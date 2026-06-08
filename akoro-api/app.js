@@ -18,10 +18,15 @@ import { Server as SocketServer } from "socket.io";
 import { createAdapter }          from "@socket.io/redis-adapter";
 import Redis                      from "ioredis";
 import cors                       from "cors";
+import helmet                     from "helmet";
 import cookieParser               from "cookie-parser";
 import path                       from "path";
 import { fileURLToPath }          from "url";
 import { MulterError }            from "multer";
+import {
+  strictLimit, refreshLimit, standardLimit, teachingLimit, aiLimit,
+  requestLogger,
+} from "./middleware/security.js";
 
 import config                     from "./config/index.js";
 import { checkDb }                from "./db.js";
@@ -75,10 +80,21 @@ setupAdaptiveWebSocket(io);
 setupVoiceStreaming(io);
 
 // ─── Core middleware ──────────────────────────────────────────────────────────
-app.use(cors({ origin: config.server.corsOrigin, credentials: true }));
+// Order: helmet → cors → cookies → body → security logging → auth → routes
+app.use(helmet({
+  contentSecurityPolicy: false,   // configured separately per-page if needed
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
+app.use(cors({
+  origin:      config.server.corsOrigin,
+  credentials: true,
+  methods:     ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"],
+}));
 app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(requestLogger);
 app.use(passport.initialize());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId); next(); });
@@ -101,17 +117,22 @@ app.get("/ready", (_req, res) =>
   res.status(serverReady ? 200 : 503).json({ ready: serverReady, instance: config.instanceId })
 );
 
-// ─── Module routes ────────────────────────────────────────────────────────────
-app.use("/api/auth",     authModule);
-app.use("/api",          coursesModule);
-app.use("/api/ranking",  rankingModule);
-app.use("/api/profiles", profilesModule);
-app.use("/api/adaptive", adaptiveModule);
-app.use("/api/battle",   battleModule);        // /api/battle/courses/:id/battles, /api/battle/:id
-app.use("/api/battle",   battleFeedRouter);    // /api/battle/my-challenges, /api/battle/my-battles
-app.use("/api/student",  studentFeedRouter);   // /api/student/sessions, /api/student/live-alerts
-app.use("/api/tasks",    tasksModule);         // /api/tasks
-app.use("/api/voice",    voiceModule);         // /api/voice/transcribe, /api/voice/speak, /api/voice/reply
+// ─── Module routes (with tiered rate limits) ─────────────────────────────────
+//   strictLimit   — login/register (5 req/15 min, by IP)
+//   refreshLimit  — token refresh  (30 req/15 min, by IP)
+//   standardLimit — read APIs      (100 req/min, by user or IP)
+//   teachingLimit — adaptive       (50 req/min, by user or IP)
+//   aiLimit       — AI operations  (10 req/min, by user or IP)
+app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
+app.use("/api",          standardLimit, coursesModule);
+app.use("/api/ranking",  standardLimit, rankingModule);
+app.use("/api/profiles", standardLimit, profilesModule);
+app.use("/api/adaptive", teachingLimit,  adaptiveModule);
+app.use("/api/battle",   standardLimit, battleModule);
+app.use("/api/battle",   standardLimit, battleFeedRouter);
+app.use("/api/student",  standardLimit, studentFeedRouter);
+app.use("/api/tasks",    aiLimit,       tasksModule);
+app.use("/api/voice",    aiLimit,       voiceModule);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

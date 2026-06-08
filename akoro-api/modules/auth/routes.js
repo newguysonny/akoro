@@ -28,6 +28,7 @@ import passport                       from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { randomUUID }                 from "crypto";
 import db                             from "../../db.js";
+import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -490,9 +491,9 @@ passport.use(new GoogleStrategy(
 
 const router = Router();
 
-router.post("/register", rules.register, runValidation, authHandlers.register);
-router.post("/login",    rules.login,    runValidation, authHandlers.login);
-router.post("/refresh",  authHandlers.refresh);
+router.post("/register", strictLimit,  rules.register, runValidation, authHandlers.register);
+router.post("/login",    strictLimit,  rules.login,    runValidation, authHandlers.login);
+router.post("/refresh",  refreshLimit, authHandlers.refresh);
 router.post("/logout",   authenticateToken, authHandlers.logout);
 router.get ("/me",       authenticateToken, authHandlers.me);
 
