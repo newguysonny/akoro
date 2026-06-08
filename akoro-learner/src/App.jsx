@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import LearnerDashboard from './pages/LearnerDashboard.jsx';
+import SettingsPage     from './pages/SettingsPage.jsx';
 import SigninPage       from './pages/auth/SigninPage.jsx';
 import SignupPage       from './pages/auth/SignupPage.jsx';
 import AuthCallback     from './pages/auth/AuthCallback.jsx';
@@ -33,6 +34,11 @@ function AppRoutes() {
       <Route path="/" element={
         <ProtectedRoute>
           <LearnerDashboard />
+        </ProtectedRoute>
+      }/>
+      <Route path="/settings" element={
+        <ProtectedRoute>
+          <SettingsPage />
         </ProtectedRoute>
       }/>
 

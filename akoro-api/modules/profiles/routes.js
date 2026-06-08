@@ -699,6 +699,173 @@ router.post  ("/schools/:schoolId/classrooms/:classroomId/students",   authentic
 router.get("/admin/schools",                                           authenticateToken, requireRole(["admin"]), adminHandlers.listSchools);
 router.get("/admin/teachers",                                          authenticateToken, requireRole(["admin"]), adminHandlers.listTeachers);
 
+// ─── Student / self settings ──────────────────────────────────────────────────
+
+const PROFILE_SELECT = [
+  "id","email","username","full_name","avatar_url","phone","role",
+  "country","school_name","school_type","year_group","study_level",
+  "language","display_mode","accent_color","teaching_guide","guide_emoji",
+  "subjects","two_factor_enabled","created_at",
+].join(",");
+
+/** GET /api/profiles/me — full profile + agent + notification prefs */
+router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+
+  const [{ data: user }, { data: agent }, { data: notif }] = await Promise.all([
+    db.from("users").select(PROFILE_SELECT).eq("id", userId).maybeSingle(),
+    db.from("user_agents").select("*").eq("user_id", userId).eq("is_active", true).maybeSingle(),
+    db.from("user_notification_preferences").select("*").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+  res200(res, {
+    id:              user.id,
+    email:           user.email,
+    username:        user.username,
+    fullName:        user.full_name,
+    avatarUrl:       user.avatar_url,
+    phone:           user.phone,
+    role:            user.role,
+    country:         user.country,
+    schoolName:      user.school_name,
+    schoolType:      user.school_type,
+    yearGroup:       user.year_group,
+    studyLevel:      user.study_level,
+    language:        user.language        || "English",
+    displayMode:     user.display_mode    || "system",
+    accentColor:     user.accent_color    || "#6C3BFF",
+    teachingGuide:   user.teaching_guide,
+    guideEmoji:      user.guide_emoji,
+    subjects:        user.subjects        || [],
+    twoFactorEnabled:user.two_factor_enabled || false,
+    memberSince:     new Date(user.created_at).toLocaleDateString("en-GB",{ month:"long", year:"numeric" }),
+    agent: agent ? {
+      id:           agent.id,
+      name:         agent.agent_name,
+      emoji:        agent.agent_emoji,
+      photoUrl:     agent.photo_url,
+      color:        agent.agent_color,
+      bg:           agent.agent_bg,
+      personality:  agent.personality,
+      studyLevel:   agent.study_level,
+      yearGroup:    agent.year_group,
+      examBoard:    agent.exam_board,
+      subjects:     agent.subjects       || [],
+      goal:         agent.goal,
+      level:        agent.level          || 1,
+      totalSessions:agent.total_sessions || 0,
+      totalTurns:   agent.total_turns    || 0,
+      knowledgeScore:agent.knowledge_score || 0,
+      xpEarned:     agent.total_xp       || 0,
+    } : null,
+    notif: notif ? {
+      email:           notif.email_enabled,
+      sms:             notif.sms_enabled,
+      push:            notif.push_enabled,
+      whatsapp:        notif.whatsapp_enabled,
+      whatsappNumber:  notif.whatsapp_number || "",
+      sessionReminders:notif.notify_session_reminders,
+      sessionStarted:  notif.notify_session_started,
+      sessionCancelled:notif.notify_session_cancelled,
+      announcements:   notif.notify_new_announcements,
+      qaReplies:       notif.notify_qa_replies,
+    } : null,
+  });
+}));
+
+/** PATCH /api/profiles/me — update user profile fields */
+router.patch("/me", authenticateToken, [
+  body("fullName").optional().trim().isLength({ min: 1, max: 120 }),
+  body("username").optional().trim().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
+  body("phone").optional().trim(),
+  body("country").optional().trim(),
+  body("schoolName").optional().trim(),
+  body("schoolType").optional().trim(),
+  body("yearGroup").optional().trim(),
+  body("studyLevel").optional().trim(),
+  body("language").optional().trim(),
+  body("displayMode").optional().isIn(["light","dark","system"]),
+  body("accentColor").optional().trim(),
+  body("teachingGuide").optional().trim(),
+  body("guideEmoji").optional().trim(),
+  body("subjects").optional().isArray(),
+  body("twoFactorEnabled").optional().isBoolean(),
+], runValidation, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const {
+    fullName, username, phone, country, schoolName, schoolType,
+    yearGroup, studyLevel, language, displayMode, accentColor,
+    teachingGuide, guideEmoji, subjects, twoFactorEnabled,
+  } = req.body;
+
+  // Check username uniqueness
+  if (username) {
+    const { data: taken } = await db.from("users")
+      .select("id").eq("username", username).neq("id", userId).maybeSingle();
+    if (taken) return res.status(409).json({ success: false, message: "Username already taken" });
+  }
+
+  const patch = {};
+  if (fullName       !== undefined) patch.full_name        = fullName;
+  if (username       !== undefined) patch.username         = username;
+  if (phone          !== undefined) patch.phone            = phone;
+  if (country        !== undefined) patch.country          = country;
+  if (schoolName     !== undefined) patch.school_name      = schoolName;
+  if (schoolType     !== undefined) patch.school_type      = schoolType;
+  if (yearGroup      !== undefined) patch.year_group       = yearGroup;
+  if (studyLevel     !== undefined) patch.study_level      = studyLevel;
+  if (language       !== undefined) patch.language         = language;
+  if (displayMode    !== undefined) patch.display_mode     = displayMode;
+  if (accentColor    !== undefined) patch.accent_color     = accentColor;
+  if (teachingGuide  !== undefined) patch.teaching_guide   = teachingGuide;
+  if (guideEmoji     !== undefined) patch.guide_emoji      = guideEmoji;
+  if (subjects       !== undefined) patch.subjects         = subjects;
+  if (twoFactorEnabled !== undefined) patch.two_factor_enabled = twoFactorEnabled;
+  patch.updated_at = new Date().toISOString();
+
+  const { data: updated, error } = await db.from("users")
+    .update(patch).eq("id", userId).select(PROFILE_SELECT).maybeSingle();
+
+  if (error) {
+    console.error("[profiles/me PATCH]", error.message);
+    return res.status(500).json({ success: false, message: "Failed to update profile" });
+  }
+
+  res200(res, { fullName: updated.full_name, username: updated.username, accentColor: updated.accent_color });
+}));
+
+/** PATCH /api/profiles/me/notifications — update notification preferences */
+router.patch("/me/notifications", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const {
+    email, sms, push, whatsapp, whatsappNumber,
+    sessionReminders, sessionStarted, sessionCancelled,
+    announcements, qaReplies,
+  } = req.body;
+
+  const row = {
+    user_id:                     userId,
+    updated_at:                  new Date().toISOString(),
+  };
+  if (email           !== undefined) row.email_enabled              = email;
+  if (sms             !== undefined) row.sms_enabled                = sms;
+  if (push            !== undefined) row.push_enabled               = push;
+  if (whatsapp        !== undefined) row.whatsapp_enabled           = whatsapp;
+  if (whatsappNumber  !== undefined) row.whatsapp_number            = whatsappNumber;
+  if (sessionReminders!== undefined) row.notify_session_reminders   = sessionReminders;
+  if (sessionStarted  !== undefined) row.notify_session_started     = sessionStarted;
+  if (sessionCancelled!== undefined) row.notify_session_cancelled   = sessionCancelled;
+  if (announcements   !== undefined) row.notify_new_announcements   = announcements;
+  if (qaReplies       !== undefined) row.notify_qa_replies          = qaReplies;
+
+  await db.from("user_notification_preferences")
+    .upsert(row, { onConflict: "user_id" });
+
+  res200(res, { saved: true });
+}));
+
 export default router;
 
 // ─── § MISSING ENDPOINTS — added per frontend audit ──────────────────────────

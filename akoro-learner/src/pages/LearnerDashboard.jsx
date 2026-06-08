@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import {
@@ -55,6 +56,7 @@ function SubjectDropdown({ value, onChange }) {
 }
 
 export default function LearnerDashboard() {
+  const navigate = useNavigate();
   const [tab,               setTab]              = useState("sessions");
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
@@ -354,7 +356,7 @@ export default function LearnerDashboard() {
         <div style={{ background:"rgba(255,255,255,.97)",backdropFilter:"blur(14px)",borderBottom:"1px solid #EDE9FE",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
-              <div style={{ position:"relative" }}>
+              <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
                 <img src="https://i.pravatar.cc/150?img=15" alt="" style={{ width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #EDE9FE" }}/>
                 <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"#9CA3AF",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
               </div>

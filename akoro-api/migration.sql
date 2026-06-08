@@ -2176,3 +2176,33 @@ CREATE TABLE IF NOT EXISTS revoked_tokens (
 );
 -- Automatically clean expired revoked tokens daily
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_exp ON revoked_tokens (expires_at);
+
+-- ── Settings: extended user profile columns ───────────────────────────────────
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id         TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS country           TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS school_name       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS school_type       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS year_group        TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS study_level       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS language          TEXT NOT NULL DEFAULT 'English';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_mode      TEXT NOT NULL DEFAULT 'system';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS accent_color      TEXT NOT NULL DEFAULT '#6C3BFF';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS teaching_guide    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS guide_emoji       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subjects          TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
+
+-- ── Settings: extended agent profile columns ──────────────────────────────────
+
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS personality    TEXT;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS exam_board     TEXT;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS subjects       TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS goal           TEXT;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS level          INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS total_sessions INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS total_turns    INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS knowledge_score INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS photo_url      TEXT;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS year_group     TEXT;
+ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS study_level    TEXT;

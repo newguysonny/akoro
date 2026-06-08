@@ -128,7 +128,11 @@ const handlers = {
    * Create or update the user's agent profile.
    */
   upsert: asyncHandler(async (req, res) => {
-    const { agent_name, agent_emoji, agent_color, agent_bg, system_prompt, personality } = req.body;
+    const {
+      agent_name, agent_emoji, agent_color, agent_bg,
+      system_prompt, personality, photo_url,
+      study_level, year_group, exam_board, subjects, goal,
+    } = req.body;
 
     const { data: existing } = await db
       .from("user_agents")
@@ -140,12 +144,18 @@ const handlers = {
 
     if (existing) {
       const updates = {};
-      if (agent_name)    updates.agent_name    = agent_name;
-      if (agent_emoji)   updates.agent_emoji   = agent_emoji;
-      if (agent_color)   updates.agent_color   = agent_color;
-      if (agent_bg)      updates.agent_bg      = agent_bg;
-      if (system_prompt) updates.system_prompt = system_prompt;
-      if (personality)   updates.personality   = personality;
+      if (agent_name    != null) updates.agent_name    = agent_name;
+      if (agent_emoji   != null) updates.agent_emoji   = agent_emoji;
+      if (agent_color   != null) updates.agent_color   = agent_color;
+      if (agent_bg      != null) updates.agent_bg      = agent_bg;
+      if (system_prompt != null) updates.system_prompt = system_prompt;
+      if (personality   != null) updates.personality   = personality;
+      if (photo_url     != null) updates.photo_url     = photo_url;
+      if (study_level   != null) updates.study_level   = study_level;
+      if (year_group    != null) updates.year_group    = year_group;
+      if (exam_board    != null) updates.exam_board    = exam_board;
+      if (subjects      != null) updates.subjects      = subjects;
+      if (goal          != null) updates.goal          = goal;
       updates.updated_at = now();
 
       ({ data, error } = await db
@@ -158,13 +168,19 @@ const handlers = {
       ({ data, error } = await db
         .from("user_agents")
         .insert({
-          user_id:     req.user.id,
-          agent_name:  agent_name  ?? `Agent_${req.user.id.slice(0, 6)}`,
-          agent_emoji: agent_emoji ?? "🤖",
+          user_id:       req.user.id,
+          agent_name:    agent_name    ?? `Agent_${req.user.id.slice(0, 6)}`,
+          agent_emoji:   agent_emoji   ?? "🤖",
           agent_color:   agent_color   ?? "#E8884A",
           agent_bg:      agent_bg      ?? "#FEF0E6",
-          system_prompt: system_prompt  ?? null,
-          personality:   personality    ?? null,
+          system_prompt: system_prompt ?? null,
+          personality:   personality   ?? null,
+          photo_url:     photo_url     ?? null,
+          study_level:   study_level   ?? null,
+          year_group:    year_group    ?? null,
+          exam_board:    exam_board    ?? null,
+          subjects:      subjects      ?? [],
+          goal:          goal          ?? null,
         })
         .select(AGENT_SELECT)
         .single());
@@ -300,6 +316,13 @@ router.put ("/user/agent",                    authenticateToken, [
   body("agent_emoji").optional().trim(),
   body("agent_color").optional().trim(),
   body("agent_bg").optional().trim(),
+  body("personality").optional().trim().isLength({ max: 500 }),
+  body("photo_url").optional().trim(),
+  body("study_level").optional().trim(),
+  body("year_group").optional().trim(),
+  body("exam_board").optional().trim(),
+  body("subjects").optional().isArray(),
+  body("goal").optional().trim(),
 ], runValidation, handlers.upsert);
 router.post("/user/agent/reply",              authenticateToken, [
   body("courseId").notEmpty(),
