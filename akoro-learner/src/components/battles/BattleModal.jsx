@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, STUDENT_ID } from '../../constants.js';
 import { API, jwt, apiPost } from '../../services/api.js';
 import { QUESTIONS, getQuestions } from '../../services/mockData.js';

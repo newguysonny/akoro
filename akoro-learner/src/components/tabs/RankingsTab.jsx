@@ -1,5 +1,5 @@
-import React from 'react';
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import React, { useState } from 'react';
+import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
 import { LEADERBOARD } from '../../services/mockData.js';
 import { TrophyIcon, FlameIcon, StarIcon, ZapIcon } from '../common/Icons.jsx';
 

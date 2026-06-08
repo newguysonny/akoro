@@ -1,5 +1,5 @@
-import React from 'react';
-import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG } from '../../constants.js';
+import React, { useState } from 'react';
+import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
 import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
 

@@ -346,6 +346,7 @@ function TeachAgentModal({ session, config, onClose }) {
 
   // Summary view — own fullscreen container
   if (activeTab === "summary") {
+    const sc = SUBJECT_COLORS[subject?.toLowerCase()] || BRAND;
     return (
       <div style={{ position:"fixed",inset:0,zIndex:3000,background:"#080812",
         display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif" }}>

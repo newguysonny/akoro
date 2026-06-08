@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API, jwt, apiPost } from '../../services/api.js';
-import { AGENT_CONFIG, MOCK_DECAY_MESSAGES } from '../../services/mockData.js';
+import { AGENT_CONFIG, MOCK_DECAY_MESSAGES, autoObjectives, autoSubtopics } from '../../services/mockData.js';
 import { buildDecayHistory, buildMockQueue } from '../../services/mockBlocks.js';
 import SessionChatView from './SessionChatView.jsx';
 

@@ -1,4 +1,4 @@
-import { CONTINUATION_HISTORY } from './mockData.js';
+import { CONTINUATION_HISTORY, autoObjectives, autoSubtopics } from './mockData.js';
 
 export const PHASE_PLAN = [
   'Phase 1 → what do they know',
