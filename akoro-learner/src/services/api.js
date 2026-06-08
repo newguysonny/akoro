@@ -1,6 +1,4 @@
-export const API = (typeof import_meta !== "undefined" && import_meta?.env?.VITE_API_URL)
-  || (typeof import !== "undefined" && import.meta?.env?.VITE_API_URL)
-  || "https://akoro.app";
+export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
 export const jwt = () =>
   (typeof localStorage !== "undefined" && localStorage.getItem("akoro_jwt")) || "";
