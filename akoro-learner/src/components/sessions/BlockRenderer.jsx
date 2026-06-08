@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon } from '../common/Icons.jsx';
 
 function BlockRenderer({ block, agentName, agentEmoji }) {

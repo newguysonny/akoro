@@ -26,3 +26,9 @@ export const DIFFICULTY_CONFIG = {
 };
 
 export const STUDENT_ID = "user-alex-01";
+
+export const AGENT_STYLES = {
+  nana:    { name:"NaNa Esumai", emoji:"🧠", bg:"#EEEDFE", color:"#3C3489", ring:"#AFA9EC" },
+  sargeant:{ name:"Sargeant",    emoji:"⚡", bg:"#FFF0F0", color:"#7F1D1D", ring:"#FCA5A5" },
+  student: { name:"Agent",       emoji:"🤖", bg:"#FEF0E6", color:"#92400E", ring:"#F59E0B" },
+};

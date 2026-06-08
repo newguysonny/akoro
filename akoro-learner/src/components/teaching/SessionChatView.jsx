@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { MicIcon, SendIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon } from '../common/Icons.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
 
