@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
 import { XIcon, ChevDownIcon } from '../common/Icons.jsx';
 import { apiPost } from '../../services/api.js';
-import { autoObjectives, autoSubtopics } from '../../services/mockData.js';
 
 function ConfigModal({ initial, onStart, onCancel }) {
   const [topic,      setTopic]      = useState(initial?.topic      || "");

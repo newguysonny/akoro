@@ -3,9 +3,8 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STU
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import {
   SESSIONS, CHALLENGES, SEED_BATTLES, MOCK_DECAY_ALERTS, AGENT_SESSIONS,
-  AGENT_CONFIG, TASKS_INIT, CONTINUATION_HISTORY, getQuestions,
+  AGENT_CONFIG, TASKS_INIT, CONTINUATION_HISTORY,
 } from '../services/mockData.js';
-import { ZapIcon, MicIcon, ChevDownIcon } from '../components/common/Icons.jsx';
 
 // Components
 import SessionCard    from '../components/sessions/SessionCard.jsx';
@@ -21,6 +20,8 @@ import AgentChatTab  from '../components/tabs/AgentChatTab.jsx';
 import RankingsTab   from '../components/tabs/RankingsTab.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
+import { ZapIcon, MicIcon, ChevDownIcon } from '../components/common/Icons.jsx';
+import React from 'react';
 
 // Hooks
 import { useWebSocket }    from '../hooks/useWebSocket.js';
@@ -30,8 +31,8 @@ import { useDecayAlerts }  from '../hooks/useDecayAlerts.js';
 import { useBattleAPI }    from '../hooks/useBattleAPI.js';
 
 function SubjectDropdown({ value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const sel = SUBJECTS[value];
+  const [open, setOpen] = React.useState(false);
+  const sel = SUBJECTS[value] || SUBJECTS.all;
   return (
     <div style={{ position:"relative" }}>
       <div onClick={() => setOpen(o=>!o)} style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",borderRadius:100,padding:"5px 11px 5px 9px",border:"1px solid #DDD3FF",cursor:"pointer" }}>

@@ -39,6 +39,9 @@ import { Router }                               from "express";
 import jwt                                      from "jsonwebtoken";
 import bcrypt                                   from "bcrypt";
 import { body, validationResult }               from "express-validator";
+import passport                                 from "passport";
+import { Strategy as GoogleStrategy }           from "passport-google-oauth20";
+import db                                       from "../../db.js";
 
 // ─── § USER STORE ─────────────────────────────────────────────────────────────
 // Swap the arrays + helper bodies for real DB calls without touching anything above.
@@ -432,6 +435,75 @@ const reviewHandlers = {
   }),
 };
 
+// ─── § GOOGLE OAUTH ───────────────────────────────────────────────────────────
+
+const FRONTEND_URL  = process.env.FRONTEND_URL   || "https://akoro.app";
+const CALLBACK_URL  = process.env.GOOGLE_CALLBACK_URL
+  || "https://api.akoro.app/api/auth/google/callback";
+
+passport.use(new GoogleStrategy(
+  {
+    clientID:     process.env.GOOGLE_CLIENT_ID     || "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    callbackURL:  CALLBACK_URL,
+  },
+  async (_accessToken, _refreshToken, profile, done) => {
+    try {
+      const email    = profile.emails?.[0]?.value;
+      const fullName = profile.displayName || "";
+      const avatar   = profile.photos?.[0]?.value   || null;
+      const googleId = profile.id;
+
+      if (!email) return done(new Error("Google did not return an email"), null);
+
+      // Find existing user by email
+      const { data: existing } = await db
+        .from("users")
+        .select("*")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (existing) {
+        // Update google_id + avatar if not already set
+        const { data: updated } = await db
+          .from("users")
+          .update({
+            google_id:  existing.google_id  || googleId,
+            avatar_url: existing.avatar_url || avatar,
+          })
+          .eq("id", existing.id)
+          .select("*")
+          .single();
+        return done(null, updated || existing);
+      }
+
+      // Create new user
+      const username = email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      const { data: created, error } = await db
+        .from("users")
+        .insert({
+          email,
+          full_name:      fullName,
+          username:       username + "_" + Date.now().toString().slice(-4),
+          password_hash:  "",           // no password for OAuth users
+          avatar_url:     avatar,
+          google_id:      googleId,
+          role:           "student",
+          is_active:      true,
+          email_verified: true,
+        })
+        .select("*")
+        .single();
+
+      if (error) return done(error, null);
+      return done(null, created);
+
+    } catch (err) {
+      return done(err, null);
+    }
+  }
+));
+
 // ─── § ROUTER ─────────────────────────────────────────────────────────────────
 
 const router = Router();
@@ -441,6 +513,33 @@ router.post("/register",  rules.register, runValidation,  authHandlers.register)
 router.post("/login",     rules.login,    runValidation,  authHandlers.login);
 router.get ("/me",        authenticateToken,              authHandlers.me);
 router.post("/refresh",   authenticateToken,              authHandlers.refresh);
+
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+router.get("/google",
+  passport.authenticate("google", { scope: ["profile", "email"], session: false })
+);
+
+router.get("/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: `${FRONTEND_URL}/signin?error=google_failed` }),
+  (req, res) => {
+    try {
+      const user  = req.user;
+      const token = signToken(user);
+      const safe  = {
+        id:        user.id,
+        email:     user.email,
+        fullName:  user.full_name,
+        username:  user.username,
+        role:      user.role,
+        avatarUrl: user.avatar_url,
+      };
+      const userParam = encodeURIComponent(JSON.stringify(safe));
+      res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}&user=${userParam}`);
+    } catch {
+      res.redirect(`${FRONTEND_URL}/signin?error=token_failed`);
+    }
+  }
+);
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 router.get ("/dashboard", authenticateToken,              dashboardHandler);

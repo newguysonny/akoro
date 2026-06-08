@@ -38,6 +38,7 @@ import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
 import voiceModule               from "./modules/voice/routes.js";
 import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
+import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const app        = express();
@@ -76,6 +77,7 @@ setupVoiceStreaming(io);
 app.use(cors({ origin: config.server.corsOrigin }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId); next(); });
 

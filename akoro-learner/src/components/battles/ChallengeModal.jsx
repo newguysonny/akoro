@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
 import { XIcon, ZapIcon, StarIcon } from '../common/Icons.jsx';
 
