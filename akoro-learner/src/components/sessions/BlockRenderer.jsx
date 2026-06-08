@@ -243,6 +243,6 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
   return null;
 }
 
-/* ══════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════ */
 
 export default BlockRenderer;

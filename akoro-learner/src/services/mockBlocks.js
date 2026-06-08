@@ -188,4 +188,6 @@ function buildDecayHistory(alert, agentNm, agentEm, guideNm="NaNa Esumai", guide
   ];
 }
 
-/* ══════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════ */
+
+export { buildInitialBlocks, buildMockQueue, buildContinuationHistory, buildDecayHistory };

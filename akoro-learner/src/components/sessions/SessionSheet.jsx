@@ -177,6 +177,6 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
 }
 
 
-/* ══════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════ */
 
 export default SessionSheet;

@@ -100,6 +100,6 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
   );
 }
 
-/* ══════════════════════════════════
+/* ══════════════════════════════════ */
 
 export default SessionCard;

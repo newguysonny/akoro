@@ -136,6 +136,6 @@ function ConfigModal({ initial, onStart, onCancel }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════ */
 
 export default ConfigModal;

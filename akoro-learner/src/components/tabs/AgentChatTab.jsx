@@ -247,6 +247,6 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════ */
 
 export default AgentChatTab;

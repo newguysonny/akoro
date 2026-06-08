@@ -41,6 +41,6 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
   );
 }
 
-/* ══════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════ */
 
 export default ChallengeModal;

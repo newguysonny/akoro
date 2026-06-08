@@ -448,6 +448,6 @@ function BattleModal({ battle: initialBattle, onClose }) {
   );
 }
 
-/* ══════════════════════════════════
+/* ══════════════════════════════════ */
 
 export default BattleModal;

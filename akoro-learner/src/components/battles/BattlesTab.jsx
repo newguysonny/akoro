@@ -143,7 +143,7 @@ function BattlesTab({ battles, onViewChallenge }) {
   );
 }
 
-/* ══════════════════════════════════
+/* ══════════════════════════════════ */
 
 export { ChallengeRow, BattlesTab };
 export default BattlesTab;

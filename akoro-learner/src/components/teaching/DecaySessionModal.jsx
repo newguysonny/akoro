@@ -159,6 +159,6 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   );
 }
 
-/* ══════════════════════════════════
+/* ══════════════════════════════════ */
 
 export default DecaySessionModal;
