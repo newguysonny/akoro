@@ -2155,3 +2155,24 @@ UPDATE edu.user_agent_preferences
         'professor-warden'
       )::uuid[]
   WHERE purchased_agents::text[] && ARRAY['nana-sargeant', 'professor-warden'];
+
+-- ── Auth hardening: refresh tokens + jti deny-list ──────────────────────────
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  jti        UUID PRIMARY KEY,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  family     UUID NOT NULL,
+  used       BOOLEAN NOT NULL DEFAULT false,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user   ON refresh_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens (family);
+
+CREATE TABLE IF NOT EXISTS revoked_tokens (
+  jti        UUID PRIMARY KEY,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Automatically clean expired revoked tokens daily
+CREATE INDEX IF NOT EXISTS idx_revoked_tokens_exp ON revoked_tokens (expires_at);

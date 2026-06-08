@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
-import { API, jwt, apiGet, apiPost } from '../../services/api.js';
+import { API, apiGet, apiPost } from '../../services/api.js';
 import { AGENT_CONFIG } from '../../services/mockData.js';
 import { buildInitialBlocks, buildMockQueue, buildContinuationHistory } from '../../services/mockBlocks.js';
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
@@ -197,7 +197,7 @@ function TeachAgentModal({ session, config, onClose }) {
             const form = new FormData();
             form.append("audio", blob, "voice.webm");
             const r = await fetch(`${API}/api/voice/transcribe`, {
-              method:"POST", headers:{ Authorization:`Bearer ${jwt()}` }, body:form });
+              method:"POST", credentials:"include", body:form });
             const data = await r.json();
             const transcript = data.transcript?.trim();
             if (transcript) { setLoading(false); await handleSend(transcript); }
@@ -224,7 +224,7 @@ function TeachAgentModal({ session, config, onClose }) {
   const speakSentence = (text) => new Promise(resolve => {
     fetch(`${API}/api/voice/speak`, {
       method:"POST",
-      headers:{ "Content-Type":"application/json", Authorization:`Bearer ${jwt()}` },
+      headers:{ "Content-Type":"application/json" }, credentials:"include",
       body: JSON.stringify({ text: text.slice(0,300), voice: ttsVoice }),
     }).then(r => r.ok ? r.blob() : null)
       .then(blob => {

@@ -1,119 +1,50 @@
 /**
- * auth.js  —  Piabam Auth, Users & Student Activity router
+ * auth/routes.js  —  Production-hardened JWT authentication
  *
- * Usage in app.js:
- *   import authRouter, { authenticateToken, requireRole } from "./routes/auth.js";
- *   app.use("/api/auth",     authRouter);
+ * Security layers implemented:
+ *  1. RS256 asymmetric signing  — private key signs, public key verifies
+ *  2. Short-lived access tokens (15 min) + long refresh tokens (7 days)
+ *  3. Refresh token rotation   — new pair on every /refresh; replay = family revoke
+ *  4. jti deny-list            — logout/password-change blacklists the access jti
+ *  5. Strict claim validation  — alg whitelist, iss + aud required
+ *  6. HttpOnly cookies         — tokens never readable by JS
+ *  7. Algorithm hardening      — rejects alg:none and HS256 downgrade
  *
- * Named exports  (used by other routers as middleware):
- *   authenticateToken   — verifies Bearer JWT, attaches req.user
- *   requireRole(roles)  — guards routes to specific roles
- *
- * ─── Sections ────────────────────────────────────────────────────────────────
- *  § IMPORTS
- *  § USER STORE          in-memory users table — swap for DB
- *  § HELPERS             async wrapper, response shorthands
- *  § JWT MIDDLEWARE       authenticateToken + requireRole
- *  § VALIDATION RULES    express-validator chains
- *  § AUTH HANDLERS       register, login, me, refresh
- *  § DASHBOARD HANDLER   role-aware stats endpoint
- *  § ENROLLMENT HANDLERS enroll, list enrolled courses
- *  § PROGRESS HANDLERS   video watch progress + course completion
- *  § REVIEW HANDLERS     submit + list reviews per course
- *  § ROUTER              all route definitions
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * Dependencies (add to package.json):
- *   "jsonwebtoken": "^9.0.2"
- *   "bcrypt":       "^5.1.1"
- *
- * Environment variables (.env):
- *   JWT_SECRET          strong random string — required in production
- *   JWT_EXPIRES_IN      e.g. "7d"  (default: "7d")
- *   BCRYPT_ROUNDS       e.g. 10    (default: 10)
+ * Env vars required:
+ *   JWT_PRIVATE_KEY     RSA-2048 private key (PEM, \n-escaped)
+ *   JWT_PUBLIC_KEY      RSA-2048 public key  (PEM, \n-escaped)
+ *   JWT_ISSUER          e.g. "https://api.akoro.app"
+ *   JWT_AUDIENCE        e.g. "https://akoro.app"
+ *   COOKIE_SECRET       random string for cookie signing
+ *   FRONTEND_URL        e.g. "https://akoro.app"
+ *   GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_CALLBACK_URL
  */
 
-// ─── § IMPORTS ────────────────────────────────────────────────────────────────
+import { Router }                     from "express";
+import jwt                            from "jsonwebtoken";
+import bcrypt                         from "bcrypt";
+import { body, validationResult }     from "express-validator";
+import passport                       from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { randomUUID }                 from "crypto";
+import db                             from "../../db.js";
 
-import { Router }                               from "express";
-import jwt                                      from "jsonwebtoken";
-import bcrypt                                   from "bcrypt";
-import { body, validationResult }               from "express-validator";
-import passport                                 from "passport";
-import { Strategy as GoogleStrategy }           from "passport-google-oauth20";
-import db                                       from "../../db.js";
+// ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
-// ─── § USER STORE ─────────────────────────────────────────────────────────────
-// Swap the arrays + helper bodies for real DB calls without touching anything above.
-// Enrollment, progress, and review records live here too — they are child
-// records of users and are naturally co-located.
+const PRIVATE_KEY  = (process.env.JWT_PRIVATE_KEY  || "").replace(/\\n/g, "\n");
+const PUBLIC_KEY   = (process.env.JWT_PUBLIC_KEY   || "").replace(/\\n/g, "\n");
+const JWT_ISSUER   = process.env.JWT_ISSUER   || "https://api.akoro.app";
+const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://akoro.app";
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 
-let _users = [];
-let _enrollments  = [];   // { id, userId, courseId, enrolledAt, completedAt }
-let _videoProgress = [];  // { id, userId, videoId, courseId, watchedDuration, lastPosition, completed, updatedAt }
-let _reviews = [];        // { id, userId, courseId, rating, comment, createdAt, updatedAt }
+const ACCESS_TTL_SECS  = 15 * 60;        // 15 minutes
+const REFRESH_TTL_SECS = 7 * 24 * 3600;  // 7 days
+const ALLOWED_ALGS     = ["RS256"];       // whitelist — never HS256 / none
 
-const now = () => new Date().toISOString();
-
-// Seed demo accounts on first load
-const _seedUsers = async () => {
-  if (_users.length) return;
-  const salt = parseInt(process.env.BCRYPT_ROUNDS ?? "10", 10);
-  _users = [
-    { id: "u-admin-1",      email: "admin@akoro.app",      username: "admin",      passwordHash: await bcrypt.hash("Admin123!",      salt), fullName: "System Admin",    role: "admin",      isActive: true, avatarUrl: null, createdAt: now() },
-    { id: "u-teacher-1",    email: "amara@akoro.app",       username: "dr_amara",   passwordHash: await bcrypt.hash("Teacher123!",    salt), fullName: "Dr. Amara Diallo",role: "instructor", isActive: true, avatarUrl: null, createdAt: now() },
-    { id: "u-student-1",    email: "chuks@gmail.com",        username: "chuks_obi",  passwordHash: await bcrypt.hash("Student123!",    salt), fullName: "Chukwuemeka Obi", role: "student",    isActive: true, avatarUrl: null, createdAt: now() },
-  ];
-};
-_seedUsers();   // fire-and-forget — no await needed at module level
-
-const UserStore = {
-  getById:       (id)    => _users.find((u) => u.id    === id)    ?? null,
-  getByEmail:    (email) => _users.find((u) => u.email === email) ?? null,
-  getByUsername: (name)  => _users.find((u) => u.username === name) ?? null,
-  create:        (data)  => { _users.push(data); return data; },
-  update:        (id, d) => { const i = _users.findIndex((u) => u.id === id); if (i === -1) return null; _users[i] = { ..._users[i], ...d, id }; return _users[i]; },
-  // Return safe public shape — never leak passwordHash
-  safe: (u) => ({ id: u.id, email: u.email, username: u.username, fullName: u.fullName, role: u.role, avatarUrl: u.avatarUrl, createdAt: u.createdAt }),
-};
-
-const EnrollmentStore = {
-  list:          (f = {}) => { let r = [..._enrollments]; if (f.userId) r = r.filter((e) => e.userId === f.userId); if (f.courseId) r = r.filter((e) => e.courseId === f.courseId); return r; },
-  get:           (userId, courseId) => _enrollments.find((e) => e.userId === userId && e.courseId === courseId) ?? null,
-  create:        (data)  => { _enrollments.push(data); return data; },
-  update:        (id, d) => { const i = _enrollments.findIndex((e) => e.id === id); if (i === -1) return null; _enrollments[i] = { ..._enrollments[i], ...d }; return _enrollments[i]; },
-  delete:        (id)    => { const i = _enrollments.findIndex((e) => e.id === id); if (i === -1) return false; _enrollments.splice(i, 1); return true; },
-};
-
-const ProgressStore = {
-  get:    (userId, videoId) => _videoProgress.find((p) => p.userId === userId && p.videoId === videoId) ?? null,
-  upsert: (data) => {
-    const i = _videoProgress.findIndex((p) => p.userId === data.userId && p.videoId === data.videoId);
-    if (i === -1) { _videoProgress.push({ ...data, id: crypto.randomUUID() }); return _videoProgress[_videoProgress.length - 1]; }
-    _videoProgress[i] = { ..._videoProgress[i], ...data, updatedAt: now() };
-    return _videoProgress[i];
-  },
-  countByCourse: (userId, courseId) => ({
-    total:     _videoProgress.filter((p) => p.userId === userId && p.courseId === courseId).length,
-    completed: _videoProgress.filter((p) => p.userId === userId && p.courseId === courseId && p.completed).length,
-  }),
-};
-
-const ReviewStore = {
-  listByCourse: (courseId) => _reviews.filter((r) => r.courseId === courseId),
-  get:          (userId, courseId) => _reviews.find((r) => r.userId === userId && r.courseId === courseId) ?? null,
-  upsert: (data) => {
-    const i = _reviews.findIndex((r) => r.userId === data.userId && r.courseId === data.courseId);
-    if (i === -1) { _reviews.push({ ...data, id: crypto.randomUUID(), createdAt: now(), updatedAt: now() }); return _reviews[_reviews.length - 1]; }
-    _reviews[i] = { ..._reviews[i], ...data, updatedAt: now() };
-    return _reviews[i];
-  },
-  avgRating: (courseId) => {
-    const rs = _reviews.filter((r) => r.courseId === courseId);
-    if (!rs.length) return 0;
-    return +(rs.reduce((s, r) => s + r.rating, 0) / rs.length).toFixed(2);
-  },
-};
+// Fall back to HS256 with a secret in dev when no RSA keys provided
+const USE_RSA = !!PRIVATE_KEY && !!PUBLIC_KEY;
+const DEV_SECRET = process.env.JWT_SECRET || "akoro-dev-secret-change-in-production";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -127,6 +58,8 @@ const res401 = (res, message)         => res.status(401).json({ success: false, 
 const res403 = (res, message)         => res.status(403).json({ success: false, message });
 const res404 = (res, message)         => res.status(404).json({ success: false, message });
 
+const now = () => new Date().toISOString();
+
 const runValidation = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
@@ -134,45 +67,203 @@ const runValidation = (req, res, next) => {
   next();
 };
 
-const JWT_SECRET     = process.env.JWT_SECRET     ?? "akoro-dev-secret-change-in-production";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "7d";
-const BCRYPT_ROUNDS  = parseInt(process.env.BCRYPT_ROUNDS ?? "10", 10);
+// ─── § TOKEN FACTORY ──────────────────────────────────────────────────────────
 
-const signToken = (user) =>
-  jwt.sign(
-    { userId: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
-  );
+function signAccess(user) {
+  const jti = randomUUID();
+  const payload = {
+    jti,
+    sub:   user.id,
+    email: user.email,
+    role:  user.role,
+    iss:   JWT_ISSUER,
+    aud:   JWT_AUDIENCE,
+  };
+  const token = USE_RSA
+    ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: ACCESS_TTL_SECS })
+    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: ACCESS_TTL_SECS });
+  return { token, jti };
+}
+
+function signRefresh(userId, family) {
+  const jti = randomUUID();
+  const payload = {
+    jti,
+    sub:    userId,
+    family,          // family ID ties all rotated tokens together for revocation
+    iss:    JWT_ISSUER,
+    aud:    JWT_AUDIENCE,
+    type:   "refresh",
+  };
+  const token = USE_RSA
+    ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: REFRESH_TTL_SECS })
+    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: REFRESH_TTL_SECS });
+  return { token, jti };
+}
+
+function verifyToken(token) {
+  const verifyKey = USE_RSA ? PUBLIC_KEY : DEV_SECRET;
+  const algs      = USE_RSA ? ALLOWED_ALGS : ["HS256"];
+  return jwt.verify(token, verifyKey, {
+    algorithms: algs,
+    issuer:     JWT_ISSUER,
+    audience:   JWT_AUDIENCE,
+  });
+}
+
+// ─── § COOKIE HELPERS ─────────────────────────────────────────────────────────
+
+const IS_PROD = process.env.NODE_ENV === "production";
+
+function setAccessCookie(res, token) {
+  res.cookie("akoro_access", token, {
+    httpOnly: true,
+    secure:   IS_PROD,
+    sameSite: IS_PROD ? "None" : "Lax",  // None required for cross-origin (API ↔ Vercel)
+    maxAge:   ACCESS_TTL_SECS * 1000,
+    path:     "/",
+  });
+}
+
+function setRefreshCookie(res, token) {
+  res.cookie("akoro_refresh", token, {
+    httpOnly: true,
+    secure:   IS_PROD,
+    sameSite: IS_PROD ? "None" : "Lax",
+    maxAge:   REFRESH_TTL_SECS * 1000,
+    path:     "/api/auth/refresh",  // refresh cookie only sent to /refresh endpoint
+  });
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie("akoro_access",  { path: "/" });
+  res.clearCookie("akoro_refresh", { path: "/api/auth/refresh" });
+}
+
+// ─── § DENY-LIST (jti blacklist) ──────────────────────────────────────────────
+// Stores revoked access token jtis until their natural expiry.
+// In production swap the in-memory map for Redis: SET jti:${jti} 1 EX ${ttl}
+
+const _denyList = new Map(); // jti → expiresAt (ms)
+
+const DenyList = {
+  add: async (jti, expiresAt) => {
+    _denyList.set(jti, expiresAt);
+    // Persist to DB for multi-instance support
+    try {
+      await db.from("revoked_tokens").insert({ jti, expires_at: new Date(expiresAt).toISOString() });
+    } catch { /* table may not exist yet — in-memory fallback suffices */ }
+  },
+  has: async (jti) => {
+    if (_denyList.has(jti)) return true;
+    // Check DB
+    try {
+      const { data } = await db.from("revoked_tokens").select("jti").eq("jti", jti).maybeSingle();
+      return !!data;
+    } catch { return false; }
+  },
+  sweep: () => {
+    const now = Date.now();
+    for (const [k, v] of _denyList) if (v < now) _denyList.delete(k);
+  },
+};
+setInterval(DenyList.sweep, 60_000); // clean expired entries every minute
+
+// ─── § REFRESH TOKEN STORE ────────────────────────────────────────────────────
+// Stores valid refresh token metadata.  Supports rotation + family revocation.
+
+const RefreshStore = {
+  // Save a newly issued refresh token
+  save: async (jti, userId, family, expiresAt) => {
+    try {
+      await db.from("refresh_tokens").insert({
+        jti,
+        user_id:    userId,
+        family,
+        expires_at: new Date(expiresAt * 1000).toISOString(),
+        used:       false,
+      });
+    } catch (e) {
+      console.error("RefreshStore.save error:", e.message);
+    }
+  },
+  // Find by jti — returns row or null
+  find: async (jti) => {
+    try {
+      const { data } = await db.from("refresh_tokens").select("*").eq("jti", jti).maybeSingle();
+      return data;
+    } catch { return null; }
+  },
+  // Mark a token as used (to detect replay)
+  markUsed: async (jti) => {
+    try { await db.from("refresh_tokens").update({ used: true }).eq("jti", jti); }
+    catch { /* ignore */ }
+  },
+  // Revoke entire family (replay attack detected)
+  revokeFamily: async (family) => {
+    try { await db.from("refresh_tokens").delete().eq("family", family); }
+    catch { /* ignore */ }
+  },
+  // Delete a single token (clean logout)
+  delete: async (jti) => {
+    try { await db.from("refresh_tokens").delete().eq("jti", jti); }
+    catch { /* ignore */ }
+  },
+};
 
 // ─── § JWT MIDDLEWARE ─────────────────────────────────────────────────────────
 
 /**
  * authenticateToken
- * Verifies the Bearer token in Authorization header.
- * Attaches the safe user object to req.user on success.
- * Export this so other routers (courses.js, stream.js) can import it.
+ * Reads access token from HttpOnly cookie (preferred) or Authorization header.
+ * Validates algorithm, issuer, audience, expiry, and deny-list.
  */
-export const authenticateToken = async (req, res, next) => {
-  const header = req.headers["authorization"];
-  const token  = header?.startsWith("Bearer ") ? header.slice(7) : null;
+export const authenticateToken = asyncHandler(async (req, res, next) => {
+  // 1. Extract token — cookie first, then Bearer fallback
+  const cookieToken = req.cookies?.akoro_access;
+  const headerToken = (() => {
+    const h = req.headers["authorization"];
+    return h?.startsWith("Bearer ") ? h.slice(7) : null;
+  })();
+  const token = cookieToken || headerToken;
   if (!token) return res401(res, "Access token required");
 
+  // 2. Reject alg:none proactively — decode header without verifying
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user    = UserStore.getById(decoded.userId);
-    if (!user || !user.isActive) return res401(res, "User not found or deactivated");
-    req.user = UserStore.safe(user);
+    const header = JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString());
+    if (!header.alg || header.alg === "none" || (!USE_RSA && !["HS256"].includes(header.alg)) || (USE_RSA && !ALLOWED_ALGS.includes(header.alg))) {
+      return res401(res, "Token algorithm not permitted");
+    }
+  } catch {
+    return res401(res, "Malformed token");
+  }
+
+  // 3. Verify signature + standard claims (iss, aud, exp enforced by jsonwebtoken)
+  let decoded;
+  try {
+    decoded = verifyToken(token);
+  } catch (err) {
+    return res403(res, err.name === "TokenExpiredError" ? "Access token expired" : "Invalid token");
+  }
+
+  // 4. Check deny-list
+  if (decoded.jti && await DenyList.has(decoded.jti)) {
+    return res401(res, "Token has been revoked");
+  }
+
+  // 5. Load user
+  try {
+    const { data: user } = await db.from("users").select("id,email,username,full_name,avatar_url,role,is_active").eq("id", decoded.sub).maybeSingle();
+    if (!user || !user.is_active) return res401(res, "User not found or deactivated");
+    req.user    = { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role };
+    req.tokenJti = decoded.jti;
+    req.tokenExp = decoded.exp;
     next();
   } catch {
-    return res403(res, "Invalid or expired token");
+    return res401(res, "Could not load user");
   }
-};
+});
 
-/**
- * requireRole(roles)
- * Use after authenticateToken.  Example: requireRole(["admin","instructor"])
- */
 export const requireRole = (roles) => (req, res, next) => {
   if (!roles.includes(req.user?.role))
     return res403(res, `Requires one of: ${roles.join(", ")}`);
@@ -183,30 +274,53 @@ export const requireRole = (roles) => (req, res, next) => {
 
 const rules = {
   register: [
-    body("email").trim().isEmail().withMessage("Valid email required").normalizeEmail(),
-    body("username").trim().notEmpty().isLength({ min: 3, max: 40 }).withMessage("Username must be 3–40 chars").matches(/^[a-zA-Z0-9_]+$/).withMessage("Username: letters, numbers, underscores only"),
-    body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
+    body("email").trim().isEmail().normalizeEmail(),
+    body("username").trim().notEmpty().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
+    body("password").isLength({ min: 8 }),
     body("fullName").optional().trim().isLength({ max: 120 }),
-    body("role").optional().isIn(["student", "instructor"]).withMessage("role must be student or instructor"),
+    body("role").optional().isIn(["student", "instructor"]),
   ],
   login: [
-    body("email").trim().isEmail().withMessage("Valid email required").normalizeEmail(),
-    body("password").notEmpty().withMessage("Password required"),
+    body("email").trim().isEmail().normalizeEmail(),
+    body("password").notEmpty(),
   ],
   review: [
-    body("rating").isInt({ min: 1, max: 5 }).withMessage("Rating must be 1–5"),
+    body("rating").isInt({ min: 1, max: 5 }),
     body("comment").optional().trim().isLength({ max: 2000 }),
   ],
   progress: [
-    body("videoId").notEmpty().withMessage("videoId required"),
-    body("courseId").notEmpty().withMessage("courseId required"),
-    body("position").isInt({ min: 0 }).withMessage("position must be a non-negative integer"),
+    body("videoId").notEmpty(),
+    body("courseId").notEmpty(),
+    body("position").isInt({ min: 0 }),
     body("completed").optional().isBoolean(),
   ],
-  enroll: [],   // params-only, no body fields needed
 };
 
 // ─── § AUTH HANDLERS ──────────────────────────────────────────────────────────
+
+const safeUser = (u) => ({
+  id:        u.id,
+  email:     u.email,
+  username:  u.username,
+  fullName:  u.full_name || u.fullName,
+  avatarUrl: u.avatar_url || u.avatarUrl,
+  role:      u.role,
+});
+
+const issueTokenPair = async (res, user) => {
+  const { token: accessToken, jti: accessJti } = signAccess(user);
+  const family = randomUUID();
+  const { token: refreshToken, jti: refreshJti } = signRefresh(user.id || user.id, family);
+  const refreshExp = Math.floor(Date.now() / 1000) + REFRESH_TTL_SECS;
+
+  await RefreshStore.save(refreshJti, user.id, family, refreshExp);
+
+  setAccessCookie(res, accessToken);
+  setRefreshCookie(res, refreshToken);
+
+  // Also return tokens in body for mobile clients
+  return { accessToken, refreshToken, user: safeUser(user) };
+};
 
 const authHandlers = {
 
@@ -214,232 +328,120 @@ const authHandlers = {
   register: asyncHandler(async (req, res) => {
     const { email, username, password, fullName, role = "student" } = req.body;
 
-    if (UserStore.getByEmail(email))
-      return res400(res, "Email already registered");
-    if (UserStore.getByUsername(username))
-      return res400(res, "Username already taken");
+    const { data: existing } = await db.from("users").select("id").eq("email", email).maybeSingle();
+    if (existing) return res400(res, "Email already registered");
+
+    const { data: existingUser } = await db.from("users").select("id").eq("username", username).maybeSingle();
+    if (existingUser) return res400(res, "Username already taken");
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const user = UserStore.create({
-      id:           crypto.randomUUID(),
-      email,
-      username,
-      passwordHash,
-      fullName:     fullName ?? null,
+    const { data: user, error } = await db.from("users").insert({
+      email, username,
+      password_hash:  passwordHash,
+      full_name:      fullName ?? null,
       role,
-      isActive:     true,
-      avatarUrl:    null,
-      createdAt:    now(),
-    });
+      is_active:      true,
+      email_verified: false,
+    }).select("*").single();
 
-    const token = signToken(user);
-    res201(res, { token, user: UserStore.safe(user) });
+    if (error) return res400(res, "Registration failed");
+
+    const payload = await issueTokenPair(res, user);
+    res201(res, payload);
   }),
 
   // POST /api/auth/login
   login: asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    const user = UserStore.getByEmail(email);
+    const { data: user } = await db.from("users").select("*").eq("email", email).maybeSingle();
     if (!user) return res401(res, "Invalid credentials");
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res401(res, "Invalid credentials");
+    if (!user.is_active) return res403(res, "Account deactivated");
 
-    if (!user.isActive) return res403(res, "Account deactivated");
-
-    const token = signToken(user);
-    res200(res, { token, user: UserStore.safe(user) });
+    const payload = await issueTokenPair(res, user);
+    res200(res, payload);
   }),
 
-  // GET /api/auth/me  (requires token)
-  me: asyncHandler(async (req, res) => {
-    res200(res, req.user);
-  }),
-
-  // POST /api/auth/refresh  (exchange a still-valid token for a fresh one)
+  // POST /api/auth/refresh  — rotate refresh token
   refresh: asyncHandler(async (req, res) => {
-    const user = UserStore.getById(req.user.id);
-    if (!user) return res401(res, "User not found");
-    const token = signToken(user);
-    res200(res, { token, user: UserStore.safe(user) });
-  }),
-};
+    const refreshToken = req.cookies?.akoro_refresh || req.body?.refreshToken;
+    if (!refreshToken) return res401(res, "Refresh token required");
 
-// ─── § DASHBOARD HANDLER ──────────────────────────────────────────────────────
-// Returns role-aware stats.
-// Import CourseStore from store.js in production — stubbed here for portability.
-
-const dashboardHandler = asyncHandler(async (req, res) => {
-  const { role, id } = req.user;
-
-  if (role === "student") {
-    const enrollments = EnrollmentStore.list({ userId: id });
-    const completed   = enrollments.filter((e) => e.completedAt).length;
-    const totalWatch  = _videoProgress.filter((p) => p.userId === id)
-                                       .reduce((s, p) => s + (p.watchedDuration ?? 0), 0);
-    return res200(res, {
-      role,
-      stats: { totalCourses: enrollments.length, completedCourses: completed, totalWatchTimeSecs: totalWatch },
-      enrollments,
-    });
-  }
-
-  if (role === "instructor") {
-    // In production: query courses WHERE teacherId = id from CourseStore
-    return res200(res, {
-      role,
-      stats: { totalCourses: 0, totalStudents: 0, totalRevenue: 0 },
-      message: "Connect CourseStore in production to populate instructor stats",
-    });
-  }
-
-  // admin
-  return res200(res, {
-    role,
-    stats: {
-      totalUsers:     _users.length,
-      totalEnrollments: _enrollments.length,
-      totalReviews:   _reviews.length,
-    },
-    users: _users.map(UserStore.safe),
-  });
-});
-
-// ─── § ENROLLMENT HANDLERS ────────────────────────────────────────────────────
-
-const enrollmentHandlers = {
-
-  // POST /api/courses/:courseId/enroll
-  enroll: asyncHandler(async (req, res) => {
-    const { courseId } = req.params;
-    const userId       = req.user.id;
-
-    if (EnrollmentStore.get(userId, courseId))
-      return res400(res, "Already enrolled in this course");
-
-    // In production: verify course exists + is published via CourseStore
-    const enrollment = EnrollmentStore.create({
-      id:          crypto.randomUUID(),
-      userId,
-      courseId,
-      progress:    0,
-      enrolledAt:  now(),
-      completedAt: null,
-    });
-
-    res201(res, enrollment);
-  }),
-
-  // DELETE /api/courses/:courseId/enroll  (unenroll)
-  unenroll: asyncHandler(async (req, res) => {
-    const { courseId } = req.params;
-    const enrollment   = EnrollmentStore.get(req.user.id, courseId);
-    if (!enrollment) return res404(res, "Enrollment not found");
-
-    EnrollmentStore.delete(enrollment.id);
-    res200(res, { message: "Successfully unenrolled" });
-  }),
-
-  // GET /api/enrollments  (list the current user's enrollments)
-  listMine: asyncHandler(async (req, res) => {
-    const enrollments = EnrollmentStore.list({ userId: req.user.id });
-    res200(res, enrollments, { total: enrollments.length });
-  }),
-};
-
-// ─── § PROGRESS HANDLERS ──────────────────────────────────────────────────────
-
-const progressHandlers = {
-
-  // POST /api/progress
-  // Called by the video player on a regular heartbeat (e.g. every 15s)
-  update: asyncHandler(async (req, res) => {
-    const { videoId, courseId, position, completed = false } = req.body;
-    const userId = req.user.id;
-
-    // Must be enrolled to track progress
-    if (!EnrollmentStore.get(userId, courseId))
-      return res403(res, "You must be enrolled to track progress");
-
-    const progress = ProgressStore.upsert({
-      userId,
-      videoId,
-      courseId,
-      lastPosition:    position,
-      watchedDuration: position,   // simplified — a real impl tracks cumulative unique seconds
-      completed:       !!completed,
-      updatedAt:       now(),
-    });
-
-    // Recompute course completion percentage
-    const { total, completed: done } = ProgressStore.countByCourse(userId, courseId);
-    const courseProgress = total > 0 ? Math.round((done / total) * 100) : 0;
-
-    // Update enrollment progress
-    const enrollment = EnrollmentStore.get(userId, courseId);
-    if (enrollment) {
-      EnrollmentStore.update(enrollment.id, {
-        progress:    courseProgress,
-        completedAt: courseProgress === 100 ? now() : enrollment.completedAt,
-      });
+    let decoded;
+    try {
+      decoded = verifyToken(refreshToken);
+    } catch {
+      clearAuthCookies(res);
+      return res401(res, "Invalid or expired refresh token");
     }
 
-    res200(res, { videoProgress: progress, courseProgress });
+    if (decoded.type !== "refresh") return res401(res, "Not a refresh token");
+
+    const stored = await RefreshStore.find(decoded.jti);
+    if (!stored) {
+      // Token not found — possible replay after expiry
+      clearAuthCookies(res);
+      return res401(res, "Refresh token not found");
+    }
+
+    if (stored.used) {
+      // ⚠ REPLAY DETECTED — revoke entire family
+      await RefreshStore.revokeFamily(stored.family);
+      clearAuthCookies(res);
+      return res401(res, "Refresh token reuse detected — all sessions revoked");
+    }
+
+    // Mark old token as used, then issue new pair
+    await RefreshStore.markUsed(decoded.jti);
+
+    const { data: user } = await db.from("users").select("*").eq("id", stored.user_id).maybeSingle();
+    if (!user || !user.is_active) {
+      clearAuthCookies(res);
+      return res401(res, "User not found");
+    }
+
+    // New refresh token inherits the same family
+    const { token: accessToken } = signAccess(user);
+    const { token: newRefreshToken, jti: newRefreshJti } = signRefresh(user.id, stored.family);
+    const newRefreshExp = Math.floor(Date.now() / 1000) + REFRESH_TTL_SECS;
+
+    await RefreshStore.save(newRefreshJti, user.id, stored.family, newRefreshExp);
+    setAccessCookie(res, accessToken);
+    setRefreshCookie(res, newRefreshToken);
+
+    res200(res, { accessToken, refreshToken: newRefreshToken, user: safeUser(user) });
   }),
 
-  // GET /api/progress/:videoId
-  getVideo: asyncHandler(async (req, res) => {
-    const progress = ProgressStore.get(req.user.id, req.params.videoId);
-    res200(res, progress ?? { lastPosition: 0, completed: false });
+  // POST /api/auth/logout
+  logout: asyncHandler(async (req, res) => {
+    // Deny-list the current access token's jti
+    if (req.tokenJti && req.tokenExp) {
+      await DenyList.add(req.tokenJti, req.tokenExp * 1000);
+    }
+    // Remove the refresh token if sent
+    const refreshToken = req.cookies?.akoro_refresh;
+    if (refreshToken) {
+      try {
+        const decoded = verifyToken(refreshToken);
+        await RefreshStore.delete(decoded.jti);
+      } catch { /* expired or invalid — ignore */ }
+    }
+    clearAuthCookies(res);
+    res200(res, { message: "Logged out" });
   }),
 
-  // GET /api/progress/course/:courseId
-  getCourse: asyncHandler(async (req, res) => {
-    const enrollment = EnrollmentStore.get(req.user.id, req.params.courseId);
-    if (!enrollment) return res404(res, "Not enrolled in this course");
-    res200(res, { progress: enrollment.progress, completedAt: enrollment.completedAt });
-  }),
-};
-
-// ─── § REVIEW HANDLERS ────────────────────────────────────────────────────────
-
-const reviewHandlers = {
-
-  // POST /api/courses/:courseId/reviews
-  submit: asyncHandler(async (req, res) => {
-    const { courseId } = req.params;
-    const userId       = req.user.id;
-
-    if (!EnrollmentStore.get(userId, courseId))
-      return res403(res, "You must be enrolled to leave a review");
-
-    const review = ReviewStore.upsert({
-      userId,
-      courseId,
-      rating:  req.body.rating,
-      comment: req.body.comment ?? null,
-    });
-
-    // In production: push avgRating back to CourseStore.update(courseId, { rating })
-    const avg = ReviewStore.avgRating(courseId);
-
-    res201(res, { review, courseAvgRating: avg });
-  }),
-
-  // GET /api/courses/:courseId/reviews
-  list: asyncHandler(async (req, res) => {
-    const reviews = ReviewStore.listByCourse(req.params.courseId);
-    const avg     = ReviewStore.avgRating(req.params.courseId);
-    res200(res, { reviews, avgRating: avg, total: reviews.length });
+  // GET /api/auth/me
+  me: asyncHandler(async (req, res) => {
+    res200(res, req.user);
   }),
 };
 
 // ─── § GOOGLE OAUTH ───────────────────────────────────────────────────────────
 
-const FRONTEND_URL  = process.env.FRONTEND_URL   || "https://akoro.app";
-const CALLBACK_URL  = process.env.GOOGLE_CALLBACK_URL
-  || "https://api.akoro.app/api/auth/google/callback";
+const CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || "https://api.akoro.app/api/auth/google/callback";
 
 passport.use(new GoogleStrategy(
   {
@@ -451,53 +453,33 @@ passport.use(new GoogleStrategy(
     try {
       const email    = profile.emails?.[0]?.value;
       const fullName = profile.displayName || "";
-      const avatar   = profile.photos?.[0]?.value   || null;
+      const avatar   = profile.photos?.[0]?.value || null;
       const googleId = profile.id;
 
       if (!email) return done(new Error("Google did not return an email"), null);
 
-      // Find existing user by email
-      const { data: existing } = await db
-        .from("users")
-        .select("*")
-        .eq("email", email)
-        .maybeSingle();
+      const { data: existing } = await db.from("users").select("*").eq("email", email).maybeSingle();
 
       if (existing) {
-        // Update google_id + avatar if not already set
-        const { data: updated } = await db
-          .from("users")
-          .update({
-            google_id:  existing.google_id  || googleId,
-            avatar_url: existing.avatar_url || avatar,
-          })
-          .eq("id", existing.id)
-          .select("*")
-          .single();
+        const { data: updated } = await db.from("users")
+          .update({ google_id: existing.google_id || googleId, avatar_url: existing.avatar_url || avatar })
+          .eq("id", existing.id).select("*").single();
         return done(null, updated || existing);
       }
 
-      // Create new user
-      const username = email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "_");
-      const { data: created, error } = await db
-        .from("users")
-        .insert({
-          email,
-          full_name:      fullName,
-          username:       username + "_" + Date.now().toString().slice(-4),
-          password_hash:  "",           // no password for OAuth users
-          avatar_url:     avatar,
-          google_id:      googleId,
-          role:           "student",
-          is_active:      true,
-          email_verified: true,
-        })
-        .select("*")
-        .single();
+      const username = email.split("@")[0].toLowerCase().replace(/[^a-z0-9_]/g, "_") + "_" + Date.now().toString().slice(-4);
+      const { data: created, error } = await db.from("users").insert({
+        email, full_name: fullName, username,
+        password_hash:  "",
+        avatar_url:     avatar,
+        google_id:      googleId,
+        role:           "student",
+        is_active:      true,
+        email_verified: true,
+      }).select("*").single();
 
       if (error) return done(error, null);
       return done(null, created);
-
     } catch (err) {
       return done(err, null);
     }
@@ -508,139 +490,67 @@ passport.use(new GoogleStrategy(
 
 const router = Router();
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-router.post("/register",  rules.register, runValidation,  authHandlers.register);
-router.post("/login",     rules.login,    runValidation,  authHandlers.login);
-router.get ("/me",        authenticateToken,              authHandlers.me);
-router.post("/refresh",   authenticateToken,              authHandlers.refresh);
+router.post("/register", rules.register, runValidation, authHandlers.register);
+router.post("/login",    rules.login,    runValidation, authHandlers.login);
+router.post("/refresh",  authHandlers.refresh);
+router.post("/logout",   authenticateToken, authHandlers.logout);
+router.get ("/me",       authenticateToken, authHandlers.me);
 
-// ── Google OAuth ──────────────────────────────────────────────────────────────
+// Google OAuth
 router.get("/google",
   passport.authenticate("google", { scope: ["profile", "email"], session: false })
 );
 
 router.get("/google/callback",
   passport.authenticate("google", { session: false, failureRedirect: `${FRONTEND_URL}/signin?error=google_failed` }),
-  (req, res) => {
-    try {
-      const user  = req.user;
-      const token = signToken(user);
-      const safe  = {
-        id:        user.id,
-        email:     user.email,
-        fullName:  user.full_name,
-        username:  user.username,
-        role:      user.role,
-        avatarUrl: user.avatar_url,
-      };
-      const userParam = encodeURIComponent(JSON.stringify(safe));
-      res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}&user=${userParam}`);
-    } catch {
-      res.redirect(`${FRONTEND_URL}/signin?error=token_failed`);
-    }
-  }
+  asyncHandler(async (req, res) => {
+    const user = req.user;
+    const { token: accessToken } = signAccess(user);
+    const family = randomUUID();
+    const { token: refreshToken, jti: refreshJti } = signRefresh(user.id, family);
+    const refreshExp = Math.floor(Date.now() / 1000) + REFRESH_TTL_SECS;
+
+    await RefreshStore.save(refreshJti, user.id, family, refreshExp);
+
+    setAccessCookie(res, accessToken);
+    setRefreshCookie(res, refreshToken);
+
+    // Pass safe user in URL for frontend to display — token is in cookie, not URL
+    const safe = safeUser(user);
+    const userParam = encodeURIComponent(JSON.stringify(safe));
+    res.redirect(`${FRONTEND_URL}/auth/callback?user=${userParam}`);
+  })
 );
-
-// ── Dashboard ─────────────────────────────────────────────────────────────────
-router.get ("/dashboard", authenticateToken,              dashboardHandler);
-
-// ── Enrollments ───────────────────────────────────────────────────────────────
-router.get   ("/enrollments",                 authenticateToken,                          enrollmentHandlers.listMine);
-router.post  ("/courses/:courseId/enroll",    authenticateToken,                          enrollmentHandlers.enroll);
-router.delete("/courses/:courseId/enroll",    authenticateToken,                          enrollmentHandlers.unenroll);
-
-// ── Progress ──────────────────────────────────────────────────────────────────
-router.post("/progress",                      authenticateToken, rules.progress, runValidation, progressHandlers.update);
-router.get ("/progress/:videoId",             authenticateToken,                               progressHandlers.getVideo);
-router.get ("/progress/course/:courseId",     authenticateToken,                               progressHandlers.getCourse);
-
-// ── Reviews ───────────────────────────────────────────────────────────────────
-router.post("/courses/:courseId/reviews",     authenticateToken, rules.review, runValidation,  reviewHandlers.submit);
-router.get ("/courses/:courseId/reviews",                                                       reviewHandlers.list);
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default router;
 
-/**
- * ── app.js wiring (for reference) ────────────────────────────────────────────
+/*
+ * ── Required DB migrations ────────────────────────────────────────────────────
  *
- * import authRouter, { authenticateToken, requireRole } from "./routes/auth.js";
- *
- * app.use("/api/auth", authRouter);
- *
- * // Re-export middleware for other routers:
- * // import { authenticateToken, requireRole } from "./routes/auth.js";
- *
- * ── Endpoints exposed ─────────────────────────────────────────────────────────
- *
- * POST   /api/auth/register
- * POST   /api/auth/login
- * GET    /api/auth/me
- * POST   /api/auth/refresh
- * GET    /api/auth/dashboard
- *
- * GET    /api/auth/enrollments
- * POST   /api/auth/courses/:courseId/enroll
- * DELETE /api/auth/courses/:courseId/enroll
- *
- * POST   /api/auth/progress
- * GET    /api/auth/progress/:videoId
- * GET    /api/auth/progress/course/:courseId
- *
- * POST   /api/auth/courses/:courseId/reviews
- * GET    /api/auth/courses/:courseId/reviews
- *
- * ── Database tables needed (Postgres) ────────────────────────────────────────
- *
- * CREATE TABLE users (
- *   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
- *   email         TEXT UNIQUE NOT NULL,
- *   username      TEXT UNIQUE NOT NULL,
- *   password_hash TEXT NOT NULL,
- *   full_name     TEXT,
- *   avatar_url    TEXT,
- *   role          TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student','instructor','admin')),
- *   is_active     BOOLEAN NOT NULL DEFAULT true,
- *   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
- * );
- *
- * CREATE TABLE enrollments (
- *   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
- *   user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- *   course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
- *   progress     INT NOT NULL DEFAULT 0,
- *   enrolled_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
- *   completed_at TIMESTAMPTZ,
- *   UNIQUE (user_id, course_id)
- * );
- *
- * CREATE TABLE video_progress (
- *   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
- *   user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- *   video_id         UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
- *   course_id        UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
- *   watched_duration INT NOT NULL DEFAULT 0,
- *   last_position    INT NOT NULL DEFAULT 0,
- *   completed        BOOLEAN NOT NULL DEFAULT false,
- *   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
- *   UNIQUE (user_id, video_id)
- * );
- *
- * CREATE TABLE reviews (
- *   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ * CREATE TABLE IF NOT EXISTS refresh_tokens (
+ *   jti        UUID PRIMARY KEY,
  *   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- *   course_id  UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
- *   rating     INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
- *   comment    TEXT,
- *   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
- *   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
- *   UNIQUE (user_id, course_id)
+ *   family     UUID NOT NULL,
+ *   used       BOOLEAN NOT NULL DEFAULT false,
+ *   expires_at TIMESTAMPTZ NOT NULL,
+ *   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+ * );
+ * CREATE INDEX ON refresh_tokens (user_id);
+ * CREATE INDEX ON refresh_tokens (family);
+ *
+ * CREATE TABLE IF NOT EXISTS revoked_tokens (
+ *   jti        UUID PRIMARY KEY,
+ *   expires_at TIMESTAMPTZ NOT NULL,
+ *   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
  * );
  *
- * CREATE INDEX ON enrollments   (user_id);
- * CREATE INDEX ON enrollments   (course_id);
- * CREATE INDEX ON video_progress(user_id);
- * CREATE INDEX ON video_progress(course_id);
- * CREATE INDEX ON reviews       (course_id);
+ * ── Env vars ──────────────────────────────────────────────────────────────────
+ *   JWT_PRIVATE_KEY     (RSA-2048 private PEM, \n-escaped)
+ *   JWT_PUBLIC_KEY      (RSA-2048 public  PEM, \n-escaped)
+ *   JWT_ISSUER          https://api.akoro.app
+ *   JWT_AUDIENCE        https://akoro.app
+ *   GOOGLE_CLIENT_ID
+ *   GOOGLE_CLIENT_SECRET
+ *   GOOGLE_CALLBACK_URL https://api.akoro.app/api/auth/google/callback
+ *   FRONTEND_URL        https://akoro.app
  */

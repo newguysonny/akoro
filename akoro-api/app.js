@@ -18,6 +18,7 @@ import { Server as SocketServer } from "socket.io";
 import { createAdapter }          from "@socket.io/redis-adapter";
 import Redis                      from "ioredis";
 import cors                       from "cors";
+import cookieParser               from "cookie-parser";
 import path                       from "path";
 import { fileURLToPath }          from "url";
 import { MulterError }            from "multer";
@@ -74,7 +75,8 @@ setupAdaptiveWebSocket(io);
 setupVoiceStreaming(io);
 
 // ─── Core middleware ──────────────────────────────────────────────────────────
-app.use(cors({ origin: config.server.corsOrigin }));
+app.use(cors({ origin: config.server.corsOrigin, credentials: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());

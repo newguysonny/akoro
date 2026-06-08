@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { API, jwt, apiGet, apiPost, apiPatch } from '../../services/api.js';
+import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
 import { AGENT_REPLIES, QUICK_PROMPTS, TASKS_INIT, AGENT_CONFIG } from '../../services/mockData.js';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 
