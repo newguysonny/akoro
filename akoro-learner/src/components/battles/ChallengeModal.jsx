@@ -1,6 +1,6 @@
 import React from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
-import { XIcon, ZapIcon } from '../common/Icons.jsx';
+import { XIcon, ZapIcon, StarIcon } from '../common/Icons.jsx';
 
 function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
   const sc=SUBJECT_COLORS[challenge.subject]||BRAND,diff=DIFFICULTY_CONFIG[challenge.difficulty],isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";

@@ -3,8 +3,9 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STU
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import {
   SESSIONS, CHALLENGES, SEED_BATTLES, MOCK_DECAY_ALERTS, AGENT_SESSIONS,
-  AGENT_CONFIG, TASKS_INIT, CONTINUATION_HISTORY,
+  AGENT_CONFIG, TASKS_INIT, CONTINUATION_HISTORY, getQuestions,
 } from '../services/mockData.js';
+import { ZapIcon, MicIcon, ChevDownIcon } from '../components/common/Icons.jsx';
 
 // Components
 import SessionCard    from '../components/sessions/SessionCard.jsx';
@@ -27,6 +28,30 @@ import { useAgentProfile } from '../hooks/useAgentProfile.js';
 import { useSessionAPI }   from '../hooks/useSessionAPI.js';
 import { useDecayAlerts }  from '../hooks/useDecayAlerts.js';
 import { useBattleAPI }    from '../hooks/useBattleAPI.js';
+
+function SubjectDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const sel = SUBJECTS[value];
+  return (
+    <div style={{ position:"relative" }}>
+      <div onClick={() => setOpen(o=>!o)} style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",borderRadius:100,padding:"5px 11px 5px 9px",border:"1px solid #DDD3FF",cursor:"pointer" }}>
+        <span style={{ fontSize:13 }}>{sel.icon}</span>
+        <span style={{ fontSize:11.5,fontWeight:800,color:BRAND }}>{sel.label}</span>
+        <ChevDownIcon size={12} color={BRAND}/>
+      </div>
+      {open && (
+        <div style={{ position:"absolute",top:"calc(100% + 6px)",left:0,background:"#fff",borderRadius:14,border:"1px solid #E5E7EB",boxShadow:"0 8px 28px rgba(0,0,0,.10)",zIndex:500,overflow:"hidden",minWidth:155 }}>
+          {Object.entries(SUBJECTS).map(([key,sub])=>(
+            <div key={key} onClick={()=>{onChange(key);setOpen(false);}} style={{ padding:"10px 14px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",background:value===key?"#F0EBFF":"transparent",borderBottom:"1px solid #F9FAFB" }}>
+              <span style={{ fontSize:14 }}>{sub.icon}</span>
+              <span style={{ fontSize:13,fontWeight:700,color:value===key?BRAND:"#374151" }}>{sub.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LearnerDashboard() {
   const [tab,               setTab]              = useState("sessions");

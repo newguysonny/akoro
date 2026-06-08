@@ -1,7 +1,7 @@
 import React from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { LEADERBOARD } from '../../services/mockData.js';
-import { TrophyIcon, FlameIcon, StarIcon } from '../common/Icons.jsx';
+import { TrophyIcon, FlameIcon, StarIcon, ZapIcon } from '../common/Icons.jsx';
 
 function RankingsTab() {
   const [boardType, setBoardType] = useState("classroom");

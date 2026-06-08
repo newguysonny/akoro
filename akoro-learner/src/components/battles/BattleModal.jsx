@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, STUDENT_ID } from '../../constants.js';
 import { API, jwt, apiPost } from '../../services/api.js';
 import { QUESTIONS, getQuestions } from '../../services/mockData.js';
-import { XIcon, ZapIcon, StarIcon } from '../common/Icons.jsx';
+import { XIcon, ZapIcon, StarIcon, BookIcon, FlameIcon, PlayIcon, TrophyIcon, UsersIcon } from '../common/Icons.jsx';
+import { LiveBadge } from '../common/ProgressBar.jsx';
 
 function BattleModal({ battle: initialBattle, onClose }) {
   const isCompleted = initialBattle.status === "completed";
