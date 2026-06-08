@@ -7,7 +7,7 @@ import {
 } from "./data/mockSeed.js";
 
 /* ── Change 1: API utilities ─────────────────────────────────────────────── */
-const API        = (typeof import_meta !== "undefined" && import_meta?.env?.VITE_API_URL) || "https://akoro.app";
+const API        = import.meta.env.VITE_API_URL || "https://akoro.app";
 const STUDENT_ID = "user-alex-01"; // replace with auth context
 const jwt = () => (typeof localStorage !== "undefined" && localStorage.getItem("akoro_jwt")) || "";
 
