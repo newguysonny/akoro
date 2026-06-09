@@ -144,7 +144,6 @@ export class NaNaEsumai {
     });
     return JSON.parse(res.choices[0].message.content);
   }
-}
 
   /* ═══ OLD interface — needed by StudentSessionOrchestrator (decay flow) ══════
      These methods match the nana-sargeant/guide.js interface exactly.
@@ -208,3 +207,4 @@ export class NaNaEsumai {
     });
     return JSON.parse(res.choices[0].message.content);
   }
+}

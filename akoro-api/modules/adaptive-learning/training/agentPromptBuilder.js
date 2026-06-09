@@ -11,8 +11,7 @@ import OpenAI from "openai";
 import { embed } from "../agents/student/knowledge.js";
 
 const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-// db.js handles supabase // 
-);
+// db.js handles supabase //
 
 // =============================================================
 // BUILD GUIDE PROMPT

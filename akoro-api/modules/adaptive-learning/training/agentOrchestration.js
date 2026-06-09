@@ -11,8 +11,7 @@ import db from "../../../db.js";
 import OpenAI from "openai";
 
 const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-// db.js handles supabase // 
-);
+// db.js handles supabase //
 
 // ── Flow type mapping from pedagogical pattern ────────────────
 function deriveFlowType(pedagogicalPattern) {

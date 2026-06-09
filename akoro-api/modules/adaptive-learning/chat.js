@@ -253,11 +253,6 @@ async function executeChatTool(name, input, studentId) {
     default: return { error: `Unknown tool: ${name}` };
   }
 }
-const db = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
-
 // =============================================================
 // FORMAT HELPERS
 // =============================================================

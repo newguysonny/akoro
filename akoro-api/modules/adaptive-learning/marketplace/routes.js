@@ -39,9 +39,7 @@ import {
   generateReference,
 } from "./paystackService.js";
 
-const router   = express.Router();
-  process.env.SUPABASE_URL,
-);
+const router = express.Router();
 
 // ── Shared helpers ────────────────────────────────────────────
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
