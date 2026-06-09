@@ -1,7 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiPost } from '../../services/api.js';
-import { AGENT_CONFIG, MOCK_DECAY_MESSAGES, autoObjectives, autoSubtopics } from '../../services/mockData.js';
+// Local fallback constants (no mock dependency)
+const AGENT_CONFIG = { name: '', emoji: '🤖' };
+const autoObjectives = (subtopic, topic) => [
+  `Define and explain ${subtopic} in the context of ${topic}`,
+  `Identify the key causes and effects of ${subtopic}`,
+  `Apply knowledge of ${subtopic} to real-world examples`,
+];
 import { buildDecayHistory, buildMockQueue } from '../../services/mockBlocks.js';
 import SessionChatView from './SessionChatView.jsx';
 

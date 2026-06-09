@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
-import { AGENT_CONFIG } from '../../services/mockData.js';
 import { buildInitialBlocks, buildMockQueue, buildContinuationHistory } from '../../services/mockBlocks.js';
+const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 

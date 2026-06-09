@@ -14,6 +14,8 @@ const AGENT_REPLIES = {
 };
 const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
 const AGENT_LEVEL = 12;
+// Local agent config constants (no mock dependency)
+const AGENT_CONFIG = { name: '', level: AGENT_LEVEL, avatars: AGENT_AVATARS };
 
 function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const initName  = agentNameProp  || '';
@@ -100,7 +102,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   };
 
   const saveCustomise=()=>{
-    const name=draftName||AGENT_CONFIG.name;
+    const name=draftName||agentName||'My Agent';
     updateAgentName(name, draftEmoji);
     // Persist to backend (non-critical)
     apiPost("/api/user/agent", { agent_name: name, agent_emoji: draftEmoji }).catch(()=>{});

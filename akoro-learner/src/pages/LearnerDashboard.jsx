@@ -2,10 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
-import {
-  SESSIONS, CHALLENGES, SEED_BATTLES, MOCK_DECAY_ALERTS, AGENT_SESSIONS,
-  AGENT_CONFIG, TASKS_INIT, CONTINUATION_HISTORY,
-} from '../services/mockData.js';
 
 // Components
 import SessionCard    from '../components/sessions/SessionCard.jsx';
@@ -71,28 +67,28 @@ export default function LearnerDashboard() {
   const [configInitial,     setConfigInitial]     = useState(null);  // pre-fill from session sheet
   const [decaySession,      setDecaySession]      = useState(null); // decay alert object
   const [acceptedIds,       setAcceptedIds]       = useState(new Set());
-  const [battles,           setBattles]           = useState(SEED_BATTLES);
+  const [battles,           setBattles]           = useState([]);
   const [toast,             setToast]             = useState(null);
   const [isOnline,          setIsOnline]          = useState(true);
   const [liveBattleModal,   setLiveBattleModal]   = useState(null);
 
-  // ── API-driven state with mock fallback ──────────────────────────────────
-  const [sessions,     setSessions]     = useState(SESSIONS);
-  const [challenges,   setChallenges]   = useState(CHALLENGES);
+  // ── API-driven state ─────────────────────────────────────────────────────
+  const [sessions,     setSessions]     = useState([]);
+  const [challenges,   setChallenges]   = useState([]);
   const [agentProfile, setAgentProfile] = useState({
-    name:             AGENT_CONFIG.name,
-    emoji:            AGENT_CONFIG.emoji,
-    teacherAgentId:   AGENT_CONFIG.teacherAgentId  || "nana-sargeant",
-    guideName:        AGENT_CONFIG.guideName        || "NaNa Esumai",
-    guideEmoji:       AGENT_CONFIG.guideEmoji       || "🧠",
-    guideRenderStyle: AGENT_CONFIG.guideRenderStyle || {
+    name:             '',
+    emoji:            '🤖',
+    teacherAgentId:   'nana-sargeant',
+    guideName:        'NaNa Esumai',
+    guideEmoji:       '🧠',
+    guideRenderStyle: {
       bubbleBg:"rgba(124,58,237,0.10)", bubbleBorder:"#7C3AED",
       labelColor:"#7C3AED", ttsVoice:"alloy", assessStyle:"gentle",
     },
-    ttsVoice: AGENT_CONFIG.guideRenderStyle?.ttsVoice || "alloy",
+    ttsVoice: "alloy",
   });
-  const [decayAlerts,  setDecayAlerts]  = useState(MOCK_DECAY_ALERTS);
-  const [agentSessions, setAgentSessions] = useState(AGENT_SESSIONS);
+  const [decayAlerts,  setDecayAlerts]  = useState([]);
+  const [agentSessions, setAgentSessions] = useState([]);
 
   useEffect(()=>{
     // Agent profile — student agent + guide agent
@@ -100,11 +96,14 @@ export default function LearnerDashboard() {
       .then(d=>{
         if (d.agent_name) setAgentProfile({
           name:            d.agent_name,
-          emoji:           d.agent_emoji  || AGENT_CONFIG.emoji,
-          teacherAgentId:  d.teacher_agent_id || AGENT_CONFIG.teacherAgentId,
-          guideName:       d.guide_name   || AGENT_CONFIG.guideName,
-          guideEmoji:      d.guide_emoji  || AGENT_CONFIG.guideEmoji,
-          guideRenderStyle:d.guide_render_style || AGENT_CONFIG.guideRenderStyle,
+          emoji:           d.agent_emoji  || '🤖',
+          teacherAgentId:  d.teacher_agent_id || 'nana-sargeant',
+          guideName:       d.guide_name   || 'NaNa Esumai',
+          guideEmoji:      d.guide_emoji  || '🧠',
+          guideRenderStyle:d.guide_render_style || {
+            bubbleBg:"rgba(124,58,237,0.10)", bubbleBorder:"#7C3AED",
+            labelColor:"#7C3AED", ttsVoice:"alloy", assessStyle:"gentle",
+          },
           ttsVoice:        d.tts_voice    || "alloy",
         });
       })
@@ -306,12 +305,11 @@ export default function LearnerDashboard() {
     const c = selectedChallenge;
     setAcceptedIds(prev => new Set([...prev, c.id]));
     setSelectedChallenge(null);
-    const battleQs = getQuestions(c.title);
     const newBattle = {
       ...c, id:`B-${Date.now()}`,
       agentA:{ id:"nexus",name:"Nexus",emoji:"🤖",owner:"You",ownerEmoji:"👤",bg:"#FEF0E6",color:"#E8884A",isYou:true,score:0,hp:100 },
       agentB:{ id:"opp",name:(c.agentBName||c.challenger.split(" ")[0]+"'s Agent"),emoji:(c.agentBEmoji||"⚡"),owner:c.challenger,ownerEmoji:"👦🏽",bg:(c.agentBBg||"#C8D8E8"),color:(c.agentBColor||BRAND),score:0,hp:100 },
-      topic:c.title, viewers:0, xpPool:parseInt((c.xpPrize||"0").replace(/\D/g,""),10)||200, totalQ:battleQs.length, currentQNum:0, winner:null, startedAgo:null, question:battleQs[0],
+      topic:c.title, viewers:0, xpPool:parseInt((c.xpPrize||"0").replace(/\D/g,""),10)||200, totalQ:0, currentQNum:0, winner:null, startedAgo:null, question:null,
     };
     // Also persist to backend (real endpoint)
     apiPost(`/api/battle/challenges/${c.id}/accept`).catch(()=>{});
