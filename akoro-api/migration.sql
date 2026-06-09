@@ -1448,11 +1448,19 @@ CREATE TABLE IF NOT EXISTS edu.user_agent_preferences (
 CREATE INDEX IF NOT EXISTS idx_user_agent_prefs_user
   ON edu.user_agent_preferences(user_id);
 
--- Migrate existing agent_preferences rows if any
-INSERT INTO edu.user_agent_preferences (user_id, default_pair_id, updated_at)
-SELECT agent_id, COALESCE(guide_pair_id, 'nana-sargeant'), updated_at
-FROM edu.agent_preferences
-ON CONFLICT (user_id) DO NOTHING;
+-- Migrate existing agent_preferences rows if any (skip if source table doesn't exist)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'edu' AND table_name = 'agent_preferences'
+  ) THEN
+    INSERT INTO edu.user_agent_preferences (user_id, default_pair_id, updated_at)
+    SELECT agent_id, COALESCE(guide_pair_id, 'nana-sargeant'), updated_at
+    FROM edu.agent_preferences
+    ON CONFLICT (user_id) DO NOTHING;
+  END IF;
+END $$;
 
 -- ── Marketplace listings ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS edu.marketplace_listings (
