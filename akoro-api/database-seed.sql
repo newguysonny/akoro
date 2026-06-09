@@ -18,11 +18,11 @@ INSERT INTO school_profiles (id, name, description, website, is_active, created_
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 2. USERS ───────────────────────────────────────────────────────────────
--- Passwords are bcrypt of "Password123!" — replace with real hashes in production.
--- $2b$12$K8p3Y... is a placeholder; use bcrypt.hash("Password123!", 12) to generate.
+-- Student passwords: FirstName2026  e.g. Alex2026, Jordan2026
+-- Instructor/admin passwords: placeholder — use Google OAuth or reset in prod.
 
 INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, role, is_active, email_verified, year_group, study_level, school_name, subjects, created_at, updated_at) VALUES
-  -- Admins / Teachers
+  -- Admins / Teachers (placeholder hashes — login via Google OAuth)
   ('22222222-0001-0001-0001-000000000001', 'admin@akoro.app',        'akoro_admin',   '$2b$12$placeholder', 'Akoro Admin',       'https://i.pravatar.cc/150?img=1',  'admin',      true, true, null,     null,          null,              '{}',                                           now(), now()),
   ('22222222-0001-0001-0001-000000000002', 'dr.amara@westwood.edu',  'dr_amara',      '$2b$12$placeholder', 'Dr. Amara Osei',    'https://i.pravatar.cc/150?img=47', 'instructor', true, true, null,     null,          'Westwood Academy','{"Mathematics","Further Mathematics"}',        now(), now()),
   ('22222222-0001-0001-0001-000000000003', 'ms.rivera@riverside.edu','ms_rivera',     '$2b$12$placeholder', 'Ms. Rivera',        'https://i.pravatar.cc/150?img=47', 'instructor', true, true, null,     null,          'Riverside High',  '{"Mathematics","Geometry"}',                   now(), now()),
@@ -31,27 +31,27 @@ INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, ro
   ('22222222-0001-0001-0001-000000000006', 'mr.okafor@westwood.edu', 'mr_okafor',     '$2b$12$placeholder', 'Mr. Okafor',        'https://i.pravatar.cc/150?img=61', 'instructor', true, true, null,     null,          'Westwood Academy','{"Mathematics","Further Mathematics"}',        now(), now()),
   ('22222222-0001-0001-0001-000000000007', 'mrs.bello@oakwood.edu',  'mrs_bello',     '$2b$12$placeholder', 'Mrs. Bello',        'https://i.pravatar.cc/150?img=38', 'instructor', true, true, null,     null,          'Oakwood Charter', '{"English Language","English Literature"}',    now(), now()),
 
-  -- Students — Westwood Academy
-  ('22222222-0002-0001-0001-000000000001', 'alex@student.akoro.app',       'alex_johnson',   '$2b$12$placeholder', 'Alex Johnson',   'https://i.pravatar.cc/150?img=15', 'student', true, true, 'Year 11', 'Senior Secondary', 'Westwood Academy', '{"Mathematics","Physics","Computer Science"}',          now(), now()),
-  ('22222222-0002-0001-0001-000000000002', 'jordan@student.akoro.app',     'jordan_m',       '$2b$12$placeholder', 'Jordan M.',      'https://i.pravatar.cc/150?img=12', 'student', true, true, 'Year 11', 'Senior Secondary', 'Westwood Academy', '{"Mathematics","Further Mathematics","Physics"}',       now(), now()),
-  ('22222222-0002-0001-0001-000000000003', 'priya@student.akoro.app',      'priya_k',        '$2b$12$placeholder', 'Priya K.',       'https://i.pravatar.cc/150?img=44', 'student', true, true, 'Year 10', 'Senior Secondary', 'Westwood Academy', '{"English Language","English Literature","History"}',   now(), now()),
-  ('22222222-0002-0001-0001-000000000004', 'marcus@student.akoro.app',     'marcus_b',       '$2b$12$placeholder', 'Marcus B.',      'https://i.pravatar.cc/150?img=57', 'student', true, true, 'Year 11', 'Senior Secondary', 'Westwood Academy', '{"Chemistry","Biology","Mathematics"}',                now(), now()),
-  ('22222222-0002-0001-0001-000000000005', 'aaliyah@student.akoro.app',    'aaliyah_t',      '$2b$12$placeholder', 'Aaliyah T.',     'https://i.pravatar.cc/150?img=32', 'student', true, true, 'Year 10', 'Senior Secondary', 'Westwood Academy', '{"Mathematics","Biology","Geography"}',                now(), now()),
-  ('22222222-0002-0001-0001-000000000006', 'leon@student.akoro.app',       'leon_s',         '$2b$12$placeholder', 'Leon S.',        'https://i.pravatar.cc/150?img=68', 'student', true, true, 'Year 11', 'Senior Secondary', 'Westwood Academy', '{"Physics","Mathematics","Computer Science"}',          now(), now()),
-  ('22222222-0002-0001-0001-000000000007', 'sasha@student.akoro.app',      'sasha_m',        '$2b$12$placeholder', 'Sasha M.',       'https://i.pravatar.cc/150?img=47', 'student', true, true, 'Year 10', 'Senior Secondary', 'Westwood Academy', '{"English Literature","History","Geography"}',          now(), now()),
-  ('22222222-0002-0001-0001-000000000008', 'devon@student.akoro.app',      'devon_r',        '$2b$12$placeholder', 'Devon R.',       'https://i.pravatar.cc/150?img=33', 'student', true, true, 'Year 11', 'Senior Secondary', 'Westwood Academy', '{"English Language","Mathematics","Economics"}',        now(), now()),
+  -- Students — Westwood Academy  (password = FirstName2026)
+  ('22222222-0002-0001-0001-000000000001', 'alex@student.akoro.app',       'alex_johnson',   '$2b$12$nNIacYBdS2oTwCR15bE/WumjF44lt0GbsaNGoDAFaBJ/zWK.kJvlm', 'Alex Johnson',   'https://i.pravatar.cc/150?img=15', 'student', true, true, 'Year 11', 'Senior Secondary',   'Westwood Academy', '{"Mathematics","Physics","Computer Science"}',          now(), now()),
+  ('22222222-0002-0001-0001-000000000002', 'jordan@student.akoro.app',     'jordan_m',       '$2b$12$1XH5PKulUqc1CcpmS755QOgBOlOubg8u6NgIoKVN2CnjydXMyf1LS', 'Jordan M.',      'https://i.pravatar.cc/150?img=12', 'student', true, true, 'Year 11', 'Senior Secondary',   'Westwood Academy', '{"Mathematics","Further Mathematics","Physics"}',       now(), now()),
+  ('22222222-0002-0001-0001-000000000003', 'priya@student.akoro.app',      'priya_k',        '$2b$12$XUeuzli84438PVjhP0sG7us7ctm0Q9HGB.bRJzYi98XS4O.2iD0DO', 'Priya K.',       'https://i.pravatar.cc/150?img=44', 'student', true, true, 'Year 10', 'Senior Secondary',   'Westwood Academy', '{"English Language","English Literature","History"}',   now(), now()),
+  ('22222222-0002-0001-0001-000000000004', 'marcus@student.akoro.app',     'marcus_b',       '$2b$12$JJ1F0WpU3tfKa3ztWjn2X.4jZ1c2IevY/Wpz7RFGPtcFaQGX/n/IS', 'Marcus B.',      'https://i.pravatar.cc/150?img=57', 'student', true, true, 'Year 11', 'Senior Secondary',   'Westwood Academy', '{"Chemistry","Biology","Mathematics"}',                now(), now()),
+  ('22222222-0002-0001-0001-000000000005', 'aaliyah@student.akoro.app',    'aaliyah_t',      '$2b$12$bz0M8CVXNMa/tk1whCfWvO2isrxC2/VK.eZAUpMs0nbbd74UwDGhm', 'Aaliyah T.',     'https://i.pravatar.cc/150?img=32', 'student', true, true, 'Year 10', 'Senior Secondary',   'Westwood Academy', '{"Mathematics","Biology","Geography"}',                now(), now()),
+  ('22222222-0002-0001-0001-000000000006', 'leon@student.akoro.app',       'leon_s',         '$2b$12$pLQ/mBwMj1pSgkpbLBFvXOY40E25LT3J2GQljAyvnj6puz0eMAt6i', 'Leon S.',        'https://i.pravatar.cc/150?img=68', 'student', true, true, 'Year 11', 'Senior Secondary',   'Westwood Academy', '{"Physics","Mathematics","Computer Science"}',          now(), now()),
+  ('22222222-0002-0001-0001-000000000007', 'sasha@student.akoro.app',      'sasha_m',        '$2b$12$KY4ZfOZCo1ttbk6UXUIqKuYKRHkxkWIVnnVOLFLD5l8AneG7vvUxi', 'Sasha M.',       'https://i.pravatar.cc/150?img=47', 'student', true, true, 'Year 10', 'Senior Secondary',   'Westwood Academy', '{"English Literature","History","Geography"}',          now(), now()),
+  ('22222222-0002-0001-0001-000000000008', 'devon@student.akoro.app',      'devon_r',        '$2b$12$TJjxzapE6iKaHCE93yvHbeQqlUv.inK60Fv3rK9XINl7xOcq2BHrC', 'Devon R.',       'https://i.pravatar.cc/150?img=33', 'student', true, true, 'Year 11', 'Senior Secondary',   'Westwood Academy', '{"English Language","Mathematics","Economics"}',        now(), now()),
 
-  -- Students — Riverside High
-  ('22222222-0002-0002-0001-000000000001', 'ngozi@student.akoro.app',      'ngozi_a',        '$2b$12$placeholder', 'Ngozi A.',       'https://i.pravatar.cc/150?img=20', 'student', true, true, 'Year 12', 'Sixth Form / A-Level', 'Riverside High', '{"Mathematics","Further Mathematics","Chemistry"}',   now(), now()),
-  ('22222222-0002-0002-0001-000000000002', 'chukwuemeka@student.akoro.app','chukwuemeka_o',  '$2b$12$placeholder', 'Chukwuemeka O.', 'https://i.pravatar.cc/150?img=21', 'student', true, true, 'Year 12', 'Sixth Form / A-Level', 'Riverside High', '{"Physics","Mathematics","Computer Science"}',         now(), now()),
-  ('22222222-0002-0002-0001-000000000003', 'amaka@student.akoro.app',      'amaka_n',        '$2b$12$placeholder', 'Amaka N.',       'https://i.pravatar.cc/150?img=22', 'student', true, true, 'Year 11', 'Senior Secondary', 'Riverside High', '{"Biology","Chemistry","English Language"}',           now(), now()),
-  ('22222222-0002-0002-0001-000000000004', 'emeka@student.akoro.app',      'emeka_c',        '$2b$12$placeholder', 'Emeka C.',       'https://i.pravatar.cc/150?img=23', 'student', true, true, 'Year 11', 'Senior Secondary', 'Riverside High', '{"Mathematics","Physics","Economics"}',                now(), now()),
-  ('22222222-0002-0002-0001-000000000005', 'tunde@student.akoro.app',      'tunde_b',        '$2b$12$placeholder', 'Tunde B.',       'https://i.pravatar.cc/150?img=24', 'student', true, true, 'Year 10', 'Senior Secondary', 'Riverside High', '{"History","Government / Civics","English Language"}', now(), now()),
+  -- Students — Riverside High  (password = FirstName2026)
+  ('22222222-0002-0002-0001-000000000001', 'ngozi@student.akoro.app',      'ngozi_a',        '$2b$12$KOwb2FsmPuudErnbzuUFU.MmJ2FqPUPXfH7l0vskjx0bPdxasHUHC', 'Ngozi A.',       'https://i.pravatar.cc/150?img=20', 'student', true, true, 'Year 12', 'Sixth Form / A-Level','Riverside High', '{"Mathematics","Further Mathematics","Chemistry"}',    now(), now()),
+  ('22222222-0002-0002-0001-000000000002', 'chukwuemeka@student.akoro.app','chukwuemeka_o',  '$2b$12$2eznKX0GcfqfYYQzzW1.9umO3q6HLFmWocwZD54EyoABXL9MiiU8m', 'Chukwuemeka O.', 'https://i.pravatar.cc/150?img=21', 'student', true, true, 'Year 12', 'Sixth Form / A-Level','Riverside High', '{"Physics","Mathematics","Computer Science"}',          now(), now()),
+  ('22222222-0002-0002-0001-000000000003', 'amaka@student.akoro.app',      'amaka_n',        '$2b$12$XssBbzpn8i4Nc6BoDKbapuoU5O7HEUw2nwVtePJG14t0u1VD7HfGW', 'Amaka N.',       'https://i.pravatar.cc/150?img=22', 'student', true, true, 'Year 11', 'Senior Secondary',   'Riverside High', '{"Biology","Chemistry","English Language"}',            now(), now()),
+  ('22222222-0002-0002-0001-000000000004', 'emeka@student.akoro.app',      'emeka_c',        '$2b$12$8ihuzrbWCDaacVNIDzAK7u0jNea2B5jtmzTai2mUExBa3qltyBFli',  'Emeka C.',       'https://i.pravatar.cc/150?img=23', 'student', true, true, 'Year 11', 'Senior Secondary',   'Riverside High', '{"Mathematics","Physics","Economics"}',                  now(), now()),
+  ('22222222-0002-0002-0001-000000000005', 'tunde@student.akoro.app',      'tunde_b',        '$2b$12$mq/cEyxde9Y77a5UbgGSA.YySMP0Im/BLfgvkdypkslwtJ.8KeNFC',  'Tunde B.',       'https://i.pravatar.cc/150?img=24', 'student', true, true, 'Year 10', 'Senior Secondary',   'Riverside High', '{"History","Government / Civics","English Language"}',  now(), now()),
 
-  -- Students — Summit Prep
-  ('22222222-0002-0003-0001-000000000001', 'chioma@student.akoro.app',     'chioma_e',       '$2b$12$placeholder', 'Chioma E.',      'https://i.pravatar.cc/150?img=25', 'student', true, true, 'Year 13', 'Sixth Form / A-Level', 'Summit Prep', '{"Biology","Chemistry","Mathematics"}',               now(), now()),
-  ('22222222-0002-0003-0001-000000000002', 'ola@student.akoro.app',        'ola_d',          '$2b$12$placeholder', 'Ola D.',         'https://i.pravatar.cc/150?img=26', 'student', true, true, 'Year 12', 'Sixth Form / A-Level', 'Summit Prep', '{"Economics","Mathematics","English Literature"}',     now(), now()),
-  ('22222222-0002-0003-0001-000000000003', 'femi@student.akoro.app',       'femi_a',         '$2b$12$placeholder', 'Femi A.',        'https://i.pravatar.cc/150?img=27', 'student', true, true, 'Year 13', 'Sixth Form / A-Level', 'Summit Prep', '{"Computer Science","Mathematics","Physics"}',         now(), now())
+  -- Students — Summit Prep  (password = FirstName2026)
+  ('22222222-0002-0003-0001-000000000001', 'chioma@student.akoro.app',     'chioma_e',       '$2b$12$IQvNnFD9hSzwahgiNzI.kO8Y/y.MlV5skAarsEIgL0zWiv2lg2Zqu', 'Chioma E.',      'https://i.pravatar.cc/150?img=25', 'student', true, true, 'Year 13', 'Sixth Form / A-Level','Summit Prep',   '{"Biology","Chemistry","Mathematics"}',                  now(), now()),
+  ('22222222-0002-0003-0001-000000000002', 'ola@student.akoro.app',        'ola_d',          '$2b$12$X9HpRs1.Z7uuqs9Pa15BL.9U/McESr2Kmc0L2ewEZ5pKV4UVogR1i',  'Ola D.',         'https://i.pravatar.cc/150?img=26', 'student', true, true, 'Year 12', 'Sixth Form / A-Level','Summit Prep',   '{"Economics","Mathematics","English Literature"}',       now(), now()),
+  ('22222222-0002-0003-0001-000000000003', 'femi@student.akoro.app',       'femi_a',         '$2b$12$cfookozrjlN2V0U2StGOe.gUfbCe9QPzNtXLKJ0Kf5nvYBvOhT9zS',  'Femi A.',        'https://i.pravatar.cc/150?img=27', 'student', true, true, 'Year 13', 'Sixth Form / A-Level','Summit Prep',   '{"Computer Science","Mathematics","Physics"}',           now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 3. SCHOOL ↔ TEACHER LINKS ─────────────────────────────────────────────
@@ -303,7 +303,65 @@ INSERT INTO battles (id, course_id, challenger_id, opponent_id, battle_type, sub
     'classroom', 'Mathematics', 'Calculus Class Championship',
     'Teacher''s agent Pythia challenges the entire class. Highest score wins the XP pool.',
     500, 20, 'hard', 'live', 18,
-    now() - interval '4 minutes', now(), now())
+    now() - interval '4 minutes', now(), now()),
+
+  -- ─── CHALLENGES (incoming challenge requests) ────────────────────────────────
+  ('aaaaaaaa-0001-0001-0001-000000000005',
+    '44444444-0001-0001-0001-000000000001',
+    '22222222-0002-0001-0001-000000000002',
+    '22222222-0002-0001-0001-000000000001',
+    'immediate', 'Mathematics', 'Speed Algebra Duel',
+    'Jordan M. has challenged you! 10 linear equations. First to finish with 100% accuracy wins.',
+    250, 15, 'hard', 'scheduled', 0,
+    null, now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000006',
+    '44444444-0001-0001-0001-000000000003',
+    '22222222-0002-0001-0001-000000000003',
+    '22222222-0002-0001-0001-000000000001',
+    'immediate', 'English Language', 'Vocabulary Blitz',
+    'Priya K. has challenged you! 50 SAT vocab words. Match definitions against the clock.',
+    180, 10, 'medium', 'scheduled', 0,
+    null, now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000007',
+    '44444444-0001-0001-0001-000000000008',
+    '22222222-0002-0001-0001-000000000004',
+    '22222222-0002-0001-0001-000000000001',
+    'scheduled', 'Chemistry', 'Periodic Table Sprint',
+    'Marcus B. has scheduled a challenge! Name the element, symbol, and atomic number.',
+    200, 12, 'hard', 'scheduled', 0,
+    now() + interval '1 day 16 hours', now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000008',
+    '44444444-0001-0001-0001-000000000002',
+    '22222222-0002-0002-0001-000000000003',
+    '22222222-0002-0001-0001-000000000001',
+    'scheduled', 'Mathematics', 'Geometry Quick-Fire',
+    'Aaliyah T. challenges you this Saturday! 20 geometry problems, shapes and proofs.',
+    160, 10, 'medium', 'scheduled', 0,
+    now() + interval '6 days 10 hours', now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000009',
+    '44444444-0001-0001-0001-000000000007',
+    '22222222-0002-0001-0001-000000000006',
+    '22222222-0002-0001-0001-000000000001',
+    'immediate', 'Physics', 'Newton''s Laws Blitz',
+    'Leon S. is waiting! Identify the correct law for each scenario in under 90 seconds.',
+    220, 12, 'hard', 'scheduled', 0,
+    null, now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000010',
+    '44444444-0001-0001-0001-000000000003',
+    '22222222-0002-0001-0001-000000000008',
+    '22222222-0002-0001-0001-000000000001',
+    'scheduled', 'English Language', 'Grammar Gauntlet',
+    'Devon R. challenges you Sunday afternoon! Identify and correct grammar errors.',
+    140, 8, 'easy', 'scheduled', 0,
+    now() + interval '7 days 14 hours', now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000011',
+    '44444444-0001-0001-0001-000000000002',
+    '22222222-0001-0001-0001-000000000002',
+    null,
+    'classroom', 'Mathematics', 'Calculus Class Championship',
+    'Dr. Amara challenges the entire class to a calculus showdown. Highest score wins the XP pool.',
+    500, 20, 'hard', 'scheduled', 0,
+    now() + interval '2 days 9 hours', now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- Battle participants
