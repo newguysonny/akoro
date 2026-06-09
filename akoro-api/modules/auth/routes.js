@@ -32,8 +32,9 @@ import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
-const PRIVATE_KEY  = (process.env.JWT_PRIVATE_KEY  || "").replace(/\\n/g, "\n");
-const PUBLIC_KEY   = (process.env.JWT_PUBLIC_KEY   || "").replace(/\\n/g, "\n");
+const PRIVATE_KEY  = (process.env.JWT_PRIVATE_KEY  || "").replace(/\\n/g, "\n").trim();
+const PUBLIC_KEY   = (process.env.JWT_PUBLIC_KEY   || "").replace(/\\n/g, "\n").trim();
+
 const JWT_ISSUER   = process.env.JWT_ISSUER   || "https://api.akoro.app";
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://akoro.app";
@@ -44,7 +45,7 @@ const REFRESH_TTL_SECS = 7 * 24 * 3600;  // 7 days
 const ALLOWED_ALGS     = ["RS256"];       // whitelist — never HS256 / none
 
 // Fall back to HS256 with a secret in dev when no RSA keys provided
-const USE_RSA = !!PRIVATE_KEY && !!PUBLIC_KEY;
+const USE_RSA = PRIVATE_KEY.includes("-----BEGIN") && PUBLIC_KEY.includes("-----BEGIN");
 const DEV_SECRET = process.env.JWT_SECRET || "akoro-dev-secret-change-in-production";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
