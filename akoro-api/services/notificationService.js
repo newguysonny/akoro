@@ -34,11 +34,13 @@ const twilioClient = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
-webpush.setVapidDetails(
-  `mailto:${process.env.VAPID_EMAIL ?? "admin@akoro.app"}`,
-  process.env.VAPID_PUBLIC_KEY  ?? "",
-  process.env.VAPID_PRIVATE_KEY ?? ""
-);
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    `mailto:${process.env.VAPID_EMAIL ?? "admin@akoro.app"}`,
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 // ─── Channel senders ──────────────────────────────────────────────────────────
 
