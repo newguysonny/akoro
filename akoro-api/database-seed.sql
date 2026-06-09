@@ -177,7 +177,9 @@ INSERT INTO user_agents (id, user_id, agent_name, agent_emoji, agent_color, agen
   ('66666666-0001-0001-0001-000000000012', '22222222-0002-0002-0001-000000000004', 'Echo',   '🌊', '#0891B2', '#CFFAFE', 2400, true, now(), now()),
   ('66666666-0001-0001-0001-000000000013', '22222222-0002-0003-0001-000000000001', 'Pythia', '🔮', '#7C3AED', '#EDE8F8', 3800, true, now(), now()),
   ('66666666-0001-0001-0001-000000000014', '22222222-0002-0003-0001-000000000002', 'Lumen',  '💡', '#F59E0B', '#FEF3C7', 3200, true, now(), now()),
-  ('66666666-0001-0001-0001-000000000015', '22222222-0002-0003-0001-000000000003', 'Vega',   '⭐', '#10B981', '#D1FAE5', 3500, true, now(), now())
+  ('66666666-0001-0001-0001-000000000015', '22222222-0002-0003-0001-000000000003', 'Vega',   '⭐', '#10B981', '#D1FAE5', 3500, true, now(), now()),
+  -- Teacher agent (Dr. Amara) — needed for classroom battle participation
+  ('66666666-0001-0001-0001-000000000016', '22222222-0001-0001-0001-000000000002', 'Pythia', '🔮', '#7C3AED', '#EDE8F8', 5000, true, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 9. XP TRANSACTIONS & LEADERBOARD ───────────────────────────────────────
@@ -234,155 +236,148 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 10. QUESTION BANK ──────────────────────────────────────────────────────
 
-INSERT INTO question_bank (id, question_text, options, correct_answer, topic, difficulty, subject, xp_value, created_by) VALUES
-  -- Algebra
-  ('99999999-0001-0001-0001-000000000001', 'Solve for x: 3x + 7 = 22',                    '["x = 3","x = 4","x = 5","x = 6"]',                                              'x = 5',                    'Algebra',       'medium', 'Mathematics', 30, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0001-000000000002', 'Solve for x: 5x − 3 = 22',                    '["x = 4","x = 5","x = 3","x = 6"]',                                              'x = 5',                    'Algebra',       'medium', 'Mathematics', 30, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0001-000000000003', 'Factorise: x² + 5x + 6',                      '["(x+2)(x+3)","(x+1)(x+6)","(x+2)(x+4)","(x+3)(x+4)"]',                          '(x+2)(x+3)',               'Quadratic',     'medium', 'Mathematics', 40, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0001-000000000004', 'Expand: (x + 3)²',                            '["x² + 9","x² + 6x + 9","x² + 3x + 9","x² + 6x + 6"]',                           'x² + 6x + 9',              'Algebra',       'medium', 'Mathematics', 35, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0001-000000000005', 'Solve simultaneously: x + y = 10, x − y = 2', '["x=6,y=4","x=7,y=3","x=5,y=5","x=8,y=2"]',                                      'x=6,y=4',                  'Simultaneous',  'hard',   'Mathematics', 45, '22222222-0001-0001-0001-000000000002'),
-  -- Geometry
-  ('99999999-0001-0001-0002-000000000001', 'Area of a triangle with base 8 and height 5?', '["20","40","25","16"]',                                                           '20',                       'Area',          'easy',   'Mathematics', 25, '22222222-0001-0001-0001-000000000003'),
-  ('99999999-0001-0001-0002-000000000002', 'Sum of interior angles of a pentagon?',         '["360°","540°","480°","720°"]',                                                   '540°',                     'Polygons',      'medium', 'Mathematics', 35, '22222222-0001-0001-0001-000000000003'),
-  ('99999999-0001-0001-0002-000000000003', 'Hypotenuse of a right triangle with legs 3 and 4?', '["5","6","7","√7"]',                                                         '5',                        'Pythagoras',    'easy',   'Mathematics', 35, '22222222-0001-0001-0001-000000000003'),
-  ('99999999-0001-0001-0002-000000000004', 'Volume of a cube with side 4?',                '["16","32","48","64"]',                                                            '64',                       'Volume',        'easy',   'Mathematics', 30, '22222222-0001-0001-0001-000000000003'),
-  -- Calculus
-  ('99999999-0001-0001-0003-000000000001', 'Find dy/dx if y = sin(3x² + 2x)',              '["cos(3x² + 2x)","(6x + 2)cos(3x² + 2x)","sin(6x + 2)","−cos(3x² + 2x)"]',      '(6x + 2)cos(3x² + 2x)',   'Chain Rule',    'hard',   'Mathematics', 40, '22222222-0001-0001-0001-000000000006'),
-  ('99999999-0001-0001-0003-000000000002', 'Integrate ∫ 3x² dx',                          '["6x + C","x³ + C","x³","3x³ + C"]',                                              'x³ + C',                   'Integration',   'medium', 'Mathematics', 30, '22222222-0001-0001-0001-000000000006'),
-  ('99999999-0001-0001-0003-000000000003', 'What is lim(x→0) sin(x)/x?',                  '["0","∞","1","Undefined"]',                                                        '1',                        'Limits',        'hard',   'Mathematics', 35, '22222222-0001-0001-0001-000000000006'),
-  ('99999999-0001-0001-0003-000000000004', 'Derivative of ln(x)?',                        '["x","1/x","e^x","ln(x)/x"]',                                                     '1/x',                      'Differentiation','medium','Mathematics', 30, '22222222-0001-0001-0001-000000000006'),
-  -- Vocabulary
-  ('99999999-0001-0001-0004-000000000001', 'What does ''ephemeral'' mean?',                '["Permanent","Short-lived","Ancient","Enormous"]',                                 'Short-lived',              'Vocabulary',    'medium', 'English Language', 30, '22222222-0001-0001-0001-000000000004'),
-  ('99999999-0001-0001-0004-000000000002', '''Ubiquitous'' means?',                        '["Rare","Present everywhere","Ancient","Invisible"]',                              'Present everywhere',       'Vocabulary',    'hard',   'English Language', 30, '22222222-0001-0001-0001-000000000004'),
-  ('99999999-0001-0001-0004-000000000003', '''Loquacious'' means?',                        '["Silent","Fearful","Talkative","Wise"]',                                          'Talkative',                'Vocabulary',    'medium', 'English Language', 30, '22222222-0001-0001-0001-000000000004'),
-  ('99999999-0001-0001-0004-000000000004', 'Antonym of ''verbose'' is?',                   '["Wordy","Lengthy","Concise","Repetitive"]',                                       'Concise',                  'Antonyms',      'medium', 'English Language', 35, '22222222-0001-0001-0001-000000000004'),
-  -- Grammar
-  ('99999999-0001-0001-0005-000000000001', 'Which sentence is correct?',                   '["She don''t like it.","She doesn''t likes it.","She doesn''t like it.","She not like it."]', 'She doesn''t like it.', 'Grammar', 'easy', 'English Language', 25, '22222222-0001-0001-0001-000000000007'),
-  ('99999999-0001-0001-0005-000000000002', 'Which is passive voice?',                      '["The dog bit the man.","The man bit the dog.","The man was bitten.","The dog bites."]',     'The man was bitten.',   'Voice',    'medium', 'English Language', 40, '22222222-0001-0001-0001-000000000007'),
-  -- Biology
-  ('99999999-0001-0001-0006-000000000001', 'What is the primary product of photosynthesis?', '["Oxygen","Glucose","Carbon dioxide","Water"]',                                  'Glucose',                  'Photosynthesis','easy',   'Biology', 25, '22222222-0001-0001-0001-000000000005'),
-  ('99999999-0001-0001-0006-000000000002', 'How many chromosomes does a human cell have?',   '["23","46","48","44"]',                                                           '46',                       'Genetics',      'easy',   'Biology', 25, '22222222-0001-0001-0001-000000000005'),
-  ('99999999-0001-0001-0006-000000000003', 'Mitosis produces how many daughter cells?',      '["1","2","3","4"]',                                                               '2',                        'Cell Division', 'medium', 'Biology', 30, '22222222-0001-0001-0001-000000000005'),
-  -- Physics / Newton
-  ('99999999-0001-0001-0007-000000000001', 'Newton''s 1st Law is called?',                  '["Law of Acceleration","Law of Inertia","Law of Action-Reaction","Law of Gravity"]', 'Law of Inertia',         'Newton''s Laws','easy',   'Physics', 25, '22222222-0001-0001-0001-000000000005'),
-  ('99999999-0001-0001-0007-000000000002', 'Force = ?',                                     '["mass × velocity","mass × acceleration","weight × speed","mass × distance"]',    'mass × acceleration',      'Equations',     'easy',   'Physics', 30, '22222222-0001-0001-0001-000000000005'),
-  ('99999999-0001-0001-0007-000000000003', 'Mass 4kg, accel 5m/s². Force?',                 '["20 N","9 N","1.25 N","25 N"]',                                                   '20 N',                     'F=ma',          'medium', 'Physics', 40, '22222222-0001-0001-0001-000000000005'),
-  -- Chemistry
-  ('99999999-0001-0001-0008-000000000001', 'Chemical symbol for Gold?',                     '["Go","Gd","Au","Ag"]',                                                            'Au',                       'Elements',      'easy',   'Chemistry', 30, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0008-000000000002', 'Atomic number of Carbon?',                      '["6","8","12","14"]',                                                              '6',                        'Elements',      'easy',   'Chemistry', 25, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0008-000000000003', 'Symbol for Sodium?',                            '["So","Sd","Sn","Na"]',                                                            'Na',                       'Elements',      'easy',   'Chemistry', 30, '22222222-0001-0001-0001-000000000002'),
-  ('99999999-0001-0001-0008-000000000004', 'Highest electronegativity?',                    '["Oxygen","Nitrogen","Chlorine","Fluorine"]',                                      'Fluorine',                 'Properties',    'hard',   'Chemistry', 40, '22222222-0001-0001-0001-000000000002')
+INSERT INTO question_bank (id, course_id, subject, topic, question_text, options_json, correct_answer_index, difficulty, xp_value, created_by) VALUES
+  -- Algebra  (course: Algebra Fundamentals)
+  ('99999999-0001-0001-0001-000000000001', '44444444-0001-0001-0001-000000000001', 'Mathematics', 'Algebra',        'Solve for x: 3x + 7 = 22',                    '["x = 3","x = 4","x = 5","x = 6"]',                                              2, 'medium', 30, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0001-000000000002', '44444444-0001-0001-0001-000000000001', 'Mathematics', 'Algebra',        'Solve for x: 5x − 3 = 22',                    '["x = 4","x = 5","x = 3","x = 6"]',                                              1, 'medium', 30, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0001-000000000003', '44444444-0001-0001-0001-000000000001', 'Mathematics', 'Quadratic',      'Factorise: x² + 5x + 6',                      '["(x+2)(x+3)","(x+1)(x+6)","(x+2)(x+4)","(x+3)(x+4)"]',                          0, 'medium', 40, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0001-000000000004', '44444444-0001-0001-0001-000000000001', 'Mathematics', 'Algebra',        'Expand: (x + 3)²',                            '["x² + 9","x² + 6x + 9","x² + 3x + 9","x² + 6x + 6"]',                           1, 'medium', 35, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0001-000000000005', '44444444-0001-0001-0001-000000000001', 'Mathematics', 'Simultaneous',   'Solve simultaneously: x + y = 10, x − y = 2', '["x=6,y=4","x=7,y=3","x=5,y=5","x=8,y=2"]',                                      0, 'hard',   45, '22222222-0001-0001-0001-000000000002'),
+  -- Geometry  (course: Geometry & Proofs)
+  ('99999999-0001-0001-0002-000000000001', '44444444-0001-0001-0001-000000000007', 'Mathematics', 'Area',           'Area of a triangle with base 8 and height 5?', '["20","40","25","16"]',                                                          0, 'easy',   25, '22222222-0001-0001-0001-000000000003'),
+  ('99999999-0001-0001-0002-000000000002', '44444444-0001-0001-0001-000000000007', 'Mathematics', 'Polygons',       'Sum of interior angles of a pentagon?',         '["360°","540°","480°","720°"]',                                                  1, 'medium', 35, '22222222-0001-0001-0001-000000000003'),
+  ('99999999-0001-0001-0002-000000000003', '44444444-0001-0001-0001-000000000007', 'Mathematics', 'Pythagoras',     'Hypotenuse of a right triangle with legs 3 and 4?', '["5","6","7","√7"]',                                                        0, 'easy',   35, '22222222-0001-0001-0001-000000000003'),
+  ('99999999-0001-0001-0002-000000000004', '44444444-0001-0001-0001-000000000007', 'Mathematics', 'Volume',         'Volume of a cube with side 4?',                '["16","32","48","64"]',                                                          3, 'easy',   30, '22222222-0001-0001-0001-000000000003'),
+  -- Calculus  (course: Further Mathematics — Calculus)
+  ('99999999-0001-0001-0003-000000000001', '44444444-0001-0001-0001-000000000002', 'Mathematics', 'Chain Rule',     'Find dy/dx if y = sin(3x² + 2x)',              '["cos(3x² + 2x)","(6x + 2)cos(3x² + 2x)","sin(6x + 2)","−cos(3x² + 2x)"]',       1, 'hard',   40, '22222222-0001-0001-0001-000000000006'),
+  ('99999999-0001-0001-0003-000000000002', '44444444-0001-0001-0001-000000000002', 'Mathematics', 'Integration',    'Integrate ∫ 3x² dx',                          '["6x + C","x³ + C","x³","3x³ + C"]',                                             1, 'medium', 30, '22222222-0001-0001-0001-000000000006'),
+  ('99999999-0001-0001-0003-000000000003', '44444444-0001-0001-0001-000000000002', 'Mathematics', 'Limits',         'What is lim(x→0) sin(x)/x?',                  '["0","∞","1","Undefined"]',                                                       2, 'hard',   35, '22222222-0001-0001-0001-000000000006'),
+  ('99999999-0001-0001-0003-000000000004', '44444444-0001-0001-0001-000000000002', 'Mathematics', 'Differentiation','Derivative of ln(x)?',                        '["x","1/x","e^x","ln(x)/x"]',                                                    1, 'medium', 30, '22222222-0001-0001-0001-000000000006'),
+  -- Vocabulary  (course: Creative Writing)
+  ('99999999-0001-0001-0004-000000000001', '44444444-0001-0001-0001-000000000003', 'English Language', 'Vocabulary','What does ''ephemeral'' mean?',                '["Permanent","Short-lived","Ancient","Enormous"]',                                1, 'medium', 30, '22222222-0001-0001-0001-000000000004'),
+  ('99999999-0001-0001-0004-000000000002', '44444444-0001-0001-0001-000000000003', 'English Language', 'Vocabulary','''Ubiquitous'' means?',                        '["Rare","Present everywhere","Ancient","Invisible"]',                             1, 'hard',   30, '22222222-0001-0001-0001-000000000004'),
+  ('99999999-0001-0001-0004-000000000003', '44444444-0001-0001-0001-000000000003', 'English Language', 'Vocabulary','''Loquacious'' means?',                        '["Silent","Fearful","Talkative","Wise"]',                                         2, 'medium', 30, '22222222-0001-0001-0001-000000000004'),
+  ('99999999-0001-0001-0004-000000000004', '44444444-0001-0001-0001-000000000003', 'English Language', 'Antonyms',  'Antonym of ''verbose'' is?',                   '["Wordy","Lengthy","Concise","Repetitive"]',                                      2, 'medium', 35, '22222222-0001-0001-0001-000000000004'),
+  -- Grammar  (course: Creative Writing)
+  ('99999999-0001-0001-0005-000000000001', '44444444-0001-0001-0001-000000000003', 'English Language', 'Grammar',   'Which sentence is correct?',                   '["She don''t like it.","She doesn''t likes it.","She doesn''t like it.","She not like it."]', 2, 'easy',   25, '22222222-0001-0001-0001-000000000007'),
+  ('99999999-0001-0001-0005-000000000002', '44444444-0001-0001-0001-000000000003', 'English Language', 'Voice',     'Which is passive voice?',                      '["The dog bit the man.","The man bit the dog.","The man was bitten.","The dog bites."]',      2, 'medium', 40, '22222222-0001-0001-0001-000000000007'),
+  -- Biology  (course: Cell Biology)
+  ('99999999-0001-0001-0006-000000000001', '44444444-0001-0001-0001-000000000005', 'Biology', 'Photosynthesis',     'What is the primary product of photosynthesis?', '["Oxygen","Glucose","Carbon dioxide","Water"]',                                 1, 'easy',   25, '22222222-0001-0001-0001-000000000005'),
+  ('99999999-0001-0001-0006-000000000002', '44444444-0001-0001-0001-000000000005', 'Biology', 'Genetics',           'How many chromosomes does a human cell have?',   '["23","46","48","44"]',                                                          1, 'easy',   25, '22222222-0001-0001-0001-000000000005'),
+  ('99999999-0001-0001-0006-000000000003', '44444444-0001-0001-0001-000000000005', 'Biology', 'Cell Division',      'Mitosis produces how many daughter cells?',      '["1","2","3","4"]',                                                              1, 'medium', 30, '22222222-0001-0001-0001-000000000005'),
+  -- Physics / Newton  (course: Newton's Laws & Forces)
+  ('99999999-0001-0001-0007-000000000001', '44444444-0001-0001-0001-000000000006', 'Physics', 'Newton''s Laws',     'Newton''s 1st Law is called?',                  '["Law of Acceleration","Law of Inertia","Law of Action-Reaction","Law of Gravity"]', 1, 'easy',   25, '22222222-0001-0001-0001-000000000005'),
+  ('99999999-0001-0001-0007-000000000002', '44444444-0001-0001-0001-000000000006', 'Physics', 'Equations',          'Force = ?',                                     '["mass × velocity","mass × acceleration","weight × speed","mass × distance"]',   1, 'easy',   30, '22222222-0001-0001-0001-000000000005'),
+  ('99999999-0001-0001-0007-000000000003', '44444444-0001-0001-0001-000000000006', 'Physics', 'F=ma',               'Mass 4kg, accel 5m/s². Force?',                 '["20 N","9 N","1.25 N","25 N"]',                                                 0, 'medium', 40, '22222222-0001-0001-0001-000000000005'),
+  -- Chemistry  (course: Periodic Table Mastery)
+  ('99999999-0001-0001-0008-000000000001', '44444444-0001-0001-0001-000000000008', 'Chemistry', 'Elements',         'Chemical symbol for Gold?',                     '["Go","Gd","Au","Ag"]',                                                          2, 'easy',   30, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0008-000000000002', '44444444-0001-0001-0001-000000000008', 'Chemistry', 'Elements',         'Atomic number of Carbon?',                      '["6","8","12","14"]',                                                            0, 'easy',   25, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0008-000000000003', '44444444-0001-0001-0001-000000000008', 'Chemistry', 'Elements',         'Symbol for Sodium?',                            '["So","Sd","Sn","Na"]',                                                          3, 'easy',   30, '22222222-0001-0001-0001-000000000002'),
+  ('99999999-0001-0001-0008-000000000004', '44444444-0001-0001-0001-000000000008', 'Chemistry', 'Properties',       'Highest electronegativity?',                    '["Oxygen","Nitrogen","Chlorine","Fluorine"]',                                    3, 'hard',   40, '22222222-0001-0001-0001-000000000002')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 11. BATTLES ────────────────────────────────────────────────────────────
 
-INSERT INTO battles (id, course_id, challenger_id, opponent_id, battle_type, subject, title, description, xp_prize, time_limit, difficulty, status, viewers, started_at, created_at, updated_at) VALUES
+INSERT INTO battles (id, course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, actual_start, created_by, created_at, updated_at) VALUES
   ('aaaaaaaa-0001-0001-0001-000000000001',
     '44444444-0001-0001-0001-000000000001',
-    '22222222-0002-0001-0001-000000000001',
-    '22222222-0002-0001-0001-000000000002',
-    'standard', 'Mathematics', 'Speed Algebra Duel',
+    '1v1', 'Speed Algebra Duel',
     '10 linear equations. First to finish with 100% accuracy wins.',
-    250, 15, 'hard', 'live', 14,
-    now() - interval '6 minutes', now(), now()),
+    'Mathematics', 'hard', 250, 250, 900, 'live', 14,
+    null, now() + interval '1 hour', now() - interval '6 minutes',
+    '22222222-0002-0001-0001-000000000001', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000002',
     '44444444-0001-0001-0001-000000000003',
-    '22222222-0002-0001-0001-000000000003',
-    '22222222-0002-0001-0001-000000000008',
-    'standard', 'English Language', 'Vocabulary Blitz',
+    '1v1', 'Vocabulary Blitz',
     '50 vocab words from the SAT prep list.',
-    180, 10, 'medium', 'completed', 0,
-    now() - interval '1 hour', now(), now()),
+    'English Language', 'medium', 180, 180, 600, 'completed', 9,
+    null, now() - interval '30 minutes', now() - interval '1 hour',
+    '22222222-0002-0001-0001-000000000003', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000003',
     '44444444-0001-0001-0001-000000000008',
-    '22222222-0002-0001-0001-000000000004',
-    '22222222-0002-0002-0001-000000000001',
-    'standard', 'Chemistry', 'Periodic Table Sprint',
+    '1v1', 'Periodic Table Sprint',
     'Name the element, symbol, and atomic number from 20 random prompts.',
-    200, 12, 'hard', 'scheduled', 0,
-    now() + interval '1 day', now(), now()),
+    'Chemistry', 'hard', 200, 200, 720, 'scheduled', 0,
+    now() + interval '1 day', now() + interval '1 day 1 hour', null,
+    '22222222-0002-0001-0001-000000000004', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000004',
     '44444444-0001-0001-0001-000000000002',
-    '22222222-0001-0001-0001-000000000002',
-    null,
-    'classroom', 'Mathematics', 'Calculus Class Championship',
+    'classroom', 'Calculus Class Championship',
     'Teacher''s agent Pythia challenges the entire class. Highest score wins the XP pool.',
-    500, 20, 'hard', 'live', 18,
-    now() - interval '4 minutes', now(), now()),
+    'Mathematics', 'hard', 500, 500, 1200, 'live', 18,
+    null, now() + interval '1 hour', now() - interval '4 minutes',
+    '22222222-0001-0001-0001-000000000002', now(), now()),
 
-  -- ─── CHALLENGES (incoming challenge requests) ────────────────────────────────
+  -- ─── CHALLENGES (incoming challenge requests, status = scheduled) ─────────────
   ('aaaaaaaa-0001-0001-0001-000000000005',
     '44444444-0001-0001-0001-000000000001',
-    '22222222-0002-0001-0001-000000000002',
-    '22222222-0002-0001-0001-000000000001',
-    'immediate', 'Mathematics', 'Speed Algebra Duel',
+    '1v1', 'Speed Algebra Duel',
     'Jordan M. has challenged you! 10 linear equations. First to finish with 100% accuracy wins.',
-    250, 15, 'hard', 'scheduled', 0,
-    null, now(), now()),
+    'Mathematics', 'hard', 250, 250, 900, 'scheduled', 0,
+    null, now() + interval '8 minutes', null,
+    '22222222-0002-0001-0001-000000000002', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000006',
     '44444444-0001-0001-0001-000000000003',
-    '22222222-0002-0001-0001-000000000003',
-    '22222222-0002-0001-0001-000000000001',
-    'immediate', 'English Language', 'Vocabulary Blitz',
+    '1v1', 'Vocabulary Blitz',
     'Priya K. has challenged you! 50 SAT vocab words. Match definitions against the clock.',
-    180, 10, 'medium', 'scheduled', 0,
-    null, now(), now()),
+    'English Language', 'medium', 180, 180, 600, 'scheduled', 0,
+    null, now() + interval '10 minutes', null,
+    '22222222-0002-0001-0001-000000000003', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000007',
     '44444444-0001-0001-0001-000000000008',
-    '22222222-0002-0001-0001-000000000004',
-    '22222222-0002-0001-0001-000000000001',
-    'scheduled', 'Chemistry', 'Periodic Table Sprint',
+    '1v1', 'Periodic Table Sprint',
     'Marcus B. has scheduled a challenge! Name the element, symbol, and atomic number.',
-    200, 12, 'hard', 'scheduled', 0,
-    now() + interval '1 day 16 hours', now(), now()),
+    'Chemistry', 'hard', 200, 200, 720, 'scheduled', 0,
+    now() + interval '1 day 16 hours', now() + interval '1 day 17 hours', null,
+    '22222222-0002-0001-0001-000000000004', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000008',
-    '44444444-0001-0001-0001-000000000002',
-    '22222222-0002-0002-0001-000000000003',
-    '22222222-0002-0001-0001-000000000001',
-    'scheduled', 'Mathematics', 'Geometry Quick-Fire',
-    'Aaliyah T. challenges you this Saturday! 20 geometry problems, shapes and proofs.',
-    160, 10, 'medium', 'scheduled', 0,
-    now() + interval '6 days 10 hours', now(), now()),
-  ('aaaaaaaa-0001-0001-0001-000000000009',
     '44444444-0001-0001-0001-000000000007',
-    '22222222-0002-0001-0001-000000000006',
-    '22222222-0002-0001-0001-000000000001',
-    'immediate', 'Physics', 'Newton''s Laws Blitz',
+    '1v1', 'Geometry Quick-Fire',
+    'Aaliyah T. challenges you this Saturday! 20 geometry problems, shapes and proofs.',
+    'Mathematics', 'medium', 160, 160, 600, 'scheduled', 0,
+    now() + interval '6 days 10 hours', now() + interval '6 days 11 hours', null,
+    '22222222-0002-0001-0001-000000000005', now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000009',
+    '44444444-0001-0001-0001-000000000006',
+    '1v1', 'Newton''s Laws Blitz',
     'Leon S. is waiting! Identify the correct law for each scenario in under 90 seconds.',
-    220, 12, 'hard', 'scheduled', 0,
-    null, now(), now()),
+    'Physics', 'hard', 220, 220, 720, 'scheduled', 0,
+    null, now() + interval '12 minutes', null,
+    '22222222-0002-0001-0001-000000000006', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000010',
     '44444444-0001-0001-0001-000000000003',
-    '22222222-0002-0001-0001-000000000008',
-    '22222222-0002-0001-0001-000000000001',
-    'scheduled', 'English Language', 'Grammar Gauntlet',
+    '1v1', 'Grammar Gauntlet',
     'Devon R. challenges you Sunday afternoon! Identify and correct grammar errors.',
-    140, 8, 'easy', 'scheduled', 0,
-    now() + interval '7 days 14 hours', now(), now()),
+    'English Language', 'easy', 140, 140, 480, 'scheduled', 0,
+    now() + interval '7 days 14 hours', now() + interval '7 days 15 hours', null,
+    '22222222-0002-0001-0001-000000000008', now(), now()),
   ('aaaaaaaa-0001-0001-0001-000000000011',
     '44444444-0001-0001-0001-000000000002',
-    '22222222-0001-0001-0001-000000000002',
-    null,
-    'classroom', 'Mathematics', 'Calculus Class Championship',
+    'classroom', 'Calculus Class Championship',
     'Dr. Amara challenges the entire class to a calculus showdown. Highest score wins the XP pool.',
-    500, 20, 'hard', 'scheduled', 0,
-    now() + interval '2 days 9 hours', now(), now())
+    'Mathematics', 'hard', 500, 500, 1200, 'scheduled', 0,
+    now() + interval '2 days 9 hours', now() + interval '2 days 10 hours', null,
+    '22222222-0001-0001-0001-000000000002', now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- Battle participants
-INSERT INTO battle_participants (id, battle_id, participant_id, agent_name, agent_emoji, agent_bg, agent_color, is_you, score, hp, started_at) VALUES
-  ('bbbbbbbb-0001-0001-0001-000000000001', 'aaaaaaaa-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000001', 'Nexus', '🤖', '#FEF0E6', '#E8884A', true,  6, 62, now() - interval '6 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000002', 'aaaaaaaa-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000002', 'Sigma', '🔺', '#C8D8E8', '#2563EB', false, 4, 78, now() - interval '6 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000003', 'aaaaaaaa-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000003', 'Ada',   '✨', '#E4D4F0', '#7C3AED', false, 11, 28, now() - interval '1 hour'),
-  ('bbbbbbbb-0001-0001-0001-000000000004', 'aaaaaaaa-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000008', 'Zeno',  '🌀', '#D4EAD8', '#059669', true,  9, 0,  now() - interval '1 hour'),
-  ('bbbbbbbb-0001-0001-0001-000000000005', 'aaaaaaaa-0001-0001-0001-000000000003', '22222222-0002-0001-0001-000000000004', 'Kira',  '💎', '#F8E8FF', '#9333EA', false, 0, 100, now() + interval '1 day'),
-  ('bbbbbbbb-0001-0001-0001-000000000006', 'aaaaaaaa-0001-0001-0001-000000000003', '22222222-0002-0002-0001-000000000001', 'Atlas', '🗺',  '#DBEAFE', '#2563EB', false, 0, 100, now() + interval '1 day'),
-  ('bbbbbbbb-0001-0001-0001-000000000007', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0001-0001-0001-000000000002', 'Pythia','🔮', '#EDE8F8', '#7C3AED', false, 8, 72, now() - interval '4 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000008', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000001', 'Nexus', '🤖', '#FEF0E6', '#E8884A', true,  5, 85, now() - interval '4 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000009', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000003', 'Ada',   '✨', '#E4D4F0', '#7C3AED', false, 7, 70, now() - interval '4 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000010', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000002', 'Sigma', '🔺', '#C8D8E8', '#2563EB', false, 4, 90, now() - interval '4 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000011', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0002-0001-000000000004', 'Echo',  '🌊', '#CFFAFE', '#0891B2', false, 6, 78, now() - interval '4 minutes'),
-  ('bbbbbbbb-0001-0001-0001-000000000012', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0002-0001-000000000001', 'Atlas', '🗺',  '#DBEAFE', '#2563EB', false, 3, 94, now() - interval '4 minutes')
+INSERT INTO battle_participants (id, battle_id, user_id, agent_id, role, score, hp, joined_at) VALUES
+  -- Battle 1: Speed Algebra Duel (Alex vs Jordan)
+  ('bbbbbbbb-0001-0001-0001-000000000001', 'aaaaaaaa-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'creator',     6, 62, now() - interval '6 minutes'),
+  ('bbbbbbbb-0001-0001-0001-000000000002', 'aaaaaaaa-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000002', '66666666-0001-0001-0001-000000000002', 'opponent',    4, 78, now() - interval '6 minutes'),
+  -- Battle 2: Vocabulary Blitz (Priya vs Devon)
+  ('bbbbbbbb-0001-0001-0001-000000000003', 'aaaaaaaa-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000003', '66666666-0001-0001-0001-000000000003', 'creator',    11, 28, now() - interval '1 hour'),
+  ('bbbbbbbb-0001-0001-0001-000000000004', 'aaaaaaaa-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000008', '66666666-0001-0001-0001-000000000008', 'opponent',    9, 0,  now() - interval '1 hour'),
+  -- Battle 3: Periodic Table Sprint (Marcus vs Ngozi, scheduled)
+  ('bbbbbbbb-0001-0001-0001-000000000005', 'aaaaaaaa-0001-0001-0001-000000000003', '22222222-0002-0001-0001-000000000004', '66666666-0001-0001-0001-000000000004', 'creator',     0, 100, now()),
+  ('bbbbbbbb-0001-0001-0001-000000000006', 'aaaaaaaa-0001-0001-0001-000000000003', '22222222-0002-0002-0001-000000000001', '66666666-0001-0001-0001-000000000009', 'opponent',    0, 100, now()),
+  -- Battle 4: Calculus Class Championship (Dr. Amara + class)
+  ('bbbbbbbb-0001-0001-0001-000000000007', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0001-0001-0001-000000000002', '66666666-0001-0001-0001-000000000016', 'teacher',     8, 72, now() - interval '4 minutes'),
+  ('bbbbbbbb-0001-0001-0001-000000000008', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'participant', 5, 85, now() - interval '4 minutes'),
+  ('bbbbbbbb-0001-0001-0001-000000000009', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000003', '66666666-0001-0001-0001-000000000003', 'participant', 7, 70, now() - interval '4 minutes'),
+  ('bbbbbbbb-0001-0001-0001-000000000010', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000002', '66666666-0001-0001-0001-000000000002', 'participant', 4, 90, now() - interval '4 minutes'),
+  ('bbbbbbbb-0001-0001-0001-000000000011', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0002-0001-000000000004', '66666666-0001-0001-0001-000000000012', 'participant', 6, 78, now() - interval '4 minutes'),
+  ('bbbbbbbb-0001-0001-0001-000000000012', 'aaaaaaaa-0001-0001-0001-000000000004', '22222222-0002-0002-0001-000000000001', '66666666-0001-0001-0001-000000000009', 'participant', 3, 94, now() - interval '4 minutes')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 12. NOTIFICATIONS (sample) ─────────────────────────────────────────────
@@ -404,11 +399,11 @@ ON CONFLICT (id) DO NOTHING;
 --   6  classrooms
 --   8  courses
 --   15 enrollments
---   15 student AI agents
+--   16 AI agents (15 students + 1 teacher)
 --   17 XP transactions
 --   16 leaderboard entries (classroom + course)
 --   29 question bank entries (Algebra, Geometry, Calculus, Vocab, Grammar, Biology, Physics, Chemistry)
---   4  battles (2 live, 1 completed, 1 scheduled)
+--   11 battles (2 live, 1 completed, 8 scheduled — incl. 7 challenges)
 --   12 battle participants
 --   5  notifications
 -- =============================================================
