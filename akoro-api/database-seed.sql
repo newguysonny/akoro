@@ -253,6 +253,22 @@ INSERT INTO xp_leaderboard (id, user_id, scope, total_xp, rank, updated_at) VALU
   ('88888888-0003-0001-0001-000000000015', '22222222-0002-0001-0001-000000000008', 'global', 1720, 15, now())   -- Devon
 ON CONFLICT (id) DO NOTHING;
 
+-- Classroom leaderboard cache — Mr. Chen English 10 (classroom 3, incl. Amaka)
+INSERT INTO xp_leaderboard (id, user_id, scope, classroom_id, total_xp, rank, updated_at) VALUES
+  ('88888888-0004-0001-0001-000000000001', '22222222-0002-0001-0001-000000000003', 'classroom', '33333333-0001-0001-0001-000000000003', 2490, 1, now()),  -- Priya
+  ('88888888-0004-0001-0001-000000000002', '22222222-0002-0002-0001-000000000003', 'classroom', '33333333-0001-0001-0001-000000000003', 2200, 2, now()),  -- Amaka
+  ('88888888-0004-0001-0001-000000000003', '22222222-0002-0001-0001-000000000007', 'classroom', '33333333-0001-0001-0001-000000000003', 1840, 3, now()),  -- Sasha
+  ('88888888-0004-0001-0001-000000000004', '22222222-0002-0001-0001-000000000008', 'classroom', '33333333-0001-0001-0001-000000000003', 1720, 4, now())   -- Devon
+ON CONFLICT (id) DO NOTHING;
+
+-- Classroom leaderboard cache — Dr. Adeyemi Science (classroom 4, incl. Amaka)
+INSERT INTO xp_leaderboard (id, user_id, scope, classroom_id, total_xp, rank, updated_at) VALUES
+  ('88888888-0005-0001-0001-000000000001', '22222222-0002-0003-0001-000000000001', 'classroom', '33333333-0001-0001-0001-000000000004', 3800, 1, now()),  -- Chioma
+  ('88888888-0005-0001-0001-000000000002', '22222222-0002-0002-0001-000000000004', 'classroom', '33333333-0001-0001-0001-000000000004', 2400, 2, now()),  -- Emeka
+  ('88888888-0005-0001-0001-000000000003', '22222222-0002-0001-0001-000000000004', 'classroom', '33333333-0001-0001-0001-000000000004', 2310, 3, now()),  -- Marcus
+  ('88888888-0005-0001-0001-000000000004', '22222222-0002-0002-0001-000000000003', 'classroom', '33333333-0001-0001-0001-000000000004', 2200, 4, now())   -- Amaka
+ON CONFLICT (id) DO NOTHING;
+
 -- ─── § 10. QUESTION BANK ──────────────────────────────────────────────────────
 
 INSERT INTO question_bank (id, course_id, subject, topic, question_text, options_json, correct_answer_index, difficulty, xp_value, created_by) VALUES
@@ -376,7 +392,23 @@ INSERT INTO battles (id, course_id, battle_type, title, description, subject, di
     'Dr. Amara challenges the entire class to a calculus showdown. Highest score wins the XP pool.',
     'Mathematics', 'hard', 500, 500, 1200, 'scheduled', 0,
     now() + interval '2 days 9 hours', now() + interval '2 days 10 hours', null,
-    '22222222-0001-0001-0001-000000000002', now(), now())
+    '22222222-0001-0001-0001-000000000002', now(), now()),
+
+  -- ─── CHALLENGES aimed at Amaka (amaka@) ──────────────────────────────────────
+  ('aaaaaaaa-0001-0001-0001-000000000012',
+    '44444444-0001-0001-0001-000000000008',
+    '1v1', 'Organic Chemistry Showdown',
+    'Chioma E. has challenged you! Name functional groups and reactions against the clock.',
+    'Chemistry', 'hard', 230, 230, 720, 'scheduled', 0,
+    null, now() + interval '15 minutes', null,
+    '22222222-0002-0003-0001-000000000001', now(), now()),
+  ('aaaaaaaa-0001-0001-0001-000000000013',
+    '44444444-0001-0001-0001-000000000005',
+    '1v1', 'Cell Biology Sprint',
+    'Marcus B. challenges you tomorrow! Mitosis phases and organelle functions.',
+    'Biology', 'medium', 170, 170, 600, 'scheduled', 0,
+    now() + interval '1 day 4 hours', now() + interval '1 day 5 hours', null,
+    '22222222-0002-0001-0001-000000000004', now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- Battle participants
@@ -417,7 +449,13 @@ INSERT INTO battle_participants (id, battle_id, user_id, agent_id, role, score, 
   ('bbbbbbbb-0001-0001-0001-000000000022', 'aaaaaaaa-0001-0001-0001-000000000009', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'opponent', 0, 100, now()),
   -- Battle 10 — Devon → Alex
   ('bbbbbbbb-0001-0001-0001-000000000023', 'aaaaaaaa-0001-0001-0001-000000000010', '22222222-0002-0001-0001-000000000008', '66666666-0001-0001-0001-000000000008', 'creator',  0, 100, now()),
-  ('bbbbbbbb-0001-0001-0001-000000000024', 'aaaaaaaa-0001-0001-0001-000000000010', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'opponent', 0, 100, now())
+  ('bbbbbbbb-0001-0001-0001-000000000024', 'aaaaaaaa-0001-0001-0001-000000000010', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'opponent', 0, 100, now()),
+  -- Battle 12 — Chioma → Amaka
+  ('bbbbbbbb-0001-0001-0001-000000000025', 'aaaaaaaa-0001-0001-0001-000000000012', '22222222-0002-0003-0001-000000000001', '66666666-0001-0001-0001-000000000013', 'creator',  0, 100, now()),
+  ('bbbbbbbb-0001-0001-0001-000000000026', 'aaaaaaaa-0001-0001-0001-000000000012', '22222222-0002-0002-0001-000000000003', '66666666-0001-0001-0001-000000000011', 'opponent', 0, 100, now()),
+  -- Battle 13 — Marcus → Amaka
+  ('bbbbbbbb-0001-0001-0001-000000000027', 'aaaaaaaa-0001-0001-0001-000000000013', '22222222-0002-0001-0001-000000000004', '66666666-0001-0001-0001-000000000004', 'creator',  0, 100, now()),
+  ('bbbbbbbb-0001-0001-0001-000000000028', 'aaaaaaaa-0001-0001-0001-000000000013', '22222222-0002-0002-0001-000000000003', '66666666-0001-0001-0001-000000000011', 'opponent', 0, 100, now())
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 12. NOTIFICATIONS (sample) ─────────────────────────────────────────────
@@ -427,7 +465,10 @@ INSERT INTO notifications (id, user_id, type, title, content, is_read, created_a
   ('cccccccc-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000001', 'xp_earned',        'XP Earned!',              'You earned 250 XP for winning the Algebra Duel.',                                   true,  now() - interval '1 day'),
   ('cccccccc-0001-0001-0001-000000000003', '22222222-0002-0001-0001-000000000001', 'session_reminder', 'Session starting soon',   'Biology: Ecosystems starts in 8 minutes.',                                          false, now() - interval '5 minutes'),
   ('cccccccc-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000002', 'battle_challenge', 'New Challenge!',          'Leon S. challenged you to Newton''s Laws Blitz! Expires in 3 minutes.',             false, now() - interval '1 minute'),
-  ('cccccccc-0001-0001-0001-000000000005', '22222222-0002-0001-0001-000000000003', 'announcement',     'New Announcement',        'Mr. Chen posted: "Creative Writing assessment moved to Friday — check resources."', false, now() - interval '30 minutes')
+  ('cccccccc-0001-0001-0001-000000000005', '22222222-0002-0001-0001-000000000003', 'announcement',     'New Announcement',        'Mr. Chen posted: "Creative Writing assessment moved to Friday — check resources."', false, now() - interval '30 minutes'),
+  -- Amaka (amaka@) notifications
+  ('cccccccc-0001-0001-0001-000000000006', '22222222-0002-0002-0001-000000000003', 'battle_challenge', 'New Battle Challenge!',   'Chioma E. has challenged you to an Organic Chemistry Showdown! Expires in 15 minutes.', false, now() - interval '3 minutes'),
+  ('cccccccc-0001-0001-0001-000000000007', '22222222-0002-0002-0001-000000000003', 'session_reminder', 'Session starting soon',   'Linear Equations Masterclass is live now — join from the Sessions tab.',             false, now() - interval '2 minutes')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 13. LIVE SESSIONS ──────────────────────────────────────────────────────
@@ -482,9 +523,10 @@ ON CONFLICT (id) DO NOTHING;
 --   17 XP transactions
 --   16 leaderboard entries (classroom + course)
 --   29 question bank entries (Algebra, Geometry, Calculus, Vocab, Grammar, Biology, Physics, Chemistry)
---   11 battles (2 live, 1 completed, 8 scheduled — incl. 7 challenges)
---   24 battle participants (incl. challenge creators + opponents)
---   5  notifications
+--   13 battles (2 live, 1 completed, 10 scheduled — incl. 9 challenges)
+--   28 battle participants (incl. challenge creators + opponents)
+--   24 leaderboard entries (classroom + course + global)
+--   7  notifications
 --   5  live sessions (1 live, 4 scheduled)
 --   10 session participants (Alex + Amaka demo logins)
 --   3  agent/adaptive sessions
