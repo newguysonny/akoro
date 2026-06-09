@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from '../services/api.js';
-import { CHALLENGES, SEED_BATTLES } from '../services/mockData.js';
 
 export function useBattleAPI() {
-  const [challenges, setChallenges] = useState(CHALLENGES);
-  const [battles,    setBattles]    = useState(SEED_BATTLES);
+  const [challenges, setChallenges] = useState([]);
+  const [battles,    setBattles]    = useState([]);
 
   useEffect(() => {
     apiGet('/api/battle/my-challenges')

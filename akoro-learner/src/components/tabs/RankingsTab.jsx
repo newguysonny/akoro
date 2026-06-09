@@ -1,13 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
-import { LEADERBOARD } from '../../services/mockData.js';
+import { apiGet } from '../../services/api.js';
 import { TrophyIcon, FlameIcon, StarIcon, ZapIcon } from '../common/Icons.jsx';
 
 function RankingsTab() {
   const [boardType, setBoardType] = useState("classroom");
+  const [data, setData] = useState([]);
+  const [classroomId, setClassroomId] = useState(null);
+  const [loading, setLoading] = useState(false);
   const BOARD_TABS=[{key:"classroom",label:"Classroom",icon:"🏫"},{key:"courses",label:"Courses",icon:"📘"},{key:"interSchool",label:"Inter-Schools",icon:"🌍"}];
-  const data=LEADERBOARD[boardType]||[];
-  const changeColor=c=>c.startsWith("+")?GREEN:c.startsWith("-")?RED:"#9CA3AF";
+
+  // Get classroom_id from sessions on mount
+  useEffect(() => {
+    apiGet('/api/student/sessions')
+      .then(d => {
+        const id = d.sessions?.[0]?.classroom_id;
+        if (id) setClassroomId(id);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch ranking data when boardType or classroomId changes
+  useEffect(() => {
+    setLoading(true);
+    let endpoint = '/api/ranking/global';
+    if (boardType === 'classroom' && classroomId) {
+      endpoint = `/api/ranking/classroom/${classroomId}`;
+    } else if (boardType === 'courses') {
+      endpoint = '/api/ranking/global';
+    }
+    apiGet(endpoint)
+      .then(d => {
+        const leaders = d.leaders || [];
+        setData(leaders.map(r => ({
+          rank: r.rank,
+          name: r.full_name || r.username || 'Unknown',
+          avatar: r.avatar_url || `https://i.pravatar.cc/150?u=${r.user_id}`,
+          xp: r.total_xp || 0,
+          isMe: r.is_me || false,
+        })));
+      })
+      .catch(() => setData([]))
+      .finally(() => setLoading(false));
+  }, [boardType, classroomId]);
+
+  const changeColor=c=>c&&c.startsWith("+")?GREEN:c&&c.startsWith("-")?RED:"#9CA3AF";
   return (
     <div style={{ flex:1,overflowY:"auto",background:"#fff",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"flex",padding:"12px 16px 0",gap:8,borderBottom:"1px solid #F3F4F6" }}>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, STUDENT_ID } from '../../constants.js';
-import { API,  apiPost } from '../../services/api.js';
-import { QUESTIONS, getQuestions } from '../../services/mockData.js';
+import { API, apiGet, apiPost } from '../../services/api.js';
 import { XIcon, ZapIcon, StarIcon, BookIcon, FlameIcon, PlayIcon, TrophyIcon, UsersIcon } from '../common/Icons.jsx';
 import { LiveBadge } from '../common/ProgressBar.jsx';
 
@@ -25,36 +24,50 @@ function BattleModal({ battle: initialBattle, onClose }) {
   const [showXp,      setShowXp]      = useState(false);
   const [currentTab,  setCurrentTab]  = useState("watch");
   const [tickerItems, setTickerItems] = useState([]);
-  const [answeredQs,  setAnsweredQs]  = useState(() => {
-    if (initialBattle.status === "completed") return BATTLE_QS_FOR_INIT(initialBattle.topic);
-    return [];
-  });
+  const [battleQs,    setBattleQs]    = useState([]);
+  const [answeredQs,  setAnsweredQs]  = useState([]);
 
   const logRef      = useRef(null);
   const timerRef    = useRef(null);
   const questionRef = useRef(qIdx);
   questionRef.current = qIdx;
 
-  const BATTLE_QS = getQuestions(initialBattle.topic);
-  const q = BATTLE_QS[qIdx % BATTLE_QS.length];
-
-  function BATTLE_QS_FOR_INIT(topic) {
-    const qs = getQuestions(topic);
-    return qs.map((q, i) => {
-      const aCorrect = Math.random() > 0.32;
-      const bCorrect = Math.random() > 0.28;
-      const aPick    = aCorrect ? q.ans : (q.ans + 1 + Math.floor(Math.random()*3)) % 4;
-      const bPick    = bCorrect ? q.ans : (q.ans + 2 + Math.floor(Math.random()*3)) % 4;
-      const userCorrect = Math.random() > 0.35;
-      const myAnswer    = userCorrect ? q.ans : (q.ans + 1 + Math.floor(Math.random()*3)) % 4;
-      return { idx:i, q, aCorrect, bCorrect, aPick, bPick, myAnswer };
-    });
-  }
+  const BATTLE_QS = battleQs;
+  const q = BATTLE_QS[qIdx % Math.max(BATTLE_QS.length, 1)] || { q: '', opts: [], ans: 0, xp: 10, topic: '' };
 
   useEffect(()=>{
     const msgs = ["🤖 Nexus is battling in 3 active matches","⚡ Speed Algebra Duel is LIVE now!","🏆 Nexus just won a Chain Rule battle!","💎 Kira is on a 7-answer streak!","🔥 5 battles live right now in your class","🌀 Vocabulary Blitz completed — Ada wins!"];
     setTickerItems([...msgs,...msgs]);
   },[]);
+
+  // Fetch real questions from API
+  useEffect(()=>{
+    if (!initialBattle.id) return;
+    apiGet(`/api/battles/${initialBattle.id}/questions`)
+      .then(qs => {
+        if (!Array.isArray(qs) || qs.length === 0) return;
+        const mapped = qs.map(r => ({
+          q:     r.question_text,
+          opts:  typeof r.options_json === 'string' ? JSON.parse(r.options_json) : (r.options_json || []),
+          ans:   r.correct_answer_index,
+          xp:    r.xp || 10,
+          topic: r.topic || initialBattle.topic || '',
+        }));
+        setBattleQs(mapped);
+        if (initialBattle.status === 'completed') {
+          setAnsweredQs(mapped.map((q, i) => {
+            const aCorrect = Math.random() > 0.32;
+            const bCorrect = Math.random() > 0.28;
+            const aPick = aCorrect ? q.ans : (q.ans + 1 + Math.floor(Math.random()*3)) % 4;
+            const bPick = bCorrect ? q.ans : (q.ans + 2 + Math.floor(Math.random()*3)) % 4;
+            const userCorrect = Math.random() > 0.35;
+            const myAnswer = userCorrect ? q.ans : (q.ans + 1 + Math.floor(Math.random()*3)) % 4;
+            return { idx: i, q, aCorrect, bCorrect, aPick, bPick, myAnswer };
+          }));
+        }
+      })
+      .catch(() => {});
+  },[initialBattle.id]);
 
   useEffect(()=>{
     if (phase!=="question") return;

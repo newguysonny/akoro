@@ -1,12 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
-import { AGENT_REPLIES, QUICK_PROMPTS, TASKS_INIT, AGENT_CONFIG } from '../../services/mockData.js';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 
+const QUICK_PROMPTS = ["Create a task for me","What's due today?","Quiz me on Algebra","Check my progress","Explain Mitosis","Help with an essay"];
+const AGENT_REPLIES = {
+  "Create a task for me":"Sure! What do you need to get done? Tell me the subject and what it's about — I'll add it to your task list.",
+  "What's due today?":"📋 Let me check your task list for today's items. Use the Tasks tab to see everything that's pending.",
+  "Quiz me on Algebra":"Let's go! 🎯\n\nQ1: Solve for x: 3x + 7 = 22\n\nType your answer and I'll check it, then move to the next question.",
+  "Check my progress":"I'll pull up your progress now. Check the Stats tab for a full breakdown of your recent activity.",
+  "Explain Mitosis":"Great topic! 🔬\n\nMitosis is how a cell divides into two identical daughters. 4 main phases:\n\n1. Prophase — chromosomes condense\n2. Metaphase — chromosomes line up\n3. Anaphase — chromosomes pulled apart\n4. Telophase — two new nuclei form\n\nWant me to quiz you on this?",
+  "Help with an essay":"Happy to help! 📝 Tell me the topic or paste in what you have so far, and I'll give you feedback or help you structure your argument.",
+};
+const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
+const AGENT_LEVEL = 12;
+
 function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
-  const initName  = agentNameProp  || AGENT_CONFIG.name;
-  const initEmoji = agentEmojiProp || AGENT_CONFIG.emoji;
+  const initName  = agentNameProp  || '';
+  const initEmoji = agentEmojiProp || '🤖';
 
   // Greeting message — uses real agent name from parent
   const greeting = (name, emoji) => ({
@@ -25,7 +36,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [draftEmoji, setDraftEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
   const [taskOpen,   setTaskOpen]   = useState(false);
-  const [tasks,      setTasks]      = useState(TASKS_INIT);
+  const [tasks,      setTasks]      = useState([]);
   const [taskFilter, setTaskFilter] = useState("pending");
   const [tTitle,     setTTitle]     = useState("");
   const [tDesc,      setTDesc]      = useState("");

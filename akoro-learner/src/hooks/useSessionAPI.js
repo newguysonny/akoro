@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { apiGet } from '../services/api.js';
-import { SESSIONS, AGENT_SESSIONS } from '../services/mockData.js';
 
 export function useSessionAPI() {
-  const [sessions,     setSessions]     = useState(SESSIONS);
-  const [agentSessions,setAgentSessions]= useState(AGENT_SESSIONS);
+  const [sessions,     setSessions]     = useState([]);
+  const [agentSessions,setAgentSessions]= useState([]);
 
   useEffect(() => {
     apiGet('/api/student/sessions')
