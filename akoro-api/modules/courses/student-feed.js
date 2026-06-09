@@ -149,14 +149,13 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         status,
         live_sessions (
           id, title, description, topic, subject, status,
-          scheduled_start, join_url, platform, level,
-          topic_count, revision_count, review_count,
+          scheduled_start, join_url, platform,
           courses ( id, title ),
           users!live_sessions_instructor_id_fkey ( full_name, avatar_url )
         )
       `)
       .eq("user_id", userId)
-      .in("live_sessions.status", ["upcoming", "live"])
+      .in("live_sessions.status", ["scheduled", "live"])
       .order("live_sessions.scheduled_start", { ascending: true });
 
     if (enrollErr) throw new Error(enrollErr.message);
@@ -177,7 +176,9 @@ router.get("/sessions", authenticateToken, async (req, res) => {
       .catch(() => ({ data: [] }));
 
     const agentSessions = (agentRows ?? []).map((row, i) => {
-      const subtopics  = JSON.parse(row.subtopics || "[]");
+      const subtopics  = Array.isArray(row.subtopics)
+        ? row.subtopics
+        : JSON.parse(row.subtopics || "[]");
       const isComplete = row.status === "complete";
       return {
         id:             row.id,
@@ -249,7 +250,7 @@ router.get("/live-alerts", authenticateToken, async (req, res) => {
         )
       `)
       .eq("user_id", userId)
-      .in("live_sessions.status", ["upcoming", "live"]);
+      .in("live_sessions.status", ["scheduled", "live"]);
 
     const alerts = (enrolled ?? [])
       .filter(d => d.live_sessions)

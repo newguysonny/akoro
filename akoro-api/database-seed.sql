@@ -430,6 +430,45 @@ INSERT INTO notifications (id, user_id, type, title, content, is_read, created_a
   ('cccccccc-0001-0001-0001-000000000005', '22222222-0002-0001-0001-000000000003', 'announcement',     'New Announcement',        'Mr. Chen posted: "Creative Writing assessment moved to Friday — check resources."', false, now() - interval '30 minutes')
 ON CONFLICT (id) DO NOTHING;
 
+-- ─── § 13. LIVE SESSIONS ──────────────────────────────────────────────────────
+
+INSERT INTO live_sessions (id, course_id, instructor_id, title, description, topic, subject, session_type, scheduled_start, platform, join_url, status, created_at, updated_at) VALUES
+  ('dddddddd-0001-0001-0001-000000000001', '44444444-0001-0001-0001-000000000001', '22222222-0001-0001-0001-000000000002', 'Linear Equations Masterclass', 'Live walkthrough of multi-step linear equations with worked examples.', 'Linear Equations', 'Mathematics',      'class',    now() - interval '8 minutes',  'zoom', 'https://zoom.us/j/akoro-001', 'live',      now(), now()),
+  ('dddddddd-0001-0001-0001-000000000002', '44444444-0001-0001-0001-000000000002', '22222222-0001-0001-0001-000000000006', 'Integration Techniques',       'Substitution and integration by parts — bring your questions.',         'Integration',      'Mathematics',      'class',    now() + interval '10 minutes', 'meet', 'https://meet.google.com/akoro-002', 'scheduled', now(), now()),
+  ('dddddddd-0001-0001-0001-000000000003', '44444444-0001-0001-0001-000000000005', '22222222-0001-0001-0001-000000000005', 'Mitosis & Cell Division Lab',  'Interactive lab covering the phases of mitosis with simulations.',      'Cell Division',    'Biology',          'class',    now() + interval '1 day 2 hours', 'zoom', 'https://zoom.us/j/akoro-003', 'scheduled', now(), now()),
+  ('dddddddd-0001-0001-0001-000000000004', '44444444-0001-0001-0001-000000000003', '22222222-0001-0001-0001-000000000004', 'Creative Writing Workshop',    'Narrative voice and structure — peer feedback session.',                'Narrative Voice',  'English Language', 'class',    now() + interval '3 days',     'teams', 'https://teams.microsoft.com/akoro-004', 'scheduled', now(), now()),
+  ('dddddddd-0001-0001-0001-000000000005', '44444444-0001-0001-0001-000000000006', '22222222-0001-0001-0001-000000000005', 'Newton''s Laws Revision',      'Rapid revision of the three laws with exam-style questions.',           'Newton''s Laws',   'Physics',          'revision', now() + interval '5 hours',    'zoom', 'https://zoom.us/j/akoro-005', 'scheduled', now(), now())
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── § 14. SESSION PARTICIPANTS ───────────────────────────────────────────────
+-- Alex (alex@) and Amaka (amaka@) registered so both demo logins see sessions.
+
+INSERT INTO session_participants (id, session_id, user_id, status, created_at) VALUES
+  -- Session 1 (live)
+  ('eeeeeeee-0001-0001-0001-000000000001', 'dddddddd-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000001', 'registered', now()),
+  ('eeeeeeee-0001-0001-0001-000000000002', 'dddddddd-0001-0001-0001-000000000001', '22222222-0002-0002-0001-000000000003', 'registered', now()),
+  ('eeeeeeee-0001-0001-0001-000000000003', 'dddddddd-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000002', 'registered', now()),
+  -- Session 2 (starting soon)
+  ('eeeeeeee-0001-0001-0001-000000000004', 'dddddddd-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000001', 'registered', now()),
+  ('eeeeeeee-0001-0001-0001-000000000005', 'dddddddd-0001-0001-0001-000000000002', '22222222-0002-0002-0001-000000000003', 'registered', now()),
+  -- Session 3 (tomorrow)
+  ('eeeeeeee-0001-0001-0001-000000000006', 'dddddddd-0001-0001-0001-000000000003', '22222222-0002-0001-0001-000000000001', 'registered', now()),
+  ('eeeeeeee-0001-0001-0001-000000000007', 'dddddddd-0001-0001-0001-000000000003', '22222222-0002-0002-0001-000000000003', 'registered', now()),
+  -- Session 4 (this week)
+  ('eeeeeeee-0001-0001-0001-000000000008', 'dddddddd-0001-0001-0001-000000000004', '22222222-0002-0002-0001-000000000003', 'registered', now()),
+  ('eeeeeeee-0001-0001-0001-000000000009', 'dddddddd-0001-0001-0001-000000000004', '22222222-0002-0001-0001-000000000003', 'registered', now()),
+  -- Session 5 (today, revision)
+  ('eeeeeeee-0001-0001-0001-000000000010', 'dddddddd-0001-0001-0001-000000000005', '22222222-0002-0001-0001-000000000001', 'registered', now())
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── § 15. AGENT (ADAPTIVE) SESSIONS ──────────────────────────────────────────
+
+INSERT INTO edu.adaptive_sessions (id, student_id, student_agent_id, topic, subject, subtopics, status, updated_at, created_at) VALUES
+  ('ffffffff-0001-0001-0001-000000000001', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'Quadratic Equations', 'Mathematics', '["Factoring","Completing the Square","Quadratic Formula"]', 'active',   now() - interval '2 hours', now() - interval '3 days'),
+  ('ffffffff-0001-0001-0001-000000000002', '22222222-0002-0001-0001-000000000001', '66666666-0001-0001-0001-000000000001', 'Photosynthesis',      'Biology',     '["Light Reactions","Calvin Cycle"]',                       'complete', now() - interval '2 days',  now() - interval '6 days'),
+  ('ffffffff-0001-0001-0001-000000000003', '22222222-0002-0002-0001-000000000003', '66666666-0001-0001-0001-000000000011', 'Organic Chemistry Basics', 'Chemistry', '["Hydrocarbons","Functional Groups"]',                  'active',   now() - interval '5 hours', now() - interval '4 days')
+ON CONFLICT (id) DO NOTHING;
+
 -- =============================================================
 -- END OF SEED
 -- =============================================================
@@ -444,6 +483,9 @@ ON CONFLICT (id) DO NOTHING;
 --   16 leaderboard entries (classroom + course)
 --   29 question bank entries (Algebra, Geometry, Calculus, Vocab, Grammar, Biology, Physics, Chemistry)
 --   11 battles (2 live, 1 completed, 8 scheduled — incl. 7 challenges)
---   12 battle participants
+--   24 battle participants (incl. challenge creators + opponents)
 --   5  notifications
+--   5  live sessions (1 live, 4 scheduled)
+--   10 session participants (Alex + Amaka demo logins)
+--   3  agent/adaptive sessions
 -- =============================================================
