@@ -6,16 +6,8 @@
 
 -- ─── § 1. SCHOOLS ─────────────────────────────────────────────────────────────
 
-INSERT INTO school_profiles (id, name, description, website, is_active, created_at, updated_at) VALUES
-  ('11111111-0001-0001-0001-000000000001', 'Westwood Academy',   'Leading STEM-focused secondary school', 'https://westwood.edu',   true, now(), now()),
-  ('11111111-0001-0001-0001-000000000002', 'Riverside High',     'Award-winning arts and sciences school', 'https://riverside.edu', true, now(), now()),
-  ('11111111-0001-0001-0001-000000000003', 'Summit Prep',        'University prep school with elite results', 'https://summitprep.edu', true, now(), now()),
-  ('11111111-0001-0001-0001-000000000004', 'Lakeside STEM',      'Specialising in mathematics and computing', 'https://lakeside.edu', true, now(), now()),
-  ('11111111-0001-0001-0001-000000000005', 'Oakwood Charter',    'Community-led charter school', 'https://oakwood.edu',    true, now(), now()),
-  ('11111111-0001-0001-0001-000000000006', 'Greenfield IB',      'International Baccalaureate school', 'https://greenfield.edu', true, now(), now()),
-  ('11111111-0001-0001-0001-000000000007', 'North Valley High',  'Large comprehensive secondary school', 'https://northvalley.edu', true, now(), now()),
-  ('11111111-0001-0001-0001-000000000008', 'Cedar Grove School', 'Friendly neighbourhood secondary', 'https://cedargrove.edu', true, now(), now())
-ON CONFLICT (id) DO NOTHING;
+-- Schools are inserted AFTER users so admin_user_id FK can be satisfied.
+-- See § 2a below for the school inserts.
 
 -- ─── § 2. USERS ───────────────────────────────────────────────────────────────
 -- Student passwords: FirstName2026  e.g. Alex2026, Jordan2026
@@ -52,6 +44,19 @@ INSERT INTO users (id, email, username, password_hash, full_name, avatar_url, ro
   ('22222222-0002-0003-0001-000000000001', 'chioma@student.akoro.app',     'chioma_e',       '$2b$12$IQvNnFD9hSzwahgiNzI.kO8Y/y.MlV5skAarsEIgL0zWiv2lg2Zqu', 'Chioma E.',      'https://i.pravatar.cc/150?img=25', 'student', true, true, 'Year 13', 'Sixth Form / A-Level','Summit Prep',   '{"Biology","Chemistry","Mathematics"}',                  now(), now()),
   ('22222222-0002-0003-0001-000000000002', 'ola@student.akoro.app',        'ola_d',          '$2b$12$X9HpRs1.Z7uuqs9Pa15BL.9U/McESr2Kmc0L2ewEZ5pKV4UVogR1i',  'Ola D.',         'https://i.pravatar.cc/150?img=26', 'student', true, true, 'Year 12', 'Sixth Form / A-Level','Summit Prep',   '{"Economics","Mathematics","English Literature"}',       now(), now()),
   ('22222222-0002-0003-0001-000000000003', 'femi@student.akoro.app',       'femi_a',         '$2b$12$cfookozrjlN2V0U2StGOe.gUfbCe9QPzNtXLKJ0Kf5nvYBvOhT9zS',  'Femi A.',        'https://i.pravatar.cc/150?img=27', 'student', true, true, 'Year 13', 'Sixth Form / A-Level','Summit Prep',   '{"Computer Science","Mathematics","Physics"}',           now(), now())
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── § 2a. SCHOOLS (inserted after users so admin_user_id FK resolves) ───────
+
+INSERT INTO school_profiles (id, admin_user_id, name, description, website, is_active, created_at, updated_at) VALUES
+  ('11111111-0001-0001-0001-000000000001', '22222222-0001-0001-0001-000000000002', 'Westwood Academy',   'Leading STEM-focused secondary school',       'https://westwood.edu',    true, now(), now()),
+  ('11111111-0001-0001-0001-000000000002', '22222222-0001-0001-0001-000000000003', 'Riverside High',     'Award-winning arts and sciences school',       'https://riverside.edu',   true, now(), now()),
+  ('11111111-0001-0001-0001-000000000003', '22222222-0001-0001-0001-000000000004', 'Summit Prep',        'University prep school with elite results',    'https://summitprep.edu',  true, now(), now()),
+  ('11111111-0001-0001-0001-000000000004', '22222222-0001-0001-0001-000000000005', 'Lakeside STEM',      'Specialising in mathematics and computing',    'https://lakeside.edu',    true, now(), now()),
+  ('11111111-0001-0001-0001-000000000005', '22222222-0001-0001-0001-000000000007', 'Oakwood Charter',    'Community-led charter school',                 'https://oakwood.edu',     true, now(), now()),
+  ('11111111-0001-0001-0001-000000000006', '22222222-0001-0001-0001-000000000006', 'Greenfield IB',      'International Baccalaureate school',           'https://greenfield.edu',  true, now(), now()),
+  ('11111111-0001-0001-0001-000000000007', '22222222-0001-0001-0001-000000000006', 'North Valley High',  'Large comprehensive secondary school',         'https://northvalley.edu', true, now(), now()),
+  ('11111111-0001-0001-0001-000000000008', '22222222-0001-0001-0001-000000000007', 'Cedar Grove School', 'Friendly neighbourhood secondary',             'https://cedargrove.edu',  true, now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── § 3. SCHOOL ↔ TEACHER LINKS ─────────────────────────────────────────────
