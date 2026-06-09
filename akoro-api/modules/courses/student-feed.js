@@ -384,7 +384,7 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
         battles (
           id, title, topic, subject, difficulty, battle_type,
           status, xp_prize, time_limit_seconds, scheduled_start,
-          course_id, created_by, winner_id, created_at
+          course_id, created_by, created_at
         )
       `)
       .eq("user_id", userId)
@@ -400,7 +400,7 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
     const allBattleIds   = battles.map(r => r.battles.id);
     const { data: parts } = await db
       .from("battle_participants")
-      .select("battle_id, user_id, role, score, users ( full_name, avatar_url )")
+      .select("battle_id, user_id, role, score, is_winner, users ( full_name, avatar_url )")
       .in("battle_id", allBattleIds);
 
     const partsByBattle = {};
@@ -456,7 +456,7 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
           score:  opp?.score ?? 0,
           hp:     100,
         },
-        winner:       b.winner_id === userId ? "agentA" : b.winner_id ? "agentB" : null,
+        winner:       me?.is_winner ? "agentA" : opp?.is_winner ? "agentB" : null,
         courseId:     b.course_id,
       };
     });

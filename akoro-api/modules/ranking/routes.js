@@ -191,6 +191,57 @@ const handlers = {
   }),
 
   /**
+   * GET /api/ranking/my-classroom
+   * Leaderboard for the current student's own (first) classroom.
+   * Resolves the classroom server-side so the client doesn't need its id.
+   */
+  myClassroom: asyncHandler(async (req, res) => {
+    const { limit = 50 } = req.query;
+
+    // Find the student's first active classroom
+    const { data: membership } = await db
+      .from("classroom_students")
+      .select("classroom_id")
+      .eq("user_id", req.user.id)
+      .eq("status", "active")
+      .order("joined_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const classroomId = membership?.classroom_id;
+    if (!classroomId) return res200(res, { scope: "classroom", classroom_id: null, leaders: [] }, { total: 0 });
+
+    const { data, error } = await db
+      .from("xp_leaderboard")
+      .select(`
+        total_xp, rank,
+        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
+        user_agents ( agent_name, agent_emoji, agent_color )
+      `)
+      .eq("classroom_id", classroomId)
+      .eq("scope", "classroom")
+      .order("total_xp", { ascending: false })
+      .limit(Number(limit));
+
+    if (error) throw new Error(error.message);
+
+    res200(res, {
+      scope:        "classroom",
+      classroom_id: classroomId,
+      leaders:      (data ?? []).map((r, i) => ({
+        rank:       i + 1,
+        user_id:    r.users?.id,
+        full_name:  r.users?.full_name,
+        username:   r.users?.username,
+        avatar_url: r.users?.avatar_url,
+        agent:      r.user_agents ?? null,
+        total_xp:   r.total_xp,
+        is_me:      r.users?.id === req.user.id,
+      })),
+    }, { total: data?.length ?? 0 });
+  }),
+
+  /**
    * GET /api/ranking/classroom/:classroomId
    * Top students in a teacher's classroom by XP.
    */
@@ -411,6 +462,7 @@ const handlers = {
 
 const router = Router();
 
+router.get ("/my-classroom",            authenticateToken, handlers.myClassroom);
 router.get ("/course/:courseId",        authenticateToken, handlers.course);
 router.get ("/classroom/:classroomId",  authenticateToken, handlers.classroom);
 router.get ("/school/:schoolId",        authenticateToken, handlers.school);

@@ -6,32 +6,20 @@ import { TrophyIcon, FlameIcon, StarIcon, ZapIcon } from '../common/Icons.jsx';
 function RankingsTab() {
   const [boardType, setBoardType] = useState("classroom");
   const [data, setData] = useState([]);
-  const [classroomId, setClassroomId] = useState(null);
   const [loading, setLoading] = useState(false);
   const BOARD_TABS=[{key:"classroom",label:"Classroom",icon:"🏫"},{key:"courses",label:"Courses",icon:"📘"},{key:"interSchool",label:"Inter-Schools",icon:"🌍"}];
 
-  // Get classroom_id from sessions on mount
-  useEffect(() => {
-    apiGet('/api/student/sessions')
-      .then(d => {
-        const id = d.sessions?.[0]?.classroom_id;
-        if (id) setClassroomId(id);
-      })
-      .catch(() => {});
-  }, []);
-
-  // Fetch ranking data when boardType or classroomId changes
+  // Fetch ranking data when boardType changes.
+  // Ranking endpoints wrap their payload in `data` (res200 helper).
   useEffect(() => {
     setLoading(true);
-    let endpoint = '/api/ranking/global';
-    if (boardType === 'classroom' && classroomId) {
-      endpoint = `/api/ranking/classroom/${classroomId}`;
-    } else if (boardType === 'courses') {
-      endpoint = '/api/ranking/global';
-    }
+    // Classroom is resolved server-side via /my-classroom; courses + inter-school use global.
+    const endpoint = boardType === 'classroom'
+      ? '/api/ranking/my-classroom'
+      : '/api/ranking/global';
     apiGet(endpoint)
-      .then(d => {
-        const leaders = d.leaders || [];
+      .then(res => {
+        const leaders = res.data?.leaders || res.leaders || [];
         setData(leaders.map(r => ({
           rank: r.rank,
           name: r.full_name || r.username || 'Unknown',
@@ -42,7 +30,7 @@ function RankingsTab() {
       })
       .catch(() => setData([]))
       .finally(() => setLoading(false));
-  }, [boardType, classroomId]);
+  }, [boardType]);
 
   const changeColor=c=>c&&c.startsWith("+")?GREEN:c&&c.startsWith("-")?RED:"#9CA3AF";
   return (
