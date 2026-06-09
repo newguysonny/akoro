@@ -419,5 +419,5 @@ router.get ("/me",                      authenticateToken, handlers.me);
 router.post("/award",                   authenticateToken, requireRole(["admin"]), handlers.awardManual);
 router.post("/refresh",                 authenticateToken, requireRole(["admin"]), handlers.refresh);
 
-export { XP, awardXP };
+export { XP };
 export default router;
