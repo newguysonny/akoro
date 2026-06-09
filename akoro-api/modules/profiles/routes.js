@@ -866,8 +866,6 @@ router.patch("/me/notifications", authenticateToken, asyncHandler(async (req, re
   res200(res, { saved: true });
 }));
 
-export default router;
-
 // ─── § MISSING ENDPOINTS — added per frontend audit ──────────────────────────
 
 /**
@@ -1098,7 +1096,7 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
       rows:            results.rows,
     });
   });
-}));
+});
 
 /**
  * PATCH /api/profiles/students/:userId
@@ -1179,3 +1177,5 @@ router.post("/students/:userId/message", authenticateToken, requireRole(["instru
 
   res200(res, { sent: true, channel, student_name: student.full_name });
 }));
+
+export default router;
