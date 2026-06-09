@@ -31,7 +31,7 @@ import {
   getTopicsBySubject,
 } from "./agents/student/knowledge.js";
 import { decayEngine } from "./agents/student/decayEngine.js";
-import { activeSessions } from "./adaptive-websocket.js";
+import { activeSessions } from "./websocket.js";
 
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
