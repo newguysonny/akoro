@@ -1,4 +1,5 @@
 import React from 'react';
+import { RED } from '../../constants.js';
 
 function ProgressBar({ value, color }) {
   return (
