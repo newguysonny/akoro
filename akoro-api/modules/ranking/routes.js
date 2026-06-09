@@ -160,8 +160,7 @@ const handlers = {
       .from("xp_leaderboard")
       .select(`
         total_xp, rank,
-        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
-        user_agents ( agent_name, agent_emoji, agent_color )
+        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url )
       `)
       .eq("course_id", courseId)
       .eq("scope", "course")
@@ -183,7 +182,7 @@ const handlers = {
         full_name:  r.users?.full_name,
         username:   r.users?.username,
         avatar_url: r.users?.avatar_url,
-        agent:      r.user_agents ?? null,
+
         total_xp:   r.total_xp,
         is_me:      r.users?.id === req.user.id,
       })),
@@ -216,7 +215,6 @@ const handlers = {
       .select(`
         total_xp, rank,
         users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
-        user_agents ( agent_name, agent_emoji, agent_color )
       `)
       .eq("classroom_id", classroomId)
       .eq("scope", "classroom")
@@ -234,7 +232,7 @@ const handlers = {
         full_name:  r.users?.full_name,
         username:   r.users?.username,
         avatar_url: r.users?.avatar_url,
-        agent:      r.user_agents ?? null,
+
         total_xp:   r.total_xp,
         is_me:      r.users?.id === req.user.id,
       })),
@@ -274,7 +272,6 @@ const handlers = {
       .select(`
         total_xp, rank,
         users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
-        user_agents ( agent_name, agent_emoji, agent_color )
       `)
       .eq("classroom_id", classroomId)
       .eq("scope", "classroom")
@@ -295,7 +292,7 @@ const handlers = {
         full_name:  r.users?.full_name,
         username:   r.users?.username,
         avatar_url: r.users?.avatar_url,
-        agent:      r.user_agents ?? null,
+
         total_xp:   r.total_xp,
         is_me:      r.users?.id === req.user.id,
       })),
@@ -343,7 +340,6 @@ const handlers = {
       .select(`
         total_xp,
         users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
-        user_agents ( agent_name, agent_emoji, agent_color )
       `)
       .eq("scope", "global")
       .in("user_id", studentIds)
@@ -361,7 +357,7 @@ const handlers = {
         full_name:  r.users?.full_name,
         username:   r.users?.username,
         avatar_url: r.users?.avatar_url,
-        agent:      r.user_agents ?? null,
+
         total_xp:   r.total_xp,
         is_me:      r.users?.id === req.user.id,
       })),
@@ -380,7 +376,6 @@ const handlers = {
       .select(`
         total_xp,
         users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
-        user_agents ( agent_name, agent_emoji, agent_color )
       `)
       .eq("scope", "global")
       .order("total_xp", { ascending: false })
@@ -396,7 +391,7 @@ const handlers = {
         full_name:  r.users?.full_name,
         username:   r.users?.username,
         avatar_url: r.users?.avatar_url,
-        agent:      r.user_agents ?? null,
+
         total_xp:   r.total_xp,
         is_me:      r.users?.id === req.user.id,
       })),

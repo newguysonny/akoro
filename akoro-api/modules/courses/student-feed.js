@@ -155,8 +155,7 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         )
       `)
       .eq("user_id", userId)
-      .in("live_sessions.status", ["scheduled", "live"])
-      .order("live_sessions.scheduled_start", { ascending: true });
+      .in("live_sessions.status", ["scheduled", "live"]);
 
     if (enrollErr) throw new Error(enrollErr.message);
 
@@ -390,7 +389,7 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
       `)
       .eq("user_id", userId)
       .in("battles.status", ["lobby", "scheduled", "live", "completed"])
-      .order("battles.created_at", { ascending: false })
+      .order("joined_at", { ascending: false })
       .limit(30);
 
     if (error) throw new Error(error.message);
