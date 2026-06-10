@@ -214,7 +214,7 @@ const handlers = {
       .from("xp_leaderboard")
       .select(`
         total_xp, rank,
-        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
+        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url )
       `)
       .eq("classroom_id", classroomId)
       .eq("scope", "classroom")
@@ -271,7 +271,7 @@ const handlers = {
       .from("xp_leaderboard")
       .select(`
         total_xp, rank,
-        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
+        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url )
       `)
       .eq("classroom_id", classroomId)
       .eq("scope", "classroom")
@@ -339,7 +339,7 @@ const handlers = {
       .from("xp_leaderboard")
       .select(`
         total_xp,
-        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
+        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url )
       `)
       .eq("scope", "global")
       .in("user_id", studentIds)
@@ -375,7 +375,7 @@ const handlers = {
       .from("xp_leaderboard")
       .select(`
         total_xp,
-        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url ),
+        users!xp_leaderboard_user_id_fkey ( id, full_name, username, avatar_url )
       `)
       .eq("scope", "global")
       .order("total_xp", { ascending: false })
