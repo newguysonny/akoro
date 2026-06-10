@@ -21,7 +21,7 @@ router.use(authenticateToken);
 // Mounted under /api/tasks/admin/tools — admin role only.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const VALID_EXECUTORS = ["llm_prompt", "notify", "create_battle"];
+const VALID_EXECUTORS = ["llm_prompt", "notify", "create_battle", "http_webhook"];
 const VALID_SCOPES     = ["global", "user", "school"];
 
 // GET /api/tasks/admin/tools — list (optional ?scope= &ownerUserId= &schoolId=)
@@ -87,6 +87,32 @@ router.delete("/admin/tools/:id", requireRole(["admin"]), async (req, res) => {
   try {
     await DynamicToolDB.remove(req.params.id);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/tasks/admin/partners — list schools + teachers for scoping UI
+router.get("/admin/partners", requireRole(["admin"]), async (req, res) => {
+  try {
+    const db = (await import("../../db.js")).default;
+    const [{ data: schools }, { data: teachers }] = await Promise.all([
+      db.from("schools").select("id, name, logo_url").order("name"),
+      db.from("users").select("id, full_name, username, email, role").in("role", ["teacher", "admin"]).order("full_name"),
+    ]);
+    res.json({ schools: schools ?? [], teachers: teachers ?? [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/tasks/admin/tools/:id — fetch single tool
+router.get("/admin/tools/:id", requireRole(["admin"]), async (req, res) => {
+  try {
+    const db = (await import("../../db.js")).default;
+    const { data, error } = await db.from("dynamic_tools").select("*").eq("id", req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: "not found" });
+    res.json({ tool: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

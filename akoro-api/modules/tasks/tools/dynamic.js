@@ -87,6 +87,55 @@ async function runNotify(row, input, ctx) {
   return { success: true };
 }
 
+async function runHttpWebhook(row, input, ctx) {
+  const cfg = row.config ?? {};
+  const url = cfg.url;
+  if (!url) throw new Error(`Tool "${row.name}" has no webhook URL configured`);
+
+  const method  = (cfg.method ?? "POST").toUpperCase();
+  const headers = { "Content-Type": "application/json", ...(cfg.headers ?? {}) };
+  if (cfg.secret) headers["X-Webhook-Secret"] = cfg.secret;
+
+  const body = cfg.payloadTemplate
+    ? JSON.parse(fillTemplate(JSON.stringify(cfg.payloadTemplate), input))
+    : input;
+
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), (cfg.timeoutMs ?? 10000));
+
+  let responseText = "";
+  let status = 0;
+  try {
+    const resp = await fetch(url, {
+      method,
+      headers,
+      body:   method !== "GET" ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    status = resp.status;
+    responseText = await resp.text();
+    if (!resp.ok) throw new Error(`Webhook returned ${status}: ${responseText.slice(0, 200)}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  let parsed;
+  try { parsed = JSON.parse(responseText); } catch { parsed = { raw: responseText }; }
+
+  const outputType = cfg.outputType ?? "message";
+  const text = cfg.responseField ? (parsed[cfg.responseField] ?? responseText) : responseText;
+
+  await TaskOutputDB.create({
+    runId:      ctx.runId,
+    taskId:     ctx.taskId,
+    outputType,
+    content:    { type: outputType, text: String(text), tool: row.name, webhookStatus: status },
+    delivered:  false,
+  });
+
+  return { success: true, status, response: parsed };
+}
+
 async function runCreateBattle(row, input, ctx) {
   const cfg    = row.config ?? {};
   const task   = await TaskDB.findById(ctx.taskId);
@@ -145,6 +194,7 @@ const EXECUTORS = {
   llm_prompt:    runLlmPrompt,
   notify:        runNotify,
   create_battle: runCreateBattle,
+  http_webhook:  runHttpWebhook,
 };
 
 // ─── Build a runnable tool from a DB row ────────────────────────────────────────
