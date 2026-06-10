@@ -1,4 +1,4 @@
-// src/tasks/tools/create-battle.ts
+// modules/tasks/tools/create-battle.js
 // Creates a battle/challenge by:
 //   1. Reading OCR text from the teacher's uploaded photo (pre-extracted by ocr.ts)
 //   2. Calling Claude to generate battle questions from that content
@@ -108,33 +108,9 @@ const paramsSchema = z.object({
   scheduleAt:       z.string().datetime({ offset: true }).optional(),
 });
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface GeneratedQuestion {
-  question:    string;
-  type:        "mcq" | "true_false" | "short_answer";
-  options?:    string[];
-  answer:      string;
-  explanation;
-  difficulty:  "easy" | "medium" | "hard";
-  points:      number;
-  concept:     string;
-}
-
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
-export async function executeCreateBattle(
-  rawInput,
-  ctx
-): Promise<{
-  success:           boolean;
-  battleId:          string;
-  title:             string;
-  questionCount:     number;
-  status:            string;
-  notifiedCount:     number;
-  extractedConcepts[];
-}> {
+export async function executeCreateBattle(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   // ── Step 1: Generate questions from source content ──────────────────────
@@ -201,7 +177,7 @@ export async function executeCreateBattle(
       notifiedCount,
       scheduledAt:       input.scheduleAt ?? null,
       questions,           // full set for teacher preview in the UI
-    } as unknown as Record<string, unknown>,
+    },
     delivered: false,
   });
 
@@ -216,47 +192,9 @@ export async function executeCreateBattle(
   };
 }
 
-// ─── Battles API call ─────────────────────────────────────────────────────────
-// POSTs to the existing battles API.
-// Uses SERVICE_API_KEY so the battles API accepts it without a teacher JWT.
-
-interface BattlesApiResponse {
-  id:     string;
-  status;
-  title:  string;
-}
-
-async function callBattlesApi(payload) {
-  const res = await fetch(BATTLES_API, {
-    method:  "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": `Bearer ${SERVICE_KEY}`,
-      "X-Source":      "task-worker",   // so the battles API can log the origin
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "unknown error");
-    throw new Error(
-      `Battles API returned ${res.status}: ${errorText}`
-    );
-  }
-
-  const json = await res.json() as { battle: BattlesApiResponse };
-  return json.battle;
-}
-
 // ─── Question generation via Claude ──────────────────────────────────────────
 
-async function generateBattleContent(
-  input
-): Promise<{
-  title:             string;
-  questions:         GeneratedQuestion[];
-  extractedConcepts[];
-}> {
+async function generateBattleContent(input) {
   const difficultyGuide =
     input.difficulty === "mixed"
       ? "Mix difficulties: roughly 30% easy, 50% medium, 20% hard."
@@ -312,17 +250,13 @@ Note: "options" is only required for mcq type. Omit it for true_false and short_
   });
 
   const raw = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("")
     .replace(/```json|```/g, "")
     .trim();
 
-  const parsed = JSON.parse(raw) as {
-    title:             string;
-    extractedConcepts[];
-    questions:         GeneratedQuestion[];
-  };
+  const parsed = JSON.parse(raw);
 
   // Use teacher-provided title if given, otherwise use Claude's derived title
   const title = input.title?.trim() || parsed.title;
@@ -334,9 +268,7 @@ Note: "options" is only required for mcq type. Omit it for true_false and short_
 // Calls the main platform's enrollment API or DB.
 // Replace with a direct DB query once enrollments are in schema.ts.
 
-async function getEnrolledStudents(
-  courseId
-) {
+async function getEnrolledStudents(courseId) {
   const ENROLLMENTS_API =
     process.env.ENROLLMENTS_API_URL ??
     `http://localhost:3000/api/courses/${courseId}/students`;
@@ -346,7 +278,7 @@ async function getEnrolledStudents(
       headers: { Authorization: `Bearer ${SERVICE_KEY}` },
     });
     if (!res.ok) return [];
-    const json = await res.json() as { students: { id; name; email }[] };
+    const json = await res.json();
     return json.students ?? [];
   } catch {
     console.warn(`[create-battle] Could not fetch enrolled students for course ${courseId}`);
@@ -362,12 +294,14 @@ async function callBattlesApi(payload) {
     course_id:        payload.courseId,
     battle_type:      payload.battleType === "classroom" ? "classroom" : "open",
     title:            payload.title,
-    difficulty:       payload.difficulty ?? "intermediate",
-    total_questions:  payload.questions?.length ?? 10,
-    time_limit_seconds: payload.timeLimitSeconds ?? 30,
-    xp_pool:          payload.xpPool ?? 500,
+    description:      payload.description ?? null,
+    subject:          payload.subject ?? "General",
+    difficulty:       payload.difficulty ?? "medium",
     xp_prize:         payload.xpPool ?? 500,
+    xp_pool:          payload.xpPool ?? 500,
+    time_limit_seconds: payload.timeLimitSeconds ?? 30,
     status:           payload.status === "pending" ? "scheduled" : "lobby",
+    peak_viewers:     0,
     scheduled_start:  payload.scheduledAt ?? null,
     expires_at:       new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     created_by:       payload.teacherId ?? null,

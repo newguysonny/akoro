@@ -1,4 +1,4 @@
-// src/tasks/tools/generate-quiz.ts
+// modules/tasks/tools/generate-quiz.js
 // Generates quiz questions for a given topic and course.
 // The agent calls this tool when the task type is "generate_quiz"
 // or when the teacher asks for practice questions in a general task.
@@ -52,7 +52,7 @@ export const generateQuizDefinition = {
   },
 };
 
-// ─── Tool parameters type ─────────────────────────────────────────────────────
+// ─── Tool parameters ──────────────────────────────────────────────────────────
 
 const paramsSchema = z.object({
   topic:            z.string(),
@@ -63,19 +63,9 @@ const paramsSchema = z.object({
   marksPerQuestion: z.number().default(2),
 });
 
-// ─── Execution context (injected by worker) ───────────────────────────────────
-
-export interface ToolContext {
-  taskId;
-  runId:  string;
-}
-
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
-export async function executeGenerateQuiz(
-  rawInput,
-  ctx
-) {
+export async function executeGenerateQuiz(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   // Call the LLM to actually write the questions
@@ -92,7 +82,7 @@ export async function executeGenerateQuiz(
       topic:     input.topic,
       courseId:  input.courseId,
       totalMarks: questions.reduce((s, q) => s + q.marks, 0),
-    } as unknown as Record<string, unknown>,
+    },
     delivered: false,
   });
 
@@ -103,9 +93,7 @@ export async function executeGenerateQuiz(
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-async function callLlmForQuestions(
-  input
-) {
+async function callLlmForQuestions(input) {
   const formatInstructions =
     input.format === "mcq"
       ? "All questions must be multiple-choice with exactly 4 options (A–D)."
@@ -146,7 +134,7 @@ Respond with a JSON array only — no markdown, no preamble:
 
   const text = response.content
     .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text }).text)
+    .map((b) => b.text)
     .join("");
 
   const parsed = JSON.parse(text);

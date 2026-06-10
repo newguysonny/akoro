@@ -76,6 +76,11 @@ function buildTaskPrompt(task, files, fileTexts, course) {
 export async function extractIntent(title, description) {
   const text  = `${title} ${description ?? ""}`.toLowerCase();
   const types = {
+    quiz_me:            ["quiz me", "test me", "practice questions for me", "practise me"],
+    explain_concept:    ["explain", "what is", "help me understand", "teach me"],
+    create_study_plan:  ["study plan", "revision plan", "schedule my study", "plan my"],
+    set_study_reminder: ["remind me", "set a reminder", "reminder to"],
+    challenge_peer:     ["challenge", "battle", "duel", "compete with"],
     generate_quiz:      ["quiz", "test", "questions", "assessment", "practice"],
     send_reminder:      ["remind", "notification", "alert", "message students", "notify"],
     grade_submissions:  ["grade", "mark", "score", "evaluate", "assess submission"],

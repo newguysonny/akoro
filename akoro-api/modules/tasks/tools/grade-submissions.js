@@ -1,4 +1,4 @@
-// src/tasks/tools/grade-submissions.ts
+// modules/tasks/tools/grade-submissions.js
 // Grades student submissions using the attached files and a rubric.
 // The agent calls this tool when the teacher uploads answer scripts
 // and asks for grading.
@@ -67,16 +67,7 @@ const paramsSchema = z.object({
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
-export async function executeGradeSubmissions(
-  rawInput,
-  ctx
-): Promise<{
-  success:    boolean;
-  studentId:  string;
-  score:      number;
-  percentage;
-  grade:      string;
-}> {
+export async function executeGradeSubmissions(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   const result = await callLlmForGrading(input);
@@ -95,7 +86,7 @@ export async function executeGradeSubmissions(
       grade:       result.grade,
       feedback:    result.feedback,
       breakdown:   result.breakdown,
-    } as unknown as Record<string, unknown>,
+    },
     delivered: false,
   });
 
@@ -112,17 +103,7 @@ export async function executeGradeSubmissions(
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-interface GradingResult {
-  score:      number;
-  percentage;
-  grade:      string;
-  feedback:   string;
-  breakdown:  GradeBreakdown[];
-}
-
-async function callLlmForGrading(
-  input
-) {
+async function callLlmForGrading(input) {
   const rubricSection = input.rubric
     ? `\nRubric / model answer:\n${input.rubric}`
     : "\nNo rubric provided — grade on general correctness and quality.";
@@ -167,10 +148,10 @@ Respond with JSON only — no markdown, no preamble:
 
   const text = response.content
     .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text }).text)
+    .map((b) => b.text)
     .join("");
 
-  return JSON.parse(text) as GradingResult;
+  return JSON.parse(text);
 }
 
 // ─── Grade letter helper (also used by export-report) ─────────────────────────

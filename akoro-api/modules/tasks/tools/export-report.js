@@ -1,4 +1,4 @@
-// src/tasks/tools/export-report.ts
+// modules/tasks/tools/export-report.js
 // Generates a progress/performance report for a course or student.
 // Produces an HTML report and a summary string. Optionally generates a CSV.
 // This is a good example of a tool that chains fetch-student-data internally.
@@ -6,7 +6,7 @@
 import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB } from "../lib/db.js";
-import { executeFetchStudentData, type StudentData, type CourseSummary } from "./fetch-student-data";
+import { executeFetchStudentData } from "./fetch-student-data.js";
 
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
@@ -53,10 +53,7 @@ const paramsSchema = z.object({
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
-export async function executeExportReport(
-  rawInput,
-  ctx
-) {
+export async function executeExportReport(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   // Fetch student data — this tool chains the data tool internally
@@ -92,7 +89,7 @@ export async function executeExportReport(
       summary,
       studentCount: reportStudents.length,
       generatedAt:  new Date().toISOString(),
-    } as unknown as Record<string, unknown>,
+    },
     delivered: false,
   });
 
@@ -101,11 +98,7 @@ export async function executeExportReport(
 
 // ─── Filter students by report type ──────────────────────────────────────────
 
-function filterStudents(
-  students: StudentData[],
-  reportType,
-  studentId?
-): StudentData[] {
+function filterStudents(students, reportType, studentId) {
   switch (reportType) {
     case "at_risk_students":
       return students.filter((s) => s.riskLevel === "high" || s.riskLevel === "medium");
@@ -125,12 +118,7 @@ function filterStudents(
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-async function generateReportContent(
-  reportType,
-  students: StudentData[],
-  summary: CourseSummary,
-  periodDays
-) {
+async function generateReportContent(reportType, students, summary, periodDays) {
   const studentTable = students
     .map(
       (s) =>
@@ -165,10 +153,10 @@ Respond with JSON only — no markdown, no preamble:
 
   const text = response.content
     .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text }).text)
+    .map((b) => b.text)
     .join("");
 
-  return JSON.parse(text) as { html; summary };
+  return JSON.parse(text);
 }
 
 function daysSince(isoDate) {

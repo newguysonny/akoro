@@ -1,4 +1,4 @@
-// src/tasks/tools/schedule-session.ts
+// modules/tasks/tools/schedule-session.js
 // Schedules a live class session — creates the session record, generates
 // a meeting link (Zoom / Google Meet), and notifies enrolled students.
 
@@ -68,15 +68,7 @@ const paramsSchema = z.object({
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
-export async function executeScheduleSession(
-  rawInput,
-  ctx
-): Promise<{
-  success:   boolean;
-  sessionId;
-  joinUrl:   string;
-  scheduledAt;
-}> {
+export async function executeScheduleSession(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   const sessionId = uuid();
@@ -103,7 +95,7 @@ export async function executeScheduleSession(
       joinUrl,
       courseId:        input.courseId,
       notifyStudents:  input.notifyStudents,
-    } as unknown as Record<string, unknown>,
+    },
     delivered: false,
   });
 

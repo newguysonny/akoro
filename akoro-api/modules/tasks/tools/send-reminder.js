@@ -1,15 +1,12 @@
-// src/tasks/tools/send-reminder.ts
+// modules/tasks/tools/send-reminder.js
 // Sends reminder messages to students via the platform notification system.
 // Resolves recipients from the DB, personalises the message, then calls
 // the notifications lib which handles in-app push and email.
 
 import { z }              from "zod";
-import { TaskOutputDB, db } from "../lib/db.js";
+import { TaskOutputDB }   from "../lib/db.js";
+import db                 from "../../../db.js";
 import { sendBulkNotifications } from "../lib/notifications.js";
-
-
-import * as schema           ;
-import { eq, and, lt }       from "drizzle-orm";
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
 
@@ -74,10 +71,7 @@ const paramsSchema = z.object({
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
 
-export async function executeSendReminder(
-  rawInput,
-  ctx
-) {
+export async function executeSendReminder(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   const recipients = await resolveRecipients(input);
@@ -86,7 +80,7 @@ export async function executeSendReminder(
     return { success: true, sentCount: 0, recipientIds: [] };
   }
 
-  // Send via the notifications lib (in-app Pusher push + optional email)
+  // Send via the notifications lib (in-app push + optional email)
   const results = await sendBulkNotifications(
     recipients.map((r) => ({
       studentId:   r.id,
@@ -112,7 +106,7 @@ export async function executeSendReminder(
       courseId:   input.courseId,
       sentCount,
       condition:  input.condition,
-    } as unknown as Record<string, unknown>,
+    },
     delivered: false,
   });
 
@@ -121,20 +115,9 @@ export async function executeSendReminder(
 
 // ─── Recipient resolver ───────────────────────────────────────────────────────
 
-interface Recipient { id; name; email; progress? }
-
-async function resolveRecipients(
-  input
-) {
-  // We join enrollments → students to get name + email.
-  // Your schema may look different — adjust the table/column names accordingly.
-  // Here we query the `students` table from the akoro main schema.
-  // For now we query the teachers table as a stand-in for the student table
-  // until the full students table is wired in.
-
+async function resolveRecipients(input) {
   try {
     if (input.targetType === "specific" && input.studentIds?.length) {
-      // Return only the requested students
       return await fetchStudentsByIds(input.studentIds);
     }
 
@@ -152,36 +135,32 @@ async function resolveRecipients(
   return [];
 }
 
-// These hit the students/enrollments tables in your main schema.
-// Replace these with your actual ORM queries once the students table is created.
-
-async function fetchStudentsByIds(ids[]) {
-  // TODO: replace with real query
-  // e.g. return db.select().from(students).where(inArray(students.id, ids))
-  return ids.map((id) => ({ id, name: "Student", email: "student@example.com" }));
+async function fetchStudentsByIds(ids) {
+  const { data } = await db.from("users")
+    .select("id, full_name, email")
+    .in("id", ids);
+  return (data ?? []).map((u) => ({
+    id: u.id, name: u.full_name ?? "Student", email: u.email ?? "",
+  }));
 }
 
 async function fetchAllStudentsInCourse(courseId) {
-  // TODO: replace with real query
-  // e.g. return db.select({ id, name, email }).from(enrollments)
-  //              .innerJoin(students, eq(enrollments.studentId, students.id))
-  //              .where(eq(enrollments.courseId, courseId))
-  console.log(`[send-reminder] Fetching all students for course ${courseId}`);
-  return [];
+  const { data } = await db.from("enrollments")
+    .select("progress, users!enrollments_user_id_fkey ( id, full_name, email )")
+    .eq("course_id", courseId);
+  return (data ?? []).map((e) => ({
+    id: e.users?.id, name: e.users?.full_name ?? "Student",
+    email: e.users?.email ?? "", progress: e.progress ?? 0,
+  })).filter((s) => s.id);
 }
 
-async function fetchStudentsByCondition(
-  courseId:  string,
-  condition
-) {
-  // Parse simple conditions the agent might pass
-  // "progress < 50" or "inactive for 7 days" etc.
+async function fetchStudentsByCondition(courseId, condition) {
+  // Parse simple conditions the agent might pass, e.g. "progress < 50".
   const progressMatch = condition.match(/progress\s*[<]\s*(\d+)/i);
   if (progressMatch) {
     const threshold = parseInt(progressMatch[1]);
-    console.log(`[send-reminder] Fetching students with progress < ${threshold}% in ${courseId}`);
-    // TODO: db.select().from(enrollments).where(and(eq(courseId), lt(progress, threshold)))
-    return [];
+    const all = await fetchAllStudentsInCourse(courseId);
+    return all.filter((s) => (s.progress ?? 0) < threshold);
   }
 
   // Default: return all

@@ -195,5 +195,12 @@ httpServer.listen(config.server.port, config.server.host, () => {
   `);
 });
 
+// Start the background task worker (Anthropic agent loop) if enabled
+if (process.env.ENABLE_TASK_WORKER !== "false") {
+  import("./modules/tasks/worker.js")
+    .then(() => console.log("[tasks] worker started"))
+    .catch((e) => console.error("[tasks] worker failed to start:", e.message));
+}
+
 export { io };
 export default app;
