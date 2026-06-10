@@ -141,18 +141,19 @@ function mapLiveSession(row, participantStatus) {
 router.get("/sessions", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log(`[sessions] userId=${userId}`);
 
     // ── 1. Live / scheduled classes ──────────────────────────────────────────
-    // Two-step: get enrolled session IDs, then fetch session rows directly.
-    // Avoids PostgREST nested-column filter ambiguity that silently nulls embeds.
     const { data: participantRows, error: partErr } = await db
       .from("session_participants")
       .select("session_id")
       .eq("user_id", userId);
 
+    console.log(`[sessions] participant rows=${participantRows?.length ?? 0} err=${partErr?.message ?? null}`);
     if (partErr) throw new Error(partErr.message);
 
     const sessionIds = (participantRows ?? []).map(r => r.session_id);
+    console.log(`[sessions] sessionIds=${JSON.stringify(sessionIds)}`);
 
     let liveSessions = [];
     if (sessionIds.length > 0) {
@@ -168,12 +169,13 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         .in("status", ["scheduled", "live"])
         .order("scheduled_start", { ascending: true });
 
+      console.log(`[sessions] live_sessions rows=${sessionRows?.length ?? 0} err=${sessErr?.message ?? null}`);
       if (sessErr) throw new Error(sessErr.message);
       liveSessions = (sessionRows ?? []).map(s => mapLiveSession(s, "registered"));
     }
 
     // ── 2. Agent sessions from edu.adaptive_sessions ─────────────────────────
-    const { data: agentRows } = await db
+    const { data: agentRows, error: agentErr } = await db
       .schema("edu")
       .from("adaptive_sessions")
       .select("id, topic, subject, status, updated_at, subtopics, objectives")
@@ -181,7 +183,9 @@ router.get("/sessions", authenticateToken, async (req, res) => {
       .in("status", ["active", "complete"])
       .order("updated_at", { ascending: false })
       .limit(20)
-      .catch(() => ({ data: [] }));
+      .catch(e => { console.log(`[sessions] adaptive_sessions catch: ${e.message}`); return { data: [] }; });
+
+    console.log(`[sessions] agent rows=${agentRows?.length ?? 0} agentErr=${agentErr?.message ?? null}`);
 
     const agentSessions = (agentRows ?? []).map((row, i) => {
       const subtopics  = Array.isArray(row.subtopics)
@@ -232,6 +236,7 @@ router.get("/sessions", authenticateToken, async (req, res) => {
       return 0;
     });
 
+    console.log(`[sessions] final: live=${liveSessions.length} agent=${agentSessions.length} total=${all.length}`);
     res.json({ success: true, sessions: all, total: all.length });
 
   } catch (err) {
