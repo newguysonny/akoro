@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
+import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 
 const QUICK_PROMPTS = ["Create a task for me","What's due today?","Quiz me on Algebra","Check my progress","Explain Mitosis","Help with an essay"];
 const AGENT_REPLIES = {
@@ -38,23 +39,17 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [draftEmoji, setDraftEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
   const [taskOpen,   setTaskOpen]   = useState(false);
-  const [tasks,      setTasks]      = useState([]);
   const [taskFilter, setTaskFilter] = useState("pending");
   const [tTitle,     setTTitle]     = useState("");
   const [tDesc,      setTDesc]      = useState("");
   const [tPriority,  setTPriority]  = useState("medium");
   const feedRef = useRef(null);
 
+  const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask } = useTaskAPI();
+
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
   const PRI_LABEL = {high:"High",medium:"Medium",low:"Low"};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
-
-  // Fetch real tasks on mount
-  useEffect(()=>{
-    apiGet("/api/tasks")
-      .then(d=>{ if(d.tasks?.length) setTasks(d.tasks); })
-      .catch(()=>{});
-  },[]);
 
   // Update greeting when agent name changes (customise flow)
   const updateAgentName = (name, emoji) => {
@@ -113,25 +108,17 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
 
   const addTask=async()=>{
     if(!tTitle.trim()) return;
-    const newTask={id:Date.now(),title:tTitle,desc:tDesc,priority:tPriority,done:false};
-    setTasks(prev=>[...prev,newTask]);
-    // Try real API
-    apiPost("/api/tasks", newTask).catch(()=>{});
-    const t=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const t=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
+    await createTask({ title:tTitle, description:tDesc, priority:tPriority });
     setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:`✅ Task assigned!\n\n📋 "${tTitle}"\nPriority: ${tPriority.charAt(0).toUpperCase()+tPriority.slice(1)}\n\nI'll track this for you!`,time:t}]);
     setTTitle(""); setTDesc(""); setTPriority("medium"); setTaskOpen(false);
     if(innerTab!=="tasks") setInnerTab("tasks");
   };
 
-  const toggleTask=id=>{
-    setTasks(prev=>prev.map(t=>t.id===id?{...t,done:!t.done}:t));
-    apiPatch(`/api/tasks/${id}/toggle`).catch(()=>{});
-  };
-
-  const filteredTasks=tasks.filter(t=>taskFilter==="done"?t.done:!t.done);
-  const pendingCount=tasks.filter(t=>!t.done).length;
-  const doneCount=tasks.filter(t=>t.done).length;
-  const highCount=tasks.filter(t=>t.priority==="high"&&!t.done).length;
+  const filteredTasks=tasks.filter(t=>taskFilter==="done"?t.status==="done":t.status!=="done");
+  const pendingCount=tasks.filter(t=>t.status!=="done").length;
+  const doneCount=tasks.filter(t=>t.status==="done").length;
+  const highCount=tasks.filter(t=>t.priority==="high"&&t.status!=="done").length;
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"#fff" }}>
@@ -206,13 +193,13 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
             {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"#9CA3AF" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?"No completed tasks yet.":"All done! 🎉"}</p></div>:filteredTasks.map(t=>(
-              <div key={t.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"#fff",border:"1px solid #F3F4F6",opacity:t.done?.6:1 }}>
-                <button onClick={()=>toggleTask(t.id)} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${t.done?GREEN:"#D1D5DB"}`,background:t.done?GREEN:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
-                  {t.done&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+              <div key={t.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"#fff",border:"1px solid #F3F4F6",opacity:t.status==="done"?.6:1 }}>
+                <button onClick={()=>toggleTask(t.id)} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${t.status==="done"?GREEN:"#D1D5DB"}`,background:t.status==="done"?GREEN:"#fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                  {t.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>
-                  <p style={{ fontSize:13.5,fontWeight:t.done?500:700,color:t.done?"#9CA3AF":"#111827",textDecoration:t.done?"line-through":"none",margin:"0 0 4px" }}>{t.title}</p>
-                  {t.desc&&<p style={{ fontSize:12,color:"#6B7280",margin:"0 0 5px",lineHeight:1.45 }}>{t.desc}</p>}
+                  <p style={{ fontSize:13.5,fontWeight:t.status==="done"?500:700,color:t.status==="done"?"#9CA3AF":"#111827",textDecoration:t.status==="done"?"line-through":"none",margin:"0 0 4px" }}>{t.title}</p>
+                  {t.description&&<p style={{ fontSize:12,color:"#6B7280",margin:"0 0 5px",lineHeight:1.45 }}>{t.description}</p>}
                   <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[t.priority],color:PRI_COLOR[t.priority] }}>{PRI_LABEL[t.priority]}</span>
                 </div>
               </div>

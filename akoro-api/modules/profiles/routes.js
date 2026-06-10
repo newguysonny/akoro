@@ -1178,4 +1178,40 @@ router.post("/students/:userId/message", authenticateToken, requireRole(["instru
   res200(res, { sent: true, channel, student_name: student.full_name });
 }));
 
+// ─── GET /api/profiles/teaching-guides ───────────────────────────────────────
+router.get("/teaching-guides", authenticateToken, asyncHandler(async (req, res) => {
+  const guides = [
+    { id: "nana-esumai",      name: "NaNa Esumai",    emoji: "🧠", style: "Adaptive & encouraging" },
+    { id: "akobi-strict",     name: "Akobi",          emoji: "🧑🏫", style: "Strict & structured" },
+    { id: "sade-warm",        name: "Sade",            emoji: "🌸", style: "Warm & nurturing" },
+    { id: "emeka-fasttrack",  name: "Emeka",           emoji: "⚡", style: "Fast-track & intensive" },
+  ];
+  res200(res, { guides });
+}));
+
+// ─── POST /api/profiles/me/deactivate ────────────────────────────────────────
+router.post("/me/deactivate", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  await db.from("users").update({ updated_at: new Date().toISOString() }).eq("id", userId);
+  // Mark all user_agents inactive
+  await db.from("user_agents").update({ is_active: false }).eq("user_id", userId);
+  res200(res, { deactivated: true });
+}));
+
+// ─── DELETE /api/profiles/me ──────────────────────────────────────────────────
+router.delete("/me", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const anon = `deleted_${Date.now()}`;
+  await db.from("users").update({
+    email:      `${anon}@deleted.akoro.app`,
+    full_name:  "Deleted User",
+    username:   anon,
+    phone:      null,
+    avatar_url: null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", userId);
+  await db.from("user_agents").update({ is_active: false }).eq("user_id", userId);
+  res200(res, { deleted: true });
+}));
+
 export default router;

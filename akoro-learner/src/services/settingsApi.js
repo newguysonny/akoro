@@ -29,6 +29,18 @@ export const putAgent = (agentPatch) => {
   }).then(r => r.json());
 };
 
+export const getTeachingGuides = () => apiGet('/api/profiles/teaching-guides');
+
+export const deactivateAccount = () => {
+  const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+  return fetch(`${API}/api/profiles/me/deactivate`, { method: 'POST', credentials: 'include' }).then(r => r.json());
+};
+
+export const deleteAccount = () => {
+  const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+  return fetch(`${API}/api/profiles/me`, { method: 'DELETE', credentials: 'include' }).then(r => r.json());
+};
+
 // Upload avatar to backend as multipart/form-data
 // Returns { url } on success
 export async function uploadAvatar(dataUrl, type = 'user') {

@@ -19,9 +19,18 @@ router.use(authenticateToken);
 // ─── POST /api/tasks ──────────────────────────────────────────────────────────
 router.post("/", async (req, res) => {
   try {
-    const { title, description, priority = "medium", agentId, courseId, dueAt, isRecurring = false, cronExpr, timezone = "Africa/Lagos", fileIds = [] } = req.body;
+    const { title, description, priority = "medium", agentId: providedAgentId, courseId, dueAt, isRecurring = false, cronExpr, timezone = "Africa/Lagos", fileIds = [] } = req.body;
 
-    if (!title || !agentId) return res.status(400).json({ error: "title and agentId are required" });
+    if (!title) return res.status(400).json({ error: "title is required" });
+
+    // Auto-resolve agentId from user's active agent if not provided
+    let agentId = providedAgentId;
+    if (!agentId) {
+      const db = (await import("../../db.js")).default;
+      const { data: agent } = await db.from("user_agents").select("id").eq("user_id", req.user.id).eq("is_active", true).maybeSingle();
+      agentId = agent?.id ?? null;
+    }
+    if (!agentId) return res.status(400).json({ error: "No agent found. Please set up your agent in settings." });
     if (isRecurring && !cronExpr) return res.status(400).json({ error: "cronExpr required for recurring tasks" });
 
     const teacherId             = req.user.id;
@@ -209,6 +218,60 @@ router.patch("/:taskId/toggle", async (req, res) => {
     const updated = await TaskDB.updateStatus(req.params.taskId, newStatus, extra);
     res.json({ task: updated });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/tasks/:taskId/create-challenge ─────────────────────────────────
+// Convert a completed or pending task into a battle challenge
+router.post("/:taskId/create-challenge", async (req, res) => {
+  try {
+    const task = await TaskDB.findById(req.params.taskId);
+    if (!task || task.creator_id !== req.user.id) return res.status(404).json({ error: "Task not found" });
+
+    const { opponentId, xpPrize = 100, timeLimitSeconds = 600 } = req.body;
+    if (!opponentId) return res.status(400).json({ error: "opponentId required" });
+
+    const db = (await import("../../db.js")).default;
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: battle, error } = await db.from("battles").insert({
+      course_id:           task.course_id ?? null,
+      battle_type:         "1v1",
+      title:               task.title,
+      description:         task.description ?? "",
+      subject:             task.payload?.subject ?? "General",
+      difficulty:          task.payload?.difficulty ?? "medium",
+      xp_prize:            xpPrize,
+      xp_pool:             xpPrize,
+      time_limit_seconds:  timeLimitSeconds,
+      status:              "scheduled",
+      peak_viewers:        0,
+      scheduled_start:     new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      expires_at:          expiresAt,
+      created_by:          req.user.id,
+    }).select("id").single();
+
+    if (error) throw new Error(error.message);
+
+    // Add creator and opponent as participants
+    const { data: myAgent } = await db.from("user_agents").select("id").eq("user_id", req.user.id).eq("is_active", true).maybeSingle();
+    const { data: oppAgent } = await db.from("user_agents").select("id").eq("user_id", opponentId).eq("is_active", true).maybeSingle();
+
+    await db.from("battle_participants").insert([
+      { battle_id: battle.id, user_id: req.user.id, agent_id: myAgent?.id ?? null, role: "creator", score: 0, hp: 100 },
+      { battle_id: battle.id, user_id: opponentId,  agent_id: oppAgent?.id ?? null, role: "opponent", score: 0, hp: 100 },
+    ]);
+
+    // Emit notification to opponent via socket if available
+    global.io?.to(`user:${opponentId}`).emit("new_challenge", {
+      battleId: battle.id, title: task.title, challengerName: req.user.full_name ?? "Someone",
+    });
+
+    res.status(201).json({ success: true, battleId: battle.id });
+  } catch (err) {
+    console.error("[tasks/create-challenge]", err.message);
     res.status(500).json({ error: err.message });
   }
 });

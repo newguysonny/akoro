@@ -6,6 +6,9 @@ import {
   patchMyProfile,
   patchNotifications,
   putAgent,
+  getTeachingGuides,
+  deactivateAccount,
+  deleteAccount,
 } from '../services/settingsApi.js';
 
 const BRAND  = '#6C3BFF';
@@ -631,7 +634,7 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 }
 
 /* ─── User tab ────────────────────────────────────────────────── */
-function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent }) {
+function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], onLogout }) {
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -647,6 +650,23 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent 
   const openSheet = (f,l,t,o) => setSheet({field:f,label:l,type:t,options:o});
 
   const saveField = useCallback(async (field, val) => {
+    // Special handling for account deactivation / deletion
+    if (field === 'deactivate') {
+      try {
+        await deactivateAccount();
+        showToast('Account deactivated');
+        setTimeout(() => onLogout && onLogout(), 1000);
+      } catch { showToast('Failed to deactivate'); }
+      return;
+    }
+    if (field === 'deleteAccount') {
+      try {
+        await deleteAccount();
+        showToast('Account deleted');
+        setTimeout(() => onLogout && onLogout(), 1000);
+      } catch { showToast('Failed to delete account'); }
+      return;
+    }
     const patch = {};
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
@@ -664,7 +684,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent 
     } catch {
       showToast('Failed to save');
     }
-  }, [onSaveProfile, setProfile]);
+  }, [onSaveProfile, setProfile, onLogout]);
 
   return (
     <div style={{ padding:'20px 0 0' }}>
@@ -705,7 +725,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent 
       <Section title="Learn & Study">
         <Row icon="ti-chalkboard" label="Teaching Guide"
           value={`${profile.guideEmoji||'🧠'} ${profile.teachingGuide||'NaNa Esumai'}`}
-          onClick={()=>openSheet('teachingGuide','Teaching Guide','select',GUIDES)}/>
+          onClick={()=>openSheet('teachingGuide','Teaching Guide','select',guides.length ? guides : GUIDES)}/>
         <Row icon="ti-building" label="School Name" value={profile.school||'Not set'}
           onClick={()=>openSheet('school','School Name','text')}/>
         <Row icon="ti-school" label="School Type" value={profile.schoolType||'Not set'}
@@ -1025,9 +1045,13 @@ export default function SettingsPage() {
   const [agent,       setAgent]       = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [showLogout,  setShowLogout]  = useState(false);
+  const [guides,      setGuides]      = useState([]);
 
   /* ── Load profile on mount ─────────────────────────────────── */
   useEffect(() => {
+    getTeachingGuides().then(d => {
+      if (d.data?.guides) setGuides(d.data.guides.map(g => `${g.name} ${g.emoji}`));
+    }).catch(() => {});
     getMyProfile()
       .then(({ data }) => {
         setProfile({
@@ -1113,6 +1137,17 @@ export default function SettingsPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
+  /* ── Apply dark mode and accent color to document ─────────── */
+  useEffect(() => {
+    if (!profile) return;
+    const root = document.documentElement;
+    const mode = profile.displayMode || 'system';
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
+    root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    if (profile.accentColor) root.style.setProperty('--accent', profile.accentColor);
+  }, [profile?.displayMode, profile?.accentColor]);
+
   const handleSaveProfile     = useCallback(p => patchMyProfile(p), []);
   const handleSaveNotif       = useCallback(n => patchNotifications(n), []);
   const handleSaveAgent       = useCallback(a => putAgent(a), []);
@@ -1197,7 +1232,9 @@ export default function SettingsPage() {
               profile={profile} setProfile={setProfile}
               onSaveProfile={handleSaveProfile}
               onSaveNotif={handleSaveNotif}
-              onSaveAgent={handleSaveAgent}/>
+              onSaveAgent={handleSaveAgent}
+              guides={guides}
+              onLogout={handleLogoutConfirm}/>
           : <AgentTab
               agent={agent} setAgent={setAgent}
               onSaveAgent={handleSaveAgent}/>
