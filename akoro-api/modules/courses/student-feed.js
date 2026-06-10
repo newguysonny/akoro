@@ -142,26 +142,35 @@ router.get("/sessions", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // ── 1. Live / scheduled classes (session_participants) ───────────────────
-    const { data: enrolled, error: enrollErr } = await db
+    // ── 1. Live / scheduled classes ──────────────────────────────────────────
+    // Two-step: get enrolled session IDs, then fetch session rows directly.
+    // Avoids PostgREST nested-column filter ambiguity that silently nulls embeds.
+    const { data: participantRows, error: partErr } = await db
       .from("session_participants")
-      .select(`
-        status,
-        live_sessions (
+      .select("session_id")
+      .eq("user_id", userId);
+
+    if (partErr) throw new Error(partErr.message);
+
+    const sessionIds = (participantRows ?? []).map(r => r.session_id);
+
+    let liveSessions = [];
+    if (sessionIds.length > 0) {
+      const { data: sessionRows, error: sessErr } = await db
+        .from("live_sessions")
+        .select(`
           id, title, description, topic, subject, status,
           scheduled_start, join_url, platform,
           courses ( id, title ),
           users!live_sessions_instructor_id_fkey ( full_name, avatar_url )
-        )
-      `)
-      .eq("user_id", userId)
-      .in("live_sessions.status", ["scheduled", "live"]);
+        `)
+        .in("id", sessionIds)
+        .in("status", ["scheduled", "live"])
+        .order("scheduled_start", { ascending: true });
 
-    if (enrollErr) throw new Error(enrollErr.message);
-
-    const liveSessions = (enrolled ?? [])
-      .filter(d => d.live_sessions)
-      .map(d => mapLiveSession(d.live_sessions, d.status));
+      if (sessErr) throw new Error(sessErr.message);
+      liveSessions = (sessionRows ?? []).map(s => mapLiveSession(s, "registered"));
+    }
 
     // ── 2. Agent sessions from edu.adaptive_sessions ─────────────────────────
     const { data: agentRows } = await db
@@ -240,27 +249,30 @@ router.get("/live-alerts", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { data: enrolled } = await db
+    const { data: partRows } = await db
       .from("session_participants")
-      .select(`
-        live_sessions (
-          id, title, subject, status,
-          scheduled_start, join_url
-        )
-      `)
-      .eq("user_id", userId)
-      .in("live_sessions.status", ["scheduled", "live"]);
+      .select("session_id")
+      .eq("user_id", userId);
 
-    const alerts = (enrolled ?? [])
-      .filter(d => d.live_sessions)
-      .map(d => {
-        const s = d.live_sessions;
-        const { bucket, minutesUntil } = getScheduleBucket(s.scheduled_start);
-        return { sessionId: s.id, title: s.title, subject: s.subject,
-          status: s.status, bucket, minutesUntil, joinUrl: s.join_url };
-      })
-      .filter(a => a.status === "live" || a.bucket === "starting-soon")
-      .sort((a, b) => (a.minutesUntil ?? 0) - (b.minutesUntil ?? 0));
+    const sIds = (partRows ?? []).map(r => r.session_id);
+    let alerts = [];
+
+    if (sIds.length > 0) {
+      const { data: sessionRows } = await db
+        .from("live_sessions")
+        .select("id, title, subject, status, scheduled_start, join_url")
+        .in("id", sIds)
+        .in("status", ["scheduled", "live"]);
+
+      alerts = (sessionRows ?? [])
+        .map(s => {
+          const { bucket, minutesUntil } = getScheduleBucket(s.scheduled_start);
+          return { sessionId: s.id, title: s.title, subject: s.subject,
+            status: s.status, bucket, minutesUntil, joinUrl: s.join_url };
+        })
+        .filter(a => a.status === "live" || a.bucket === "starting-soon")
+        .sort((a, b) => (a.minutesUntil ?? 0) - (b.minutesUntil ?? 0));
+    }
 
     res.json({ success: true, alerts, count: alerts.length });
 
