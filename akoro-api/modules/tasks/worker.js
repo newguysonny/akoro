@@ -10,7 +10,7 @@ import Anthropic    from "@anthropic-ai/sdk";
 import { TaskDB, TaskRunDB, AgentDB } from "./lib/db.js";
 import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
-import { getToolsForTaskType, findTool }          from "./tools/index.js";
+import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 
 const MAX_TOOL_ITERATIONS = 20;
@@ -34,8 +34,9 @@ export const taskWorker = new Worker("task-runner", async (job) => {
 
   try {
     const ctx          = await buildContext(task);
-    const tools        = getToolsForTaskType(task.task_type ?? "general");
+    const tools        = await getToolsForTask(task);
     const toolDefs     = tools.map((t) => t.definition);
+    const toolMap      = new Map(tools.map((t) => [t.definition.name, t]));
     const toolCtx      = { taskId: task.id, runId: run.id };
     const agentSteps   = [];
     const outputs      = [];
@@ -69,7 +70,7 @@ export const taskWorker = new Worker("task-runner", async (job) => {
         const toolResults = [];
         for (const block of response.content) {
           if (block.type !== "tool_use") continue;
-          const registered = findTool(block.name);
+          const registered = toolMap.get(block.name);
           if (!registered) {
             toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `Tool "${block.name}" not found`, is_error: true });
             continue;

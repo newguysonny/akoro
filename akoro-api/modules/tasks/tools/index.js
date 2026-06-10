@@ -50,3 +50,23 @@ export const TOOLS_BY_TYPE = {
 
 export const getToolsForTaskType = (type) => TOOLS_BY_TYPE[type] ?? TOOLS_BY_TYPE.general;
 export const findTool            = (name) => ALL_TOOLS.find((t) => t.definition.name === name);
+
+/**
+ * getToolsForTask — resolves the full tool set for a task at run time.
+ * Unions the static (code) tools for the task type with the config-only
+ * (dynamic) tools the task creator's partner is entitled to. Deduped by name;
+ * a code tool wins over a dynamic tool sharing its name.
+ */
+export const getToolsForTask = async (task) => {
+  const staticTools = getToolsForTaskType(task?.task_type ?? "general");
+  let dynamicTools = [];
+  try {
+    const { loadDynamicToolsForUser } = await import("./dynamic.js");
+    dynamicTools = await loadDynamicToolsForUser(task?.creator_id);
+  } catch (e) {
+    console.warn("[tasks/tools] dynamic load skipped:", e.message);
+  }
+  const byName = new Map();
+  for (const t of [...dynamicTools, ...staticTools]) byName.set(t.definition.name, t);
+  return [...byName.values()];
+};

@@ -174,6 +174,40 @@ export const TaskScheduleDB = {
   },
 };
 
+// ─── Dynamic (config-only) Tools ────────────────────────────────────────────────
+// Partner-scoped tools an FDE attaches without a code deploy.
+
+export const DynamicToolDB = {
+  async create(data) {
+    const { data: row, error } = await db.from("dynamic_tools").insert(data).select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+
+  async update(id, updates) {
+    const { data, error } = await db.from("dynamic_tools")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async remove(id) {
+    const { error } = await db.from("dynamic_tools").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  async list({ scope, ownerUserId, schoolId } = {}) {
+    let q = db.from("dynamic_tools").select("*").order("created_at", { ascending: false });
+    if (scope)       q = q.eq("scope", scope);
+    if (ownerUserId) q = q.eq("owner_user_id", ownerUserId);
+    if (schoolId)    q = q.eq("school_id", schoolId);
+    const { data } = await q;
+    return data ?? [];
+  },
+};
+
 // ─── Agents ───────────────────────────────────────────────────────────────────
 // Task agents = teacher's AI assistants — separate from student user_agents
 

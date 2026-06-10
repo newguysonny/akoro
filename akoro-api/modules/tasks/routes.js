@@ -6,7 +6,7 @@
  */
 
 import { Router }                         from "express";
-import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB } from "./lib/db.js";
+import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";
 import { scheduleTask, cancelTask, triggerNow, getQueueHealth }        from "./scheduler.js";
 import { extractIntent }                  from "./lib/context.js";
 import { createPresignedUpload }          from "./lib/storage.js";
@@ -15,6 +15,82 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 
 const router = Router();
 router.use(authenticateToken);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FDE / admin: config-only tool management (no code deploy)
+// Mounted under /api/tasks/admin/tools — admin role only.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const VALID_EXECUTORS = ["llm_prompt", "notify", "create_battle"];
+const VALID_SCOPES     = ["global", "user", "school"];
+
+// GET /api/tasks/admin/tools — list (optional ?scope= &ownerUserId= &schoolId=)
+router.get("/admin/tools", requireRole(["admin"]), async (req, res) => {
+  try {
+    const { scope, ownerUserId, schoolId } = req.query;
+    const tools = await DynamicToolDB.list({ scope, ownerUserId, schoolId });
+    res.json({ tools, count: tools.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/tasks/admin/tools — create a config-only tool
+router.post("/admin/tools", requireRole(["admin"]), async (req, res) => {
+  try {
+    const {
+      name, description, inputSchema, executor, config = {},
+      scope = "global", ownerUserId, schoolId, intentKeywords = [],
+    } = req.body;
+
+    if (!name || !/^[a-z][a-z0-9_]*$/.test(name))
+      return res.status(400).json({ error: "name must be snake_case (a-z, 0-9, _)" });
+    if (!description)                       return res.status(400).json({ error: "description is required" });
+    if (!VALID_EXECUTORS.includes(executor)) return res.status(400).json({ error: `executor must be one of ${VALID_EXECUTORS.join(", ")}` });
+    if (!VALID_SCOPES.includes(scope))       return res.status(400).json({ error: `scope must be one of ${VALID_SCOPES.join(", ")}` });
+    if (scope === "user"   && !ownerUserId)  return res.status(400).json({ error: "ownerUserId required for scope 'user'" });
+    if (scope === "school" && !schoolId)     return res.status(400).json({ error: "schoolId required for scope 'school'" });
+
+    const tool = await DynamicToolDB.create({
+      name, description,
+      input_schema:    inputSchema ?? { type: "object", properties: {} },
+      executor, config, scope,
+      owner_user_id:   scope === "user"   ? ownerUserId : null,
+      school_id:       scope === "school" ? schoolId    : null,
+      intent_keywords: intentKeywords,
+      created_by:      req.user.id,
+    });
+    res.status(201).json({ tool });
+  } catch (err) {
+    console.error("[tasks/admin/tools] create:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/tasks/admin/tools/:id — update / enable / disable
+router.patch("/admin/tools/:id", requireRole(["admin"]), async (req, res) => {
+  try {
+    const allowed = ["name", "description", "config", "enabled", "intent_keywords"];
+    const updates = {};
+    for (const k of allowed) if (req.body[k] !== undefined) updates[k] = req.body[k];
+    if (req.body.inputSchema !== undefined) updates.input_schema = req.body.inputSchema;
+    if (!Object.keys(updates).length) return res.status(400).json({ error: "no updatable fields provided" });
+    const tool = await DynamicToolDB.update(req.params.id, updates);
+    res.json({ tool });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/tasks/admin/tools/:id
+router.delete("/admin/tools/:id", requireRole(["admin"]), async (req, res) => {
+  try {
+    await DynamicToolDB.remove(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── POST /api/tasks ──────────────────────────────────────────────────────────
 router.post("/", async (req, res) => {
