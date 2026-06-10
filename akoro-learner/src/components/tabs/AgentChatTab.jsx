@@ -3,6 +3,18 @@ import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
+import { formatTaskOutputs } from '../../utils/formatTaskOutput.js';
+
+// Detect when a chat message should run an agentic task (student tools).
+// Mirrors the backend intent keywords so the agent acts instead of just chatting.
+const TASK_INTENTS = [
+  /\bquiz me\b/i, /\btest me\b/i, /\bpractice questions?\b/i,
+  /\bexplain\b/i, /\bwhat is\b/i, /\bteach me\b/i, /\bhelp me understand\b/i,
+  /\bstudy plan\b/i, /\brevision plan\b/i, /\bplan my\b/i,
+  /\bremind me\b/i, /\bset a reminder\b/i,
+  /\bchallenge\b/i, /\bduel\b/i, /\bcompete with\b/i,
+];
+const isTaskIntent = (text) => TASK_INTENTS.some((re) => re.test(text));
 
 const QUICK_PROMPTS = ["Create a task for me","What's due today?","Quiz me on Algebra","Check my progress","Explain Mitosis","Help with an essay"];
 const AGENT_REPLIES = {
@@ -45,7 +57,12 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [tPriority,  setTPriority]  = useState("medium");
   const feedRef = useRef(null);
 
-  const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask } = useTaskAPI();
+  const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask, runTaskAndWait } = useTaskAPI();
+
+  const pushAgent = (text) => {
+    const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setMessages(prev => [...prev, { id: Date.now() + Math.random(), from: "agent", text, time: t }]);
+  };
 
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
   const PRI_LABEL = {high:"High",medium:"Medium",low:"Low"};
@@ -65,6 +82,31 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     const t=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const userMsg={id:Date.now(),from:"me",text,time:t};
     setMessages(prev=>[...prev,userMsg]); setLoading(true);
+
+    // Agentic task intents ("quiz me", "explain…", "study plan", "remind me",
+    // "challenge…") run a real task and stream the result back into the chat.
+    if(isTaskIntent(text)){
+      pushAgent("On it — let me work on that for you… ⏳");
+      try {
+        const { outputs, failed, timedOut } = await runTaskAndWait(
+          { title: text, priority: "medium" },
+          { onUpdate: () => {} }
+        );
+        if(failed){
+          pushAgent("Hmm, I ran into a problem doing that. Mind rephrasing or trying again?");
+        } else if(timedOut){
+          pushAgent("That's taking longer than usual — I'll keep working. Check the Tasks tab in a moment for the result.");
+        } else {
+          const texts = formatTaskOutputs(outputs);
+          if(texts.length) texts.forEach(pushAgent);
+          else pushAgent("All done! Check the Tasks tab for the details.");
+        }
+      } catch {
+        pushAgent("I couldn't start that task — please try again.");
+      }
+      setLoading(false);
+      return;
+    }
 
     // Quick-reply shortcuts (unchanged)
     const shortcut=AGENT_REPLIES[text];

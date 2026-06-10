@@ -48,5 +48,34 @@ export function useTaskAPI() {
     return apiPost(`/api/tasks/${taskId}/create-challenge`, { opponentId, xpPrize });
   }, []);
 
-  return { tasks, loading, agentId, createTask, toggleTask, deleteTask, createChallenge, refetch: fetchTasks };
+  // Fetch the outputs a task's agent run produced (quiz, explanation, plan, etc.)
+  const getOutputs = useCallback(async (taskId) => {
+    const d = await apiGet(`/api/tasks/${taskId}/outputs`).catch(() => ({ outputs: [] }));
+    return d.outputs ?? [];
+  }, []);
+
+  // Create a task, then poll until its agent run produces outputs (or timeout).
+  // Calls onUpdate(status) as it progresses. Returns { task, outputs, failed?, timedOut? }.
+  const runTaskAndWait = useCallback(async (
+    { title, description, priority = 'medium' },
+    { onUpdate, intervalMs = 2500, timeoutMs = 60000 } = {}
+  ) => {
+    const task = await createTask({ title, description, priority });
+    if (!task?.id) throw new Error('Task could not be created');
+    onUpdate?.('queued');
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, intervalMs));
+      const outputs = await getOutputs(task.id);
+      if (outputs.length) return { task, outputs };
+      const fresh = await apiGet(`/api/tasks/${task.id}`).catch(() => null);
+      const status = fresh?.task?.status;
+      if (status === 'failed') return { task, outputs: [], failed: true };
+      if (status) onUpdate?.(status);
+    }
+    return { task, outputs: [], timedOut: true };
+  }, [createTask, getOutputs]);
+
+  return { tasks, loading, agentId, createTask, toggleTask, deleteTask, createChallenge, getOutputs, runTaskAndWait, refetch: fetchTasks };
 }
