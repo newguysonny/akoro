@@ -57,12 +57,64 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [tPriority,  setTPriority]  = useState("medium");
   const feedRef = useRef(null);
 
-  const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask, runTaskAndWait } = useTaskAPI();
+  const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask, getOutputs } = useTaskAPI();
+
+  // Socket for instant task results; resolvers map taskId → fn called on push.
+  const socketRef       = useRef(null);
+  const taskResolvers   = useRef(new Map());
 
   const pushAgent = (text) => {
     const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), from: "agent", text, time: t }]);
   };
+
+  // Connect to the backend WebSocket and listen for task lifecycle events.
+  // The worker emits task.completed / task.failed to room user:<studentId>.
+  useEffect(() => {
+    let socket;
+    try {
+      if (typeof window !== 'undefined' && window.io) {
+        socket = window.io(API, { transports: ['websocket', 'polling'] });
+        socketRef.current = socket;
+        socket.on('connect', () => {
+          socket.emit('subscribe-student', STUDENT_ID);
+          socket.emit('join-student-room',  STUDENT_ID);
+        });
+        socket.on('task.completed', (p) => { const r = taskResolvers.current.get(p?.taskId); if (r) r({}); });
+        socket.on('task.failed',    (p) => { const r = taskResolvers.current.get(p?.taskId); if (r) r({ failed: true }); });
+      }
+    } catch { /* WS unavailable — polling still works */ }
+    return () => socket?.disconnect?.();
+  }, []);
+
+  // Resolve as soon as EITHER the socket pushes completion OR polling finds
+  // outputs (whichever is first), with a hard timeout. Deduped via `settled`.
+  const waitForTask = (taskId, { timeoutMs = 60000, intervalMs = 2500 } = {}) =>
+    new Promise((resolve) => {
+      let settled = false;
+      const cleanup = () => taskResolvers.current.delete(taskId);
+      const finish  = (val) => { if (!settled) { settled = true; cleanup(); resolve(val); } };
+
+      // Fast path: socket push
+      taskResolvers.current.set(taskId, async (evt) => {
+        if (evt?.failed) return finish({ failed: true });
+        const outputs = await getOutputs(taskId);
+        finish({ outputs });
+      });
+
+      // Fallback path: poll
+      const deadline = Date.now() + timeoutMs;
+      const tick = async () => {
+        if (settled) return;
+        const outputs = await getOutputs(taskId);
+        if (outputs.length) return finish({ outputs });
+        const fresh = await apiGet(`/api/tasks/${taskId}`).catch(() => null);
+        if (fresh?.task?.status === 'failed') return finish({ failed: true });
+        if (Date.now() > deadline) return finish({ timedOut: true });
+        setTimeout(tick, intervalMs);
+      };
+      setTimeout(tick, intervalMs);
+    });
 
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
   const PRI_LABEL = {high:"High",medium:"Medium",low:"Low"};
@@ -88,10 +140,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     if(isTaskIntent(text)){
       pushAgent("On it — let me work on that for you… ⏳");
       try {
-        const { outputs, failed, timedOut } = await runTaskAndWait(
-          { title: text, priority: "medium" },
-          { onUpdate: () => {} }
-        );
+        const task = await createTask({ title: text, priority: "medium" });
+        if(!task?.id) throw new Error("no task");
+        const { outputs, failed, timedOut } = await waitForTask(task.id);
         if(failed){
           pushAgent("Hmm, I ran into a problem doing that. Mind rephrasing or trying again?");
         } else if(timedOut){
