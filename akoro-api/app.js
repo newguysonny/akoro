@@ -40,6 +40,7 @@ import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
+import instructorModule           from "./modules/instructor/index.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
 import voiceModule               from "./modules/voice/routes.js";
@@ -74,6 +75,7 @@ io.on("connection", (socket) => {
   socket.on("subscribe-student",       (id) => socket.join(`user:${id}`));
   // Joins student:{id} room for decay alerts from decayEngine cron
   socket.on("join-student-room",       (id) => socket.join(`student:${id}`));
+  socket.on("join-instructor",         (id) => socket.join(`instructor:${id}`));
 });
 
 setupAdaptiveWebSocket(io);
@@ -131,8 +133,9 @@ app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
 app.use("/api/student",  standardLimit, studentFeedRouter);
-app.use("/api/tasks",    aiLimit,       tasksModule);
-app.use("/api/voice",    aiLimit,       voiceModule);
+app.use("/api/tasks",      aiLimit,       tasksModule);
+app.use("/api/instructor", standardLimit, instructorModule);
+app.use("/api/voice",      aiLimit,       voiceModule);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
