@@ -1,0 +1,334 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Users, BookOpen, Swords, TrendingUp, Plus, Eye, Clock, Video, Bot, ChevronRight, Star, Zap } from 'lucide-react';
+import { PageLayout } from '../components/Layout.jsx';
+import { Btn, Toast, Skeleton } from '../components/Primitives.jsx';
+import { useStatsAPI } from '../hooks/useStatsAPI.js';
+import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
+
+/* ── Mock fallback data ─────────────────────────────────────────────── */
+const MOCK_STATS = {
+  totalStudents: 48,
+  activeCourses: 3,
+  totalBattles: 12,
+  avgRating: 4.8,
+  earningsThisMonth: 2340,
+  hoursTeached: 86,
+};
+
+const MOCK_PROFILE = {
+  agentName: 'Prof. Aria',
+  agentStatus: 'active',
+  agentDescription: 'Your AI teaching assistant handles student questions 24/7.',
+  totalResponses: 342,
+  studentsSatisfied: 94,
+};
+
+const MOCK_SESSIONS = [
+  { id: 1, title: 'Advanced React Patterns', startTime: new Date().toISOString(), platform: 'zoom', enrolledCount: 14 },
+  { id: 2, title: 'State Management Deep Dive', startTime: new Date(Date.now() + 3600000).toISOString(), platform: 'meet', enrolledCount: 9 },
+];
+
+/* ── Stat card ──────────────────────────────────────────────────────── */
+function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading }) {
+  if (loading) return (
+    <div style={{ background: WHITE, borderRadius: 16, padding: '20px', border: `1px solid ${BORDER}` }}>
+      <Skeleton height={14} width={80} style={{ marginBottom: 12 }} />
+      <Skeleton height={32} width={60} style={{ marginBottom: 6 }} />
+      <Skeleton height={12} width={100} />
+    </div>
+  );
+  return (
+    <div style={{
+      background: WHITE, borderRadius: 16, padding: '20px',
+      border: `1px solid ${BORDER}`,
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: `${color}15`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon size={18} color={color} />
+        </div>
+        <span style={{ fontSize: 12, color: MUTED, fontWeight: 500, fontFamily: FONT }}>{label}</span>
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: INK, fontFamily: FONT, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: MUTED, fontFamily: FONT }}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ── Today's sessions ───────────────────────────────────────────────── */
+function SessionItem({ session }) {
+  const time = new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '12px 16px', background: WHITE, borderRadius: 12,
+      border: `1px solid ${BORDER}`,
+    }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: 10, background: `${AMBER}15`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <Video size={18} color={AMBER} />
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {session.title}
+        </div>
+        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Clock size={10} /> {time} · {session.enrolledCount || 0} enrolled
+        </div>
+      </div>
+      <Btn size="sm" variant="outline">Join</Btn>
+    </div>
+  );
+}
+
+/* ── Quick action card ──────────────────────────────────────────────── */
+function QuickAction({ icon: Icon, label, desc, color, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14,
+        padding: '16px', cursor: 'pointer', textAlign: 'left',
+        display: 'flex', flexDirection: 'column', gap: 8, transition: 'all .15s',
+        fontFamily: FONT,
+      }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = color}
+      onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: 10, background: `${color}15`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon size={18} color={color} />
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{label}</div>
+      <div style={{ fontSize: 11, color: MUTED }}>{desc}</div>
+    </button>
+  );
+}
+
+export default function HomePage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { getStats, getProfile } = useStatsAPI();
+  const { getSessions } = useCoursesAPI();
+
+  const [stats,    setStats]    = useState(null);
+  const [profile,  setProfile]  = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [toast,    setToast]    = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [statsRes, profileRes, sessionsRes] = await Promise.allSettled([
+          getStats(),
+          getProfile(),
+          getSessions(),
+        ]);
+        if (cancelled) return;
+        setStats(statsRes.status === 'fulfilled' ? statsRes.value?.data || MOCK_STATS : MOCK_STATS);
+        setProfile(profileRes.status === 'fulfilled' ? profileRes.value?.data || MOCK_PROFILE : MOCK_PROFILE);
+
+        // Filter sessions for today
+        const allSessions = sessionsRes.status === 'fulfilled'
+          ? (sessionsRes.value?.data || MOCK_SESSIONS)
+          : MOCK_SESSIONS;
+        const today = new Date().toDateString();
+        setSessions(allSessions.filter(s => new Date(s.startTime).toDateString() === today));
+
+        if (statsRes.status === 'rejected') {
+          console.warn('Stats API error, using mock data:', statsRes.reason);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('HomePage load error, using mock data:', err);
+          setStats(MOCK_STATS);
+          setProfile(MOCK_PROFILE);
+          setSessions(MOCK_SESSIONS);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  return (
+    <PageLayout
+      title={`${greeting()}, ${user?.fullName?.split(' ')[0] || 'Instructor'} 👋`}
+      subtitle="Here's what's happening today"
+    >
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Stats grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 16, marginBottom: 28,
+        }}>
+          <StatCard icon={Users}      label="Total Students"    value={stats?.totalStudents ?? '—'}   sub="enrolled across all courses" color={BLUE}   loading={loading} />
+          <StatCard icon={BookOpen}   label="Active Courses"    value={stats?.activeCourses ?? '—'}   sub="live & on-demand"             color={AMBER}  loading={loading} />
+          <StatCard icon={Swords}     label="Battles Created"   value={stats?.totalBattles ?? '—'}    sub="all time"                     color={PURPLE} loading={loading} />
+          <StatCard icon={Star}       label="Avg. Rating"       value={stats?.avgRating ?? '—'}        sub="from student feedback"        color={GREEN}  loading={loading} />
+          <StatCard icon={TrendingUp} label="Earnings (month)"  value={stats?.earningsThisMonth ? `$${stats.earningsThisMonth.toLocaleString()}` : '—'} sub="this month" color={GREEN} loading={loading} />
+          <StatCard icon={Clock}      label="Hours Taught"      value={stats?.hoursTeached ?? '—'}    sub="total session time"           color={BLUE}   loading={loading} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+          {/* Left col */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Quick actions */}
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Quick Actions</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                <QuickAction icon={Video}    label="New Live Class"   desc="Schedule a live session"     color={AMBER}  onClick={() => navigate('/courses')} />
+                <QuickAction icon={Eye}      label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/students')} />
+                <QuickAction icon={Plus}     label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/students?add=1')} />
+                <QuickAction icon={Swords}   label="Create Battle"    desc="Launch a quiz battle"         color={PURPLE} onClick={() => navigate('/battles')} />
+                <QuickAction icon={BookOpen} label="New On-Demand"    desc="Build a video course"         color={BLUE}   onClick={() => navigate('/courses')} />
+                <QuickAction icon={Bot}      label="AI Assistant"     desc="Chat with your AI tutor"      color={AMBER}  onClick={() => navigate('/chat')} />
+              </div>
+            </div>
+
+            {/* Today's schedule */}
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>
+                Today's Schedule
+              </h2>
+              {loading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <Skeleton height={64} />
+                  <Skeleton height={64} />
+                </div>
+              ) : sessions.length === 0 ? (
+                <div style={{
+                  background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14,
+                  padding: '32px', textAlign: 'center',
+                }}>
+                  <Clock size={28} color={MUTED} style={{ marginBottom: 10 }} />
+                  <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: 0 }}>No sessions scheduled for today</p>
+                  <Btn size="sm" style={{ marginTop: 12 }} onClick={() => navigate('/courses')}>
+                    <Plus size={14} /> Schedule one
+                  </Btn>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {sessions.map(s => <SessionItem key={s.id} session={s} />)}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right col — Agent panel */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Profile card */}
+            <div style={{
+              background: INK, borderRadius: 20, padding: '24px',
+              color: WHITE, fontFamily: FONT,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: '50%',
+                  background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20,
+                }}>
+                  {(user?.fullName || 'T')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{user?.fullName || 'Instructor'}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>{user?.email || ''}</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 10, padding: '12px' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>{stats?.totalStudents ?? '—'}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>Students</div>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 10, padding: '12px' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>{stats?.avgRating ?? '—'}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>Rating</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Agent panel */}
+            <div style={{
+              background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px',
+              fontFamily: FONT,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: `linear-gradient(135deg, ${PURPLE}, ${BLUE})`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Bot size={16} color={WHITE} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{loading ? '…' : (profile?.agentName || 'AI Agent')}</div>
+                    <div style={{ fontSize: 10, color: MUTED }}>Teaching Assistant</div>
+                  </div>
+                </div>
+                <span style={{
+                  padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700,
+                  background: '#DCFCE7', color: GREEN,
+                }}>
+                  Active
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>
+                {loading ? 'Loading…' : (profile?.agentDescription || 'Your AI teaching assistant handles student questions 24/7.')}
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ textAlign: 'center', background: LIGHT, borderRadius: 10, padding: '10px' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: INK }}>{loading ? '—' : (profile?.totalResponses ?? 342)}</div>
+                  <div style={{ fontSize: 10, color: MUTED }}>Responses</div>
+                </div>
+                <div style={{ textAlign: 'center', background: LIGHT, borderRadius: 10, padding: '10px' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: INK }}>{loading ? '—' : `${profile?.studentsSatisfied ?? 94}%`}</div>
+                  <div style={{ fontSize: 10, color: MUTED }}>Satisfaction</div>
+                </div>
+              </div>
+              <Btn
+                size="sm"
+                variant="ghost"
+                style={{ marginTop: 12, width: '100%', justifyContent: 'center', color: PURPLE, background: `${PURPLE}10` }}
+                onClick={() => navigate('/chat')}
+              >
+                <Zap size={14} /> Train Agent <ChevronRight size={12} />
+              </Btn>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </PageLayout>
+  );
+}

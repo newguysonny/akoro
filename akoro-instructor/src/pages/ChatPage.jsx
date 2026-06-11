@@ -1,0 +1,482 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
+  Upload, FileText, ScanLine, Loader, CheckCircle2,
+} from 'lucide-react';
+import { PageLayout } from '../components/Layout.jsx';
+import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
+import TrainingSimulation from '../components/TrainingSimulation.jsx';
+import { useStatsAPI } from '../hooks/useStatsAPI.js';
+import { useInstructorSocket } from '../hooks/useWebSocket.js';
+import { apiPost } from '../services/api.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import {
+  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
+} from '../constants.js';
+
+const bdr = (w, c) => `${w}px solid ${c}`;
+
+const AGENT_AVATARS = ['🤖', '🔮', '⚡', '🌀', '✨', '🔺', '🌙', '💎', '🦊', '🧠', '🚀', '🎯'];
+
+const QUICK_PROMPTS = [
+  'Generate quiz', 'Check student progress', 'Battle report',
+  'Draft lesson plan', 'Send reminder', 'Grade submissions',
+];
+
+const CHAT_INIT = [
+  { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
+];
+
+const REPLIES = [
+  'Understood! Working on it now.',
+  "Done! Here's what I've prepared...",
+  'Great question. Based on my training, here\'s the best approach...',
+  'Updated course materials. Anything else?',
+  'Battle report updated — ranked #3 this week!',
+];
+
+const now = () => new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+
+export default function ChatPage() {
+  const { user } = useAuth();
+  const { getProfile, updateAgent } = useStatsAPI();
+  const { on, off } = useInstructorSocket(user?.id);
+
+  const [messages, setMessages]   = useState(CHAT_INIT);
+  const [input, setInput]         = useState('');
+  const [isTask, setIsTask]       = useState(false);
+  const [taskChips, setTaskChips] = useState([]);
+  const [toast, setToast]         = useState(null);
+
+  const [agentName, setAgentName]   = useState('Your Agent');
+  const [agentEmoji, setAgentEmoji] = useState('🔮');
+  const [agentLevel, setAgentLevel] = useState(1);
+
+  const [trainModal, setTrainModal]   = useState(false);
+  const [custModal, setCustModal]     = useState(false);
+  const [taskModal, setTaskModal]     = useState(false);
+  const [attachModal, setAttachModal] = useState(false);
+  const [attachMenu, setAttachMenu]   = useState(false);
+
+  const [trainType, setTrainType]   = useState('audio');
+  const [trainSubj, setTrainSubj]   = useState('Mathematics');
+  const [trainingInChat, setTrainingInChat] = useState(false);
+
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDesc, setTaskDesc]   = useState('');
+  const [taskPri, setTaskPri]     = useState('high');
+
+  const [attachType, setAttachType] = useState('file');
+  const [ocrText, setOcrText]       = useState('');
+  const [ocrRunning, setOcrRunning] = useState(false);
+
+  const [draftName, setDraftName]   = useState('');
+  const [draftEmoji, setDraftEmoji] = useState('🔮');
+
+  const feedRef   = useRef(null);
+  const attachRef = useRef(null);
+  const inputRef  = useRef(null);
+
+  // ── Load agent profile ──
+  useEffect(() => {
+    getProfile()
+      .then((res) => {
+        const agent = res?.data?.agent ?? res?.data?.user_agents?.[0] ?? res?.data;
+        if (agent) {
+          setAgentName(agent.agent_name ?? 'Your Agent');
+          setAgentEmoji(agent.agent_emoji ?? '🔮');
+          setAgentLevel(agent.level ?? agent.total_xp ? Math.floor((agent.total_xp ?? 0) / 500) + 1 : 1);
+          setDraftName(agent.agent_name ?? '');
+          setDraftEmoji(agent.agent_emoji ?? '🔮');
+        }
+      })
+      .catch((e) => console.warn('[chat] profile load failed, using defaults:', e.message));
+  }, []); // eslint-disable-line
+
+  // ── WebSocket: agent task completion pushes a reply ──
+  useEffect(() => {
+    const handler = (evt) => {
+      pushAgent(evt?.message ?? evt?.text ?? '✅ Task completed.');
+    };
+    on('task.completed', handler);
+    return () => off('task.completed', handler);
+  }, [on, off]);
+
+  // ── auto-scroll ──
+  useEffect(() => {
+    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+  }, [messages, trainingInChat]);
+
+  // ── close attach menu on outside click ──
+  useEffect(() => {
+    const h = (e) => { if (attachRef.current && !attachRef.current.contains(e.target)) setAttachMenu(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const pushAgent = useCallback((text) => {
+    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'agent', text, time: now() }]);
+  }, []);
+
+  const pushMe = useCallback((text, task = false, chips = []) => {
+    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'me', text, time: now(), isTask: task, chips }]);
+  }, []);
+
+  const handleQuickPrompt = (p) => {
+    if (taskChips.includes(p)) return;
+    setTaskChips((prev) => [...prev, p]);
+    setIsTask(true);
+    inputRef.current && inputRef.current.focus();
+  };
+
+  const removeChip = (chip) => {
+    setTaskChips((prev) => {
+      const next = prev.filter((c) => c !== chip);
+      if (next.length === 0 && !input.trim()) setIsTask(false);
+      return next;
+    });
+  };
+
+  // ── Send message — persists as a task when isTask ──
+  const send = async () => {
+    const hasChips = taskChips.length > 0;
+    const hasText = input.trim().length > 0;
+    if (!hasChips && !hasText) return;
+
+    const chipText = hasChips ? taskChips.join(' · ') : null;
+    const bodyText = [chipText, hasText ? input.trim() : null].filter(Boolean).join('\n');
+    const chips = [...taskChips];
+    const asTask = isTask;
+
+    pushMe(bodyText, asTask, chips);
+    setInput(''); setIsTask(false); setTaskChips([]);
+
+    if (asTask) {
+      try {
+        await apiPost('/api/tasks', { title: bodyText, description: chipText ?? '', priority: 'medium' });
+        pushAgent(`Got it! Task logged: "${chipText ?? bodyText.slice(0, 40)}". I'll get started right away.`);
+      } catch (e) {
+        console.warn('[chat] task create failed:', e.message);
+        pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]);
+      }
+    } else {
+      setTimeout(() => pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]), 900);
+    }
+  };
+
+  // ── Training ──
+  const startTraining = async () => {
+    setTrainModal(false);
+    setTrainingInChat(true);
+    pushMe(`Start training on ${trainSubj} now.`);
+    try {
+      await apiPost('/api/tasks', {
+        title: `Train agent on ${trainSubj}`,
+        description: `Training session: ingest uploaded ${trainType} material for ${trainSubj}.`,
+        task_type: 'general',
+        priority: 'high',
+      });
+    } catch (e) {
+      console.warn('[chat] training task create failed:', e.message);
+    }
+  };
+
+  const handleTrainingComplete = () => {
+    setTrainingInChat(false);
+    const concepts = Math.floor(Math.random() * 20 + 10);
+    const qs = Math.floor(Math.random() * 30 + 15);
+    pushAgent(`🎓 Training complete!\n\nI've absorbed the material on ${trainSubj}.\n\n• ${concepts} new concepts indexed\n• ${qs} practice questions generated\n\nReady to support your students!`);
+  };
+
+  // ── Attachment / OCR ──
+  const runOcr = () => {
+    setOcrRunning(true);
+    setTimeout(() => {
+      setOcrText("Extracted text:\n\n∫ x² dx = x³/3 + C\n\nChain Rule: d/dx[f(g(x))] = f'(g(x))·g'(x)\n\nProduct Rule: d/dx[uv] = u'v + uv'");
+      setOcrRunning(false);
+    }, 1800);
+  };
+
+  const sendAttachment = () => {
+    if (attachType === 'ocr' && ocrText) {
+      pushMe('📷 Scanned image · OCR result:\n\n' + ocrText);
+    } else {
+      pushMe('📎 Attachment sent');
+    }
+    setAttachModal(false); setOcrText(''); setOcrRunning(false);
+    setTimeout(() => pushAgent("Got it! I've received your attachment and I'm processing it now."), 700);
+  };
+
+  // ── Save agent customisation ──
+  const saveAgent = async () => {
+    setAgentName(draftName || agentName);
+    setAgentEmoji(draftEmoji);
+    setCustModal(false);
+    try {
+      await updateAgent({ agent_name: draftName || agentName, agent_emoji: draftEmoji });
+      setToast({ message: 'Agent updated', type: 'success' });
+    } catch (e) {
+      console.warn('[chat] agent update failed:', e.message);
+      setToast({ message: 'Saved locally (offline)', type: 'info' });
+    }
+  };
+
+  const hasInput = taskChips.length > 0 || input.trim().length > 0;
+
+  return (
+    <PageLayout title="Agent Chat" subtitle={`${agentName} · Lv ${agentLevel}`}>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <style>{`
+        .ci-task-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px 3px 9px;border-radius:20px;background:linear-gradient(135deg,rgba(232,136,74,.18),rgba(240,160,75,.14));border:1.5px solid rgba(232,136,74,.5);color:${AMBER};font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0}
+        .ci-task-chip button{display:flex;align-items:center;background:none;border:none;cursor:pointer;padding:0;color:${AMBER};opacity:.7;line-height:1}
+        .ci-qp{flex-shrink:0;padding:5px 11px;border-radius:20px;border:1.5px solid ${BORDER};background:#fff;color:${MUTED};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:${FONT};transition:all .15s;display:inline-flex;align-items:center;gap:4px}
+        .ci-qp:hover{border-color:${AMBER};color:${AMBER}}
+        .ci-qp.active{border-color:${AMBER};color:${AMBER};background:rgba(232,136,74,.12)}
+        .ci-quickbar{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+        .ci-quickbar::-webkit-scrollbar{display:none}
+        .ci-attach-menu{position:absolute;bottom:48px;left:0;background:#fff;border-radius:16px;border:1px solid ${BORDER};box-shadow:0 8px 32px rgba(0,0,0,.12);padding:8px;min-width:210px;z-index:50}
+        .ci-attach-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;border:none;background:transparent;width:100%;font-family:${FONT};text-align:left}
+        .ci-attach-item:hover{background:${LIGHT}}
+        .ci-typing{display:inline-block;width:6px;height:6px;border-radius:50%;background:${MUTED2};margin:0 2px;animation:ciTyping 1.4s infinite ease-in-out}
+        @keyframes ciTyping{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
+      `}</style>
+
+      <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)' }}>
+
+        {/* Agent header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: WHITE, borderRadius: 16, border: bdr(1, BORDER), marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, boxShadow: `0 0 0 2px #fff, 0 0 0 3.5px ${AMBER}` }}>{agentEmoji}</div>
+            <div>
+              <div style={{ fontWeight: 800, color: INK, fontSize: 15 }}>{agentName}</div>
+              <div style={{ fontSize: 11, color: trainingInChat ? AMBER : GREEN, display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: trainingInChat ? AMBER : GREEN, display: 'inline-block' }} />
+                {trainingInChat ? 'Training in progress…' : `Online · Lv ${agentLevel}`}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="secondary" size="sm" onClick={() => { setDraftName(agentName); setDraftEmoji(agentEmoji); setCustModal(true); }}><Edit3 size={13} />Edit</Btn>
+            <Btn variant="primary" size="sm" onClick={() => setTrainModal(true)}><Brain size={13} />Train</Btn>
+          </div>
+        </div>
+
+        {/* Quick prompts */}
+        <div className="ci-quickbar">
+          {QUICK_PROMPTS.map((p) => {
+            const active = taskChips.includes(p);
+            return (
+              <button key={p} className={'ci-qp' + (active ? ' active' : '')} onClick={() => (active ? removeChip(p) : handleQuickPrompt(p))}>
+                <CheckSquare size={9} style={{ opacity: active ? 1 : 0.45 }} />{p}{active && <X size={9} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Message feed */}
+        <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 2px' }}>
+          {messages.map((msg) => {
+            const isMe = msg.from === 'me';
+            const chips = msg.chips || [];
+            const textPart = chips.length ? msg.text.replace(chips.join(' · '), '').replace(/^\n/, '').trim() : msg.text;
+            return (
+              <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8 }}>
+                {!isMe && <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{agentEmoji}</div>}
+                <div style={{ maxWidth: '80%' }}>
+                  {isMe && msg.isTask && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 20, background: 'rgba(232,136,74,.12)', border: '1.5px solid rgba(232,136,74,.35)', color: AMBER, fontSize: 11, fontWeight: 700 }}><CheckSquare size={10} />Task assigned</span>
+                    </div>
+                  )}
+                  <div style={{
+                    padding: '10px 13px',
+                    borderRadius: isMe ? '17px 17px 4px 17px' : '17px 17px 17px 4px',
+                    background: isMe ? (msg.isTask ? 'linear-gradient(135deg,#E8884A,#F0A04B)' : INK) : '#F0ECE6',
+                    color: isMe ? WHITE : INK, fontSize: 13, lineHeight: 1.55,
+                  }}>
+                    {chips.length > 0 && (
+                      <div style={{ marginBottom: textPart ? 6 : 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {chips.map((c) => (
+                          <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,255,255,.25)', border: '1px solid rgba(255,255,255,.4)', fontSize: 10.5, fontWeight: 700, color: '#fff' }}><CheckSquare size={9} />{c}</span>
+                        ))}
+                      </div>
+                    )}
+                    {textPart && <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>}
+                  </div>
+                  <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, textAlign: isMe ? 'right' : 'left' }}>{msg.time}</div>
+                </div>
+              </div>
+            );
+          })}
+
+          {trainingInChat && (
+            <TrainingSimulation onComplete={handleTrainingComplete} agentName={agentName} />
+          )}
+
+          {!trainingInChat && messages[messages.length - 1]?.from === 'me' && !messages[messages.length - 1]?.isTask && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#FEF0E6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{agentEmoji}</div>
+              <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: '#F0ECE6', display: 'flex', gap: 2 }}>
+                <span className="ci-typing" /><span className="ci-typing" style={{ animationDelay: '.2s' }} /><span className="ci-typing" style={{ animationDelay: '.4s' }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input bar */}
+        <div style={{ paddingTop: 10 }}>
+          {isTask && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: 'rgba(232,136,74,.1)', border: bdr(1, 'rgba(232,136,74,.3)'), marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><CheckSquare size={12} color={AMBER} /><span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER }}>Sending as task</span></div>
+              <button onClick={() => { setIsTask(false); setTaskChips([]); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: MUTED, fontFamily: FONT, fontWeight: 600 }}><X size={11} />Clear</button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: LIGHT, borderRadius: taskChips.length > 0 ? 18 : 50, border: bdr(1.5, isTask ? AMBER : BORDER), padding: taskChips.length > 0 ? '10px 10px 8px 12px' : '6px 8px', minHeight: 50 }}>
+            <div ref={attachRef} style={{ position: 'relative', flexShrink: 0, alignSelf: 'flex-end' }}>
+              <button onClick={() => setAttachMenu((p) => !p)} style={{ width: 32, height: 32, borderRadius: '50%', background: attachMenu ? 'rgba(232,136,74,.15)' : WHITE, border: bdr(1, attachMenu ? AMBER : BORDER), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <Plus size={14} color={attachMenu ? AMBER : MUTED2} />
+              </button>
+              {attachMenu && (
+                <div className="ci-attach-menu">
+                  {[
+                    { icon: <Camera size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <Upload size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
+                    { icon: <FileText size={15} color={BLUE} />, label: 'Upload document', desc: 'Lesson notes, worksheets', act: () => { setAttachType('doc'); setAttachModal(true); setAttachMenu(false); } },
+                  ].map((item) => (
+                    <button key={item.label} className="ci-attach-item" onClick={item.act}>
+                      <div style={{ width: 32, height: 32, borderRadius: 9, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
+                      <div><div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{item.label}</div><div style={{ fontSize: 11, color: MUTED }}>{item.desc}</div></div>
+                    </button>
+                  ))}
+                  <div style={{ height: 1, background: BORDER, margin: '4px 0' }} />
+                  <button className="ci-attach-item" onClick={() => { setTaskModal(true); setAttachMenu(false); }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(232,136,74,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CheckSquare size={15} color={AMBER} /></div>
+                    <div><div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>Assign task</div><div style={{ fontSize: 11, color: MUTED }}>Create a structured task</div></div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              {taskChips.map((chip) => (
+                <span key={chip} className="ci-task-chip"><CheckSquare size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><X size={9} /></button></span>
+              ))}
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+                  if (e.key === 'Backspace' && input === '' && taskChips.length > 0) removeChip(taskChips[taskChips.length - 1]);
+                }}
+                placeholder={taskChips.length > 0 ? 'Add a note… (optional)' : `Ask ${agentName} anything…`}
+                style={{ flex: 1, minWidth: 80, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: INK, fontFamily: FONT, padding: '2px 0' }}
+              />
+            </div>
+
+            <button onClick={() => setIsTask((p) => !p)} title="Mark as task" style={{ width: 30, height: 30, borderRadius: '50%', background: isTask ? 'rgba(232,136,74,.15)' : LIGHT, border: bdr(1, isTask ? AMBER : BORDER), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, alignSelf: 'flex-end' }}>
+              <CheckSquare size={13} color={isTask ? AMBER : MUTED2} />
+            </button>
+            <button onClick={send} disabled={!hasInput} style={{ width: 34, height: 34, borderRadius: '50%', background: hasInput ? AMBER : BORDER, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasInput ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'flex-end' }}>
+              <Send size={14} color={WHITE} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Task modal */}
+      <Modal open={taskModal} onClose={() => setTaskModal(false)} title="📋 Create Task for Agent">
+        <Inp label="Task title" placeholder="e.g. Generate quiz for Module 3" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
+        <FileUploadZone label="Attach files (optional)" accept=".pdf,.doc,.docx,.pptx,.jpg,.png" />
+        <Txa label="Description" placeholder="Describe what you want the agent to do…" value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} rows={3} />
+        <Sel label="Priority" value={taskPri} onChange={(e) => setTaskPri(e.target.value)}>
+          <option value="high">🔴 High</option>
+          <option value="medium">🟡 Medium</option>
+          <option value="low">🟢 Low</option>
+        </Sel>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn variant="secondary" style={{ flex: 1 }} onClick={() => setTaskModal(false)}>Cancel</Btn>
+          <Btn variant="primary" style={{ flex: 1 }} onClick={async () => {
+            if (!taskTitle.trim()) return;
+            pushMe('📋 Task: ' + taskTitle + (taskDesc ? '\n' + taskDesc : ''), true);
+            const title = taskTitle, desc = taskDesc, pri = taskPri;
+            setTaskModal(false); setTaskTitle(''); setTaskDesc('');
+            try {
+              await apiPost('/api/tasks', { title, description: desc, priority: pri });
+              pushAgent(`Got it! Task logged: "${title}". I'll get started right away.`);
+            } catch (e) {
+              console.warn('[chat] task create failed:', e.message);
+              pushAgent(`Task "${title}" noted.`);
+            }
+          }}><Send size={14} />Assign task</Btn>
+        </div>
+      </Modal>
+
+      {/* Attach modal */}
+      <Modal open={attachModal} onClose={() => { setAttachModal(false); setOcrText(''); setOcrRunning(false); }} title={attachType === 'ocr' ? '📷 Photo / Image OCR' : attachType === 'doc' ? '📄 Upload Document' : '📎 Upload File'}>
+        {attachType === 'ocr' ? (
+          <div>
+            <FileUploadZone label="Upload an image to scan" accept="image/*" />
+            {!ocrText && (
+              <Btn variant="secondary" style={{ width: '100%', marginBottom: 14 }} onClick={runOcr} disabled={ocrRunning}>
+                {ocrRunning ? <Loader size={13} className="spinner" /> : <ScanLine size={13} />}{ocrRunning ? 'Extracting text…' : 'Run OCR'}
+              </Btn>
+            )}
+            {ocrText && (
+              <>
+                <Txa label="Extracted text — edit if needed" value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={5} />
+                <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Send size={13} />Send to {agentName}</Btn>
+              </>
+            )}
+          </div>
+        ) : (
+          <div>
+            <FileUploadZone label={attachType === 'doc' ? 'Upload a document' : 'Upload a file'} accept={attachType === 'doc' ? '.pdf,.doc,.docx,.pptx,.xlsx' : '*'} />
+            <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Paperclip size={13} />Attach & send</Btn>
+          </div>
+        )}
+      </Modal>
+
+      {/* Train modal */}
+      <Modal open={trainModal} onClose={() => setTrainModal(false)} title="🧠 Train Your Agent">
+        <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, marginBottom: 16 }}>Upload content for {agentName} to learn from.</p>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {[['audio', '🎙 Audio', 'Voice & lectures'], ['video', '📹 Video', 'Recordings'], ['live', '📡 Live', 'Stream from device']].map(([k, l, d]) => (
+            <button key={k} onClick={() => setTrainType(k)} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: bdr(1.5, trainType === k ? AMBER : BORDER), background: trainType === k ? 'rgba(232,136,74,.08)' : WHITE, cursor: 'pointer', textAlign: 'center', fontFamily: FONT }}>
+              <div style={{ fontSize: 16, marginBottom: 3 }}>{l.split(' ')[0]}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: trainType === k ? AMBER : INK }}>{l.split(' ').slice(1).join(' ')}</div>
+              <div style={{ fontSize: 10, color: MUTED, marginTop: 1 }}>{d}</div>
+            </button>
+          ))}
+        </div>
+        {trainType !== 'live' && <FileUploadZone label={`Upload ${trainType} files`} accept={trainType === 'audio' ? 'audio/*' : 'video/*'} />}
+        {trainType === 'live' && (
+          <div style={{ border: '2px dashed rgba(232,136,74,.4)', borderRadius: 14, padding: '24px 20px', textAlign: 'center', background: 'rgba(232,136,74,.04)', marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, color: INK, marginBottom: 4 }}>Stream live from device</div>
+            <div style={{ fontSize: 12, color: MUTED }}>{agentName} learns in real time as you teach</div>
+          </div>
+        )}
+        <Sel label="Assign to subject" value={trainSubj} onChange={(e) => setTrainSubj(e.target.value)}>
+          {['Mathematics', 'Chemistry', 'Physics', 'Biology', 'English', 'Economics', 'Computer Science', 'General'].map((s) => <option key={s} value={s}>{s}</option>)}
+        </Sel>
+        <Btn variant="primary" style={{ width: '100%' }} onClick={startTraining}><Brain size={14} />Start training {agentName}</Btn>
+      </Modal>
+
+      {/* Customise modal */}
+      <Modal open={custModal} onClose={() => setCustModal(false)} title="✨ Customise Your Agent">
+        <Inp label="Agent name" placeholder="e.g. Pythia" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, display: 'block', marginBottom: 8 }}>Pick an avatar</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {AGENT_AVATARS.map((em) => (
+              <button key={em} onClick={() => setDraftEmoji(em)} style={{ width: 44, height: 44, borderRadius: 12, border: bdr(2, draftEmoji === em ? AMBER : BORDER), background: draftEmoji === em ? 'rgba(232,136,74,.1)' : LIGHT, fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{em}</button>
+            ))}
+          </div>
+        </div>
+        <Btn variant="primary" style={{ width: '100%' }} onClick={saveAgent}><CheckCircle2 size={14} />Save agent</Btn>
+      </Modal>
+    </PageLayout>
+  );
+}
