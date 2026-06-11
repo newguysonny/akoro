@@ -160,8 +160,14 @@ export default function TasksPage() {
   };
 
   const handleToggle = async (id, status) => {
-    await apiPatch(`/api/tasks/${id}/status`, { status }).catch(console.warn);
+    // Optimistic update; backend /toggle flips done <-> pending and persists.
     setTasks(ts => ts.map(t => t.id === id ? { ...t, status } : t));
+    try {
+      const res = await apiPatch(`/api/tasks/${id}/toggle`, {});
+      if (res?.task) setTasks(ts => ts.map(t => t.id === id ? { ...t, status: res.task.status } : t));
+    } catch (e) {
+      console.warn('toggle failed', e);
+    }
   };
 
   const filtered = filter === 'all' ? tasks
