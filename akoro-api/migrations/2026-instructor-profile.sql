@@ -1,6 +1,9 @@
 -- 2026-instructor-profile.sql
--- Adds profile + preference columns used by the instructor (and learner)
--- settings pages. Safe to re-run: every column is guarded with IF NOT EXISTS.
+-- Aligns the instructor app onto the shared profile schema already used by the
+-- learner (users.* columns + the user_notification_preferences table).
+--
+-- Only `bio` is genuinely new; the rest are guarded no-ops on databases where
+-- the learner has already created them. Safe to re-run.
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS bio                 TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS country             TEXT;
@@ -11,4 +14,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS language            TEXT DEFAULT 'Eng
 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_mode        TEXT DEFAULT 'system';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS accent_color        TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled  BOOLEAN DEFAULT false;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs  JSONB DEFAULT '{}'::jsonb;
+
+-- Notification preferences live in the shared user_notification_preferences
+-- table (created in migration.sql) — no separate column needed here.

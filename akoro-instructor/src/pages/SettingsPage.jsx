@@ -377,8 +377,8 @@ function NotifSection({ notif, onToggle }) {
       <NotifRow icon={Mail} label="Email Notifications" sub="Enrollments, payouts, reminders" field="email" />
       <NotifRow icon={Bell} label="Push Notifications" sub="In-app and device alerts" field="push" />
       <NotifRow icon={Clock} label="Session Reminders" sub="Before each live class" field="sessionReminders" />
+      <NotifRow icon={Bolt} label="Announcements" sub="Platform & course announcements" field="announcements" />
       <NotifRow icon={MessageCircle} label="Student Q&A" sub="When a student asks a question" field="qaReplies" />
-      <NotifRow icon={Bolt} label="Battle Activity" sub="Battle joins and results" field="battles" />
     </Section>
   );
 }
@@ -591,7 +591,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState(null);
   const [agent, setAgent] = useState(null);
   const [stats, setStats] = useState({});
-  const [notif, setNotif] = useState({ email: true, push: true, sessionReminders: true, qaReplies: true, battles: true });
+  const [notif, setNotif] = useState({ email: true, push: true, sessionReminders: true, announcements: true, qaReplies: true });
   const [listingId, setListingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLogout, setShowLogout] = useState(false);
@@ -618,8 +618,11 @@ export default function SettingsPage() {
           accentColor: d.accent_color || BRAND, twoFactor: !!d.two_factor_enabled,
         });
         // Server-persisted notification prefs take priority over local cache
-        if (d.notification_prefs && Object.keys(d.notification_prefs).length) {
-          setNotif((n) => ({ ...n, ...d.notification_prefs }));
+        if (d.notif) {
+          setNotif((n) => ({
+            ...n,
+            ...Object.fromEntries(Object.entries(d.notif).filter(([, v]) => v != null)),
+          }));
         }
         setAgent({
           name: a.agent_name || 'My Agent', emoji: a.agent_emoji || '🤖', photoUrl: null,

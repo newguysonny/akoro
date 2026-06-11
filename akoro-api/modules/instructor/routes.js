@@ -111,21 +111,30 @@ const getStats = asyncHandler(async (req, res) => {
 
 const getProfile = asyncHandler(async (req, res) => {
   try {
-    const { data: user, error: userErr } = await db
-      .from("users")
-      .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, notification_prefs, created_at")
-      .eq("id", req.user.id)
-      .single();
+    const [{ data: user, error: userErr }, { data: agent }, { data: notif }] = await Promise.all([
+      db.from("users")
+        .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, created_at")
+        .eq("id", req.user.id).single(),
+      db.from("user_agents")
+        .select("id, agent_name, agent_emoji, xp, level, streak_days")
+        .eq("user_id", req.user.id).maybeSingle(),
+      db.from("user_notification_preferences")
+        .select("*").eq("user_id", req.user.id).maybeSingle(),
+    ]);
 
     if (userErr || !user) return err404(res, "User not found");
 
-    const { data: agent } = await db
-      .from("user_agents")
-      .select("id, agent_name, agent_emoji, xp, level, streak_days")
-      .eq("user_id", req.user.id)
-      .single();
-
-    ok(res, { ...user, agent: agent ?? null });
+    ok(res, {
+      ...user,
+      agent: agent ?? null,
+      notif: notif ? {
+        email:            notif.email_enabled,
+        push:             notif.push_enabled,
+        sessionReminders: notif.notify_session_reminders,
+        announcements:    notif.notify_new_announcements,
+        qaReplies:        notif.notify_qa_replies,
+      } : null,
+    });
   } catch (e) {
     err500(res, e);
   }
@@ -152,7 +161,7 @@ const updateProfile = asyncHandler(async (req, res) => {
       .from("users")
       .update(updates)
       .eq("id", req.user.id)
-      .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, notification_prefs")
+      .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled")
       .single();
 
     if (error) {
@@ -166,30 +175,28 @@ const updateProfile = asyncHandler(async (req, res) => {
   }
 });
 
-// PATCH /profile/notifications — merge into notification_prefs JSONB
+// PATCH /profile/notifications — upsert into the shared
+// user_notification_preferences table (same model as the learner app).
 const updateNotifications = asyncHandler(async (req, res) => {
   try {
-    if (!req.body || typeof req.body !== "object")
-      return err400(res, "notification preferences object required");
+    const { email, push, sessionReminders, announcements, qaReplies } = req.body ?? {};
 
-    // Merge with existing so partial updates don't clobber other keys
-    const { data: existing } = await db
-      .from("users")
-      .select("notification_prefs")
-      .eq("id", req.user.id)
-      .single();
+    const row = { user_id: req.user.id, updated_at: now() };
+    if (email            !== undefined) row.email_enabled            = email;
+    if (push             !== undefined) row.push_enabled             = push;
+    if (sessionReminders !== undefined) row.notify_session_reminders = sessionReminders;
+    if (announcements    !== undefined) row.notify_new_announcements = announcements;
+    if (qaReplies        !== undefined) row.notify_qa_replies        = qaReplies;
 
-    const merged = { ...(existing?.notification_prefs ?? {}), ...req.body };
+    if (Object.keys(row).length <= 2)
+      return err400(res, "No valid notification fields provided");
 
-    const { data, error } = await db
-      .from("users")
-      .update({ notification_prefs: merged, updated_at: now() })
-      .eq("id", req.user.id)
-      .select("notification_prefs")
-      .single();
+    const { error } = await db
+      .from("user_notification_preferences")
+      .upsert(row, { onConflict: "user_id" });
 
     if (error) throw new Error(error.message);
-    ok(res, data.notification_prefs);
+    ok(res, { saved: true });
   } catch (e) {
     err500(res, e);
   }
