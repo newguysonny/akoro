@@ -52,6 +52,13 @@ function TeachAgentModal({ session, config, onClose }) {
   const mediaRef      = useRef(null);    // MediaRecorder — audio (blob) mode
   const voiceMediaRef = useRef(null);    // MediaRecorder — voice (streaming) mode
   const chunksRef     = useRef([]);
+  // How the human delivered their last message: 'text' | 'audio' | 'live'.
+  // The agent mirrors this — text gets text, voice gets voice.
+  const lastModalityRef = useRef("text");
+  const speakSeqRef     = useRef(0);     // bumped per turn — stops stale speech queues
+  const maybeSpeak = (text) => {
+    if (lastModalityRef.current !== "text" && text) speakBlock(text, speakSeqRef.current);
+  };
 
   const [voiceStreaming, setVoiceStreaming] = useState(false);
   const [interimText,    setInterimText]   = useState("");     // audio chunks
@@ -124,9 +131,9 @@ function TeachAgentModal({ session, config, onClose }) {
         setLoading(false);
         if (newBlocks?.length) {
           setBlocks(prev => [...prev, ...newBlocks]);
-          // TTS: Atlas/Aria (student AI agent) speaks back to the human
+          // TTS only when the human used voice — modality mirrors input.
           const agentBlock = newBlocks.find(b => b.type === "student-agent");
-          if (agentBlock?.text) speakBlock(agentBlock.text);
+          maybeSpeak(agentBlock?.text);
         }
       });
       ws.on("student_done", ()=>{});
@@ -158,7 +165,7 @@ function TeachAgentModal({ session, config, onClose }) {
         // Stream closed — auto-submit transcript
         setVoiceStreaming(false);
         setInterimText("");
-        if (transcript?.trim()) handleSend(transcript);
+        if (transcript?.trim()) handleSend(transcript, "live");
       });
 
       ws.on("voice_error", ({ message }) => {
@@ -200,7 +207,7 @@ function TeachAgentModal({ session, config, onClose }) {
               method:"POST", credentials:"include", body:form });
             const data = await r.json();
             const transcript = data.transcript?.trim();
-            if (transcript) { setLoading(false); await handleSend(transcript); }
+            if (transcript) { setLoading(false); await handleSend(transcript, "audio"); }
             else setLoading(false);
           } catch { setLoading(false); }
         };
@@ -237,11 +244,14 @@ function TeachAgentModal({ session, config, onClose }) {
       }).catch(resolve);
   });
 
-  const speakBlock = async (text) => {
+  const speakBlock = async (text, seq = speakSeqRef.current) => {
     if (!text) return;
     // Split into sentences — start playing first sentence immediately
     const sentences = (text.match(/[^.!?]+[.!?]+/g) || [text]).slice(0, 4);
-    for (const s of sentences) await speakSentence(s.trim());
+    for (const s of sentences) {
+      if (seq !== speakSeqRef.current) return;  // user moved on (new turn / switched to text)
+      await speakSentence(s.trim());
+    }
   };
 
   // ── Voice streaming (realtime Deepgram) ────────────────────────
@@ -281,16 +291,18 @@ function TeachAgentModal({ session, config, onClose }) {
     }
   };
 
-  const handleSend = async (overrideText) => {
+  const handleSend = async (overrideText, modality = "text") => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
     if (!overrideText) setInput("");
-    setBlocks(prev => [...prev, { type:"user", text }]);
+    lastModalityRef.current = modality;
+    speakSeqRef.current += 1;            // invalidate any queued speech from the prior turn
+    setBlocks(prev => [...prev, { type:"user", text, modality }]);
     setLoading(true);
 
     // Use WebSocket if connected
     if (wsRef.current?.connected && wsReady) {
-      wsRef.current.emit("teacher_message", { message: text });
+      wsRef.current.emit("teacher_message", { message: text, modality });
       return;
     }
 
@@ -298,13 +310,13 @@ function TeachAgentModal({ session, config, onClose }) {
     if (sessionId) {
       try {
         const data = await apiPost("/api/adaptive/teaching/message", {
-          sessionId, message: text, studentId: STUDENT_ID,
+          sessionId, message: text, studentId: STUDENT_ID, modality,
         });
         if (data.blocks?.length) {
           setBlocks(prev=>[...prev,...data.blocks]);
           setLoading(false);
           const agentBlock = data.blocks.find(b => b.type === "student-agent");
-          if (agentBlock?.text) speakBlock(agentBlock.text);
+          maybeSpeak(agentBlock?.text);
           return;
         }
       } catch { /* fall through to mock */ }
@@ -320,7 +332,7 @@ function TeachAgentModal({ session, config, onClose }) {
       setBlocks(prev => [...prev, ...responseBlocks]);
       setLoading(false);
       const agentBlock = responseBlocks.find(b => b.type === "student-agent");
-      if (agentBlock?.text) speakBlock(agentBlock.text);
+      maybeSpeak(agentBlock?.text);
     }, 800);
   };
 
