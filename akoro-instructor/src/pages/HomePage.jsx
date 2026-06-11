@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
@@ -6,7 +6,7 @@ import { Btn, Toast, Skeleton, Modal, Inp } from '../components/Primitives.jsx';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { apiGet, apiPost, apiDelete } from '../services/api.js';
+import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 /* ── Mock fallback data (matches backend snake_case shape) ──────────── */
@@ -125,36 +125,76 @@ function QuickAction({ icon: Icon, label, desc, color, onClick }) {
 }
 
 /* ── Streaming platforms panel (connected) ──────────────────────────── */
+const PLATFORM_KEYS = ['zoom', 'meet', 'teams'];
+const STREAM_ERRORS = {
+  invalid_state:         'Security check failed — please try connecting again.',
+  provider_mismatch:     'Security check failed — please try connecting again.',
+  missing_code:          'Authorization was cancelled.',
+  token_exchange_failed: 'The platform rejected the connection. Please retry.',
+};
+
 function StreamingPanel({ onToast }) {
-  const [platforms, setPlatforms] = useState(null); // null = loading
+  // Per-platform: { connected, method: 'oauth'|'link'|null, meeting_url }
+  const [state, setState] = useState(null); // null = loading
   const [busy, setBusy] = useState(null);
-  const [connectFor, setConnectFor] = useState(null); // platform key being connected
+  const [connectFor, setConnectFor] = useState(null); // platform key for the "link" modal
   const [roomUrl, setRoomUrl] = useState('');
   const [hostEmail, setHostEmail] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    apiGet('/api/instructor/streaming')
-      .then((res) => { if (!cancelled) setPlatforms(res?.data ?? []); })
-      .catch(() => {
-        if (!cancelled) setPlatforms(Object.keys(STREAM_META).map((p) => ({ platform: p, connected: false })));
-      });
-    return () => { cancelled = true; };
+  const load = useCallback(async () => {
+    // Merge OAuth status (/api/meeting/status) with paste-link status (/api/instructor/streaming).
+    const [oauthRes, linkRes] = await Promise.allSettled([
+      apiGet('/api/meeting/status'),
+      apiGet('/api/instructor/streaming'),
+    ]);
+    const oauth = oauthRes.status === 'fulfilled' ? (oauthRes.value?.data ?? {}) : {};
+    const links = linkRes.status === 'fulfilled' ? (linkRes.value?.data ?? []) : [];
+    const linkMap = Object.fromEntries(links.map((l) => [l.platform, l]));
+
+    setState(PLATFORM_KEYS.map((p) => {
+      const oauthConnected = !!oauth[p]?.connected;
+      const link = linkMap[p];
+      return {
+        platform:    p,
+        connected:   oauthConnected || !!link?.connected,
+        method:      oauthConnected ? 'oauth' : link?.connected ? 'link' : null,
+        meeting_url: link?.meeting_url ?? null,
+      };
+    }));
   }, []);
+
+  // Handle the OAuth return (?connected= / ?streaming_error=) then load status.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('connected');
+    const error = params.get('streaming_error');
+    if (connected || error) {
+      if (connected) onToast?.(`${STREAM_META[connected]?.label ?? connected} connected`, 'success');
+      if (error) onToast?.(STREAM_ERRORS[error] || 'Could not connect platform', 'error');
+      params.delete('connected'); params.delete('streaming_error');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }
+    load().catch(() => setState(PLATFORM_KEYS.map((p) => ({ platform: p, connected: false, method: null }))));
+  }, [load, onToast]);
+
+  // Full-page redirect to the provider's consent screen.
+  const startOAuth = (platform) => { window.location.href = `${API}/api/meeting/auth/${platform}`; };
 
   const disconnect = async (p) => {
     setBusy(p.platform);
-    setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: false } : x));
+    setState((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: false, method: null } : x));
     try {
-      await apiDelete(`/api/instructor/streaming/${p.platform}`);
+      if (p.method === 'oauth') await apiDelete(`/api/meeting/disconnect/${p.platform}`);
+      else                      await apiDelete(`/api/instructor/streaming/${p.platform}`);
       onToast?.(`${STREAM_META[p.platform]?.label} disconnected`, 'info');
     } catch {
-      setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: true } : x));
       onToast?.('Could not update platform', 'error');
+      load();
     } finally { setBusy(null); }
   };
 
-  const submitConnect = async () => {
+  const submitLink = async () => {
     const platform = connectFor;
     setBusy(platform);
     try {
@@ -163,8 +203,8 @@ function StreamingPanel({ onToast }) {
         meetingUrl: roomUrl.trim() || null,
         hostEmail:  hostEmail.trim() || null,
       });
-      setPlatforms((ps) => ps.map((x) => x.platform === platform
-        ? { ...x, connected: true, meeting_url: roomUrl.trim() || null } : x));
+      setState((ps) => ps.map((x) => x.platform === platform
+        ? { ...x, connected: true, method: 'link', meeting_url: roomUrl.trim() || null } : x));
       onToast?.(`${STREAM_META[platform]?.label} connected`, 'success');
       setConnectFor(null); setRoomUrl(''); setHostEmail('');
     } catch {
@@ -179,10 +219,13 @@ function StreamingPanel({ onToast }) {
         <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>Streaming Platforms</h3>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {platforms === null
+        {state === null
           ? [0, 1, 2].map((i) => <Skeleton key={i} height={44} />)
-          : platforms.map((p) => {
+          : state.map((p) => {
             const meta = STREAM_META[p.platform] ?? { label: p.platform, color: MUTED };
+            const sub = p.connected
+              ? (p.method === 'oauth' ? 'Connected · OAuth' : 'Connected · Manual link')
+              : 'Not connected';
             return (
               <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -191,25 +234,30 @@ function StreamingPanel({ onToast }) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{meta.label}</div>
                   <div style={{ fontSize: 10.5, color: p.connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    {p.connected && <CheckCircle2 size={10} />}{p.connected ? 'Connected' : 'Not connected'}
+                    {p.connected && <CheckCircle2 size={10} />}{sub}
                   </div>
                 </div>
-                <Btn size="sm" variant={p.connected ? 'ghost' : 'outline'} disabled={busy === p.platform}
-                  onClick={() => p.connected ? disconnect(p) : setConnectFor(p.platform)}
-                  style={p.connected ? { color: MUTED } : undefined}>
-                  {busy === p.platform ? '…' : p.connected ? 'Disconnect' : 'Connect'}
-                </Btn>
+                {p.connected ? (
+                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: MUTED }}>
+                    {busy === p.platform ? '…' : 'Disconnect'}
+                  </Btn>
+                ) : (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Btn size="sm" variant="outline" onClick={() => startOAuth(p.platform)}>Connect</Btn>
+                    <Btn size="sm" variant="ghost" onClick={() => setConnectFor(p.platform)} style={{ color: MUTED }}>Use link</Btn>
+                  </div>
+                )}
               </div>
             );
           })}
       </div>
 
       <Modal open={!!connectFor} onClose={() => { setConnectFor(null); setRoomUrl(''); setHostEmail(''); }}
-        title={`Connect ${STREAM_META[connectFor]?.label ?? ''}`}>
+        title={`Connect ${STREAM_META[connectFor]?.label ?? ''} with a link`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.5 }}>
-            Paste your personal meeting room link. New live sessions will use it automatically.
-            {connectFor === 'zoom' && ' Leave blank to auto-create Zoom meetings if your account has Server-to-Server credentials.'}
+            Prefer <b>Connect</b> to authorize with your account so links are generated automatically.
+            Or paste a personal meeting room link to reuse for every session.
           </p>
           <Inp label="Personal meeting link" value={roomUrl} onChange={(e) => setRoomUrl(e.target.value)}
             placeholder={connectFor === 'zoom' ? 'https://zoom.us/j/your-pmi' : connectFor === 'meet' ? 'https://meet.google.com/abc-defg-hij' : 'https://teams.microsoft.com/l/meetup-join/…'} />
@@ -219,7 +267,7 @@ function StreamingPanel({ onToast }) {
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Btn variant="secondary" onClick={() => { setConnectFor(null); setRoomUrl(''); setHostEmail(''); }}>Cancel</Btn>
-            <Btn onClick={submitConnect} disabled={busy === connectFor}>{busy === connectFor ? 'Connecting…' : 'Connect'}</Btn>
+            <Btn onClick={submitLink} disabled={busy === connectFor || !roomUrl.trim()}>{busy === connectFor ? 'Saving…' : 'Save link'}</Btn>
           </div>
         </div>
       </Modal>

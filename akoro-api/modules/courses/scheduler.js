@@ -33,6 +33,7 @@ import { Router }    from "express";
 import cron          from "node-cron";
 import axios         from "axios";
 import db            from "../../db.js";
+import { createMeeting } from "./meeting-integration.js";
 
 // This scheduler is now backed by the `live_sessions` Postgres table — the same
 // rows the instructor app and live-sessions router read/write. Status vocabulary
@@ -231,9 +232,9 @@ const persistLink = async (sessionId, meeting, platform) => {
 /**
  * createLiveLink — best-effort meeting provisioning ~15 min before start.
  * Resolution order per the teacher's connected platform settings:
- *   1. Static personal room URL  → stamp directly (works for zoom/meet/teams)
- *   2. Google Meet + refresh_token → generate a fresh Calendar/Meet link
- *   3. Zoom + Server-to-Server env creds → create a scheduled meeting
+ *   1. OAuth-connected platform (provider_tokens) → createMeeting() — preferred
+ *   2. Static personal room URL → stamp directly (works for zoom/meet/teams)
+ *   3. Zoom + Server-to-Server env creds → create a scheduled meeting (fallback)
  * Persists onto the live_sessions row. Failures are logged, never fatal.
  */
 const createLiveLink = async (session) => {
@@ -247,21 +248,28 @@ const createLiveLink = async (session) => {
     Math.round((new Date(session.scheduled_end || scheduledAt) - new Date(scheduledAt)) / 60000) || 60,
   );
 
+  // 1. OAuth-connected platform — fresh per-session link via stored tokens.
+  try {
+    const meeting = await createMeeting(session.instructor_id, { topic, startTime: scheduledAt, durationMin, platform });
+    if (meeting?.joinUrl || meeting?.meetingUrl) {
+      return await persistLink(session.id, { meetingId: meeting.meetingId, password: meeting.password, joinUrl: meeting.joinUrl ?? meeting.meetingUrl }, platform) ?? session;
+    }
+  } catch (err) {
+    // No OAuth connection (or Redis/token error) — fall through to other paths.
+    if (!/No active|No meeting platform/.test(err.message)) {
+      console.warn(`[scheduler] createMeeting unavailable session=${session.id}: ${err.message}`);
+    }
+  }
+
   const conn = await getInstructorPlatform(session.instructor_id, platform);
 
-  // 1. Static personal room link — simplest, no API calls, all platforms.
+  // 2. Static personal room link — manual override, no API calls, all platforms.
   if (conn?.meeting_url) {
     return await persistLink(session.id, { joinUrl: conn.meeting_url }, platform) ?? session;
   }
 
+  // 3. Zoom Server-to-Server fallback (account-level creds + host email).
   try {
-    // 2. Google Meet via per-teacher OAuth refresh token.
-    if (platform === "meet" && conn?.refresh_token) {
-      const meeting = await createGoogleMeetLink({ topic, scheduledAt, durationMin, teacherRefreshToken: conn.refresh_token });
-      return await persistLink(session.id, meeting, platform) ?? session;
-    }
-
-    // 3. Zoom via Server-to-Server account credentials + host email.
     if (platform === "zoom" && process.env.ZOOM_CLIENT_ID) {
       const { data: instructor } = await db
         .from("users").select("email").eq("id", session.instructor_id).maybeSingle();

@@ -45,9 +45,23 @@ import axios                         from "axios";
 import { v4 as uuidv4 }              from "uuid";
 import Redis                         from "ioredis";
 import cron                          from "node-cron";
+import jwt                           from "jsonwebtoken";
 import db                            from "../../db.js";
 import { authenticateToken,
          requireRole }               from "../auth/routes.js";
+
+// ─── § PROVIDER NAMING + OAUTH STATE ──────────────────────────────────────────
+// The frontend speaks { zoom, meet, teams }; OAuth/storage use Google's real
+// name "google". Translate at the boundary so both sides stay consistent.
+const toOAuth = (p) => (p === "meet" ? "google" : p);
+const toUi    = (p) => (p === "google" ? "meet" : p);
+
+const STATE_SECRET   = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || "akoro-oauth-state";
+const INSTRUCTOR_URL = process.env.INSTRUCTOR_URL || process.env.FRONTEND_URL || "https://akoro.app";
+
+const signState = (userId, provider) =>
+  jwt.sign({ uid: userId, provider, n: uuidv4() }, STATE_SECRET, { expiresIn: "10m" });
+const verifyState = (token) => jwt.verify(token, STATE_SECRET);
 
 // ─── § CONFIG ─────────────────────────────────────────────────────────────────
 
@@ -407,19 +421,26 @@ const meetingHandlers = {
   // GET /api/meeting/auth/:provider
   // Redirects instructor to the OAuth consent page
   oauthRedirect: (req, res) => {
-    const { provider } = req.params;
-    const cfg          = providerConfig(provider);
+    const provider = toOAuth(req.params.provider);
+    let cfg;
+    try { cfg = providerConfig(provider); }
+    catch { return res.status(400).json({ success: false, message: "Invalid provider" }); }
+
+    // CSRF + identity binding: the callback authenticates from this signed state,
+    // not the session cookie (which may not survive the provider round-trip).
+    const state = encodeURIComponent(signState(req.user.id, provider));
+    const redir = encodeURIComponent(cfg.redirectUri);
     let authUrl;
 
     switch (provider) {
       case "zoom":
-        authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(cfg.redirectUri)}`;
+        authUrl = `https://zoom.us/oauth/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${redir}&state=${state}`;
         break;
       case "google":
-        authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${cfg.clientId}&redirect_uri=${encodeURIComponent(cfg.redirectUri)}&response_type=code&scope=https://www.googleapis.com/auth/calendar.events&access_type=offline&prompt=consent`;
+        authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${cfg.clientId}&redirect_uri=${redir}&response_type=code&scope=${encodeURIComponent("https://www.googleapis.com/auth/calendar.events")}&access_type=offline&prompt=consent&state=${state}`;
         break;
       case "teams":
-        authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${cfg.clientId}&response_type=code&redirect_uri=${encodeURIComponent(cfg.redirectUri)}&scope=offline_access%20Calendars.ReadWrite&prompt=consent`;
+        authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${cfg.clientId}&response_type=code&redirect_uri=${redir}&scope=${encodeURIComponent("offline_access Calendars.ReadWrite OnlineMeetings.ReadWrite")}&prompt=consent&state=${state}`;
         break;
       default:
         return res.status(400).json({ success: false, message: "Invalid provider" });
@@ -431,21 +452,34 @@ const meetingHandlers = {
   // GET /api/meeting/auth/callback/:provider
   // Exchanges auth code for tokens, saves to Supabase + Redis
   oauthCallback: asyncHandler(async (req, res) => {
-    const { provider } = req.params;
-    const { code }     = req.query;
-    const userId       = req.user?.id;
+    const provider          = toOAuth(req.params.provider);
+    const { code, state }   = req.query;
+    const settingsUrl       = `${INSTRUCTOR_URL}/settings`;
+    const fail = (reason) => res.redirect(`${settingsUrl}?streaming_error=${encodeURIComponent(reason)}`);
 
-    if (!userId) return res.status(401).json({ success: false, message: "Not authenticated" });
-    if (!code)   return res.status(400).json({ success: false, message: "Missing auth code" });
+    if (!code)  return fail("missing_code");
+    if (!state) return fail("missing_state");
 
-    const cfg = providerConfig(provider);
-    let tokenResponse;
+    // Authenticate via the signed state (CSRF-safe; no session cookie needed).
+    let userId;
+    try {
+      const claims = verifyState(decodeURIComponent(state));
+      if (claims.provider !== provider) return fail("provider_mismatch");
+      userId = claims.uid;
+    } catch {
+      return fail("invalid_state");
+    }
+
+    let cfg;
+    try { cfg = providerConfig(provider); }
+    catch { return fail("invalid_provider"); }
 
     try {
+      let tokenResponse;
       if (provider === "zoom") {
         tokenResponse = await axios.post(cfg.tokenUrl, null, {
-          params:  { grant_type: "authorization_code", code, redirect_uri: cfg.redirectUri },
-          auth:    { username: cfg.clientId, password: cfg.clientSecret },
+          params: { grant_type: "authorization_code", code, redirect_uri: cfg.redirectUri },
+          auth:   { username: cfg.clientId, password: cfg.clientSecret },
         });
       } else {
         tokenResponse = await axios.post(cfg.tokenUrl, new URLSearchParams({
@@ -461,15 +495,13 @@ const meetingHandlers = {
       await saveTokens(userId, provider, {
         access_token,
         refresh_token,
-        expires_at: Date.now() + expires_in * 1000,
+        expires_at: Date.now() + (expires_in ?? 3600) * 1000,
       });
 
-      // In production: redirect to frontend settings page
-      res.json({ success: true, message: `${provider} connected successfully` });
-
+      res.redirect(`${settingsUrl}?connected=${toUi(provider)}`);
     } catch (err) {
       console.error(`[meeting] OAuth callback error for ${provider}:`, err.response?.data ?? err.message);
-      res.status(500).json({ success: false, message: `Failed to connect ${provider}` });
+      fail("token_exchange_failed");
     }
   }),
 
@@ -489,8 +521,8 @@ const meetingHandlers = {
   // DELETE /api/meeting/disconnect/:provider
   // Removes tokens from Supabase + Redis cache
   disconnect: asyncHandler(async (req, res) => {
-    const { provider } = req.params;
-    const userId       = req.user.id;
+    const provider = toOAuth(req.params.provider);
+    const userId   = req.user.id;
 
     const { error } = await db
       .from("provider_tokens")
@@ -501,7 +533,7 @@ const meetingHandlers = {
     if (error) throw new Error(error.message);
 
     await redis.del(cacheKey(userId, provider));
-    res.json({ success: true, message: `${provider} disconnected` });
+    res.json({ success: true, message: `${toUi(provider)} disconnected` });
   }),
 
   // GET /api/meeting/status
@@ -514,9 +546,9 @@ const meetingHandlers = {
 
     if (error) throw new Error(error.message);
 
-    const status = { zoom: null, google: null, teams: null };
+    const status = { zoom: null, meet: null, teams: null };
     for (const row of (data ?? [])) {
-      status[row.provider] = {
+      status[toUi(row.provider)] = {
         connected:         row.is_active,
         connected_at:      row.connected_at,
         last_refreshed_at: row.last_refreshed_at,
@@ -568,7 +600,9 @@ const router = Router();
 
 // OAuth flows — instructor only
 router.get   ("/auth/:provider",            authenticateToken, requireRole(["instructor", "admin"]), meetingHandlers.oauthRedirect);
-router.get   ("/auth/callback/:provider",   authenticateToken, meetingHandlers.oauthCallback);
+// No authenticateToken: the provider's redirect won't carry our session cookie.
+// Identity comes from the signed `state` param verified inside the handler.
+router.get   ("/auth/callback/:provider",   meetingHandlers.oauthCallback);
 
 // Meeting management
 router.post  ("/schedule",                  authenticateToken, requireRole(["instructor", "admin"]), meetingHandlers.schedule);
