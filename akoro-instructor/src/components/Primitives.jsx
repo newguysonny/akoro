@@ -250,29 +250,36 @@ export function CoursTypeBadge({ type }) {
 }
 
 /* ── FileUploadZone ─────────────────────────────────────────────────── */
-export function FileUploadZone({ label = 'Drop files here or click to upload', accept, onFile }) {
+// Real upload to R2 via uploadApi. `onUploaded(result)` gets { id, fileUrl, fileName }.
+// Pass `upload={false}` to only capture the File locally (via onFile) without uploading.
+export function FileUploadZone({ label = 'Drop files here or click to upload', accept, onFile, onUploaded, upload = true }) {
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState(null);
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState(null);
   const inputRef = useRef(null);
 
-  const simulateUpload = (file) => {
+  const startUpload = async (file) => {
     setFileName(file.name);
     setProgress(0);
     setDone(false);
-    console.log('upload would go here:', file.name);
+    setError(null);
     if (onFile) onFile(file);
-    let p = 0;
-    const interval = setInterval(() => {
-      p += Math.random() * 20 + 5;
-      if (p >= 100) { p = 100; setDone(true); clearInterval(interval); }
-      setProgress(Math.round(p));
-    }, 200);
+    if (!upload) { setProgress(100); setDone(true); return; }
+    try {
+      const { uploadFile } = await import('../services/uploadApi.js');
+      const result = await uploadFile(file, setProgress);
+      setProgress(100);
+      setDone(true);
+      if (onUploaded) onUploaded(result);
+    } catch (err) {
+      setError(err.message || 'Upload failed');
+    }
   };
 
   const handleFiles = (files) => {
-    if (files.length > 0) simulateUpload(files[0]);
+    if (files.length > 0) startUpload(files[0]);
   };
 
   return (
@@ -301,7 +308,8 @@ export function FileUploadZone({ label = 'Drop files here or click to upload', a
           <div style={{ height: 4, background: BORDER, borderRadius: 2, overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${progress}%`, background: done ? GREEN : AMBER, transition: 'width .2s' }} />
           </div>
-          {done && <p style={{ fontSize: 11, color: GREEN, marginTop: 6, fontWeight: 600 }}>Upload complete</p>}
+          {done && !error && <p style={{ fontSize: 11, color: GREEN, marginTop: 6, fontWeight: 600 }}>Upload complete</p>}
+          {error && <p style={{ fontSize: 11, color: RED, marginTop: 6, fontWeight: 600 }}>{error}</p>}
         </div>
       )}
     </div>

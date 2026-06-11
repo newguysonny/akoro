@@ -295,6 +295,27 @@ router.post("/files/confirm", async (req, res) => {
   }
 });
 
+// ─── GET /api/tasks/files/:id ─────────────────────────────────────────────────
+// Poll a file's OCR status/result (ocr_text is populated in the background).
+router.get("/files/:id", async (req, res) => {
+  try {
+    const file = await TaskFileDB.findById(req.params.id);
+    if (!file) return res.status(404).json({ error: "File not found" });
+    if (file.teacher_id && file.teacher_id !== req.user.id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    res.json({
+      id:       file.id,
+      fileName: file.file_name,
+      fileUrl:  file.file_url,
+      ocrText:  file.ocr_text ?? null,
+      ocrReady: file.ocr_text != null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/tasks/queue/health  (admin) ────────────────────────────────────
 router.get("/queue/health", requireRole(["admin"]), async (req, res) => {
   try {

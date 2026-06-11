@@ -22,6 +22,22 @@ export const patchAgent = (agentPatch) => {
   return apiPatch('/api/instructor/profile/agent', body);
 };
 
+/* ── Two-factor authentication ───────────────────────────────────── */
+const auth2fa = (path, body) =>
+  fetch(`${API}${path}`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }).then(async r => {
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || j.error || `${path} -> ${r.status}`);
+    return j.data ?? j;
+  });
+
+export const setup2FA   = ()      => auth2fa('/api/auth/2fa/setup');          // → { secret, otpauthUrl }
+export const enable2FA  = (code)  => auth2fa('/api/auth/2fa/enable',  { code });
+export const disable2FA = (code)  => auth2fa('/api/auth/2fa/disable', { code });
+
 /* ── Marketplace publishing ──────────────────────────────────────── */
 // POST /api/adaptive/marketplace/list — publish a trained agent for sale.
 export const publishAgentToMarketplace = ({

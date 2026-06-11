@@ -12,6 +12,7 @@ import {
   getProfile, patchProfile, patchAgent, patchNotifications,
   publishAgentToMarketplace, unpublishListing,
   loadLocalNotif, saveLocalNotif, loadListingId, saveListingId,
+  setup2FA, enable2FA, disable2FA,
 } from '../services/settingsApi.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, FONT } from '../constants.js';
 
@@ -388,6 +389,7 @@ function AccountTab({ profile, setProfile, stats, notif, onToggleNotif, onSaveFi
   const [sheet, setSheet] = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet, setAvatarSheet] = useState(false);
+  const [twoFaSheet, setTwoFaSheet] = useState(false);
   const color = profile.accentColor || BRAND;
   const openSheet = (field, label, type, options) => setSheet({ field, label, type, options });
 
@@ -456,7 +458,7 @@ function AccountTab({ profile, setProfile, stats, notif, onToggleNotif, onSaveFi
             <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>Two-Factor Auth</p>
             <p style={{ fontSize: 11.5, color: MUTED2, marginTop: 2, margin: 0 }}>Extra security for your account</p>
           </div>
-          <Toggle on={!!profile.twoFactor} onChange={() => onSaveField('twoFactor', !profile.twoFactor)} />
+          <Toggle on={!!profile.twoFactor} onChange={() => setTwoFaSheet(true)} />
         </div>
         <Row icon={PauseCircle} label="Deactivate Account" danger sub="Suspend temporarily" onClick={() => openSheet('deactivate', 'Deactivate Account', 'deactivate')} />
         <Row icon={Trash2} label="Delete Account" danger sub="Permanently delete all data" onClick={() => openSheet('deleteAccount', 'Delete Account', 'delete-confirm')} />
@@ -475,7 +477,115 @@ function AccountTab({ profile, setProfile, stats, notif, onToggleNotif, onSaveFi
           onSave={(s) => { setProfile((p) => ({ ...p, subjects: s })); onSaveField('subjects', s); }} />
       )}
       {sheet && <GenericSheet {...sheet} value={profile[sheet.field]} onClose={() => setSheet(null)} onSave={(f, v) => { onSaveField(f, v); setSheet(null); }} />}
+      {twoFaSheet && (
+        <TwoFactorSheet
+          enabled={!!profile.twoFactor}
+          color={color}
+          onClose={() => setTwoFaSheet(false)}
+          onChanged={(enabled) => { setProfile((p) => ({ ...p, twoFactor: enabled })); setTwoFaSheet(false); }}
+        />
+      )}
     </div>
+  );
+}
+
+/* ─── Two-Factor Auth setup sheet ──────────────────────────────────── */
+function TwoFactorSheet({ enabled, color, onClose, onChanged }) {
+  const [step, setStep] = useState(enabled ? 'disable' : 'intro'); // intro → setup → disable
+  const [secret, setSecret] = useState('');
+  const [otpauthUrl, setOtpauthUrl] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const beginSetup = async () => {
+    setBusy(true); setErr('');
+    try {
+      const { secret, otpauthUrl } = await setup2FA();
+      setSecret(secret); setOtpauthUrl(otpauthUrl); setStep('setup');
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const confirmEnable = async () => {
+    if (!/^\d{6}$/.test(code)) { setErr('Enter the 6-digit code'); return; }
+    setBusy(true); setErr('');
+    try { await enable2FA(code); onChanged(true); }
+    catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const confirmDisable = async () => {
+    if (!/^\d{6}$/.test(code)) { setErr('Enter the 6-digit code'); return; }
+    setBusy(true); setErr('');
+    try { await disable2FA(code); onChanged(false); }
+    catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const qrSrc = otpauthUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(otpauthUrl)}`
+    : null;
+
+  const codeInput = (
+    <input
+      type="text" inputMode="numeric" maxLength={6} autoFocus value={code}
+      onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+      placeholder="000000"
+      style={{ width: '100%', padding: '12px', borderRadius: 12, border: `1.5px solid ${BORDER}`,
+        textAlign: 'center', letterSpacing: 8, fontSize: 20, fontWeight: 700, fontFamily: FONT,
+        boxSizing: 'border-box', marginBottom: 12 }}
+    />
+  );
+
+  return (
+    <Sheet onClose={onClose}>
+      <h3 style={{ fontSize: 17, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>
+        Two-Factor Authentication
+      </h3>
+
+      {err && <p style={{ fontSize: 12.5, color: RED, fontWeight: 600, margin: '8px 0' }}>{err}</p>}
+
+      {step === 'intro' && (
+        <>
+          <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, margin: '8px 0 18px' }}>
+            Protect your account with an authenticator app (Google Authenticator, Authy, 1Password).
+            You'll enter a 6-digit code each time you sign in.
+          </p>
+          <SheetButtons onClose={onClose} onSave={beginSetup} saveLabel={busy ? 'Loading…' : 'Set up'} disabled={busy} />
+        </>
+      )}
+
+      {step === 'setup' && (
+        <>
+          <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.5, margin: '8px 0 14px' }}>
+            Scan this QR code with your authenticator app, then enter the 6-digit code to confirm.
+          </p>
+          {qrSrc && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <img src={qrSrc} alt="2FA QR code" width={180} height={180} style={{ borderRadius: 12, border: `1px solid ${BORDER}` }} />
+            </div>
+          )}
+          <p style={{ fontSize: 11, color: MUTED2, textAlign: 'center', margin: '0 0 4px' }}>Or enter this key manually:</p>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: INK, textAlign: 'center', wordBreak: 'break-all',
+            background: LIGHT, padding: '8px 10px', borderRadius: 8, margin: '0 0 16px', fontFamily: 'monospace' }}>
+            {secret}
+          </p>
+          {codeInput}
+          <SheetButtons onClose={onClose} onSave={confirmEnable} saveLabel={busy ? 'Verifying…' : 'Enable'} disabled={busy} />
+        </>
+      )}
+
+      {step === 'disable' && (
+        <>
+          <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, margin: '8px 0 16px' }}>
+            Enter a current code from your authenticator app to turn off two-factor authentication.
+          </p>
+          {codeInput}
+          <SheetButtons onClose={onClose} onSave={confirmDisable} saveLabel={busy ? 'Disabling…' : 'Disable'} danger disabled={busy} />
+        </>
+      )}
+    </Sheet>
   );
 }
 

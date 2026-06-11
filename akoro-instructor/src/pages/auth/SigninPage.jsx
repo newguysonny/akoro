@@ -19,11 +19,23 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { login, loginWithGoogle, logout, loading, clearError } = useAuth();
+  const { login, verifyTwoFactor, loginWithGoogle, logout, loading, clearError } = useAuth();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [formErr,  setFormErr]  = useState('');
+  const [challenge, setChallenge] = useState(null);   // 2FA challenge token
+  const [code,      setCode]      = useState('');
   const urlError = params.get('error');
+
+  const finishLogin = (data) => {
+    const role = data?.user?.role || data?.role;
+    if (role && role !== 'instructor' && role !== 'admin') {
+      setFormErr('This portal is for instructors only');
+      logout();
+      return;
+    }
+    navigate('/', { replace: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,13 +44,20 @@ export default function SigninPage() {
     if (!email || !password) { setFormErr('Please fill in all fields'); return; }
     try {
       const data = await login({ email, password });
-      const role = data?.user?.role || data?.role;
-      if (role && role !== 'instructor' && role !== 'admin') {
-        setFormErr('This portal is for instructors only');
-        await logout();
-        return;
-      }
-      navigate('/', { replace: true });
+      if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
+      finishLogin(data);
+    } catch (err) {
+      setFormErr(err.message);
+    }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setFormErr('');
+    if (!/^\d{6}$/.test(code)) { setFormErr('Enter the 6-digit code'); return; }
+    try {
+      const data = await verifyTwoFactor({ challengeToken: challenge, code });
+      finishLogin(data);
     } catch (err) {
       setFormErr(err.message);
     }
@@ -80,10 +99,45 @@ export default function SigninPage() {
         border: '1px solid #EDE8E1',
       }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>
-          Welcome, Tutor
+          {challenge ? 'Two-factor verification' : 'Welcome, Tutor'}
         </h1>
-        <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>Sign in to your instructor dashboard</p>
+        <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
+          {challenge ? 'Enter the 6-digit code from your authenticator app' : 'Sign in to your instructor dashboard'}
+        </p>
 
+        {challenge ? (
+          <>
+            {formErr && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: RED }}>
+                {formErr}
+              </div>
+            )}
+            <form onSubmit={handleVerify}>
+              <input
+                type="text" inputMode="numeric" autoFocus maxLength={6}
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                style={{ ...inp, textAlign: 'center', letterSpacing: 8, fontSize: 22, fontWeight: 700, marginBottom: 20 }}
+              />
+              <button type="submit" disabled={loading} style={{
+                width: '100%', padding: '13px', borderRadius: 14, border: 'none',
+                background: loading ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`,
+                color: loading ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
+                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif",
+              }}>
+                {loading ? 'Verifying…' : 'Verify & sign in'}
+              </button>
+            </form>
+            <button onClick={() => { setChallenge(null); setCode(''); setFormErr(''); }} style={{
+              width: '100%', marginTop: 14, background: 'none', border: 'none',
+              color: '#9490A0', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>
+              ← Back to sign in
+            </button>
+          </>
+        ) : (
+        <>
         {/* Google */}
         <button
           onClick={() => loginWithGoogle('/')}
@@ -148,6 +202,8 @@ export default function SigninPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        </>
+        )}
       </div>
 
       <p style={{ fontSize: 12, color: '#9490A0', marginTop: 20, textAlign: 'center' }}>

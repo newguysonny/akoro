@@ -19,16 +19,29 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { login, loginWithGoogle, loading, clearError } = useAuth();
+  const { login, verifyTwoFactor, loginWithGoogle, loading, clearError } = useAuth();
   const [email,    setEmail]   = useState('');
   const [password, setPassword]= useState('');
   const [formErr,  setFormErr] = useState('');
+  const [challenge, setChallenge] = useState(null);
+  const [code,      setCode]      = useState('');
   const urlError = params.get('error');
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setFormErr(''); clearError();
     if (!email || !password) { setFormErr('Please fill in all fields'); return; }
-    try { await login({ email, password }); navigate('/', { replace:true }); }
+    try {
+      const data = await login({ email, password });
+      if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
+      navigate('/', { replace:true });
+    }
+    catch (err) { setFormErr(err.message); }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault(); setFormErr('');
+    if (!/^\d{6}$/.test(code)) { setFormErr('Enter the 6-digit code'); return; }
+    try { await verifyTwoFactor({ challengeToken: challenge, code }); navigate('/', { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
 
@@ -50,6 +63,32 @@ export default function SigninPage() {
       </div>
       <div style={{ width:'100%', maxWidth:400, background:'#fff', borderRadius:24,
         padding:'32px 28px', boxShadow:'0 4px 32px rgba(0,0,0,.08)' }}>
+        {challenge ? (
+          <>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'#111827', margin:'0 0 6px' }}>Two-factor verification</h1>
+            <p style={{ fontSize:13, color:'#6B7280', margin:'0 0 24px' }}>Enter the 6-digit code from your authenticator app</p>
+            {formErr && (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{formErr}</div>
+            )}
+            <form onSubmit={handleVerify}>
+              <input type="text" inputMode="numeric" autoFocus maxLength={6} value={code}
+                onChange={e=>setCode(e.target.value.replace(/\D/g,''))} placeholder="000000"
+                style={{ ...inp, textAlign:'center', letterSpacing:8, fontSize:22, fontWeight:800, marginBottom:20 }}/>
+              <button type="submit" disabled={loading}
+                style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
+                  background:loading?'#E5E7EB':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
+                  color:loading?'#9CA3AF':'#fff', fontSize:14, fontWeight:800,
+                  cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif" }}>
+                {loading ? 'Verifying…' : 'Verify & sign in'}
+              </button>
+            </form>
+            <button onClick={() => { setChallenge(null); setCode(''); setFormErr(''); }}
+              style={{ width:'100%', marginTop:14, background:'none', border:'none', color:'#9CA3AF', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              ← Back to sign in
+            </button>
+          </>
+        ) : (
+        <>
         <h1 style={{ fontSize:22, fontWeight:900, color:'#111827', margin:'0 0 6px' }}>Welcome back</h1>
         <p style={{ fontSize:13, color:'#6B7280', margin:'0 0 24px' }}>Sign in to continue learning</p>
         <button onClick={() => loginWithGoogle('/')}
@@ -94,6 +133,8 @@ export default function SigninPage() {
           Don't have an account?{' '}
           <Link to="/signup" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>Sign up</Link>
         </p>
+        </>
+        )}
       </div>
     </div>
   );

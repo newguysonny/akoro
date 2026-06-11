@@ -62,6 +62,17 @@ export function AuthProvider({ children }) {
     setLoading(true); setError(null);
     try {
       const { data } = await authFetch('/api/auth/login', { email, password });
+      if (data?.twoFactorRequired) return data;
+      if (data?.user) saveUser(data.user);
+      return data;
+    } catch (err) { setError(err.message); throw err; }
+    finally { setLoading(false); }
+  }, [saveUser]);
+
+  const verifyTwoFactor = useCallback(async ({ challengeToken, code }) => {
+    setLoading(true); setError(null);
+    try {
+      const { data } = await authFetch('/api/auth/2fa/login', { challengeToken, code });
       if (data?.user) saveUser(data.user);
       return data;
     } catch (err) { setError(err.message); throw err; }
@@ -113,7 +124,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, error, isAuthenticated,
-      login, register, loginWithGoogle, logout, refresh, restoreFromCallback,
+      login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
       clearError: () => setError(null),
     }}>
       {children}

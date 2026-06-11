@@ -190,6 +190,20 @@ async function testTasks() {
   }
 }
 
+async function testTwoFactor() {
+  console.log('\n[2FA]');
+  // setup writes a pending secret but does NOT enable 2FA (no code verified).
+  const setup = await req('POST', '/api/auth/2fa/setup', {});
+  check('POST /api/auth/2fa/setup → 200', setup.ok, `status=${setup.status}`);
+  if (setup.ok) {
+    check('setup returns secret', !!setup.data?.secret);
+    check('setup returns otpauthUrl', !!setup.data?.otpauthUrl);
+  }
+  // wrong code should be rejected
+  const bad = await req('POST', '/api/auth/2fa/enable', { code: '000000' });
+  check('enable with bad code → 400', bad.status === 400, `status=${bad.status}`);
+}
+
 async function testCleanup() {
   console.log('\n[Cleanup]');
   if (cleanup.sessionId) {
@@ -223,6 +237,7 @@ async function main() {
   await testBattles();
   await testStreaming();
   await testTasks();
+  await testTwoFactor();
   await testCleanup();
 
   console.log('\n' + '─'.repeat(40));

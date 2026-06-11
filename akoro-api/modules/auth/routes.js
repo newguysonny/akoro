@@ -29,6 +29,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { randomUUID }                 from "crypto";
 import db                             from "../../db.js";
 import { strictLimit, refreshLimit }  from "../../middleware/security.js";
+import { generateSecret, otpauthURL, verifyTOTP } from "./totp.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -309,6 +310,14 @@ const safeUser = (u) => ({
   role:      u.role,
 });
 
+// Short-lived (5 min) token proving password step passed, pending TOTP code.
+const signChallenge = (userId) => {
+  const payload = { sub: userId, type: "2fa_challenge", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
+  return USE_RSA
+    ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: 300 })
+    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: 300 });
+};
+
 const issueTokenPair = async (res, user) => {
   const { token: accessToken, jti: accessJti } = signAccess(user);
   const family = randomUUID();
@@ -363,8 +372,75 @@ const authHandlers = {
     if (!valid) return res401(res, "Invalid credentials");
     if (!user.is_active) return res403(res, "Account deactivated");
 
+    // Two-factor gate — issue a short-lived challenge token instead of a session.
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      const challengeToken = signChallenge(user.id);
+      return res200(res, { twoFactorRequired: true, challengeToken });
+    }
+
     const payload = await issueTokenPair(res, user);
     res200(res, payload);
+  }),
+
+  // POST /api/auth/2fa/login — complete a 2FA-gated login with a TOTP code.
+  twoFactorLogin: asyncHandler(async (req, res) => {
+    const { challengeToken, code } = req.body;
+    if (!challengeToken || !code) return res401(res, "Challenge token and code required");
+
+    let decoded;
+    try { decoded = verifyToken(challengeToken); }
+    catch { return res401(res, "Invalid or expired challenge"); }
+    if (decoded.type !== "2fa_challenge") return res401(res, "Not a 2FA challenge token");
+
+    const { data: user } = await db.from("users").select("*").eq("id", decoded.sub).maybeSingle();
+    if (!user || !user.is_active) return res401(res, "User not found");
+    if (!user.two_factor_enabled || !user.two_factor_secret) return res401(res, "2FA not enabled");
+
+    if (!verifyTOTP(user.two_factor_secret, code)) return res401(res, "Invalid authentication code");
+
+    const payload = await issueTokenPair(res, user);
+    res200(res, payload);
+  }),
+
+  // ─── § 2FA management (authenticated) ───────────────────────────────────────
+
+  // POST /api/auth/2fa/setup — generate a pending secret + provisioning URI.
+  twoFactorSetup: asyncHandler(async (req, res) => {
+    const { data: user } = await db.from("users").select("id,email,two_factor_enabled").eq("id", req.user.id).maybeSingle();
+    if (!user) return res401(res, "User not found");
+    if (user.two_factor_enabled) return res.status(400).json({ success: false, message: "2FA already enabled" });
+
+    const secret = generateSecret();
+    await db.from("users").update({ two_factor_secret: secret }).eq("id", user.id);
+
+    res200(res, {
+      secret,
+      otpauthUrl: otpauthURL(secret, user.email, "Akoro"),
+    });
+  }),
+
+  // POST /api/auth/2fa/enable — verify the first code, then turn 2FA on.
+  twoFactorEnable: asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ success: false, message: "Code required" });
+
+    const { data: user } = await db.from("users").select("id,two_factor_secret,two_factor_enabled").eq("id", req.user.id).maybeSingle();
+    if (!user || !user.two_factor_secret) return res.status(400).json({ success: false, message: "Run 2FA setup first" });
+    if (!verifyTOTP(user.two_factor_secret, code)) return res.status(400).json({ success: false, message: "Invalid authentication code" });
+
+    await db.from("users").update({ two_factor_enabled: true }).eq("id", user.id);
+    res200(res, { twoFactorEnabled: true });
+  }),
+
+  // POST /api/auth/2fa/disable — verify a current code, then turn 2FA off.
+  twoFactorDisable: asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    const { data: user } = await db.from("users").select("id,two_factor_secret,two_factor_enabled").eq("id", req.user.id).maybeSingle();
+    if (!user || !user.two_factor_enabled) return res.status(400).json({ success: false, message: "2FA not enabled" });
+    if (!code || !verifyTOTP(user.two_factor_secret, code)) return res.status(400).json({ success: false, message: "Invalid authentication code" });
+
+    await db.from("users").update({ two_factor_enabled: false, two_factor_secret: null }).eq("id", user.id);
+    res200(res, { twoFactorEnabled: false });
   }),
 
   // POST /api/auth/refresh  — rotate refresh token
@@ -497,6 +573,12 @@ router.post("/login",    strictLimit,  rules.login,    runValidation, authHandle
 router.post("/refresh",  refreshLimit, authHandlers.refresh);
 router.post("/logout",   authenticateToken, authHandlers.logout);
 router.get ("/me",       authenticateToken, authHandlers.me);
+
+// Two-factor authentication
+router.post("/2fa/login",   strictLimit, authHandlers.twoFactorLogin);
+router.post("/2fa/setup",   authenticateToken, authHandlers.twoFactorSetup);
+router.post("/2fa/enable",  authenticateToken, authHandlers.twoFactorEnable);
+router.post("/2fa/disable", authenticateToken, authHandlers.twoFactorDisable);
 
 // Google OAuth
 router.get("/google",

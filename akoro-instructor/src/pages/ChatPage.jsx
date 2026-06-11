@@ -69,6 +69,8 @@ export default function ChatPage() {
   const [attachType, setAttachType] = useState('file');
   const [ocrText, setOcrText]       = useState('');
   const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrError, setOcrError]     = useState('');
+  const [attachFile, setAttachFile] = useState(null);
 
   const [draftName, setDraftName]   = useState('');
   const [draftEmoji, setDraftEmoji] = useState('🔮');
@@ -189,21 +191,35 @@ export default function ChatPage() {
   };
 
   // ── Attachment / OCR ──
-  const runOcr = () => {
+  // The image is uploaded by FileUploadZone; on completion we extract text via
+  // the backend (Claude Vision) and poll for the result.
+  const handleOcrUploaded = async ({ id }) => {
     setOcrRunning(true);
-    setTimeout(() => {
-      setOcrText("Extracted text:\n\n∫ x² dx = x³/3 + C\n\nChain Rule: d/dx[f(g(x))] = f'(g(x))·g'(x)\n\nProduct Rule: d/dx[uv] = u'v + uv'");
+    setOcrError('');
+    try {
+      const { pollOcr } = await import('../services/uploadApi.js');
+      const text = await pollOcr(id);
+      setOcrText(text);
+    } catch (e) {
+      setOcrError(e.message || 'Could not extract text');
+    } finally {
       setOcrRunning(false);
-    }, 1800);
+    }
+  };
+
+  const handleAttachUploaded = ({ fileUrl, fileName }) => {
+    setAttachFile({ fileUrl, fileName });
   };
 
   const sendAttachment = () => {
     if (attachType === 'ocr' && ocrText) {
       pushMe('📷 Scanned image · OCR result:\n\n' + ocrText);
+    } else if (attachFile) {
+      pushMe(`📎 Attachment sent · ${attachFile.fileName}`);
     } else {
       pushMe('📎 Attachment sent');
     }
-    setAttachModal(false); setOcrText(''); setOcrRunning(false);
+    setAttachModal(false); setOcrText(''); setOcrRunning(false); setOcrError(''); setAttachFile(null);
     setTimeout(() => pushAgent("Got it! I've received your attachment and I'm processing it now."), 700);
   };
 
@@ -415,15 +431,16 @@ export default function ChatPage() {
       </Modal>
 
       {/* Attach modal */}
-      <Modal open={attachModal} onClose={() => { setAttachModal(false); setOcrText(''); setOcrRunning(false); }} title={attachType === 'ocr' ? '📷 Photo / Image OCR' : attachType === 'doc' ? '📄 Upload Document' : '📎 Upload File'}>
+      <Modal open={attachModal} onClose={() => { setAttachModal(false); setOcrText(''); setOcrRunning(false); setOcrError(''); setAttachFile(null); }} title={attachType === 'ocr' ? '📷 Photo / Image OCR' : attachType === 'doc' ? '📄 Upload Document' : '📎 Upload File'}>
         {attachType === 'ocr' ? (
           <div>
-            <FileUploadZone label="Upload an image to scan" accept="image/*" />
-            {!ocrText && (
-              <Btn variant="secondary" style={{ width: '100%', marginBottom: 14 }} onClick={runOcr} disabled={ocrRunning}>
-                {ocrRunning ? <Loader size={13} className="spinner" /> : <ScanLine size={13} />}{ocrRunning ? 'Extracting text…' : 'Run OCR'}
-              </Btn>
+            <FileUploadZone label="Upload an image to scan" accept="image/*" onUploaded={handleOcrUploaded} />
+            {ocrRunning && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '14px 0', fontSize: 13, color: MUTED }}>
+                <Loader size={13} className="spinner" /> Extracting text…
+              </div>
             )}
+            {ocrError && <p style={{ fontSize: 12, color: RED, margin: '12px 0', fontWeight: 600 }}>{ocrError}</p>}
             {ocrText && (
               <>
                 <Txa label="Extracted text — edit if needed" value={ocrText} onChange={(e) => setOcrText(e.target.value)} rows={5} />
@@ -433,8 +450,8 @@ export default function ChatPage() {
           </div>
         ) : (
           <div>
-            <FileUploadZone label={attachType === 'doc' ? 'Upload a document' : 'Upload a file'} accept={attachType === 'doc' ? '.pdf,.doc,.docx,.pptx,.xlsx' : '*'} />
-            <Btn variant="primary" style={{ width: '100%' }} onClick={sendAttachment}><Paperclip size={13} />Attach & send</Btn>
+            <FileUploadZone label={attachType === 'doc' ? 'Upload a document' : 'Upload a file'} accept={attachType === 'doc' ? '.pdf,.doc,.docx,.pptx,.xlsx' : '*'} onUploaded={handleAttachUploaded} />
+            <Btn variant="primary" style={{ width: '100%', marginTop: 14 }} onClick={sendAttachment} disabled={!attachFile}><Paperclip size={13} />Attach & send</Btn>
           </div>
         )}
       </Modal>
