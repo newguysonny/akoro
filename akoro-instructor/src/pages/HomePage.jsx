@@ -1,21 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Swords, TrendingUp, Plus, Eye, Clock, Video, Bot, ChevronRight, Star, Zap } from 'lucide-react';
+import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast, Skeleton } from '../components/Primitives.jsx';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { apiGet, apiPost, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
-/* ── Mock fallback data ─────────────────────────────────────────────── */
+/* ── Mock fallback data (matches backend snake_case shape) ──────────── */
 const MOCK_STATS = {
-  totalStudents: 48,
-  activeCourses: 3,
-  totalBattles: 12,
-  avgRating: 4.8,
-  earningsThisMonth: 2340,
-  hoursTeached: 86,
+  total_students: 48,
+  active_courses: 3,
+  total_courses:  5,
+  total_revenue:  234000,
+  agent_xp:       1840,
+  agent_level:    4,
+  streak_days:    6,
+};
+
+const STREAM_META = {
+  zoom:  { label: 'Zoom',        color: '#2D8CFF' },
+  meet:  { label: 'Google Meet', color: '#00897B' },
+  teams: { label: 'MS Teams',    color: '#6264A7' },
 };
 
 const MOCK_PROFILE = {
@@ -116,6 +124,78 @@ function QuickAction({ icon: Icon, label, desc, color, onClick }) {
   );
 }
 
+/* ── Streaming platforms panel (connected) ──────────────────────────── */
+function StreamingPanel({ onToast }) {
+  const [platforms, setPlatforms] = useState(null); // null = loading
+  const [busy, setBusy] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet('/api/instructor/streaming')
+      .then((res) => { if (!cancelled) setPlatforms(res?.data ?? []); })
+      .catch(() => {
+        if (!cancelled) setPlatforms(Object.keys(STREAM_META).map((p) => ({ platform: p, connected: false })));
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggle = async (p) => {
+    setBusy(p.platform);
+    const wasConnected = p.connected;
+    // optimistic
+    setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: !wasConnected } : x));
+    try {
+      if (wasConnected) {
+        await apiDelete(`/api/instructor/streaming/${p.platform}`);
+        onToast?.(`${STREAM_META[p.platform]?.label} disconnected`, 'info');
+      } else {
+        await apiPost('/api/instructor/streaming/connect', { platform: p.platform });
+        onToast?.(`${STREAM_META[p.platform]?.label} connected`, 'success');
+      }
+    } catch (e) {
+      // revert on failure
+      setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: wasConnected } : x));
+      onToast?.('Could not update platform', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <Video size={16} color={AMBER} />
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>Streaming Platforms</h3>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {platforms === null
+          ? [0, 1, 2].map((i) => <Skeleton key={i} height={44} />)
+          : platforms.map((p) => {
+            const meta = STREAM_META[p.platform] ?? { label: p.platform, color: MUTED };
+            return (
+              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Video size={15} color={meta.color} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{meta.label}</div>
+                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {p.connected && <CheckCircle2 size={10} />}{p.connected ? 'Connected' : 'Not connected'}
+                  </div>
+                </div>
+                <Btn size="sm" variant={p.connected ? 'ghost' : 'outline'} disabled={busy === p.platform}
+                  onClick={() => toggle(p)}
+                  style={p.connected ? { color: MUTED } : undefined}>
+                  {busy === p.platform ? '…' : p.connected ? 'Disconnect' : 'Connect'}
+                </Btn>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -190,12 +270,12 @@ export default function HomePage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 16, marginBottom: 28,
         }}>
-          <StatCard icon={Users}      label="Total Students"    value={stats?.totalStudents ?? '—'}   sub="enrolled across all courses" color={BLUE}   loading={loading} />
-          <StatCard icon={BookOpen}   label="Active Courses"    value={stats?.activeCourses ?? '—'}   sub="live & on-demand"             color={AMBER}  loading={loading} />
-          <StatCard icon={Swords}     label="Battles Created"   value={stats?.totalBattles ?? '—'}    sub="all time"                     color={PURPLE} loading={loading} />
-          <StatCard icon={Star}       label="Avg. Rating"       value={stats?.avgRating ?? '—'}        sub="from student feedback"        color={GREEN}  loading={loading} />
-          <StatCard icon={TrendingUp} label="Earnings (month)"  value={stats?.earningsThisMonth ? `$${stats.earningsThisMonth.toLocaleString()}` : '—'} sub="this month" color={GREEN} loading={loading} />
-          <StatCard icon={Clock}      label="Hours Taught"      value={stats?.hoursTeached ?? '—'}    sub="total session time"           color={BLUE}   loading={loading} />
+          <StatCard icon={Users}    label="Total Students" value={(stats?.total_students ?? 0).toLocaleString()} sub="enrolled across all courses" color={BLUE}   loading={loading} />
+          <StatCard icon={BookOpen} label="Active Courses" value={stats?.active_courses ?? 0}                   sub="currently live"               color={AMBER}  loading={loading} />
+          <StatCard icon={Layers}   label="Total Courses"  value={stats?.total_courses ?? 0}                    sub="published & draft"            color={PURPLE} loading={loading} />
+          <StatCard icon={Wallet}   label="Revenue"        value={`₦${(stats?.total_revenue ?? 0).toLocaleString()}`} sub="from enrollments"      color={GREEN}  loading={loading} />
+          <StatCard icon={Zap}      label="Agent XP"       value={(stats?.agent_xp ?? 0).toLocaleString()}      sub={`Level ${stats?.agent_level ?? 1}`} color={AMBER} loading={loading} />
+          <StatCard icon={Flame}    label="Streak"         value={`${stats?.streak_days ?? 0}d`}                sub="keep it going"                color={GREEN}  loading={loading} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
@@ -266,12 +346,12 @@ export default function HomePage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 10, padding: '12px' }}>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>{stats?.totalStudents ?? '—'}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>{(stats?.total_students ?? 0).toLocaleString()}</div>
                   <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>Students</div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 10, padding: '12px' }}>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>{stats?.avgRating ?? '—'}</div>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>Rating</div>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>{stats?.active_courses ?? 0}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>Active Courses</div>
                 </div>
               </div>
             </div>
@@ -291,7 +371,7 @@ export default function HomePage() {
                     <Bot size={16} color={WHITE} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{loading ? '…' : (profile?.agentName || 'AI Agent')}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{loading ? '…' : (profile?.agent?.agent_name || profile?.agentName || 'AI Agent')}</div>
                     <div style={{ fontSize: 10, color: MUTED }}>Teaching Assistant</div>
                   </div>
                 </div>
@@ -324,6 +404,9 @@ export default function HomePage() {
                 <Zap size={14} /> Train Agent <ChevronRight size={12} />
               </Btn>
             </div>
+
+            {/* Streaming platforms */}
+            <StreamingPanel onToast={showToast} />
           </div>
         </div>
       </div>

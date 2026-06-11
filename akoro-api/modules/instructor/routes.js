@@ -828,7 +828,7 @@ const getStreaming = asyncHandler(async (req, res) => {
       .from("user_settings")
       .select("settings")
       .eq("user_id", req.user.id)
-      .single();
+      .maybeSingle();
 
     const stored   = settings?.settings?.streaming_platforms ?? {};
     const platforms = STREAMING_PLATFORMS.map((p) => ({
@@ -857,7 +857,7 @@ const connectStreaming = asyncHandler(async (req, res) => {
       .from("user_settings")
       .select("settings")
       .eq("user_id", req.user.id)
-      .single();
+      .maybeSingle();
 
     const currentSettings = existing?.settings ?? {};
     const streamingPlatforms = currentSettings.streaming_platforms ?? {};
@@ -903,7 +903,7 @@ const disconnectStreaming = asyncHandler(async (req, res) => {
       .from("user_settings")
       .select("settings")
       .eq("user_id", req.user.id)
-      .single();
+      .maybeSingle();
 
     if (!existing) return err404(res, "No settings found");
 
