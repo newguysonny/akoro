@@ -190,6 +190,42 @@ async function testTasks() {
   }
 }
 
+async function testSchedule() {
+  if (!cleanup.courseId) { console.log('\n[Schedule] skipped — no course'); return; }
+  console.log('\n[Schedule]');
+  const spec = { frequency: '3x_weekly', daysOfWeek: [1, 3, 5], time: '16:00', durationMin: 60, startDate: '2025-09-08', weeks: 2, platform: 'zoom' };
+
+  const preview = await req('POST', `/api/instructor/courses/${cleanup.courseId}/schedule/preview`, spec);
+  check('POST schedule/preview → 200', preview.ok, `status=${preview.status}`);
+  check('preview returns 2 modules', preview.data?.modules?.length === 2);
+  check('preview module has 3 sessions', preview.data?.modules?.[0]?.sessions?.length === 3);
+
+  const commit = await req('POST', `/api/instructor/courses/${cleanup.courseId}/schedule/commit`, {
+    scheduleConfig: spec,
+    modules: (preview.data?.modules || []).map((m, mi) => ({
+      title: m.title, orderIndex: mi,
+      sessions: m.sessions.map((s, si) => ({
+        title: s.title || `Topic ${si + 1}`, scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
+        duration_min: 60, platform: 'zoom', order_index: si,
+        materials: si === 0 ? [{ kind: 'link', title: 'Slides', url: 'https://example.com/s' }] : [],
+      })),
+    })),
+  });
+  check('POST schedule/commit → 201', commit.status === 201, `status=${commit.status}`);
+  check('commit created 2 modules', commit.data?.modules?.length === 2);
+
+  const list = await req('GET', `/api/instructor/courses/${cleanup.courseId}/modules`);
+  check('GET modules → 200', list.ok, `status=${list.status}`);
+  check('modules have nested sessions', (list.data?.[0]?.sessions?.length ?? 0) > 0);
+
+  // materials on the first session of the first module
+  const firstSession = list.data?.[0]?.sessions?.[0];
+  if (firstSession) {
+    const mats = await req('GET', `/api/instructor/sessions/${firstSession.id}/materials`);
+    check('GET session materials → 200', mats.ok, `status=${mats.status}`);
+  }
+}
+
 async function testTwoFactor() {
   console.log('\n[2FA]');
   // setup writes a pending secret but does NOT enable 2FA (no code verified).
@@ -233,6 +269,7 @@ async function main() {
   await testProfile();
   await testCourses();
   await testSessions();
+  await testSchedule();
   await testStudents();
   await testBattles();
   await testStreaming();

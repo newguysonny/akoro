@@ -32,47 +32,11 @@
 import { Router }    from "express";
 import cron          from "node-cron";
 import axios         from "axios";
+import db            from "../../db.js";
 
-// Internal store references — these are the same in-memory arrays
-// used in courses.js. In production both files import from a shared
-// DB module instead.
-import { SessionStore, CourseStore, TeacherStore } from "./store.js";
-
-// ─── § LIVE-LINKS STORE ───────────────────────────────────────────────────────
-//
-// live_class_links table
-// ─────────────────────
-// id            uuid  PK
-// sessionId     uuid  FK → sessions.id
-// courseId      uuid  FK → courses.id
-// teacherId     uuid  FK → teachers.id
-// platform      "zoom" | "meet"
-// meetingId     string   platform's own meeting identifier
-// joinUrl       string   the URL students click
-// startUrl      string   the URL the teacher uses (Zoom only)
-// password      string?  Zoom meeting password
-// topic         string   meeting title sent to the platform
-// scheduledAt   ISO      when the session is due to start
-// expiresAt     ISO      when the link should be deleted (scheduledAt + durationMin)
-// createdAt     ISO
-// deletedAt     ISO?     soft-delete timestamp
-
-let _liveLinks = [];
-
-const LiveLinkStore = {
-  list:          (filters = {}) => {
-    let r = _liveLinks.filter((l) => !l.deletedAt);
-    if (filters.courseId)  r = r.filter((l) => l.courseId  === filters.courseId);
-    if (filters.teacherId) r = r.filter((l) => l.teacherId === filters.teacherId);
-    if (filters.sessionId) r = r.filter((l) => l.sessionId === filters.sessionId);
-    return r;
-  },
-  get:           (id)    => _liveLinks.find((l) => l.id === id && !l.deletedAt) ?? null,
-  getBySession:  (sid)   => _liveLinks.find((l) => l.sessionId === sid && !l.deletedAt) ?? null,
-  create:        (data)  => { _liveLinks.push(data); return data; },
-  update:        (id, d) => { const i = _liveLinks.findIndex((l) => l.id === id); if (i === -1) return null; _liveLinks[i] = { ..._liveLinks[i], ...d }; return _liveLinks[i]; },
-  softDelete:    (id)    => { const i = _liveLinks.findIndex((l) => l.id === id); if (i === -1) return false; _liveLinks[i].deletedAt = new Date().toISOString(); return true; },
-};
+// This scheduler is now backed by the `live_sessions` Postgres table — the same
+// rows the instructor app and live-sessions router read/write. Status vocabulary
+// matches the DB CHECK constraint: scheduled → live → ended (+ cancelled / recorded).
 
 // ─── § PLATFORM CLIENTS ───────────────────────────────────────────────────────
 
@@ -215,280 +179,213 @@ const deleteGoogleMeetLink = async ({ meetingId, teacherRefreshToken }) => {
   );
 };
 
-// ─── § CORE LOGIC ─────────────────────────────────────────────────────────────
 
-/**
- * createLiveLink
- *
- * Called when a session is ~15 min away from starting.
- * 1. Fetches the session + course + teacher from the store
- * 2. Calls Zoom or Google Meet to create the meeting
- * 3. Saves the link record to LiveLinkStore
- * 4. Patches the session with the joinUrl so the frontend can read it
- *
- * Returns the created LiveLink record.
- */
-const createLiveLink = async (sessionId) => {
-  const session = SessionStore.get(sessionId);
-  if (!session) throw new Error(`Session ${sessionId} not found`);
+// ─── § CORE LOGIC (DB-backed) ─────────────────────────────────────────────────
 
-  // Don't double-create
-  const existing = LiveLinkStore.getBySession(sessionId);
-  if (existing) return existing;
+const GRACE_MIN = 30;          // keep a session "live" this long past its end
+const LINK_LEAD_MIN = 15;      // create the meeting link this long before start
 
-  const course  = CourseStore.get(session.courseId);
-  if (!course)  throw new Error(`Course ${session.courseId} not found`);
+// Fetch enrolled student user-ids for a course (for live-class notifications).
+const courseParticipants = async (courseId) => {
+  const { data } = await db
+    .from("enrollments")
+    .select("user_id")
+    .eq("course_id", courseId)
+    .eq("status", "active");
+  return (data ?? []).map((r) => r.user_id);
+};
 
-  const teacher = TeacherStore.get(course.teacherId);
-  if (!teacher) throw new Error(`Teacher ${course.teacherId} not found`);
-
-  const platform    = session.platform || course.platform || "zoom";
-  const topic       = `${course.title} — ${session.title}`;
-  const scheduledAt = buildISO(session.date, session.time);
-  const durationMin = session.durationMin || course.sessionLengthMin || 90;
-
-  let meetingData;
-
-  if (platform === "zoom") {
-    meetingData = await createZoomMeeting({
-      topic,
-      scheduledAt,
-      durationMin,
-      teacherEmail: teacher.email,
-    });
-  } else if (platform === "meet") {
-    if (!teacher.googleRefreshToken)
-      throw new Error(`Teacher ${teacher.id} has no Google refresh token stored`);
-    meetingData = await createGoogleMeetLink({
-      topic,
-      scheduledAt,
-      durationMin,
-      teacherRefreshToken: teacher.googleRefreshToken,
-    });
-  } else {
-    throw new Error(`Unsupported platform: ${platform}`);
-  }
-
-  const expiresAt = new Date(
-    new Date(scheduledAt).getTime() + (durationMin + 30) * 60 * 1000  // +30 min buffer
-  ).toISOString();
-
-  const link = LiveLinkStore.create({
-    id:          crypto.randomUUID(),
-    sessionId,
-    courseId:    course.id,
-    teacherId:   teacher.id,
-    platform,
-    meetingId:   meetingData.meetingId,
-    joinUrl:     meetingData.joinUrl,
-    startUrl:    meetingData.startUrl,
-    password:    meetingData.password,
-    topic,
-    scheduledAt,
-    expiresAt,
-    createdAt:   new Date().toISOString(),
-    deletedAt:   null,
-  });
-
-  // Patch the session so the frontend can surface the join URL immediately
-  SessionStore.update(sessionId, { joinUrl: link.joinUrl, startUrl: link.startUrl });
-
-  console.log(`[scheduler] ✅ Live link created  session=${sessionId}  platform=${platform}  url=${link.joinUrl}`);
-  return link;
+const emitToParticipants = async (courseId, event, payload) => {
+  const io = global.io;
+  if (!io) return;
+  const ids = await courseParticipants(courseId);
+  for (const uid of ids) io.to(`user:${uid}`).emit(event, payload);
 };
 
 /**
- * activateSession
- *
- * Flips a session's status from "upcoming" → "live".
- * Called right at the session's scheduled start time.
+ * createLiveLink — best-effort meeting provisioning ~15 min before start.
+ * Persists meeting_url / join_url / meeting_id / meeting_password onto the
+ * live_sessions row. Failures are logged, never fatal (status flow still runs).
  */
-const activateSession = (sessionId) => {
-  const session = SessionStore.get(sessionId);
-  if (!session) return;
-  if (session.status !== "upcoming") return;       // already live or cancelled
+const createLiveLink = async (session) => {
+  if (session.join_url || session.meeting_url) return session;  // already provisioned
 
-  SessionStore.update(sessionId, { status: "live" });
-  console.log(`[scheduler] 🔴 Session activated  session=${sessionId}`);
-};
+  // Load the instructor's email (Zoom S2S needs a host email).
+  const { data: instructor } = await db
+    .from("users").select("email").eq("id", session.instructor_id).maybeSingle();
 
-/**
- * expireSession
- *
- * Flips a live session → "recorded" and deletes the platform meeting + link record.
- * Called after session end time + buffer.
- */
-const expireSession = async (sessionId) => {
-  const session = SessionStore.get(sessionId);
-  if (!session) return;
+  const platform    = session.platform || "zoom";
+  const topic       = session.title || "Live class";
+  const scheduledAt = session.scheduled_start;
+  const durationMin = Math.max(
+    15,
+    Math.round((new Date(session.scheduled_end || scheduledAt) - new Date(scheduledAt)) / 60000) || 60,
+  );
 
-  // Update status
-  SessionStore.update(sessionId, { status: "recorded", joinUrl: null, startUrl: null });
-
-  // Find and delete the live link
-  const link = LiveLinkStore.getBySession(sessionId);
-  if (!link) return;
-
+  let meeting;
   try {
-    if (link.platform === "zoom") {
-      await deleteZoomMeeting(link.meetingId);
-    } else if (link.platform === "meet") {
-      const course  = CourseStore.get(link.courseId);
-      const teacher = TeacherStore.get(link.teacherId);
-      if (teacher?.googleRefreshToken) {
-        await deleteGoogleMeetLink({ meetingId: link.meetingId, teacherRefreshToken: teacher.googleRefreshToken });
-      }
+    if (platform === "zoom" && process.env.ZOOM_CLIENT_ID) {
+      meeting = await createZoomMeeting({ topic, scheduledAt, durationMin, teacherEmail: instructor?.email });
+    } else {
+      return session; // meet/teams need per-teacher OAuth tokens (not yet stored)
     }
-    LiveLinkStore.softDelete(link.id);
-    console.log(`[scheduler] 🗑  Live link deleted  session=${sessionId}  meetingId=${link.meetingId}`);
   } catch (err) {
-    console.error(`[scheduler] ⚠️  Failed to delete meeting  session=${sessionId}`, err.message);
+    console.error(`[scheduler] ❌ meeting creation failed session=${session.id}`, err.message);
+    return session;
   }
+
+  const { data: updated } = await db
+    .from("live_sessions")
+    .update({
+      meeting_id:       meeting.meetingId,
+      meeting_password: meeting.password ?? null,
+      meeting_url:      meeting.joinUrl,
+      join_url:         meeting.joinUrl,
+      updated_at:       new Date().toISOString(),
+    })
+    .eq("id", session.id)
+    .select()
+    .single();
+
+  console.log(`[scheduler] ✅ link created session=${session.id} platform=${platform}`);
+  return updated ?? session;
+};
+
+/** activateSession — scheduled → live at start time. */
+const activateSession = async (session) => {
+  const { data } = await db
+    .from("live_sessions")
+    .update({ status: "live", actual_start: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", session.id)
+    .eq("status", "scheduled")          // guard against double-activation
+    .select()
+    .maybeSingle();
+  if (!data) return;
+  console.log(`[scheduler] 🔴 session live session=${session.id}`);
+  await emitToParticipants(session.course_id, "live_class_live", {
+    sessionId: session.id, title: session.title, status: "live",
+    joinUrl: session.join_url ?? session.meeting_url ?? null,
+  });
+};
+
+/** expireSession — live → ended after end time + grace; tears down the meeting. */
+const expireSession = async (session) => {
+  const { data } = await db
+    .from("live_sessions")
+    .update({ status: "ended", actual_end: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", session.id)
+    .eq("status", "live")
+    .select()
+    .maybeSingle();
+  if (!data) return;
+
+  if (session.platform === "zoom" && session.meeting_id && process.env.ZOOM_CLIENT_ID) {
+    try { await deleteZoomMeeting(session.meeting_id); }
+    catch (err) { console.error(`[scheduler] ⚠️ meeting delete failed session=${session.id}`, err.message); }
+  }
+  console.log(`[scheduler] ⏹ session ended session=${session.id}`);
+  await emitToParticipants(session.course_id, "live_class_ended", { sessionId: session.id, status: "ended" });
 };
 
 // ─── § CRON JOBS ──────────────────────────────────────────────────────────────
 //
-// Job 1 — every minute: find upcoming sessions starting in ≤15 min → createLiveLink
-// Job 2 — every minute: find upcoming sessions starting now (±1 min) → activateSession
-// Job 3 — every minute: find live sessions past their end time → expireSession
-//
-// All three run on the same 1-minute tick. In production you might
-// run jobs 1+3 every 5 min and job 2 every 30 seconds.
+// One 1-minute tick drives the whole lifecycle off the live_sessions table:
+//   · create meeting link ≤15 min before start
+//   · scheduled → live at start
+//   · live → ended after end + grace
+// The status/start index (idx_live_sessions_status_start) keeps these cheap.
 
-cron.schedule("* * * * *", async () => {
-  const now       = Date.now();
-  const sessions  = SessionStore.list();
-  const io        = global.io;
+let _tickRunning = false;
 
-  for (const session of sessions) {
-    if (!session.date || !session.time) continue;
+const tick = async () => {
+  if (_tickRunning) return;           // avoid overlap on slow DB
+  _tickRunning = true;
+  try {
+    const now = Date.now();
+    const horizon = new Date(now + LINK_LEAD_MIN * 60000).toISOString();
 
-    const startMs    = new Date(buildISO(session.date, session.time)).getTime();
-    const durationMs = (session.durationMin || 90) * 60 * 1000;
-    const endMs      = startMs + durationMs + 30 * 60 * 1000;   // +30 min buffer
-    const diffMins   = Math.round((startMs - now) / 60_000);
+    // Upcoming sessions within the link-lead window OR already due to start.
+    const { data: upcoming } = await db
+      .from("live_sessions")
+      .select("*")
+      .eq("status", "scheduled")
+      .lte("scheduled_start", horizon);
 
-    // ── Job 1: create link 15 minutes before start ───────────────────────────
-    if (
-      session.status === "upcoming" &&
-      !LiveLinkStore.getBySession(session.id) &&
-      startMs - now <= 15 * 60 * 1000 &&
-      startMs - now >  0
-    ) {
-      try {
-        await createLiveLink(session.id);
-
-        // ── WS: notify enrolled students the class is starting soon ──────────
-        if (io && session.participants?.length) {
-          const payload = {
-            sessionId:    session.id,
-            title:        session.title,
-            subject:      session.subject ?? "science",
-            minutesUntil: diffMins,
-            scheduleBucket: "starting-soon",
-            joinUrl:      LiveLinkStore.getBySession(session.id)?.joinUrl ?? null,
-          };
-          for (const uid of session.participants) {
-            io.to(`user:${uid}`).emit("live_class_starting", payload);
-          }
-        }
-      } catch (err) {
-        console.error(`[scheduler] ❌ createLiveLink failed  session=${session.id}`, err.message);
-      }
-    }
-
-    // ── Job 2: activate session at start time ────────────────────────────────
-    if (
-      session.status === "upcoming" &&
-      startMs <= now &&
-      now < startMs + 60 * 1000    // within the first 60 s of start time
-    ) {
-      activateSession(session.id);
-
-      // ── WS: notify enrolled students the class is now live ───────────────
-      if (io && session.participants?.length) {
-        const link = LiveLinkStore.getBySession(session.id);
-        const payload = {
-          sessionId: session.id,
-          title:     session.title,
-          subject:   session.subject ?? "science",
-          joinUrl:   link?.joinUrl ?? null,
-          status:    "live",
-        };
-        for (const uid of session.participants) {
-          io.to(`user:${uid}`).emit("live_class_live", payload);
+    for (const s of upcoming ?? []) {
+      const startMs = new Date(s.scheduled_start).getTime();
+      if (startMs - now <= LINK_LEAD_MIN * 60000 && startMs - now > 0) {
+        const linked = await createLiveLink(s);
+        if (linked.join_url) {
+          await emitToParticipants(s.course_id, "live_class_starting", {
+            sessionId: s.id, title: s.title,
+            minutesUntil: Math.round((startMs - now) / 60000),
+            joinUrl: linked.join_url,
+          });
         }
       }
+      if (startMs <= now) await activateSession(s);
     }
 
-    // ── Job 3: expire session after end time ─────────────────────────────────
-    if (session.status === "live" && now >= endMs) {
-      await expireSession(session.id);
-    }
+    // Live sessions past their end time + grace.
+    const { data: liveOnes } = await db
+      .from("live_sessions")
+      .select("*")
+      .eq("status", "live");
 
-    // ── Attach scheduleBucket to each session for REST polling fallback ──────
-    let bucket = "later";
-    if (session.status === "live")             bucket = "live";
-    else if (diffMins <= 15 && diffMins > 0)   bucket = "starting-soon";
-    else if (diffMins <= 60)                   bucket = "today";
-    else {
-      const startDate = new Date(startMs);
-      const todayEnd  = new Date(); todayEnd.setHours(23, 59, 59, 999);
-      const tomorrowEnd = new Date(todayEnd); tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
-      const weekEnd   = new Date(todayEnd); weekEnd.setDate(weekEnd.getDate() + 7);
-      if (startDate <= todayEnd)    bucket = "today";
-      else if (startDate <= tomorrowEnd) bucket = "tomorrow";
-      else if (startDate <= weekEnd)     bucket = "week";
+    for (const s of liveOnes ?? []) {
+      const endMs = new Date(s.scheduled_end || s.scheduled_start).getTime() + GRACE_MIN * 60000;
+      if (now >= endMs) await expireSession(s);
     }
-    SessionStore.update(session.id, { scheduleBucket: bucket, minutesUntil: diffMins });
+  } catch (err) {
+    console.error("[scheduler] tick error:", err.message);
+  } finally {
+    _tickRunning = false;
   }
-});
+};
 
-console.log("[scheduler] ⏰ Cron jobs registered (1-min tick)");
+cron.schedule("* * * * *", tick);
+console.log("[scheduler] ⏰ DB-backed live-session cron registered (1-min tick)");
 
 // ─── § MANUAL TRIGGERS ────────────────────────────────────────────────────────
-// REST endpoints so admins / teachers can trigger actions on-demand
-// without waiting for the cron tick.
+// REST endpoints so teachers/admins can act without waiting for the tick.
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
+const loadSession = async (id) => {
+  const { data } = await db.from("live_sessions").select("*").eq("id", id).maybeSingle();
+  return data;
+};
+
 const schedulerHandlers = {
-
-  // GET /api/scheduler/links
-  // List all active live links (optionally filter by courseId or teacherId)
-  listLinks: wrap(async (req, res) => {
-    const links = LiveLinkStore.list(req.query);
-    res.json({ success: true, data: links, total: links.length });
-  }),
-
-  // GET /api/scheduler/links/:sessionId
-  // Get the live link for a specific session
-  getLinkBySession: wrap(async (req, res) => {
-    const link = LiveLinkStore.getBySession(req.params.sessionId);
-    if (!link) return res.status(404).json({ success: false, message: "No active link for this session" });
-    res.json({ success: true, data: link });
-  }),
-
-  // POST /api/scheduler/links/:sessionId
-  // Manually trigger link creation for a session (skips the 15-min window check)
+  // POST /api/scheduler/links/:sessionId — provision the meeting link now.
   createLink: wrap(async (req, res) => {
-    const link = await createLiveLink(req.params.sessionId);
-    res.status(201).json({ success: true, data: link });
+    const s = await loadSession(req.params.sessionId);
+    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    const updated = await createLiveLink(s);
+    res.status(201).json({ success: true, data: { joinUrl: updated.join_url ?? updated.meeting_url ?? null } });
   }),
 
-  // POST /api/scheduler/activate/:sessionId
-  // Manually flip a session to "live"
+  // GET /api/scheduler/links/:sessionId — read the current link.
+  getLinkBySession: wrap(async (req, res) => {
+    const s = await loadSession(req.params.sessionId);
+    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    res.json({ success: true, data: { joinUrl: s.join_url ?? s.meeting_url ?? null, meetingId: s.meeting_id ?? null } });
+  }),
+
+  // POST /api/scheduler/activate/:sessionId — force scheduled → live.
   activate: wrap(async (req, res) => {
-    activateSession(req.params.sessionId);
-    const session = SessionStore.get(req.params.sessionId);
-    res.json({ success: true, data: session });
+    const s = await loadSession(req.params.sessionId);
+    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    await activateSession(s);
+    res.json({ success: true, data: await loadSession(req.params.sessionId) });
   }),
 
-  // DELETE /api/scheduler/links/:sessionId
-  // Manually expire a session and delete its meeting link
-  deleteLink: wrap(async (req, res) => {
-    await expireSession(req.params.sessionId);
-    res.json({ success: true, message: "Session expired and link deleted" });
+  // POST /api/scheduler/end/:sessionId — force live → ended.
+  end: wrap(async (req, res) => {
+    const s = await loadSession(req.params.sessionId);
+    if (!s) return res.status(404).json({ success: false, message: "Session not found" });
+    await expireSession(s);
+    res.json({ success: true, data: await loadSession(req.params.sessionId) });
   }),
 };
 
@@ -496,72 +393,9 @@ const schedulerHandlers = {
 
 const router = Router();
 
-router.get   ("/links",                    schedulerHandlers.listLinks);
-router.get   ("/links/:sessionId",         schedulerHandlers.getLinkBySession);
-router.post  ("/links/:sessionId",         schedulerHandlers.createLink);
-router.post  ("/activate/:sessionId",      schedulerHandlers.activate);
-router.delete("/links/:sessionId",         schedulerHandlers.deleteLink);
+router.get ("/links/:sessionId",    schedulerHandlers.getLinkBySession);
+router.post("/links/:sessionId",    schedulerHandlers.createLink);
+router.post("/activate/:sessionId", schedulerHandlers.activate);
+router.post("/end/:sessionId",      schedulerHandlers.end);
 
 export default router;
-
-// ─── § UTILITIES ──────────────────────────────────────────────────────────────
-
-/**
- * Build an ISO 8601 datetime string from a session's date + time fields.
- * Handles both "2025-06-19" + "14:00" style and display strings like "Thu 19 Jun".
- * In production your sessions should always store proper ISO dates.
- */
-function buildISO(date, time) {
-  // Already a full ISO string
-  if (date?.includes("T")) return date;
-
-  // "2025-06-19" + "14:00"
-  if (date?.match(/^\d{4}-\d{2}-\d{2}$/) && time) {
-    return new Date(`${date}T${time}:00.000+01:00`).toISOString(); // WAT (UTC+1)
-  }
-
-  // Fallback — return now so the cron doesn't crash on bad data
-  console.warn(`[scheduler] ⚠️  Could not parse date="${date}" time="${time}" — using now`);
-  return new Date().toISOString();
-}
-
-/**
- * ── app.js wiring (for reference) ────────────────────────────────────────────
- *
- * import coursesRouter,   { sessionHandlers } from "./routes/courses.js";
- * import schedulerRouter                      from "./routes/scheduler.js";
- * import "./routes/scheduler.js";   // self-starts the cron jobs on import
- *
- * app.use("/api/courses",   coursesRouter);
- * app.use("/api/sessions",  sessionHandlers.listAll);
- * app.use("/api/scheduler", schedulerRouter);
- *
- * ── Database tables needed (Postgres example) ────────────────────────────────
- *
- * -- Teachers table must store OAuth tokens
- * ALTER TABLE teachers ADD COLUMN IF NOT EXISTS zoom_email          TEXT;
- * ALTER TABLE teachers ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
- *
- * -- Live links table
- * CREATE TABLE live_class_links (
- *   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
- *   session_id    UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
- *   course_id     UUID NOT NULL REFERENCES courses(id)  ON DELETE CASCADE,
- *   teacher_id    UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
- *   platform      TEXT NOT NULL CHECK (platform IN ('zoom','meet')),
- *   meeting_id    TEXT NOT NULL,
- *   join_url      TEXT NOT NULL,
- *   start_url     TEXT,
- *   password      TEXT,
- *   topic         TEXT,
- *   scheduled_at  TIMESTAMPTZ NOT NULL,
- *   expires_at    TIMESTAMPTZ NOT NULL,
- *   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
- *   deleted_at    TIMESTAMPTZ
- * );
- *
- * CREATE INDEX ON live_class_links (session_id);
- * CREATE INDEX ON live_class_links (course_id);
- * CREATE INDEX ON live_class_links (teacher_id);
- * CREATE INDEX ON live_class_links (expires_at) WHERE deleted_at IS NULL;
- */

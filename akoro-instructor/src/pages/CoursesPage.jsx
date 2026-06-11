@@ -3,6 +3,7 @@ import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRi
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, WizardSteps, StatusPill, PlatBadge, CoursTypeBadge, FileUploadZone, Toast, Skeleton } from '../components/Primitives.jsx';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
+import LiveClassWizard from '../components/LiveClassWizard.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
@@ -18,112 +19,6 @@ const MOCK_SESSIONS = [
   { id: 3, courseId: 2, title: 'Express Routing', startTime: new Date(Date.now() - 3600000).toISOString(), platform: 'zoom', status: 'completed', enrolledCount: 22 },
 ];
 
-/* ── Live Class Wizard ──────────────────────────────────────────────── */
-function LiveClassWizard({ open, onClose, onSubmit }) {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({
-    title: '', description: '', maxStudents: '20',
-    topics: [{ title: '', date: '', time: '', platform: 'zoom', duration: '60' }],
-  });
-  const [loading, setLoading] = useState(false);
-
-  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const setTopic = (i, k, v) => {
-    const topics = [...form.topics];
-    topics[i] = { ...topics[i], [k]: v };
-    setForm(f => ({ ...f, topics }));
-  };
-  const addTopic = () => setForm(f => ({ ...f, topics: [...f.topics, { title: '', date: '', time: '', platform: 'zoom', duration: '60' }] }));
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try { await onSubmit(form); onClose(); setStep(0); setForm({ title: '', description: '', maxStudents: '20', topics: [{ title: '', date: '', time: '', platform: 'zoom', duration: '60' }] }); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="New Live Course" width={560}>
-      <WizardSteps steps={['Course Info', 'Sessions', 'Review']} current={step} />
-
-      {step === 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Inp label="Course Title" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="e.g. Advanced React Patterns" />
-          <Txa label="Description" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="What will students learn?" />
-          <Inp label="Max Students" type="number" value={form.maxStudents} onChange={e => setField('maxStudents', e.target.value)} />
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: INK, display: 'block', marginBottom: 6 }}>Thumbnail (optional)</label>
-            <FileUploadZone label="Upload course thumbnail" accept="image/*" />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-            <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
-            <Btn onClick={() => setStep(1)} disabled={!form.title.trim()}>Next: Sessions</Btn>
-          </div>
-        </div>
-      )}
-
-      {step === 1 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {form.topics.map((topic, i) => (
-            <div key={i} style={{ background: LIGHT, borderRadius: 12, padding: '14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>Session {i + 1}</span>
-                {i > 0 && (
-                  <button onClick={() => setForm(f => ({ ...f, topics: f.topics.filter((_, j) => j !== i) }))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: 2 }}>
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-              <Inp placeholder="Session title" value={topic.title} onChange={e => setTopic(i, 'title', e.target.value)} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <Inp type="date" label="Date" value={topic.date} onChange={e => setTopic(i, 'date', e.target.value)} />
-                <Inp type="time" label="Time" value={topic.time} onChange={e => setTopic(i, 'time', e.target.value)} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <Sel label="Platform" value={topic.platform} onChange={e => setTopic(i, 'platform', e.target.value)}>
-                  <option value="zoom">Zoom</option>
-                  <option value="meet">Google Meet</option>
-                  <option value="teams">Teams</option>
-                  <option value="akoro">Akoro Live</option>
-                </Sel>
-                <Inp label="Duration (min)" type="number" value={topic.duration} onChange={e => setTopic(i, 'duration', e.target.value)} />
-              </div>
-            </div>
-          ))}
-          <Btn variant="secondary" size="sm" onClick={addTopic}><Plus size={14} /> Add Session</Btn>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            <Btn variant="secondary" onClick={() => setStep(0)}>Back</Btn>
-            <Btn onClick={() => setStep(2)}>Review</Btn>
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ background: LIGHT, borderRadius: 12, padding: '16px' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 8px', fontFamily: FONT }}>{form.title}</h3>
-            <p style={{ fontSize: 13, color: MUTED, margin: '0 0 12px', fontFamily: FONT }}>{form.description}</p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: MUTED, background: WHITE, padding: '3px 10px', borderRadius: 20, border: `1px solid ${BORDER}` }}>
-                <Users size={10} style={{ marginRight: 4 }} />Max {form.maxStudents} students
-              </span>
-              <span style={{ fontSize: 11, color: MUTED, background: WHITE, padding: '3px 10px', borderRadius: 20, border: `1px solid ${BORDER}` }}>
-                <Calendar size={10} style={{ marginRight: 4 }} />{form.topics.length} session{form.topics.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Btn variant="secondary" onClick={() => setStep(1)}>Back</Btn>
-            <Btn onClick={handleSubmit} disabled={loading}>
-              {loading ? 'Creating…' : 'Create Course'}
-            </Btn>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
 
 /* ── On-Demand Builder ──────────────────────────────────────────────── */
 function OnDemandBuilder({ open, onClose, onSubmit }) {
@@ -282,7 +177,7 @@ function SessionRow({ session, onDelete }) {
 
 /* ── Main Page ──────────────────────────────────────────────────────── */
 export default function CoursesPage() {
-  const { getCourses, createCourse, getSessions, createSession, deleteSession } = useCoursesAPI();
+  const { getCourses, createCourse, getSessions, createSession, deleteSession, commitSchedule } = useCoursesAPI();
   const [courses,  setCourses]  = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -314,15 +209,33 @@ export default function CoursesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const handleCreateLive = async (form) => {
-    const course = await createCourse({ title: form.title, description: form.description, type: 'live', maxStudents: parseInt(form.maxStudents) }).catch(() => ({ data: { id: Date.now(), ...form, type: 'live', studentsEnrolled: 0, status: 'draft' } }));
-    const courseData = course?.data;
-    for (const topic of form.topics) {
-      if (topic.title && topic.date && topic.time) {
-        await createSession({ courseId: courseData?.id, title: topic.title, startTime: new Date(`${topic.date}T${topic.time}`).toISOString(), platform: topic.platform, duration: parseInt(topic.duration) }).catch(console.warn);
-      }
+  const handleCreateLive = async ({ info, spec, modules }) => {
+    // 1. Create the live course.
+    const course = await createCourse({
+      title: info.title, description: info.description, type: 'live',
+      maxStudents: parseInt(info.maxStudents), thumbnail: info.thumbnail,
+    }).catch((e) => { console.warn('createCourse failed:', e); return null; });
+    const courseId = course?.data?.id;
+    if (!courseId) { showToast('Could not create course.', 'error'); return; }
+
+    // 2. Commit the whole module → topics tree (+ materials) + schedule config.
+    try {
+      await commitSchedule(courseId, {
+        scheduleConfig: spec,
+        modules: modules.map((m, mi) => ({
+          title: m.title, orderIndex: mi,
+          sessions: m.sessions.map((s, si) => ({
+            title: s.title, scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
+            duration_min: Number(s.duration_min) || 60, platform: s.platform, order_index: si,
+            materials: (s.materials || []).filter((x) => x.title || x.url || x.body),
+          })),
+        })),
+      });
+      showToast('Course & schedule created!');
+    } catch (e) {
+      console.warn('commitSchedule failed:', e);
+      showToast('Course created, but schedule failed to save.', 'error');
     }
-    showToast('Course created successfully!');
     load();
   };
 

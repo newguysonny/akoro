@@ -24,6 +24,7 @@
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { generateSchedule }               from "./schedule.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,17 @@ const mapSession = (row) => ({
   startTime:     row.scheduled_start,
   enrolledCount: row.current_participants ?? 0,
   courseId:      row.course_id,
+  moduleId:      row.module_id ?? null,
   meetingUrl:    row.meeting_url ?? null,
+});
+
+const mapModule = (row, sessions = []) => ({
+  id:          row.id,
+  courseId:    row.course_id,
+  title:       row.title,
+  description: row.description ?? null,
+  orderIndex:  row.order_index ?? 0,
+  sessions:    sessions.map(mapSession),
 });
 
 const mapBattle = (row) => ({
@@ -436,9 +447,9 @@ const listSessions = asyncHandler(async (req, res) => {
     const { data: sessions, error } = await db
       .from("live_sessions")
       .select(`
-        id, title, description, session_type,
-        scheduled_start, status, platform, meeting_url,
-        max_participants, current_participants, recording_url,
+        id, title, description, session_type, module_id, order_index,
+        scheduled_start, scheduled_end, status, platform, meeting_url,
+        max_participants, current_participants, recording_url, course_id,
         courses ( id, title )
       `)
       .in("course_id", ids)
@@ -482,6 +493,8 @@ const createSession = asyncHandler(async (req, res) => {
       .insert({
         course_id:        courseId,
         instructor_id:    req.user.id,
+        module_id:        b.moduleId ?? b.module_id ?? null,
+        order_index:      Number(b.orderIndex ?? b.order_index ?? 0),
         title,
         description:      b.description ?? null,
         scheduled_start:  scheduledStart,
@@ -533,6 +546,8 @@ const updateSession = asyncHandler(async (req, res) => {
     if (b.status      !== undefined) updates.status          = b.status;
     if (b.startTime !== undefined || b.scheduled_start !== undefined) updates.scheduled_start = b.startTime ?? b.scheduled_start;
     if (b.meetingLink !== undefined || b.meeting_url !== undefined) updates.meeting_url = b.meetingLink ?? b.meeting_url;
+    if (b.moduleId !== undefined || b.module_id !== undefined) updates.module_id = b.moduleId ?? b.module_id;
+    if (b.orderIndex !== undefined || b.order_index !== undefined) updates.order_index = Number(b.orderIndex ?? b.order_index);
     if (Object.keys(updates).length === 0) return err400(res, "No updatable fields provided");
     updates.updated_at = now();
 
@@ -578,6 +593,248 @@ const deleteSession = asyncHandler(async (req, res) => {
   } catch (e) {
     err500(res, e);
   }
+});
+
+// ─── § MODULES & SCHEDULE ─────────────────────────────────────────────────────
+
+// Ownership guard — returns the course row or null.
+const ownCourse = async (courseId, userId) => {
+  const { data } = await db
+    .from("courses")
+    .select("id, instructor_id")
+    .eq("id", courseId)
+    .maybeSingle();
+  return data && data.instructor_id === userId ? data : null;
+};
+
+// GET /api/instructor/courses/:courseId/modules — modules + their sessions.
+const listModules = asyncHandler(async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    if (!(await ownCourse(courseId, req.user.id))) return err403(res, "You do not own this course");
+
+    const { data: modules, error } = await db
+      .from("course_modules")
+      .select("*")
+      .eq("course_id", courseId)
+      .order("order_index", { ascending: true });
+    if (error) throw new Error(error.message);
+
+    const ids = (modules ?? []).map((m) => m.id);
+    let byModule = {};
+    if (ids.length) {
+      const { data: sessions } = await db
+        .from("live_sessions")
+        .select("*")
+        .in("module_id", ids)
+        .order("scheduled_start", { ascending: true });
+      for (const s of sessions ?? []) (byModule[s.module_id] ??= []).push(s);
+    }
+
+    ok(res, (modules ?? []).map((m) => mapModule(m, byModule[m.id] ?? [])));
+  } catch (e) { err500(res, e); }
+});
+
+// POST /api/instructor/courses/:courseId/modules — create a single module.
+const createModule = asyncHandler(async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    if (!(await ownCourse(courseId, req.user.id))) return err403(res, "You do not own this course");
+    const { title, description, orderIndex } = req.body;
+    if (!title) return err400(res, "title is required");
+
+    const { data, error } = await db
+      .from("course_modules")
+      .insert({ course_id: courseId, title, description: description ?? null, order_index: Number(orderIndex ?? 0) })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    created(res, mapModule(data));
+  } catch (e) { err500(res, e); }
+});
+
+// PATCH /api/instructor/modules/:id — rename / reorder a module.
+const updateModule = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: mod } = await db.from("course_modules").select("id, course_id").eq("id", id).maybeSingle();
+    if (!mod) return err404(res, "Module not found");
+    if (!(await ownCourse(mod.course_id, req.user.id))) return err403(res, "You do not own this module's course");
+
+    const b = req.body, updates = {};
+    if (b.title !== undefined)       updates.title = b.title;
+    if (b.description !== undefined) updates.description = b.description;
+    if (b.orderIndex !== undefined)  updates.order_index = Number(b.orderIndex);
+    if (Object.keys(updates).length === 0) return err400(res, "No updatable fields provided");
+
+    const { data, error } = await db.from("course_modules").update(updates).eq("id", id).select().single();
+    if (error) throw new Error(error.message);
+    ok(res, mapModule(data));
+  } catch (e) { err500(res, e); }
+});
+
+// DELETE /api/instructor/modules/:id — delete a module (sessions keep, module_id nulled).
+const deleteModule = asyncHandler(async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: mod } = await db.from("course_modules").select("id, course_id").eq("id", id).maybeSingle();
+    if (!mod) return err404(res, "Module not found");
+    if (!(await ownCourse(mod.course_id, req.user.id))) return err403(res, "You do not own this module's course");
+
+    const { error } = await db.from("course_modules").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    ok(res, { message: "Module deleted" });
+  } catch (e) { err500(res, e); }
+});
+
+// POST /api/instructor/courses/:courseId/schedule/preview
+// Expand a recurrence spec into a module→sessions tree (no writes).
+const previewSchedule = asyncHandler(async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    if (!(await ownCourse(courseId, req.user.id))) return err403(res, "You do not own this course");
+    const tree = generateSchedule(req.body || {});
+    ok(res, tree);
+  } catch (e) {
+    // generator throws plain validation errors — surface as 400.
+    return err400(res, e.message);
+  }
+});
+
+// POST /api/instructor/courses/:courseId/schedule/commit
+// Persist an edited module→sessions tree (+ optional per-session materials)
+// and save the reusable schedule_config on the course.
+const commitSchedule = asyncHandler(async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    if (!(await ownCourse(courseId, req.user.id))) return err403(res, "You do not own this course");
+
+    const { modules = [], scheduleConfig } = req.body || {};
+    if (!Array.isArray(modules) || modules.length === 0) return err400(res, "modules array is required");
+
+    if (scheduleConfig) {
+      await db.from("courses").update({ schedule_config: scheduleConfig, updated_at: now() }).eq("id", courseId);
+    }
+
+    const createdModules = [];
+    for (const [mi, m] of modules.entries()) {
+      const { data: modRow, error: mErr } = await db
+        .from("course_modules")
+        .insert({ course_id: courseId, title: m.title || `Week ${mi + 1}`, description: m.description ?? null, order_index: Number(m.orderIndex ?? mi) })
+        .select()
+        .single();
+      if (mErr) throw new Error(mErr.message);
+
+      const createdSessions = [];
+      for (const [si, s] of (m.sessions ?? []).entries()) {
+        if (!s.scheduled_start && !s.startTime) continue;
+        const startIso = s.scheduled_start ?? s.startTime;
+        const durationMin = Number(s.duration_min ?? s.duration ?? 60);
+        const endIso = s.scheduled_end ?? new Date(new Date(startIso).getTime() + durationMin * 60000).toISOString();
+
+        const { data: sess, error: sErr } = await db
+          .from("live_sessions")
+          .insert({
+            course_id:       courseId,
+            instructor_id:   req.user.id,
+            module_id:       modRow.id,
+            order_index:     Number(s.order_index ?? si),
+            title:           s.title || `Session ${si + 1}`,
+            description:     s.description ?? null,
+            topic:           s.topic ?? s.title ?? null,
+            scheduled_start: startIso,
+            scheduled_end:   endIso,
+            platform:        s.platform ?? "zoom",
+            status:          "scheduled",
+            max_participants: 50,
+            created_at:      now(),
+            updated_at:      now(),
+          })
+          .select()
+          .single();
+        if (sErr) throw new Error(sErr.message);
+
+        // Optional materials for this session.
+        const mats = (s.materials ?? []).filter((x) => x && (x.title || x.url || x.body));
+        if (mats.length) {
+          await db.from("session_materials").insert(
+            mats.map((x, xi) => ({
+              session_id:  sess.id,
+              title:       x.title || x.url || "Material",
+              kind:        ["file", "link", "note"].includes(x.kind) ? x.kind : "file",
+              url:         x.url ?? null,
+              body:        x.body ?? null,
+              file_type:   x.fileType ?? x.file_type ?? null,
+              order_index: xi,
+            }))
+          );
+        }
+        createdSessions.push(sess);
+      }
+      createdModules.push(mapModule(modRow, createdSessions));
+    }
+
+    created(res, { modules: createdModules });
+  } catch (e) { err500(res, e); }
+});
+
+// ─── § SESSION MATERIALS ──────────────────────────────────────────────────────
+
+const sessionOwned = async (sessionId, userId) => {
+  const { data: s } = await db.from("live_sessions").select("id, course_id").eq("id", sessionId).maybeSingle();
+  if (!s) return null;
+  return (await ownCourse(s.course_id, userId)) ? s : null;
+};
+
+// GET /api/instructor/sessions/:id/materials
+const listMaterials = asyncHandler(async (req, res) => {
+  try {
+    if (!(await sessionOwned(req.params.id, req.user.id))) return err403(res, "You do not own this session");
+    const { data, error } = await db
+      .from("session_materials")
+      .select("*")
+      .eq("session_id", req.params.id)
+      .order("order_index", { ascending: true });
+    if (error) throw new Error(error.message);
+    ok(res, data ?? []);
+  } catch (e) { err500(res, e); }
+});
+
+// POST /api/instructor/sessions/:id/materials
+const addMaterial = asyncHandler(async (req, res) => {
+  try {
+    if (!(await sessionOwned(req.params.id, req.user.id))) return err403(res, "You do not own this session");
+    const b = req.body;
+    if (!b.title && !b.url && !b.body) return err400(res, "title, url, or body is required");
+
+    const { data, error } = await db
+      .from("session_materials")
+      .insert({
+        session_id:  req.params.id,
+        title:       b.title || b.url || "Material",
+        kind:        ["file", "link", "note"].includes(b.kind) ? b.kind : "file",
+        url:         b.url ?? null,
+        body:        b.body ?? null,
+        file_type:   b.fileType ?? b.file_type ?? null,
+        order_index: Number(b.orderIndex ?? b.order_index ?? 0),
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    created(res, data);
+  } catch (e) { err500(res, e); }
+});
+
+// DELETE /api/instructor/materials/:id
+const deleteMaterial = asyncHandler(async (req, res) => {
+  try {
+    const { data: mat } = await db.from("session_materials").select("id, session_id").eq("id", req.params.id).maybeSingle();
+    if (!mat) return err404(res, "Material not found");
+    if (!(await sessionOwned(mat.session_id, req.user.id))) return err403(res, "You do not own this material");
+    const { error } = await db.from("session_materials").delete().eq("id", req.params.id);
+    if (error) throw new Error(error.message);
+    ok(res, { message: "Material deleted" });
+  } catch (e) { err500(res, e); }
 });
 
 // ─── § STUDENTS ───────────────────────────────────────────────────────────────
@@ -1070,6 +1327,19 @@ router.get   ("/sessions",     listSessions);
 router.post  ("/sessions",     createSession);
 router.patch ("/sessions/:id", updateSession);
 router.delete("/sessions/:id", deleteSession);
+
+// Modules + recurrence schedule
+router.get   ("/courses/:courseId/modules",          listModules);
+router.post  ("/courses/:courseId/modules",          createModule);
+router.patch ("/modules/:id",                        updateModule);
+router.delete("/modules/:id",                        deleteModule);
+router.post  ("/courses/:courseId/schedule/preview", previewSchedule);
+router.post  ("/courses/:courseId/schedule/commit",  commitSchedule);
+
+// Session materials
+router.get   ("/sessions/:id/materials", listMaterials);
+router.post  ("/sessions/:id/materials", addMaterial);
+router.delete("/materials/:id",          deleteMaterial);
 
 // Students
 router.get   ("/students",                   listStudents);
