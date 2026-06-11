@@ -39,6 +39,45 @@ const err500 = (res, e)           => res.status(500).json({ error: e.message ?? 
 
 const now = () => new Date().toISOString();
 
+// user_agents stores total_xp only; derive a display level (500 XP per level).
+const levelFromXp = (xp = 0) => Math.floor((xp ?? 0) / 500) + 1;
+
+const slugify = (s) =>
+  (s || "course").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60)
+  + "-" + Math.random().toString(36).slice(2, 8);
+
+// course_type: DB allows 'live' | 'video'. Frontend speaks 'live' | 'on-demand'.
+const typeToDb  = (t) => (t === "on-demand" || t === "ondemand" || t === "video" ? "video" : "live");
+const typeToApi = (t) => (t === "video" ? "on-demand" : "live");
+const VALID_LEVELS = ["beginner", "intermediate", "advanced", "all"];
+
+// Shape a courses row into what the instructor frontend expects.
+const mapCourse = (row, enrolledCount = 0) => ({
+  ...row,
+  type:             typeToApi(row.course_type),
+  status:           row.is_published ? "active" : "draft",
+  studentsEnrolled: enrolledCount,
+  thumbnail:        row.cover_image_url ?? null,
+});
+
+const mapSession = (row) => ({
+  ...row,
+  startTime:     row.scheduled_start,
+  enrolledCount: row.current_participants ?? 0,
+  courseId:      row.course_id,
+  meetingUrl:    row.meeting_url ?? null,
+});
+
+const mapBattle = (row) => ({
+  ...row,
+  topic:            row.topic,
+  difficulty:       row.difficulty,
+  participantCount: row.total_participants ?? 0,
+  maxParticipants:  row.max_participants ?? 0,
+  duration:         Math.round((row.time_limit_seconds ?? 0) / 60),
+  scheduledAt:      row.scheduled_start,
+});
+
 // ─── § STATS ──────────────────────────────────────────────────────────────────
 
 const getStats = asyncHandler(async (req, res) => {
@@ -48,13 +87,13 @@ const getStats = asyncHandler(async (req, res) => {
     // Get teacher's courses
     const { data: courses, error: coursesErr } = await db
       .from("courses")
-      .select("id, price, status")
+      .select("id, price, is_published")
       .eq("instructor_id", teacherId);
 
     if (coursesErr) throw new Error(coursesErr.message);
 
     const courseIds    = (courses ?? []).map((c) => c.id);
-    const activeCourses = (courses ?? []).filter((c) => c.status === "live").length;
+    const activeCourses = (courses ?? []).filter((c) => c.is_published).length;
 
     let totalStudents = 0;
     let totalRevenue  = 0;
@@ -86,21 +125,21 @@ const getStats = asyncHandler(async (req, res) => {
       );
     }
 
-    // Agent XP from user_agents
+    // Agent XP from user_agents (only total_xp is stored)
     const { data: agent } = await db
       .from("user_agents")
-      .select("xp, level, streak_days")
+      .select("total_xp")
       .eq("user_id", teacherId)
-      .single();
+      .maybeSingle();
 
     ok(res, {
       total_students:  totalStudents,
       total_revenue:   totalRevenue,
       active_courses:  activeCourses,
       total_courses:   courseIds.length,
-      agent_xp:        agent?.xp         ?? 0,
-      agent_level:     agent?.level      ?? 1,
-      streak_days:     agent?.streak_days ?? 0,
+      agent_xp:        agent?.total_xp ?? 0,
+      agent_level:     levelFromXp(agent?.total_xp),
+      streak_days:     0,
     });
   } catch (e) {
     err500(res, e);
@@ -116,7 +155,7 @@ const getProfile = asyncHandler(async (req, res) => {
         .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, created_at")
         .eq("id", req.user.id).single(),
       db.from("user_agents")
-        .select("id, agent_name, agent_emoji, xp, level, streak_days")
+        .select("id, agent_name, agent_emoji, agent_color, agent_bg, total_xp")
         .eq("user_id", req.user.id).maybeSingle(),
       db.from("user_notification_preferences")
         .select("*").eq("user_id", req.user.id).maybeSingle(),
@@ -126,7 +165,12 @@ const getProfile = asyncHandler(async (req, res) => {
 
     ok(res, {
       ...user,
-      agent: agent ?? null,
+      agent: agent ? {
+        ...agent,
+        xp:          agent.total_xp ?? 0,
+        level:       levelFromXp(agent.total_xp),
+        streak_days: 0,
+      } : null,
       notif: notif ? {
         email:            notif.email_enabled,
         push:             notif.push_enabled,
@@ -236,7 +280,6 @@ const listCourses = asyncHandler(async (req, res) => {
       .from("courses")
       .select("*")
       .eq("instructor_id", req.user.id)
-      .neq("status", "archived")
       .order("created_at", { ascending: false });
 
     if (error) throw new Error(error.message);
@@ -248,7 +291,7 @@ const listCourses = asyncHandler(async (req, res) => {
         .select("id", { count: "exact", head: true })
         .eq("course_id", course.id)
         .eq("status", "active");
-      return { ...course, enrolled_count: count ?? 0 };
+      return mapCourse(course, count ?? 0);
     }));
 
     ok(res, enriched);
@@ -260,39 +303,43 @@ const listCourses = asyncHandler(async (req, res) => {
 const createCourse = asyncHandler(async (req, res) => {
   try {
     const {
-      title, description, subject, level,
+      title, description, subject = null,
+      level, type, course_type, status,
       language      = "English",
       price         = 0,
-      course_type   = "ondemand",
-      status        = "draft",
-      thumbnail_url = null,
+      thumbnail, thumbnail_url,
+      maxStudents,  // not a courses column — ignored
     } = req.body;
 
-    if (!title)   return err400(res, "title is required");
-    if (!subject) return err400(res, "subject is required");
-    if (!level)   return err400(res, "level is required");
+    if (!title) return err400(res, "title is required");
+
+    const lvl       = VALID_LEVELS.includes(level) ? level : "all";
+    const dbType    = typeToDb(type ?? course_type);
+    const published = status === "active" || status === "live" || status === "published";
 
     const { data, error } = await db
       .from("courses")
       .insert({
-        instructor_id:    req.user.id,
+        instructor_id:   req.user.id,
         title,
-        description:   description ?? null,
+        slug:            slugify(title),
+        description:     description ?? null,
         subject,
-        level,
+        level:           lvl,
         language,
-        price,
-        course_type,
-        status,
-        thumbnail_url,
-        created_at:    now(),
-        updated_at:    now(),
+        price:           Math.round(Number(price) || 0),
+        course_type:     dbType,
+        cover_image_url: thumbnail ?? thumbnail_url ?? null,
+        is_published:    published,
+        published_at:    published ? now() : null,
+        created_at:      now(),
+        updated_at:      now(),
       })
       .select()
       .single();
 
     if (error) throw new Error(error.message);
-    created(res, data);
+    created(res, mapCourse(data, 0));
   } catch (e) {
     err500(res, e);
   }
@@ -312,10 +359,23 @@ const updateCourse = asyncHandler(async (req, res) => {
     if (!existing)                        return err404(res, "Course not found");
     if (existing.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
-    const forbidden = ["id", "instructor_id", "created_at"];
-    const updates   = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => !forbidden.includes(k)),
-    );
+    // Map frontend vocabulary → real columns, whitelisted.
+    const b = req.body;
+    const updates = {};
+    if (b.title       !== undefined) updates.title           = b.title;
+    if (b.description !== undefined) updates.description     = b.description;
+    if (b.subject     !== undefined) updates.subject         = b.subject;
+    if (b.language    !== undefined) updates.language        = b.language;
+    if (b.price       !== undefined) updates.price           = Math.round(Number(b.price) || 0);
+    if (b.level       !== undefined) updates.level           = VALID_LEVELS.includes(b.level) ? b.level : "all";
+    if (b.type !== undefined || b.course_type !== undefined) updates.course_type = typeToDb(b.type ?? b.course_type);
+    if (b.thumbnail !== undefined || b.thumbnail_url !== undefined) updates.cover_image_url = b.thumbnail ?? b.thumbnail_url;
+    if (b.status !== undefined) {
+      const pub = b.status === "active" || b.status === "live" || b.status === "published";
+      updates.is_published = pub;
+      updates.published_at = pub ? now() : null;
+    }
+    if (Object.keys(updates).length === 0) return err400(res, "No updatable fields provided");
     updates.updated_at = now();
 
     const { data, error } = await db
@@ -326,7 +386,7 @@ const updateCourse = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
-    ok(res, data);
+    ok(res, mapCourse(data, 0));
   } catch (e) {
     err500(res, e);
   }
@@ -345,13 +405,10 @@ const deleteCourse = asyncHandler(async (req, res) => {
     if (!existing)                        return err404(res, "Course not found");
     if (existing.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
-    const { error } = await db
-      .from("courses")
-      .update({ status: "archived", updated_at: now() })
-      .eq("id", id);
-
+    // No 'archived' state in schema — hard delete (cascades sessions/enrollments).
+    const { error } = await db.from("courses").delete().eq("id", id);
     if (error) throw new Error(error.message);
-    ok(res, { message: "Course archived" });
+    ok(res, { message: "Course deleted" });
   } catch (e) {
     err500(res, e);
   }
@@ -388,7 +445,7 @@ const listSessions = asyncHandler(async (req, res) => {
       .order("scheduled_start", { ascending: false });
 
     if (error) throw new Error(error.message);
-    ok(res, sessions ?? []);
+    ok(res, (sessions ?? []).map(mapSession));
   } catch (e) {
     err500(res, e);
   }
@@ -396,37 +453,41 @@ const listSessions = asyncHandler(async (req, res) => {
 
 const createSession = asyncHandler(async (req, res) => {
   try {
-    const {
-      course_id, title, description,
-      scheduled_start, duration_minutes = 60,
-      platform = "zoom", meeting_url = null,
-    } = req.body;
+    const b = req.body;
+    const courseId       = b.courseId ?? b.course_id;
+    const title          = b.title;
+    const scheduledStart = b.startTime ?? b.scheduled_start;
+    const durationMin    = Number(b.duration ?? b.duration_minutes ?? 60);
+    const platform       = b.platform ?? "zoom";
+    const meetingUrl     = b.meetingLink ?? b.meeting_url ?? null;
 
-    if (!course_id)       return err400(res, "course_id is required");
-    if (!title)           return err400(res, "title is required");
-    if (!scheduled_start) return err400(res, "scheduled_start is required");
+    if (!courseId)       return err400(res, "courseId is required");
+    if (!title)          return err400(res, "title is required");
+    if (!scheduledStart) return err400(res, "startTime is required");
 
     // Verify ownership
     const { data: course } = await db
       .from("courses")
       .select("id, instructor_id")
-      .eq("id", course_id)
+      .eq("id", courseId)
       .single();
 
     if (!course)                        return err404(res, "Course not found");
     if (course.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
+    const scheduledEnd = new Date(new Date(scheduledStart).getTime() + durationMin * 60000).toISOString();
+
     const { data, error } = await db
       .from("live_sessions")
       .insert({
-        course_id,
+        course_id:        courseId,
         instructor_id:    req.user.id,
         title,
-        description:      description ?? null,
-        scheduled_start,
-        duration_minutes,
+        description:      b.description ?? null,
+        scheduled_start:  scheduledStart,
+        scheduled_end:    scheduledEnd,
         platform,
-        meeting_url,
+        meeting_url:      meetingUrl,
         status:           "scheduled",
         max_participants: 50,
         created_at:       now(),
@@ -436,7 +497,7 @@ const createSession = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
-    created(res, data);
+    created(res, mapSession(data));
   } catch (e) {
     err500(res, e);
   }
@@ -464,10 +525,15 @@ const updateSession = asyncHandler(async (req, res) => {
     if (!course || course.instructor_id !== req.user.id)
       return err403(res, "You do not own this session's course");
 
-    const forbidden = ["id", "course_id", "instructor_id", "created_at"];
-    const updates   = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => !forbidden.includes(k)),
-    );
+    const b = req.body;
+    const updates = {};
+    if (b.title       !== undefined) updates.title           = b.title;
+    if (b.description !== undefined) updates.description     = b.description;
+    if (b.platform    !== undefined) updates.platform        = b.platform;
+    if (b.status      !== undefined) updates.status          = b.status;
+    if (b.startTime !== undefined || b.scheduled_start !== undefined) updates.scheduled_start = b.startTime ?? b.scheduled_start;
+    if (b.meetingLink !== undefined || b.meeting_url !== undefined) updates.meeting_url = b.meetingLink ?? b.meeting_url;
+    if (Object.keys(updates).length === 0) return err400(res, "No updatable fields provided");
     updates.updated_at = now();
 
     const { data, error } = await db
@@ -478,7 +544,7 @@ const updateSession = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
-    ok(res, data);
+    ok(res, mapSession(data));
   } catch (e) {
     err500(res, e);
   }
@@ -532,7 +598,7 @@ const listStudents = asyncHandler(async (req, res) => {
     let q = db
       .from("enrollments")
       .select(`
-        id, course_id, status, access_level, enrolled_at,
+        id, course_id, status, progress, enrolled_at,
         users ( id, full_name, email, avatar_url, phone ),
         courses ( id, title )
       `)
@@ -543,19 +609,33 @@ const listStudents = asyncHandler(async (req, res) => {
     const { data: enrollments, error } = await q.order("enrolled_at", { ascending: false });
     if (error) throw new Error(error.message);
 
-    let result = enrollments ?? [];
+    let rows = enrollments ?? [];
 
     // In-memory search filter (Supabase JS doesn't support ilike on joined columns cleanly)
     if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((e) => {
+      const s = search.toLowerCase();
+      rows = rows.filter((e) => {
         const name  = (e.users?.full_name ?? "").toLowerCase();
         const email = (e.users?.email     ?? "").toLowerCase();
-        return name.includes(q) || email.includes(q);
+        return name.includes(s) || email.includes(s);
       });
     }
 
-    ok(res, result);
+    // Shape for the instructor StudentsPage
+    ok(res, rows.map((e) => ({
+      id:              e.users?.id,
+      enrollmentId:    e.id,
+      fullName:        e.users?.full_name,
+      email:           e.users?.email,
+      avatarUrl:       e.users?.avatar_url,
+      phone:           e.users?.phone,
+      progress:        e.progress ?? 0,
+      status:          e.status,
+      joinedAt:        e.enrolled_at,
+      course:          e.courses?.title,
+      courseId:        e.course_id,
+      coursesEnrolled: 1,
+    })));
   } catch (e) {
     err500(res, e);
   }
@@ -586,18 +666,25 @@ const enrolStudent = asyncHandler(async (req, res) => {
       .from("users")
       .select("id, full_name, email")
       .eq("email", email)
-      .single();
+      .maybeSingle();
 
     if (!user) {
+      // users.username and users.password_hash are NOT NULL. Invited students
+      // get a derived unique username and a sentinel hash (they sign in via the
+      // magic/Google flow and set a password later).
+      const base   = (email.split("@")[0] || "student").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 30) || "student";
+      const uname  = `${base}_${Math.random().toString(36).slice(2, 7)}`;
       const { data: newUser, error: createErr } = await db
         .from("users")
         .insert({
           email,
-          full_name: fullName ?? email.split("@")[0],
-          phone:     phone ?? null,
-          role:      "student",
-          created_at: now(),
-          updated_at: now(),
+          username:      uname,
+          password_hash: "INVITED",          // placeholder; cannot log in with it
+          full_name:     fullName ?? email.split("@")[0],
+          phone:         phone ?? null,
+          role:          "student",
+          created_at:    now(),
+          updated_at:    now(),
         })
         .select()
         .single();
@@ -612,16 +699,16 @@ const enrolStudent = asyncHandler(async (req, res) => {
       .select("id, status")
       .eq("user_id", user.id)
       .eq("course_id", courseId)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       if (existing.status === "active")
         return err400(res, "Student is already enrolled in this course");
 
-      // Re-activate if previously removed
+      // Re-activate if previously expired/suspended
       const { data: reactivated, error: reErr } = await db
         .from("enrollments")
-        .update({ status: "active", access_level: accessLevel, enrolled_at: now() })
+        .update({ status: "active", enrolled_at: now() })
         .eq("id", existing.id)
         .select()
         .single();
@@ -633,12 +720,11 @@ const enrolStudent = asyncHandler(async (req, res) => {
     const { data: enrollment, error: enrolErr } = await db
       .from("enrollments")
       .insert({
-        user_id:      user.id,
-        course_id:    courseId,
-        status:       "active",
-        access_level: accessLevel,
-        enrolled_at:  now(),
-        created_at:   now(),
+        user_id:     user.id,
+        course_id:   courseId,
+        status:      "active",
+        progress:    0,
+        enrolled_at: now(),
       })
       .select()
       .single();
@@ -698,66 +784,89 @@ const listBattles = asyncHandler(async (req, res) => {
     const { data, error } = await q;
     if (error) throw new Error(error.message);
 
-    ok(res, data ?? []);
+    ok(res, (data ?? []).map(mapBattle));
   } catch (e) {
     err500(res, e);
   }
 });
 
+const VALID_BATTLE_TYPES  = ["1v1", "open", "classroom"];
+const VALID_BATTLE_STATUS = ["lobby", "scheduled", "live", "completed", "expired", "cancelled"];
+
 const createBattle = asyncHandler(async (req, res) => {
   try {
-    const {
-      title, courseId, battleType = "quiz",
-      xpPool = 100, questionCount = 10,
-      timeLimitSeconds = 300, scheduledStart = null,
-    } = req.body;
-
+    const b = req.body;
+    const title  = b.title;
     if (!title) return err400(res, "title is required");
 
-    // Verify teacher owns course (if provided)
+    // battles.course_id is NOT NULL — resolve a course to attach the battle to.
+    let courseId = b.courseId;
     if (courseId) {
       const { data: course } = await db
-        .from("courses")
-        .select("id, instructor_id")
-        .eq("id", courseId)
-        .single();
-
-      if (!course)                        return err404(res, "Course not found");
+        .from("courses").select("id, instructor_id").eq("id", courseId).maybeSingle();
+      if (!course)                              return err404(res, "Course not found");
       if (course.instructor_id !== req.user.id) return err403(res, "You do not own this course");
+    } else {
+      // Default to the teacher's most recent course.
+      const { data: first } = await db
+        .from("courses").select("id").eq("instructor_id", req.user.id)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (!first) return err400(res, "Create a course before launching a battle");
+      courseId = first.id;
     }
+
+    const battleType = VALID_BATTLE_TYPES.includes(b.battleType) ? b.battleType : "open";
+    const durationMin = Number(b.duration ?? 15);
+    const scheduledStart = b.scheduledAt || null;
+    // status: schema has no 'draft' — unscheduled battles sit in 'lobby'.
+    let battleStatus = b.status === "scheduled" || scheduledStart ? "scheduled" : "lobby";
+    if (VALID_BATTLE_STATUS.includes(b.status)) battleStatus = b.status;
+    // expires_at is NOT NULL.
+    const expiresAt = scheduledStart
+      ? new Date(new Date(scheduledStart).getTime() + 24 * 3600000).toISOString()
+      : new Date(Date.now() + 7 * 24 * 3600000).toISOString();
 
     const { data: battle, error: battleErr } = await db
       .from("battles")
       .insert({
+        course_id:          courseId,
+        battle_type:        battleType,
         title,
-        course_id:         courseId ?? null,
-        battle_type:       battleType,
-        xp_pool:           xpPool,
-        question_count:    questionCount,
-        time_limit_seconds: timeLimitSeconds,
-        scheduled_start:   scheduledStart,
-        status:            "pending",
-        created_by:        req.user.id,
-        created_at:        now(),
-        updated_at:        now(),
+        description:        b.description ?? null,
+        topic:              b.topic ?? null,
+        difficulty:         b.difficulty ?? "intermediate",
+        total_questions:    Number(b.questionCount ?? 15),
+        time_limit_seconds: durationMin * 60,
+        max_participants:   Number(b.maxParticipants ?? 10),
+        scheduled_start:    scheduledStart,
+        expires_at:         expiresAt,
+        status:             battleStatus,
+        created_by:         req.user.id,
+        created_at:         now(),
+        updated_at:         now(),
       })
       .select()
       .single();
 
     if (battleErr) throw new Error(battleErr.message);
 
-    // Add teacher as creator participant
-    await db.from("battle_participants").insert({
-      battle_id:  battle.id,
-      user_id:    req.user.id,
-      role:       "creator",
-      joined_at:  now(),
-    });
+    // battle_participants.agent_id is NOT NULL — only add the creator as a
+    // participant if they have an active agent.
+    const { data: agent } = await db
+      .from("user_agents").select("id").eq("user_id", req.user.id).eq("is_active", true).maybeSingle();
+    if (agent) {
+      await db.from("battle_participants").insert({
+        battle_id: battle.id,
+        user_id:   req.user.id,
+        agent_id:  agent.id,
+        role:      "creator",
+        joined_at: now(),
+      });
+    }
 
-    // Emit socket event
     global.io?.to(`user:${req.user.id}`).emit("battle.created", { battleId: battle.id });
 
-    created(res, battle);
+    created(res, mapBattle(battle));
   } catch (e) {
     err500(res, e);
   }
@@ -776,10 +885,17 @@ const updateBattle = asyncHandler(async (req, res) => {
     if (!existing)                         return err404(res, "Battle not found");
     if (existing.created_by !== req.user.id) return err403(res, "You did not create this battle");
 
-    const forbidden = ["id", "created_by", "created_at"];
-    const updates   = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => !forbidden.includes(k)),
-    );
+    const b = req.body;
+    const updates = {};
+    if (b.title       !== undefined) updates.title       = b.title;
+    if (b.description !== undefined) updates.description = b.description;
+    if (b.topic       !== undefined) updates.topic       = b.topic;
+    if (b.difficulty  !== undefined) updates.difficulty  = b.difficulty;
+    if (b.maxParticipants !== undefined) updates.max_participants   = Number(b.maxParticipants);
+    if (b.duration        !== undefined) updates.time_limit_seconds = Number(b.duration) * 60;
+    if (b.scheduledAt     !== undefined) updates.scheduled_start    = b.scheduledAt || null;
+    if (b.status !== undefined && VALID_BATTLE_STATUS.includes(b.status)) updates.status = b.status;
+    if (Object.keys(updates).length === 0) return err400(res, "No updatable fields provided");
     updates.updated_at = now();
 
     const { data, error } = await db
@@ -790,7 +906,7 @@ const updateBattle = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
-    ok(res, data);
+    ok(res, mapBattle(data));
   } catch (e) {
     err500(res, e);
   }
