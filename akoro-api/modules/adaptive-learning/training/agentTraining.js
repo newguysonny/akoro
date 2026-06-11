@@ -2,7 +2,7 @@
 // training/agentTraining.js
 // Full training pipeline:
 //   1. File upload       → Supabase Storage
-//   2. Transcription     → Deepgram Nova-2
+//   2. Transcription     → OpenAI Whisper
 //   3. Style extraction  → GPT-4o
 //   4. Segment extraction → GPT-4o
 //   5. Embedding         → text-embedding-3-small
@@ -15,16 +15,15 @@
 import express from "express";
 import multer  from "multer";
 import db from "../../../db.js";
-import OpenAI  from "openai";
-import { createClient as createDeepgram } from "@deepgram/sdk";
+import OpenAI, { toFile } from "openai";
 import { v4 as uuid } from "uuid";
 import fs   from "fs";
 import path from "path";
 import { deriveAndSaveOrchestrationConfig } from "./agentOrchestration.js";
+import { createRealtimeTranscriber } from "../../voice/openaiRealtime.js";
 
 const router   = express.Router();
 const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const deepgram = createDeepgram(process.env.DEEPGRAM_API_KEY);
 
 // ── Multer ────────────────────────────────────────────────────
 const UPLOAD_DIR = path.join("/tmp", "akoro-uploads");
@@ -200,25 +199,26 @@ XP values: worked_example=80, analogy=60, concept_explanation=40, correction=50,
   return key ? result[key] : [];
 }
 
-// ── Deepgram transcription ────────────────────────────────────
-async function transcribeFile(localPath, mimeType) {
-  const buffer = fs.readFileSync(localPath);
-  const { result, error } = await deepgram.listen.prerecorded.transcribeFile(buffer, {
-    model: "nova-2", smart_format: true, punctuate: true,
-    paragraphs: true, utterances: true, diarize: true,
-    language: "en", detect_language: false,
-    keywords: ["calculus","differentiation","integration","theorem","WAEC","JAMB"],
+// ── OpenAI Whisper transcription ──────────────────────────────
+// Note: Whisper API has a 25MB file limit and no speaker
+// diarization — speaker is null on all words/paragraphs.
+async function transcribeFile(localPath, _mimeType) {
+  const result = await openai.audio.transcriptions.create({
+    file:     await toFile(fs.createReadStream(localPath), path.basename(localPath)),
+    model:    "whisper-1",
+    language: "en",
+    prompt:   "calculus, differentiation, integration, theorem, WAEC, JAMB",
+    response_format:         "verbose_json",
+    timestamp_granularities: ["word", "segment"],
   });
-  if (error) throw error;
 
-  const alt        = result.results.channels[0].alternatives[0];
-  const fullText   = alt.transcript;
-  const words      = (alt.words || []).map(w => ({
-    word: w.word, start: w.start, end: w.end, confidence: w.confidence, speaker: w.speaker,
+  const fullText = result.text || "";
+  const words    = (result.words || []).map(w => ({
+    word: w.word, start: w.start, end: w.end, confidence: 1, speaker: null,
   }));
-  const paragraphs = (alt.paragraphs?.paragraphs || []).map(p => ({
-    speaker: p.speaker, start: p.start, end: p.end,
-    sentences: p.sentences.map(s => s.text),
+  const paragraphs = (result.segments || []).map(s => ({
+    speaker: null, start: s.start, end: s.end,
+    sentences: [s.text.trim()],
   }));
   return { fullText, words, paragraphs };
 }
@@ -260,7 +260,7 @@ async function runPipeline(run, file, teacherId, agentId, subject, sessionTitle)
     runProgress(run, "store", 12, "File stored securely");
 
     // ── Phase 2: Transcribe ───────────────────────────────────
-    runProgress(run, "transcribe", 14, "Transcribing with Deepgram Nova-2");
+    runProgress(run, "transcribe", 14, "Transcribing with OpenAI Whisper");
     const { data: fileData } = await db.storage.from("training-assets").download(storagePath);
     const tmpForDg = path.join(UPLOAD_DIR, `${run.sessionId}_dg${path.extname(file.filename)}`);
     fs.writeFileSync(tmpForDg, Buffer.from(await fileData.arrayBuffer()));
@@ -679,13 +679,30 @@ router.delete("/session/:sessionId", async (req, res) => {
 // =============================================================
 export function attachTrainingWS(wss) {
   wss.on("connection", (ws) => {
-    let dgConnection = null, run = null, authenticated = false;
+    let sttConnection = null, run = null, authenticated = false;
     let transcript = "", teacherId, agentId, subject, sessionId;
     const send = (event, data) => ws.send(JSON.stringify({ event, data }));
 
-    ws.on("message", async (raw) => {
+    const handleSegment = async (segment) => {
+      transcript += " " + segment;
+      send("transcript", { text: segment });
+      if (run) runLog(run, "info", "Transcript segment received", `${Math.ceil(transcript.split(" ").length)} words`);
+      if (Math.ceil(transcript.split(" ").length) % 500 === 0) {
+        try {
+          const embedding = await embed(segment);
+          await storeChunk({ teacherId, agentId, sessionId, chunkText: segment, chunkType: "transcript", metadata: { subject, live: true }, embedding });
+          if (run) runLog(run, "ok", "Live chunk embedded");
+        } catch (e) { if (run) runLog(run, "err", "Live chunk embed failed", e.message); }
+      }
+    };
+
+    ws.on("message", async (raw, isBinary) => {
       try {
-        if (Buffer.isBuffer(raw) && authenticated && dgConnection) { dgConnection.send(raw); return; }
+        // Binary frames are raw PCM16 mono 24kHz audio
+        if (isBinary && authenticated && sttConnection) {
+          sttConnection.sendAudio(Buffer.from(raw).toString("base64"));
+          return;
+        }
         const msg = JSON.parse(raw.toString());
 
         if (msg.type === "auth") {
@@ -697,33 +714,20 @@ export function attachTrainingWS(wss) {
           subject   = tok.subject;   sessionId = tok.session_id;
           authenticated = true; run = runs.get(tok.run_id);
 
-          dgConnection = deepgram.listen.live({ model: "nova-2", smart_format: true, interim_results: true, language: "en" });
-          dgConnection.on("open",  ()  => { send("status", { message: "Deepgram open — streaming" }); if (run) runLog(run, "ok", "Deepgram live connection open"); });
-          dgConnection.on("error", (e) => { send("error",  { message: e.message }); });
-          dgConnection.on("close", ()  => { send("status", { message: "Deepgram closed" }); });
-          dgConnection.on("Results", async (result) => {
-            const alt = result.channel?.alternatives?.[0];
-            if (!alt?.transcript) return;
-            if (!result.is_final) { send("interim", { text: alt.transcript }); return; }
-            const segment = alt.transcript.trim();
-            if (!segment) return;
-            transcript += " " + segment;
-            send("transcript", { text: segment });
-            if (run) runLog(run, "info", "Transcript segment received", `${Math.ceil(transcript.split(" ").length)} words`);
-            if (Math.ceil(transcript.split(" ").length) % 500 === 0) {
-              try {
-                const embedding = await embed(segment);
-                await storeChunk({ teacherId, agentId, sessionId, chunkText: segment, chunkType: "transcript", metadata: { subject, live: true }, embedding });
-                if (run) runLog(run, "ok", "Live chunk embedded");
-              } catch (e) { if (run) runLog(run, "err", "Live chunk embed failed", e.message); }
-            }
+          let interim = "";
+          sttConnection = createRealtimeTranscriber({
+            onOpen:  () => { send("status", { message: "Transcription open — streaming" }); if (run) runLog(run, "ok", "OpenAI realtime transcription open"); },
+            onDelta: (delta) => { interim += delta; send("interim", { text: interim }); },
+            onCompleted: async (segment) => { interim = ""; await handleSegment(segment); },
+            onError: (e) => { send("error", { message: e.message }); },
+            onClose: ()  => { send("status", { message: "Transcription closed" }); },
           });
-          send("auth_ok", { sessionId, runId: tok.run_id, message: "Ready — send audio chunks" });
+          send("auth_ok", { sessionId, runId: tok.run_id, message: "Ready — send audio chunks (PCM16 mono 24kHz)" });
           return;
         }
 
         if (msg.type === "end" && authenticated) {
-          if (dgConnection) dgConnection.finish();
+          if (sttConnection) sttConnection.close();
           if (run) runLog(run, "sys", "Live stream ended — running final extraction");
           if (transcript.trim().length > 100) {
             const [styleProfile, segments] = await Promise.all([
@@ -757,7 +761,7 @@ export function attachTrainingWS(wss) {
         send("error", { message: err.message });
       }
     });
-    ws.on("close", () => { if (dgConnection) { try { dgConnection.finish(); } catch (_) {} } });
+    ws.on("close", () => { if (sttConnection) { try { sttConnection.close(); } catch (_) {} } });
   });
 }
 
@@ -769,7 +773,7 @@ export default router;
  * POST /api/adaptive/training/stream/start
  * Starts a live microphone/device stream training session.
  * The client sends audio chunks via POST /api/adaptive/training/stream/chunk.
- * Each chunk is transcribed via Deepgram and added to the training session.
+ * Each chunk is transcribed via OpenAI Whisper and added to the training session.
  * Finalize via POST /api/adaptive/training/stream/end
  */
 export async function startLiveStream(req, res) {
@@ -807,7 +811,7 @@ export async function startLiveStream(req, res) {
 /**
  * POST /api/adaptive/training/stream/chunk
  * Receives a raw audio chunk (base64 or buffer) from the client.
- * Transcribes via Deepgram and appends text to the live session.
+ * Transcribes via OpenAI Whisper and appends text to the live session.
  */
 export async function receiveChunk(req, res) {
   const { session_id, audio_base64, text } = req.body;
@@ -815,18 +819,18 @@ export async function receiveChunk(req, res) {
 
   let transcribed = text ?? "";
 
-  // If audio provided, transcribe via Deepgram
+  // If audio provided, transcribe via OpenAI Whisper
   if (audio_base64 && !text) {
     try {
-      const { createClient } = await import("@deepgram/sdk");
-      const dg       = createClient(process.env.DEEPGRAM_API_KEY);
-      const buffer   = Buffer.from(audio_base64, "base64");
-      const { result } = await dg.listen.prerecorded.transcribeFile(buffer, {
-        model: "nova-2", smart_format: true, language: "en",
+      const buffer = Buffer.from(audio_base64, "base64");
+      const result = await openai.audio.transcriptions.create({
+        file:     await toFile(buffer, "chunk.webm"),
+        model:    "whisper-1",
+        language: "en",
       });
-      transcribed = result?.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
+      transcribed = result.text ?? "";
     } catch (e) {
-      console.warn("[training/stream] Deepgram transcription failed:", e.message);
+      console.warn("[training/stream] Whisper transcription failed:", e.message);
       return res.status(500).json({ error: "Transcription failed: " + e.message });
     }
   }

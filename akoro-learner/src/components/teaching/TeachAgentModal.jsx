@@ -50,7 +50,8 @@ function TeachAgentModal({ session, config, onClose }) {
   const wsRef         = useRef(null);
   const mockQueueRef  = useRef([]);
   const mediaRef      = useRef(null);    // MediaRecorder — audio (blob) mode
-  const voiceMediaRef = useRef(null);    // MediaRecorder — voice (streaming) mode
+  const voiceMediaRef = useRef(null);    // PCM capture handle — voice (streaming) mode
+  const voiceReadyRef = useRef(false);   // backend STT connection open
   const chunksRef     = useRef([]);
   // How the human delivered their last message: 'text' | 'audio' | 'live'.
   // The agent mirrors this — text gets text, voice gets voice.
@@ -203,8 +204,8 @@ function TeachAgentModal({ session, config, onClose }) {
 
       // ── Voice streaming events ─────────────────────────────────
       ws.on("voice_stream_ready", () => {
-        // Deepgram open — start sending audio chunks
-        voiceMediaRef.current?.start(250);
+        // OpenAI realtime transcription open — start sending PCM chunks
+        voiceReadyRef.current = true;
       });
 
       ws.on("voice_interim", ({ text, accumulated }) => {
@@ -333,10 +334,12 @@ function TeachAgentModal({ session, config, onClose }) {
     }
   };
 
-  // ── Voice streaming (realtime Deepgram) ────────────────────────
+  // ── Voice streaming (OpenAI realtime transcription) ────────────
+  // Captures raw PCM16 mono @ 24kHz — the format OpenAI realtime expects.
   const toggleVoiceStream = async () => {
     if (voiceStreaming) {
       voiceMediaRef.current?.stop();
+      voiceMediaRef.current = null;
       wsRef.current?.emit("stop_voice_stream");
       setVoiceStreaming(false);
       setInterimText("");
@@ -344,25 +347,42 @@ function TeachAgentModal({ session, config, onClose }) {
     }
     stopTts(); // barge-in: stop agent speech before going live
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime   = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus" : "audio/webm";
-      const mr = new MediaRecorder(stream, { mimeType: mime });
-      voiceMediaRef.current = mr;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+      const ctx    = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      const source = ctx.createMediaStreamSource(stream);
+      const proc   = ctx.createScriptProcessor(4096, 1, 1);
 
-      mr.ondataavailable = async (e) => {
-        if (e.data.size < 100 || !wsRef.current?.connected) return;
-        const ab  = await e.data.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(ab)));
-        wsRef.current.emit("voice_audio_chunk", { audio: b64 });
+      proc.onaudioprocess = (e) => {
+        if (!voiceReadyRef.current || !wsRef.current?.connected) return;
+        const f32 = e.inputBuffer.getChannelData(0);
+        const i16 = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+          const s = Math.max(-1, Math.min(1, f32[i]));
+          i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        const bytes = new Uint8Array(i16.buffer);
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 8192) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        }
+        wsRef.current.emit("voice_audio_chunk", { audio: btoa(bin) });
       };
 
-      mr.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        voiceMediaRef.current = null;
+      source.connect(proc);
+      proc.connect(ctx.destination);
+
+      voiceMediaRef.current = {
+        stop() {
+          voiceReadyRef.current = false;
+          try { proc.disconnect(); source.disconnect(); } catch {}
+          stream.getTracks().forEach(t => t.stop());
+          ctx.close().catch(() => {});
+        },
       };
 
-      // Open Deepgram on backend — mr.start(250) called on voice_stream_ready
+      // Open OpenAI realtime on backend — chunks flow once voice_stream_ready fires
       wsRef.current?.emit("start_voice_stream");
       setVoiceStreaming(true);
       setInterimText("");

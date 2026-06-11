@@ -11,8 +11,7 @@
  *   No second login required — same token works across all modules
  *
  * New env vars needed (.env):
- *   OPENAI_API_KEY       GPT-4o for teaching agents + embeddings
- *   DEEPGRAM_API_KEY     Nova-2 transcription for teacher training
+ *   OPENAI_API_KEY       GPT-4o agents + embeddings + Whisper STT + TTS
  *
  * Usage in app.js:
  *   import { adaptiveLearningRoutes, setupAdaptiveWebSocket }

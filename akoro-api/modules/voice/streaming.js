@@ -1,16 +1,16 @@
 /**
  * voice/streaming.js
  * ─────────────────────────────────────────────────────────────
- * Realtime voice streaming via Deepgram nova-2 (STT)
- * + streaming TTS via OpenAI tts-1 (TTS).
+ * Realtime voice streaming via OpenAI Realtime transcription (STT)
+ * + streaming TTS via OpenAI tts-1 (TTS). Single OPENAI_API_KEY.
  *
  * STT events (client → server):
- *   start_voice_stream          — open Deepgram live connection
- *   voice_audio_chunk { audio } — base64 PCM/webm chunk (every 250ms)
+ *   start_voice_stream          — open OpenAI realtime connection
+ *   voice_audio_chunk { audio } — base64 PCM16 mono 24kHz chunk
  *   stop_voice_stream           — close connection, emit voice_complete
  *
  * STT events (server → client):
- *   voice_stream_ready          — Deepgram connection open, start sending chunks
+ *   voice_stream_ready          — realtime connection open, start sending chunks
  *   voice_interim  { text, accumulated }   — word forming (grey text)
  *   voice_final    { text, accumulated }   — sentence confirmed (black text)
  *   voice_utterance_end { transcript }     — silence gap detected
@@ -28,15 +28,13 @@
  *   tts_error { message }           — TTS failure
  */
 
-import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
 import OpenAI from "openai";
+import { createRealtimeTranscriber } from "./openaiRealtime.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const VALID_VOICES = ["alloy","echo","fable","onyx","nova","shimmer"];
 
-const dg = createClient(process.env.DEEPGRAM_API_KEY);
-
-// socketId → { live: DeepgramLive, transcript: string }
+// socketId → { live: RealtimeTranscriber, transcript: string }
 const liveConnections = new Map();
 
 // socketId → AbortController (for barge-in TTS cancellation)
@@ -45,7 +43,7 @@ const ttsStreams = new Map();
 function closeLiveConnection(socketId) {
   const conn = liveConnections.get(socketId);
   if (conn?.live) {
-    try { conn.live.finish(); } catch { /* already closed */ }
+    try { conn.live.close(); } catch { /* already closed */ }
   }
   liveConnections.delete(socketId);
 }
@@ -60,77 +58,51 @@ export function setupVoiceStreaming(io) {
       closeLiveConnection(socket.id);
 
       let accumulated = "";
+      let interim     = "";   // partial of the current utterance
 
-      const live = dg.listen.live({
-        model:            "nova-2",
-        language:         "en",
-        smart_format:     true,
-        punctuate:        true,
-        interim_results:  true,   // enables grey-text interim words
-        utterance_end_ms: 1200,   // silence gap triggers utterance end
-        vad_events:       true,   // voice activity detection
-        encoding:         "linear16",
-        sample_rate:      16000,
-      });
-
-      liveConnections.set(socket.id, { live, transcript: "" });
-
-      live.on(LiveTranscriptionEvents.Open, () => {
-        // Tell frontend Deepgram is ready — start sending audio chunks
-        socket.emit("voice_stream_ready");
-      });
-
-      live.on(LiveTranscriptionEvents.Transcript, (data) => {
-        const text = data.channel?.alternatives?.[0]?.transcript?.trim();
-        if (!text) return;
-
-        if (!data.is_final) {
+      const live = createRealtimeTranscriber({
+        onOpen: () => {
+          // Tell frontend OpenAI is ready — start sending audio chunks
+          socket.emit("voice_stream_ready");
+        },
+        onDelta: (delta) => {
           // Interim — words still forming, show as grey ghost text
-          socket.emit("voice_interim", {
-            text,
-            accumulated,
-          });
-        } else {
-          // Final — sentence complete, add to accumulator
-          accumulated = accumulated
-            ? `${accumulated} ${text}`
-            : text;
+          interim += delta;
+          socket.emit("voice_interim", { text: interim, accumulated });
+        },
+        onCompleted: (text) => {
+          // Final — utterance complete, add to accumulator
+          interim     = "";
+          accumulated = accumulated ? `${accumulated} ${text}` : text;
 
           const conn = liveConnections.get(socket.id);
           if (conn) conn.transcript = accumulated;
 
-          socket.emit("voice_final", {
-            text,
-            accumulated,
+          socket.emit("voice_final", { text, accumulated });
+        },
+        onSpeechStarted: () => {
+          socket.emit("voice_speech_started");
+        },
+        onSpeechStopped: () => {
+          // Silence gap detected — interim trigger for auto-submit if desired
+          const conn = liveConnections.get(socket.id);
+          if (conn?.transcript) {
+            socket.emit("voice_utterance_end", { transcript: conn.transcript });
+          }
+        },
+        onError: (err) => {
+          console.error(`[voice/streaming] socket=${socket.id}`, err);
+          socket.emit("voice_error", {
+            message: err?.message || "Transcription error",
           });
-        }
+          closeLiveConnection(socket.id);
+        },
+        onClose: () => {
+          liveConnections.delete(socket.id);
+        },
       });
 
-      live.on(LiveTranscriptionEvents.UtteranceEnd, () => {
-        // Silence gap detected — interim trigger for auto-submit if desired
-        const conn = liveConnections.get(socket.id);
-        if (conn?.transcript) {
-          socket.emit("voice_utterance_end", {
-            transcript: conn.transcript,
-          });
-        }
-      });
-
-      live.on(LiveTranscriptionEvents.SpeechStarted, () => {
-        socket.emit("voice_speech_started");
-      });
-
-      live.on(LiveTranscriptionEvents.Error, (err) => {
-        console.error(`[voice/streaming] socket=${socket.id}`, err);
-        socket.emit("voice_error", {
-          message: err?.message || "Transcription error",
-        });
-        closeLiveConnection(socket.id);
-      });
-
-      live.on(LiveTranscriptionEvents.Close, () => {
-        liveConnections.delete(socket.id);
-      });
+      liveConnections.set(socket.id, { live, transcript: "" });
     });
 
     /* ── voice_audio_chunk ───────────────────────────────────────── */
@@ -139,8 +111,7 @@ export function setupVoiceStreaming(io) {
       if (!conn?.live) return;
 
       try {
-        const buffer = Buffer.from(audio, "base64");
-        conn.live.send(buffer);
+        conn.live.sendAudio(audio);   // base64 PCM16 mono 24kHz
       } catch (err) {
         console.warn("[voice_audio_chunk]", err.message);
       }
