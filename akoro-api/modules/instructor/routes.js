@@ -1219,7 +1219,7 @@ const getStreaming = asyncHandler(async (req, res) => {
 
 const connectStreaming = asyncHandler(async (req, res) => {
   try {
-    const { platform, accessToken, meetingUrl } = req.body;
+    const { platform, accessToken, meetingUrl, hostEmail, refreshToken } = req.body;
 
     if (!platform)    return err400(res, "platform is required");
     if (!STREAMING_PLATFORMS.includes(platform))
@@ -1236,10 +1236,13 @@ const connectStreaming = asyncHandler(async (req, res) => {
     const streamingPlatforms = currentSettings.streaming_platforms ?? {};
 
     streamingPlatforms[platform] = {
-      connected:    true,
-      access_token: accessToken ?? null,
-      meeting_url:  meetingUrl  ?? null,
-      connected_at: now(),
+      ...(streamingPlatforms[platform] ?? {}),   // preserve existing creds on re-connect
+      connected:     true,
+      access_token:  accessToken  ?? streamingPlatforms[platform]?.access_token  ?? null,
+      refresh_token: refreshToken ?? streamingPlatforms[platform]?.refresh_token ?? null,
+      host_email:    hostEmail    ?? streamingPlatforms[platform]?.host_email    ?? null,
+      meeting_url:   meetingUrl   ?? streamingPlatforms[platform]?.meeting_url   ?? null,
+      connected_at:  now(),
     };
 
     const newSettings = { ...currentSettings, streaming_platforms: streamingPlatforms };

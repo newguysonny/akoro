@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { Btn, Toast, Skeleton } from '../components/Primitives.jsx';
+import { Btn, Toast, Skeleton, Modal, Inp } from '../components/Primitives.jsx';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
@@ -128,6 +128,9 @@ function QuickAction({ icon: Icon, label, desc, color, onClick }) {
 function StreamingPanel({ onToast }) {
   const [platforms, setPlatforms] = useState(null); // null = loading
   const [busy, setBusy] = useState(null);
+  const [connectFor, setConnectFor] = useState(null); // platform key being connected
+  const [roomUrl, setRoomUrl] = useState('');
+  const [hostEmail, setHostEmail] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -139,26 +142,34 @@ function StreamingPanel({ onToast }) {
     return () => { cancelled = true; };
   }, []);
 
-  const toggle = async (p) => {
+  const disconnect = async (p) => {
     setBusy(p.platform);
-    const wasConnected = p.connected;
-    // optimistic
-    setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: !wasConnected } : x));
+    setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: false } : x));
     try {
-      if (wasConnected) {
-        await apiDelete(`/api/instructor/streaming/${p.platform}`);
-        onToast?.(`${STREAM_META[p.platform]?.label} disconnected`, 'info');
-      } else {
-        await apiPost('/api/instructor/streaming/connect', { platform: p.platform });
-        onToast?.(`${STREAM_META[p.platform]?.label} connected`, 'success');
-      }
-    } catch (e) {
-      // revert on failure
-      setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: wasConnected } : x));
+      await apiDelete(`/api/instructor/streaming/${p.platform}`);
+      onToast?.(`${STREAM_META[p.platform]?.label} disconnected`, 'info');
+    } catch {
+      setPlatforms((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: true } : x));
       onToast?.('Could not update platform', 'error');
-    } finally {
-      setBusy(null);
-    }
+    } finally { setBusy(null); }
+  };
+
+  const submitConnect = async () => {
+    const platform = connectFor;
+    setBusy(platform);
+    try {
+      await apiPost('/api/instructor/streaming/connect', {
+        platform,
+        meetingUrl: roomUrl.trim() || null,
+        hostEmail:  hostEmail.trim() || null,
+      });
+      setPlatforms((ps) => ps.map((x) => x.platform === platform
+        ? { ...x, connected: true, meeting_url: roomUrl.trim() || null } : x));
+      onToast?.(`${STREAM_META[platform]?.label} connected`, 'success');
+      setConnectFor(null); setRoomUrl(''); setHostEmail('');
+    } catch {
+      onToast?.('Could not connect platform', 'error');
+    } finally { setBusy(null); }
   };
 
   return (
@@ -184,7 +195,7 @@ function StreamingPanel({ onToast }) {
                   </div>
                 </div>
                 <Btn size="sm" variant={p.connected ? 'ghost' : 'outline'} disabled={busy === p.platform}
-                  onClick={() => toggle(p)}
+                  onClick={() => p.connected ? disconnect(p) : setConnectFor(p.platform)}
                   style={p.connected ? { color: MUTED } : undefined}>
                   {busy === p.platform ? '…' : p.connected ? 'Disconnect' : 'Connect'}
                 </Btn>
@@ -192,6 +203,26 @@ function StreamingPanel({ onToast }) {
             );
           })}
       </div>
+
+      <Modal open={!!connectFor} onClose={() => { setConnectFor(null); setRoomUrl(''); setHostEmail(''); }}
+        title={`Connect ${STREAM_META[connectFor]?.label ?? ''}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.5 }}>
+            Paste your personal meeting room link. New live sessions will use it automatically.
+            {connectFor === 'zoom' && ' Leave blank to auto-create Zoom meetings if your account has Server-to-Server credentials.'}
+          </p>
+          <Inp label="Personal meeting link" value={roomUrl} onChange={(e) => setRoomUrl(e.target.value)}
+            placeholder={connectFor === 'zoom' ? 'https://zoom.us/j/your-pmi' : connectFor === 'meet' ? 'https://meet.google.com/abc-defg-hij' : 'https://teams.microsoft.com/l/meetup-join/…'} />
+          {connectFor === 'zoom' && (
+            <Inp label="Zoom host email (optional)" value={hostEmail} onChange={(e) => setHostEmail(e.target.value)}
+              placeholder="you@example.com" />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Btn variant="secondary" onClick={() => { setConnectFor(null); setRoomUrl(''); setHostEmail(''); }}>Cancel</Btn>
+            <Btn onClick={submitConnect} disabled={busy === connectFor}>{busy === connectFor ? 'Connecting…' : 'Connect'}</Btn>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

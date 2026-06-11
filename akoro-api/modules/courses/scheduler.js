@@ -202,17 +202,42 @@ const emitToParticipants = async (courseId, event, payload) => {
   for (const uid of ids) io.to(`user:${uid}`).emit(event, payload);
 };
 
+// Read a teacher's connected platform credentials from user_settings.
+// Shape: settings.streaming_platforms[platform] = { connected, meeting_url,
+//        host_email, refresh_token, access_token, connected_at }
+const getInstructorPlatform = async (instructorId, platform) => {
+  const { data } = await db
+    .from("user_settings").select("settings").eq("user_id", instructorId).maybeSingle();
+  return data?.settings?.streaming_platforms?.[platform] ?? null;
+};
+
+const persistLink = async (sessionId, meeting, platform) => {
+  const { data: updated } = await db
+    .from("live_sessions")
+    .update({
+      meeting_id:       meeting.meetingId ?? null,
+      meeting_password: meeting.password ?? null,
+      meeting_url:      meeting.joinUrl,
+      join_url:         meeting.joinUrl,
+      updated_at:       new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .select()
+    .single();
+  console.log(`[scheduler] ✅ link set session=${sessionId} platform=${platform}`);
+  return updated;
+};
+
 /**
  * createLiveLink — best-effort meeting provisioning ~15 min before start.
- * Persists meeting_url / join_url / meeting_id / meeting_password onto the
- * live_sessions row. Failures are logged, never fatal (status flow still runs).
+ * Resolution order per the teacher's connected platform settings:
+ *   1. Static personal room URL  → stamp directly (works for zoom/meet/teams)
+ *   2. Google Meet + refresh_token → generate a fresh Calendar/Meet link
+ *   3. Zoom + Server-to-Server env creds → create a scheduled meeting
+ * Persists onto the live_sessions row. Failures are logged, never fatal.
  */
 const createLiveLink = async (session) => {
   if (session.join_url || session.meeting_url) return session;  // already provisioned
-
-  // Load the instructor's email (Zoom S2S needs a host email).
-  const { data: instructor } = await db
-    .from("users").select("email").eq("id", session.instructor_id).maybeSingle();
 
   const platform    = session.platform || "zoom";
   const topic       = session.title || "Live class";
@@ -222,33 +247,34 @@ const createLiveLink = async (session) => {
     Math.round((new Date(session.scheduled_end || scheduledAt) - new Date(scheduledAt)) / 60000) || 60,
   );
 
-  let meeting;
+  const conn = await getInstructorPlatform(session.instructor_id, platform);
+
+  // 1. Static personal room link — simplest, no API calls, all platforms.
+  if (conn?.meeting_url) {
+    return await persistLink(session.id, { joinUrl: conn.meeting_url }, platform) ?? session;
+  }
+
   try {
+    // 2. Google Meet via per-teacher OAuth refresh token.
+    if (platform === "meet" && conn?.refresh_token) {
+      const meeting = await createGoogleMeetLink({ topic, scheduledAt, durationMin, teacherRefreshToken: conn.refresh_token });
+      return await persistLink(session.id, meeting, platform) ?? session;
+    }
+
+    // 3. Zoom via Server-to-Server account credentials + host email.
     if (platform === "zoom" && process.env.ZOOM_CLIENT_ID) {
-      meeting = await createZoomMeeting({ topic, scheduledAt, durationMin, teacherEmail: instructor?.email });
-    } else {
-      return session; // meet/teams need per-teacher OAuth tokens (not yet stored)
+      const { data: instructor } = await db
+        .from("users").select("email").eq("id", session.instructor_id).maybeSingle();
+      const hostEmail = conn?.host_email || instructor?.email;
+      const meeting = await createZoomMeeting({ topic, scheduledAt, durationMin, teacherEmail: hostEmail });
+      return await persistLink(session.id, meeting, platform) ?? session;
     }
   } catch (err) {
     console.error(`[scheduler] ❌ meeting creation failed session=${session.id}`, err.message);
     return session;
   }
 
-  const { data: updated } = await db
-    .from("live_sessions")
-    .update({
-      meeting_id:       meeting.meetingId,
-      meeting_password: meeting.password ?? null,
-      meeting_url:      meeting.joinUrl,
-      join_url:         meeting.joinUrl,
-      updated_at:       new Date().toISOString(),
-    })
-    .eq("id", session.id)
-    .select()
-    .single();
-
-  console.log(`[scheduler] ✅ link created session=${session.id} platform=${platform}`);
-  return updated ?? session;
+  return session; // no usable credentials — leave unprovisioned
 };
 
 /** activateSession — scheduled → live at start time. */
