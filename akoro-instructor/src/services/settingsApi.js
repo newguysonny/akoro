@@ -12,6 +12,7 @@ import { API } from '../constants.js';
 /* ── Profile + agent ─────────────────────────────────────────────── */
 export const getProfile  = () => apiGet('/api/instructor/profile');
 export const patchProfile = (patch) => apiPatch('/api/instructor/profile', patch);
+export const patchNotifications = (prefs) => apiPatch('/api/instructor/profile/notifications', prefs);
 
 export const patchAgent = (agentPatch) => {
   // settings camelCase → API snake_case

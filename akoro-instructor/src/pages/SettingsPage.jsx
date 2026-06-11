@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
-  getProfile, patchProfile, patchAgent,
+  getProfile, patchProfile, patchAgent, patchNotifications,
   publishAgentToMarketplace, unpublishListing,
   loadLocalNotif, saveLocalNotif, loadListingId, saveListingId,
 } from '../services/settingsApi.js';
@@ -614,8 +614,13 @@ export default function SettingsPage() {
           fullName: d.full_name || d.fullName, avatarUrl: d.avatar_url, avatarEmoji: '👩🏾‍🏫',
           bio: d.bio, phone: d.phone, country: d.country, school: d.school_name,
           schoolType: d.school_type, subjects: d.subjects || [],
-          language: 'English', displayMode: 'system', accentColor: BRAND, twoFactor: false,
+          language: d.language || 'English', displayMode: d.display_mode || 'system',
+          accentColor: d.accent_color || BRAND, twoFactor: !!d.two_factor_enabled,
         });
+        // Server-persisted notification prefs take priority over local cache
+        if (d.notification_prefs && Object.keys(d.notification_prefs).length) {
+          setNotif((n) => ({ ...n, ...d.notification_prefs }));
+        }
         setAgent({
           name: a.agent_name || 'My Agent', emoji: a.agent_emoji || '🤖', photoUrl: null,
           color: BRAND, personality: a.personality || '',
@@ -652,14 +657,16 @@ export default function SettingsPage() {
   /* ── Save handlers ── */
   const saveProfileField = useCallback(async (field, val) => {
     setProfile((p) => ({ ...p, [field]: val }));
-    if (field === 'twoFactor' || field === 'displayMode' || field === 'accentColor' || field === 'language') {
-      showToast('Saved ✓'); return; // local-only preferences
-    }
-    const map = { fullName: 'full_name', bio: 'bio', avatarUrl: 'avatar_url' };
+    const map = {
+      fullName: 'full_name', username: 'username', phone: 'phone', bio: 'bio',
+      avatarUrl: 'avatar_url', country: 'country', school: 'school_name',
+      schoolType: 'school_type', subjects: 'subjects', language: 'language',
+      displayMode: 'display_mode', accentColor: 'accent_color', twoFactor: 'two_factor_enabled',
+    };
     const apiKey = map[field];
-    if (!apiKey) { showToast('Saved ✓'); return; } // username/phone/country/school not in backend yet
+    if (!apiKey) { showToast('Saved ✓'); return; }
     try { await patchProfile({ [apiKey]: val }); showToast('Saved ✓'); }
-    catch { showToast('Failed to save'); }
+    catch (e) { showToast(e.message?.includes('username') ? 'Username already taken' : 'Failed to save'); }
   }, []);
 
   const saveAgent = useCallback(async (patch) => {
@@ -670,7 +677,8 @@ export default function SettingsPage() {
   const toggleNotif = useCallback((field) => {
     setNotif((n) => {
       const updated = { ...n, [field]: !n[field] };
-      if (user?.id) saveLocalNotif(user.id, updated);
+      if (user?.id) saveLocalNotif(user.id, updated); // offline cache
+      patchNotifications({ [field]: updated[field] }).catch(() => showToast('Saved locally (offline)'));
       return updated;
     });
   }, [user]);

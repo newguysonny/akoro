@@ -113,7 +113,7 @@ const getProfile = asyncHandler(async (req, res) => {
   try {
     const { data: user, error: userErr } = await db
       .from("users")
-      .select("id, full_name, email, bio, avatar_url, role, created_at")
+      .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, notification_prefs, created_at")
       .eq("id", req.user.id)
       .single();
 
@@ -131,15 +131,20 @@ const getProfile = asyncHandler(async (req, res) => {
   }
 });
 
+const PROFILE_FIELDS = [
+  "full_name", "username", "phone", "bio", "avatar_url",
+  "country", "school_name", "school_type", "subjects",
+  "language", "display_mode", "accent_color", "two_factor_enabled",
+];
+
 const updateProfile = asyncHandler(async (req, res) => {
   try {
-    const allowed = ["full_name", "bio", "avatar_url"];
     const updates = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => allowed.includes(k)),
+      Object.entries(req.body).filter(([k]) => PROFILE_FIELDS.includes(k)),
     );
 
     if (Object.keys(updates).length === 0)
-      return err400(res, "No valid fields provided. Allowed: full_name, bio, avatar_url");
+      return err400(res, `No valid fields provided. Allowed: ${PROFILE_FIELDS.join(", ")}`);
 
     updates.updated_at = now();
 
@@ -147,11 +152,44 @@ const updateProfile = asyncHandler(async (req, res) => {
       .from("users")
       .update(updates)
       .eq("id", req.user.id)
-      .select("id, full_name, email, bio, avatar_url, role")
+      .select("id, full_name, username, email, phone, bio, avatar_url, role, country, school_name, school_type, subjects, language, display_mode, accent_color, two_factor_enabled, notification_prefs")
+      .single();
+
+    if (error) {
+      // Unique-violation on username → friendly 400
+      if (/duplicate key|unique/i.test(error.message)) return err400(res, "That username is already taken");
+      throw new Error(error.message);
+    }
+    ok(res, data);
+  } catch (e) {
+    err500(res, e);
+  }
+});
+
+// PATCH /profile/notifications — merge into notification_prefs JSONB
+const updateNotifications = asyncHandler(async (req, res) => {
+  try {
+    if (!req.body || typeof req.body !== "object")
+      return err400(res, "notification preferences object required");
+
+    // Merge with existing so partial updates don't clobber other keys
+    const { data: existing } = await db
+      .from("users")
+      .select("notification_prefs")
+      .eq("id", req.user.id)
+      .single();
+
+    const merged = { ...(existing?.notification_prefs ?? {}), ...req.body };
+
+    const { data, error } = await db
+      .from("users")
+      .update({ notification_prefs: merged, updated_at: now() })
+      .eq("id", req.user.id)
+      .select("notification_prefs")
       .single();
 
     if (error) throw new Error(error.message);
-    ok(res, data);
+    ok(res, data.notification_prefs);
   } catch (e) {
     err500(res, e);
   }
@@ -894,8 +932,9 @@ router.get("/stats", getStats);
 
 // Profile
 router.get  ("/profile",        getProfile);
-router.patch("/profile",        updateProfile);
-router.patch("/profile/agent",  updateAgent);
+router.patch("/profile",               updateProfile);
+router.patch("/profile/notifications", updateNotifications);
+router.patch("/profile/agent",         updateAgent);
 
 // Courses
 router.get   ("/courses",     listCourses);
