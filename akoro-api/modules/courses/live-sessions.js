@@ -967,7 +967,7 @@ const asyncHndlr = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next
 router.get("/live-sessions/:sessionId/replay", authenticateToken, asyncHndlr(async (req, res) => {
   const { data: session, error } = await db
     .from("live_sessions")
-    .select("id, course_id, title, recording_url, status, instructor_id, ended_at, duration_minutes")
+    .select("id, course_id, title, recording_url, status, instructor_id, scheduled_start, scheduled_end, actual_start, actual_end")
     .eq("id", req.params.sessionId)
     .single();
 
@@ -981,14 +981,21 @@ router.get("/live-sessions/:sessionId/replay", authenticateToken, asyncHndlr(asy
     if (!enrolled) return res.status(403).json({ success: false, message: "You must be enrolled to watch this recording" });
   }
 
+  // Derive duration from actual times if present, else the scheduled window.
+  const startAt = session.actual_start || session.scheduled_start;
+  const endAt   = session.actual_end   || session.scheduled_end;
+  const durationMinutes = startAt && endAt
+    ? Math.max(0, Math.round((new Date(endAt) - new Date(startAt)) / 60000))
+    : null;
+
   res.status(200).json({
     success: true,
     data: {
       session_id:        session.id,
       title:             session.title,
       recording_url:     session.recording_url,
-      duration_minutes:  session.duration_minutes,
-      ended_at:          session.ended_at,
+      duration_minutes:  durationMinutes,
+      ended_at:          session.actual_end,
     },
   });
 }));

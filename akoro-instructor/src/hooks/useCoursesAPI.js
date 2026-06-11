@@ -11,6 +11,9 @@ export function useCoursesAPI() {
 
   // Modules + recurrence schedule
   const getModules      = (courseId) => apiGet(`/api/instructor/courses/${courseId}/modules`);
+  const createModule    = (courseId, data) => apiPost(`/api/instructor/courses/${courseId}/modules`, data);
+  const updateModule    = (id, data) => apiPatch(`/api/instructor/modules/${id}`, data);
+  const deleteModule    = (id) => apiDelete(`/api/instructor/modules/${id}`);
   const previewSchedule = (courseId, spec) => apiPost(`/api/instructor/courses/${courseId}/schedule/preview`, spec);
   const commitSchedule  = (courseId, payload) => apiPost(`/api/instructor/courses/${courseId}/schedule/commit`, payload);
 
@@ -22,7 +25,7 @@ export function useCoursesAPI() {
   return {
     getCourses, createCourse, updateCourse,
     getSessions, createSession, updateSession, deleteSession,
-    getModules, previewSchedule, commitSchedule,
+    getModules, createModule, updateModule, deleteModule, previewSchedule, commitSchedule,
     getMaterials, addMaterial, deleteMaterial,
   };
 }

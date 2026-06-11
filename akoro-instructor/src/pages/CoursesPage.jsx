@@ -4,6 +4,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, WizardSteps, StatusPill, PlatBadge, CoursTypeBadge, FileUploadZone, Toast, Skeleton } from '../components/Primitives.jsx';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import LiveClassWizard from '../components/LiveClassWizard.jsx';
+import CourseCurriculum from '../components/CourseCurriculum.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
@@ -106,7 +107,7 @@ function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
 }
 
 /* ── Course Card ────────────────────────────────────────────────────── */
-function CourseCard({ course }) {
+function CourseCard({ course, onManage }) {
   return (
     <div style={{
       background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16,
@@ -137,8 +138,8 @@ function CourseCard({ course }) {
           <span style={{ fontSize: 12, color: MUTED, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Users size={12} /> {course.studentsEnrolled || 0} students
           </span>
-          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
-            Manage <ChevronRight size={12} />
+          <button onClick={() => onManage?.(course)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
+            {course.type === 'live' ? 'Curriculum' : 'Manage'} <ChevronRight size={12} />
           </button>
         </div>
       </div>
@@ -186,6 +187,7 @@ export default function CoursesPage() {
   const [liveWizard,     setLiveWizard]     = useState(false);
   const [onDemandModal,  setOnDemandModal]  = useState(false);
   const [scheduleModal,  setScheduleModal]  = useState(false);
+  const [curriculumFor,  setCurriculumFor]  = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -286,7 +288,7 @@ export default function CoursesPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-            {courses.map(c => <CourseCard key={c.id} course={c} />)}
+            {courses.map(c => <CourseCard key={c.id} course={c} onManage={setCurriculumFor} />)}
             {courses.length === 0 && (
               <div style={{
                 gridColumn: '1 / -1', background: WHITE, border: `1px dashed ${BORDER}`,
@@ -325,6 +327,7 @@ export default function CoursesPage() {
         )}
       </div>
 
+      <CourseCurriculum open={!!curriculumFor} course={curriculumFor} onClose={() => { setCurriculumFor(null); load(); }} onToast={showToast} />
       <LiveClassWizard open={liveWizard} onClose={() => setLiveWizard(false)} onSubmit={handleCreateLive} />
       <OnDemandBuilder open={onDemandModal} onClose={() => setOnDemandModal(false)} onSubmit={handleCreateOnDemand} />
       <ScheduleSessionModal open={scheduleModal} onClose={() => setScheduleModal(false)} onSubmit={handleCreateSession} courses={courses} />
