@@ -7,6 +7,7 @@ import SigninPage       from './pages/auth/SigninPage.jsx';
 import SignupPage       from './pages/auth/SignupPage.jsx';
 import AuthCallback     from './pages/auth/AuthCallback.jsx';
 import FDEAdminPage     from './pages/FDEAdminPage.jsx';
+import LiveClassesPage  from './pages/LiveClassesPage.jsx';
 import NotFoundPage     from './pages/NotFoundPage.jsx';
 
 /* ── ProtectedRoute: redirects to /signin if not authenticated ── */
@@ -46,6 +47,17 @@ function AppRoutes() {
       <Route path="/fde-admin" element={
         <ProtectedRoute>
           <FDEAdminPage />
+        </ProtectedRoute>
+      }/>
+
+      <Route path="/live" element={
+        <ProtectedRoute>
+          <LiveClassesPage />
+        </ProtectedRoute>
+      }/>
+      <Route path="/live/:courseId" element={
+        <ProtectedRoute>
+          <LiveClassesPage />
         </ProtectedRoute>
       }/>
 

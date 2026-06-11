@@ -364,6 +364,10 @@ export default function LearnerDashboard() {
               </div>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <button onClick={()=>navigate("/live")} title="Live Classes"
+                style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,padding:"6px 12px",cursor:"pointer",color:BRAND,fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif" }}>
+                🎥 Live
+              </button>
               <SubjectDropdown value={subjectFilter} onChange={setSubjectFilter}/>
               <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:"#F0EBFF",borderRadius:100,padding:4,cursor:"pointer",border:"1px solid #DDD3FF" }}>
                 <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"#9CA3AF",fontSize:11,fontWeight:700,transition:"all .22s ease" }}>{isOnline?"● Online":"Online"}</div>

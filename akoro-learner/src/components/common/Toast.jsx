@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 function Toast({ msg, color, onDone }) {
   useEffect(()=>{ const t=setTimeout(onDone,3200); return()=>clearTimeout(t); },[]);

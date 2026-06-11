@@ -919,6 +919,104 @@ const instructorSessionsHandler = asyncHandler(async (req, res) => {
   res200(res, data ?? [], { total: data?.length ?? 0 });
 });
 
+/**
+ * GET /api/courses/:courseId/curriculum
+ * Learner-facing modular schedule: course_modules (weeks) → their live_sessions,
+ * with the student's registration state, join eligibility, and per-topic
+ * materials. Sessions without a module fall into an "unscheduled" bucket.
+ */
+const curriculumHandler = asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const userId       = req.user.id;
+  const isStudent    = req.user.role === "student";
+
+  const { data: course } = await db
+    .from("courses")
+    .select("id, title, description, cover_image_url, instructor_id")
+    .eq("id", courseId)
+    .maybeSingle();
+  if (!course) return res404(res, "Course not found");
+
+  // Enrollment gate (instructors/admins always allowed for their own course).
+  let enrolled = false;
+  if (course.instructor_id !== userId) {
+    const { data: enr } = await db
+      .from("enrollments")
+      .select("id").eq("user_id", userId).eq("course_id", courseId).eq("status", "active").maybeSingle();
+    enrolled = !!enr;
+    if (!enrolled && isStudent) return res403(res, "You must be enrolled to view this curriculum");
+  } else {
+    enrolled = true;
+  }
+
+  const [{ data: modules }, { data: sessions }] = await Promise.all([
+    db.from("course_modules").select("id, title, description, order_index").eq("course_id", courseId).order("order_index", { ascending: true }),
+    db.from("live_sessions")
+      .select(`
+        id, title, topic, description, session_type, module_id, order_index,
+        scheduled_start, scheduled_end, status, platform, join_url, meeting_password,
+        recording_url, max_participants, current_participants
+      `)
+      .eq("course_id", courseId)
+      .order("scheduled_start", { ascending: true }),
+  ]);
+
+  const sessionIds = (sessions ?? []).map((s) => s.id);
+
+  // Batch-fetch the student's participant rows + all materials (avoid N+1).
+  const [{ data: regs }, { data: materials }] = await Promise.all([
+    sessionIds.length
+      ? db.from("session_participants").select("session_id, status").eq("user_id", userId).in("session_id", sessionIds)
+      : Promise.resolve({ data: [] }),
+    sessionIds.length
+      ? db.from("session_materials").select("id, session_id, title, kind, url, order_index").in("session_id", sessionIds).order("order_index", { ascending: true })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const regBySession = Object.fromEntries((regs ?? []).map((r) => [r.session_id, r.status]));
+  const matsBySession = {};
+  for (const m of materials ?? []) (matsBySession[m.session_id] ??= []).push(m);
+
+  const shapeSession = (s) => {
+    const registered = s.id in regBySession;
+    const out = {
+      id: s.id, title: s.title, topic: s.topic, description: s.description,
+      session_type: s.session_type, module_id: s.module_id, order_index: s.order_index,
+      scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
+      status: s.status, platform: s.platform, recording_url: s.recording_url,
+      max_participants: s.max_participants, current_participants: s.current_participants,
+      is_registered: registered,
+      participant_status: regBySession[s.id] ?? null,
+      can_join: s.status === "live" && s.current_participants < s.max_participants,
+      materials: matsBySession[s.id] ?? [],
+      // Only expose the join URL/password once the session is live.
+      join_url: s.status === "live" ? s.join_url : null,
+      meeting_password: (s.status === "live" && !isStudent) ? s.meeting_password : null,
+    };
+    return out;
+  };
+
+  const byModule = {};
+  const unscheduled = [];
+  for (const s of sessions ?? []) {
+    const shaped = shapeSession(s);
+    if (s.module_id) (byModule[s.module_id] ??= []).push(shaped);
+    else unscheduled.push(shaped);
+  }
+
+  const moduleTree = (modules ?? []).map((m) => ({
+    id: m.id, title: m.title, description: m.description, order_index: m.order_index,
+    sessions: byModule[m.id] ?? [],
+  }));
+
+  res200(res, {
+    course: { id: course.id, title: course.title, description: course.description, cover_image_url: course.cover_image_url },
+    enrolled,
+    modules: moduleTree,
+    unscheduled,
+  });
+});
+
 // ─── § ROUTER ─────────────────────────────────────────────────────────────────
 
 const router = Router();
@@ -945,6 +1043,7 @@ router.get ("/live-sessions/:sessionId/participants",        authenticateToken, 
 router.get ("/live-sessions/:sessionId/analytics",           authenticateToken, requireRole(["instructor", "admin"]), analyticsHandler);
 
 // Dashboards
+router.get("/courses/:courseId/curriculum",                  authenticateToken, curriculumHandler);
 router.get("/user/sessions",                                 authenticateToken, dashboardHandler);
 router.get("/instructor/sessions",                           authenticateToken, requireRole(["instructor", "admin"]), instructorSessionsHandler);
 
