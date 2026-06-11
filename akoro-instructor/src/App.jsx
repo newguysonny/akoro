@@ -10,20 +10,32 @@ import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 
 /* ── ProtectedRoute ─────────────────────────────────────────────────── */
+const INSTRUCTOR_ROLES = ['teacher', 'admin'];
+
 function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   if (!isAuthenticated) {
     localStorage.setItem('akoro_redirect', location.pathname + location.search);
     return <Navigate to="/signin" replace />;
+  }
+  // Role guard: a valid session that isn't an instructor (e.g. a student
+  // cookie shared across apps, or a non-teacher Google sign-in) is bounced
+  // to /signin with a message instead of seeing the dashboard.
+  if (user?.role && !INSTRUCTOR_ROLES.includes(user.role)) {
+    return <Navigate to="/signin?error=not_instructor" replace />;
   }
   return children;
 }
 
 /* ── GuestRoute ─────────────────────────────────────────────────────── */
 function GuestRoute({ children }) {
-  const { isAuthenticated } = useAuth();
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  const { isAuthenticated, user } = useAuth();
+  // Only bounce authenticated *instructors* away from /signin. A logged-in
+  // non-instructor must stay here (with the "not_instructor" message) rather
+  // than ping-ponging against ProtectedRoute's role guard.
+  const isInstructor = !user?.role || INSTRUCTOR_ROLES.includes(user.role);
+  if (isAuthenticated && isInstructor) return <Navigate to="/" replace />;
   return children;
 }
 

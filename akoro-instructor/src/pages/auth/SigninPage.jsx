@@ -110,7 +110,10 @@ export default function SigninPage() {
             background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
             padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: RED,
           }}>
-            {formErr || (urlError === 'google_failed' ? 'Google sign-in failed. Try again.' : urlError)}
+            {formErr
+              || (urlError === 'google_failed' ? 'Google sign-in failed. Try again.'
+              : urlError === 'not_instructor' ? 'This portal is for instructors only. Your account does not have access.'
+              : urlError)}
           </div>
         )}
 
