@@ -1,30 +1,46 @@
 /**
  * voice/streaming.js
  * ─────────────────────────────────────────────────────────────
- * Realtime voice streaming via Deepgram nova-2.
- * Acts as a server-side proxy between the client socket and
- * Deepgram's streaming API — API key never exposed to browser.
+ * Realtime voice streaming via Deepgram nova-2 (STT)
+ * + streaming TTS via OpenAI tts-1 (TTS).
  *
- * Socket events (client → server):
+ * STT events (client → server):
  *   start_voice_stream          — open Deepgram live connection
  *   voice_audio_chunk { audio } — base64 PCM/webm chunk (every 250ms)
  *   stop_voice_stream           — close connection, emit voice_complete
  *
- * Socket events (server → client):
+ * STT events (server → client):
  *   voice_stream_ready          — Deepgram connection open, start sending chunks
  *   voice_interim  { text, accumulated }   — word forming (grey text)
  *   voice_final    { text, accumulated }   — sentence confirmed (black text)
  *   voice_utterance_end { transcript }     — silence gap detected
  *   voice_complete { transcript }          — stream closed, full text ready
  *   voice_error    { message }             — transcription error
+ *
+ * TTS events (client → server):
+ *   start_tts_stream  { text, voice, seq } — begin streaming TTS audio
+ *   stop_tts_stream                        — abort current TTS (barge-in)
+ *
+ * TTS events (server → client):
+ *   tts_audio_chunk { chunk, seq }  — base64 MP3 chunk
+ *   tts_stream_done { seq }         — stream complete
+ *   tts_stream_stopped              — stream aborted on request
+ *   tts_error { message }           — TTS failure
  */
 
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
+import OpenAI from "openai";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const VALID_VOICES = ["alloy","echo","fable","onyx","nova","shimmer"];
 
 const dg = createClient(process.env.DEEPGRAM_API_KEY);
 
 // socketId → { live: DeepgramLive, transcript: string }
 const liveConnections = new Map();
+
+// socketId → AbortController (for barge-in TTS cancellation)
+const ttsStreams = new Map();
 
 function closeLiveConnection(socketId) {
   const conn = liveConnections.get(socketId);
@@ -139,8 +155,59 @@ export function setupVoiceStreaming(io) {
       socket.emit("voice_complete", { transcript: final });
     });
 
+    /* ── start_tts_stream ───────────────────────────────────────── */
+    socket.on("start_tts_stream", async ({ text, voice, seq }) => {
+      // Cancel any in-progress TTS for this socket (previous turn barge-in)
+      const existing = ttsStreams.get(socket.id);
+      if (existing) { existing.abort(); ttsStreams.delete(socket.id); }
+
+      if (!text?.trim()) return;
+      const ttsVoice = VALID_VOICES.includes(voice) ? voice : "alloy";
+      const controller = new AbortController();
+      ttsStreams.set(socket.id, controller);
+
+      try {
+        const response = await openai.audio.speech.create({
+          model:           "tts-1",
+          voice:           ttsVoice,
+          input:           text.slice(0, 4096),
+          response_format: "mp3",
+        });
+
+        // Pipe the ReadableStream body as base64 chunks
+        for await (const chunk of response.body) {
+          if (controller.signal.aborted) break;
+          socket.emit("tts_audio_chunk", {
+            chunk: Buffer.from(chunk).toString("base64"),
+            seq,
+          });
+        }
+
+        if (!controller.signal.aborted) {
+          socket.emit("tts_stream_done", { seq });
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          console.error(`[tts/stream] socket=${socket.id}`, err.message);
+          socket.emit("tts_error", { message: err.message });
+        }
+      } finally {
+        ttsStreams.delete(socket.id);
+      }
+    });
+
+    /* ── stop_tts_stream (barge-in) ──────────────────────────────── */
+    socket.on("stop_tts_stream", () => {
+      const ctrl = ttsStreams.get(socket.id);
+      if (ctrl) { ctrl.abort(); ttsStreams.delete(socket.id); }
+      socket.emit("tts_stream_stopped");
+    });
+
     /* ── cleanup on disconnect ───────────────────────────────────── */
     socket.on("disconnect", () => {
+      const ctrl = ttsStreams.get(socket.id);
+      if (ctrl) ctrl.abort();
+      ttsStreams.delete(socket.id);
       closeLiveConnection(socket.id);
     });
   });

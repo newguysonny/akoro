@@ -56,8 +56,69 @@ function TeachAgentModal({ session, config, onClose }) {
   // The agent mirrors this — text gets text, voice gets voice.
   const lastModalityRef = useRef("text");
   const speakSeqRef     = useRef(0);     // bumped per turn — stops stale speech queues
+
+  // Streaming TTS refs
+  const ttsAudioRef = useRef(null);   // current <audio> element
+  const ttsMsRef    = useRef(null);   // MediaSource
+  const ttsSbRef    = useRef(null);   // SourceBuffer
+  const ttsQueueRef = useRef([]);     // pending ArrayBuffers while SourceBuffer is busy
+  const ttsDoneRef  = useRef(false);  // server signalled stream complete
+
+  const stopTts = () => {
+    wsRef.current?.emit("stop_tts_stream");
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      try { URL.revokeObjectURL(ttsAudioRef.current.src); } catch {}
+      ttsAudioRef.current = null;
+    }
+    ttsMsRef.current    = null;
+    ttsSbRef.current    = null;
+    ttsQueueRef.current = [];
+    ttsDoneRef.current  = false;
+  };
+
+  const streamTts = (text, seq) => {
+    if (!wsRef.current?.connected || !text) return;
+    stopTts();
+
+    const ms    = new MediaSource();
+    const audio = new Audio();
+    ttsAudioRef.current = audio;
+    ttsMsRef.current    = ms;
+    ttsQueueRef.current = [];
+    ttsDoneRef.current  = false;
+
+    audio.src = URL.createObjectURL(ms);
+
+    ms.addEventListener("sourceopen", () => {
+      let sb;
+      try { sb = ms.addSourceBuffer("audio/mpeg"); }
+      catch { return; }
+      ttsSbRef.current = sb;
+
+      const flush = () => {
+        if (sb.updating || ttsQueueRef.current.length === 0) return;
+        sb.appendBuffer(ttsQueueRef.current.shift());
+      };
+
+      sb.addEventListener("updateend", () => {
+        if (ttsSbRef.current !== sb) return;
+        if (ttsQueueRef.current.length > 0) { flush(); return; }
+        if (ttsDoneRef.current && !sb.updating) {
+          try { ms.endOfStream(); } catch {}
+        }
+      });
+
+      // Drain anything queued before sourceopen fired
+      flush();
+    }, { once: true });
+
+    audio.play().catch(() => {});
+    wsRef.current.emit("start_tts_stream", { text, voice: ttsVoice, seq });
+  };
+
   const maybeSpeak = (text) => {
-    if (lastModalityRef.current !== "text" && text) speakBlock(text, speakSeqRef.current);
+    if (lastModalityRef.current !== "text" && text) streamTts(text, speakSeqRef.current);
   };
 
   const [voiceStreaming, setVoiceStreaming] = useState(false);
@@ -173,9 +234,53 @@ function TeachAgentModal({ session, config, onClose }) {
         setVoiceStreaming(false);
         setInterimText("");
       });
+
+      // ── Streaming TTS events ───────────────────────────────────
+      ws.on("tts_audio_chunk", ({ chunk, seq }) => {
+        if (seq !== speakSeqRef.current) return;  // stale turn
+        const bytes = Uint8Array.from(atob(chunk), c => c.charCodeAt(0));
+        const sb    = ttsSbRef.current;
+        if (!sb) {
+          // sourceopen hasn't fired yet — queue for later flush
+          ttsQueueRef.current.push(bytes.buffer);
+          return;
+        }
+        if (sb.updating) {
+          ttsQueueRef.current.push(bytes.buffer);
+        } else {
+          sb.appendBuffer(bytes.buffer);
+        }
+      });
+
+      ws.on("tts_stream_done", ({ seq }) => {
+        if (seq !== speakSeqRef.current) return;
+        ttsDoneRef.current = true;
+        const sb = ttsSbRef.current;
+        if (sb && !sb.updating && ttsQueueRef.current.length === 0) {
+          try { ttsMsRef.current?.endOfStream(); } catch {}
+        }
+      });
+
+      ws.on("tts_stream_stopped", () => {
+        // Backend confirmed abort — ensure local state is clean
+        if (ttsAudioRef.current) {
+          ttsAudioRef.current.pause();
+          try { URL.revokeObjectURL(ttsAudioRef.current.src); } catch {}
+          ttsAudioRef.current = null;
+        }
+        ttsMsRef.current  = null;
+        ttsSbRef.current  = null;
+        ttsDoneRef.current = false;
+        ttsQueueRef.current = [];
+      });
+
+      ws.on("tts_error", ({ message }) => {
+        console.warn("[tts stream]", message);
+      });
     }
 
     return () => {
+      stopTts();
       wsRef.current?.emit("end_session");
       wsRef.current?.disconnect();
       clearInterval(timerRef.current);
@@ -189,6 +294,7 @@ function TeachAgentModal({ session, config, onClose }) {
       clearInterval(timerRef.current);
       setSeconds(0);
     } else {
+      stopTts(); // barge-in: stop agent speech before user records
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         chunksRef.current = [];
@@ -227,33 +333,6 @@ function TeachAgentModal({ session, config, onClose }) {
     }
   };
 
-  // TTS — play student AI agent response sentence by sentence
-  const speakSentence = (text) => new Promise(resolve => {
-    fetch(`${API}/api/voice/speak`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" }, credentials:"include",
-      body: JSON.stringify({ text: text.slice(0,300), voice: ttsVoice }),
-    }).then(r => r.ok ? r.blob() : null)
-      .then(blob => {
-        if (!blob) { resolve(); return; }
-        const url   = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.play().catch(resolve);
-        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-      }).catch(resolve);
-  });
-
-  const speakBlock = async (text, seq = speakSeqRef.current) => {
-    if (!text) return;
-    // Split into sentences — start playing first sentence immediately
-    const sentences = (text.match(/[^.!?]+[.!?]+/g) || [text]).slice(0, 4);
-    for (const s of sentences) {
-      if (seq !== speakSeqRef.current) return;  // user moved on (new turn / switched to text)
-      await speakSentence(s.trim());
-    }
-  };
-
   // ── Voice streaming (realtime Deepgram) ────────────────────────
   const toggleVoiceStream = async () => {
     if (voiceStreaming) {
@@ -263,6 +342,7 @@ function TeachAgentModal({ session, config, onClose }) {
       setInterimText("");
       return;
     }
+    stopTts(); // barge-in: stop agent speech before going live
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime   = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
