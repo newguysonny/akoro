@@ -98,7 +98,7 @@ router.get("/admin/partners", requireRole(["admin"]), async (req, res) => {
     const db = (await import("../../db.js")).default;
     const [{ data: schools }, { data: teachers }] = await Promise.all([
       db.from("schools").select("id, name, logo_url").order("name"),
-      db.from("users").select("id, full_name, username, email, role").in("role", ["teacher", "admin"]).order("full_name"),
+      db.from("users").select("id, full_name, username, email, role").in("role", ["instructor", "admin"]).order("full_name"),
     ]);
     res.json({ schools: schools ?? [], teachers: teachers ?? [] });
   } catch (err) {

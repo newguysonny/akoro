@@ -33,7 +33,7 @@ export default function SigninPage() {
     try {
       const data = await login({ email, password });
       const role = data?.user?.role || data?.role;
-      if (role && role !== 'teacher' && role !== 'admin') {
+      if (role && role !== 'instructor' && role !== 'admin') {
         setFormErr('This portal is for instructors only');
         await logout();
         return;

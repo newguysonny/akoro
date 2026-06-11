@@ -49,7 +49,7 @@ const getStats = asyncHandler(async (req, res) => {
     const { data: courses, error: coursesErr } = await db
       .from("courses")
       .select("id, price, status")
-      .eq("teacher_id", teacherId);
+      .eq("instructor_id", teacherId);
 
     if (coursesErr) throw new Error(coursesErr.message);
 
@@ -190,7 +190,7 @@ const listCourses = asyncHandler(async (req, res) => {
     const { data: courses, error } = await db
       .from("courses")
       .select("*")
-      .eq("teacher_id", req.user.id)
+      .eq("instructor_id", req.user.id)
       .neq("status", "archived")
       .order("created_at", { ascending: false });
 
@@ -230,7 +230,7 @@ const createCourse = asyncHandler(async (req, res) => {
     const { data, error } = await db
       .from("courses")
       .insert({
-        teacher_id:    req.user.id,
+        instructor_id:    req.user.id,
         title,
         description:   description ?? null,
         subject,
@@ -260,14 +260,14 @@ const updateCourse = asyncHandler(async (req, res) => {
     // Verify ownership
     const { data: existing } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", id)
       .single();
 
     if (!existing)                        return err404(res, "Course not found");
-    if (existing.teacher_id !== req.user.id) return err403(res, "You do not own this course");
+    if (existing.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
-    const forbidden = ["id", "teacher_id", "created_at"];
+    const forbidden = ["id", "instructor_id", "created_at"];
     const updates   = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => !forbidden.includes(k)),
     );
@@ -293,12 +293,12 @@ const deleteCourse = asyncHandler(async (req, res) => {
 
     const { data: existing } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", id)
       .single();
 
     if (!existing)                        return err404(res, "Course not found");
-    if (existing.teacher_id !== req.user.id) return err403(res, "You do not own this course");
+    if (existing.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
     const { error } = await db
       .from("courses")
@@ -322,7 +322,7 @@ const listSessions = asyncHandler(async (req, res) => {
     let courseQuery = db
       .from("courses")
       .select("id")
-      .eq("teacher_id", req.user.id);
+      .eq("instructor_id", req.user.id);
 
     if (courseId) courseQuery = courseQuery.eq("id", courseId);
     const { data: courses, error: cErr } = await courseQuery;
@@ -364,12 +364,12 @@ const createSession = asyncHandler(async (req, res) => {
     // Verify ownership
     const { data: course } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", course_id)
       .single();
 
     if (!course)                        return err404(res, "Course not found");
-    if (course.teacher_id !== req.user.id) return err403(res, "You do not own this course");
+    if (course.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
     const { data, error } = await db
       .from("live_sessions")
@@ -412,11 +412,11 @@ const updateSession = asyncHandler(async (req, res) => {
 
     const { data: course } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", session.course_id)
       .single();
 
-    if (!course || course.teacher_id !== req.user.id)
+    if (!course || course.instructor_id !== req.user.id)
       return err403(res, "You do not own this session's course");
 
     const forbidden = ["id", "course_id", "instructor_id", "created_at"];
@@ -453,11 +453,11 @@ const deleteSession = asyncHandler(async (req, res) => {
 
     const { data: course } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", session.course_id)
       .single();
 
-    if (!course || course.teacher_id !== req.user.id)
+    if (!course || course.instructor_id !== req.user.id)
       return err403(res, "You do not own this session's course");
 
     const { error } = await db.from("live_sessions").delete().eq("id", id);
@@ -476,7 +476,7 @@ const listStudents = asyncHandler(async (req, res) => {
     const { courseId, search, status } = req.query;
 
     // Get teacher's course IDs
-    let cq = db.from("courses").select("id").eq("teacher_id", req.user.id);
+    let cq = db.from("courses").select("id").eq("instructor_id", req.user.id);
     if (courseId) cq = cq.eq("id", courseId);
     const { data: courses, error: cErr } = await cq;
     if (cErr) throw new Error(cErr.message);
@@ -529,12 +529,12 @@ const enrolStudent = asyncHandler(async (req, res) => {
     // Verify teacher owns course
     const { data: course } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", courseId)
       .single();
 
     if (!course)                        return err404(res, "Course not found");
-    if (course.teacher_id !== req.user.id) return err403(res, "You do not own this course");
+    if (course.instructor_id !== req.user.id) return err403(res, "You do not own this course");
 
     // Find or create user by email
     let { data: user } = await db
@@ -620,11 +620,11 @@ const removeStudent = asyncHandler(async (req, res) => {
 
     const { data: course } = await db
       .from("courses")
-      .select("id, teacher_id")
+      .select("id, instructor_id")
       .eq("id", enrollment.course_id)
       .single();
 
-    if (!course || course.teacher_id !== req.user.id)
+    if (!course || course.instructor_id !== req.user.id)
       return err403(res, "You do not own this enrollment's course");
 
     const { error } = await db.from("enrollments").delete().eq("id", enrollmentId);
@@ -673,12 +673,12 @@ const createBattle = asyncHandler(async (req, res) => {
     if (courseId) {
       const { data: course } = await db
         .from("courses")
-        .select("id, teacher_id")
+        .select("id, instructor_id")
         .eq("id", courseId)
         .single();
 
       if (!course)                        return err404(res, "Course not found");
-      if (course.teacher_id !== req.user.id) return err403(res, "You do not own this course");
+      if (course.instructor_id !== req.user.id) return err403(res, "You do not own this course");
     }
 
     const { data: battle, error: battleErr } = await db
@@ -885,9 +885,9 @@ const disconnectStreaming = asyncHandler(async (req, res) => {
 
 const router = Router();
 
-// All routes require authentication and teacher/admin role
+// All routes require authentication and instructor/admin role
 router.use(authenticateToken);
-router.use(requireRole(["teacher", "admin"]));
+router.use(requireRole(["instructor", "admin"]));
 
 // Stats
 router.get("/stats", getStats);

@@ -10,7 +10,7 @@ import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 
 /* ── ProtectedRoute ─────────────────────────────────────────────────── */
-const INSTRUCTOR_ROLES = ['teacher', 'admin'];
+const INSTRUCTOR_ROLES = ['instructor', 'admin'];
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, user } = useAuth();
