@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/battles', icon: Swords,        label: 'Battles' },
   { to: '/tasks',   icon: CheckSquare,   label: 'Tasks' },
   { to: '/chat',    icon: MessageSquare, label: 'AI Chat' },
+  { to: '/settings',icon: Settings,      label: 'Settings' },
 ];
 
 function NavItem({ to, icon: Icon, label }) {
