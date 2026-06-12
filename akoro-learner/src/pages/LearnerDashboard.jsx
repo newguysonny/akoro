@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
+import { useLang } from '../contexts/LanguageContext.jsx';
 
 // Components
 import SessionCard    from '../components/sessions/SessionCard.jsx';
@@ -54,6 +55,7 @@ function SubjectDropdown({ value, onChange }) {
 
 export default function LearnerDashboard() {
   const navigate = useNavigate();
+  const { t } = useLang();
   const [tab,               setTab]              = useState("sessions");
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
@@ -328,7 +330,7 @@ export default function LearnerDashboard() {
     }
   };
 
-  const NAV_ITEMS=[{key:"sessions",icon:"📚",label:"Learn"},{key:"discovery",icon:"🧭",label:"Discover"},{key:"rankings",icon:"🏆",label:"Rankings"},{key:"battles",icon:"⚔️",label:"Battles"},{key:"agent",icon:"🤖",label:"Agent"}];
+  const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
   const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
 
   return (
@@ -349,10 +351,10 @@ export default function LearnerDashboard() {
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
-      <div style={{ width:"100vw",height:"100vh",fontFamily:"'Nunito',sans-serif",background:"#F3F1FF",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
+      <div style={{ width:"100vw",height:"100vh",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 
         {/* HEADER */}
-        <div style={{ background:"rgba(255,255,255,.97)",backdropFilter:"blur(14px)",borderBottom:"1px solid #EDE9FE",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
+        <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
               <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
@@ -360,7 +362,7 @@ export default function LearnerDashboard() {
                 <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"#9CA3AF",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
               </div>
               <div>
-                <p style={{ fontSize:15,fontWeight:900,color:"#111827",margin:0,lineHeight:1.2 }}>Alex Johnson</p>
+                <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,lineHeight:1.2 }}>Alex Johnson</p>
                 <div style={{ display:"flex",alignItems:"center",gap:5 }}><ZapIcon size={11} color={GOLD}/><span style={{ fontSize:11,fontWeight:700,color:"#9CA3AF" }}>2,840 XP · Grade 10</span></div>
               </div>
             </div>
@@ -387,9 +389,9 @@ export default function LearnerDashboard() {
         {/* SCROLLABLE CONTENT */}
         <div style={{ flex:1,overflowY:"auto",paddingBottom:72 }}>
           {tab==="sessions"&&(
-            <div style={{ background:"#fff",display:"flex",flexDirection:"column",minHeight:"100%" }}>
+            <div style={{ background:"var(--ak-surface)",display:"flex",flexDirection:"column",minHeight:"100%" }}>
               {/* ── Top session type tabs ── */}
-              <div style={{ display:"flex",borderBottom:"1px solid #F3F4F6",background:"#fff",flexShrink:0 }}>
+              <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                 {[
                   {key:"all",    label:"All",          icon:"📚", count:bySubject.length},
                   {key:"live",   label:"Live Classes",  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
@@ -555,9 +557,9 @@ export default function LearnerDashboard() {
             </div>
           )}
           {tab==="challenges"&&(
-            <div style={{ background:"#fff",minHeight:"100%" }}>
-              <div style={{ padding:"12px 18px 10px",borderBottom:"1px solid #F3F4F6" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}><ZapIcon size={13} color={RED}/><span style={{ fontSize:12,fontWeight:800,color:"#374151" }}>Peer Challenges — Accept before they expire</span></div>
+            <div style={{ background:"var(--ak-surface)",minHeight:"100%" }}>
+              <div style={{ padding:"12px 18px 10px",borderBottom:"1px solid var(--ak-border)" }}>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}><ZapIcon size={13} color={RED}/><span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text-sec)" }}>Peer Challenges — Accept before they expire</span></div>
                 <div style={{ display:"flex",gap:10 }}>
                   <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:RED,animation:"pulse-dot 1.2s ease-in-out infinite" }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>⚡ Immediate — battle opens right away</span></div>
                   <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:BRAND }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>🗓 Scheduled — goes to Battles tab</span></div>
@@ -580,7 +582,7 @@ export default function LearnerDashboard() {
         </div>
 
         {/* BOTTOM NAV */}
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"rgba(255,255,255,.97)",backdropFilter:"blur(12px)",borderTop:"1px solid #EDE9FE",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
+        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
           {NAV_ITEMS.map(({key,icon,label})=>{
             const navActive=tab===key;
             return (

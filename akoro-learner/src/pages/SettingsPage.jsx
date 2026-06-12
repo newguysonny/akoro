@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate }    from 'react-router-dom';
 import { useAuth }        from '../contexts/AuthContext.jsx';
+import { useTheme, applyTheme, LS_DISPLAY, LS_ACCENT } from '../contexts/ThemeContext.jsx';
+import { useLang, LS_LANGUAGE, LANG_NAME_TO_CODE }     from '../contexts/LanguageContext.jsx';
 import QRCode from 'qrcode';
 import {
   getMyProfile,
@@ -20,44 +22,6 @@ import {
 const BRAND  = '#6C3BFF';
 const RED    = '#EF4444';
 const ORANGE = '#E8884A';
-
-/* ─── localStorage keys ───────────────────────────────────────── */
-const LS_DISPLAY  = 'akoro_display_mode';
-const LS_ACCENT   = 'akoro_accent_color';
-const LS_LANGUAGE = 'akoro_language';
-
-/* ─── Language → BCP-47 ──────────────────────────────────────── */
-const LANG_CODES = {
-  English:'en', Yoruba:'yo', Igbo:'ig', Hausa:'ha',
-  Pidgin:'pcm', French:'fr', Arabic:'ar',
-};
-
-/* ─── Apply CSS custom-properties to :root ────────────────────── */
-function applyTheme(mode, accent) {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
-  const root = document.documentElement;
-  root.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  const v = isDark
-    ? { '--ak-bg':'#0D1117','--ak-surface':'#161B22','--ak-surface-hover':'#1C2128',
-        '--ak-border':'#21262D','--ak-border2':'#30363D','--ak-border3':'#484F58',
-        '--ak-text':'#E6EDF3','--ak-text-sec':'#C9D1D9',
-        '--ak-text-sub':'#8B949E','--ak-text-muted':'#6E7681',
-        '--ak-toggle-off':'#30363D','--ak-tag-bg':'#21262D',
-        '--ak-tag-text':'#C9D1D9','--ak-select-bg':'#0D1117' }
-    : { '--ak-bg':'#F9FAFB','--ak-surface':'#ffffff','--ak-surface-hover':'#F9FAFB',
-        '--ak-border':'#F3F4F6','--ak-border2':'#E5E7EB','--ak-border3':'#D1D5DB',
-        '--ak-text':'#111827','--ak-text-sec':'#374151',
-        '--ak-text-sub':'#6B7280','--ak-text-muted':'#9CA3AF',
-        '--ak-toggle-off':'#E5E7EB','--ak-tag-bg':'#F3F4F6',
-        '--ak-tag-text':'#374151','--ak-select-bg':'#F9FAFB' };
-  for (const [k, val] of Object.entries(v)) root.style.setProperty(k, val);
-  if (accent) root.style.setProperty('--ak-accent', accent);
-}
-
-/* Apply immediately from localStorage on module load (before first paint) */
-applyTheme(localStorage.getItem(LS_DISPLAY) || 'system', localStorage.getItem(LS_ACCENT) || BRAND);
-document.documentElement.lang = LANG_CODES[localStorage.getItem(LS_LANGUAGE)] || 'en';
 
 /* ─── Reference data ──────────────────────────────────────────── */
 const ALL_SUBJECTS = [
@@ -810,7 +774,7 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 }
 
 /* ─── User tab ────────────────────────────────────────────────── */
-function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], onLogout, accentColor }) {
+function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage }) {
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -837,19 +801,10 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       return;
     }
 
-    /* Persist theme-related settings to localStorage & apply immediately */
-    if (field === 'displayMode') {
-      localStorage.setItem(LS_DISPLAY, val);
-      applyTheme(val, profile.accentColor || BRAND);
-    }
-    if (field === 'accentColor') {
-      localStorage.setItem(LS_ACCENT, val);
-      applyTheme(profile.displayMode || 'system', val);
-    }
-    if (field === 'language') {
-      localStorage.setItem(LS_LANGUAGE, val);
-      document.documentElement.lang = LANG_CODES[val] || 'en';
-    }
+    /* Delegate to ThemeContext / LanguageContext so all pages react */
+    if (field === 'displayMode') { onSetMode(val); }
+    if (field === 'accentColor') { onSetAccent(val); }
+    if (field === 'language')    { onSetLanguage(val); }
 
     /* Change password — separate API endpoint */
     if (field === 'password') {
@@ -877,7 +832,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     } catch {
       showToast('Saved locally ✓');
     }
-  }, [onSaveProfile, setProfile, onLogout, profile]);
+  }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage]);
 
   return (
     <div style={{ padding:'20px 0 0' }}>
@@ -1250,8 +1205,10 @@ function LoadingSkeleton() {
 
 /* ─── Main SettingsPage ───────────────────────────────────────── */
 export default function SettingsPage() {
-  const navigate           = useNavigate();
-  const { user, logout }   = useAuth();
+  const navigate                   = useNavigate();
+  const { user, logout }           = useAuth();
+  const { accentColor, setMode: onSetMode, setAccent: onSetAccent } = useTheme();
+  const { language, setLanguage: onSetLanguage }                    = useLang();
 
   const [tab,         setTab]         = useState('user');
   const [profile,     setProfile]     = useState(null);
@@ -1260,15 +1217,13 @@ export default function SettingsPage() {
   const [showLogout,  setShowLogout]  = useState(false);
   const [guides,      setGuides]      = useState([]);
 
-  /* accentColor as separate state so header updates immediately */
-  const [accentColor, setAccentColor] = useState(
-    () => localStorage.getItem(LS_ACCENT) || BRAND
-  );
-
-  /* Watch profile.accentColor changes and sync to state + localStorage */
+  /* When API returns saved accent/lang, push into global contexts */
   useEffect(() => {
-    if (profile?.accentColor) setAccentColor(profile.accentColor);
+    if (profile?.accentColor) onSetAccent(profile.accentColor);
   }, [profile?.accentColor]);
+  useEffect(() => {
+    if (profile?.language) onSetLanguage(profile.language);
+  }, [profile?.language]);
 
   /* ── Load profile on mount ─────────────────────────────────── */
   useEffect(() => {
@@ -1282,13 +1237,10 @@ export default function SettingsPage() {
         const accent      = data.accentColor  || localStorage.getItem(LS_ACCENT)  || BRAND;
         const language    = data.language     || localStorage.getItem(LS_LANGUAGE) || 'English';
 
-        /* Sync API values back to localStorage & apply */
-        localStorage.setItem(LS_DISPLAY,  displayMode);
-        localStorage.setItem(LS_ACCENT,   accent);
-        localStorage.setItem(LS_LANGUAGE, language);
-        applyTheme(displayMode, accent);
-        document.documentElement.lang = LANG_CODES[language] || 'en';
-        setAccentColor(accent);
+        /* Push API values into global contexts */
+        onSetMode(displayMode);
+        onSetAccent(accent);
+        onSetLanguage(language);
 
         setProfile({
           id:            data.id,
@@ -1374,17 +1326,6 @@ export default function SettingsPage() {
       })
       .finally(() => setLoading(false));
   }, [user]);
-
-  /* Listen for system dark-mode changes when display mode is 'system' */
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => {
-      const mode = localStorage.getItem(LS_DISPLAY) || 'system';
-      if (mode === 'system') applyTheme('system', localStorage.getItem(LS_ACCENT) || BRAND);
-    };
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
 
   const handleSaveProfile     = useCallback(p => patchMyProfile(p), []);
   const handleSaveNotif       = useCallback(n => patchNotifications(n), []);
@@ -1474,7 +1415,10 @@ export default function SettingsPage() {
               onSaveAgent={handleSaveAgent}
               guides={guides}
               accentColor={accentColor}
-              onLogout={handleLogoutConfirm}/>
+              onLogout={handleLogoutConfirm}
+              onSetMode={onSetMode}
+              onSetAccent={onSetAccent}
+              onSetLanguage={onSetLanguage}/>
           : <AgentTab
               agent={agent} setAgent={setAgent}
               onSaveAgent={handleSaveAgent}/>

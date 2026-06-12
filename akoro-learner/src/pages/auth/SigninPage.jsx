@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -20,11 +21,12 @@ export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { login, verifyTwoFactor, loginWithGoogle, loading, clearError } = useAuth();
-  const [email,    setEmail]   = useState('');
-  const [password, setPassword]= useState('');
-  const [formErr,  setFormErr] = useState('');
-  const [challenge, setChallenge] = useState(null);
-  const [code,      setCode]      = useState('');
+  const { t } = useLang();
+  const [email,     setEmail]    = useState('');
+  const [password,  setPassword] = useState('');
+  const [formErr,   setFormErr]  = useState('');
+  const [challenge, setChallenge]= useState(null);
+  const [code,      setCode]     = useState('');
   const urlError = params.get('error');
 
   const handleSubmit = async (e) => {
@@ -34,8 +36,7 @@ export default function SigninPage() {
       const data = await login({ email, password });
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
       navigate('/', { replace:true });
-    }
-    catch (err) { setFormErr(err.message); }
+    } catch (err) { setFormErr(err.message); }
   };
 
   const handleVerify = async (e) => {
@@ -45,13 +46,16 @@ export default function SigninPage() {
     catch (err) { setFormErr(err.message); }
   };
 
-  const inp = { width:'100%', padding:'11px 14px', borderRadius:12,
-    border:'1.5px solid #E5E7EB', outline:'none', fontSize:14,
-    fontFamily:"'Nunito',sans-serif", color:'#111827', boxSizing:'border-box' };
+  const inp = {
+    width:'100%', padding:'11px 14px', borderRadius:12,
+    border:'1.5px solid var(--ak-border2)', outline:'none', fontSize:14,
+    fontFamily:"'Nunito',sans-serif", color:'var(--ak-text)',
+    background:'var(--ak-input-bg)', boxSizing:'border-box',
+  };
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column',
-      alignItems:'center', justifyContent:'center', background:'#F9FAFB',
+      alignItems:'center', justifyContent:'center', background:'var(--ak-bg)',
       padding:'24px 20px', fontFamily:"'Nunito',sans-serif" }}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:32 }}>
         <div style={{ width:38, height:38, borderRadius:12, background:BRAND,
@@ -59,16 +63,20 @@ export default function SigninPage() {
           boxShadow:`0 4px 14px ${BRAND}44` }}>
           <span style={{ fontSize:18 }}>🧠</span>
         </div>
-        <span style={{ fontSize:22, fontWeight:900, color:'#111827' }}>Akoro</span>
+        <span style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)' }}>Akoro</span>
       </div>
-      <div style={{ width:'100%', maxWidth:400, background:'#fff', borderRadius:24,
-        padding:'32px 28px', boxShadow:'0 4px 32px rgba(0,0,0,.08)' }}>
+
+      <div style={{ width:'100%', maxWidth:400, background:'var(--ak-surface)', borderRadius:24,
+        padding:'32px 28px', boxShadow:'0 4px 32px rgba(0,0,0,.12)',
+        border:'1px solid var(--ak-border)' }}>
+
         {challenge ? (
           <>
-            <h1 style={{ fontSize:22, fontWeight:900, color:'#111827', margin:'0 0 6px' }}>Two-factor verification</h1>
-            <p style={{ fontSize:13, color:'#6B7280', margin:'0 0 24px' }}>Enter the 6-digit code from your authenticator app</p>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Two-factor verification</h1>
+            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>Enter the 6-digit code from your authenticator app</p>
             {formErr && (
-              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{formErr}</div>
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
+                padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{formErr}</div>
             )}
             <form onSubmit={handleVerify}>
               <input type="text" inputMode="numeric" autoFocus maxLength={6} value={code}
@@ -76,64 +84,65 @@ export default function SigninPage() {
                 style={{ ...inp, textAlign:'center', letterSpacing:8, fontSize:22, fontWeight:800, marginBottom:20 }}/>
               <button type="submit" disabled={loading}
                 style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
-                  background:loading?'#E5E7EB':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
-                  color:loading?'#9CA3AF':'#fff', fontSize:14, fontWeight:800,
+                  background:loading?'var(--ak-tag-bg)':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
+                  color:loading?'var(--ak-text-muted)':'#fff', fontSize:14, fontWeight:800,
                   cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif" }}>
-                {loading ? 'Verifying…' : 'Verify & sign in'}
+                {loading ? t('common.loading') : 'Verify & sign in'}
               </button>
             </form>
             <button onClick={() => { setChallenge(null); setCode(''); setFormErr(''); }}
-              style={{ width:'100%', marginTop:14, background:'none', border:'none', color:'#9CA3AF', fontSize:13, fontWeight:700, cursor:'pointer' }}>
-              ← Back to sign in
+              style={{ width:'100%', marginTop:14, background:'none', border:'none',
+                color:'var(--ak-text-muted)', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              ← {t('common.back')} to sign in
             </button>
           </>
         ) : (
-        <>
-        <h1 style={{ fontSize:22, fontWeight:900, color:'#111827', margin:'0 0 6px' }}>Welcome back</h1>
-        <p style={{ fontSize:13, color:'#6B7280', margin:'0 0 24px' }}>Sign in to continue learning</p>
-        <button onClick={() => loginWithGoogle('/')}
-          style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
-            gap:10, padding:'12px', borderRadius:14, border:`1.5px solid #E5E7EB`,
-            background:'#fff', cursor:'pointer', fontSize:14, fontWeight:700,
-            color:'#374151', marginBottom:20, fontFamily:"'Nunito',sans-serif" }}>
-          <GoogleIcon /> Continue with Google
-        </button>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
-          <div style={{ flex:1, height:1, background:'#F3F4F6' }}/>
-          <span style={{ fontSize:11, fontWeight:600, color:'#9CA3AF' }}>or</span>
-          <div style={{ flex:1, height:1, background:'#F3F4F6' }}/>
-        </div>
-        {(formErr || urlError) && (
-          <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
-            padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>
-            {formErr || (urlError==='google_failed'?'Google sign-in failed. Try again.':urlError)}
-          </div>
-        )}
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom:14 }}>
-            <label style={{ display:'block', fontSize:12, fontWeight:800, color:'#374151', marginBottom:6 }}>Email</label>
-            <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-              placeholder="you@example.com" style={inp}/>
-          </div>
-          <div style={{ marginBottom:20 }}>
-            <label style={{ display:'block', fontSize:12, fontWeight:800, color:'#374151', marginBottom:6 }}>Password</label>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-              placeholder="••••••••" style={inp}/>
-          </div>
-          <button type="submit" disabled={loading}
-            style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
-              background:loading?'#E5E7EB':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
-              color:loading?'#9CA3AF':'#fff', fontSize:14, fontWeight:800,
-              cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif",
-              boxShadow:loading?'none':`0 4px 14px ${BRAND}44` }}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-        <p style={{ textAlign:'center', fontSize:13, color:'#6B7280', marginTop:20, marginBottom:0 }}>
-          Don't have an account?{' '}
-          <Link to="/signup" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>Sign up</Link>
-        </p>
-        </>
+          <>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Welcome back</h1>
+            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>Sign in to continue learning</p>
+            <button onClick={() => loginWithGoogle('/')}
+              style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
+                gap:10, padding:'12px', borderRadius:14, border:'1.5px solid var(--ak-border2)',
+                background:'var(--ak-surface)', cursor:'pointer', fontSize:14, fontWeight:700,
+                color:'var(--ak-text-sec)', marginBottom:20, fontFamily:"'Nunito',sans-serif" }}>
+              <GoogleIcon /> {t('auth.google')}
+            </button>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+              <div style={{ flex:1, height:1, background:'var(--ak-border)' }}/>
+              <span style={{ fontSize:11, fontWeight:600, color:'var(--ak-text-muted)' }}>or</span>
+              <div style={{ flex:1, height:1, background:'var(--ak-border)' }}/>
+            </div>
+            {(formErr || urlError) && (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
+                padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>
+                {formErr || (urlError==='google_failed'?'Google sign-in failed. Try again.':urlError)}
+              </div>
+            )}
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom:14 }}>
+                <label style={{ display:'block', fontSize:12, fontWeight:800, color:'var(--ak-text-sec)', marginBottom:6 }}>{t('auth.email')}</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
+                  placeholder="you@example.com" style={inp}/>
+              </div>
+              <div style={{ marginBottom:20 }}>
+                <label style={{ display:'block', fontSize:12, fontWeight:800, color:'var(--ak-text-sec)', marginBottom:6 }}>{t('auth.password')}</label>
+                <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+                  placeholder="••••••••" style={inp}/>
+              </div>
+              <button type="submit" disabled={loading}
+                style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
+                  background:loading?'var(--ak-tag-bg)':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
+                  color:loading?'var(--ak-text-muted)':'#fff', fontSize:14, fontWeight:800,
+                  cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif",
+                  boxShadow:loading?'none':`0 4px 14px ${BRAND}44` }}>
+                {loading ? t('common.loading') : t('auth.signin')}
+              </button>
+            </form>
+            <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
+              Don't have an account?{' '}
+              <Link to="/signup" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signup')}</Link>
+            </p>
+          </>
         )}
       </div>
     </div>
