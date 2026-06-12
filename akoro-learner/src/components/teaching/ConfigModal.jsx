@@ -55,27 +55,27 @@ function ConfigModal({ initial, onStart, onCancel }) {
 
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,fontFamily:"'Nunito',sans-serif" }}>
-      <div style={{ background:"#fff",borderRadius:16,maxWidth:540,width:"100%",maxHeight:"90vh",overflowY:"auto",padding:"24px 22px",boxShadow:"0 20px 60px rgba(0,0,0,.25)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)" }}>
+      <div style={{ background:"var(--ak-surface)",borderRadius:16,maxWidth:540,width:"100%",maxHeight:"90vh",overflowY:"auto",padding:"24px 22px",boxShadow:"0 20px 60px rgba(0,0,0,.25)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)" }}>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20 }}>
           <div>
-            <h2 style={{ fontSize:16,fontWeight:800,color:"#111827",margin:0 }}>Configure teaching session</h2>
-            <p style={{ fontSize:11.5,color:"#6B7280",margin:"3px 0 0" }}>You teach · your agent learns · NaNa guides</p>
+            <h2 style={{ fontSize:16,fontWeight:800,color:"var(--ak-text)",margin:0 }}>Configure teaching session</h2>
+            <p style={{ fontSize:11.5,color:"var(--ak-text-sub)",margin:"3px 0 0" }}>You teach · your agent learns · NaNa guides</p>
           </div>
-          {onCancel && <button onClick={onCancel} style={{ width:30,height:30,borderRadius:"50%",border:"0.5px solid #E5E7EB",background:"#F9FAFB",cursor:"pointer",fontSize:14,color:"#6B7280" }}>✕</button>}
+          {onCancel && <button onClick={onCancel} style={{ width:30,height:30,borderRadius:"50%",border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",cursor:"pointer",fontSize:14,color:"var(--ak-text-sub)" }}>✕</button>}
         </div>
 
         {/* Topic */}
         <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:5,letterSpacing:.3 }}>TOPIC</label>
+          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>TOPIC</label>
           <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. Water, Algebra, Shakespeare…"
-            style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid #D1D5DB",fontSize:14,fontWeight:600,color:"#111827",outline:"none",fontFamily:"inherit" }}
+            style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit" }}
             onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#D1D5DB"}/>
         </div>
 
         {/* Subject */}
         <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:5,letterSpacing:.3 }}>SUBJECT</label>
-          <select value={subject} onChange={e=>setSubject(e.target.value)} style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid #D1D5DB",fontSize:14,fontWeight:600,color:"#111827",outline:"none",fontFamily:"inherit",background:"#fff" }}>
+          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>SUBJECT</label>
+          <select value={subject} onChange={e=>setSubject(e.target.value)} style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit",background:"var(--ak-surface)" }}>
             {subjects.map(s=><option key={s}>{s}</option>)}
           </select>
         </div>
@@ -83,8 +83,8 @@ function ConfigModal({ initial, onStart, onCancel }) {
         {/* Subtopics */}
         <div style={{ marginBottom:14 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7 }}>
-            <label style={{ fontSize:11,fontWeight:700,color:"#374151",letterSpacing:.3 }}>SUBTOPICS ({subtopics.length})</label>
-            <button onClick={generate} disabled={!topic.trim()||generating} style={{ padding:"4px 11px",borderRadius:6,border:`0.5px solid ${BRAND}`,background:generating?"#F9FAFB":`${BRAND}10`,color:!topic.trim()||generating?"#9CA3AF":BRAND,fontSize:11,fontWeight:700,cursor:topic.trim()&&!generating?"pointer":"default",fontFamily:"inherit" }}>
+            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",letterSpacing:.3 }}>SUBTOPICS ({subtopics.length})</label>
+            <button onClick={generate} disabled={!topic.trim()||generating} style={{ padding:"4px 11px",borderRadius:6,border:`0.5px solid ${BRAND}`,background:generating?"var(--ak-bg)":`${BRAND}10`,color:!topic.trim()||generating?"var(--ak-text-muted)":BRAND,fontSize:11,fontWeight:700,cursor:topic.trim()&&!generating?"pointer":"default",fontFamily:"inherit" }}>
               {generating?"⏳ Generating…":"✨ Auto-generate"}
             </button>
           </div>
@@ -92,15 +92,15 @@ function ConfigModal({ initial, onStart, onCancel }) {
             <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:8 }}>
               {subtopics.map((st,i)=>(
                 <div key={st} style={{ display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:20,background:`${BRAND}10`,border:`0.5px solid ${BRAND}30`,fontSize:12,fontWeight:700,color:BRAND }}>
-                  <span style={{ fontSize:9.5,color:"#9CA3AF",fontWeight:500 }}>{i+1}</span>{st}
-                  <button onClick={()=>removeSubtopic(st)} style={{ background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#9CA3AF",padding:0,lineHeight:1 }}>✕</button>
+                  <span style={{ fontSize:9.5,color:"var(--ak-text-muted)",fontWeight:500 }}>{i+1}</span>{st}
+                  <button onClick={()=>removeSubtopic(st)} style={{ background:"none",border:"none",cursor:"pointer",fontSize:11,color:"var(--ak-text-muted)",padding:0,lineHeight:1 }}>✕</button>
                 </div>
               ))}
             </div>
           )}
           <div style={{ display:"flex",gap:8 }}>
             <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSubtopic(draft);}}} placeholder="Type a subtopic and press Enter or +"
-              style={{ flex:1,padding:"9px 12px",borderRadius:8,border:"0.5px solid #D1D5DB",fontSize:13,color:"#111827",outline:"none",fontFamily:"inherit" }}
+              style={{ flex:1,padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:13,color:"var(--ak-text)",outline:"none",fontFamily:"inherit" }}
               onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#D1D5DB"}/>
             <button onClick={()=>addSubtopic(draft)} style={{ padding:"9px 14px",borderRadius:8,border:"none",background:BRAND,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer" }}>+</button>
           </div>
@@ -109,14 +109,14 @@ function ConfigModal({ initial, onStart, onCancel }) {
         {/* Objectives */}
         {subtopics.length>0&&(
           <div style={{ marginBottom:20 }}>
-            <label style={{ fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:8,letterSpacing:.3 }}>LEARNING OBJECTIVES</label>
+            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:8,letterSpacing:.3 }}>LEARNING OBJECTIVES</label>
             {subtopics.map(st=>(
-              <div key={st} style={{ background:"#F9FAFB",border:"0.5px solid #E5E7EB",borderRadius:8,padding:"10px 12px",marginBottom:8 }}>
+              <div key={st} style={{ background:"var(--ak-bg)",border:"0.5px solid var(--ak-border2)",borderRadius:8,padding:"10px 12px",marginBottom:8 }}>
                 <div style={{ fontSize:11.5,fontWeight:700,color:BRAND,marginBottom:6 }}>{st}</div>
                 {(objs[st]||autoObjectives(st,topic)).map((obj,i)=>(
                   <input key={i} value={obj} onChange={e=>updateObj(st,i,e.target.value)}
-                    style={{ width:"100%",padding:"5px 9px",borderRadius:6,border:"0.5px solid #E5E7EB",fontSize:12,color:"#374151",marginBottom:4,outline:"none",fontFamily:"inherit",background:"#fff" }}
-                    onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#E5E7EB"}/>
+                    style={{ width:"100%",padding:"5px 9px",borderRadius:6,border:"0.5px solid var(--ak-border2)",fontSize:12,color:"var(--ak-text-sec)",marginBottom:4,outline:"none",fontFamily:"inherit",background:"var(--ak-surface)" }}
+                    onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/>
                 ))}
               </div>
             ))}
@@ -124,10 +124,10 @@ function ConfigModal({ initial, onStart, onCancel }) {
         )}
 
         <div style={{ display:"flex",gap:10 }}>
-          {onCancel&&<button onClick={onCancel} style={{ flex:1,padding:"12px",borderRadius:10,border:"0.5px solid #E5E7EB",background:"#F9FAFB",fontSize:13,fontWeight:700,color:"#6B7280",cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>}
+          {onCancel&&<button onClick={onCancel} style={{ flex:1,padding:"12px",borderRadius:10,border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>}
           <button onClick={()=>{ if(!canStart) return; onStart({ topic, subject, subtopics, objectives:objs }); }}
             disabled={!canStart}
-            style={{ flex:2,padding:"12px",borderRadius:10,border:"none",background:canStart?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"#E5E7EB",fontSize:13,fontWeight:800,color:canStart?"#fff":"#9CA3AF",cursor:canStart?"pointer":"default",fontFamily:"inherit" }}>
+            style={{ flex:2,padding:"12px",borderRadius:10,border:"none",background:canStart?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:canStart?"#fff":"#9CA3AF",cursor:canStart?"pointer":"default",fontFamily:"inherit" }}>
             ▶ Start session
           </button>
         </div>

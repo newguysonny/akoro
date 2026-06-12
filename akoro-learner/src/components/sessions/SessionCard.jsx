@@ -9,7 +9,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
   const drop  = isDecay ? (decayAlert.prevConfidence - decayAlert.confidence) : 0;
 
   return (
-    <div onClick={()=>onTap(session)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid #F3F4F6",cursor:"pointer",background:isDecay?"#FFFBF5":"#fff",transition:"background .2s" }}>
+    <div onClick={()=>onTap(session)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid var(--ak-border)",cursor:"pointer",background:isDecay?"#FFFBF5":"var(--ak-surface)",transition:"background .2s" }}>
 
       {/* Avatar — agent emoji for decay, tutor photo otherwise */}
       <div style={{ position:"relative",flexShrink:0 }}>
@@ -23,15 +23,15 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
           <img src={session.avatar} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50` }}/>
         )}
         <div style={{ position:"absolute",bottom:1,right:1,width:12,height:12,borderRadius:"50%",
-          background:isDecay?RED:pri.dot,border:"2px solid #fff",
+          background:isDecay?RED:pri.dot,border:"2px solid var(--ak-surface)",
           animation:isDecay||pri.pulse?"pulse-dot 1.2s ease-in-out infinite":"none" }}/>
       </div>
 
       <div style={{ flex:1,minWidth:0 }}>
         {/* Title row */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:1 }}>
-          <span style={{ fontSize:14,fontWeight:800,color:"#111827",letterSpacing:-0.1 }}>{session.title}</span>
-          <span style={{ fontSize:11,fontWeight:600,color:isDecay?RED:"#9CA3AF",flexShrink:0,marginLeft:8 }}>
+          <span style={{ fontSize:14,fontWeight:800,color:"var(--ak-text)",letterSpacing:-0.1 }}>{session.title}</span>
+          <span style={{ fontSize:11,fontWeight:600,color:isDecay?RED:"var(--ak-text-muted)",flexShrink:0,marginLeft:8 }}>
             {isDecay ? `${decayAlert.daysSince}d ago` : session.nextSession}
           </span>
         </div>
@@ -44,7 +44,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
             borderRadius:5,padding:"1px 7px",flexShrink:0 }}>
             {SUBJECTS[session.subject]?.icon} {isDecay ? decayAlert.topic : SUBJECTS[session.subject]?.label}
           </span>
-          <span style={{ fontSize:10,fontWeight:600,color:"#9CA3AF",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+          <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
             {isDecay
               ? `${agentProfile?.name || "Agent"} · needs your help`
               : session.topic}
@@ -58,14 +58,14 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
               ⚠ confidence {decayAlert.confidence}% (was {decayAlert.prevConfidence}%)
             </span>
             {decayAlert.misconceptions?.length > 0 && (
-              <span style={{ fontSize:9.5,fontWeight:600,color:"#9CA3AF",fontFamily:"monospace" }}>
+              <span style={{ fontSize:9.5,fontWeight:600,color:"var(--ak-text-muted)",fontFamily:"monospace" }}>
                 · {decayAlert.misconceptions[0]}
               </span>
             )}
           </div>
         ) : (
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
-            {[{v:session.id,c:"#9CA3AF"},{v:`🕐 ${session.time}`,c:"#9CA3AF"},{v:`📌 ${session.topics} topics`,c:sc},{v:`🔁 ${session.revisions} revisions`,c:"#9CA3AF"},{v:`⭐ ${session.reviews} reviews`,c:GOLD}].map(({v,c},i)=>(
+            {[{v:session.id,c:"var(--ak-text-muted)"},{v:`🕐 ${session.time}`,c:"var(--ak-text-muted)"},{v:`📌 ${session.topics} topics`,c:sc},{v:`🔁 ${session.revisions} revisions`,c:"var(--ak-text-muted)"},{v:`⭐ ${session.reviews} reviews`,c:GOLD}].map(({v,c},i)=>(
               <span key={i} style={{ fontSize:9.5,fontWeight:700,color:c,fontFamily:"monospace" }}>{v}</span>
             ))}
           </div>
@@ -74,7 +74,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
         {/* Progress / confidence bar */}
         {isDecay ? (
           <div style={{ marginTop:5 }}>
-            <div style={{ height:5,background:"#F3F4F6",borderRadius:99,overflow:"hidden" }}>
+            <div style={{ height:5,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden" }}>
               <div style={{ height:"100%",width:`${decayAlert.confidence}%`,
                 background:`linear-gradient(90deg,${RED}88,${RED})`,borderRadius:99 }}/>
             </div>

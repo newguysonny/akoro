@@ -23,8 +23,8 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
 
   return (
     <><div onClick={onClose} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
-    <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"#fff",borderRadius:"22px 22px 0 0",padding:"0 20px 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"88vh",overflowY:"auto" }}>
-      <div style={{ width:38,height:4,borderRadius:2,background:"#D1D5DB",margin:"14px auto 18px" }}/>
+    <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"88vh",overflowY:"auto" }}>
+      <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border2)",margin:"14px auto 18px" }}/>
 
       {/* Header */}
       <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:14 }}>
@@ -38,8 +38,8 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
           <img src={session.avatar} alt="" style={{ width:46,height:46,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}` }}/>
         )}
         <div style={{ flex:1 }}>
-          <p style={{ fontSize:15,fontWeight:900,color:"#111827",margin:0 }}>{session.title}</p>
-          <p style={{ fontSize:11.5,color:"#9CA3AF",margin:0,fontWeight:600 }}>
+          <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{session.title}</p>
+          <p style={{ fontSize:11.5,color:"var(--ak-text-muted)",margin:0,fontWeight:600 }}>
             {isDecay ? `${agentProfile?.name||"Agent"} · needs your help`
               : isContinuation ? `${agentProfile?.name||"Agent"} · ${session.daysSince||0}d ago`
               : `${session.tutor||""} · ${session.level||""}`}
@@ -66,15 +66,15 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
       {isDecay&&(<>
         <div style={{ background:"#FFF5F5",borderRadius:14,border:"1px solid rgba(239,68,68,.20)",padding:"12px 14px",marginBottom:12 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
-            <span style={{ fontSize:11,fontWeight:700,color:"#6B7280" }}>Confidence</span>
+            <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>Confidence</span>
             <span style={{ fontSize:12,fontWeight:900,color:RED }}>{decayAlert.confidence}%{" "}
-              <span style={{ fontSize:10,fontWeight:600,color:"#9CA3AF" }}>(was {decayAlert.prevConfidence}%)</span>
+              <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>(was {decayAlert.prevConfidence}%)</span>
             </span>
           </div>
-          <div style={{ height:6,background:"#F3F4F6",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
+          <div style={{ height:6,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
             <div style={{ height:"100%",width:`${decayAlert.confidence}%`,background:`linear-gradient(90deg,${RED}88,${RED})`,borderRadius:99 }}/>
           </div>
-          <div style={{ display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"#9CA3AF" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>
             <span style={{ color:RED }}>▼ dropped {drop}%</span>
             <span>{decayAlert.daysSince} days since last session</span>
           </div>
@@ -85,8 +85,8 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
             {decayAlert.misconceptions.map((m,i)=><p key={i} style={{ fontSize:12.5,color:"#7C2D12",margin:"0 0 4px",fontWeight:600 }}>· {m}</p>)}
           </div>
         )}
-        <div style={{ background:"#F9FAFB",borderRadius:14,border:"1px solid #F3F4F6",padding:"11px 14px",marginBottom:14 }}>
-          <p style={{ fontSize:11,fontWeight:700,color:"#6B7280",margin:"0 0 8px" }}>Session stats</p>
+        <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
+          <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>Session stats</p>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
             {[{icon:"📌",val:`${session.topics||0} topics`,label:"to review and refresh"},
               {icon:"🔁",val:`${session.revisions||0} re-teaches`,label:"completed so far"},
@@ -94,8 +94,8 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ fontSize:13 }}>{icon}</span>
-                <span style={{ fontSize:12,fontWeight:800,color:"#111827" }}>{val}</span>
-                <span style={{ fontSize:11,color:"#9CA3AF" }}>{label}</span>
+                <span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)" }}>{val}</span>
+                <span style={{ fontSize:11,color:"var(--ak-text-muted)" }}>{label}</span>
               </div>
             ))}
           </div>
@@ -106,19 +106,19 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
       {isContinuation&&(<>
         <div style={{ background:"#F0FDF4",borderRadius:14,border:"1px solid rgba(16,185,129,.20)",padding:"12px 14px",marginBottom:12 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
-            <span style={{ fontSize:11,fontWeight:700,color:"#6B7280" }}>Avg Confidence</span>
+            <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>Avg Confidence</span>
             <span style={{ fontSize:12,fontWeight:900,color:GREEN }}>{session.avgConfidence||session.progress||0}%</span>
           </div>
-          <div style={{ height:6,background:"#F3F4F6",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
+          <div style={{ height:6,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
             <div style={{ height:"100%",width:`${session.avgConfidence||session.progress||0}%`,background:`linear-gradient(90deg,${GREEN}88,${GREEN})`,borderRadius:99 }}/>
           </div>
-          <p style={{ fontSize:10,fontWeight:600,color:"#9CA3AF",margin:0 }}>
+          <p style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
             Last taught {session.daysSince===0?"today":session.daysSince===1?"yesterday":`${session.daysSince||0} days ago`}
           </p>
         </div>
         {session.subtopicList?.length>0&&(
-          <div style={{ background:"#F9FAFB",border:"1px solid #F3F4F6",borderRadius:14,padding:"11px 14px",marginBottom:12 }}>
-            <p style={{ fontSize:11,fontWeight:700,color:"#6B7280",margin:"0 0 8px" }}>Subtopics covered</p>
+          <div style={{ background:"var(--ak-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"11px 14px",marginBottom:12 }}>
+            <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>Subtopics covered</p>
             <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
               {session.subtopicList.map((st,i)=>(
                 <span key={i} style={{ fontSize:11,fontWeight:700,color:sc,background:`${sc}12`,borderRadius:8,padding:"3px 9px",border:`1px solid ${sc}25` }}>{st}</span>
@@ -126,7 +126,7 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
             </div>
           </div>
         )}
-        <div style={{ background:"#F9FAFB",borderRadius:14,border:"1px solid #F3F4F6",padding:"11px 14px",marginBottom:14 }}>
+        <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
             {[{icon:"📌",val:`${session.topics||0} subtopics`,label:"in this session"},
               {icon:"🔁",val:`${session.revisions||0} assessments`,label:"with Sargeant"},
@@ -134,8 +134,8 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ fontSize:13 }}>{icon}</span>
-                <span style={{ fontSize:12,fontWeight:800,color:"#111827" }}>{val}</span>
-                <span style={{ fontSize:11,color:"#9CA3AF" }}>{label}</span>
+                <span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)" }}>{val}</span>
+                <span style={{ fontSize:11,color:"var(--ak-text-muted)" }}>{label}</span>
               </div>
             ))}
           </div>
@@ -144,11 +144,11 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
 
       {/* NORMAL session details */}
       {!isDecay&&!isContinuation&&(<>
-        <p style={{ fontSize:14,color:"#374151",fontWeight:600,lineHeight:1.6,marginBottom:14 }}>{session.description}</p>
+        <p style={{ fontSize:14,color:"var(--ak-text-sec)",fontWeight:600,lineHeight:1.6,marginBottom:14 }}>{session.description}</p>
         {session.progress>0&&(
-          <div style={{ background:"#F9FAFB",borderRadius:14,border:"1px solid #F3F4F6",padding:"11px 14px",marginBottom:14 }}>
+          <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
             <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
-              <span style={{ fontSize:11,fontWeight:700,color:"#6B7280" }}>Your Progress</span>
+              <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>Your Progress</span>
               <span style={{ fontSize:13,fontWeight:900,color:sc }}>{session.progress}%</span>
             </div>
             <ProgressBar value={session.progress} color={sc}/>
@@ -157,14 +157,14 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         {session.type==="live"&&(
           <div style={{ display:"flex",gap:10,marginBottom:14 }}>
             <a href="tel:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${GREEN},#059669)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><PhoneIcon size={15}/>Call Tutor</button></a>
-            <a href="sms:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid #E5E7EB",background:"#F9FAFB",fontSize:13,fontWeight:800,color:"#374151",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><MessageIcon size={15} color="#374151"/>Message</button></a>
+            <a href="sms:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sec)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><MessageIcon size={15} color="var(--ak-text-sec)"/>Message</button></a>
           </div>
         )}
       </>)}
 
       {/* CTA buttons */}
       <div style={{ display:"flex",gap:10 }}>
-        <button onClick={onClose} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid #E5E7EB",background:"#F9FAFB",fontSize:13,fontWeight:800,color:"#6B7280",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Close</button>
+        <button onClick={onClose} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Close</button>
         <button onClick={()=>{onClose();onStartTeach(session);}}
           style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:ctaBg,
             fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",
