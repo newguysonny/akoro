@@ -17,9 +17,9 @@
  * default_pair_id = trained:<agentId> + active_agent_id.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
-import { apiGet, apiPost } from '../../services/api.js';
+import { API, apiGet, apiPost } from '../../services/api.js';
 import Toast from '../common/Toast.jsx';
 
 const FONT  = "'Nunito', sans-serif";
@@ -279,6 +279,38 @@ export default function DiscoveryTab() {
     const t = setTimeout(loadListings, query ? 350 : 0);  // debounce search
     return () => clearTimeout(t);
   }, [loadListings, query]);
+
+  // Keep the latest loaders reachable from the once-mounted socket effect.
+  const loadListingsRef = useRef(loadListings);
+  const loadOwnedRef    = useRef(loadOwned);
+  loadListingsRef.current = loadListings;
+  loadOwnedRef.current    = loadOwned;
+
+  // Live refresh — backend pushes agent_purchased after a payment confirms
+  // (Paystack webhook). Reuses the shared window.io socket; only detaches its
+  // own listener on unmount so the dashboard's connection stays alive.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.io) return;
+    let socket;
+    try {
+      socket = window.io(API, { transports: ['websocket', 'polling'] });
+      const subscribe = () => socket.emit('subscribe-student', STUDENT_ID);
+      subscribe();
+      socket.on('connect', subscribe);   // re-join the room after a reconnect
+
+      const onPurchased = (data) => {
+        if (data?.agentId) setOwnedIds(prev => new Set(prev).add(data.agentId));
+        else loadOwnedRef.current();
+        setToast({ msg: data?.message || '🎉 New agent unlocked!', color: GREEN });
+        loadListingsRef.current();   // refresh learner counts / owned badges
+      };
+      socket.on('agent_purchased', onPurchased);
+      return () => {
+        socket.off('agent_purchased', onPurchased);
+        socket.off('connect', subscribe);
+      };
+    } catch { /* WS unavailable */ }
+  }, []);
 
   // Detect a Paystack redirect return (?payment=success&agentId=…)
   useEffect(() => {

@@ -252,6 +252,16 @@ export function setupWebSocket(io) {
   io.on("connection", (socket) => {
     console.log(`🔌 Connected: ${socket.id}`);
 
+    // ── subscribe-student / join-student-room ─────────────────
+    // Joins the student room so out-of-session pushes (e.g.
+    // agent_purchased after a marketplace payment) reach this socket
+    // even when no teaching session is active.
+    const joinStudentRoom = (studentId) => {
+      if (studentId) socket.join(`student:${studentId}`);
+    };
+    socket.on("subscribe-student",  joinStudentRoom);
+    socket.on("join-student-room",  joinStudentRoom);
+
     // ── list_agent_pairs ──────────────────────────────────────
     // v3.2: accepts userId to return only owned agents
     socket.on("list_agent_pairs", async ({ userId } = {}) => {
