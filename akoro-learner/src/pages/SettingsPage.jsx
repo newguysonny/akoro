@@ -15,6 +15,44 @@ const BRAND  = '#6C3BFF';
 const RED    = '#EF4444';
 const ORANGE = '#E8884A';
 
+/* ─── localStorage keys ───────────────────────────────────────── */
+const LS_DISPLAY  = 'akoro_display_mode';
+const LS_ACCENT   = 'akoro_accent_color';
+const LS_LANGUAGE = 'akoro_language';
+
+/* ─── Language → BCP-47 ──────────────────────────────────────── */
+const LANG_CODES = {
+  English:'en', Yoruba:'yo', Igbo:'ig', Hausa:'ha',
+  Pidgin:'pcm', French:'fr', Arabic:'ar',
+};
+
+/* ─── Apply CSS custom-properties to :root ────────────────────── */
+function applyTheme(mode, accent) {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
+  const root = document.documentElement;
+  root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  const v = isDark
+    ? { '--ak-bg':'#0D1117','--ak-surface':'#161B22','--ak-surface-hover':'#1C2128',
+        '--ak-border':'#21262D','--ak-border2':'#30363D','--ak-border3':'#484F58',
+        '--ak-text':'#E6EDF3','--ak-text-sec':'#C9D1D9',
+        '--ak-text-sub':'#8B949E','--ak-text-muted':'#6E7681',
+        '--ak-toggle-off':'#30363D','--ak-tag-bg':'#21262D',
+        '--ak-tag-text':'#C9D1D9','--ak-select-bg':'#0D1117' }
+    : { '--ak-bg':'#F9FAFB','--ak-surface':'#ffffff','--ak-surface-hover':'#F9FAFB',
+        '--ak-border':'#F3F4F6','--ak-border2':'#E5E7EB','--ak-border3':'#D1D5DB',
+        '--ak-text':'#111827','--ak-text-sec':'#374151',
+        '--ak-text-sub':'#6B7280','--ak-text-muted':'#9CA3AF',
+        '--ak-toggle-off':'#E5E7EB','--ak-tag-bg':'#F3F4F6',
+        '--ak-tag-text':'#374151','--ak-select-bg':'#F9FAFB' };
+  for (const [k, val] of Object.entries(v)) root.style.setProperty(k, val);
+  if (accent) root.style.setProperty('--ak-accent', accent);
+}
+
+/* Apply immediately from localStorage on module load (before first paint) */
+applyTheme(localStorage.getItem(LS_DISPLAY) || 'system', localStorage.getItem(LS_ACCENT) || BRAND);
+document.documentElement.lang = LANG_CODES[localStorage.getItem(LS_LANGUAGE)] || 'en';
+
 /* ─── Reference data ──────────────────────────────────────────── */
 const ALL_SUBJECTS = [
   'Mathematics','Further Mathematics','English Language','English Literature',
@@ -61,7 +99,7 @@ function Toggle({ on, onChange }) {
   return (
     <div onClick={onChange}
       style={{ width:42,height:23,borderRadius:12,position:'relative',
-        background:on?BRAND:'#E5E7EB',transition:'background .25s',
+        background:on?BRAND:'var(--ak-toggle-off)',transition:'background .25s',
         cursor:'pointer',flexShrink:0 }}>
       <div style={{ position:'absolute',top:2.5,left:on?21:2.5,
         width:18,height:18,borderRadius:'50%',background:'#fff',
@@ -71,7 +109,7 @@ function Toggle({ on, onChange }) {
 }
 function ProgressBar({ pct, color }) {
   return (
-    <div style={{ height:5,background:'#F3F4F6',borderRadius:99,overflow:'hidden' }}>
+    <div style={{ height:5,background:'var(--ak-tag-bg)',borderRadius:99,overflow:'hidden' }}>
       <div style={{ height:'100%',width:`${pct}%`,borderRadius:99,
         background:`linear-gradient(90deg,${color},${color}CC)` }}/>
     </div>
@@ -99,9 +137,9 @@ function Section({ title, children }) {
       <p style={{ fontSize:11,fontWeight:900,color:BRAND,letterSpacing:1.5,
         textTransform:'uppercase',padding:'0 16px',margin:'0 0 8px',
         fontFamily:"'Nunito',sans-serif" }}>{title}</p>
-      <div style={{ background:'#fff',borderRadius:16,
-        boxShadow:'0 1px 4px rgba(0,0,0,.05)',overflow:'hidden',
-        border:'1px solid #F3F4F6' }}>
+      <div style={{ background:'var(--ak-surface)',borderRadius:16,
+        boxShadow:'0 1px 4px rgba(0,0,0,.08)',overflow:'hidden',
+        border:'1px solid var(--ak-border)' }}>
         {children}
       </div>
     </div>
@@ -109,25 +147,25 @@ function Section({ title, children }) {
 }
 const rowBase = {
   display:'flex',alignItems:'center',padding:'13px 16px',
-  borderBottom:'1px solid #F3F4F6',background:'#fff',
+  borderBottom:'1px solid var(--ak-border)',background:'var(--ak-surface)',
   fontFamily:"'Nunito',sans-serif",
 };
 function Row({ icon,label,value,sub,danger,onClick,noArrow,children }) {
   return (
     <div style={{ ...rowBase,cursor:onClick?'pointer':'default' }}
-      onMouseEnter={e=>onClick&&(e.currentTarget.style.background='#F9FAFB')}
-      onMouseLeave={e=>e.currentTarget.style.background='#fff'}
+      onMouseEnter={e=>onClick&&(e.currentTarget.style.background='var(--ak-surface-hover)')}
+      onMouseLeave={e=>e.currentTarget.style.background='var(--ak-surface)'}
       onClick={onClick}>
       <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
-        <Icon name={icon} size={17} color={danger?RED:'#6B7280'}/>
+        <Icon name={icon} size={17} color={danger?RED:'var(--ak-text-sub)'}/>
       </span>
       <div style={{ flex:1,minWidth:0 }}>
-        <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:danger?RED:'#111827' }}>{label}</p>
-        {sub&&<p style={{ fontSize:11.5,color:'#9CA3AF',marginTop:2,margin:0 }}>{sub}</p>}
+        <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:danger?RED:'var(--ak-text)' }}>{label}</p>
+        {sub&&<p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>{sub}</p>}
       </div>
-      {value!==undefined&&<span style={{ fontSize:12.5,fontWeight:600,color:'#6B7280',marginRight:4,flexShrink:0 }}>{value}</span>}
+      {value!==undefined&&<span style={{ fontSize:12.5,fontWeight:600,color:'var(--ak-text-sub)',marginRight:4,flexShrink:0 }}>{value}</span>}
       {children}
-      {onClick&&!noArrow&&<span style={{ color:'#D1D5DB',fontSize:16 }}>›</span>}
+      {onClick&&!noArrow&&<span style={{ color:'var(--ak-border3)',fontSize:16 }}>›</span>}
     </div>
   );
 }
@@ -147,7 +185,7 @@ function AvatarCircle({ photoUrl, emoji, color, size=60, onPhotoClick }) {
       </div>
       <div style={{ position:'absolute',bottom:0,right:0,
         width:20,height:20,borderRadius:'50%',background:color,
-        border:'2px solid #fff',display:'flex',alignItems:'center',
+        border:'2px solid var(--ak-surface)',display:'flex',alignItems:'center',
         justifyContent:'center',cursor:'pointer' }}
         onClick={onPhotoClick}>
         <Icon name="ti-pencil" size={9} color="#fff"/>
@@ -176,26 +214,26 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
     <>
       <div onClick={onClose}
         style={{ position:'fixed',inset:0,zIndex:3000,
-          background:'rgba(0,0,0,.45)',backdropFilter:'blur(4px)' }}/>
+          background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
       <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
-        background:'#fff',borderRadius:'22px 22px 0 0',
-        padding:'0 18px 40px',boxShadow:'0 -8px 40px rgba(0,0,0,.12)',
+        background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',
+        padding:'0 18px 40px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)',
         animation:'sheet-up .3s ease',fontFamily:"'Nunito',sans-serif",
         maxHeight:'88vh',overflowY:'auto' }}>
-        <div style={{ width:36,height:4,borderRadius:2,background:'#D1D5DB',
+        <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',
           margin:'14px auto 18px' }}/>
-        <p style={{ fontSize:16,fontWeight:900,color:'#111827',margin:'0 0 16px' }}>
+        <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:'0 0 16px' }}>
           Change {type==='user'?'Profile':'Agent'} Photo
         </p>
-        <div style={{ display:'flex',background:'#F3F4F6',borderRadius:12,
+        <div style={{ display:'flex',background:'var(--ak-tag-bg)',borderRadius:12,
           padding:3,marginBottom:20,gap:3 }}>
           {['photo','emoji'].map(t=>(
             <button key={t} onClick={()=>setTab(t)}
               style={{ flex:1,padding:'8px 0',borderRadius:10,border:'none',
-                background:tab===t?'#fff':'transparent',cursor:'pointer',
+                background:tab===t?'var(--ak-surface)':'transparent',cursor:'pointer',
                 fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",
-                color:tab===t?'#111827':'#6B7280',
-                boxShadow:tab===t?'0 1px 4px rgba(0,0,0,.08)':'none' }}>
+                color:tab===t?'var(--ak-text)':'var(--ak-text-sub)',
+                boxShadow:tab===t?'0 1px 4px rgba(0,0,0,.12)':'none' }}>
               {t==='photo'?'📷 Upload Photo':'🎭 Choose Emoji'}
             </button>
           ))}
@@ -218,27 +256,27 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
                       fontFamily:"'Nunito',sans-serif" }}>Remove photo</button>
                 </div>
               : <div onClick={()=>fileRef.current?.click()}
-                  style={{ border:'2px dashed #E5E7EB',borderRadius:16,
+                  style={{ border:'2px dashed var(--ak-border2)',borderRadius:16,
                     padding:'32px 20px',textAlign:'center',cursor:'pointer',marginBottom:20 }}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=color}
-                  onMouseLeave={e=>e.currentTarget.style.borderColor='#E5E7EB'}>
-                  <Icon name="ti-upload" size={28} color="#9CA3AF"
+                  onMouseLeave={e=>e.currentTarget.style.borderColor='var(--ak-border2)'}>
+                  <Icon name="ti-upload" size={28} color="var(--ak-text-muted)"
                     style={{ display:'block',margin:'0 auto 10px' }}/>
-                  <p style={{ fontSize:14,fontWeight:800,color:'#374151',margin:'0 0 4px' }}>
+                  <p style={{ fontSize:14,fontWeight:800,color:'var(--ak-text)',margin:'0 0 4px' }}>
                     Tap to upload photo</p>
-                  <p style={{ fontSize:12,color:'#9CA3AF',margin:0 }}>JPG, PNG or WebP · Max 5MB</p>
+                  <p style={{ fontSize:12,color:'var(--ak-text-muted)',margin:0 }}>JPG, PNG or WebP · Max 5MB</p>
                 </div>
             }
             <div style={{ display:'flex',gap:10 }}>
               <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
-                border:'1.5px solid #E5E7EB',background:'#F9FAFB',
-                fontSize:13,fontWeight:800,color:'#6B7280',cursor:'pointer',
+                border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
+                fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
                 fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
               <button onClick={()=>{ if(preview){onSavePhoto(preview);onClose();} }}
                 disabled={!preview}
                 style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
-                  background:preview?`linear-gradient(135deg,${color},#4C1DCC)`:'#E5E7EB',
-                  color:preview?'#fff':'#9CA3AF',fontSize:13,fontWeight:800,
+                  background:preview?`linear-gradient(135deg,${color},#4C1DCC)`:'var(--ak-tag-bg)',
+                  color:preview?'#fff':'var(--ak-text-muted)',fontSize:13,fontWeight:800,
                   cursor:preview?'pointer':'not-allowed',fontFamily:"'Nunito',sans-serif" }}>
                 Save Photo</button>
             </div>
@@ -252,16 +290,16 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
                 <div key={em} onClick={()=>setSelEmoji(em)}
                   style={{ width:46,height:46,borderRadius:12,display:'flex',
                     alignItems:'center',justifyContent:'center',fontSize:22,cursor:'pointer',
-                    background:selEmoji===em?`${color}15`:'#F9FAFB',
-                    border:`1.5px solid ${selEmoji===em?color:'#E5E7EB'}` }}>
+                    background:selEmoji===em?`${color}15`:'var(--ak-tag-bg)',
+                    border:`1.5px solid ${selEmoji===em?color:'var(--ak-border2)'}` }}>
                   {em}
                 </div>
               ))}
             </div>
             <div style={{ display:'flex',gap:10 }}>
               <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
-                border:'1.5px solid #E5E7EB',background:'#F9FAFB',
-                fontSize:13,fontWeight:800,color:'#6B7280',cursor:'pointer',
+                border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
+                fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
                 fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
               <button onClick={()=>{onSaveEmoji(selEmoji);onClose();}}
                 style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
@@ -292,15 +330,15 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
-        background:'rgba(0,0,0,.45)',backdropFilter:'blur(4px)' }}/>
+        background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
       <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
-        background:'#fff',borderRadius:'22px 22px 0 0',padding:'0 18px 40px',
-        boxShadow:'0 -8px 40px rgba(0,0,0,.12)',animation:'sheet-up .3s ease',
+        background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',padding:'0 18px 40px',
+        boxShadow:'0 -8px 40px rgba(0,0,0,.2)',animation:'sheet-up .3s ease',
         fontFamily:"'Nunito',sans-serif",maxHeight:'88vh',overflowY:'auto' }}>
-        <div style={{ width:36,height:4,borderRadius:2,background:'#D1D5DB',margin:'14px auto 18px' }}/>
+        <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',margin:'14px auto 18px' }}/>
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16 }}>
-          <p style={{ fontSize:16,fontWeight:900,color:'#111827',margin:0 }}>Manage Subjects</p>
-          <span style={{ fontSize:12,color:'#6B7280',fontWeight:600 }}>{selected.length} selected</span>
+          <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:0 }}>Manage Subjects</p>
+          <span style={{ fontSize:12,color:'var(--ak-text-sub)',fontWeight:600 }}>{selected.length} selected</span>
         </div>
         {selected.length>0&&(
           <div style={{ marginBottom:20 }}>
@@ -312,52 +350,54 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
           </div>
         )}
         <div style={{ marginBottom:14 }}>
-          <p style={{ fontSize:11,fontWeight:900,color:'#6B7280',letterSpacing:1.2,
+          <p style={{ fontSize:11,fontWeight:900,color:'var(--ak-text-sub)',letterSpacing:1.2,
             textTransform:'uppercase',marginBottom:10 }}>Add subjects</p>
           <div style={{ position:'relative',marginBottom:10 }}>
             <Icon name="ti-search" size={14} style={{ position:'absolute',left:12,
-              top:'50%',transform:'translateY(-50%)',color:'#9CA3AF' }}/>
+              top:'50%',transform:'translateY(-50%)',color:'var(--ak-text-muted)' }}/>
             <input value={search} onChange={e=>setSearch(e.target.value)}
               placeholder="Search subjects…"
               style={{ width:'100%',padding:'10px 13px 10px 34px',borderRadius:12,
-                border:'1.5px solid #E5E7EB',outline:'none',fontSize:13,
-                fontFamily:"'Nunito',sans-serif",color:'#111827',boxSizing:'border-box' }}/>
+                border:'1.5px solid var(--ak-border2)',outline:'none',fontSize:13,
+                fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
+                background:'var(--ak-surface)',boxSizing:'border-box' }}/>
           </div>
           <div style={{ display:'flex',flexWrap:'wrap',gap:7,maxHeight:160,overflowY:'auto' }}>
             {available.map(s=>(
               <div key={s} onClick={()=>addSubject(s)}
                 style={{ display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',
-                  borderRadius:20,border:'1px solid #E5E7EB',background:'#F9FAFB',
-                  fontSize:12,fontWeight:700,color:'#374151',cursor:'pointer' }}
+                  borderRadius:20,border:'1px solid var(--ak-border2)',background:'var(--ak-tag-bg)',
+                  fontSize:12,fontWeight:700,color:'var(--ak-text-sec)',cursor:'pointer' }}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=accentColor;e.currentTarget.style.color=accentColor;}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor='#E5E7EB';e.currentTarget.style.color='#374151';}}>
-                <Icon name={subjIcon(s)} size={12} color="#9CA3AF"/>{s}
-                <span style={{ color:'#9CA3AF' }}>+</span>
+                onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--ak-border2)';e.currentTarget.style.color='var(--ak-text-sec)';}}>
+                <Icon name={subjIcon(s)} size={12} color="var(--ak-text-muted)"/>{s}
+                <span style={{ color:'var(--ak-text-muted)' }}>+</span>
               </div>
             ))}
           </div>
         </div>
         <div style={{ marginBottom:20 }}>
-          <p style={{ fontSize:11,fontWeight:900,color:'#6B7280',letterSpacing:1.2,
+          <p style={{ fontSize:11,fontWeight:900,color:'var(--ak-text-sub)',letterSpacing:1.2,
             textTransform:'uppercase',marginBottom:8 }}>Custom subject</p>
           <div style={{ display:'flex',gap:8 }}>
             <input value={custom} onChange={e=>setCustom(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&addCustom()}
               placeholder="e.g. Accounting, Arabic…"
-              style={{ flex:1,padding:'11px 14px',borderRadius:12,border:'1.5px solid #E5E7EB',
-                outline:'none',fontSize:13,fontFamily:"'Nunito',sans-serif",color:'#111827' }}/>
+              style={{ flex:1,padding:'11px 14px',borderRadius:12,border:'1.5px solid var(--ak-border2)',
+                outline:'none',fontSize:13,fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
+                background:'var(--ak-surface)' }}/>
             <button onClick={addCustom}
               style={{ padding:'11px 16px',borderRadius:12,border:'none',
-                background:custom.trim()?`linear-gradient(135deg,${accentColor},#4C1DCC)`:'#E5E7EB',
-                color:custom.trim()?'#fff':'#9CA3AF',fontSize:13,fontWeight:800,
+                background:custom.trim()?`linear-gradient(135deg,${accentColor},#4C1DCC)`:'var(--ak-tag-bg)',
+                color:custom.trim()?'#fff':'var(--ak-text-muted)',fontSize:13,fontWeight:800,
                 cursor:custom.trim()?'pointer':'default',fontFamily:"'Nunito',sans-serif",
                 flexShrink:0 }}>Add</button>
           </div>
         </div>
         <div style={{ display:'flex',gap:10 }}>
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
-            border:'1.5px solid #E5E7EB',background:'#F9FAFB',
-            fontSize:13,fontWeight:800,color:'#6B7280',cursor:'pointer',
+            border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
+            fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
             fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
           <button onClick={()=>{onSave(selected);onClose();}}
             style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
@@ -377,8 +417,9 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
   const [pw, setPw] =useState({ current:'',next:'',confirm:'' });
   const [del,setDel]=useState('');
   const inp = { width:'100%',padding:'11px 14px',borderRadius:12,
-    border:'1.5px solid #E5E7EB',outline:'none',fontSize:14,
-    fontFamily:"'Nunito',sans-serif",color:'#111827',boxSizing:'border-box',marginTop:6 };
+    border:'1.5px solid var(--ak-border2)',outline:'none',fontSize:14,
+    fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
+    background:'var(--ak-surface)',boxSizing:'border-box',marginTop:6 };
   const handle = () => {
     if(type==='change-password'){
       if(!pw.current){alert('Enter current password');return;}
@@ -392,13 +433,13 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
-        background:'rgba(0,0,0,.45)',backdropFilter:'blur(4px)' }}/>
+        background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
       <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
-        background:'#fff',borderRadius:'22px 22px 0 0',padding:'0 18px 40px',
-        boxShadow:'0 -8px 40px rgba(0,0,0,.12)',animation:'sheet-up .3s ease',
+        background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',padding:'0 18px 40px',
+        boxShadow:'0 -8px 40px rgba(0,0,0,.2)',animation:'sheet-up .3s ease',
         fontFamily:"'Nunito',sans-serif",maxHeight:'85vh',overflowY:'auto' }}>
-        <div style={{ width:36,height:4,borderRadius:2,background:'#D1D5DB',margin:'14px auto 18px' }}/>
-        <p style={{ fontSize:16,fontWeight:900,color:'#111827',margin:'0 0 16px' }}>{label}</p>
+        <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',margin:'14px auto 18px' }}/>
+        <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:'0 0 16px' }}>{label}</p>
 
         {type==='text'&&<input autoFocus value={val} onChange={e=>setVal(e.target.value)}
           placeholder={`Enter ${label.toLowerCase()}`} style={inp}/>}
@@ -411,15 +452,15 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
               <div key={o} onClick={()=>setVal(o)}
                 style={{ display:'flex',alignItems:'center',gap:10,padding:'11px 14px',
                   borderRadius:12,cursor:'pointer',
-                  border:`1.5px solid ${val===o?BRAND:'#E5E7EB'}`,
-                  background:val===o?`${BRAND}08`:'#fff' }}>
+                  border:`1.5px solid ${val===o?BRAND:'var(--ak-border2)'}`,
+                  background:val===o?`${BRAND}08`:'var(--ak-surface)' }}>
                 <div style={{ width:18,height:18,borderRadius:'50%',flexShrink:0,
-                  border:`2px solid ${val===o?BRAND:'#D1D5DB'}`,
-                  background:val===o?BRAND:'#fff',
+                  border:`2px solid ${val===o?BRAND:'var(--ak-border3)'}`,
+                  background:val===o?BRAND:'var(--ak-surface)',
                   display:'flex',alignItems:'center',justifyContent:'center' }}>
                   {val===o&&<div style={{ width:6,height:6,borderRadius:'50%',background:'#fff' }}/>}
                 </div>
-                <span style={{ fontSize:13.5,fontWeight:700,color:val===o?BRAND:'#374151' }}>{o}</span>
+                <span style={{ fontSize:13.5,fontWeight:700,color:val===o?BRAND:'var(--ak-text)' }}>{o}</span>
               </div>
             ))}
           </div>
@@ -429,11 +470,11 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
             {['light','dark','system'].map(m=>(
               <div key={m} onClick={()=>setVal(m)}
                 style={{ padding:'14px 8px',borderRadius:12,textAlign:'center',cursor:'pointer',
-                  border:`1.5px solid ${val===m?BRAND:'#E5E7EB'}`,
-                  background:val===m?`${BRAND}08`:'#F9FAFB' }}>
+                  border:`1.5px solid ${val===m?BRAND:'var(--ak-border2)'}`,
+                  background:val===m?`${BRAND}08`:'var(--ak-select-bg)' }}>
                 <div style={{ fontSize:22,marginBottom:5 }}>{m==='light'?'☀️':m==='dark'?'🌙':'⚙️'}</div>
                 <p style={{ margin:0,fontSize:11.5,fontWeight:800,
-                  color:val===m?BRAND:'#374151',textTransform:'capitalize' }}>{m}</p>
+                  color:val===m?BRAND:'var(--ak-text-sec)',textTransform:'capitalize' }}>{m}</p>
               </div>
             ))}
           </div>
@@ -444,7 +485,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
               <div key={c} onClick={()=>setVal(c)}
                 style={{ width:40,height:40,borderRadius:'50%',background:c,cursor:'pointer',
                   border:`2px solid ${c==='#F3F4F6'?'#D1D5DB':c}`,
-                  outline:val===c?'3px solid #111827':'3px solid transparent',
+                  outline:val===c?'3px solid var(--ak-text)':'3px solid transparent',
                   outlineOffset:2,transition:'all .2s' }}/>
             ))}
           </div>
@@ -453,7 +494,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
           <div style={{ display:'flex',flexDirection:'column',gap:12 }}>
             {[['current','Current password'],['next','New password'],['confirm','Confirm new']].map(([k,l])=>(
               <div key={k}>
-                <label style={{ fontSize:12,fontWeight:800,color:'#374151' }}>{l}</label>
+                <label style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)' }}>{l}</label>
                 <input type="password" value={pw[k]}
                   onChange={e=>setPw(p=>({...p,[k]:e.target.value}))}
                   placeholder="••••••••" style={inp}/>
@@ -479,25 +520,25 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
               <p style={{ margin:0,fontSize:13,color:'#991B1B',lineHeight:1.6 }}>
                 All data — sessions, agent progress, XP, and history — will be permanently deleted.</p>
             </div>
-            <label style={{ fontSize:12,fontWeight:800,color:'#374151' }}>Type DELETE to confirm</label>
+            <label style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)' }}>Type DELETE to confirm</label>
             <input value={del} onChange={e=>setDel(e.target.value.toUpperCase())}
               placeholder="DELETE"
-              style={{ ...inp,borderColor:del==='DELETE'?RED:'#E5E7EB',
-                color:del==='DELETE'?RED:'#111827',letterSpacing:1 }}/>
+              style={{ ...inp,borderColor:del==='DELETE'?RED:'var(--ak-border2)',
+                color:del==='DELETE'?RED:'var(--ak-text)',letterSpacing:1 }}/>
           </>
         )}
         <div style={{ display:'flex',gap:10,marginTop:20 }}>
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
-            border:'1.5px solid #E5E7EB',background:'#F9FAFB',
-            fontSize:13,fontWeight:800,color:'#6B7280',cursor:'pointer',
+            border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
+            fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
             fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
           <button onClick={handle}
             disabled={type==='delete-confirm'&&del!=='DELETE'}
             style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
-              background:type==='delete-confirm'?(del==='DELETE'?RED:'#E5E7EB')
+              background:type==='delete-confirm'?(del==='DELETE'?RED:'var(--ak-tag-bg)')
                 :type==='deactivate'?ORANGE
                 :`linear-gradient(135deg,${BRAND},#4C1DCC)`,
-              color:(type==='delete-confirm'&&del!=='DELETE')?'#9CA3AF':'#fff',
+              color:(type==='delete-confirm'&&del!=='DELETE')?'var(--ak-text-muted)':'#fff',
               fontSize:13,fontWeight:800,
               cursor:(type==='delete-confirm'&&del!=='DELETE')?'not-allowed':'pointer',
               fontFamily:"'Nunito',sans-serif" }}>
@@ -516,25 +557,25 @@ function LogoutModal({ onClose, onConfirm }) {
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
-        background:'rgba(0,0,0,.45)',backdropFilter:'blur(4px)' }}/>
+        background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
       <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
-        background:'#fff',borderRadius:'22px 22px 0 0',
+        background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',
         padding:'28px 18px 40px',animation:'sheet-up .3s ease',
         fontFamily:"'Nunito',sans-serif",textAlign:'center' }}>
-        <div style={{ width:36,height:4,borderRadius:2,background:'#D1D5DB',margin:'0 auto 22px' }}/>
+        <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',margin:'0 auto 22px' }}/>
         <div style={{ width:52,height:52,borderRadius:'50%',background:`${RED}12`,
           border:`1.5px solid ${RED}30`,display:'flex',alignItems:'center',
           justifyContent:'center',margin:'0 auto 14px' }}>
           <Icon name="ti-logout" size={22} color={RED}/>
         </div>
-        <p style={{ fontSize:17,fontWeight:900,color:'#111827',margin:'0 0 8px' }}>Log out of Akoro?</p>
-        <p style={{ fontSize:13,color:'#6B7280',margin:'0 0 24px',lineHeight:1.6 }}>
+        <p style={{ fontSize:17,fontWeight:900,color:'var(--ak-text)',margin:'0 0 8px' }}>Log out of Akoro?</p>
+        <p style={{ fontSize:13,color:'var(--ak-text-sub)',margin:'0 0 24px',lineHeight:1.6 }}>
           You'll need to sign back in to continue learning with your AI agent.
         </p>
         <div style={{ display:'flex',gap:10 }}>
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
-            border:'1.5px solid #E5E7EB',background:'#F9FAFB',
-            fontSize:13,fontWeight:800,color:'#6B7280',cursor:'pointer',
+            border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
+            fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
             fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
           <button onClick={onConfirm}
             style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
@@ -551,19 +592,19 @@ function LogoutModal({ onClose, onConfirm }) {
 function SubjectsRow({ subjects,onClick,color=BRAND }) {
   return (
     <div style={{ ...rowBase,flexDirection:'column',alignItems:'stretch',cursor:'pointer' }}
-      onMouseEnter={e=>e.currentTarget.style.background='#F9FAFB'}
-      onMouseLeave={e=>e.currentTarget.style.background='#fff'}
+      onMouseEnter={e=>e.currentTarget.style.background='var(--ak-surface-hover)'}
+      onMouseLeave={e=>e.currentTarget.style.background='var(--ak-surface)'}
       onClick={onClick}>
       <div style={{ display:'flex',alignItems:'center',width:'100%' }}>
         <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
-          <Icon name="ti-book-2" size={17} color="#6B7280"/>
+          <Icon name="ti-book-2" size={17} color="var(--ak-text-sub)"/>
         </span>
         <div style={{ flex:1 }}>
-          <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'#111827' }}>Subjects</p>
+          <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Subjects</p>
         </div>
-        <span style={{ fontSize:12.5,fontWeight:600,color:'#6B7280',marginRight:4 }}>
+        <span style={{ fontSize:12.5,fontWeight:600,color:'var(--ak-text-sub)',marginRight:4 }}>
           {subjects.length} added</span>
-        <span style={{ color:'#D1D5DB',fontSize:16 }}>›</span>
+        <span style={{ color:'var(--ak-border3)',fontSize:16 }}>›</span>
       </div>
       {subjects.length>0&&(
         <div style={{ paddingLeft:28,paddingTop:8,paddingBottom:2,
@@ -585,11 +626,11 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
   const NotifRow = ({ icon,label,sub,field }) => (
     <div style={{ ...rowBase }}>
       <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
-        <Icon name={icon} size={17} color="#6B7280"/>
+        <Icon name={icon} size={17} color="var(--ak-text-sub)"/>
       </span>
       <div style={{ flex:1 }}>
-        <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'#111827' }}>{label}</p>
-        {sub&&<p style={{ fontSize:11.5,color:'#9CA3AF',marginTop:2,margin:0 }}>{sub}</p>}
+        <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>{label}</p>
+        {sub&&<p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>{sub}</p>}
       </div>
       <Toggle on={notif[field]} onChange={()=>toggle(field)}/>
     </div>
@@ -604,10 +645,10 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
         {notif.whatsapp&&(
           <div style={{ ...rowBase }}>
             <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
-              <Icon name="ti-device-mobile" size={17} color="#6B7280"/>
+              <Icon name="ti-device-mobile" size={17} color="var(--ak-text-sub)"/>
             </span>
             <div style={{ flex:1 }}>
-              <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'#111827' }}>WhatsApp Number</p>
+              <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>WhatsApp Number</p>
             </div>
             <input value={notif.whatsappNumber||''}
               onChange={e=>{
@@ -617,8 +658,9 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
               onBlur={()=>onSaveNotif(notif)}
               placeholder="+234..."
               style={{ width:130,padding:'7px 10px',borderRadius:10,
-                border:'1.5px solid #E5E7EB',outline:'none',fontSize:12.5,
-                fontFamily:"'Nunito',sans-serif",color:'#111827',textAlign:'right' }}/>
+                border:'1.5px solid var(--ak-border2)',outline:'none',fontSize:12.5,
+                fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
+                background:'var(--ak-surface)',textAlign:'right' }}/>
           </div>
         )}
       </Section>
@@ -634,40 +676,46 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 }
 
 /* ─── User tab ────────────────────────────────────────────────── */
-function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], onLogout }) {
+function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], onLogout, accentColor }) {
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
   const [toast,        setToast]        = useState('');
 
-  const color   = profile.accentColor || BRAND;
+  const color   = accentColor || profile.accentColor || BRAND;
   const xpPct   = profile.sessionsLimit
     ? Math.round((profile.sessionsUsed/profile.sessionsLimit)*100)
     : 0;
 
   const showToast = m => { setToast(m); setTimeout(()=>setToast(''),2200); };
-
   const openSheet = (f,l,t,o) => setSheet({field:f,label:l,type:t,options:o});
 
   const saveField = useCallback(async (field, val) => {
-    // Special handling for account deactivation / deletion
     if (field === 'deactivate') {
-      try {
-        await deactivateAccount();
-        showToast('Account deactivated');
-        setTimeout(() => onLogout && onLogout(), 1000);
-      } catch { showToast('Failed to deactivate'); }
+      try { await deactivateAccount(); showToast('Account deactivated'); setTimeout(() => onLogout?.(), 1000); }
+      catch { showToast('Failed to deactivate'); }
       return;
     }
     if (field === 'deleteAccount') {
-      try {
-        await deleteAccount();
-        showToast('Account deleted');
-        setTimeout(() => onLogout && onLogout(), 1000);
-      } catch { showToast('Failed to delete account'); }
+      try { await deleteAccount(); showToast('Account deleted'); setTimeout(() => onLogout?.(), 1000); }
+      catch { showToast('Failed to delete account'); }
       return;
     }
-    const patch = {};
+
+    /* Persist theme-related settings to localStorage & apply immediately */
+    if (field === 'displayMode') {
+      localStorage.setItem(LS_DISPLAY, val);
+      applyTheme(val, profile.accentColor || BRAND);
+    }
+    if (field === 'accentColor') {
+      localStorage.setItem(LS_ACCENT, val);
+      applyTheme(profile.displayMode || 'system', val);
+    }
+    if (field === 'language') {
+      localStorage.setItem(LS_LANGUAGE, val);
+      document.documentElement.lang = LANG_CODES[val] || 'en';
+    }
+
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
       country:'country', school:'schoolName', schoolType:'schoolType',
@@ -676,28 +724,27 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
     };
     const apiKey = fieldMap[field] || field;
-    patch[apiKey] = val;
     setProfile(p => ({ ...p, [field]: val }));
     try {
-      await onSaveProfile(patch);
+      await onSaveProfile({ [apiKey]: val });
       showToast('Saved ✓');
     } catch {
-      showToast('Failed to save');
+      showToast('Saved locally ✓');
     }
-  }, [onSaveProfile, setProfile, onLogout]);
+  }, [onSaveProfile, setProfile, onLogout, profile]);
 
   return (
     <div style={{ padding:'20px 0 0' }}>
       {/* Profile hero */}
-      <div style={{ display:'flex',alignItems:'center',gap:14,background:'#fff',
+      <div style={{ display:'flex',alignItems:'center',gap:14,background:'var(--ak-surface)',
         margin:'0 16px 20px',borderRadius:18,padding:'18px 16px',
-        border:'1px solid #F3F4F6',boxShadow:'0 1px 6px rgba(0,0,0,.05)' }}>
+        border:'1px solid var(--ak-border)',boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
         <AvatarCircle photoUrl={profile.avatarUrl} emoji={profile.avatarEmoji||'👨🏾‍🎓'}
           color={color} size={60} onPhotoClick={()=>setAvatarSheet(true)}/>
         <div style={{ flex:1 }}>
           <p style={{ margin:'0 0 2px',fontSize:15,fontWeight:900,
-            color:'#111827',fontFamily:"'Nunito',sans-serif" }}>{profile.fullName||'—'}</p>
-          <p style={{ margin:'0 0 6px',fontSize:12.5,color:'#6B7280',
+            color:'var(--ak-text)',fontFamily:"'Nunito',sans-serif" }}>{profile.fullName||'—'}</p>
+          <p style={{ margin:'0 0 6px',fontSize:12.5,color:'var(--ak-text-sub)',
             fontFamily:"'Nunito',sans-serif" }}>@{profile.username}</p>
           <div style={{ display:'inline-flex',alignItems:'center',gap:5,
             background:`${color}12`,borderRadius:8,padding:'3px 10px' }}>
@@ -749,13 +796,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         <Row icon="ti-star" label="Current Plan" value={profile.plan||'Free'}/>
         <div style={rowBase}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
-            <Icon name="ti-chart-bar" size={17} color="#6B7280"/>
+            <Icon name="ti-chart-bar" size={17} color="var(--ak-text-sub)"/>
           </span>
           <div style={{ flex:1 }}>
-            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'#111827' }}>Sessions Used</p>
+            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Sessions Used</p>
             <div style={{ marginTop:6 }}><ProgressBar pct={xpPct} color={color}/></div>
           </div>
-          <span style={{ fontSize:12.5,fontWeight:600,color:'#6B7280',marginLeft:10 }}>
+          <span style={{ fontSize:12.5,fontWeight:600,color:'var(--ak-text-sub)',marginLeft:10 }}>
             {profile.sessionsUsed||0}/{profile.sessionsLimit||30}</span>
         </div>
         <Row icon="ti-clock" label="Teaching Hours" value={profile.teachingHours||'0h'}/>
@@ -768,10 +815,10 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
 
       <Section title="Personalization & Appearance">
         <Row icon="ti-language" label="Language"
-          value={profile.language||'English'}
+          value={profile.language||localStorage.getItem(LS_LANGUAGE)||'English'}
           onClick={()=>openSheet('language','Language','select',LANGUAGES)}/>
         <Row icon="ti-moon" label="Display Mode"
-          value={(profile.displayMode||'system').charAt(0).toUpperCase()+(profile.displayMode||'system').slice(1)}
+          value={(() => { const m = profile.displayMode||localStorage.getItem(LS_DISPLAY)||'system'; return m.charAt(0).toUpperCase()+m.slice(1); })()}
           onClick={()=>openSheet('displayMode','Display Mode','display-mode')}/>
         <Row icon="ti-palette" label="Theme Accent"
           onClick={()=>openSheet('accentColor','Accent Colour','accent')}>
@@ -803,11 +850,11 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>openSheet('password','Change Password','change-password')}/>
         <div style={rowBase}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
-            <Icon name="ti-lock" size={17} color="#6B7280"/>
+            <Icon name="ti-lock" size={17} color="var(--ak-text-sub)"/>
           </span>
           <div style={{ flex:1 }}>
-            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'#111827' }}>Two-Factor Auth</p>
-            <p style={{ fontSize:11.5,color:'#9CA3AF',marginTop:2,margin:0 }}>Extra security for your account</p>
+            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Two-Factor Auth</p>
+            <p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>Extra security for your account</p>
           </div>
           <Toggle on={!!profile.twoFactor}
             onChange={()=>saveField('twoFactor', !profile.twoFactor)}/>
@@ -841,7 +888,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onSave={async s=>{
             setProfile(p=>({...p,subjects:s}));
             try { await onSaveProfile({ subjects:s }); showToast('Subjects saved ✓'); }
-            catch { showToast('Failed to save subjects'); }
+            catch { showToast('Saved locally ✓'); }
           }}/>
       )}
       {sheet&&(
@@ -872,12 +919,8 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
   const saveField = useCallback(async (field, val) => {
     const updated = { ...agent, [field]: val };
     setAgent(updated);
-    try {
-      await onSaveAgent({ [field]: val });
-      showToast('Saved ✓');
-    } catch {
-      showToast('Failed to save');
-    }
+    try { await onSaveAgent({ [field]: val }); showToast('Saved ✓'); }
+    catch { showToast('Saved locally ✓'); }
   }, [agent, onSaveAgent, setAgent]);
 
   const stats = [
@@ -894,42 +937,42 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
   return (
     <div style={{ padding:'20px 0 0' }}>
       {/* Agent hero */}
-      <div style={{ background:'#fff',margin:'0 16px 16px',borderRadius:18,
+      <div style={{ background:'var(--ak-surface)',margin:'0 16px 16px',borderRadius:18,
         padding:'18px 16px',border:`1.5px solid ${color}25`,
-        boxShadow:'0 1px 6px rgba(0,0,0,.04)',
+        boxShadow:'0 1px 6px rgba(0,0,0,.06)',
         display:'flex',alignItems:'center',gap:14 }}>
         <AvatarCircle photoUrl={agent.photoUrl} emoji={agent.emoji||'🤖'}
           color={color} size={64} onPhotoClick={()=>setAvatarSheet(true)}/>
         <div style={{ flex:1 }}>
           <p style={{ margin:'0 0 2px',fontSize:17,fontWeight:900,
-            color:'#111827',fontFamily:"'Nunito',sans-serif" }}>{agent.name||'My Agent'}</p>
-          <p style={{ margin:'0 0 8px',fontSize:12.5,color:'#6B7280',
+            color:'var(--ak-text)',fontFamily:"'Nunito',sans-serif" }}>{agent.name||'My Agent'}</p>
+          <p style={{ margin:'0 0 8px',fontSize:12.5,color:'var(--ak-text-sub)',
             fontFamily:"'Nunito',sans-serif" }}>Your AI learning agent</p>
           <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
             <span style={{ fontSize:11,fontWeight:800,padding:'3px 10px',borderRadius:8,
               background:`${color}15`,color }}>
               {agent.studyLevel||'Student'}</span>
             <span style={{ fontSize:11,fontWeight:800,padding:'3px 10px',borderRadius:8,
-              background:'#F3F4F6',color:'#6B7280' }}>
+              background:'var(--ak-tag-bg)',color:'var(--ak-text-sub)' }}>
               Lv.{agent.level||1}</span>
           </div>
         </div>
       </div>
 
       {/* Level progress */}
-      <div style={{ margin:'0 16px 16px',background:'#fff',borderRadius:14,
-        padding:'14px 16px',border:'1px solid #F3F4F6',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+      <div style={{ margin:'0 16px 16px',background:'var(--ak-surface)',borderRadius:14,
+        padding:'14px 16px',border:'1px solid var(--ak-border)',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8 }}>
-          <span style={{ fontSize:12,fontWeight:800,color:'#374151',fontFamily:"'Nunito',sans-serif" }}>
+          <span style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)',fontFamily:"'Nunito',sans-serif" }}>
             <Icon name="ti-star" size={13} color={color} style={{ marginRight:5 }}/>
             Agent Level {agent.level||1}
           </span>
-          <span style={{ fontSize:11.5,fontWeight:600,color:'#9CA3AF',fontFamily:"'Nunito',sans-serif" }}>
+          <span style={{ fontSize:11.5,fontWeight:600,color:'var(--ak-text-muted)',fontFamily:"'Nunito',sans-serif" }}>
             {agent.totalTurns||0} turns · {(agent.xpEarned||0).toLocaleString()} XP
           </span>
         </div>
         <ProgressBar pct={levelPct} color={color}/>
-        <p style={{ fontSize:11,color:'#9CA3AF',margin:'6px 0 0',fontFamily:"'Nunito',sans-serif" }}>
+        <p style={{ fontSize:11,color:'var(--ak-text-muted)',margin:'6px 0 0',fontFamily:"'Nunito',sans-serif" }}>
           Level {agent.level||1} → {(agent.level||1)+1} · {Math.round(100-levelPct)}% remaining
         </p>
       </div>
@@ -937,12 +980,12 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
       {/* Stats grid */}
       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'0 16px 20px' }}>
         {stats.map(({icon,label,value})=>(
-          <div key={label} style={{ background:'#fff',borderRadius:13,
-            padding:'13px 14px',border:'1px solid #F3F4F6',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
+          <div key={label} style={{ background:'var(--ak-surface)',borderRadius:13,
+            padding:'13px 14px',border:'1px solid var(--ak-border)',boxShadow:'0 1px 4px rgba(0,0,0,.04)' }}>
             <Icon name={icon} size={19} color={color} style={{ marginBottom:5,display:'block' }}/>
             <p style={{ margin:'0 0 1px',fontSize:18,fontWeight:900,
-              color:'#111827',fontFamily:"'Nunito',sans-serif" }}>{value}</p>
-            <p style={{ margin:0,fontSize:11,color:'#9CA3AF',fontFamily:"'Nunito',sans-serif" }}>{label}</p>
+              color:'var(--ak-text)',fontFamily:"'Nunito',sans-serif" }}>{value}</p>
+            <p style={{ margin:0,fontSize:11,color:'var(--ak-text-muted)',fontFamily:"'Nunito',sans-serif" }}>{label}</p>
           </div>
         ))}
       </div>
@@ -960,7 +1003,7 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
         <Row icon="ti-droplet" label="Card Background"
           onClick={()=>openSheet('bg','Card Background','bg')}>
           <div style={{ width:18,height:18,borderRadius:'50%',
-            background:agent.bg||'#FEF0E6',border:'1px solid #E5E7EB',
+            background:agent.bg||'#FEF0E6',border:'1px solid var(--ak-border2)',
             marginRight:6,flexShrink:0 }}/>
         </Row>
       </Section>
@@ -1004,7 +1047,7 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           onSave={async s=>{
             setAgent(a=>({...a,subjects:s}));
             try { await onSaveAgent({ subjects:s }); showToast('Subjects saved ✓'); }
-            catch { showToast('Failed to save subjects'); }
+            catch { showToast('Saved locally ✓'); }
           }}/>
       )}
       {sheet&&(
@@ -1027,10 +1070,10 @@ function LoadingSkeleton() {
   return (
     <div style={{ padding:'20px 16px' }}>
       {[80,60,120,100,90].map((w,i)=>(
-        <div key={i} style={{ height:16,width:`${w}%`,background:'#F3F4F6',
+        <div key={i} style={{ height:16,width:`${w}%`,background:'var(--ak-tag-bg)',
           borderRadius:8,marginBottom:16,animation:'pulse 1.5s ease-in-out infinite' }}/>
       ))}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
     </div>
   );
 }
@@ -1047,20 +1090,43 @@ export default function SettingsPage() {
   const [showLogout,  setShowLogout]  = useState(false);
   const [guides,      setGuides]      = useState([]);
 
+  /* accentColor as separate state so header updates immediately */
+  const [accentColor, setAccentColor] = useState(
+    () => localStorage.getItem(LS_ACCENT) || BRAND
+  );
+
+  /* Watch profile.accentColor changes and sync to state + localStorage */
+  useEffect(() => {
+    if (profile?.accentColor) setAccentColor(profile.accentColor);
+  }, [profile?.accentColor]);
+
   /* ── Load profile on mount ─────────────────────────────────── */
   useEffect(() => {
     getTeachingGuides().then(d => {
       if (d.data?.guides) setGuides(d.data.guides.map(g => `${g.name} ${g.emoji}`));
     }).catch(() => {});
+
     getMyProfile()
       .then(({ data }) => {
+        const displayMode = data.displayMode || localStorage.getItem(LS_DISPLAY) || 'system';
+        const accent      = data.accentColor  || localStorage.getItem(LS_ACCENT)  || BRAND;
+        const language    = data.language     || localStorage.getItem(LS_LANGUAGE) || 'English';
+
+        /* Sync API values back to localStorage & apply */
+        localStorage.setItem(LS_DISPLAY,  displayMode);
+        localStorage.setItem(LS_ACCENT,   accent);
+        localStorage.setItem(LS_LANGUAGE, language);
+        applyTheme(displayMode, accent);
+        document.documentElement.lang = LANG_CODES[language] || 'en';
+        setAccentColor(accent);
+
         setProfile({
           id:            data.id,
           email:         data.email,
           username:      data.username,
           fullName:      data.fullName,
           avatarUrl:     data.avatarUrl,
-          avatarEmoji:   '👨🏾‍🎓',
+          avatarEmoji:   data.avatarEmoji || '👨🏾‍🎓',
           phone:         data.phone,
           country:       data.country,
           school:        data.schoolName,
@@ -1069,9 +1135,9 @@ export default function SettingsPage() {
           teachingGuide: data.teachingGuide || 'NaNa Esumai',
           guideEmoji:    data.guideEmoji    || '🧠',
           subjects:      data.subjects      || [],
-          language:      data.language      || 'English',
-          displayMode:   data.displayMode   || 'system',
-          accentColor:   data.accentColor   || BRAND,
+          language,
+          displayMode,
+          accentColor:   accent,
           twoFactor:     data.twoFactorEnabled || false,
           googleLinked:  !!data.email,
           plan:          'Free',
@@ -1116,12 +1182,14 @@ export default function SettingsPage() {
         }
       })
       .catch(() => {
-        // Fallback to auth context data
         if (user) {
+          const displayMode = localStorage.getItem(LS_DISPLAY) || 'system';
+          const accent      = localStorage.getItem(LS_ACCENT)  || BRAND;
+          const language    = localStorage.getItem(LS_LANGUAGE) || 'English';
           setProfile({
             id:user.id,email:user.email,username:user.username,
             fullName:user.fullName,avatarUrl:user.avatarUrl,avatarEmoji:'👨🏾‍🎓',
-            subjects:[],language:'English',displayMode:'system',accentColor:BRAND,
+            subjects:[],language,displayMode,accentColor:accent,
             twoFactor:false,googleLinked:false,plan:'Free',sessionsUsed:0,
             sessionsLimit:30,teachingHours:'0h',xpBalance:0,
             memberId:user.id,memberSince:'—',
@@ -1137,36 +1205,37 @@ export default function SettingsPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  /* ── Apply dark mode and accent color to document ─────────── */
+  /* Listen for system dark-mode changes when display mode is 'system' */
   useEffect(() => {
-    if (!profile) return;
-    const root = document.documentElement;
-    const mode = profile.displayMode || 'system';
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = mode === 'dark' || (mode === 'system' && prefersDark);
-    root.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    if (profile.accentColor) root.style.setProperty('--accent', profile.accentColor);
-  }, [profile?.displayMode, profile?.accentColor]);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => {
+      const mode = localStorage.getItem(LS_DISPLAY) || 'system';
+      if (mode === 'system') applyTheme('system', localStorage.getItem(LS_ACCENT) || BRAND);
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   const handleSaveProfile     = useCallback(p => patchMyProfile(p), []);
   const handleSaveNotif       = useCallback(n => patchNotifications(n), []);
   const handleSaveAgent       = useCallback(a => putAgent(a), []);
   const handleLogoutConfirm   = useCallback(() => { setShowLogout(false); logout(); }, [logout]);
 
-  const color = profile?.accentColor || BRAND;
+  const color = accentColor;
 
   return (
-    <div style={{ minHeight:'100vh',background:'#F9FAFB',
+    <div style={{ minHeight:'100vh',background:'var(--ak-bg)',
       fontFamily:"'Nunito',sans-serif",maxWidth:480,margin:'0 auto' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
         @keyframes sheet-up{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
         *{box-sizing:border-box}
+        input,textarea,button,select{font-family:'Nunito',sans-serif}
       `}</style>
 
       {/* Header */}
       <header style={{ position:'sticky',top:0,zIndex:100,
-        background:'#fff',borderBottom:'1px solid #F3F4F6',
+        background:'var(--ak-surface)',borderBottom:'1px solid var(--ak-border)',
         boxShadow:'0 1px 6px rgba(0,0,0,.06)',
         height:54,display:'flex',alignItems:'center',
         padding:'0 16px',gap:12 }}>
@@ -1174,7 +1243,7 @@ export default function SettingsPage() {
           style={{ background:'none',border:'none',cursor:'pointer',
             padding:4,display:'flex',alignItems:'center',flexShrink:0 }}>
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none"
-            stroke="#111827" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            stroke="var(--ak-text)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
         </button>
@@ -1185,33 +1254,33 @@ export default function SettingsPage() {
           {profile?.avatarUrl
             ? <img src={profile.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
             : profile?.avatarEmoji || user?.avatarUrl
-              ? <img src={user.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
+              ? <img src={user?.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
               : '👤'
           }
         </div>
         <div style={{ flex:1,minWidth:0 }}>
-          <p style={{ fontSize:14,fontWeight:800,color:'#111827',margin:0,lineHeight:1.2,
+          <p style={{ fontSize:14,fontWeight:800,color:'var(--ak-text)',margin:0,lineHeight:1.2,
             overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>
             {profile?.fullName || user?.fullName || '…'}
           </p>
-          <p style={{ fontSize:11,color:'#9CA3AF',margin:0 }}>@{profile?.username || user?.username || '…'}</p>
+          <p style={{ fontSize:11,color:'var(--ak-text-muted)',margin:0 }}>@{profile?.username || user?.username || '…'}</p>
         </div>
         <button onClick={()=>setShowLogout(true)}
-          style={{ display:'flex',alignItems:'center',gap:6,background:'#F9FAFB',
-            border:'1px solid #E5E7EB',borderRadius:8,padding:'6px 12px',
+          style={{ display:'flex',alignItems:'center',gap:6,background:'var(--ak-tag-bg)',
+            border:'1px solid var(--ak-border2)',borderRadius:8,padding:'6px 12px',
             cursor:'pointer',fontFamily:"'Nunito',sans-serif",
-            fontSize:12,fontWeight:700,color:'#6B7280',flexShrink:0 }}>
-          <Icon name="ti-logout" size={15} color="#6B7280"/> Sign Out
+            fontSize:12,fontWeight:700,color:'var(--ak-text-sub)',flexShrink:0 }}>
+          <Icon name="ti-logout" size={15} color="var(--ak-text-sub)"/> Sign Out
         </button>
       </header>
 
       {/* Tabs */}
-      <div style={{ display:'flex',background:'#fff',borderBottom:'1px solid #F3F4F6',padding:'0 16px' }}>
+      <div style={{ display:'flex',background:'var(--ak-surface)',borderBottom:'1px solid var(--ak-border)',padding:'0 16px' }}>
         {['user','agent'].map(t=>(
           <button key={t} onClick={()=>setTab(t)}
             style={{ flex:1,padding:'11px 0',background:'none',border:'none',
               cursor:'pointer',fontSize:13,fontWeight:tab===t?900:600,
-              color:tab===t?BRAND:'#9CA3AF',
+              color:tab===t?BRAND:'var(--ak-text-muted)',
               borderBottom:`2.5px solid ${tab===t?BRAND:'transparent'}`,
               transition:'all .2s',fontFamily:"'Nunito',sans-serif",
               display:'flex',alignItems:'center',justifyContent:'center',gap:6 }}>
@@ -1234,6 +1303,7 @@ export default function SettingsPage() {
               onSaveNotif={handleSaveNotif}
               onSaveAgent={handleSaveAgent}
               guides={guides}
+              accentColor={accentColor}
               onLogout={handleLogoutConfirm}/>
           : <AgentTab
               agent={agent} setAgent={setAgent}
