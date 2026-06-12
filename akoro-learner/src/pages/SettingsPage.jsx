@@ -10,6 +10,8 @@ import {
   patchNotifications,
   putAgent,
   getTeachingGuides,
+  getMyAgents,
+  setDefaultAgent,
   deactivateAccount,
   deleteAccount,
   changePassword,
@@ -774,7 +776,7 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 }
 
 /* ─── User tab ────────────────────────────────────────────────── */
-function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage }) {
+function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], guideMap = {}, onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage }) {
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -806,6 +808,22 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     if (field === 'accentColor') { onSetAccent(val); }
     if (field === 'language')    { onSetLanguage(val); }
 
+    /* Teaching guide — set the default agent in the marketplace, then
+       mirror the name+emoji onto the users row for display. */
+    if (field === 'teachingGuide') {
+      const opt = guideMap[val] || { name: val, emoji: profile.guideEmoji || '🧠', pairId: null };
+      setProfile(p => ({ ...p, teachingGuide: opt.name, guideEmoji: opt.emoji }));
+      if (opt.pairId && profile.id) {
+        try { await setDefaultAgent({ userId: profile.id, agentPairId: opt.pairId }); }
+        catch { /* ownership/network — fall through to mirror */ }
+      }
+      try {
+        await onSaveProfile({ teachingGuide: opt.name, guideEmoji: opt.emoji });
+        showToast('Saved ✓');
+      } catch { showToast('Saved locally ✓'); }
+      return;
+    }
+
     /* Change password — separate API endpoint */
     if (field === 'password') {
       try {
@@ -832,7 +850,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     } catch {
       showToast('Saved locally ✓');
     }
-  }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage]);
+  }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);
 
   return (
     <div style={{ padding:'20px 0 0' }}>
@@ -1215,7 +1233,8 @@ export default function SettingsPage() {
   const [agent,       setAgent]       = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [showLogout,  setShowLogout]  = useState(false);
-  const [guides,      setGuides]      = useState([]);
+  const [guides,      setGuides]      = useState([]);   // display labels for the picker
+  const [guideMap,    setGuideMap]    = useState({});   // label → { pairId, name, emoji }
 
   /* When API returns saved accent/lang, push into global contexts */
   useEffect(() => {
@@ -1225,12 +1244,47 @@ export default function SettingsPage() {
     if (profile?.language) onSetLanguage(profile.language);
   }, [profile?.language]);
 
+  /* ── Load the guide catalog from the marketplace (purchase-driven) ──
+     Catalog = platform default (NaNa Esumai) + the student's purchased
+     agents. Falls back to the static guide stub if the user id isn't
+     available yet or the marketplace call fails. */
+  useEffect(() => {
+    if (!user?.id) return;
+    getMyAgents(user.id)
+      .then(d => {
+        if (!d?.success) throw new Error('no marketplace data');
+        const opts = [
+          ...(d.platformAgents  || []).map(a => ({
+            label: `${a.avatar || '🧠'} ${a.name}`, pairId: a.id, name: a.name, emoji: a.avatar || '🧠',
+          })),
+          ...(d.purchasedAgents || []).map(a => ({
+            label: `${a.avatar || '🎓'} ${a.name}`, pairId: a.id, name: a.name, emoji: a.avatar || '🎓',
+          })),
+        ];
+        if (!opts.length) throw new Error('empty catalog');
+        setGuides(opts.map(o => o.label));
+        const map = {};
+        opts.forEach(o => { map[o.label] = o; });
+        setGuideMap(map);
+      })
+      .catch(() => {
+        // Fallback: static stub so the picker is never empty
+        getTeachingGuides().then(d => {
+          if (d.data?.guides) {
+            const opts = d.data.guides.map(g => ({
+              label: `${g.emoji} ${g.name}`, pairId: g.id, name: g.name, emoji: g.emoji,
+            }));
+            setGuides(opts.map(o => o.label));
+            const map = {};
+            opts.forEach(o => { map[o.label] = o; });
+            setGuideMap(map);
+          }
+        }).catch(() => {});
+      });
+  }, [user?.id]);
+
   /* ── Load profile on mount ─────────────────────────────────── */
   useEffect(() => {
-    getTeachingGuides().then(d => {
-      if (d.data?.guides) setGuides(d.data.guides.map(g => `${g.name} ${g.emoji}`));
-    }).catch(() => {});
-
     getMyProfile()
       .then(({ data }) => {
         const displayMode = data.displayMode || localStorage.getItem(LS_DISPLAY) || 'system';
@@ -1414,6 +1468,7 @@ export default function SettingsPage() {
               onSaveNotif={handleSaveNotif}
               onSaveAgent={handleSaveAgent}
               guides={guides}
+              guideMap={guideMap}
               accentColor={accentColor}
               onLogout={handleLogoutConfirm}
               onSetMode={onSetMode}

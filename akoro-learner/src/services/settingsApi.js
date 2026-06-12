@@ -31,6 +31,14 @@ export const putAgent = (agentPatch) => {
 
 export const getTeachingGuides = () => apiGet('/api/profiles/teaching-guides');
 
+// Marketplace-driven guide catalog: platform default + the student's purchased agents
+export const getMyAgents = (userId) =>
+  apiGet(`/api/adaptive/marketplace/my-agents/${userId}`);
+
+// Set the student's default/active guide agent (verifies ownership server-side)
+export const setDefaultAgent = ({ userId, agentPairId, activeAgentId }) =>
+  apiPost('/api/adaptive/marketplace/set-default', { userId, agentPairId, activeAgentId });
+
 export const changePassword = ({ currentPassword, newPassword }) => {
   const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
   return fetch(`${API}/api/auth/change-password`, {
