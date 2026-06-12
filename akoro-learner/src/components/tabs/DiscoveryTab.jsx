@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
 
 const FONT  = "'Nunito', sans-serif";
@@ -53,6 +54,7 @@ function Stars({ rating = 0, size = 12 }) {
 
 /* ── Listing card ──────────────────────────────────────────── */
 function AgentCard({ listing, owned, onOpen }) {
+  const { t } = useLang();
   const sc = subjectColor(listing.subject);
   return (
     <button
@@ -72,7 +74,7 @@ function AgentCard({ listing, owned, onOpen }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 14, fontWeight: 900, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{listing.title}</span>
-            {owned && <span style={{ fontSize: 9, fontWeight: 900, color: GREEN, background: 'rgba(16,185,129,.12)', padding: '2px 6px', borderRadius: 6 }}>OWNED</span>}
+            {owned && <span style={{ fontSize: 9, fontWeight: 900, color: GREEN, background: 'rgba(16,185,129,.12)', padding: '2px 6px', borderRadius: 6 }}>{t('discovery.owned')}</span>}
           </div>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: '#6B7280', marginTop: 2 }}>
             by {listing.teacher_name || 'Teacher'}
@@ -120,6 +122,7 @@ function StarInput({ value, onChange }) {
 
 /* ── Detail sheet ──────────────────────────────────────────── */
 function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy }) {
+  const { t } = useLang();
   const [full,     setFull]     = useState(listing);
   const [reviews,  setReviews]  = useState([]);
   const [myRating, setMyRating] = useState(0);
@@ -213,7 +216,7 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
           {/* use cases */}
           {useCases.length > 0 && (
             <div style={{ marginTop: 18 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 900, color: '#111827', marginBottom: 8 }}>What you can learn</div>
+              <div style={{ fontSize: 11.5, fontWeight: 900, color: '#111827', marginBottom: 8 }}>{t('discovery.what_learn')}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {useCases.slice(0, 12).map((t, i) => (
                   <span key={i} style={{ fontSize: 11.5, fontWeight: 700, color: '#4B5563', background: '#F3F4F6', padding: '5px 11px', borderRadius: 9 }}>{t}</span>
@@ -253,7 +256,7 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
           {/* reviews */}
           {reviews.length > 0 && (
             <div style={{ marginTop: 20 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 900, color: '#111827', marginBottom: 8 }}>Recent reviews</div>
+              <div style={{ fontSize: 11.5, fontWeight: 900, color: '#111827', marginBottom: 8 }}>{t('discovery.recent_reviews')}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {reviews.slice(0, 5).map((r) => (
                   <div key={r.id} style={{ background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 12, padding: '10px 12px' }}>
@@ -357,6 +360,7 @@ function PurchaseHistorySheet({ onClose }) {
 
 /* ── Main tab ──────────────────────────────────────────────── */
 export default function DiscoveryTab() {
+  const { t } = useLang();
   const [listings, setListings] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [subject,  setSubject]  = useState('all');
@@ -510,7 +514,7 @@ export default function DiscoveryTab() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search teacher agents, subjects, topics…"
+            placeholder={t('discovery.search')}
             style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid #E5E0F5', background: '#fff', fontSize: 13, fontWeight: 600, color: '#111827', fontFamily: FONT, outline: 'none' }}
           />
         </div>
@@ -541,7 +545,7 @@ export default function DiscoveryTab() {
           border: freeOnly ? `1.5px solid ${GREEN}` : '1.5px solid #E5E0F5', background: freeOnly ? `${GREEN}12` : '#fff',
           cursor: 'pointer', fontFamily: FONT,
         }}>
-          <span style={{ fontSize: 11.5, fontWeight: 800, color: freeOnly ? GREEN : '#6B7280' }}>✨ Free</span>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: freeOnly ? GREEN : '#6B7280' }}>✨ {t('discovery.free')}</span>
         </button>
       </div>
 
@@ -552,7 +556,7 @@ export default function DiscoveryTab() {
         ) : listings.length === 0 ? (
           <div style={{ background: '#fff', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
             <div style={{ fontSize: 40, opacity: .3 }}>🔭</div>
-            <p style={{ fontSize: 14, fontWeight: 800, color: '#6B7280', margin: '10px 0 0' }}>No agents found</p>
+            <p style={{ fontSize: 14, fontWeight: 800, color: '#6B7280', margin: '10px 0 0' }}>{t('discovery.no_agents')}</p>
             <p style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', margin: '4px 0 0' }}>Try a different subject or clear your search.</p>
           </div>
         ) : (

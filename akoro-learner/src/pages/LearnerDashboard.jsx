@@ -379,7 +379,7 @@ export default function LearnerDashboard() {
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
               <button onClick={()=>navigate("/live")} title="Live Classes"
                 style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,padding:"6px 12px",cursor:"pointer",color:BRAND,fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif" }}>
-                🎥 Live
+                🎥 {t('dash.live')}
               </button>
               <SubjectDropdown value={subjectFilter} onChange={setSubjectFilter}/>
               <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:"#F0EBFF",borderRadius:100,padding:4,cursor:"pointer",border:"1px solid #DDD3FF" }}>
@@ -388,7 +388,7 @@ export default function LearnerDashboard() {
             </div>
           </div>
           <div style={{ display:"flex" }}>
-            {[{key:"sessions",label:"My Sessions",count:totalUnread,countColor:BRAND},{key:"challenges",label:"Challenges",count:pendingChallenges,countColor:RED}].map(({key,label,count,countColor})=>(
+            {[{key:"sessions",label:t('dash.my_sessions'),count:totalUnread,countColor:BRAND},{key:"challenges",label:t('dash.challenges'),count:pendingChallenges,countColor:RED}].map(({key,label,count,countColor})=>(
               <button key={key} onClick={()=>setTab(key)} style={{ flex:1,padding:"10px 0 12px",background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:tab===key?800:600,color:tab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${tab===key?BRAND:"transparent"}`,transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Nunito',sans-serif" }}>
                 {label}{count>0&&<span style={{ background:tab===key?countColor:"#E5E7EB",color:tab===key?"#fff":"#6B7280",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800 }}>{count}</span>}
               </button>
@@ -403,9 +403,9 @@ export default function LearnerDashboard() {
               {/* ── Top session type tabs ── */}
               <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                 {[
-                  {key:"all",    label:"All",          icon:"📚", count:bySubject.length},
-                  {key:"live",   label:"Live Classes",  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
-                  {key:"agent",  label:"Agent",         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length},
+                  {key:"all",    label:t('sessions.all'),          icon:"📚", count:bySubject.length},
+                  {key:"live",   label:t('sessions.live_classes'),  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
+                  {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length},
                 ].map(({key,label,icon,count})=>(
                   <button key={key} onClick={()=>setSessionTab(key)} style={{ flex:1,padding:"10px 4px 11px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:sessionTab===key?800:600,color:sessionTab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${sessionTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
                     <span style={{ fontSize:13 }}>{icon}</span>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"#F3F4F6",color:sessionTab===key?"#fff":"#9CA3AF",borderRadius:8,padding:"1px 6px" }}>{count}</span>
@@ -418,10 +418,10 @@ export default function LearnerDashboard() {
                 <>
                   <div style={{ display:"flex",gap:7,padding:"10px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",background:"#FAFBFF",flexShrink:0 }}>
                     {[
-                      {key:"starting-soon", label:"Starting Soon", icon:"🔴"},
-                      {key:"today",         label:"Today",         icon:"📅"},
-                      {key:"tomorrow",      label:"Tomorrow",      icon:"🌅"},
-                      {key:"week",          label:"This Week",     icon:"📆"},
+                      {key:"starting-soon", label:t('sessions.starting_soon'), icon:"🔴"},
+                      {key:"today",         label:t('sessions.today'),         icon:"📅"},
+                      {key:"tomorrow",      label:t('sessions.tomorrow'),      icon:"🌅"},
+                      {key:"week",          label:t('sessions.this_week'),     icon:"📆"},
                     ].map(({key,label,icon})=>{
                       const cnt = bySubject.filter(s=>s.type==="live"&&s.scheduleBucket===key).length;
                       const active = liveSubTab===key;
@@ -489,8 +489,8 @@ export default function LearnerDashboard() {
                   {/* Sub-tab bar */}
                   <div style={{ display:"flex",borderBottom:"1px solid #F3F4F6",background:"#fff",flexShrink:0 }}>
                     {[
-                      {key:"sessions",  label:"Sessions",  icon:"📚", count:agentSessionsFiltered.length},
-                      {key:"revisions", label:"Revisions", icon:"🔄", count:agentRevisions.length},
+                      {key:"sessions",  label:t('sessions.sessions'),  icon:"📚", count:agentSessionsFiltered.length},
+                      {key:"revisions", label:t('sessions.revisions'), icon:"🔄", count:agentRevisions.length},
                     ].map(({key,label,icon,count})=>{
                       const active=agentSubTab===key;
                       const isRevision=key==="revisions";
@@ -537,7 +537,7 @@ export default function LearnerDashboard() {
                     agentSessionsFiltered.length===0
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
                         <span style={{ fontSize:52,opacity:.2 }}>📚</span>
-                        <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>No sessions yet</p>
+                        <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>{t('sessions.empty')}</p>
                         <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>Start a session with the FAB button to see your teaching history here.</p>
                       </div>
                       :agentSessionsFiltered.map(s=>(
@@ -552,8 +552,8 @@ export default function LearnerDashboard() {
                     decayAsSessions.length===0
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
                         <span style={{ fontSize:52,opacity:.2 }}>✅</span>
-                        <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>No revisions needed</p>
-                        <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>All your agent sessions are up to date!</p>
+                        <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>{t('sessions.no_revisions')}</p>
+                        <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.all_up_to_date')}</p>
                       </div>
                       :decayAsSessions.map(s=>(
                         <SessionCard key={s.id} session={s}
@@ -569,18 +569,18 @@ export default function LearnerDashboard() {
           {tab==="challenges"&&(
             <div style={{ background:"var(--ak-surface)",minHeight:"100%" }}>
               <div style={{ padding:"12px 18px 10px",borderBottom:"1px solid var(--ak-border)" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}><ZapIcon size={13} color={RED}/><span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text-sec)" }}>Peer Challenges — Accept before they expire</span></div>
+                <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}><ZapIcon size={13} color={RED}/><span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text-sec)" }}>{t('challenges.peer')}</span></div>
                 <div style={{ display:"flex",gap:10 }}>
-                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:RED,animation:"pulse-dot 1.2s ease-in-out infinite" }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>⚡ Immediate — battle opens right away</span></div>
-                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:BRAND }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>🗓 Scheduled — goes to Battles tab</span></div>
+                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:RED,animation:"pulse-dot 1.2s ease-in-out infinite" }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>{t('challenges.immediate')}</span></div>
+                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:BRAND }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>{t('challenges.scheduled')}</span></div>
                 </div>
               </div>
               {challenges.filter(c=>!acceptedIds.has(c.id)).length===0?(
                 <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:12 }}>
                   <span style={{ fontSize:48,opacity:.25 }}>✅</span>
-                  <p style={{ fontSize:14,fontWeight:800,color:"#9CA3AF",textAlign:"center" }}>All challenges accepted!</p>
-                  <p style={{ fontSize:12,fontWeight:600,color:"#D1D5DB",textAlign:"center" }}>Check the Battles tab to watch live or preview scheduled battles.</p>
-                  <button onClick={()=>setTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Go to Battles ⚔️</button>
+                  <p style={{ fontSize:14,fontWeight:800,color:"#9CA3AF",textAlign:"center" }}>{t('challenges.all_accepted')}</p>
+                  <p style={{ fontSize:12,fontWeight:600,color:"#D1D5DB",textAlign:"center" }}>{t('challenges.check_battles')}</p>
+                  <button onClick={()=>setTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenges.go_to_battles')}</button>
                 </div>
               ):challenges.filter(c=>!acceptedIds.has(c.id)).map(c=><ChallengeRow key={c.id} challenge={c} onTap={setSelectedChallenge}/>)}
             </div>
@@ -613,7 +613,7 @@ export default function LearnerDashboard() {
         {!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
           <div onClick={()=>setConfigOpen(true)} style={{ position:"fixed",bottom:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
             <MicIcon size={15} color="#fff"/>
-            <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>Start Session</span>
+            <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>{t('dash.start_session')}</span>
           </div>
         )}
 

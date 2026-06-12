@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
 import { apiGet } from '../../services/api.js';
 import { TrophyIcon, FlameIcon, StarIcon, ZapIcon } from '../common/Icons.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function RankingsTab() {
+  const { t } = useLang();
   const [boardType, setBoardType] = useState("classroom");
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const BOARD_TABS=[{key:"classroom",label:"Classroom",icon:"🏫"},{key:"courses",label:"Courses",icon:"📘"},{key:"interSchool",label:"Inter-Schools",icon:"🌍"}];
+  const BOARD_TABS=[{key:"classroom",label:t('rankings.classroom'),icon:"🏫"},{key:"courses",label:t('rankings.courses'),icon:"📘"},{key:"interSchool",label:t('rankings.inter_schools'),icon:"🌍"}];
 
   // Fetch ranking data when boardType changes.
   // Ranking endpoints wrap their payload in `data` (res200 helper).
@@ -58,7 +60,7 @@ function RankingsTab() {
               <div style={{ width:28,height:28,borderRadius:8,background:isMe?`${BRAND}15`:"#F3F4F6",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><span style={{ fontSize:12,fontWeight:900,color:isMe?BRAND:"#6B7280" }}>{entry.rank}</span></div>
               <img src={entry.avatar} alt="" style={{ width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`2px solid ${isMe?BRAND:"#E5E7EB"}`,flexShrink:0 }}/>
               <div style={{ flex:1,minWidth:0 }}>
-                <div style={{ display:"flex",alignItems:"center",gap:5 }}><span style={{ fontSize:13.5,fontWeight:800,color:isMe?BRAND:"#111827" }}>{entry.name}</span>{isMe&&<span style={{ fontSize:9,fontWeight:800,color:BRAND,background:`${BRAND}15`,borderRadius:4,padding:"1px 5px" }}>YOU</span>}</div>
+                <div style={{ display:"flex",alignItems:"center",gap:5 }}><span style={{ fontSize:13.5,fontWeight:800,color:isMe?BRAND:"#111827" }}>{entry.name}</span>{isMe&&<span style={{ fontSize:9,fontWeight:800,color:BRAND,background:`${BRAND}15`,borderRadius:4,padding:"1px 5px" }}>{t('rankings.you')}</span>}</div>
                 <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:2 }}>
                   {entry.streak!==undefined&&<span style={{ fontSize:10,fontWeight:700,color:"#9CA3AF" }}>🔥 {entry.streak}d streak</span>}
                   {entry.subject&&<span style={{ fontSize:10,fontWeight:700,color:subjectColor||"#9CA3AF",background:`${subjectColor}15`,borderRadius:4,padding:"1px 6px" }}>{SUBJECTS[entry.subject]?.icon} {SUBJECTS[entry.subject]?.label}</span>}

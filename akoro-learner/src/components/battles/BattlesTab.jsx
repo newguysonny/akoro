@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
 import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
   const sc=SUBJECT_COLORS[challenge.subject]||BRAND,diff=DIFFICULTY_CONFIG[challenge.difficulty],isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
@@ -33,6 +34,7 @@ function ChallengeRow({ challenge, onTap }) {
 
 
 function BattlesTab({ battles, onViewChallenge }) {
+  const { t } = useLang();
   const [viewFilter, setViewFilter] = useState("active");
   const [watching,   setWatching]   = useState(null);
   const liveBattles      = battles.filter(b=>b.status==="live");
@@ -46,11 +48,11 @@ function BattlesTab({ battles, onViewChallenge }) {
     scheduled:{label:"SCHEDULED",bg:"rgba(108,59,255,.10)", color:BRAND, border:"rgba(108,59,255,.25)" },
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
   };
-  const TABS=[{key:"active",label:"Active",icon:"⚡",count:liveBattles.length},{key:"scheduled",label:"Scheduled",icon:"🗓",count:scheduledBattles.length},{key:"completed",label:"Completed",icon:"🏆",count:completedBattles.length}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"⚡",count:liveBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"🗓",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"🏆",count:completedBattles.length}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"#fff",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid #F3F4F6" }}>
-        {[{val:liveBattles.length,label:"Live",color:RED,bg:`${RED}0a`},{val:scheduledBattles.length,label:"Scheduled",color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length,label:"Completed",color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:"XP at stake",color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
+        {[{val:liveBattles.length,label:t('battles.live'),color:RED,bg:`${RED}0a`},{val:scheduledBattles.length,label:t('battles.scheduled'),color:BRAND,bg:`${BRAND}0a`},{val:completedBattles.length,label:t('battles.completed'),color:GREEN,bg:"rgba(16,185,129,.07)"},{val:`+${totalXP}`,label:t('battles.xp_at_stake'),color:GOLD,bg:"rgba(245,158,11,.07)"}].map(({val,label,color,bg})=>(
           <div key={label} style={{ textAlign:"center",background:bg,borderRadius:12,padding:"9px 4px",border:`1px solid ${color}25` }}>
             <div style={{ fontSize:17,fontWeight:900,color }}>{val}</div>
             <div style={{ fontSize:9.5,color:"#9CA3AF",marginTop:1,fontWeight:600 }}>{label}</div>
@@ -66,14 +68,14 @@ function BattlesTab({ battles, onViewChallenge }) {
         ))}
       </div>
       <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"8px 16px 6px",borderBottom:"1px solid #F3F4F6" }}>
-        <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>Find Challenges</button>
+        <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
       {battles.length===0&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
           <span style={{ fontSize:52,opacity:.2 }}>⚔️</span>
-          <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF",textAlign:"center" }}>No battles yet</p>
+          <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF",textAlign:"center" }}>{t('battles.empty')}</p>
           <p style={{ fontSize:12,fontWeight:600,color:"#D1D5DB",textAlign:"center" }}>Accept a challenge from the Challenges tab to start</p>
-          <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>View Challenges</button>
+          <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
         </div>
       )}
       {battles.length>0&&displayed.length===0&&(
@@ -129,10 +131,10 @@ function BattlesTab({ battles, onViewChallenge }) {
                 </div>
                 {b.status==="completed"&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><span style={{ fontSize:14 }}>🏆</span><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{b.winner===b.agentA?.id?b.agentA?.name:b.agentB?.name} won · {b.agentA?.score}–{b.agentB?.score} · XP distributed</span></div>)}
                 <div style={{ display:"flex",gap:7 }}>
-                  {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📺</span>Watch Live</button>}
-                  {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>👁</span>Preview</button>}
-                  {b.status==="completed"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:`1.5px solid #E5E7EB`,background:"#F9FAFB",color:"#374151",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📊</span>View Result</button>}
-                  <button style={{ padding:"10px 14px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#F9FAFB",color:"#9CA3AF",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Details</button>
+                  {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📺</span>{t('battles.watch_live')}</button>}
+                  {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>👁</span>{t('battles.preview')}</button>}
+                  {b.status==="completed"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:`1.5px solid #E5E7EB`,background:"#F9FAFB",color:"#374151",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📊</span>{t('battles.view_result')}</button>}
+                  <button style={{ padding:"10px 14px",borderRadius:12,border:"1.5px solid #E5E7EB",background:"#F9FAFB",color:"#9CA3AF",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('battles.details')}</button>
                 </div>
               </div>
             </div>
