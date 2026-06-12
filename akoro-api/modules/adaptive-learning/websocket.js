@@ -480,6 +480,7 @@ export function setupWebSocket(io) {
           sessionId: id, agentId: studentId,
           agentPairId: "student-session",
           userId: caller, mode,
+          topic, subject,                  // preserved for mid-session agent switch
         };
 
         // Single unified response event
@@ -567,15 +568,31 @@ export function setupWebSocket(io) {
     });
 
     // ── switch_agent_pair ─────────────────────────────────────
-    // v3.2: verifies ownership before switching
-    socket.on("switch_agent_pair", async ({ agentId, topic, newAgentPairId, userId }) => {
+    // v3.2: verifies ownership, then rebuilds the live session with the new
+    // teacher guide — same student + topic, same sessionId (socket room intact).
+    // The student agent's learned state is keyed by studentId, so its knowledge
+    // carries over; only the guiding teacher changes.
+    socket.on("switch_agent_pair", async ({ newAgentPairId, topic: topicArg, userId }) => {
       try {
-        const caller = userId || agentId;
+        const data      = socket.data || {};
+        const sessionId = data.sessionId;
+        const studentId = data.agentId;
+        const subject   = data.subject;
+        const topic     = topicArg || data.topic;
+        const caller    = userId || data.userId || studentId;
 
-        // Ownership check for trained agents
-        if (newAgentPairId?.startsWith("trained:")) {
-          const rawId = newAgentPairId.replace("trained:", "");
-          const owns  = await userOwnsAgent(caller, rawId);
+        if (!sessionId || !studentId)
+          return socket.emit("error", { message: "No active session to switch." });
+        if (!newAgentPairId)
+          return socket.emit("error", { message: "newAgentPairId required" });
+        if (!topic)
+          return socket.emit("error", { message: "Session topic unavailable for switch." });
+
+        // Resolve the teacher agent the new pair maps to (null = platform default)
+        let teacherAgentId = null;
+        if (newAgentPairId.startsWith("trained:")) {
+          teacherAgentId = newAgentPairId.replace("trained:", "");
+          const owns = await userOwnsAgent(caller, teacherAgentId);
           if (!owns) {
             return socket.emit("error", {
               message: "You do not own this agent. Purchase it from the marketplace first.",
@@ -585,10 +602,42 @@ export function setupWebSocket(io) {
           }
         }
 
-        const { sessionId } = socket.data;
-        if (sessionId && activeSessions.has(sessionId)) activeSessions.delete(sessionId);
         socket.emit("agent_pair_switching", { newAgentPairId });
-      } catch (err) { socket.emit("error", { message: err.message }); }
+
+        // Rebuild the orchestrator with the new teacher; reuse student + topic
+        const orchestrator = await getOrchestrator({
+          mode:     "student",
+          studentId,
+          userId:   caller,
+          teacherAgentId,
+        });
+        const init = await orchestrator.initialize(studentId, topic);
+
+        // Swap in place under the same sessionId so the socket room stays valid
+        activeSessions.set(sessionId, orchestrator);
+        socket.data = { ...socket.data, agentPairId: newAgentPairId, teacherAgentId };
+
+        socket.emit("agent_pair_switched", {
+          sessionId,
+          agentPairId:      newAgentPairId,
+          topic,            subject,
+          message:          init.openingPrompt,
+          mustKnowParts:    init.mustKnowParts,
+          agentLevel:       init.agentLevel,
+          knowledgeScore:   init.knowledgeScore,
+          initialState:     init.initialState,
+          studentAgentName: init.studentAgentName,
+          guideProfile: {
+            name:        orchestrator.profile?.guideName  || "NaNa Esumai",
+            emoji:       orchestrator.profile?.guideEmoji || "🧠",
+            renderStyle: orchestrator.profile?.renderStyle || null,
+            ttsVoice:    orchestrator.profile?.renderStyle?.ttsVoice || "alloy",
+          },
+        });
+      } catch (err) {
+        console.error("[switch_agent_pair]", err);
+        socket.emit("error", { message: err.message });
+      }
     });
 
     // ── get_knowledge_health ──────────────────────────────────

@@ -10,6 +10,7 @@ function SessionChatView({
   recording, onToggleRecording, seconds,
   voiceStreaming, interimText, onToggleVoice,
   cognitive,
+  guideLabel, onSwitchAgent, switching,
   onClose,
 }) {
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
@@ -48,10 +49,19 @@ function SessionChatView({
           </div>
           <p style={{ fontSize:15,fontWeight:900,color:"#F1F5F9",margin:0 }}>{topic}</p>
           <p style={{ fontSize:11,fontWeight:600,color:"#475569",margin:0 }}>
-            {subject} · {agentEmoji} {agentName} · NaNa Esumai 🧠 · Sargeant ⚡
+            {subject} · {agentEmoji} {agentName} · {guideLabel || "NaNa Esumai 🧠 · Sargeant ⚡"}
           </p>
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+          {onSwitchAgent && (
+            <div onClick={switching ? undefined : onSwitchAgent}
+              style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.07)",
+                border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"7px 11px",
+                cursor:switching?"default":"pointer",opacity:switching?.6:1 }}>
+              <span style={{ fontSize:12 }}>⇄</span>
+              <span style={{ fontSize:11,fontWeight:800,color:"#CBD5E1" }}>{switching?"Switching…":"Switch"}</span>
+            </div>
+          )}
           {showSummarize && (
             <div onClick={onSummarize}
               style={{ display:"flex",alignItems:"center",gap:5,background:`${sc}22`,

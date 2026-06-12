@@ -126,6 +126,13 @@ function TeachAgentModal({ session, config, onClose }) {
   const [interimText,    setInterimText]   = useState("");     // audio chunks
   const [cogState,       setCogState]      = useState(null);   // live cognitive state
 
+  // Mid-session teacher switching
+  const [guide,        setGuide]        = useState({ name: guideNm, emoji: guideEm });
+  const [currentPair,  setCurrentPair]  = useState("nana-esumai");
+  const [switchOpen,   setSwitchOpen]   = useState(false);
+  const [switching,    setSwitching]    = useState(false);
+  const [agentChoices, setAgentChoices] = useState(null);   // null = not yet loaded
+
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
@@ -178,6 +185,8 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
         setWsReady(true);
+        if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: d.guideProfile.emoji || "🧠" });
+        if (d.agentPairId) setCurrentPair(d.agentPairId);
         if (d.historyBlocks?.length) {
           setBlocks(prev => {
             const fresh = prev.filter(b => !b.faded && b.type !== "system-divider");
@@ -218,9 +227,27 @@ function TeachAgentModal({ session, config, onClose }) {
       };
       ws.on("state_update",   (state) => applyState(state));
       ws.on("state_snapshot", ({ state }) => applyState(state));
+
+      // ── Mid-session teacher switching ──────────────────────────
+      ws.on("agent_pair_switching", () => { setSwitching(true); setLoading(true); });
+      ws.on("agent_pair_switched", d => {
+        setSwitching(false);
+        setLoading(false);
+        setSwitchOpen(false);
+        stopTts();                       // silence the previous teacher
+        if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: d.guideProfile.emoji || "🧠" });
+        if (d.agentPairId) setCurrentPair(d.agentPairId);
+        const newGuideName = d.guideProfile?.name || "your guide";
+        setBlocks(prev => [
+          ...prev,
+          { type:"system-divider", label:`Switched to ${newGuideName}` },
+          ...(d.message ? [{ type:"guide", agent:newGuideName, emoji:d.guideProfile?.emoji || "🧠",
+              phase:"New teacher · ready", text:d.message }] : []),
+        ]);
+      });
       ws.on("student_done", ()=>{});
       ws.on("guide_done",   ()=>{});
-      ws.on("error", err => { console.warn("[TeachModal WS]", err.message); setLoading(false); });
+      ws.on("error", err => { console.warn("[TeachModal WS]", err.message); setLoading(false); setSwitching(false); });
 
       // ── Voice streaming events ─────────────────────────────────
       ws.on("voice_stream_ready", () => {
@@ -456,6 +483,32 @@ function TeachAgentModal({ session, config, onClose }) {
     }, 800);
   };
 
+  // ── Agent switching ────────────────────────────────────────────
+  const openSwitch = async () => {
+    setSwitchOpen(true);
+    if (agentChoices) return;            // cached
+    try {
+      const d = await apiGet(`/api/adaptive/marketplace/my-agents/${STUDENT_ID}`);
+      const platform = (d.platformAgents || []).map(p => ({
+        id: p.id, name: p.name, avatar: p.avatar || "🧠", subject: p.subject, kind: "platform",
+      }));
+      const trained = (d.purchasedAgents || []).map(p => ({
+        id: p.id, name: p.name, avatar: p.avatar || "🎓", subject: p.subject, teacher: p.teacherName, kind: "trained",
+      }));
+      setAgentChoices([...platform, ...trained]);
+      if (d.defaultPairId) setCurrentPair(prev => prev === "nana-esumai" ? d.defaultPairId : prev);
+    } catch {
+      setAgentChoices([{ id: "nana-esumai", name: "NaNa Esumai & Sargeant", avatar: "🧠", subject: "All subjects", kind: "platform" }]);
+    }
+  };
+
+  const performSwitch = (pairId) => {
+    if (pairId === currentPair || switching) { setSwitchOpen(false); return; }
+    if (!wsRef.current?.connected) return;
+    setSwitching(true);
+    wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic, userId: STUDENT_ID });
+  };
+
   const generateSummary = async () => {
     setActiveTab("summary");
     setLoading(true);
@@ -537,29 +590,81 @@ function TeachAgentModal({ session, config, onClose }) {
 
   // Chat view — SessionChatView is the root, no wrapper needed
   return (
-    <SessionChatView
-      blocks={blocks}
-      loading={loading}
-      input={input}
-      onInputChange={setInput}
-      onSend={handleSend}
-      topic={topic}
-      subject={subject}
-      agentName={agentNm}
-      agentEmoji={agentEm}
-      mode={mode}
-      userTurns={userTurns}
-      showSummarize={userTurns >= 2 && !summary}
-      onSummarize={generateSummary}
-      recording={recording}
-      onToggleRecording={toggleRecording}
-      seconds={seconds}
-      voiceStreaming={voiceStreaming}
-      interimText={interimText}
-      onToggleVoice={toggleVoiceStream}
-      cognitive={cogState}
-      onClose={onClose}
-    />
+    <>
+      <SessionChatView
+        blocks={blocks}
+        loading={loading}
+        input={input}
+        onInputChange={setInput}
+        onSend={handleSend}
+        topic={topic}
+        subject={subject}
+        agentName={agentNm}
+        agentEmoji={agentEm}
+        mode={mode}
+        userTurns={userTurns}
+        showSummarize={userTurns >= 2 && !summary}
+        onSummarize={generateSummary}
+        recording={recording}
+        onToggleRecording={toggleRecording}
+        seconds={seconds}
+        voiceStreaming={voiceStreaming}
+        interimText={interimText}
+        onToggleVoice={toggleVoiceStream}
+        cognitive={cogState}
+        guideLabel={`${guide.emoji} ${guide.name}`}
+        onSwitchAgent={wsReady ? openSwitch : null}
+        switching={switching}
+        onClose={onClose}
+      />
+
+      {switchOpen && (
+        <div onClick={() => !switching && setSwitchOpen(false)}
+          style={{ position:"fixed",inset:0,zIndex:3200,background:"rgba(6,6,18,.6)",
+            backdropFilter:"blur(5px)",display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:"#0F0F1C",width:"100%",maxWidth:540,maxHeight:"78vh",overflowY:"auto",
+              borderRadius:"22px 22px 0 0",fontFamily:"'Nunito',sans-serif",
+              animation:"sheet-up .28s cubic-bezier(.34,1.4,.6,1)",border:"1px solid rgba(255,255,255,.08)" }}>
+            <div style={{ padding:"12px 0 4px",display:"flex",justifyContent:"center" }}>
+              <div style={{ width:38,height:4,borderRadius:4,background:"rgba(255,255,255,.18)" }}/>
+            </div>
+            <div style={{ padding:"6px 18px 26px" }}>
+              <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"4px 0 3px" }}>⇄ Switch teacher</p>
+              <p style={{ fontSize:12,fontWeight:600,color:"#64748B",margin:"0 0 16px",lineHeight:1.5 }}>
+                Your agent keeps everything it has learned — only the teacher guiding this session changes.
+              </p>
+              {!agentChoices ? (
+                [0,1].map(i => <div key={i} style={{ height:64,borderRadius:14,background:"rgba(255,255,255,.04)",marginBottom:9 }}/>)
+              ) : (
+                <div style={{ display:"flex",flexDirection:"column",gap:9 }}>
+                  {agentChoices.map(a => {
+                    const active = a.id === currentPair;
+                    return (
+                      <button key={a.id} onClick={() => performSwitch(a.id)} disabled={switching || active}
+                        style={{ display:"flex",alignItems:"center",gap:12,textAlign:"left",
+                          background:active?"rgba(108,59,255,.16)":"rgba(255,255,255,.04)",
+                          border:`1.5px solid ${active?BRAND:"rgba(255,255,255,.08)"}`,borderRadius:14,
+                          padding:"12px 14px",cursor:(switching||active)?"default":"pointer",width:"100%" }}>
+                        <div style={{ width:42,height:42,borderRadius:12,flexShrink:0,display:"flex",
+                          alignItems:"center",justifyContent:"center",fontSize:22,background:"rgba(255,255,255,.06)" }}>{a.avatar}</div>
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ fontSize:13.5,fontWeight:800,color:"#F1F5F9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{a.name}</div>
+                          <div style={{ fontSize:11,fontWeight:600,color:"#64748B",marginTop:2 }}>
+                            {a.kind === "platform" ? "Platform default" : (a.teacher ? `by ${a.teacher}` : "Trained agent")}{a.subject ? ` · ${a.subject}` : ""}
+                          </div>
+                        </div>
+                        {active && <span style={{ fontSize:10,fontWeight:900,color:BRAND,background:`${BRAND}22`,padding:"3px 9px",borderRadius:20,flexShrink:0 }}>CURRENT</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
