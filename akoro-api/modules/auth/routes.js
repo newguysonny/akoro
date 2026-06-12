@@ -515,6 +515,32 @@ const authHandlers = {
   me: asyncHandler(async (req, res) => {
     res200(res, req.user);
   }),
+
+  // POST /api/auth/change-password — verify current password, set new one
+  changePassword: asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword)
+      return res400(res, "currentPassword and newPassword are required");
+    if (newPassword.length < 8)
+      return res400(res, "New password must be at least 8 characters");
+
+    const { data: user } = await db.from("users")
+      .select("id,password_hash").eq("id", req.user.id).maybeSingle();
+    if (!user) return res401(res, "User not found");
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash || "");
+    if (!valid) return res.status(403).json({ success: false, message: "Current password is incorrect" });
+
+    const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await db.from("users").update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq("id", user.id);
+
+    // Invalidate current access token so the client must re-authenticate
+    if (req.tokenJti && req.tokenExp) {
+      await DenyList.add(req.tokenJti, req.tokenExp * 1000);
+    }
+    clearAuthCookies(res);
+    res200(res, { passwordChanged: true });
+  }),
 };
 
 // ─── § GOOGLE OAUTH ───────────────────────────────────────────────────────────
@@ -579,6 +605,8 @@ router.post("/2fa/login",   strictLimit, authHandlers.twoFactorLogin);
 router.post("/2fa/setup",   authenticateToken, authHandlers.twoFactorSetup);
 router.post("/2fa/enable",  authenticateToken, authHandlers.twoFactorEnable);
 router.post("/2fa/disable", authenticateToken, authHandlers.twoFactorDisable);
+
+router.post("/change-password", authenticateToken, authHandlers.changePassword);
 
 // Google OAuth
 router.get("/google",

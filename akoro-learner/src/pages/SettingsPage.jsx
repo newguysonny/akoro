@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate }    from 'react-router-dom';
 import { useAuth }        from '../contexts/AuthContext.jsx';
+import QRCode from 'qrcode';
 import {
   getMyProfile,
   patchMyProfile,
@@ -9,6 +10,11 @@ import {
   getTeachingGuides,
   deactivateAccount,
   deleteAccount,
+  changePassword,
+  uploadAvatar,
+  setup2FA,
+  enable2FA,
+  disable2FA,
 } from '../services/settingsApi.js';
 
 const BRAND  = '#6C3BFF';
@@ -588,6 +594,134 @@ function LogoutModal({ onClose, onConfirm }) {
   );
 }
 
+/* ─── Two-Factor Auth sheet ───────────────────────────────────── */
+function TwoFactorSheet({ mode, onClose, onDone }) {
+  const [step,     setStep]     = useState(mode === 'enable' ? 'setup' : 'confirm');
+  const [qrUrl,    setQrUrl]    = useState(null);
+  const [secret,   setSecret]   = useState('');
+  const [code,     setCode]     = useState('');
+  const [loading,  setLoading]  = useState(mode === 'enable');
+  const [error,    setError]    = useState('');
+
+  useEffect(() => {
+    if (mode !== 'enable') return;
+    setup2FA()
+      .then(async ({ data }) => {
+        if (!data?.otpauthUrl) throw new Error('Setup failed');
+        setSecret(data.secret);
+        const url = await QRCode.toDataURL(data.otpauthUrl, { width: 200, margin: 2 });
+        setQrUrl(url);
+        setStep('scan');
+      })
+      .catch(() => setError('Failed to start 2FA setup. Try again.'))
+      .finally(() => setLoading(false));
+  }, [mode]);
+
+  const handleConfirm = async () => {
+    if (!/^\d{6}$/.test(code)) { setError('Enter a 6-digit code'); return; }
+    setLoading(true); setError('');
+    try {
+      const fn = mode === 'enable' ? enable2FA : disable2FA;
+      const { success, message } = await fn(code);
+      if (!success) { setError(message || 'Invalid code'); return; }
+      onDone(mode === 'enable');
+      onClose();
+    } catch {
+      setError('Network error. Try again.');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
+        background:'rgba(0,0,0,.55)',backdropFilter:'blur(4px)' }}/>
+      <div style={{ position:'fixed',bottom:0,left:0,right:0,zIndex:3100,
+        background:'var(--ak-surface)',borderRadius:'22px 22px 0 0',
+        padding:'0 18px 40px',boxShadow:'0 -8px 40px rgba(0,0,0,.2)',
+        animation:'sheet-up .3s ease',fontFamily:"'Nunito',sans-serif",
+        maxHeight:'90vh',overflowY:'auto' }}>
+        <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',
+          margin:'14px auto 18px' }}/>
+
+        <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:'0 0 4px' }}>
+          {mode === 'enable' ? '🔐 Set Up Two-Factor Auth' : '🔓 Disable Two-Factor Auth'}
+        </p>
+        <p style={{ fontSize:13,color:'var(--ak-text-sub)',margin:'0 0 20px',lineHeight:1.6 }}>
+          {mode === 'enable'
+            ? 'Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.'
+            : 'Enter the 6-digit code from your authenticator app to disable 2FA.'}
+        </p>
+
+        {loading && (
+          <div style={{ textAlign:'center',padding:'30px 0',color:'var(--ak-text-muted)',fontSize:13 }}>
+            Setting up…
+          </div>
+        )}
+
+        {!loading && mode === 'enable' && step === 'scan' && (
+          <div style={{ display:'flex',flexDirection:'column',alignItems:'center',gap:16,marginBottom:20 }}>
+            {qrUrl && (
+              <div style={{ padding:12,background:'#fff',borderRadius:14,
+                border:'1px solid var(--ak-border2)',display:'inline-block' }}>
+                <img src={qrUrl} width={180} height={180} alt="2FA QR code"/>
+              </div>
+            )}
+            <div style={{ background:'var(--ak-tag-bg)',borderRadius:10,padding:'10px 14px',
+              display:'flex',alignItems:'center',gap:10,width:'100%' }}>
+              <Icon name="ti-key" size={15} color="var(--ak-text-sub)"/>
+              <div style={{ flex:1,minWidth:0 }}>
+                <p style={{ fontSize:10,fontWeight:900,color:'var(--ak-text-muted)',
+                  textTransform:'uppercase',letterSpacing:1,margin:'0 0 2px' }}>Manual key</p>
+                <p style={{ fontSize:12,fontWeight:700,color:'var(--ak-text)',margin:0,
+                  wordBreak:'break-all',fontFamily:'monospace' }}>{secret}</p>
+              </div>
+              <button onClick={()=>navigator.clipboard?.writeText(secret)}
+                style={{ background:'none',border:'none',cursor:'pointer',
+                  color:'var(--ak-text-sub)',fontSize:12,fontWeight:700,
+                  fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>Copy</button>
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <>
+            <div style={{ position:'relative',marginBottom:error?10:20 }}>
+              <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))}
+                placeholder="000000" maxLength={6} inputMode="numeric" autoFocus
+                style={{ width:'100%',padding:'14px',borderRadius:12,textAlign:'center',
+                  border:`1.5px solid ${error?'#EF4444':'var(--ak-border2)'}`,
+                  outline:'none',fontSize:24,fontWeight:900,letterSpacing:8,
+                  color:'var(--ak-text)',background:'var(--ak-surface)',
+                  fontFamily:'monospace',boxSizing:'border-box' }}/>
+            </div>
+            {error && (
+              <p style={{ fontSize:12.5,color:'#EF4444',fontWeight:700,
+                margin:'0 0 14px',textAlign:'center' }}>{error}</p>
+            )}
+            <div style={{ display:'flex',gap:10 }}>
+              <button onClick={onClose}
+                style={{ flex:1,padding:'13px',borderRadius:14,
+                  border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
+                  fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
+                  fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+              <button onClick={handleConfirm} disabled={loading||code.length!==6}
+                style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
+                  background:code.length===6
+                    ? (mode==='enable'?`linear-gradient(135deg,${BRAND},#4C1DCC)`:`linear-gradient(135deg,#EF4444,#DC2626)`)
+                    : 'var(--ak-tag-bg)',
+                  color:code.length===6?'#fff':'var(--ak-text-muted)',
+                  fontSize:13,fontWeight:800,cursor:code.length===6?'pointer':'not-allowed',
+                  fontFamily:"'Nunito',sans-serif" }}>
+                {loading ? '…' : mode==='enable' ? 'Activate 2FA' : 'Disable 2FA'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 /* ─── Subjects row ────────────────────────────────────────────── */
 function SubjectsRow({ subjects,onClick,color=BRAND }) {
   return (
@@ -680,6 +814,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
+  const [twoFaSheet,   setTwoFaSheet]   = useState(null); // 'enable' | 'disable' | null
   const [toast,        setToast]        = useState('');
 
   const color   = accentColor || profile.accentColor || BRAND;
@@ -714,6 +849,17 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     if (field === 'language') {
       localStorage.setItem(LS_LANGUAGE, val);
       document.documentElement.lang = LANG_CODES[val] || 'en';
+    }
+
+    /* Change password — separate API endpoint */
+    if (field === 'password') {
+      try {
+        const res = await changePassword({ currentPassword: val.current, newPassword: val.next });
+        if (!res.success) { showToast(res.message || 'Failed to change password'); return; }
+        showToast('Password changed — please sign in again');
+        setTimeout(() => onLogout?.(), 1800);
+      } catch { showToast('Failed to change password'); }
+      return;
     }
 
     const fieldMap = {
@@ -848,16 +994,26 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       <Section title="Privacy & Security">
         <Row icon="ti-key" label="Change Password"
           onClick={()=>openSheet('password','Change Password','change-password')}/>
-        <div style={rowBase}>
+        <div style={{ ...rowBase,cursor:'pointer' }}
+          onMouseEnter={e=>e.currentTarget.style.background='var(--ak-surface-hover)'}
+          onMouseLeave={e=>e.currentTarget.style.background='var(--ak-surface)'}
+          onClick={()=>setTwoFaSheet(profile.twoFactor ? 'disable' : 'enable')}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
             <Icon name="ti-lock" size={17} color="var(--ak-text-sub)"/>
           </span>
           <div style={{ flex:1 }}>
             <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Two-Factor Auth</p>
-            <p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>Extra security for your account</p>
+            <p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>
+              {profile.twoFactor ? 'Enabled — tap to disable' : 'Add extra security to your account'}
+            </p>
           </div>
-          <Toggle on={!!profile.twoFactor}
-            onChange={()=>saveField('twoFactor', !profile.twoFactor)}/>
+          <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+            {profile.twoFactor && (
+              <span style={{ fontSize:11,fontWeight:800,padding:'3px 8px',borderRadius:6,
+                background:'#D1FAE520',color:'#10B981',border:'1px solid #10B98130' }}>ON</span>
+            )}
+            <span style={{ color:'var(--ak-border3)',fontSize:16 }}>›</span>
+          </div>
         </div>
         <Row icon="ti-player-pause" label="Deactivate Account" danger
           sub="Suspend your account temporarily"
@@ -873,12 +1029,18 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           current={{ emoji:profile.avatarEmoji, photoUrl:profile.avatarUrl }}
           color={color}
           onClose={()=>setAvatarSheet(false)}
-          onSavePhoto={async url=>{
-            setProfile(p=>({...p,avatarUrl:url}));
-            showToast('Photo updated ✓');
+          onSavePhoto={async dataUrl=>{
+            setProfile(p=>({...p,avatarUrl:dataUrl}));
+            showToast('Uploading…');
+            try {
+              const { data } = await uploadAvatar(dataUrl, 'user');
+              if (data?.url) setProfile(p=>({...p,avatarUrl:data.url}));
+              showToast('Photo updated ✓');
+            } catch { showToast('Upload failed — saved locally'); }
           }}
           onSaveEmoji={em=>{
             setProfile(p=>({...p,avatarEmoji:em,avatarUrl:null}));
+            try { onSaveProfile({ avatarEmoji: em }); } catch { /* best-effort */ }
             showToast('Saved ✓');
           }}/>
       )}
@@ -895,6 +1057,14 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         <GenericSheet {...sheet} value={profile[sheet.field]}
           onClose={()=>setSheet(null)}
           onSave={(f,v)=>{ saveField(f,v); setSheet(null); }}/>
+      )}
+      {twoFaSheet&&(
+        <TwoFactorSheet mode={twoFaSheet}
+          onClose={()=>setTwoFaSheet(null)}
+          onDone={(enabled)=>{
+            setProfile(p=>({...p,twoFactor:enabled}));
+            showToast(enabled ? '2FA enabled ✓' : '2FA disabled');
+          }}/>
       )}
       {toast&&(
         <div style={{ position:'fixed',bottom:28,left:'50%',transform:'translateX(-50%)',

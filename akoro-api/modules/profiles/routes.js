@@ -1198,6 +1198,36 @@ router.post("/me/deactivate", authenticateToken, asyncHandler(async (req, res) =
   res200(res, { deactivated: true });
 }));
 
+// ─── POST /api/profiles/me/avatar ────────────────────────────────────────────
+const avatarUpload = multerLib({
+  storage: multerLib.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WebP or GIF allowed"));
+  },
+}).single("file");
+
+router.post("/me/avatar", authenticateToken, (req, res, next) => {
+  avatarUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    next();
+  });
+}, asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
+  const userId = req.user.id;
+  const mime   = req.file.mimetype;
+  const b64    = req.file.buffer.toString("base64");
+  const dataUrl = `data:${mime};base64,${b64}`;
+
+  const { error } = await db.from("users")
+    .update({ avatar_url: dataUrl, updated_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) return res.status(500).json({ success: false, message: "Failed to save avatar" });
+
+  res200(res, { url: dataUrl });
+}));
+
 // ─── DELETE /api/profiles/me ──────────────────────────────────────────────────
 router.delete("/me", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;

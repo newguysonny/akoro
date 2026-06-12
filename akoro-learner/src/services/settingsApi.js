@@ -31,6 +31,39 @@ export const putAgent = (agentPatch) => {
 
 export const getTeachingGuides = () => apiGet('/api/profiles/teaching-guides');
 
+export const changePassword = ({ currentPassword, newPassword }) => {
+  const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+  return fetch(`${API}/api/auth/change-password`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }).then(r => r.json());
+};
+
+export const setup2FA = () => {
+  const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+  return fetch(`${API}/api/auth/2fa/setup`, { method: 'POST', credentials: 'include' }).then(r => r.json());
+};
+
+export const enable2FA = (code) => {
+  const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+  return fetch(`${API}/api/auth/2fa/enable`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  }).then(r => r.json());
+};
+
+export const disable2FA = (code) => {
+  const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+  return fetch(`${API}/api/auth/2fa/disable`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  }).then(r => r.json());
+};
+
 export const deactivateAccount = () => {
   const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
   return fetch(`${API}/api/profiles/me/deactivate`, { method: 'POST', credentials: 'include' }).then(r => r.json());
