@@ -92,8 +92,14 @@ export default function LearnerDashboard() {
   });
   const [decayAlerts,  setDecayAlerts]  = useState([]);
   const [agentSessions, setAgentSessions] = useState([]);
+  const [userProfile,  setUserProfile]  = useState(null);
 
   useEffect(()=>{
+    // User profile — name, avatar, year group, XP for the header
+    apiGet("/api/profiles/me")
+      .then(d=>{ if(d?.id||d?.data?.id) setUserProfile(d.data||d); })
+      .catch(()=>{});
+
     // Agent profile — student agent + guide agent
     apiGet("/api/user/agent")
       .then(d=>{
@@ -358,12 +364,16 @@ export default function LearnerDashboard() {
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
               <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
-                <img src="https://i.pravatar.cc/150?img=15" alt="" style={{ width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #EDE9FE" }}/>
+                {userProfile?.avatarUrl
+                  ? <img src={userProfile.avatarUrl} alt="" style={{ width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #EDE9FE" }}/>
+                  : <div style={{ width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:15,fontWeight:900,border:"2px solid #EDE9FE" }}>
+                      {(userProfile?.fullName||userProfile?.username||"?").trim().charAt(0).toUpperCase()}
+                    </div>}
                 <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"#9CA3AF",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
               </div>
               <div>
-                <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,lineHeight:1.2 }}>Alex Johnson</p>
-                <div style={{ display:"flex",alignItems:"center",gap:5 }}><ZapIcon size={11} color={GOLD}/><span style={{ fontSize:11,fontWeight:700,color:"#9CA3AF" }}>2,840 XP · Grade 10</span></div>
+                <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,lineHeight:1.2 }}>{userProfile?.fullName||userProfile?.username||"…"}</p>
+                <div style={{ display:"flex",alignItems:"center",gap:5 }}><ZapIcon size={11} color={GOLD}/><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{(userProfile?.agent?.xpEarned ?? 0).toLocaleString()} XP{userProfile?.yearGroup?` · ${userProfile.yearGroup}`:""}</span></div>
               </div>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>

@@ -1793,10 +1793,18 @@ $$;
 -- PART 6: Tasks Module Tables
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE TYPE task_status   AS ENUM ('pending','queued','running','done','failed','cancelled') ;
-CREATE TYPE task_priority AS ENUM ('low','medium','high');
-CREATE TYPE run_status    AS ENUM ('running','done','failed');
-CREATE TYPE output_type   AS ENUM ('message','quiz','report','reminder','grade','file','session','battle');
+DO $$ BEGIN
+    CREATE TYPE task_status   AS ENUM ('pending','queued','running','done','failed','cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE task_priority AS ENUM ('low','medium','high');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE run_status    AS ENUM ('running','done','failed');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE output_type   AS ENUM ('message','quiz','report','reminder','grade','file','session','battle');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Task agents (teacher's AI assistants — separate from student user_agents)
 CREATE TABLE IF NOT EXISTS task_agents (
