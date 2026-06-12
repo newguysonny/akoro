@@ -3,7 +3,7 @@ import { RED } from '../../constants.js';
 
 function ProgressBar({ value, color }) {
   return (
-    <div style={{ height:5,background:"#F3F4F6",borderRadius:99,overflow:"hidden",marginTop:5 }}>
+    <div style={{ height:5,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden",marginTop:5 }}>
       <div style={{ height:"100%",width:`${value}%`,background:`linear-gradient(90deg,${color}88,${color})`,borderRadius:99,transition:"width 0.6s ease" }}/>
     </div>
   );

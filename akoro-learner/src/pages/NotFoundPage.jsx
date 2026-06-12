@@ -18,8 +18,8 @@ export default function NotFoundPage() {
   );
 
   return (
-    <div style={{ minHeight:'100vh', background:'#fff', fontFamily:"'Nunito',sans-serif",
-      color:'#111827', overflowX:'hidden' }}>
+    <div style={{ minHeight:'100vh', background:'var(--ak-surface)', fontFamily:"'Nunito',sans-serif",
+      color:'var(--ak-text)', overflowX:'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
         @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
@@ -37,18 +37,18 @@ export default function NotFoundPage() {
       <header style={{ position:'fixed', top:0, left:0, right:0, zIndex:40,
         display:'flex', alignItems:'center', justifyContent:'space-between',
         padding:'0 20px', height:60, background:'rgba(255,255,255,.95)',
-        backdropFilter:'blur(12px)', borderBottom:'1px solid #F3F4F6' }}>
+        backdropFilter:'blur(12px)', borderBottom:'1px solid var(--ak-border)' }}>
         <Link to="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none' }}>
           <div style={{ width:34, height:34, borderRadius:10, background:BRAND,
             display:'flex', alignItems:'center', justifyContent:'center',
             boxShadow:`0 3px 12px ${BRAND}44` }}>
             <span style={{ fontSize:16 }}>🧠</span>
           </div>
-          <span style={{ fontSize:18, fontWeight:900, color:'#111827' }}>Akoro</span>
+          <span style={{ fontSize:18, fontWeight:900, color:'var(--ak-text)' }}>Akoro</span>
         </Link>
         <Link to="/" style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
-          borderRadius:20, border:'1.5px solid #E5E7EB', fontSize:13, fontWeight:700,
-          color:'#374151', textDecoration:'none', background:'#fff' }}>
+          borderRadius:20, border:'1.5px solid var(--ak-border2)', fontSize:13, fontWeight:700,
+          color:'var(--ak-text-sec)', textDecoration:'none', background:'var(--ak-surface)' }}>
           ← Back
         </Link>
       </header>
@@ -65,20 +65,20 @@ export default function NotFoundPage() {
 
           <div className="fade-1 float" style={{ marginBottom:24 }}>
             <div style={{ display:'inline-flex', alignItems:'center', gap:10,
-              background:'#fff', border:'1.5px solid #E5E7EB', borderRadius:20,
+              background:'var(--ak-surface)', border:'1.5px solid var(--ak-border2)', borderRadius:20,
               padding:'12px 24px', boxShadow:'0 4px 20px rgba(0,0,0,.06)' }}>
               <span style={{ fontSize:28 }}>🔍</span>
               <span style={{ fontFamily:'monospace', fontSize:52, fontWeight:900,
-                color:'#111827', letterSpacing:-2 }}>404</span>
+                color:'var(--ak-text)', letterSpacing:-2 }}>404</span>
             </div>
           </div>
 
           <h1 className="fade-2" style={{ fontSize:'clamp(28px,5vw,48px)', fontWeight:900,
-            color:'#111827', margin:'0 0 14px', letterSpacing:-1 }}>
+            color:'var(--ak-text)', margin:'0 0 14px', letterSpacing:-1 }}>
             Page not <span style={{ color:BRAND }}>found</span>
           </h1>
 
-          <p className="fade-3" style={{ fontSize:15, color:'#6B7280', maxWidth:440,
+          <p className="fade-3" style={{ fontSize:15, color:'var(--ak-text-sub)', maxWidth:440,
             lineHeight:1.7, margin:'0 0 28px' }}>
             Looks like your AI agent couldn't locate this page. It may have moved or never existed.
           </p>
@@ -92,8 +92,8 @@ export default function NotFoundPage() {
               🏠 Go to Dashboard
             </Link>
             <Link to="/signin" style={{ display:'flex', alignItems:'center', gap:7, padding:'12px 22px',
-              borderRadius:14, background:'#fff', border:'1.5px solid #E5E7EB',
-              color:'#374151', fontSize:14, fontWeight:700, textDecoration:'none' }}>
+              borderRadius:14, background:'var(--ak-surface)', border:'1.5px solid var(--ak-border2)',
+              color:'var(--ak-text-sec)', fontSize:14, fontWeight:700, textDecoration:'none' }}>
               🔑 Sign in
             </Link>
           </div>
@@ -105,31 +105,31 @@ export default function NotFoundPage() {
             <input value={query} onChange={e=>setQuery(e.target.value)}
               placeholder="Search sessions, battles, rankings…"
               style={{ width:'100%', padding:'11px 14px 11px 42px', borderRadius:20,
-                border:'1.5px solid #E5E7EB', outline:'none', fontSize:13,
-                fontFamily:"'Nunito',sans-serif", color:'#111827', boxSizing:'border-box' }}/>
+                border:'1.5px solid var(--ak-border2)', outline:'none', fontSize:13,
+                fontFamily:"'Nunito',sans-serif", color:'var(--ak-text)', boxSizing:'border-box' }}/>
           </div>
         </section>
 
         {/* Suggestions */}
-        <section style={{ padding:'32px 20px', background:'#F9FAFB' }}>
+        <section style={{ padding:'32px 20px', background:'var(--ak-bg)' }}>
           <div style={{ maxWidth:640, margin:'0 auto' }}>
             <p style={{ fontSize:11, fontWeight:800, color:BRAND, letterSpacing:2,
               textTransform:'uppercase', marginBottom:8 }}>You might be looking for</p>
-            <h2 style={{ fontSize:22, fontWeight:900, color:'#111827', margin:'0 0 20px' }}>
+            <h2 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 20px' }}>
               Popular <span style={{ color:BRAND }}>destinations</span>
             </h2>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:12 }}>
               {filtered.map((s,i) => (
                 <Link key={i} to={s.to} className="card"
                   style={{ display:'flex', alignItems:'center', gap:14, padding:'16px',
-                    background:'#fff', border:'1.5px solid #F3F4F6', borderRadius:16,
+                    background:'var(--ak-surface)', border:'1.5px solid var(--ak-border)', borderRadius:16,
                     textDecoration:'none' }}>
                   <div style={{ width:42, height:42, borderRadius:12, fontSize:20,
                     background:`${BRAND}10`, display:'flex', alignItems:'center',
                     justifyContent:'center', flexShrink:0 }}>{s.emoji}</div>
                   <div>
-                    <p style={{ fontSize:14, fontWeight:800, color:'#111827', margin:'0 0 2px' }}>{s.title}</p>
-                    <p style={{ fontSize:12, color:'#6B7280', margin:0 }}>{s.desc}</p>
+                    <p style={{ fontSize:14, fontWeight:800, color:'var(--ak-text)', margin:'0 0 2px' }}>{s.title}</p>
+                    <p style={{ fontSize:12, color:'var(--ak-text-sub)', margin:0 }}>{s.desc}</p>
                   </div>
                 </Link>
               ))}
@@ -138,9 +138,9 @@ export default function NotFoundPage() {
         </section>
       </main>
 
-      <footer style={{ background:'#F9FAFB', borderTop:'1px solid #F3F4F6',
+      <footer style={{ background:'var(--ak-bg)', borderTop:'1px solid var(--ak-border)',
         padding:'16px 20px', textAlign:'center',
-        fontSize:12, color:'#9CA3AF' }}>
+        fontSize:12, color:'var(--ak-text-muted)' }}>
         © 2025 Akoro — Adaptive Learning
       </footer>
     </div>

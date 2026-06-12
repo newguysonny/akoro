@@ -9,8 +9,8 @@ import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 
 // ─── palette / tokens ────────────────────────────────────────────────────────
 const BRAND  = "#7C3AED";
-const SURFACE = "#F8F7FF";
-const BORDER  = "#E5E7EB";
+const SURFACE = "var(--ak-bg)";
+const BORDER  = "var(--ak-border2)";
 
 const EXECUTOR_COLORS = {
   llm_prompt:    { bg: "#EDE9FE", text: "#6D28D9" },
@@ -35,7 +35,7 @@ const SCOPE_COLORS = {
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function Badge({ label, colorMap }) {
-  const c = colorMap?.[label] ?? { bg: "#F3F4F6", text: "#374151" };
+  const c = colorMap?.[label] ?? { bg: "var(--ak-tag-bg)", text: "var(--ak-text-sec)" };
   return (
     <span style={{ background: c.bg, color: c.text, borderRadius: 100, padding: "2px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
       {label}
@@ -57,7 +57,7 @@ function Chip({ label, onRemove }) {
 function Section({ title, children }) {
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--ak-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>{title}</div>
       {children}
     </div>
   );
@@ -66,7 +66,7 @@ function Section({ title, children }) {
 function Input({ label, ...props }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      {label && <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>{label}</label>}
+      {label && <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ak-text-sec)", display: "block", marginBottom: 4 }}>{label}</label>}
       <input
         style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${BORDER}`, fontSize: 13, outline: "none", boxSizing: "border-box" }}
         {...props}
@@ -78,7 +78,7 @@ function Input({ label, ...props }) {
 function Textarea({ label, rows = 3, ...props }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      {label && <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>{label}</label>}
+      {label && <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ak-text-sec)", display: "block", marginBottom: 4 }}>{label}</label>}
       <textarea
         rows={rows}
         style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${BORDER}`, fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }}
@@ -91,9 +91,9 @@ function Textarea({ label, rows = 3, ...props }) {
 function Select({ label, options, ...props }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      {label && <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>{label}</label>}
+      {label && <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ak-text-sec)", display: "block", marginBottom: 4 }}>{label}</label>}
       <select
-        style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${BORDER}`, fontSize: 13, outline: "none", background: "#fff", boxSizing: "border-box" }}
+        style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${BORDER}`, fontSize: 13, outline: "none", background: "var(--ak-surface)", boxSizing: "border-box" }}
         {...props}
       >
         {options.map(o => (
@@ -107,9 +107,9 @@ function Select({ label, options, ...props }) {
 function Btn({ children, onClick, variant = "primary", disabled, style: s }) {
   const variants = {
     primary:   { background: BRAND, color: "#fff", border: "none" },
-    secondary: { background: "#fff", color: "#374151", border: `1px solid ${BORDER}` },
+    secondary: { background: "var(--ak-surface)", color: "var(--ak-text-sec)", border: `1px solid ${BORDER}` },
     danger:    { background: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A5" },
-    ghost:     { background: "transparent", color: "#6B7280", border: "none" },
+    ghost:     { background: "transparent", color: "var(--ak-text-sub)", border: "none" },
   };
   return (
     <button
@@ -181,7 +181,7 @@ function HttpWebhookConfig({ config, onChange }) {
       <Input label="Response field to use as output text (optional)" value={config.responseField ?? ""} onChange={e => onChange({ ...config, responseField: e.target.value })} placeholder="message" />
       <Select label="Output type" options={[{value:"message",label:"Message"},{value:"reminder",label:"Reminder"}]} value={config.outputType ?? "message"} onChange={e => onChange({ ...config, outputType: e.target.value })} />
       <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>Custom headers</label>
+        <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ak-text-sec)", display: "block", marginBottom: 4 }}>Custom headers</label>
         <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
           <input value={headerKey} onChange={e => setHeaderKey(e.target.value)} placeholder="Header name" style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 12 }} />
           <input value={headerVal} onChange={e => setHeaderVal(e.target.value)} placeholder="Value" style={{ flex: 2, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 12 }} />
@@ -231,17 +231,17 @@ function SchemaBuilder({ schema, onChange }) {
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <label style={{ fontSize: 12, fontWeight: 700, color: "#374151", display: "block", marginBottom: 4 }}>Input parameters</label>
+      <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ak-text-sec)", display: "block", marginBottom: 4 }}>Input parameters</label>
       <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 12, background: "#FAFAFA" }}>
         {Object.entries(props).length === 0 && (
-          <div style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 8 }}>No parameters yet. Add below.</div>
+          <div style={{ color: "var(--ak-text-muted)", fontSize: 12, marginBottom: 8 }}>No parameters yet. Add below.</div>
         )}
         {Object.entries(props).map(([k, v]) => (
           <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${BORDER}` }}>
             <span style={{ fontSize: 12 }}>
               <b>{k}</b>
-              <span style={{ color: "#6B7280" }}> ({v.type})</span>
-              {v.description && <span style={{ color: "#9CA3AF" }}> — {v.description}</span>}
+              <span style={{ color: "var(--ak-text-sub)" }}> ({v.type})</span>
+              {v.description && <span style={{ color: "var(--ak-text-muted)" }}> — {v.description}</span>}
               {required.includes(k) && <span style={{ color: BRAND, marginLeft: 4 }}>*</span>}
             </span>
             <Btn variant="ghost" onClick={() => remove(k)} style={{ padding: "2px 8px", fontSize: 12 }}>✕</Btn>
@@ -309,7 +309,7 @@ function ToolForm({ initial, schools, teachers, onSave, onCancel, saving }) {
           onChange={e => set("executor", e.target.value)}
           options={Object.keys(CONFIG_EDITORS).map(k => ({ value: k, label: k }))}
         />
-        <div style={{ fontSize: 12, color: "#6B7280", marginTop: -8, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: "var(--ak-text-sub)", marginTop: -8, marginBottom: 12 }}>
           {EXECUTOR_DESCRIPTIONS[form.executor]}
         </div>
         {ConfigEditor && <ConfigEditor config={form.config} onChange={v => set("config", v)} />}
@@ -339,7 +339,7 @@ function ToolForm({ initial, schools, teachers, onSave, onCancel, saving }) {
       </Section>
 
       <Section title="Intent keywords (optional)">
-        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>Phrases the agent uses to detect this tool's intent.</div>
+        <div style={{ fontSize: 12, color: "var(--ak-text-sub)", marginBottom: 6 }}>Phrases the agent uses to detect this tool's intent.</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           <input value={kwInput} onChange={e => setKwInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addKw()} placeholder="e.g. send sms" style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 12 }} />
           <Btn variant="secondary" onClick={addKw} style={{ padding: "6px 12px" }}>Add</Btn>
@@ -361,14 +361,14 @@ function ToolForm({ initial, schools, teachers, onSave, onCancel, saving }) {
 
 function ToolRow({ tool, onEdit, onDelete, onToggle }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto auto auto", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: `1px solid ${BORDER}`, background: tool.enabled ? "#fff" : "#FAFAFA" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto auto auto", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: `1px solid ${BORDER}`, background: tool.enabled ? "var(--ak-surface)" : "#FAFAFA" }}>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 14, color: tool.enabled ? "#111827" : "#9CA3AF" }}>{tool.name}</div>
-        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 }}>{tool.description}</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: tool.enabled ? "var(--ak-text)" : "var(--ak-text-muted)" }}>{tool.name}</div>
+        <div style={{ fontSize: 12, color: "var(--ak-text-sub)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 }}>{tool.description}</div>
       </div>
       <Badge label={tool.executor} colorMap={EXECUTOR_COLORS} />
       <Badge label={tool.scope} colorMap={SCOPE_COLORS} />
-      <span style={{ fontSize: 12, color: tool.enabled ? "#059669" : "#9CA3AF", fontWeight: 700 }}>{tool.enabled ? "enabled" : "disabled"}</span>
+      <span style={{ fontSize: 12, color: tool.enabled ? "#059669" : "var(--ak-text-muted)", fontWeight: 700 }}>{tool.enabled ? "enabled" : "disabled"}</span>
       <div style={{ display: "flex", gap: 6 }}>
         <Btn variant="secondary" onClick={() => onEdit(tool)} style={{ padding: "5px 10px", fontSize: 12 }}>Edit</Btn>
         <Btn variant="secondary" onClick={() => onToggle(tool)} style={{ padding: "5px 10px", fontSize: 12 }}>{tool.enabled ? "Disable" : "Enable"}</Btn>
@@ -464,11 +464,11 @@ export default function FDEAdminPage() {
   if (modal) {
     return (
       <div style={{ minHeight: "100vh", background: SURFACE, display: "flex", justifyContent: "center" }}>
-        <div style={{ width: "100%", maxWidth: 680, background: "#fff", margin: "32px 16px", borderRadius: 18, border: `1px solid ${BORDER}`, overflow: "hidden", alignSelf: "flex-start" }}>
+        <div style={{ width: "100%", maxWidth: 680, background: "var(--ak-surface)", margin: "32px 16px", borderRadius: 18, border: `1px solid ${BORDER}`, overflow: "hidden", alignSelf: "flex-start" }}>
           <div style={{ padding: "18px 24px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>{modal === "create" ? "New dynamic tool" : `Edit: ${modal.editing.name}`}</div>
-              <div style={{ fontSize: 12, color: "#6B7280" }}>Configure how this tool behaves at run time.</div>
+              <div style={{ fontSize: 12, color: "var(--ak-text-sub)" }}>Configure how this tool behaves at run time.</div>
             </div>
             <Btn variant="ghost" onClick={() => setModal(null)}>✕</Btn>
           </div>
@@ -488,12 +488,12 @@ export default function FDEAdminPage() {
   return (
     <div style={{ minHeight: "100vh", background: SURFACE }}>
       {/* header */}
-      <div style={{ background: "#fff", borderBottom: `1px solid ${BORDER}`, padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ background: "var(--ak-surface)", borderBottom: `1px solid ${BORDER}`, padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Btn variant="ghost" onClick={() => navigate(-1)} style={{ padding: "6px 10px" }}>← Back</Btn>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900, color: BRAND }}>FDE Admin Console</div>
-            <div style={{ fontSize: 12, color: "#6B7280" }}>Manage config-only tools for partner deployments</div>
+            <div style={{ fontSize: 12, color: "var(--ak-text-sub)" }}>Manage config-only tools for partner deployments</div>
           </div>
         </div>
         <Btn onClick={() => setModal("create")}>+ New tool</Btn>
@@ -509,9 +509,9 @@ export default function FDEAdminPage() {
             { label: "Schools",       value: schools.length },
             { label: "FDE partners",  value: teachers.length },
           ].map(s => (
-            <div key={s.label} style={{ background: "#fff", borderRadius: 14, border: `1px solid ${BORDER}`, padding: "16px 20px" }}>
+            <div key={s.label} style={{ background: "var(--ak-surface)", borderRadius: 14, border: `1px solid ${BORDER}`, padding: "16px 20px" }}>
               <div style={{ fontSize: 26, fontWeight: 900, color: BRAND }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>{s.label}</div>
+              <div style={{ fontSize: 12, color: "var(--ak-text-sub)", fontWeight: 600 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -538,18 +538,18 @@ export default function FDEAdminPage() {
         </div>
 
         {/* tool list */}
-        <div style={{ background: "#fff", borderRadius: 14, border: `1px solid ${BORDER}`, overflow: "hidden" }}>
+        <div style={{ background: "var(--ak-surface)", borderRadius: 14, border: `1px solid ${BORDER}`, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto auto auto", gap: 12, padding: "10px 16px", borderBottom: `1px solid ${BORDER}`, background: SURFACE }}>
             {["Tool", "Executor", "Scope", "Status", "Actions"].map(h => (
-              <div key={h} style={{ fontSize: 11, fontWeight: 800, color: "#9CA3AF", textTransform: "uppercase" }}>{h}</div>
+              <div key={h} style={{ fontSize: 11, fontWeight: 800, color: "var(--ak-text-muted)", textTransform: "uppercase" }}>{h}</div>
             ))}
             <div />
           </div>
 
-          {loading && <div style={{ padding: 32, textAlign: "center", color: "#9CA3AF" }}>Loading…</div>}
+          {loading && <div style={{ padding: 32, textAlign: "center", color: "var(--ak-text-muted)" }}>Loading…</div>}
           {error   && <div style={{ padding: 32, textAlign: "center", color: "#DC2626" }}>Error: {error}</div>}
           {!loading && !error && visible.length === 0 && (
-            <div style={{ padding: 48, textAlign: "center", color: "#9CA3AF" }}>
+            <div style={{ padding: 48, textAlign: "center", color: "var(--ak-text-muted)" }}>
               {tools.length === 0 ? "No tools yet. Create your first one →" : "No tools match your filters."}
             </div>
           )}
@@ -562,7 +562,7 @@ export default function FDEAdminPage() {
         <div style={{ marginTop: 32, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
 
           {/* schools */}
-          <div style={{ background: "#fff", borderRadius: 14, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: "var(--ak-surface)", borderRadius: 14, border: `1px solid ${BORDER}` }}>
             <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BORDER}`, fontWeight: 800, fontSize: 15 }}>
               Partner schools ({schools.length})
             </div>
@@ -572,17 +572,17 @@ export default function FDEAdminPage() {
                   {s.logo_url && <img src={s.logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover" }} />}
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{s.name}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>{s.id}</div>
+                    <div style={{ fontSize: 11, color: "var(--ak-text-muted)" }}>{s.id}</div>
                   </div>
                   <Btn variant="secondary" onClick={() => { setFilterScope("school"); /* TODO: filter by this school */ }} style={{ marginLeft: "auto", padding: "4px 10px", fontSize: 11 }}>Filter</Btn>
                 </div>
               ))}
-              {schools.length === 0 && <div style={{ padding: 24, color: "#9CA3AF", textAlign: "center", fontSize: 13 }}>No schools found.</div>}
+              {schools.length === 0 && <div style={{ padding: 24, color: "var(--ak-text-muted)", textAlign: "center", fontSize: 13 }}>No schools found.</div>}
             </div>
           </div>
 
           {/* teachers */}
-          <div style={{ background: "#fff", borderRadius: 14, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: "var(--ak-surface)", borderRadius: 14, border: `1px solid ${BORDER}` }}>
             <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BORDER}`, fontWeight: 800, fontSize: 15 }}>
               Teachers / Partners ({teachers.length})
             </div>
@@ -594,12 +594,12 @@ export default function FDEAdminPage() {
                   </div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{t.full_name}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF" }}>{t.email}</div>
+                    <div style={{ fontSize: 11, color: "var(--ak-text-muted)" }}>{t.email}</div>
                   </div>
                   <Badge label={t.role} colorMap={{ teacher: { bg: "#EDE9FE", text: BRAND }, admin: { bg: "#FEE2E2", text: "#DC2626" } }} />
                 </div>
               ))}
-              {teachers.length === 0 && <div style={{ padding: 24, color: "#9CA3AF", textAlign: "center", fontSize: 13 }}>No teachers found.</div>}
+              {teachers.length === 0 && <div style={{ padding: 24, color: "var(--ak-text-muted)", textAlign: "center", fontSize: 13 }}>No teachers found.</div>}
             </div>
           </div>
         </div>

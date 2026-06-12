@@ -40,11 +40,11 @@ const fmtAgo = (iso) => {
   return d <= 0 ? 'today' : d === 1 ? '1d ago' : `${d}d ago`;
 };
 
-function StatCell({ value, label, color = '#111827' }) {
+function StatCell({ value, label, color = 'var(--ak-text)' }) {
   return (
-    <div style={{ textAlign: 'center', background: '#F9FAFB', borderRadius: 12, padding: '11px 6px', border: '1px solid #F3F4F6' }}>
+    <div style={{ textAlign: 'center', background: 'var(--ak-bg)', borderRadius: 12, padding: '11px 6px', border: '1px solid var(--ak-border)' }}>
       <div style={{ fontSize: 19, fontWeight: 900, color }}>{value}</div>
-      <div style={{ fontSize: 9.5, fontWeight: 700, color: '#9CA3AF', marginTop: 2, textTransform: 'uppercase', letterSpacing: .3 }}>{label}</div>
+      <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 2, textTransform: 'uppercase', letterSpacing: .3 }}>{label}</div>
     </div>
   );
 }
@@ -52,8 +52,8 @@ function StatCell({ value, label, color = '#111827' }) {
 function Section({ title, children, hint }) {
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 900, color: '#111827', marginBottom: 2 }}>{title}</div>
-      {hint && <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', marginBottom: 9 }}>{hint}</div>}
+      <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 2 }}>{title}</div>
+      {hint && <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', marginBottom: 9 }}>{hint}</div>}
       {!hint && <div style={{ height: 9 }} />}
       {children}
     </div>
@@ -87,7 +87,7 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
   if (loading) {
     return (
       <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 11, fontFamily: FONT }}>
-        {[0, 1, 2].map(i => <div key={i} style={{ height: 90, borderRadius: 14, background: '#F3F1FF', opacity: .6 }} />)}
+        {[0, 1, 2].map(i => <div key={i} style={{ height: 90, borderRadius: 14, background: 'var(--ak-bg)', opacity: .6 }} />)}
       </div>
     );
   }
@@ -97,7 +97,7 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
   const avgConf = summary.avgConfidence ?? (intel?.avg_confidence != null ? pct(intel.avg_confidence) : 0);
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px', fontFamily: FONT, background: '#fff' }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 24px', fontFamily: FONT, background: 'var(--ak-surface)' }}>
 
       {/* Intelligence header */}
       <div style={{ background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`, borderRadius: 18, padding: '16px 16px 18px', color: '#fff' }}>
@@ -140,13 +140,13 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
               return (
                 <div key={sub.subject} style={{ background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', textTransform: 'capitalize' }}>{sub.subject || 'General'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', textTransform: 'capitalize' }}>{sub.subject || 'General'}</span>
                     <span style={{ fontSize: 10, fontWeight: 800, color: h.color, background: `${h.color}18`, padding: '2px 8px', borderRadius: 20 }}>{h.label} · {conf}%</span>
                   </div>
-                  <div style={{ height: 6, borderRadius: 4, background: '#EDE9FE', overflow: 'hidden' }}>
+                  <div style={{ height: 6, borderRadius: 4, background: 'var(--ak-border)', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${conf}%`, background: col, borderRadius: 4, transition: 'width .5s' }} />
                   </div>
-                  <div style={{ display: 'flex', gap: 10, marginTop: 7, fontSize: 10.5, fontWeight: 700, color: '#9CA3AF' }}>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 7, fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
                     <span>{sub.topic_count ?? 0} topics</span>
                     {sub.critical_count > 0 && <span style={{ color: RED }}>{sub.critical_count} critical</span>}
                     {sub.last_activity && <span>· last {fmtAgo(sub.last_activity)}</span>}
@@ -166,11 +166,11 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
               const conf = pct(t.confidence);
               const h = HEALTH[t.health_status || healthOf(t.confidence)];
               return (
-                <div key={t.id || `${t.topic}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #F3F4F6', borderRadius: 13, padding: '10px 12px' }}>
+                <div key={t.id || `${t.topic}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 13, padding: '10px 12px' }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: h.color, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.topic}</div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#9CA3AF', textTransform: 'capitalize' }}>{t.subject || 'General'} · {conf}% confidence</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.topic}</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)', textTransform: 'capitalize' }}>{t.subject || 'General'} · {conf}% confidence</div>
                   </div>
                   {onStartTeach && (
                     <button onClick={() => onStartTeach({ topic: t.topic, subject: t.subject, agentName, agentEmoji })}
@@ -197,17 +197,17 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
               return (
                 <div key={h.id || h.session_id || i} style={{ background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', textTransform: 'capitalize' }}>{h.topic || 'Session'}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9CA3AF' }}>{fmtAgo(h.completed_at || h.started_at)}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', textTransform: 'capitalize' }}>{h.topic || 'Session'}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{fmtAgo(h.completed_at || h.started_at)}</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                     {h.subject && <span style={{ fontSize: 10, fontWeight: 800, color: col, background: `${col}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{h.subject}</span>}
                     {delta !== 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: delta > 0 ? GREEN : RED }}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}% understanding</span>}
-                    {h.agent_knowledge_added > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#6B7280' }}>+{h.agent_knowledge_added} chunks</span>}
+                    {h.agent_knowledge_added > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-sub)' }}>+{h.agent_knowledge_added} chunks</span>}
                     {h.xp_earned > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: GOLD }}>+{h.xp_earned} XP</span>}
                   </div>
                   {h.concepts_learned?.length > 0 && (
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', marginTop: 6, lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-sub)', marginTop: 6, lineHeight: 1.4 }}>
                       💡 {h.concepts_learned.slice(0, 4).join(', ')}
                     </div>
                   )}
@@ -223,7 +223,7 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
 
 function Empty({ text }) {
   return (
-    <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 24, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: '#9CA3AF' }}>
+    <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 24, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text-muted)' }}>
       {text}
     </div>
   );
