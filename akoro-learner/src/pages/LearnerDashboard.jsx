@@ -15,6 +15,7 @@ import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
 import AgentChatTab  from '../components/tabs/AgentChatTab.jsx';
 import RankingsTab   from '../components/tabs/RankingsTab.jsx';
+import DiscoveryTab  from '../components/tabs/DiscoveryTab.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, ChevDownIcon } from '../components/common/Icons.jsx';
@@ -327,7 +328,7 @@ export default function LearnerDashboard() {
     }
   };
 
-  const NAV_ITEMS=[{key:"sessions",icon:"📚",label:"Learn"},{key:"rankings",icon:"🏆",label:"Rankings"},{key:"battles",icon:"⚔️",label:"Battles"},{key:"agent",icon:"🤖",label:"Agent"}];
+  const NAV_ITEMS=[{key:"sessions",icon:"📚",label:"Learn"},{key:"discovery",icon:"🧭",label:"Discover"},{key:"rankings",icon:"🏆",label:"Rankings"},{key:"battles",icon:"⚔️",label:"Battles"},{key:"agent",icon:"🤖",label:"Agent"}];
   const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
 
   return (
@@ -572,6 +573,7 @@ export default function LearnerDashboard() {
               ):challenges.filter(c=>!acceptedIds.has(c.id)).map(c=><ChallengeRow key={c.id} challenge={c} onTap={setSelectedChallenge}/>)}
             </div>
           )}
+          {tab==="discovery" && <DiscoveryTab/>}
           {tab==="rankings" && <RankingsTab/>}
           {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>setTab("challenges")}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}
@@ -596,7 +598,7 @@ export default function LearnerDashboard() {
         </div>
 
         {/* FAB — now opens ConfigModal first */}
-        {!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&tab!=="agent"&&tab!=="battles"&&(
+        {!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
           <div onClick={()=>setConfigOpen(true)} style={{ position:"fixed",bottom:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
             <MicIcon size={15} color="#fff"/>
             <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>Start Session</span>
