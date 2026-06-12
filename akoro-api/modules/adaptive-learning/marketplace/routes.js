@@ -29,7 +29,7 @@
 
 import express from "express";
 import db from "../../../db.js";
-import { authenticateToken } from "../../auth/routes.js";
+import { authenticateToken, requireRole } from "../../auth/routes.js";
 import { addPurchasedAgent } from "../student-state.js";
 import { v4 as uuid } from "uuid";
 import {
@@ -189,7 +189,7 @@ router.get("/search", async (req, res) => {
 });
 
 // POST /marketplace/list — teacher creates a listing
-router.post("/list", authenticateToken, async (req, res) => {
+router.post("/list", authenticateToken, requireRole(["teacher", "admin"]), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const {
@@ -248,7 +248,7 @@ router.post("/list", authenticateToken, async (req, res) => {
 });
 
 // PUT /marketplace/listings/:id — teacher updates listing
-router.put("/listings/:id", authenticateToken, async (req, res) => {
+router.put("/listings/:id", authenticateToken, requireRole(["teacher", "admin"]), async (req, res) => {
   try {
     const teacherId = req.user.id;
     const { teacherId: _ignored, ...updates } = req.body;
@@ -287,7 +287,7 @@ router.put("/listings/:id", authenticateToken, async (req, res) => {
 });
 
 // DELETE /marketplace/listings/:id — teacher removes listing
-router.delete("/listings/:id", authenticateToken, async (req, res) => {
+router.delete("/listings/:id", authenticateToken, requireRole(["teacher", "admin"]), async (req, res) => {
   try {
     const teacherId = req.user.id;
 
