@@ -19,7 +19,7 @@
         var r = document.documentElement;
         r.setAttribute('data-theme', dark ? 'dark' : 'light');
         var lang = localStorage.getItem('akoro_language') || 'English';
-        var codes = {English:'en',Yoruba:'yo',Igbo:'ig',Hausa:'ha',Pidgin:'pcm',French:'fr',Arabic:'ar'};
+        var codes = {English:'en',Spanish:'es',Portuguese:'pt',French:'fr',Yoruba:'yo',Igbo:'ig',Hausa:'ha',Pidgin:'pcm',Arabic:'ar'};
         r.lang = codes[lang] || 'en';
         r.dir  = r.lang === 'ar' ? 'rtl' : 'ltr';
         var v = dark
