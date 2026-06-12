@@ -2200,7 +2200,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS teaching_guide    TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS guide_emoji       TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subjects          TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified    BOOLEAN NOT NULL DEFAULT false;
+
+-- ── Account lifecycle: deactivate (reversible) / delete (right-to-erasure) ─────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivated_at    TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at        TIMESTAMPTZ;
 
 -- ── Settings: extended agent profile columns ──────────────────────────────────
 

@@ -142,6 +142,27 @@ function clearAuthCookies(res) {
   res.clearCookie("akoro_access",  { path: "/" });
   res.clearCookie("akoro_refresh", { path: "/api/auth/refresh" });
 }
+export { clearAuthCookies };
+
+/**
+ * Revoke the access token on the current request (deny-list its jti) and
+ * clear auth cookies. Used by account deactivate/delete to kill the session
+ * immediately. Safe to call even if the request had no jti.
+ */
+export async function endSession(req, res) {
+  if (req.tokenJti && req.tokenExp) {
+    await DenyList.add(req.tokenJti, req.tokenExp * 1000);
+  }
+  // Revoke the refresh token too if present
+  const refreshToken = req.cookies?.akoro_refresh;
+  if (refreshToken) {
+    try {
+      const decoded = verifyToken(refreshToken);
+      await RefreshStore.delete(decoded.jti);
+    } catch { /* expired/invalid — ignore */ }
+  }
+  clearAuthCookies(res);
+}
 
 // ─── § DENY-LIST (jti blacklist) ──────────────────────────────────────────────
 // Stores revoked access token jtis until their natural expiry.
@@ -370,7 +391,29 @@ const authHandlers = {
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res401(res, "Invalid credentials");
-    if (!user.is_active) return res403(res, "Account deactivated");
+
+    // Deleted accounts are permanently blocked.
+    if (user.deleted_at) return res403(res, "This account has been deleted");
+
+    // Deactivated accounts auto-reactivate on successful login within the
+    // 30-day grace period; after that they stay blocked.
+    if (!user.is_active) {
+      const graceMs = 30 * 24 * 60 * 60 * 1000;
+      const deactivatedAt = user.deactivated_at ? new Date(user.deactivated_at).getTime() : 0;
+      if (deactivatedAt && Date.now() - deactivatedAt <= graceMs) {
+        await db.from("users").update({
+          is_active: true, deactivated_at: null, updated_at: new Date().toISOString(),
+        }).eq("id", user.id);
+        // Reactivate only the most recent agent to preserve the single-active-agent invariant
+        const { data: lastAgent } = await db.from("user_agents")
+          .select("id").eq("user_id", user.id)
+          .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+        if (lastAgent) await db.from("user_agents").update({ is_active: true }).eq("id", lastAgent.id);
+        user.is_active = true;
+      } else {
+        return res403(res, "Account deactivated");
+      }
+    }
 
     // Two-factor gate — issue a short-lived challenge token instead of a session.
     if (user.two_factor_enabled && user.two_factor_secret) {

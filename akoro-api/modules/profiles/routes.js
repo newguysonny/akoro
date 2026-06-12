@@ -38,7 +38,7 @@ import { body, validationResult }         from "express-validator";
 import bcrypt                             from "bcrypt";
 import crypto                             from "crypto";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole, endSession } from "../auth/routes.js";
 import multerLib                           from "multer";
 
 const asyncHandler = (fn) => (req, res, next) =>
@@ -1190,11 +1190,27 @@ router.get("/teaching-guides", authenticateToken, asyncHandler(async (req, res) 
 }));
 
 // ─── POST /api/profiles/me/deactivate ────────────────────────────────────────
+// Suspends the account: login is blocked (is_active=false) but data is kept,
+// so the user can reactivate within the grace period by signing back in.
 router.post("/me/deactivate", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  await db.from("users").update({ updated_at: new Date().toISOString() }).eq("id", userId);
+
+  const { error } = await db.from("users").update({
+    is_active:       false,
+    deactivated_at:  new Date().toISOString(),
+    updated_at:      new Date().toISOString(),
+  }).eq("id", userId);
+  if (error) {
+    console.error("[profiles/me/deactivate]", error.message);
+    return res.status(500).json({ success: false, message: "Failed to deactivate account" });
+  }
+
   // Mark all user_agents inactive
   await db.from("user_agents").update({ is_active: false }).eq("user_id", userId);
+
+  // Kill the current session so the user is signed out everywhere
+  await endSession(req, res);
+
   res200(res, { deactivated: true });
 }));
 
@@ -1229,18 +1245,40 @@ router.post("/me/avatar", authenticateToken, (req, res, next) => {
 }));
 
 // ─── DELETE /api/profiles/me ──────────────────────────────────────────────────
+// Right-to-erasure delete: blocks login, anonymizes all PII, scrubs credentials
+// and 2FA, and removes the user's learning data. The row is retained (anonymized)
+// to preserve referential integrity for aggregate records.
 router.delete("/me", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const anon = `deleted_${Date.now()}`;
-  await db.from("users").update({
-    email:      `${anon}@deleted.akoro.app`,
-    full_name:  "Deleted User",
-    username:   anon,
-    phone:      null,
-    avatar_url: null,
-    updated_at: new Date().toISOString(),
+  const anon = `deleted_${userId.slice(0, 8)}_${Date.now()}`;
+
+  const { error } = await db.from("users").update({
+    email:             `${anon}@deleted.akoro.app`,
+    full_name:         "Deleted User",
+    username:          anon,
+    phone:             null,
+    avatar_url:        null,
+    password_hash:     "",            // scrub credentials
+    two_factor_secret: null,
+    two_factor_enabled:false,
+    is_active:         false,         // block any further login
+    deleted_at:        new Date().toISOString(),
+    updated_at:        new Date().toISOString(),
   }).eq("id", userId);
-  await db.from("user_agents").update({ is_active: false }).eq("user_id", userId);
+  if (error) {
+    console.error("[profiles/me DELETE]", error.message);
+    return res.status(500).json({ success: false, message: "Failed to delete account" });
+  }
+
+  // Remove the user's owned learning data (best-effort — ignore missing tables)
+  await Promise.allSettled([
+    db.from("user_agents").delete().eq("user_id", userId),
+    db.from("user_notification_preferences").delete().eq("user_id", userId),
+  ]);
+
+  // Kill the current session
+  await endSession(req, res);
+
   res200(res, { deleted: true });
 }));
 
