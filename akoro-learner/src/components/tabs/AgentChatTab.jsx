@@ -4,6 +4,7 @@ import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import { formatTaskOutputs } from '../../utils/formatTaskOutput.js';
+import AgentStatsTab from './AgentStatsTab.jsx';
 
 // Detect when a chat message should run an agentic task (student tools).
 // Mirrors the backend intent keywords so the agent acts instead of just chatting.
@@ -230,7 +231,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
         </button>
       </div>
       <div style={{ display:"flex",borderBottom:"1px solid #F3F4F6",background:"#fff",flexShrink:0 }}>
-        {[{key:"chat",label:"Chat",icon:"💬",badge:null},{key:"tasks",label:"Tasks",icon:"📋",badge:pendingCount}].map(({key,label,icon,badge})=>(
+        {[{key:"chat",label:"Chat",icon:"💬",badge:null},{key:"tasks",label:"Tasks",icon:"📋",badge:pendingCount},{key:"stats",label:"Stats",icon:"📊",badge:null}].map(({key,label,icon,badge})=>(
           <button key={key} onClick={()=>setInnerTab(key)} style={{ flex:1,padding:"9px 4px 10px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:innerTab===key?800:600,color:innerTab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${innerTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}>
             <span style={{ fontSize:13 }}>{icon}</span>{label}
             {badge>0&&<span style={{ fontSize:9,fontWeight:900,background:innerTab===key?BRAND:"#F3F4F6",color:innerTab===key?"#fff":"#9CA3AF",borderRadius:8,padding:"1px 5px" }}>{badge}</span>}
@@ -299,6 +300,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
             ))}
           </div>
         </div>
+      )}
+      {innerTab==="stats"&&(
+        <AgentStatsTab studentId={STUDENT_ID} agentName={agentName} agentEmoji={agentEmoji} onStartTeach={onStartTeach}/>
       )}
       {taskOpen&&(
         <><div onClick={()=>setTaskOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>

@@ -105,10 +105,27 @@ function AgentCard({ listing, owned, onOpen }) {
   );
 }
 
+/* ── Interactive star picker ───────────────────────────────── */
+function StarInput({ value, onChange }) {
+  return (
+    <div style={{ display: 'inline-flex', gap: 4 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <button key={i} onClick={() => onChange(i)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 1 }}>
+          <span style={{ fontSize: 26, color: i <= value ? GOLD : '#E5E7EB' }}>★</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ── Detail sheet ──────────────────────────────────────────── */
-function AgentSheet({ listing, owned, onClose, onPurchase, onUse, busy }) {
-  const [full,    setFull]    = useState(listing);
-  const [reviews, setReviews] = useState([]);
+function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy }) {
+  const [full,     setFull]     = useState(listing);
+  const [reviews,  setReviews]  = useState([]);
+  const [myRating, setMyRating] = useState(0);
+  const [myText,   setMyText]   = useState('');
+  const [posting,  setPosting]  = useState(false);
+  const [posted,   setPosted]   = useState(false);
   const sc = subjectColor(listing.subject);
 
   useEffect(() => {
@@ -117,6 +134,18 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, busy }) {
     apiGet(`${MKT}/reviews/${listing.id}`).then(d => { if (alive) setReviews(d.reviews || []); }).catch(() => {});
     return () => { alive = false; };
   }, [listing.id]);
+
+  const submitReview = async () => {
+    if (!myRating) return;
+    setPosting(true);
+    const ok = await onReview(listing, myRating, myText.trim());
+    setPosting(false);
+    if (ok) {
+      setPosted(true);
+      // Optimistically prepend so the user sees their review immediately
+      setReviews(prev => [{ id: `me-${Date.now()}`, rating: myRating, review_text: myText.trim() }, ...prev]);
+    }
+  };
 
   const useCases = full.topics_covered?.length ? full.topics_covered
     : full.concepts_taught?.length ? full.concepts_taught
@@ -193,6 +222,34 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, busy }) {
             </div>
           )}
 
+          {/* write a review — owners only */}
+          {owned && (
+            <div style={{ marginTop: 20, background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 14, padding: '13px 14px' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 900, color: '#111827', marginBottom: 9 }}>
+                {posted ? '✓ Thanks for your review!' : 'Rate this agent'}
+              </div>
+              {!posted && (
+                <>
+                  <StarInput value={myRating} onChange={setMyRating} />
+                  <textarea
+                    value={myText}
+                    onChange={(e) => setMyText(e.target.value)}
+                    placeholder="Share how this agent helped you learn… (optional)"
+                    rows={2}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, padding: '10px 12px', borderRadius: 11, border: '1px solid #E5E0F5', background: '#fff', fontSize: 12.5, fontWeight: 600, color: '#111827', fontFamily: FONT, outline: 'none', resize: 'none', lineHeight: 1.45 }}
+                  />
+                  <button onClick={submitReview} disabled={!myRating || posting}
+                    style={{ marginTop: 9, padding: '9px 16px', borderRadius: 11, border: 'none',
+                      background: (!myRating || posting) ? '#E5E1F2' : `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`,
+                      color: (!myRating || posting) ? '#9CA3AF' : '#fff', fontSize: 12.5, fontWeight: 800,
+                      cursor: (!myRating || posting) ? 'default' : 'pointer', fontFamily: FONT }}>
+                    {posting ? 'Posting…' : 'Submit review'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {/* reviews */}
           {reviews.length > 0 && (
             <div style={{ marginTop: 20 }}>
@@ -233,6 +290,71 @@ const primaryBtn = (color, busy) => ({
   fontFamily: FONT,
 });
 
+/* ── Purchase history sheet ────────────────────────────────── */
+function PurchaseHistorySheet({ onClose }) {
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    apiGet(`${MKT}/purchases/${STUDENT_ID}`)
+      .then(d => { if (alive) setRows(d.purchases || []); })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const statusMeta = (s, granted) =>
+    granted || s === 'success' ? { label: 'Active',   color: GREEN }
+    : s === 'pending'          ? { label: 'Pending',  color: GOLD }
+    : s === 'refunded'         ? { label: 'Refunded', color: '#9CA3AF' }
+    :                            { label: 'Failed',   color: RED };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', width: '100%', maxWidth: 540, maxHeight: '80vh', borderRadius: '22px 22px 0 0', overflowY: 'auto', fontFamily: FONT, animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
+        <div style={{ position: 'sticky', top: 0, background: '#fff', padding: '10px 0 4px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 38, height: 4, borderRadius: 4, background: '#E5E7EB' }} />
+        </div>
+        <div style={{ padding: '6px 18px 24px' }}>
+          <h2 style={{ fontSize: 17, fontWeight: 900, color: '#111827', margin: '4px 0 14px' }}>🧾 My purchases</h2>
+          {loading ? (
+            [0, 1].map(i => <div key={i} style={{ height: 64, borderRadius: 12, background: '#F3F1FF', opacity: .6, marginBottom: 9 }} />)
+          ) : rows.length === 0 ? (
+            <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 30, textAlign: 'center', fontSize: 13, fontWeight: 600, color: '#9CA3AF' }}>
+              No purchases yet. Unlock an agent to see it here.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {rows.map((p) => {
+                const listing = p['edu.marketplace_listings'] || p.marketplace_listings || {};
+                const m = statusMeta(p.paystack_status, p.access_granted);
+                return (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {listing.title || p.metadata?.listing_title || 'Agent'}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', marginTop: 2 }}>
+                        {listing.teacher_name || p.metadata?.teacher_name || 'Teacher'}
+                        {p.purchased_at ? ` · ${new Date(p.purchased_at).toLocaleDateString()}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{fmtPrice(p.amount_kobo, p.currency)}</div>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: m.color, background: `${m.color}18`, padding: '2px 7px', borderRadius: 20 }}>{m.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main tab ──────────────────────────────────────────────── */
 export default function DiscoveryTab() {
   const [listings, setListings] = useState([]);
@@ -244,6 +366,7 @@ export default function DiscoveryTab() {
   const [ownedIds, setOwnedIds] = useState(new Set());
   const [busy,     setBusy]     = useState(false);
   const [toast,    setToast]    = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const loadOwned = useCallback(async () => {
     try {
@@ -362,21 +485,39 @@ export default function DiscoveryTab() {
     } finally { setBusy(false); }
   };
 
+  const handleReview = async (listing, rating, reviewText) => {
+    try {
+      await apiPost(`${MKT}/review`, { studentId: STUDENT_ID, listingId: listing.id, rating, reviewText });
+      setToast({ msg: 'Review posted — thank you!', color: GREEN });
+      return true;
+    } catch (e) {
+      const msg = String(e.message || '').includes('403') ? 'Purchase this agent before reviewing' : 'Could not post review';
+      setToast({ msg, color: RED });
+      return false;
+    }
+  };
+
   const subjectKeys = useMemo(() => Object.keys(SUBJECTS), []);
 
   return (
     <div style={{ padding: '4px 14px 90px', fontFamily: FONT }}>
       <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
 
-      {/* Search */}
-      <div style={{ position: 'relative', marginTop: 8 }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search teacher agents, subjects, topics…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid #E5E0F5', background: '#fff', fontSize: 13, fontWeight: 600, color: '#111827', fontFamily: FONT, outline: 'none' }}
-        />
+      {/* Search + purchases */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search teacher agents, subjects, topics…"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid #E5E0F5', background: '#fff', fontSize: 13, fontWeight: 600, color: '#111827', fontFamily: FONT, outline: 'none' }}
+          />
+        </div>
+        <button onClick={() => setHistoryOpen(true)} title="My purchases"
+          style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid #E5E0F5', background: '#fff', fontSize: 18, cursor: 'pointer' }}>
+          🧾
+        </button>
       </div>
 
       {/* Subject pills + free toggle */}
@@ -429,8 +570,11 @@ export default function DiscoveryTab() {
           onClose={() => setActive(null)}
           onPurchase={handlePurchase}
           onUse={handleUse}
+          onReview={handleReview}
         />
       )}
+
+      {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>

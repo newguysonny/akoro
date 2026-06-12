@@ -124,6 +124,7 @@ function TeachAgentModal({ session, config, onClose }) {
 
   const [voiceStreaming, setVoiceStreaming] = useState(false);
   const [interimText,    setInterimText]   = useState("");     // audio chunks
+  const [cogState,       setCogState]      = useState(null);   // live cognitive state
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -189,15 +190,34 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); });
 
       ws.on("typing_start", () => setLoading(true));
-      ws.on("turn_complete", ({ blocks: newBlocks }) => {
+      ws.on("turn_complete", ({ blocks: newBlocks, currentPhase }) => {
         setLoading(false);
         if (newBlocks?.length) {
           setBlocks(prev => [...prev, ...newBlocks]);
           // TTS only when the human used voice — modality mirrors input.
           const agentBlock = newBlocks.find(b => b.type === "student-agent");
           maybeSpeak(agentBlock?.text);
+          // Instant understanding read from the agent block; confusion comes
+          // from the authoritative state snapshot we request below.
+          if (agentBlock?.confidence != null)
+            setCogState(prev => ({ ...prev, understanding: agentBlock.confidence, phase: currentPhase ?? prev?.phase }));
         }
+        ws.emit("get_state");   // pull full cognitive snapshot for this turn
       });
+
+      // Live cognitive state — both the push (state_update) and the
+      // explicit snapshot (state_snapshot) resolve to the same shape.
+      const applyState = (state) => {
+        if (!state) return;
+        const c = state.cognitive || state;
+        setCogState(prev => ({
+          understanding: c.understanding ?? prev?.understanding ?? 0,
+          confusion:     c.confusion     ?? prev?.confusion     ?? 0,
+          phase:         state.session?.phase ?? prev?.phase ?? null,
+        }));
+      };
+      ws.on("state_update",   (state) => applyState(state));
+      ws.on("state_snapshot", ({ state }) => applyState(state));
       ws.on("student_done", ()=>{});
       ws.on("guide_done",   ()=>{});
       ws.on("error", err => { console.warn("[TeachModal WS]", err.message); setLoading(false); });
@@ -537,6 +557,7 @@ function TeachAgentModal({ session, config, onClose }) {
       voiceStreaming={voiceStreaming}
       interimText={interimText}
       onToggleVoice={toggleVoiceStream}
+      cognitive={cogState}
       onClose={onClose}
     />
   );

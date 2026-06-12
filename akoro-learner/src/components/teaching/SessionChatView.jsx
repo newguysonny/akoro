@@ -9,6 +9,7 @@ function SessionChatView({
   userTurns, onSummarize, showSummarize,
   recording, onToggleRecording, seconds,
   voiceStreaming, interimText, onToggleVoice,
+  cognitive,
   onClose,
 }) {
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
@@ -66,6 +67,34 @@ function SessionChatView({
           </div>
         </div>
       </div>
+
+      {/* Live cognitive state — agent's understanding & confusion this turn */}
+      {cognitive && (cognitive.understanding != null || cognitive.confusion != null) && (
+        <div style={{ display:"flex",alignItems:"center",gap:14,padding:"9px 20px",
+          borderBottom:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)" }}>
+          {[
+            { label:"Understanding", val:Math.round(cognitive.understanding ?? 0), color:GREEN },
+            { label:"Confusion",     val:Math.round(cognitive.confusion ?? 0),     color:GOLD  },
+          ].map(({label,val,color}) => (
+            <div key={label} style={{ flex:1,minWidth:0 }}>
+              <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                <span style={{ fontSize:9.5,fontWeight:800,color:"#64748B",letterSpacing:.4,textTransform:"uppercase" }}>{label}</span>
+                <span style={{ fontSize:10,fontWeight:900,color }}>{val}%</span>
+              </div>
+              <div style={{ height:5,borderRadius:4,background:"rgba(255,255,255,.07)",overflow:"hidden" }}>
+                <div style={{ height:"100%",width:`${Math.max(0,Math.min(100,val))}%`,background:color,
+                  borderRadius:4,transition:"width .5s cubic-bezier(.4,0,.2,1)" }}/>
+              </div>
+            </div>
+          ))}
+          {cognitive.phase != null && (
+            <span style={{ fontSize:9.5,fontWeight:800,color:BRAND,background:`${BRAND}22`,
+              padding:"3px 9px",borderRadius:20,whiteSpace:"nowrap",flexShrink:0 }}>
+              Phase {cognitive.phase}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Blocks */}
       <div ref={scrollRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",
