@@ -189,17 +189,18 @@ router.get("/search", async (req, res) => {
 });
 
 // POST /marketplace/list — teacher creates a listing
-router.post("/list", async (req, res) => {
+router.post("/list", authenticateToken, async (req, res) => {
   try {
+    const teacherId = req.user.id;
     const {
-      teacherId, agentId, title, description,
+      agentId, title, description,
       subject, topicsCovered = [], previewTopics = [],
       priceKobo = 0, currency = "NGN",
       teacherName, teacherAvatar, sampleTip,
     } = req.body;
 
-    if (!teacherId || !agentId || !title || !subject) {
-      return res.status(400).json({ error: "teacherId, agentId, title and subject required" });
+    if (!agentId || !title || !subject) {
+      return res.status(400).json({ error: "agentId, title and subject required" });
     }
 
     // Verify agent belongs to teacher
@@ -247,10 +248,10 @@ router.post("/list", async (req, res) => {
 });
 
 // PUT /marketplace/listings/:id — teacher updates listing
-router.put("/listings/:id", async (req, res) => {
+router.put("/listings/:id", authenticateToken, async (req, res) => {
   try {
-    const { teacherId, ...updates } = req.body;
-    if (!teacherId) return res.status(400).json({ error: "teacherId required" });
+    const teacherId = req.user.id;
+    const { teacherId: _ignored, ...updates } = req.body;
 
     const { data: existing } = await db
       .from("edu.marketplace_listings")
@@ -286,10 +287,9 @@ router.put("/listings/:id", async (req, res) => {
 });
 
 // DELETE /marketplace/listings/:id — teacher removes listing
-router.delete("/listings/:id", async (req, res) => {
+router.delete("/listings/:id", authenticateToken, async (req, res) => {
   try {
-    const { teacherId } = req.body;
-    if (!teacherId) return res.status(400).json({ error: "teacherId required" });
+    const teacherId = req.user.id;
 
     const { data: existing } = await db
       .from("edu.marketplace_listings")
@@ -320,11 +320,14 @@ router.delete("/listings/:id", async (req, res) => {
 // POST /marketplace/checkout
 // Body: { studentId, listingId, email? }
 // Returns: { authorization_url, reference, purchaseId }
-router.post("/checkout", async (req, res) => {
+router.post("/checkout", authenticateToken, async (req, res) => {
   try {
-    const { studentId, listingId, email: providedEmail } = req.body;
-    if (!studentId || !listingId) {
-      return res.status(400).json({ error: "studentId and listingId required" });
+    // Always derive the buyer from the authenticated session — never trust
+    // a client-supplied studentId (prevents purchasing on another user's behalf).
+    const studentId = req.user.id;
+    const { listingId, email: providedEmail } = req.body;
+    if (!listingId) {
+      return res.status(400).json({ error: "listingId required" });
     }
 
     // Load listing
@@ -619,9 +622,11 @@ router.get("/payment/callback", async (req, res) => {
 
 // GET /marketplace/my-agents/:userId
 // Returns: default platform agent + all purchased agents with full profiles
-router.get("/my-agents/:userId", async (req, res) => {
+router.get("/my-agents/:userId", authenticateToken, async (req, res) => {
   try {
-    const { userId } = req.params;
+    // Ignore the path param for authorization — only ever return the
+    // authenticated user's own agents.
+    const userId = req.user.id;
 
     // Load preferences
     const { data: prefs } = await db
@@ -694,11 +699,12 @@ router.get("/my-agents/:userId", async (req, res) => {
 
 // POST /marketplace/set-default
 // Body: { userId, agentPairId, activeAgentId? }
-router.post("/set-default", async (req, res) => {
+router.post("/set-default", authenticateToken, async (req, res) => {
   try {
-    const { userId, agentPairId, activeAgentId } = req.body;
-    if (!userId || !agentPairId) {
-      return res.status(400).json({ error: "userId and agentPairId required" });
+    const userId = req.user.id;
+    const { agentPairId, activeAgentId } = req.body;
+    if (!agentPairId) {
+      return res.status(400).json({ error: "agentPairId required" });
     }
 
     // Verify user owns this agent (if it's a trained agent)
@@ -730,7 +736,7 @@ router.post("/set-default", async (req, res) => {
 });
 
 // GET /marketplace/purchases/:userId
-router.get("/purchases/:userId", async (req, res) => {
+router.get("/purchases/:userId", authenticateToken, async (req, res) => {
   try {
     const { data, error } = await db
       .from("edu.agent_purchases")
@@ -739,7 +745,7 @@ router.get("/purchases/:userId", async (req, res) => {
         paystack_status, access_granted, purchased_at,
         edu.marketplace_listings!inner(title, subject, teacher_name, price_kobo)
       `)
-      .eq("student_id", req.params.userId)
+      .eq("student_id", req.user.id)
       .order("purchased_at", { ascending: false });
 
     if (error) throw error;
@@ -754,11 +760,12 @@ router.get("/purchases/:userId", async (req, res) => {
 // =============================================================
 
 // POST /marketplace/review
-router.post("/review", async (req, res) => {
+router.post("/review", authenticateToken, async (req, res) => {
   try {
-    const { studentId, listingId, rating, reviewText } = req.body;
-    if (!studentId || !listingId || !rating) {
-      return res.status(400).json({ error: "studentId, listingId and rating required" });
+    const studentId = req.user.id;
+    const { listingId, rating, reviewText } = req.body;
+    if (!listingId || !rating) {
+      return res.status(400).json({ error: "listingId and rating required" });
     }
     if (rating < 1 || rating > 5) {
       return res.status(400).json({ error: "rating must be 1–5" });
