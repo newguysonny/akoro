@@ -1404,7 +1404,7 @@ export default function SettingsPage() {
         boxShadow:'0 1px 6px rgba(0,0,0,.06)',
         height:54,display:'flex',alignItems:'center',
         padding:'0 16px',gap:12 }}>
-        <button onClick={()=>navigate('/')}
+        <button onClick={()=>navigate('/app')}
           style={{ background:'none',border:'none',cursor:'pointer',
             padding:4,display:'flex',alignItems:'center',flexShrink:0 }}>
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none"
