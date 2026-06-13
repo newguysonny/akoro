@@ -67,6 +67,7 @@ const FontStyle = () => (
       .ak-how-card-grid{grid-template-columns:1fr 1fr!important}
       .ak-pricing-grid{grid-template-columns:1fr!important}
       .ak-footer-grid{grid-template-columns:1fr 1fr!important}
+      .ak-faq-grid{grid-template-columns:1fr!important}
       .ak-hero-inner{padding:100px 18px 64px!important}
     }
     @media(max-width:480px){
@@ -943,7 +944,7 @@ function FAQ() {
             Questions we <em style={{ color: B, fontStyle: 'italic' }}>actually get</em> asked
           </h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(480px,1fr))', gap: 12 }}>
+        <div className="ak-faq-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(480px,1fr))', gap: 12 }}>
           {faqs.map(([q, a], i) => (
             <Reveal key={i} delay={(i % 2) * 0.08}>
               <div style={{ background: '#fff', border: `1px solid ${open === i ? `${B}30` : '#EDE8E1'}`, borderRadius: 14, overflow: 'hidden', transition: 'border-color .2s' }}>
