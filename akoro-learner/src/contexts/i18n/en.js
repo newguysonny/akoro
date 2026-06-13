@@ -158,4 +158,42 @@ export const EN = {
   'mode.system':  'System',
   'mode.light':   'Light',
   'mode.dark':    'Dark',
+
+  /* ── Config (teaching session) modal ── */
+  'config.title':       'Configure teaching session',
+  'config.subtitle':    'You teach · your agent learns · NaNa guides',
+  'config.topic':       'TOPIC',
+  'config.subject':     'SUBJECT',
+  'config.subtopics':   'SUBTOPICS',
+  'config.objectives':  'LEARNING OBJECTIVES',
+  'config.topic_ph':    'e.g. Water, Algebra, Shakespeare…',
+  'config.subtopic_ph': 'Type a subtopic and press Enter or +',
+  'config.autogen':     'Auto-generate',
+  'config.generating':  'Generating…',
+  'config.start':       'Start session',
+
+  /* ── Session detail sheet ── */
+  'sheet.your_progress':     'Your Progress',
+  'sheet.session_stats':     'Session stats',
+  'sheet.subtopics_covered': 'Subtopics covered',
+  'sheet.flagged_gaps':      'Flagged gaps',
+  'sheet.avg_confidence':    'Avg Confidence',
+  'sheet.confidence':        'Confidence',
+  'sheet.message':           'Message',
+  'sheet.call_tutor':        'Call Tutor',
+  'sheet.upcoming':          'Upcoming',
+  'sheet.above_70':          'above 70% confidence',
+  'sheet.completed_so_far':  'completed so far',
+  'sheet.in_session':        'in this session',
+  'sheet.passed_sargeant':   'passed with Sargeant',
+  'sheet.to_review':         'to review and refresh',
+  'sheet.with_sargeant':     'with Sargeant',
+
+  /* ── Challenge modal ── */
+  'challenge.decline':    'Decline',
+  'challenge.time_limit': 'Time Limit',
+  'challenge.xp_prize':   'XP Prize',
+  'challenge.immediate':  'Immediate battle',
+  'challenge.classroom':  'Classroom battle',
+  'challenge.scheduled':  'Scheduled battle',
 };

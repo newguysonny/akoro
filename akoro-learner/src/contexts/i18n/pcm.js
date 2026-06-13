@@ -157,4 +157,42 @@ export const PCM = {
   'mode.system':  'System',
   'mode.light':   'Light',
   'mode.dark':    'Dark',
+
+  /* ── Configure teaching session ── */
+  'config.title':        'Set up teaching session',
+  'config.subtitle':     'You dey teach · your agent dey learn · NaNa dey guide',
+  'config.topic':        'TOPIC',
+  'config.subject':      'SUBJECT',
+  'config.subtopics':    'SUBTOPIC DEM',
+  'config.objectives':   'WETIN YOU WAN LEARN',
+  'config.topic_ph':     'like Water, Algebra, Shakespeare…',
+  'config.subtopic_ph':  'Type one subtopic and press Enter or +',
+  'config.autogen':      'Make am auto',
+  'config.generating':   'E dey generate…',
+  'config.start':        'Start session',
+
+  /* ── Progress sheet ── */
+  'sheet.your_progress':      'Your Progress',
+  'sheet.session_stats':      'Session stats',
+  'sheet.subtopics_covered':  'Subtopic dem wey you don cover',
+  'sheet.flagged_gaps':       'Gap dem wey dem flag',
+  'sheet.avg_confidence':     'Average Confidence',
+  'sheet.confidence':         'Confidence',
+  'sheet.message':            'Message',
+  'sheet.call_tutor':         'Call Tutor',
+  'sheet.upcoming':           'Wetin dey come',
+  'sheet.above_70':           'pass 70% confidence',
+  'sheet.completed_so_far':   'wey you don finish so far',
+  'sheet.in_session':         'for dis session',
+  'sheet.passed_sargeant':    'wey you pass with Sargeant',
+  'sheet.to_review':          'make you review and refresh',
+  'sheet.with_sargeant':      'with Sargeant',
+
+  /* ── Challenge ── */
+  'challenge.decline':    'Refuse',
+  'challenge.time_limit': 'Time Limit',
+  'challenge.xp_prize':   'XP Prize',
+  'challenge.immediate':  'Battle now now',
+  'challenge.classroom':  'Classroom battle',
+  'challenge.scheduled':  'Battle wey dem schedule',
 };

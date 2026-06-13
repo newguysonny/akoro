@@ -2,8 +2,10 @@ import React from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG } from '../../constants.js';
 import { PlayIcon, PhoneIcon, MessageIcon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile }) {
+  const { t } = useLang();
   const sc           = SUBJECT_COLORS[session.subject] || BRAND;
   const pri          = PRIORITY_CONFIG[session.priority] || { dot:BRAND, bg:`${BRAND}10`, color:BRAND, label:"Upcoming", pulse:false };
   const isDecay      = !!decayAlert;
@@ -66,7 +68,7 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
       {isDecay&&(<>
         <div style={{ background:"#FFF5F5",borderRadius:14,border:"1px solid rgba(239,68,68,.20)",padding:"12px 14px",marginBottom:12 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
-            <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>Confidence</span>
+            <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('sheet.confidence')}</span>
             <span style={{ fontSize:12,fontWeight:900,color:RED }}>{decayAlert.confidence}%{" "}
               <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>(was {decayAlert.prevConfidence}%)</span>
             </span>
@@ -81,16 +83,16 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         </div>
         {decayAlert.misconceptions?.length>0&&(
           <div style={{ background:"#FFF7ED",border:"1px solid rgba(245,158,11,.25)",borderRadius:14,padding:"12px 14px",marginBottom:12 }}>
-            <p style={{ fontSize:11,fontWeight:800,color:"#92400E",margin:"0 0 8px",letterSpacing:.3 }}>⚠ Flagged gaps</p>
+            <p style={{ fontSize:11,fontWeight:800,color:"#92400E",margin:"0 0 8px",letterSpacing:.3 }}>⚠ {t('sheet.flagged_gaps')}</p>
             {decayAlert.misconceptions.map((m,i)=><p key={i} style={{ fontSize:12.5,color:"#7C2D12",margin:"0 0 4px",fontWeight:600 }}>· {m}</p>)}
           </div>
         )}
         <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
-          <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>Session stats</p>
+          <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>{t('sheet.session_stats')}</p>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
-            {[{icon:"📌",val:`${session.topics||0} topics`,label:"to review and refresh"},
-              {icon:"🔁",val:`${session.revisions||0} re-teaches`,label:"completed so far"},
-              {icon:"⭐",val:`${session.reviews||0} assessments`,label:"passed with Sargeant"}
+            {[{icon:"📌",val:`${session.topics||0} topics`,label:t('sheet.to_review')},
+              {icon:"🔁",val:`${session.revisions||0} re-teaches`,label:t('sheet.completed_so_far')},
+              {icon:"⭐",val:`${session.reviews||0} assessments`,label:t('sheet.passed_sargeant')}
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ fontSize:13 }}>{icon}</span>
@@ -106,7 +108,7 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
       {isContinuation&&(<>
         <div style={{ background:"#F0FDF4",borderRadius:14,border:"1px solid rgba(16,185,129,.20)",padding:"12px 14px",marginBottom:12 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
-            <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>Avg Confidence</span>
+            <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('sheet.avg_confidence')}</span>
             <span style={{ fontSize:12,fontWeight:900,color:GREEN }}>{session.avgConfidence||session.progress||0}%</span>
           </div>
           <div style={{ height:6,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
@@ -118,7 +120,7 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         </div>
         {session.subtopicList?.length>0&&(
           <div style={{ background:"var(--ak-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"11px 14px",marginBottom:12 }}>
-            <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>Subtopics covered</p>
+            <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>{t('sheet.subtopics_covered')}</p>
             <div style={{ display:"flex",flexWrap:"wrap",gap:6 }}>
               {session.subtopicList.map((st,i)=>(
                 <span key={i} style={{ fontSize:11,fontWeight:700,color:sc,background:`${sc}12`,borderRadius:8,padding:"3px 9px",border:`1px solid ${sc}25` }}>{st}</span>
@@ -128,9 +130,9 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         )}
         <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
-            {[{icon:"📌",val:`${session.topics||0} subtopics`,label:"in this session"},
-              {icon:"🔁",val:`${session.revisions||0} assessments`,label:"with Sargeant"},
-              {icon:"⭐",val:`${session.reviews||0} passed`,label:"above 70% confidence"}
+            {[{icon:"📌",val:`${session.topics||0} subtopics`,label:t('sheet.in_session')},
+              {icon:"🔁",val:`${session.revisions||0} assessments`,label:t('sheet.with_sargeant')},
+              {icon:"⭐",val:`${session.reviews||0} passed`,label:t('sheet.above_70')}
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ fontSize:13 }}>{icon}</span>
@@ -148,7 +150,7 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         {session.progress>0&&(
           <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
             <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4 }}>
-              <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>Your Progress</span>
+              <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('sheet.your_progress')}</span>
               <span style={{ fontSize:13,fontWeight:900,color:sc }}>{session.progress}%</span>
             </div>
             <ProgressBar value={session.progress} color={sc}/>
@@ -156,15 +158,15 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         )}
         {session.type==="live"&&(
           <div style={{ display:"flex",gap:10,marginBottom:14 }}>
-            <a href="tel:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${GREEN},#059669)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><PhoneIcon size={15}/>Call Tutor</button></a>
-            <a href="sms:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sec)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><MessageIcon size={15} color="var(--ak-text-sec)"/>Message</button></a>
+            <a href="tel:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${GREEN},#059669)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><PhoneIcon size={15}/>{t('sheet.call_tutor')}</button></a>
+            <a href="sms:" style={{ textDecoration:"none",flex:1 }}><button style={{ width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sec)",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}><MessageIcon size={15} color="var(--ak-text-sec)"/>{t('sheet.message')}</button></a>
           </div>
         )}
       </>)}
 
       {/* CTA buttons */}
       <div style={{ display:"flex",gap:10 }}>
-        <button onClick={onClose} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>Close</button>
+        <button onClick={onClose} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.close')}</button>
         <button onClick={()=>{onClose();onStartTeach(session);}}
           style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:ctaBg,
             fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",

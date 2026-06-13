@@ -157,4 +157,42 @@ export const IG = {
   'mode.system':  'Sistemu',
   'mode.light':   'Ìhè',
   'mode.dark':    'Ọchịchịrị',
+
+  /* ── Session configuration ── */
+  'config.title':       'Hazie oge nkuzi',
+  'config.subtitle':    'Ị na-akụzi · onyeòké gị na-amụ ihe · NaNa na-eduzi',
+  'config.topic':       'ISIOKWU',
+  'config.subject':     'IHE MMŪTA',
+  'config.subtopics':   'OBERE ISIOKWU',
+  'config.objectives':  'EBUMNUCHE MMỤTA',
+  'config.topic_ph':    'dịka. Mmiri, Aljebra, Shakespeare…',
+  'config.subtopic_ph': 'Pịnye obere isiokwu wee pịa Enter ma ọ bụ +',
+  'config.autogen':     'Mepụta na-akpaghị aka',
+  'config.generating':  'Na-emepụta…',
+  'config.start':       'Malite oge',
+
+  /* ── Progress sheet ── */
+  'sheet.your_progress':     'Ọganihu Gị',
+  'sheet.session_stats':     'Ọnụọgụ oge',
+  'sheet.subtopics_covered': 'Obere isiokwu ekpuchiri',
+  'sheet.flagged_gaps':      'Oghere akara ekara',
+  'sheet.avg_confidence':    'Nkwado Nkezi',
+  'sheet.confidence':        'Nkwado',
+  'sheet.message':           'Ozi',
+  'sheet.call_tutor':        'Kpọọ Onye Nkuzi',
+  'sheet.upcoming':          'Na-abịa',
+  'sheet.above_70':          'karịrị nkwado 70%',
+  'sheet.completed_so_far':  'emechara ruo ugbu a',
+  'sheet.in_session':        'n\'oge a',
+  'sheet.passed_sargeant':   'gafere na Sargeant',
+  'sheet.to_review':         'ịtụlegharị ma mee ọhụrụ',
+  'sheet.with_sargeant':     'na Sargeant',
+
+  /* ── Challenge ── */
+  'challenge.decline':    'Jụ',
+  'challenge.time_limit': 'Oke Oge',
+  'challenge.xp_prize':   'Ihe Nrite XP',
+  'challenge.immediate':  'Agha ozugbo',
+  'challenge.classroom':  'Agha klaasị',
+  'challenge.scheduled':  'Agha ahaziri ahazi',
 };

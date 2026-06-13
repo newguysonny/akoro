@@ -158,4 +158,42 @@ export const YO = {
   'mode.system':  'Ètò Ẹ̀rọ',
   'mode.light':   'Ìmọ́lẹ̀',
   'mode.dark':    'Òkùnkùn',
+
+  /* ── Session configuration ── */
+  'config.title':        'Ṣètò ìpàdé ìkọ́ni',
+  'config.subtitle':     'Ìwọ kọ́ni · aṣojú rẹ kọ́ ẹ̀kọ́ · NaNa ń tọ́ ọ sọ́nà',
+  'config.topic':        'KÓKÓ',
+  'config.subject':      'KÓKÓ Ẹ̀KỌ́',
+  'config.subtopics':    'ÀWỌN KÓKÓ KÉKERÉ',
+  'config.objectives':   'ÀWỌN ÈRÒNGBÀ Ẹ̀KỌ́',
+  'config.topic_ph':     'f.a. Omi, Áljẹ́brà, Shakespeare…',
+  'config.subtopic_ph':  'Tẹ kókó kékeré kan kí o sì tẹ Enter tàbí +',
+  'config.autogen':      'Ìpilẹ̀ṣẹ̀ aládàáṣe',
+  'config.generating':   'Ń ṣẹ̀dá…',
+  'config.start':        'Bẹ̀rẹ̀ ìpàdé',
+
+  /* ── Progress sheet ── */
+  'sheet.your_progress':     'Ìlọsíwájú Rẹ',
+  'sheet.session_stats':     'Ìṣirò ìpàdé',
+  'sheet.subtopics_covered': 'Àwọn kókó kékeré tí a kọ́',
+  'sheet.flagged_gaps':      'Àwọn àlàfo tí a sàmì sí',
+  'sheet.avg_confidence':    'Ìgbẹ́kẹ̀lé Àpapọ̀',
+  'sheet.confidence':        'Ìgbẹ́kẹ̀lé',
+  'sheet.message':           'Ìránṣẹ́',
+  'sheet.call_tutor':        'Pe Olùkọ́',
+  'sheet.upcoming':          'Tí ń bọ̀',
+  'sheet.above_70':          'ó ju 70% ìgbẹ́kẹ̀lé lọ',
+  'sheet.completed_so_far':  'tí a parí títí di báyìí',
+  'sheet.in_session':        'nínú ìpàdé yìí',
+  'sheet.passed_sargeant':   'kọjá pẹ̀lú Sargeant',
+  'sheet.to_review':         'láti ṣàyẹ̀wò àti túnṣe',
+  'sheet.with_sargeant':     'pẹ̀lú Sargeant',
+
+  /* ── Challenge ── */
+  'challenge.decline':    'Kọ̀',
+  'challenge.time_limit': 'Àkókò Tí A Yàn',
+  'challenge.xp_prize':   'Ẹ̀bùn XP',
+  'challenge.immediate':  'Ìjà lẹ́sẹ̀kẹsẹ̀',
+  'challenge.classroom':  'Ìjà nínú kíláàsì',
+  'challenge.scheduled':  'Ìjà tí a ṣètò',
 };

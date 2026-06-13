@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
 import { XIcon, ChevDownIcon } from '../common/Icons.jsx';
 import { apiPost } from '../../services/api.js';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ConfigModal({ initial, onStart, onCancel }) {
+  const { t } = useLang();
   const [topic,      setTopic]      = useState(initial?.topic      || "");
   const [subject,    setSubject]    = useState(initial?.subject    || "Science");
   const [subtopics,  setSubtopics]  = useState(initial?.subtopics  || []);
@@ -58,23 +60,23 @@ function ConfigModal({ initial, onStart, onCancel }) {
       <div style={{ background:"var(--ak-surface)",borderRadius:16,maxWidth:540,width:"100%",maxHeight:"90vh",overflowY:"auto",padding:"24px 22px",boxShadow:"0 20px 60px rgba(0,0,0,.25)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)" }}>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20 }}>
           <div>
-            <h2 style={{ fontSize:16,fontWeight:800,color:"var(--ak-text)",margin:0 }}>Configure teaching session</h2>
-            <p style={{ fontSize:11.5,color:"var(--ak-text-sub)",margin:"3px 0 0" }}>You teach · your agent learns · NaNa guides</p>
+            <h2 style={{ fontSize:16,fontWeight:800,color:"var(--ak-text)",margin:0 }}>{t('config.title')}</h2>
+            <p style={{ fontSize:11.5,color:"var(--ak-text-sub)",margin:"3px 0 0" }}>{t('config.subtitle')}</p>
           </div>
           {onCancel && <button onClick={onCancel} style={{ width:30,height:30,borderRadius:"50%",border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",cursor:"pointer",fontSize:14,color:"var(--ak-text-sub)" }}>✕</button>}
         </div>
 
         {/* Topic */}
         <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>TOPIC</label>
-          <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. Water, Algebra, Shakespeare…"
+          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>{t('config.topic')}</label>
+          <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder={t('config.topic_ph')}
             style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit" }}
             onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#D1D5DB"}/>
         </div>
 
         {/* Subject */}
         <div style={{ marginBottom:14 }}>
-          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>SUBJECT</label>
+          <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:5,letterSpacing:.3 }}>{t('config.subject')}</label>
           <select value={subject} onChange={e=>setSubject(e.target.value)} style={{ width:"100%",padding:"10px 13px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:14,fontWeight:600,color:"var(--ak-text)",outline:"none",fontFamily:"inherit",background:"var(--ak-surface)" }}>
             {subjects.map(s=><option key={s}>{s}</option>)}
           </select>
@@ -83,9 +85,9 @@ function ConfigModal({ initial, onStart, onCancel }) {
         {/* Subtopics */}
         <div style={{ marginBottom:14 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7 }}>
-            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",letterSpacing:.3 }}>SUBTOPICS ({subtopics.length})</label>
+            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",letterSpacing:.3 }}>{t('config.subtopics')} ({subtopics.length})</label>
             <button onClick={generate} disabled={!topic.trim()||generating} style={{ padding:"4px 11px",borderRadius:6,border:`0.5px solid ${BRAND}`,background:generating?"var(--ak-bg)":`${BRAND}10`,color:!topic.trim()||generating?"var(--ak-text-muted)":BRAND,fontSize:11,fontWeight:700,cursor:topic.trim()&&!generating?"pointer":"default",fontFamily:"inherit" }}>
-              {generating?"⏳ Generating…":"✨ Auto-generate"}
+              {generating?`⏳ ${t('config.generating')}`:`✨ ${t('config.autogen')}`}
             </button>
           </div>
           {subtopics.length>0&&(
@@ -99,7 +101,7 @@ function ConfigModal({ initial, onStart, onCancel }) {
             </div>
           )}
           <div style={{ display:"flex",gap:8 }}>
-            <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSubtopic(draft);}}} placeholder="Type a subtopic and press Enter or +"
+            <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSubtopic(draft);}}} placeholder={t('config.subtopic_ph')}
               style={{ flex:1,padding:"9px 12px",borderRadius:8,border:"0.5px solid var(--ak-border2)",fontSize:13,color:"var(--ak-text)",outline:"none",fontFamily:"inherit" }}
               onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="#D1D5DB"}/>
             <button onClick={()=>addSubtopic(draft)} style={{ padding:"9px 14px",borderRadius:8,border:"none",background:BRAND,color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer" }}>+</button>
@@ -109,7 +111,7 @@ function ConfigModal({ initial, onStart, onCancel }) {
         {/* Objectives */}
         {subtopics.length>0&&(
           <div style={{ marginBottom:20 }}>
-            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:8,letterSpacing:.3 }}>LEARNING OBJECTIVES</label>
+            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('config.objectives')}</label>
             {subtopics.map(st=>(
               <div key={st} style={{ background:"var(--ak-bg)",border:"0.5px solid var(--ak-border2)",borderRadius:8,padding:"10px 12px",marginBottom:8 }}>
                 <div style={{ fontSize:11.5,fontWeight:700,color:BRAND,marginBottom:6 }}>{st}</div>
@@ -124,11 +126,11 @@ function ConfigModal({ initial, onStart, onCancel }) {
         )}
 
         <div style={{ display:"flex",gap:10 }}>
-          {onCancel&&<button onClick={onCancel} style={{ flex:1,padding:"12px",borderRadius:10,border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"inherit" }}>Cancel</button>}
+          {onCancel&&<button onClick={onCancel} style={{ flex:1,padding:"12px",borderRadius:10,border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"inherit" }}>{t('common.cancel')}</button>}
           <button onClick={()=>{ if(!canStart) return; onStart({ topic, subject, subtopics, objectives:objs }); }}
             disabled={!canStart}
             style={{ flex:2,padding:"12px",borderRadius:10,border:"none",background:canStart?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:canStart?"#fff":"#9CA3AF",cursor:canStart?"pointer":"default",fontFamily:"inherit" }}>
-            ▶ Start session
+            ▶ {t('config.start')}
           </button>
         </div>
       </div>
