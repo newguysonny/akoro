@@ -30,8 +30,14 @@ import subtitlesRouter          from "./subtitles.js";
 import payoutsRouter            from "./payouts.js";
 import bundlesRouter            from "./bundles.js";
 import meetingRouter            from "./meeting-integration.js";
+import publicCatalogRouter      from "./public-catalog.js";
 
 const router = Router();
+
+// Public landing-page catalogue endpoints. MUST be registered before
+// the "/courses" mount below, otherwise GET /courses/published is
+// captured by coursesRouter's "/:id" route.
+router.use(publicCatalogRouter);   // /courses/published, /live-sessions, /instructors/featured
 
 // Prefixed sub-routers
 router.use("/courses",   coursesRouter);
