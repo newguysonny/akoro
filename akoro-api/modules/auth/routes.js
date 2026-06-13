@@ -275,10 +275,23 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     return res401(res, "Token has been revoked");
   }
 
-  // 5. Load user
+  // 5. Load user — try with onboarding_completed, fall back without if column is missing
   try {
-    const { data: user } = await db.from("users").select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed").eq("id", decoded.sub).maybeSingle();
-    if (!user || !user.is_active) return res401(res, "User not found or deactivated");
+    let user, dbErr;
+    ({ data: user, error: dbErr } = await db.from("users")
+      .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed")
+      .eq("id", decoded.sub).maybeSingle());
+
+    if (dbErr) {
+      // Column may not exist yet (pending migration) — retry without it
+      ({ data: user, error: dbErr } = await db.from("users")
+        .select("id,email,username,full_name,avatar_url,role,is_active")
+        .eq("id", decoded.sub).maybeSingle());
+      if (dbErr) return res401(res, "Could not load user");
+    }
+
+    if (!user) return res401(res, "User not found");
+    if (!user.is_active) return res401(res, "Account deactivated");
     req.user    = { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role, onboardingCompleted: user.onboarding_completed ?? false };
     req.tokenJti = decoded.jti;
     req.tokenExp = decoded.exp;

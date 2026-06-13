@@ -97,7 +97,7 @@ export default function SigninPage() {
           <>
             <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Welcome back</h1>
             <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>Sign in to continue learning</p>
-            <button onClick={() => loginWithGoogle('/')}
+            <button onClick={() => loginWithGoogle('/app')}
               style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
                 gap:10, padding:'12px', borderRadius:14, border:'1.5px solid var(--ak-border2)',
                 background:'var(--ak-surface)', cursor:'pointer', fontSize:14, fontWeight:700,

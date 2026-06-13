@@ -708,15 +708,28 @@ const PROFILE_SELECT = [
   "subjects","two_factor_enabled","onboarding_completed","created_at",
 ].join(",");
 
+// Fallback select without columns added by pending migrations
+const PROFILE_SELECT_BASE = [
+  "id","email","username","full_name","avatar_url","phone","role",
+  "country","school_name","school_type","year_group","study_level",
+  "language","display_mode","accent_color","teaching_guide","guide_emoji",
+  "subjects","two_factor_enabled","created_at",
+].join(",");
+
 /** GET /api/profiles/me — full profile + agent + notification prefs */
 router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  const [{ data: user }, { data: agent }, { data: notif }] = await Promise.all([
+  let [{ data: user, error: userErr }, { data: agent }, { data: notif }] = await Promise.all([
     db.from("users").select(PROFILE_SELECT).eq("id", userId).maybeSingle(),
     db.from("user_agents").select("*").eq("user_id", userId).eq("is_active", true).maybeSingle(),
     db.from("user_notification_preferences").select("*").eq("user_id", userId).maybeSingle(),
   ]);
+
+  // If the full select fails (e.g. pending migration columns), retry with base columns
+  if (userErr || !user) {
+    ({ data: user } = await db.from("users").select(PROFILE_SELECT_BASE).eq("id", userId).maybeSingle());
+  }
 
   if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
