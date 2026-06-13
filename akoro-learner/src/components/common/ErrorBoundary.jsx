@@ -34,11 +34,7 @@ class ErrorBoundary extends Component {
           padding:'0 20px', height:60, background:'rgba(255,255,255,.95)',
           backdropFilter:'blur(12px)', borderBottom:'1px solid #F3F4F6' }}>
           <a href="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none' }}>
-            <div style={{ width:34, height:34, borderRadius:10, background:BRAND,
-              display:'flex', alignItems:'center', justifyContent:'center',
-              boxShadow:`0 3px 12px ${BRAND}44` }}>
-              <span style={{ fontSize:16 }}>🧠</span>
-            </div>
+            <img src="/logo/akoro-mark-transparent.svg" alt="Akoro" width={34} height={34} style={{ borderRadius:10, display:'block' }}/>
             <span style={{ fontSize:18, fontWeight:900, color:'#111827' }}>Akoro</span>
           </a>
           <button onClick={() => window.location.reload()}

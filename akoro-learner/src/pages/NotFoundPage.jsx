@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import AkoroLogo from '../components/common/AkoroLogo.jsx';
 
 const BRAND = '#6C3BFF';
 
@@ -39,11 +40,7 @@ export default function NotFoundPage() {
         padding:'0 20px', height:60, background:'rgba(255,255,255,.95)',
         backdropFilter:'blur(12px)', borderBottom:'1px solid var(--ak-border)' }}>
         <Link to="/" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none' }}>
-          <div style={{ width:34, height:34, borderRadius:10, background:BRAND,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            boxShadow:`0 3px 12px ${BRAND}44` }}>
-            <span style={{ fontSize:16 }}>🧠</span>
-          </div>
+          <AkoroLogo size={34} radius={10}/>
           <span style={{ fontSize:18, fontWeight:900, color:'var(--ak-text)' }}>Akoro</span>
         </Link>
         <Link to="/" style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px',

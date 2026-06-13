@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -58,11 +59,7 @@ export default function SigninPage() {
       alignItems:'center', justifyContent:'center', background:'var(--ak-bg)',
       padding:'24px 20px', fontFamily:"'Nunito',sans-serif" }}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:32 }}>
-        <div style={{ width:38, height:38, borderRadius:12, background:BRAND,
-          display:'flex', alignItems:'center', justifyContent:'center',
-          boxShadow:`0 4px 14px ${BRAND}44` }}>
-          <span style={{ fontSize:18 }}>🧠</span>
-        </div>
+        <AkoroLogo size={38} radius={12}/>
         <span style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)' }}>Akoro</span>
       </div>
 

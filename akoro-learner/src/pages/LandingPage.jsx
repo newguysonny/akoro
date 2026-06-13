@@ -9,6 +9,7 @@ import {
   Video, CalendarDays, UserCheck, MonitorPlay, ExternalLink, Radio,
   Layers, Settings, LayoutDashboard,
 } from 'lucide-react';
+import AkoroLogo from '../components/common/AkoroLogo.jsx';
 import {
   FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter,
 } from 'react-icons/fa6';
@@ -139,7 +140,7 @@ function Header({ onDrawer }) {
   return (
     <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 900, height: 68, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: scrolled ? 'rgba(255,255,255,.97)' : 'rgba(255,255,255,.85)', backdropFilter: 'blur(14px)', borderBottom: scrolled ? '1px solid #EDE8E1' : 'none', transition: 'all .3s', fontFamily: "'DM Sans',sans-serif" }}>
       <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${B},${B2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${B}40` }}><Brain size={17} color="#fff" strokeWidth={2.5}/></div>
+        <AkoroLogo size={34} radius={10}/>
         <span className="fs" style={{ fontSize: 20, color: '#1A1A2E' }}>Akoro</span>
       </a>
       <nav className="ak-nav-links" style={{ gap: 4, alignItems: 'center' }}>
@@ -185,7 +186,7 @@ function Drawer({ open, onClose }) {
       <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 961, width: 300, background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,.12)', display: 'flex', flexDirection: 'column', padding: 24, overflowY: 'auto', transform: open ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .36s cubic-bezier(.4,0,.2,1)', fontFamily: "'DM Sans',sans-serif" }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${B},${B2})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Brain size={15} color="#fff" strokeWidth={2.5}/></div>
+            <AkoroLogo size={32} radius={9}/>
             <span className="fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
           </div>
           <button onClick={onClose} style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#F5F3EE', border: 'none', cursor: 'pointer', color: '#6B6B80' }}><X size={16}/></button>
@@ -1008,7 +1009,7 @@ function Footer() {
         <div className="ak-footer-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 48, marginBottom: 48 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${B},${B2})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Brain size={15} color="#fff" strokeWidth={2.5}/></div>
+              <AkoroLogo size={32} radius={9}/>
               <span className="fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
             </div>
             <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents — where NaNa Esumai learns everything you teach her, then teaches you back.</p>
