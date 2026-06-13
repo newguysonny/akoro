@@ -2152,10 +2152,12 @@ CREATE INDEX IF NOT EXISTS idx_session_phase_session
 
 -- Row-level security: students can only read their own sessions
 ALTER TABLE edu.adaptive_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS adaptive_sessions_owner ON edu.adaptive_sessions;
 CREATE POLICY adaptive_sessions_owner ON edu.adaptive_sessions
   FOR ALL USING (student_id = auth.uid());
 
 ALTER TABLE edu.session_phase_progress ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS session_phase_owner ON edu.session_phase_progress;
 CREATE POLICY session_phase_owner ON edu.session_phase_progress
   FOR ALL USING (
     session_id IN (
