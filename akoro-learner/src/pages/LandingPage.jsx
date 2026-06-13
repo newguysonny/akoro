@@ -284,7 +284,7 @@ function ProblemSolution() {
             <div style={card({ background: '#FAF8F5', border: '1px solid #EDE8E1' })}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: '#F0ECE6', border: '1px solid #DDD8CF', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 20 }}><AlertCircle size={10}/>The old way</div>
               <h3 className="fs" style={{ fontSize: 26, color: '#1A1A2E', lineHeight: 1.25, marginBottom: 24 }}>Passive, forgettable, one-size-fits-all</h3>
-              {['Sit through 2-hour video lectures you'll forget by morning', 'No feedback loop — you don't know what you don't know', '83% of online learners quit before finishing', 'Generic AI tutors that don't know your curriculum', 'Pay for content you never finish'].map(t => row(null, t, false))}
+              {["Sit through 2-hour video lectures you'll forget by morning", "No feedback loop — you don't know what you don't know", '83% of online learners quit before finishing', "Generic AI tutors that don't know your curriculum", 'Pay for content you never finish'].map(t => row(null, t, false))}
             </div>
           </Reveal>
           <Reveal delay={0.1}>
