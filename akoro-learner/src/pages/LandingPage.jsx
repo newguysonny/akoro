@@ -51,6 +51,32 @@ const FontStyle = () => (
     ::-webkit-scrollbar{width:4px}
     ::-webkit-scrollbar-thumb{background:#d1c9ff;border-radius:2px}
     a{text-decoration:none;color:inherit}
+    /* ── Responsive helpers ── */
+    .ak-nav-links{display:flex}
+    .ak-header-ctas{display:flex}
+    .ak-menu-btn{display:flex}
+    .ak-hero-btns{display:flex;flex-wrap:wrap}
+    .ak-stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:560px;margin:0 auto}
+    @media(max-width:768px){
+      .ak-nav-links{display:none!important}
+      .ak-header-ctas .ak-desktop-ctas{display:none!important}
+      .ak-section-pad{padding:64px 18px!important}
+      .ak-two-col{grid-template-columns:1fr!important}
+      .ak-four-col{grid-template-columns:1fr 1fr!important}
+      .ak-three-col{grid-template-columns:1fr!important}
+      .ak-how-card-grid{grid-template-columns:1fr 1fr!important}
+      .ak-pricing-grid{grid-template-columns:1fr!important}
+      .ak-footer-grid{grid-template-columns:1fr 1fr!important}
+      .ak-hero-inner{padding:100px 18px 64px!important}
+    }
+    @media(max-width:480px){
+      .ak-four-col{grid-template-columns:1fr!important}
+      .ak-how-card-grid{grid-template-columns:1fr!important}
+      .ak-footer-grid{grid-template-columns:1fr!important}
+      .ak-stats-grid{grid-template-columns:repeat(2,1fr)!important;max-width:100%!important}
+      .ak-hero-btns{flex-direction:column;align-items:stretch}
+      .ak-hero-btns button{width:100%;justify-content:center}
+    }
   `}</style>
 );
 
@@ -115,7 +141,7 @@ function Header({ onDrawer }) {
         <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${B},${B2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${B}40` }}><Brain size={17} color="#fff" strokeWidth={2.5}/></div>
         <span className="fs" style={{ fontSize: 20, color: '#1A1A2E' }}>Akoro</span>
       </a>
-      <nav style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+      <nav className="ak-nav-links" style={{ gap: 4, alignItems: 'center' }}>
         {navLinks.map(l => (
           <a key={l.label} href={l.id} onClick={e => scroll(e, l.id)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#6B6B80', transition: 'all .2s' }}
             onMouseEnter={e => { e.currentTarget.style.color = '#1A1A2E'; e.currentTarget.style.background = '#F5F2EC'; }}
@@ -124,9 +150,11 @@ function Header({ onDrawer }) {
           </a>
         ))}
       </nav>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Btn v="ghost" sz="sm" onClick={() => navigate('/signin')}>Log in</Btn>
-        <Btn v="primary" sz="sm" onClick={() => navigate('/signup')}>Start free <ArrowRight size={13}/></Btn>
+      <div className="ak-header-ctas" style={{ alignItems: 'center', gap: 10 }}>
+        <span className="ak-desktop-ctas" style={{ display: 'flex', gap: 10 }}>
+          <Btn v="ghost" sz="sm" onClick={() => navigate('/signin')}>Log in</Btn>
+          <Btn v="primary" sz="sm" onClick={() => navigate('/signup')}>Start free <ArrowRight size={13}/></Btn>
+        </span>
         <button onClick={onDrawer} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1.5px solid #E2DDD6', background: 'transparent', cursor: 'pointer', color: '#6B6B80', transition: 'border-color .2s' }}
           onMouseEnter={e => e.currentTarget.style.borderColor = B}
           onMouseLeave={e => e.currentTarget.style.borderColor = '#E2DDD6'}>
@@ -188,10 +216,10 @@ function Hero({ onSignup }) {
     { icon: <School size={20} color={B}/>, label: 'Partner Schools',val: '280+',  sub: 'across Nigeria & Africa' },
   ];
   return (
-    <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '120px 24px 80px', textAlign: 'center', background: '#fff', overflow: 'hidden' }}>
+    <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: '#fff', overflow: 'hidden' }}>
       <div className="hero-grid" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}/>
       <div style={{ position: 'absolute', top: -200, left: '50%', transform: 'translateX(-50%)', width: 700, height: 500, borderRadius: '50%', background: `radial-gradient(circle,${B}20 0%,transparent 70%)`, filter: 'blur(60px)', pointerEvents: 'none' }}/>
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 820, width: '100%' }}>
+      <div className="ak-hero-inner" style={{ position: 'relative', zIndex: 1, maxWidth: 820, width: '100%', padding: '120px 24px 80px' }}>
         <div className="fu1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: `${B}10`, border: `1px solid ${B}30`, borderRadius: 99, padding: '6px 16px', marginBottom: 28 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: B }} className="pdot"/>
           <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 11, fontWeight: 700, color: B, letterSpacing: '0.12em', textTransform: 'uppercase' }}>AI-Powered Adaptive Learning</span>
@@ -207,11 +235,11 @@ function Hero({ onSignup }) {
           <div style={{ display: 'flex' }}>{[...Array(5)].map((_, i) => <Star key={i} size={13} fill={GL} strokeWidth={0}/>)}</div>
           <span style={{ fontSize: 13, color: '#9490A0' }}>Trusted by <strong style={{ color: '#1A1A2E' }}>12,400+</strong> students across <strong style={{ color: '#1A1A2E' }}>38</strong> countries</span>
         </div>
-        <div className="fu5" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 64, flexWrap: 'wrap' }}>
+        <div className="fu5 ak-hero-btns" style={{ alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 64 }}>
           <Btn v="primary" sz="lg" onClick={onSignup}>Get your first lesson free <ArrowRight size={16}/></Btn>
           <Btn v="outline" sz="lg"><Play size={14} fill={B} color={B} style={{ flexShrink: 0 }}/> See how it works</Btn>
         </div>
-        <div className="fu5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, maxWidth: 820 }}>
+        <div className="fu5 ak-stats-grid">
           {stats.map(({ icon, label, val, sub }, i) => (
             <div key={i} style={{ background: '#fff', border: '1px solid #EDE8E1', borderRadius: 16, padding: '18px 20px', textAlign: 'left', boxShadow: '0 2px 12px rgba(0,0,0,.05)', transition: 'transform .2s,box-shadow .2s', cursor: 'default' }}
               onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 10px 28px ${B}14`; }}
@@ -273,13 +301,13 @@ function ProblemSolution() {
     </div>
   );
   return (
-    <section id="problem" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="problem" className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 48 }}>
           <SL>The problem</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,48px)', color: '#1A1A2E', letterSpacing: '-0.02em', lineHeight: 1.15, maxWidth: 480 }}>Education is stuck in the wrong century.</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20 }}>
+        <div className="ak-two-col" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20 }}>
           <Reveal>
             <div style={card({ background: '#FAF8F5', border: '1px solid #EDE8E1' })}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: '#F0ECE6', border: '1px solid #DDD8CF', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 20 }}><AlertCircle size={10}/>The old way</div>
@@ -309,7 +337,7 @@ function HowItWorks() {
     { num: '04', icon: <Trophy size={28} color={B}/>, title: 'Rise the ranks', desc: 'Climb classroom and inter-school leaderboards. Challenge friends, earn XP, and prove your knowledge in live battles.' },
   ];
   return (
-    <section id="how-it-works" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="how-it-works" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
           <SL center>How it works</SL>
@@ -318,7 +346,7 @@ function HowItWorks() {
           </h2>
           <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>Four simple steps that turn passive studying into active mastery.</p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 20, marginBottom: 36 }}>
+        <div className="ak-how-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 20, marginBottom: 36 }}>
           {steps.map(({ num, icon, title, desc }, i) => (
             <Reveal key={num} delay={i * 0.09}>
               <div style={{ background: '#fff', border: '1px solid #EDE8E1', borderRadius: 20, padding: '28px 24px', height: '100%', transition: 'transform .2s,box-shadow .2s', cursor: 'default' }}
@@ -436,7 +464,7 @@ function Courses() {
   );
 
   return (
-    <section id="courses" ref={sectionRef} style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="courses" ref={sectionRef} className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 36 }}>
           <SL>Courses</SL>
@@ -586,7 +614,7 @@ function Features() {
     { icon: <Link2 size={18}/>, title: 'Curriculum Partners',          desc: 'Connected to WAEC, JAMB, NECO — and aligned to your school\'s exact syllabus.', badge: 'Integrations' },
   ];
   return (
-    <section id="features" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="features" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 52 }}>
           <SL>Features</SL>
@@ -628,7 +656,7 @@ function Outcomes() {
     { stars: 5, quote: 'I prepped for IELTS alongside a full-time job. 20 mins a day via spaced repetition got me from 6.0 to 7.5.', emoji: '👨🏾‍💼', bg: '#F0E4C8', name: 'Kofi Mensah', role: 'Engineer, Accra → UK', result: 'IELTS 6.0 → 7.5' },
   ];
   return (
-    <section id="outcomes" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="outcomes" className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <SL center>Results</SL>
@@ -636,7 +664,7 @@ function Outcomes() {
             Numbers that matter, not <em style={{ color: B, fontStyle: 'italic' }}>vanity metrics</em>
           </h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 36 }}>
+        <div className="ak-four-col" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 36 }}>
           {metrics.map(({ val, label }, i) => (
             <Reveal key={i} delay={i * 0.08}>
               <div style={{ background: '#FAF8F5', border: '1px solid #EDE8E1', borderRadius: 18, padding: '28px 24px', textAlign: 'center', transition: 'transform .2s', cursor: 'default' }}
@@ -704,7 +732,7 @@ function Pricing() {
   const plans = tab === 'individual' ? indiv : enterprise;
 
   return (
-    <section id="pricing" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="pricing" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <SL center>Pricing</SL>
@@ -849,7 +877,7 @@ function Instructors() {
   const display = instructors.length ? instructors : STATIC;
 
   return (
-    <section id="instructors" ref={sectionRef} style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="instructors" ref={sectionRef} className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 48 }}>
           <SL>Instructors</SL>
@@ -863,7 +891,7 @@ function Instructors() {
             Loading instructors…
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 18 }}>
+        <div className="ak-four-col" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 18 }}>
           {display.map(({ emoji, bg, name, subject, score, rev, bio }, i) => (
             <Reveal key={name} delay={i * 0.1}>
               <div style={{ background: '#FAF8F5', border: '1px solid #EDE8E1', borderRadius: 18, padding: '28px 22px', textAlign: 'center', transition: 'transform .2s,box-shadow .2s', cursor: 'default' }}
@@ -907,7 +935,7 @@ function FAQ() {
     ['How do live classes work?', 'Teachers schedule sessions on Zoom, Google Meet, or Microsoft Teams and link them to Akoro. Students see the schedule, join directly, and recordings are available after.'],
   ];
   return (
-    <section id="faq" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
+    <section id="faq" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 52 }}>
           <SL center>FAQ</SL>
@@ -980,7 +1008,7 @@ function Footer() {
   return (
     <footer style={{ background: '#F5F2EC', borderTop: '1px solid #E2DDD6', padding: '56px 24px 32px', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 48, marginBottom: 48 }}>
+        <div className="ak-footer-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 48, marginBottom: 48 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${B},${B2})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Brain size={15} color="#fff" strokeWidth={2.5}/></div>
