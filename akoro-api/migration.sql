@@ -2164,13 +2164,19 @@ UPDATE edu.user_agent_preferences
   SET default_pair_id = 'nana-esumai', updated_at = now()
   WHERE default_pair_id IN ('nana-sargeant', 'professor-warden');
 
--- Remove deleted agent IDs from purchased_agents arrays
+-- Remove deleted agent IDs from purchased_agents arrays.
+-- (purchased_agents is uuid[]; the legacy IDs are non-uuid pair strings,
+--  so this is defensive. Written with unnest/ARRAY() instead of a
+--  text[]->uuid[] round-trip cast, which some SQL editors mis-parse.)
 UPDATE edu.user_agent_preferences
-  SET purchased_agents = array_remove(
-        array_remove(purchased_agents::text[], 'nana-sargeant'),
-        'professor-warden'
-      )::uuid[]
-  WHERE purchased_agents::text[] && ARRAY['nana-sargeant', 'professor-warden'];
+  SET purchased_agents = ARRAY(
+        SELECT a FROM unnest(purchased_agents) AS a
+        WHERE a::text NOT IN ('nana-sargeant', 'professor-warden')
+      )
+  WHERE EXISTS (
+        SELECT 1 FROM unnest(purchased_agents) AS a
+        WHERE a::text IN ('nana-sargeant', 'professor-warden')
+      );
 
 -- ── Auth hardening: refresh tokens + jti deny-list ──────────────────────────
 
