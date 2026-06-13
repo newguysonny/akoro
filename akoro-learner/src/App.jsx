@@ -3,6 +3,7 @@ import { AuthProvider, useAuth }   from './contexts/AuthContext.jsx';
 import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
+import LandingPage      from './pages/LandingPage.jsx';
 import LearnerDashboard from './pages/LearnerDashboard.jsx';
 import SettingsPage     from './pages/SettingsPage.jsx';
 import SigninPage       from './pages/auth/SigninPage.jsx';
@@ -23,17 +24,18 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-/* ── GuestRoute: redirects to / if already signed in ─────────── */
+/* ── GuestRoute: redirects to /app if already signed in ─────────── */
 function GuestRoute({ children }) {
   const { isAuthenticated } = useAuth();
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to="/app" replace />;
   return children;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
+      <Route path="/" element={<LandingPage />}/>
+      <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/live" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>

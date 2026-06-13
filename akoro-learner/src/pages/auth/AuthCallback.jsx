@@ -30,7 +30,7 @@ export default function AuthCallback() {
       const userObj = JSON.parse(decodeURIComponent(userRaw));
       restoreFromCallback(userObj);   // stores user in memory + localStorage (UI only)
 
-      const redirect = localStorage.getItem(REDIRECT_KEY) || '/';
+      const redirect = localStorage.getItem(REDIRECT_KEY) || '/app';
       localStorage.removeItem(REDIRECT_KEY);
 
       setStatus('Signed in! Redirecting...');

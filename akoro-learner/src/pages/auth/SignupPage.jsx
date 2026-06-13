@@ -31,7 +31,7 @@ export default function SignupPage() {
     const { fullName, username, email, password } = form;
     if (!fullName || !username || !email || !password) { setFormErr('Please fill in all fields'); return; }
     if (password.length < 8) { setFormErr('Password must be at least 8 characters'); return; }
-    try { await register({ fullName, username, email, password }); navigate('/', { replace:true }); }
+    try { await register({ fullName, username, email, password }); navigate('/app', { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
 

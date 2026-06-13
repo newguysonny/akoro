@@ -35,7 +35,7 @@ export default function SigninPage() {
     try {
       const data = await login({ email, password });
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
-      navigate('/', { replace:true });
+      navigate('/app', { replace:true });
     } catch (err) { setFormErr(err.message); }
   };
 
