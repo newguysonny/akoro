@@ -384,7 +384,7 @@ function HowItWorks() {
   );
 }
 
-/* ══════════════ COURSES (lazy-loaded) ══════════════ */
+/* ══════════════ COURSES (lazy-loaded from backend only) ══════════════ */
 function Courses() {
   const [mainTab, setMainTab] = useState('recorded');
   const [subTab, setSubTab]   = useState('all');
@@ -394,22 +394,6 @@ function Courses() {
   const [loading, setLoading]  = useState(false);
   const [fetched, setFetched]  = useState(false);
   const sectionRef = useRef(null);
-
-  /* ── Fallback static data ── */
-  const STATIC_COURSES = [
-    { cat: 'stem',     emoji: '🧮', grad: ['#E8F0FF','#D4E4FF'], title: 'Further Mathematics & Calculus', dur: '48h', rating: '4.9', rev: '1.2k', level: 'Advanced',     price: 'Free',         priceNum: 0,     syllabus: ['Limits & continuity','Differentiation rules','Integration techniques','Differential equations'] },
-    { cat: 'stem',     emoji: '🔬', grad: ['#E8FFE8','#D4F0D4'], title: 'Organic Chemistry Mastery',      dur: '36h', rating: '4.8', rev: '890',  level: 'Intermediate', price: '₦18,000/mo',   priceNum: 18000, syllabus: ['Functional groups','Reaction mechanisms','Stereochemistry','Lab simulations'] },
-    { cat: 'business', emoji: '💰', grad: ['#FFF8E8','#FFE8C0'], title: 'Financial Literacy & Economics', dur: '24h', rating: '4.9', rev: '2.1k', level: 'Beginner',     price: 'Free',         priceNum: 0,     syllabus: ['Supply & demand','Personal finance','Investment basics','African markets'] },
-    { cat: 'languages',emoji: '🗣', grad: ['#F8E8FF','#EDD4FF'], title: 'English Language Mastery',       dur: '40h', rating: '4.7', rev: '3.4k', level: 'All levels',   price: '₦13,500/mo',   priceNum: 13500, syllabus: ['Grammar deep-dive','Essay writing','Comprehension','Oral practice'] },
-    { cat: 'stem',     emoji: '💻', grad: ['#E8EFFF','#D0DCFF'], title: 'Intro to Computer Science',      dur: '32h', rating: '4.9', rev: '5.6k', level: 'Beginner',     price: 'Free',         priceNum: 0,     syllabus: ['Algorithms','Python basics','Web fundamentals','Build a project'] },
-    { cat: 'arts',     emoji: '📜', grad: ['#FFF3E8','#FFE0C0'], title: 'African History & Civilisations',dur: '28h', rating: '4.8', rev: '780',  level: 'Intermediate', price: '₦13,500/mo',   priceNum: 13500, syllabus: ['Ancient civilisations','Colonial era','Modern politics','Source analysis'] },
-  ];
-  const STATIC_LIVE = [
-    { id: 1, status: 'live',     platform: 'Zoom',        subject: 'Further Mathematics', course: 'Differentiation & Calculus',   teacher: 'Dr. Amara Diallo',   teacherEmoji: '👩🏾‍💻', date: 'Today',    time: '2:00 PM – 3:30 PM WAT', desc: 'Live session covering Chain Rule, Product Rule, and exam-style differentiation questions. Students should complete Modules 1–3 first.', enrolled: 42, present: 38 },
-    { id: 2, status: 'upcoming', platform: 'Google Meet', subject: 'Organic Chemistry',   course: 'Reaction Mechanisms',          teacher: 'Prof. Segun Adesanya',teacherEmoji: '👨🏾‍🔬', date: 'Thu 19 Jun',time: '10:00 AM – 11:30 AM WAT', desc: 'SN1 vs SN2 mechanisms with molecular models. Bring past paper questions from 2020–2022.', enrolled: 55, present: null },
-    { id: 3, status: 'upcoming', platform: 'MS Teams',    subject: 'English Language',    course: 'Essay Writing Masterclass',    teacher: 'Ms. Priya Krishnan', teacherEmoji: '👩🏻‍🏫', date: 'Fri 20 Jun',time: '4:00 PM – 5:00 PM WAT', desc: 'Intensive WAEC essay writing clinic. We\'ll analyse 5 past paper prompts and peer-review openings live.', enrolled: 60, present: null },
-    { id: 4, status: 'recorded', platform: 'Zoom',        subject: 'Computer Science',    course: 'Python Fundamentals',          teacher: 'Dr. Amara Diallo',   teacherEmoji: '👩🏾‍💻', date: 'Mon 9 Jun', time: 'Recorded · 1h 20m', desc: 'Introduction to variables, loops, and functions. Includes live coding exercises and Q&A.', enrolled: 120, present: 98 },
-  ];
 
   /* Lazy load when section enters view */
   useEffect(() => {
@@ -424,16 +408,16 @@ function Courses() {
         fetch('/api/courses/published').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/live-sessions').then(r => r.ok ? r.json() : null).catch(() => null),
       ]).then(([c, l]) => {
-        setCourses(c?.length ? c : STATIC_COURSES);
-        setLive(l?.length ? l : STATIC_LIVE);
+        setCourses(Array.isArray(c) ? c : c?.courses || []);
+        setLive(Array.isArray(l) ? l : l?.sessions || []);
       }).finally(() => setLoading(false));
     }, { threshold: 0.05 });
     obs.observe(el);
     return () => obs.disconnect();
   }, [fetched]);
 
-  const displayCourses = (courses.length ? courses : STATIC_COURSES).filter(c => subTab === 'all' || c.cat === subTab);
-  const displayLive    = (live.length ? live : STATIC_LIVE).filter(s => mainTab === 'live' ? s.status !== 'recorded' : mainTab === 'recorded' ? s.status === 'recorded' : true);
+  const displayCourses = courses.filter(c => subTab === 'all' || c.cat === subTab);
+  const displayLive    = live.filter(s => mainTab === 'live' ? s.status !== 'recorded' : mainTab === 'recorded' ? s.status === 'recorded' : true);
 
   const StatusBadge = ({ status }) => {
     if (status === 'live') return (
@@ -498,6 +482,13 @@ function Courses() {
                 </button>
               ))}
             </div>
+            {!loading && displayCourses.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '64px 24px', color: '#9490A0' }}>
+                <BookOpen size={40} color="#DDD8CF" style={{ marginBottom: 16 }}/>
+                <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>No courses yet</p>
+                <p style={{ fontSize: 14 }}>Courses will appear here once instructors publish them.</p>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 20 }}>
               {displayCourses.map((c, i) => (
                 <Reveal key={c.title} delay={i * 0.07}>
@@ -548,6 +539,13 @@ function Courses() {
         {/* Live classes */}
         {mainTab === 'live' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {!loading && displayLive.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '64px 24px', color: '#9490A0' }}>
+                <Radio size={40} color="#DDD8CF" style={{ marginBottom: 16 }}/>
+                <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>No live classes scheduled</p>
+                <p style={{ fontSize: 14 }}>Check back soon — instructors post upcoming sessions here.</p>
+              </div>
+            )}
             {displayLive.map((s, i) => (
               <Reveal key={s.id} delay={i * 0.06}>
                 <div style={{ background: '#fff', border: `1px solid ${s.status === 'live' ? '#FECACA' : '#EDE8E1'}`, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
@@ -845,19 +843,12 @@ function Pricing() {
   );
 }
 
-/* ══════════════ INSTRUCTORS (lazy-loaded) ══════════════ */
+/* ══════════════ INSTRUCTORS (lazy-loaded from backend only) ══════════════ */
 function Instructors() {
   const [instructors, setInstructors] = useState([]);
   const [loading, setLoading]         = useState(false);
   const [fetched, setFetched]         = useState(false);
   const sectionRef = useRef(null);
-
-  const STATIC = [
-    { emoji: '👩🏾‍💻', bg: '#C8E8D4', name: 'Dr. Amara Diallo',    subject: 'Mathematics & Statistics', score: '4.9', rev: '2.4k', bio: 'PhD from Cape Town. Former WAEC examiner. 14 years teaching Further Maths.' },
-    { emoji: '👨🏾‍🔬', bg: '#D4C8E8', name: 'Prof. Segun Adesanya', subject: 'Chemistry & Biology',      score: '4.8', rev: '1.8k', bio: 'Oxford-trained biochemist. Published in Nature. IGCSE specialist.' },
-    { emoji: '👩🏻‍🏫', bg: '#F0E4C8', name: 'Ms. Priya Krishnan',  subject: 'English & Language Arts',  score: '4.9', rev: '3.1k', bio: 'Cambridge-certified IELTS trainer. Helps 500+ students/year hit 7.0+.' },
-    { emoji: '👨🏾‍💼', bg: '#C8D8E8', name: 'Kwame Asante',        subject: 'Economics & Finance',       score: '4.8', rev: '1.2k', bio: 'LSE grad, former World Bank economist. Makes macro econ make sense.' },
-  ];
 
   useEffect(() => {
     if (fetched) return;
@@ -868,14 +859,12 @@ function Instructors() {
       fetch('/api/instructors/featured')
         .then(r => r.ok ? r.json() : null)
         .catch(() => null)
-        .then(data => setInstructors(data?.length ? data : STATIC))
+        .then(data => setInstructors(Array.isArray(data) ? data : data?.instructors || []))
         .finally(() => setLoading(false));
     }, { threshold: 0.05 });
     obs.observe(el);
     return () => obs.disconnect();
   }, [fetched]);
-
-  const display = instructors.length ? instructors : STATIC;
 
   return (
     <section id="instructors" ref={sectionRef} className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
@@ -892,8 +881,15 @@ function Instructors() {
             Loading instructors…
           </div>
         )}
+        {!loading && instructors.length === 0 && fetched && (
+          <div style={{ textAlign: 'center', padding: '64px 24px', color: '#9490A0' }}>
+            <GraduationCap size={40} color="#DDD8CF" style={{ marginBottom: 16 }}/>
+            <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>No instructors yet</p>
+            <p style={{ fontSize: 14 }}>Instructors will appear here once they join the platform.</p>
+          </div>
+        )}
         <div className="ak-four-col" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 18 }}>
-          {display.map(({ emoji, bg, name, subject, score, rev, bio }, i) => (
+          {instructors.map(({ emoji, bg, name, subject, score, rev, bio }, i) => (
             <Reveal key={name} delay={i * 0.1}>
               <div style={{ background: '#FAF8F5', border: '1px solid #EDE8E1', borderRadius: 18, padding: '28px 22px', textAlign: 'center', transition: 'transform .2s,box-shadow .2s', cursor: 'default' }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 32px ${B}12`; }}
