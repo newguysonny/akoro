@@ -705,7 +705,7 @@ const PROFILE_SELECT = [
   "id","email","username","full_name","avatar_url","phone","role",
   "country","school_name","school_type","year_group","study_level",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
-  "subjects","two_factor_enabled","created_at",
+  "subjects","two_factor_enabled","onboarding_completed","created_at",
 ].join(",");
 
 /** GET /api/profiles/me — full profile + agent + notification prefs */
@@ -740,6 +740,7 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
     guideEmoji:      user.guide_emoji,
     subjects:        user.subjects        || [],
     twoFactorEnabled:user.two_factor_enabled || false,
+    onboardingCompleted: user.onboarding_completed ?? false,
     memberSince:     new Date(user.created_at).toLocaleDateString("en-GB",{ month:"long", year:"numeric" }),
     agent: agent ? {
       id:           agent.id,
@@ -792,12 +793,13 @@ router.patch("/me", authenticateToken, [
   body("guideEmoji").optional().trim(),
   body("subjects").optional().isArray(),
   body("twoFactorEnabled").optional().isBoolean(),
+  body("onboardingCompleted").optional().isBoolean(),
 ], runValidation, asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const {
     fullName, username, phone, country, schoolName, schoolType,
     yearGroup, studyLevel, language, displayMode, accentColor,
-    teachingGuide, guideEmoji, subjects, twoFactorEnabled,
+    teachingGuide, guideEmoji, subjects, twoFactorEnabled, onboardingCompleted,
   } = req.body;
 
   // Check username uniqueness
@@ -823,6 +825,7 @@ router.patch("/me", authenticateToken, [
   if (guideEmoji     !== undefined) patch.guide_emoji      = guideEmoji;
   if (subjects       !== undefined) patch.subjects         = subjects;
   if (twoFactorEnabled !== undefined) patch.two_factor_enabled = twoFactorEnabled;
+  if (onboardingCompleted !== undefined) patch.onboarding_completed = onboardingCompleted;
   patch.updated_at = new Date().toISOString();
 
   const { data: updated, error } = await db.from("users")
@@ -833,7 +836,12 @@ router.patch("/me", authenticateToken, [
     return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
 
-  res200(res, { fullName: updated.full_name, username: updated.username, accentColor: updated.accent_color });
+  res200(res, {
+    fullName: updated.full_name,
+    username: updated.username,
+    accentColor: updated.accent_color,
+    onboardingCompleted: updated.onboarding_completed ?? false,
+  });
 }));
 
 /** PATCH /api/profiles/me/notifications — update notification preferences */

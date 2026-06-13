@@ -2215,6 +2215,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS guide_emoji       TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS subjects          TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT;
+-- First-run onboarding gate: false until the user finishes the setup wizard.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified    BOOLEAN NOT NULL DEFAULT false;
 
 -- ── Account lifecycle: deactivate (reversible) / delete (right-to-erasure) ─────

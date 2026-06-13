@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
 import SigninPage   from './pages/auth/SigninPage.jsx';
 import SignupPage   from './pages/auth/SignupPage.jsx';
+import OnboardingPage from './pages/auth/OnboardingPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
@@ -27,6 +28,21 @@ function ProtectedRoute({ children }) {
   if (user?.role && !INSTRUCTOR_ROLES.includes(user.role)) {
     return <Navigate to="/signin?error=not_instructor" replace />;
   }
+  // First-run gate: unfinished onboarding must complete before the dashboard.
+  if (user && user.onboardingCompleted === false) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return children;
+}
+
+/* ── OnboardingRoute: requires an instructor session; skips if done ── */
+function OnboardingRoute({ children }) {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/signin" replace />;
+  if (user?.role && !INSTRUCTOR_ROLES.includes(user.role)) {
+    return <Navigate to="/signin?error=not_instructor" replace />;
+  }
+  if (user && user.onboardingCompleted) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -71,6 +87,7 @@ function AppRoutes() {
       {/* Auth */}
       <Route path="/signin" element={<GuestRoute><SigninPage /></GuestRoute>} />
       <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
+      <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />

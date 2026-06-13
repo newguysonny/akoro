@@ -48,6 +48,17 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Flip the local onboarding flag once the wizard saves it server-side,
+  // so the gate releases without a full reload.
+  const markOnboarded = useCallback(() => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, onboardingCompleted: true };
+      localStorage.setItem(USER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const register = useCallback(async ({ email, password, username, fullName }) => {
     setLoading(true); setError(null);
     try {
@@ -125,6 +136,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, loading, error, isAuthenticated,
       login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
+      markOnboarded,
       clearError: () => setError(null),
     }}>
       {children}

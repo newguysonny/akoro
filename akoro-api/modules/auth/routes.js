@@ -277,9 +277,9 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
 
   // 5. Load user
   try {
-    const { data: user } = await db.from("users").select("id,email,username,full_name,avatar_url,role,is_active").eq("id", decoded.sub).maybeSingle();
+    const { data: user } = await db.from("users").select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed").eq("id", decoded.sub).maybeSingle();
     if (!user || !user.is_active) return res401(res, "User not found or deactivated");
-    req.user    = { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role };
+    req.user    = { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role, onboardingCompleted: user.onboarding_completed ?? false };
     req.tokenJti = decoded.jti;
     req.tokenExp = decoded.exp;
     next();
@@ -329,6 +329,7 @@ const safeUser = (u) => ({
   fullName:  u.full_name || u.fullName,
   avatarUrl: u.avatar_url || u.avatarUrl,
   role:      u.role,
+  onboardingCompleted: u.onboarding_completed ?? u.onboardingCompleted ?? false,
 });
 
 // Short-lived (5 min) token proving password step passed, pending TOTP code.

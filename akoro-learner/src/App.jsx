@@ -4,6 +4,7 @@ import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import LandingPage      from './pages/LandingPage.jsx';
+import OnboardingPage   from './pages/OnboardingPage.jsx';
 import LearnerDashboard from './pages/LearnerDashboard.jsx';
 import SettingsPage     from './pages/SettingsPage.jsx';
 import SigninPage       from './pages/auth/SigninPage.jsx';
@@ -13,14 +14,26 @@ import FDEAdminPage     from './pages/FDEAdminPage.jsx';
 import LiveClassesPage  from './pages/LiveClassesPage.jsx';
 import NotFoundPage     from './pages/NotFoundPage.jsx';
 
-/* ── ProtectedRoute: redirects to /signin if not authenticated ── */
+/* ── ProtectedRoute: requires auth, then gates on onboarding ── */
 function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   if (!isAuthenticated) {
     localStorage.setItem('akoro_redirect', location.pathname + location.search);
     return <Navigate to="/signin" replace />;
   }
+  // First-run gate: unfinished onboarding must complete before the app.
+  if (user && user.onboardingCompleted === false) {
+    return <Navigate to="/onboarding" replace />;
+  }
+  return children;
+}
+
+/* ── OnboardingRoute: requires auth; skips wizard if already done ── */
+function OnboardingRoute({ children }) {
+  const { isAuthenticated, user } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/signin" replace />;
+  if (user && user.onboardingCompleted) return <Navigate to="/app" replace />;
   return children;
 }
 
@@ -35,6 +48,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />}/>
+      <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>}/>
       <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
