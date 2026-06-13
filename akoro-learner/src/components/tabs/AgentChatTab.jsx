@@ -265,13 +265,13 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
                 <div key={msg.id} style={{ display:"flex",justifyContent:isMe?"flex-end":"flex-start",alignItems:"flex-end",gap:8 }}>
                   {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div>}
                   <div style={{ maxWidth:"78%" }}>
-                    <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"#F3F1FF",border:isMe?"none":`1px solid ${BRAND}18`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
+                    <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
                     <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,textAlign:isMe?"right":"left" }}>{msg.time}</div>
                   </div>
                 </div>
               );
             })}
-            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"#F3F1FF",border:`1px solid ${BRAND}18`,display:"flex",gap:4,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
+            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:4,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
             <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 16px" }}>
