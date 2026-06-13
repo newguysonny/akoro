@@ -30,9 +30,9 @@ export default function OnboardingPage() {
   const [studyLevel, setStudyLevel] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [subjects, setSubjects]     = useState([]);
-  // Step 2 — agent
-  const [agentName, setAgentName]   = useState('');
-  const [guideEmoji, setGuideEmoji] = useState('🧠');
+  // Step 2 — student agent
+  const [agentName,  setAgentName]  = useState('');
+  const [agentEmoji, setAgentEmoji] = useState('🤖');
 
   const toggleSubject = (s) =>
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -58,28 +58,46 @@ export default function OnboardingPage() {
     if (!validateStep()) return;
     setSaving(true); setErr('');
     try {
-      const res = await fetch(`${API}/api/profiles/me`, {
+      // 1. Save profile fields to users table
+      const profileRes = await fetch(`${API}/api/profiles/me`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fullName:       fullName.trim(),
-          yearGroup:      yearGroup.trim() || undefined,
+          fullName:            fullName.trim(),
+          yearGroup:           yearGroup.trim() || undefined,
           studyLevel,
-          schoolName:     schoolName.trim() || undefined,
+          schoolName:          schoolName.trim() || undefined,
           subjects,
-          teachingGuide:  agentName.trim(),
-          guideEmoji,
           language,
           displayMode,
           accentColor,
           onboardingCompleted: true,
         }),
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || 'Could not save your setup');
+      if (!profileRes.ok) {
+        const j = await profileRes.json().catch(() => ({}));
+        throw new Error(j.message || 'Could not save your profile');
       }
+
+      // 2. Save student AI agent to user_agents table (separate from instructor teaching guide)
+      const agentRes = await fetch(`${API}/api/user/agent`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_name:  agentName.trim() || `Agent_${user?.username || 'me'}`,
+          agent_emoji: agentEmoji,
+          study_level: studyLevel || undefined,
+          year_group:  yearGroup.trim() || undefined,
+          subjects:    subjects.length ? subjects : undefined,
+        }),
+      });
+      if (!agentRes.ok) {
+        // Non-fatal — agent row will be auto-created on first GET /api/user/agent
+        console.warn('Agent setup failed, will use defaults');
+      }
+
       markOnboarded();
       navigate('/app', { replace: true });
     } catch (e) {
@@ -170,7 +188,7 @@ export default function OnboardingPage() {
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
               <div style={{ width: 76, height: 76, borderRadius: 22, background: `linear-gradient(135deg,${accentColor},#4C1DCC)`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 38, boxShadow: `0 6px 20px ${accentColor}44` }}>
-                {guideEmoji}
+                {agentEmoji}
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -183,8 +201,8 @@ export default function OnboardingPage() {
                 {GUIDE_EMOJIS.map(em => (
                   <button key={em} onClick={() => setGuideEmoji(em)} style={{
                     width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
-                    border: `2px solid ${guideEmoji === em ? accentColor : 'var(--ak-border2)'}`,
-                    background: guideEmoji === em ? `${accentColor}18` : 'var(--ak-surface)',
+                    border: `2px solid ${agentEmoji === em ? accentColor : 'var(--ak-border2)'}`,
+                    background: agentEmoji === em ? `${accentColor}18` : 'var(--ak-surface)',
                   }}>{em}</button>
                 ))}
               </div>

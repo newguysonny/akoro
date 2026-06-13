@@ -7,6 +7,7 @@ const AMBER = '#E8884A';
 const RED   = '#EF4444';
 const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemistry', 'Biology',
   'Computer Science', 'English Language', 'English Literature', 'Economics', 'Geography', 'History'];
+const GUIDE_EMOJIS = ['🧠', '👩‍🏫', '👨‍🏫', '🎓', '📚', '💡', '🦉', '⚡', '🌟', '🔮', '🚀', '🎯'];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -16,15 +17,18 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr]     = useState('');
 
-  const [fullName, setFullName]     = useState(user?.fullName || '');
-  const [schoolName, setSchoolName] = useState('');
-  const [subjects, setSubjects]     = useState([]);
-  const [headline, setHeadline]     = useState('');
+  const [fullName, setFullName]         = useState(user?.fullName || '');
+  const [schoolName, setSchoolName]     = useState('');
+  const [subjects, setSubjects]         = useState([]);
+  const [headline, setHeadline]         = useState('');
+  // Teaching guide — the instructor's AI persona for their students
+  const [guideName, setGuideName]       = useState('');
+  const [guideEmoji, setGuideEmoji]     = useState('🧠');
 
   const toggleSubject = (s) =>
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
 
-  const STEPS = ['Profile', 'Teaching focus'];
+  const STEPS = ['Profile', 'Teaching focus', 'Teaching guide'];
 
   const validateStep = () => {
     setErr('');
@@ -45,9 +49,12 @@ export default function OnboardingPage() {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fullName:    fullName.trim(),
-          schoolName:  schoolName.trim() || undefined,
+          fullName:      fullName.trim(),
+          schoolName:    schoolName.trim() || undefined,
           subjects,
+          // Teaching guide persona — instructor's AI guide for their students
+          teachingGuide: guideName.trim() || undefined,
+          guideEmoji:    guideEmoji,
           onboardingCompleted: true,
         }),
       });
@@ -131,6 +138,39 @@ export default function OnboardingPage() {
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Pick the subjects you'll build courses and agents for.</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {SUBJECT_OPTIONS.map(s => <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>)}
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your teaching guide 🧠</h1>
+            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Name the AI guide that will help your students learn. You can always change this later.</p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, boxShadow: `0 6px 20px ${AMBER}55` }}>
+                {guideEmoji}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={lbl}>Guide name <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
+              <input value={guideName} onChange={e => setGuideName(e.target.value)}
+                placeholder="e.g. NaNa, Akobi, Sade…" style={inp}/>
+            </div>
+            <div>
+              <label style={lbl}>Guide avatar</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {GUIDE_EMOJIS.map(em => (
+                  <button key={em} onClick={() => setGuideEmoji(em)} style={{
+                    width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
+                    border: `2px solid ${guideEmoji === em ? AMBER : '#EDE8E1'}`,
+                    background: guideEmoji === em ? `${AMBER}18` : '#FAF8F5',
+                    fontFamily: "'DM Sans', sans-serif",
+                  }}>{em}</button>
+                ))}
+              </div>
             </div>
           </>
         )}
