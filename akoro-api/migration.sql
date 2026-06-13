@@ -1900,11 +1900,20 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'edu_student_states'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'edu' AND table_name = 'edu_student_states'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'edu' AND table_name = 'student_states'
   ) THEN
     ALTER TABLE public.edu_student_states SET SCHEMA edu;
     ALTER TABLE edu.edu_student_states RENAME TO student_states;
     RAISE NOTICE 'Moved edu_student_states → edu.student_states';
-  ELSE
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'edu' AND table_name IN ('edu_student_states', 'student_states')
+  ) THEN
     -- Create fresh in the right place
     CREATE TABLE IF NOT EXISTS edu.student_states (
       agent_id   UUID PRIMARY KEY,
@@ -1912,6 +1921,8 @@ BEGIN
       updated_at TIMESTAMPTZ DEFAULT now()
     );
     RAISE NOTICE 'Created edu.student_states';
+  ELSE
+    RAISE NOTICE 'edu.student_states already exists — skipping';
   END IF;
 END $$;
 
