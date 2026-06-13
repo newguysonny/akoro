@@ -202,6 +202,15 @@ export default function SigninPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        <p style={{ textAlign: 'center', fontSize: 13, color: '#6B6B80', marginTop: 20, marginBottom: 0 }}>
+          New instructor?{' '}
+          <button
+            onClick={() => navigate('/signup')}
+            style={{ background: 'none', border: 'none', color: AMBER, fontWeight: 700, cursor: 'pointer', fontSize: 13, fontFamily: "'DM Sans', sans-serif", padding: 0 }}
+          >
+            Create an account
+          </button>
+        </p>
         </>
         )}
       </div>

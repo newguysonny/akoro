@@ -48,10 +48,10 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  const register = useCallback(async ({ email, password, username, fullName }) => {
+  const register = useCallback(async ({ email, password, username, fullName, role = 'instructor' }) => {
     setLoading(true); setError(null);
     try {
-      const { data } = await authFetch('/api/auth/register', { email, password, username, fullName });
+      const { data } = await authFetch('/api/auth/register', { email, password, username, fullName, role });
       if (data?.user) saveUser(data.user);
       return data;
     } catch (err) { setError(err.message); throw err; }

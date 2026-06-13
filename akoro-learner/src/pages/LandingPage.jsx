@@ -15,6 +15,9 @@ import {
   FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter,
 } from 'react-icons/fa6';
 
+/* ── Instructor portal (separate deployment) ── */
+const INSTRUCTOR_URL = import.meta.env.VITE_INSTRUCTOR_URL || 'https://instructor.akoro.app';
+
 /* ── Brand tokens ── */
 const B  = '#6C3BFF';   // primary purple
 const B2 = '#4C1DCC';   // darker purple
@@ -912,7 +915,7 @@ function Instructors() {
         <Reveal delay={0.3}>
           <div style={{ textAlign: 'center', marginTop: 44 }}>
             <p style={{ fontSize: 15, color: '#6B6B80', marginBottom: 18 }}>Are you an educator? Join our growing community of instructors.</p>
-            <Btn v="outline">Apply as an Instructor <ArrowRight size={14}/></Btn>
+            <Btn v="outline" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signup`; }}>Apply as an Instructor <ArrowRight size={14}/></Btn>
           </div>
         </Reveal>
       </div>
@@ -975,7 +978,7 @@ function FinalCTA({ onSignup }) {
           <p style={{ fontSize: 17, color: '#6B6B80', marginBottom: 36, lineHeight: 1.65 }}>Free to start. No credit card. Cancel anytime.</p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
             <Btn v="primary" sz="lg" onClick={onSignup}>🎓 Learner Login <ArrowRight size={16}/></Btn>
-            <Btn v="dark" sz="lg" onClick={() => navigate('/signin?role=instructor')}><School size={16}/> Instructor Login</Btn>
+            <Btn v="dark" sz="lg" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signin`; }}><School size={16}/> Instructor Login</Btn>
           </div>
           <p style={{ fontSize: 12, color: '#9490A0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Shield size={11} color={B}/>30-day money-back</span>

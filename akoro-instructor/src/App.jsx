@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
 import SigninPage   from './pages/auth/SigninPage.jsx';
+import SignupPage   from './pages/auth/SignupPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
@@ -69,6 +70,7 @@ function AppRoutes() {
 
       {/* Auth */}
       <Route path="/signin" element={<GuestRoute><SigninPage /></GuestRoute>} />
+      <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
