@@ -77,7 +77,7 @@ function AgentCard({ listing, owned, onOpen }) {
             {owned && <span style={{ fontSize: 9, fontWeight: 900, color: GREEN, background: 'rgba(16,185,129,.12)', padding: '2px 6px', borderRadius: 6 }}>{t('discovery.owned')}</span>}
           </div>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 2 }}>
-            by {listing.teacher_name || 'Teacher'}
+            {t('discovery.by')} {listing.teacher_name || t('discovery.teacher')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10, fontWeight: 800, color: sc, background: `${sc}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{listing.subject || 'General'}</span>
@@ -97,7 +97,7 @@ function AgentCard({ listing, owned, onOpen }) {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F3F0FF', paddingTop: 9 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          👥 {fmtCount(listing.total_students)} learning
+          👥 {fmtCount(listing.total_students)} {t('discovery.learning')}
         </span>
         <span style={{ fontSize: 13, fontWeight: 900, color: listing.is_free ? GREEN : BRAND }}>
           {fmtPrice(listing.price_kobo, listing.currency)}
@@ -173,10 +173,10 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>{full.title}</h2>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 3 }}>by {full.teacher_name || 'Teacher'}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 3 }}>{t('discovery.by')} {full.teacher_name || t('discovery.teacher')}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                 <Stars rating={full.avg_rating} size={13} />
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{Number(full.avg_rating || 0).toFixed(1)} · {full.rating_count || 0} reviews</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{Number(full.avg_rating || 0).toFixed(1)} · {full.rating_count || 0} {t('discovery.reviews')}</span>
               </div>
             </div>
           </div>
@@ -184,9 +184,9 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
           {/* stat strip */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 16 }}>
             {[
-              { label: 'Learners',  value: fmtCount(full.total_students), icon: '👥' },
-              { label: 'Trained on', value: `${Math.round(full.total_hours_trained || 0)}h`, icon: '🎓' },
-              { label: 'Sessions',  value: fmtCount(full.training_sessions), icon: '📈' },
+              { label: t('discovery.learners'),  value: fmtCount(full.total_students), icon: '👥' },
+              { label: t('discovery.trained_on'), value: `${Math.round(full.total_hours_trained || 0)}h`, icon: '🎓' },
+              { label: t('discovery.sessions'),  value: fmtCount(full.training_sessions), icon: '📈' },
             ].map((s) => (
               <div key={s.label} style={{ background: '#F8F6FF', borderRadius: 12, padding: '10px 6px', textAlign: 'center' }}>
                 <div style={{ fontSize: 16 }}>{s.icon}</div>
@@ -208,7 +208,7 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
 
           {full.sample_tip && (
             <div style={{ background: 'rgba(108,59,255,.06)', border: '1px solid rgba(108,59,255,.15)', borderRadius: 12, padding: '11px 13px', marginTop: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 900, color: BRAND, letterSpacing: .4, marginBottom: 4 }}>💡 A SAMPLE TIP</div>
+              <div style={{ fontSize: 10, fontWeight: 900, color: BRAND, letterSpacing: .4, marginBottom: 4 }}>{t('discovery.sample_tip')}</div>
               <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text-sec)', margin: 0, lineHeight: 1.5, fontStyle: 'italic' }}>"{full.sample_tip}"</p>
             </div>
           )}
@@ -229,7 +229,7 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
           {owned && (
             <div style={{ marginTop: 20, background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 14, padding: '13px 14px' }}>
               <div style={{ fontSize: 11.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 9 }}>
-                {posted ? '✓ Thanks for your review!' : 'Rate this agent'}
+                {posted ? t('discovery.thanks_review') : t('discovery.rate_agent')}
               </div>
               {!posted && (
                 <>
@@ -237,7 +237,7 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
                   <textarea
                     value={myText}
                     onChange={(e) => setMyText(e.target.value)}
-                    placeholder="Share how this agent helped you learn… (optional)"
+                    placeholder={t('discovery.review_ph')}
                     rows={2}
                     style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, padding: '10px 12px', borderRadius: 11, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none', resize: 'none', lineHeight: 1.45 }}
                   />
@@ -246,7 +246,7 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
                       background: (!myRating || posting) ? '#E5E1F2' : `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`,
                       color: (!myRating || posting) ? 'var(--ak-text-muted)' : '#fff', fontSize: 12.5, fontWeight: 800,
                       cursor: (!myRating || posting) ? 'default' : 'pointer', fontFamily: FONT }}>
-                    {posting ? 'Posting…' : 'Submit review'}
+                    {posting ? t('discovery.posting') : t('discovery.submit_review')}
                   </button>
                 </>
               )}
@@ -273,11 +273,11 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
         <div style={{ position: 'sticky', bottom: 0, background: 'var(--ak-surface)', backdropFilter: 'blur(8px)', borderTop: '1px solid #EDE9FE', padding: '12px 18px calc(12px + env(safe-area-inset-bottom,0px))', display: 'flex', gap: 10 }}>
           {owned ? (
             <button onClick={() => onUse(full)} disabled={busy} style={primaryBtn(GREEN, busy)}>
-              {busy ? 'Setting…' : '✓ Use this agent'}
+              {busy ? t('discovery.setting') : t('discovery.use_agent')}
             </button>
           ) : (
             <button onClick={() => onPurchase(full)} disabled={busy} style={primaryBtn(BRAND, busy)}>
-              {busy ? 'Processing…' : full.is_free ? 'Get free agent' : `Unlock · ${fmtPrice(full.price_kobo, full.currency)}`}
+              {busy ? t('discovery.processing') : full.is_free ? t('discovery.get_free') : `${t('discovery.unlock')} · ${fmtPrice(full.price_kobo, full.currency)}`}
             </button>
           )}
         </div>
@@ -295,6 +295,7 @@ const primaryBtn = (color, busy) => ({
 
 /* ── Purchase history sheet ────────────────────────────────── */
 function PurchaseHistorySheet({ onClose }) {
+  const { t } = useLang();
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -308,10 +309,10 @@ function PurchaseHistorySheet({ onClose }) {
   }, []);
 
   const statusMeta = (s, granted) =>
-    granted || s === 'success' ? { label: 'Active',   color: GREEN }
-    : s === 'pending'          ? { label: 'Pending',  color: GOLD }
-    : s === 'refunded'         ? { label: 'Refunded', color: 'var(--ak-text-muted)' }
-    :                            { label: 'Failed',   color: RED };
+    granted || s === 'success' ? { label: t('discovery.st_active'),   color: GREEN }
+    : s === 'pending'          ? { label: t('discovery.st_pending'),  color: GOLD }
+    : s === 'refunded'         ? { label: t('discovery.st_refunded'), color: 'var(--ak-text-muted)' }
+    :                            { label: t('discovery.st_failed'),   color: RED };
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -320,12 +321,12 @@ function PurchaseHistorySheet({ onClose }) {
           <div style={{ width: 38, height: 4, borderRadius: 4, background: 'var(--ak-border2)' }} />
         </div>
         <div style={{ padding: '6px 18px 24px' }}>
-          <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '4px 0 14px' }}>🧾 My purchases</h2>
+          <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '4px 0 14px' }}>{t('discovery.my_purchases')}</h2>
           {loading ? (
             [0, 1].map(i => <div key={i} style={{ height: 64, borderRadius: 12, background: '#F3F1FF', opacity: .6, marginBottom: 9 }} />)
           ) : rows.length === 0 ? (
             <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 30, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--ak-text-muted)' }}>
-              No purchases yet. Unlock an agent to see it here.
+              {t('discovery.no_purchases')}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -336,10 +337,10 @@ function PurchaseHistorySheet({ onClose }) {
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--ak-surface)', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {listing.title || p.metadata?.listing_title || 'Agent'}
+                        {listing.title || p.metadata?.listing_title || t('discovery.agent')}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 2 }}>
-                        {listing.teacher_name || p.metadata?.teacher_name || 'Teacher'}
+                        {listing.teacher_name || p.metadata?.teacher_name || t('discovery.teacher')}
                         {p.purchased_at ? ` · ${new Date(p.purchased_at).toLocaleDateString()}` : ''}
                       </div>
                     </div>
@@ -396,7 +397,7 @@ export default function DiscoveryTab() {
       }
       setListings(d.listings || []);
     } catch (e) {
-      setToast({ msg: 'Could not load agents', color: RED });
+      setToast({ msg: t('discovery.could_not_load'), color: RED });
       setListings([]);
     } finally { setLoading(false); }
   }, [subject, freeOnly, query]);
@@ -428,7 +429,7 @@ export default function DiscoveryTab() {
       const onPurchased = (data) => {
         if (data?.agentId) setOwnedIds(prev => new Set(prev).add(data.agentId));
         else loadOwnedRef.current();
-        setToast({ msg: data?.message || '🎉 New agent unlocked!', color: GREEN });
+        setToast({ msg: data?.message || t('discovery.new_unlocked'), color: GREEN });
         loadListingsRef.current();   // refresh learner counts / owned badges
       };
       socket.on('agent_purchased', onPurchased);
@@ -445,10 +446,10 @@ export default function DiscoveryTab() {
     const pay = p.get('payment');
     if (!pay) return;
     if (pay === 'success') {
-      setToast({ msg: '🎉 Agent unlocked! Find it in your agent picker.', color: GREEN });
+      setToast({ msg: t('discovery.unlocked_picker'), color: GREEN });
       loadOwned();
     } else if (pay === 'failed' || pay === 'cancelled' || pay === 'error') {
-      setToast({ msg: 'Payment not completed', color: RED });
+      setToast({ msg: t('discovery.payment_incomplete'), color: RED });
     }
     // strip query so it doesn't re-fire
     window.history.replaceState({}, '', window.location.pathname);
@@ -469,7 +470,7 @@ export default function DiscoveryTab() {
       setToast({ msg: d.message || `${listing.title} unlocked!`, color: GREEN });
       setActive(null);
     } catch (e) {
-      const msg = String(e.message || '').includes('409') ? 'You already own this agent' : 'Checkout failed — try again';
+      const msg = String(e.message || '').includes('409') ? t('discovery.already_own') : t('discovery.checkout_failed');
       setToast({ msg, color: RED });
     } finally { setBusy(false); }
   };
@@ -482,20 +483,20 @@ export default function DiscoveryTab() {
         agentPairId:   `trained:${listing.agent_id}`,
         activeAgentId: listing.agent_id,
       });
-      setToast({ msg: `${listing.title} is now your active agent`, color: GREEN });
+      setToast({ msg: `${listing.title} ${t('discovery.now_active')}`, color: GREEN });
       setActive(null);
     } catch {
-      setToast({ msg: 'Could not set agent', color: RED });
+      setToast({ msg: t('discovery.could_not_set'), color: RED });
     } finally { setBusy(false); }
   };
 
   const handleReview = async (listing, rating, reviewText) => {
     try {
       await apiPost(`${MKT}/review`, { studentId: STUDENT_ID, listingId: listing.id, rating, reviewText });
-      setToast({ msg: 'Review posted — thank you!', color: GREEN });
+      setToast({ msg: t('discovery.review_posted'), color: GREEN });
       return true;
     } catch (e) {
-      const msg = String(e.message || '').includes('403') ? 'Purchase this agent before reviewing' : 'Could not post review';
+      const msg = String(e.message || '').includes('403') ? t('discovery.purchase_first') : t('discovery.could_not_review');
       setToast({ msg, color: RED });
       return false;
     }
@@ -557,7 +558,7 @@ export default function DiscoveryTab() {
           <div style={{ background: 'var(--ak-surface)', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
             <div style={{ fontSize: 40, opacity: .3 }}>🔭</div>
             <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '10px 0 0' }}>{t('discovery.no_agents')}</p>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>Try a different subject or clear your search.</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>{t('discovery.no_agents_hint')}</p>
           </div>
         ) : (
           listings.map((l) => (

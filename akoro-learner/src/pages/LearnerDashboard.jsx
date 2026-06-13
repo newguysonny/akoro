@@ -471,8 +471,8 @@ export default function LearnerDashboard() {
                     </span>
                     <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>
                       {sessionTab==="live"
-                        ?`No ${liveSubTab==="starting-soon"?"classes starting soon":liveSubTab==="today"?"classes today":liveSubTab==="tomorrow"?"classes tomorrow":"classes this week"}`
-                        :"No sessions found"}
+                        ?(liveSubTab==="starting-soon"?t('sessions.none_starting'):liveSubTab==="today"?t('sessions.none_today'):liveSubTab==="tomorrow"?t('sessions.none_tomorrow'):t('sessions.none_week'))
+                        :t('sessions.not_found')}
                     </p>
                   </div>
                   :filtered.map(s=>(
@@ -538,7 +538,7 @@ export default function LearnerDashboard() {
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
                         <span style={{ fontSize:52,opacity:.2 }}>📚</span>
                         <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>{t('sessions.empty')}</p>
-                        <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>Start a session with the FAB button to see your teaching history here.</p>
+                        <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.empty_hint')}</p>
                       </div>
                       :agentSessionsFiltered.map(s=>(
                         <SessionCard key={s.id} session={s}

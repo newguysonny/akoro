@@ -168,6 +168,7 @@ function AvatarCircle({ photoUrl, emoji, color, size=60, onPhotoClick }) {
 
 /* ─── Avatar picker sheet ─────────────────────────────────────── */
 function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, color }) {
+  const { t } = useLang();
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [tab,     setTab]     = useState('photo');
@@ -195,18 +196,18 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
         <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',
           margin:'14px auto 18px' }}/>
         <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:'0 0 16px' }}>
-          Change {type==='user'?'Profile':'Agent'} Photo
+          {type==='user'?t('settings.change_profile_photo'):t('settings.change_agent_photo')}
         </p>
         <div style={{ display:'flex',background:'var(--ak-tag-bg)',borderRadius:12,
           padding:3,marginBottom:20,gap:3 }}>
-          {['photo','emoji'].map(t=>(
-            <button key={t} onClick={()=>setTab(t)}
+          {['photo','emoji'].map(tk=>(
+            <button key={tk} onClick={()=>setTab(tk)}
               style={{ flex:1,padding:'8px 0',borderRadius:10,border:'none',
-                background:tab===t?'var(--ak-surface)':'transparent',cursor:'pointer',
+                background:tab===tk?'var(--ak-surface)':'transparent',cursor:'pointer',
                 fontSize:12.5,fontWeight:800,fontFamily:"'Nunito',sans-serif",
-                color:tab===t?'var(--ak-text)':'var(--ak-text-sub)',
-                boxShadow:tab===t?'0 1px 4px rgba(0,0,0,.12)':'none' }}>
-              {t==='photo'?'📷 Upload Photo':'🎭 Choose Emoji'}
+                color:tab===tk?'var(--ak-text)':'var(--ak-text-sub)',
+                boxShadow:tab===tk?'0 1px 4px rgba(0,0,0,.12)':'none' }}>
+              {tk==='photo'?t('settings.upload_photo'):t('settings.choose_emoji')}
             </button>
           ))}
         </div>
@@ -225,7 +226,7 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
                   <button onClick={()=>setPreview(null)}
                     style={{ fontSize:12.5,fontWeight:700,color:RED,
                       background:'none',border:'none',cursor:'pointer',
-                      fontFamily:"'Nunito',sans-serif" }}>Remove photo</button>
+                      fontFamily:"'Nunito',sans-serif" }}>{t('settings.remove_photo')}</button>
                 </div>
               : <div onClick={()=>fileRef.current?.click()}
                   style={{ border:'2px dashed var(--ak-border2)',borderRadius:16,
@@ -235,22 +236,22 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
                   <Icon name="ti-upload" size={28} color="var(--ak-text-muted)"
                     style={{ display:'block',margin:'0 auto 10px' }}/>
                   <p style={{ fontSize:14,fontWeight:800,color:'var(--ak-text)',margin:'0 0 4px' }}>
-                    Tap to upload photo</p>
-                  <p style={{ fontSize:12,color:'var(--ak-text-muted)',margin:0 }}>JPG, PNG or WebP · Max 5MB</p>
+                    {t('settings.tap_upload')}</p>
+                  <p style={{ fontSize:12,color:'var(--ak-text-muted)',margin:0 }}>{t('settings.photo_formats')}</p>
                 </div>
             }
             <div style={{ display:'flex',gap:10 }}>
               <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
                 border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
                 fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
-                fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+                fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
               <button onClick={()=>{ if(preview){onSavePhoto(preview);onClose();} }}
                 disabled={!preview}
                 style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
                   background:preview?`linear-gradient(135deg,${color},#4C1DCC)`:'var(--ak-tag-bg)',
                   color:preview?'#fff':'var(--ak-text-muted)',fontSize:13,fontWeight:800,
                   cursor:preview?'pointer':'not-allowed',fontFamily:"'Nunito',sans-serif" }}>
-                Save Photo</button>
+                {t('settings.save_photo')}</button>
             </div>
           </div>
         )}
@@ -272,12 +273,12 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
               <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
                 border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
                 fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
-                fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+                fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
               <button onClick={()=>{onSaveEmoji(selEmoji);onClose();}}
                 style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
                   background:`linear-gradient(135deg,${color},#4C1DCC)`,
                   color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',
-                  fontFamily:"'Nunito',sans-serif" }}>Save Emoji</button>
+                  fontFamily:"'Nunito',sans-serif" }}>{t('settings.save_emoji')}</button>
             </div>
           </div>
         )}
@@ -288,6 +289,7 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
 
 /* ─── Subjects sheet ──────────────────────────────────────────── */
 function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
+  const { t } = useLang();
   const [selected,setSelected]=useState([...current]);
   const [search,  setSearch]  =useState('');
   const [custom,  setCustom]  =useState('');
@@ -309,13 +311,13 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
         fontFamily:"'Nunito',sans-serif",maxHeight:'88vh',overflowY:'auto' }}>
         <div style={{ width:36,height:4,borderRadius:2,background:'var(--ak-border3)',margin:'14px auto 18px' }}/>
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16 }}>
-          <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:0 }}>Manage Subjects</p>
-          <span style={{ fontSize:12,color:'var(--ak-text-sub)',fontWeight:600 }}>{selected.length} selected</span>
+          <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:0 }}>{t('settings.manage_subjects')}</p>
+          <span style={{ fontSize:12,color:'var(--ak-text-sub)',fontWeight:600 }}>{selected.length} {t('settings.selected')}</span>
         </div>
         {selected.length>0&&(
           <div style={{ marginBottom:20 }}>
             <p style={{ fontSize:11,fontWeight:900,color:accentColor,letterSpacing:1.2,
-              textTransform:'uppercase',marginBottom:10 }}>Your subjects</p>
+              textTransform:'uppercase',marginBottom:10 }}>{t('settings.your_subjects')}</p>
             <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
               {selected.map(s=><SubjectChip key={s} label={s} color={accentColor} onRemove={removeSubject}/>)}
             </div>
@@ -323,12 +325,12 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
         )}
         <div style={{ marginBottom:14 }}>
           <p style={{ fontSize:11,fontWeight:900,color:'var(--ak-text-sub)',letterSpacing:1.2,
-            textTransform:'uppercase',marginBottom:10 }}>Add subjects</p>
+            textTransform:'uppercase',marginBottom:10 }}>{t('settings.add_subjects')}</p>
           <div style={{ position:'relative',marginBottom:10 }}>
             <Icon name="ti-search" size={14} style={{ position:'absolute',left:12,
               top:'50%',transform:'translateY(-50%)',color:'var(--ak-text-muted)' }}/>
             <input value={search} onChange={e=>setSearch(e.target.value)}
-              placeholder="Search subjects…"
+              placeholder={t('settings.search_subjects')}
               style={{ width:'100%',padding:'10px 13px 10px 34px',borderRadius:12,
                 border:'1.5px solid var(--ak-border2)',outline:'none',fontSize:13,
                 fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
@@ -350,11 +352,11 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
         </div>
         <div style={{ marginBottom:20 }}>
           <p style={{ fontSize:11,fontWeight:900,color:'var(--ak-text-sub)',letterSpacing:1.2,
-            textTransform:'uppercase',marginBottom:8 }}>Custom subject</p>
+            textTransform:'uppercase',marginBottom:8 }}>{t('settings.custom_subject')}</p>
           <div style={{ display:'flex',gap:8 }}>
             <input value={custom} onChange={e=>setCustom(e.target.value)}
               onKeyDown={e=>e.key==='Enter'&&addCustom()}
-              placeholder="e.g. Accounting, Arabic…"
+              placeholder={t('settings.custom_subject_ph')}
               style={{ flex:1,padding:'11px 14px',borderRadius:12,border:'1.5px solid var(--ak-border2)',
                 outline:'none',fontSize:13,fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
                 background:'var(--ak-surface)' }}/>
@@ -363,20 +365,20 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
                 background:custom.trim()?`linear-gradient(135deg,${accentColor},#4C1DCC)`:'var(--ak-tag-bg)',
                 color:custom.trim()?'#fff':'var(--ak-text-muted)',fontSize:13,fontWeight:800,
                 cursor:custom.trim()?'pointer':'default',fontFamily:"'Nunito',sans-serif",
-                flexShrink:0 }}>Add</button>
+                flexShrink:0 }}>{t('common.add')}</button>
           </div>
         </div>
         <div style={{ display:'flex',gap:10 }}>
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
             border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
             fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
-            fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+            fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
           <button onClick={()=>{onSave(selected);onClose();}}
             style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
               background:`linear-gradient(135deg,${accentColor},#4C1DCC)`,
               color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',
               fontFamily:"'Nunito',sans-serif",
-              boxShadow:`0 4px 14px ${accentColor}44` }}>Save Subjects</button>
+              boxShadow:`0 4px 14px ${accentColor}44` }}>{t('settings.save_subjects')}</button>
         </div>
       </div>
     </>
@@ -385,6 +387,7 @@ function SubjectsSheet({ current, onClose, onSave, accentColor=BRAND }) {
 
 /* ─── Generic field sheet ─────────────────────────────────────── */
 function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
+  const { t } = useLang();
   const [val,setVal]=useState(value??'');
   const [pw, setPw] =useState({ current:'',next:'',confirm:'' });
   const [del,setDel]=useState('');
@@ -464,7 +467,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
         )}
         {type==='change-password'&&(
           <div style={{ display:'flex',flexDirection:'column',gap:12 }}>
-            {[['current','Current password'],['next','New password'],['confirm','Confirm new']].map(([k,l])=>(
+            {[['current',t('settings.current_pw')],['next',t('settings.new_pw')],['confirm',t('settings.confirm_pw')]].map(([k,l])=>(
               <div key={k}>
                 <label style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)' }}>{l}</label>
                 <input type="password" value={pw[k]}
@@ -478,9 +481,9 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
           <div style={{ background:'#FFF7ED',border:'1px solid #FED7AA',
             borderRadius:14,padding:'14px 16px',marginBottom:12 }}>
             <p style={{ margin:'0 0 8px',fontSize:14,fontWeight:800,color:'#92400E' }}>
-              ⚠️ Deactivate your account?</p>
+              ⚠️ {t('settings.deactivate_q')}</p>
             <p style={{ margin:0,fontSize:13,color:'#78350F',lineHeight:1.6 }}>
-              Your account will be suspended. You can reactivate within 30 days by signing back in.</p>
+              {t('settings.deactivate_warn')}</p>
           </div>
         )}
         {type==='delete-confirm'&&(
@@ -488,11 +491,11 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
             <div style={{ background:'#FEF2F2',border:'1px solid #FECACA',
               borderRadius:14,padding:'14px 16px',marginBottom:14 }}>
               <p style={{ margin:'0 0 8px',fontSize:14,fontWeight:800,color:'#7F1D1D' }}>
-                🗑️ Permanently delete your account?</p>
+                🗑️ {t('settings.delete_q')}</p>
               <p style={{ margin:0,fontSize:13,color:'#991B1B',lineHeight:1.6 }}>
-                All data — sessions, agent progress, XP, and history — will be permanently deleted.</p>
+                {t('settings.delete_warn')}</p>
             </div>
-            <label style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)' }}>Type DELETE to confirm</label>
+            <label style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)' }}>{t('settings.type_delete')}</label>
             <input value={del} onChange={e=>setDel(e.target.value.toUpperCase())}
               placeholder="DELETE"
               style={{ ...inp,borderColor:del==='DELETE'?RED:'var(--ak-border2)',
@@ -503,7 +506,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
             border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
             fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
-            fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+            fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
           <button onClick={handle}
             disabled={type==='delete-confirm'&&del!=='DELETE'}
             style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
@@ -514,9 +517,9 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
               fontSize:13,fontWeight:800,
               cursor:(type==='delete-confirm'&&del!=='DELETE')?'not-allowed':'pointer',
               fontFamily:"'Nunito',sans-serif" }}>
-            {type==='change-password'?'Update Password'
-              :type==='deactivate'?'Deactivate Account'
-              :type==='delete-confirm'?'Delete My Account':'Save Changes'}
+            {type==='change-password'?t('settings.update_password')
+              :type==='deactivate'?t('settings.deactivate')
+              :type==='delete-confirm'?t('settings.delete_my_account'):t('settings.save_changes')}
           </button>
         </div>
       </div>
@@ -526,6 +529,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
 
 /* ─── Logout modal ────────────────────────────────────────────── */
 function LogoutModal({ onClose, onConfirm }) {
+  const { t } = useLang();
   return (
     <>
       <div onClick={onClose} style={{ position:'fixed',inset:0,zIndex:3000,
@@ -540,20 +544,20 @@ function LogoutModal({ onClose, onConfirm }) {
           justifyContent:'center',margin:'0 auto 14px' }}>
           <Icon name="ti-logout" size={22} color={RED}/>
         </div>
-        <p style={{ fontSize:17,fontWeight:900,color:'var(--ak-text)',margin:'0 0 8px' }}>Log out of Akoro?</p>
+        <p style={{ fontSize:17,fontWeight:900,color:'var(--ak-text)',margin:'0 0 8px' }}>{t('settings.logout')}</p>
         <p style={{ fontSize:13,color:'var(--ak-text-sub)',margin:'0 0 24px',lineHeight:1.6 }}>
-          You'll need to sign back in to continue learning with your AI agent.
+          {t('settings.logout_sub')}
         </p>
         <div style={{ display:'flex',gap:10 }}>
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
             border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
             fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
-            fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+            fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
           <button onClick={onConfirm}
             style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
               background:`linear-gradient(135deg,${RED},#DC2626)`,color:'#fff',
               fontSize:13,fontWeight:800,cursor:'pointer',fontFamily:"'Nunito',sans-serif",
-              boxShadow:`0 4px 14px ${RED}44` }}>Log out</button>
+              boxShadow:`0 4px 14px ${RED}44` }}>{t('settings.log_out')}</button>
         </div>
       </div>
     </>
@@ -562,6 +566,7 @@ function LogoutModal({ onClose, onConfirm }) {
 
 /* ─── Two-Factor Auth sheet ───────────────────────────────────── */
 function TwoFactorSheet({ mode, onClose, onDone }) {
+  const { t } = useLang();
   const [step,     setStep]     = useState(mode === 'enable' ? 'setup' : 'confirm');
   const [qrUrl,    setQrUrl]    = useState(null);
   const [secret,   setSecret]   = useState('');
@@ -610,17 +615,17 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
           margin:'14px auto 18px' }}/>
 
         <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:'0 0 4px' }}>
-          {mode === 'enable' ? '🔐 Set Up Two-Factor Auth' : '🔓 Disable Two-Factor Auth'}
+          {mode === 'enable' ? t('settings.twofa_setup_title') : t('settings.twofa_disable_title')}
         </p>
         <p style={{ fontSize:13,color:'var(--ak-text-sub)',margin:'0 0 20px',lineHeight:1.6 }}>
           {mode === 'enable'
-            ? 'Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.'
-            : 'Enter the 6-digit code from your authenticator app to disable 2FA.'}
+            ? t('settings.twofa_setup_sub')
+            : t('settings.twofa_disable_sub')}
         </p>
 
         {loading && (
           <div style={{ textAlign:'center',padding:'30px 0',color:'var(--ak-text-muted)',fontSize:13 }}>
-            Setting up…
+            {t('settings.setting_up')}
           </div>
         )}
 
@@ -637,14 +642,14 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
               <Icon name="ti-key" size={15} color="var(--ak-text-sub)"/>
               <div style={{ flex:1,minWidth:0 }}>
                 <p style={{ fontSize:10,fontWeight:900,color:'var(--ak-text-muted)',
-                  textTransform:'uppercase',letterSpacing:1,margin:'0 0 2px' }}>Manual key</p>
+                  textTransform:'uppercase',letterSpacing:1,margin:'0 0 2px' }}>{t('settings.manual_key')}</p>
                 <p style={{ fontSize:12,fontWeight:700,color:'var(--ak-text)',margin:0,
                   wordBreak:'break-all',fontFamily:'monospace' }}>{secret}</p>
               </div>
               <button onClick={()=>navigator.clipboard?.writeText(secret)}
                 style={{ background:'none',border:'none',cursor:'pointer',
                   color:'var(--ak-text-sub)',fontSize:12,fontWeight:700,
-                  fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>Copy</button>
+                  fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>{t('common.copy')}</button>
             </div>
           </div>
         )}
@@ -669,7 +674,7 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
                 style={{ flex:1,padding:'13px',borderRadius:14,
                   border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',
                   fontSize:13,fontWeight:800,color:'var(--ak-text-sub)',cursor:'pointer',
-                  fontFamily:"'Nunito',sans-serif" }}>Cancel</button>
+                  fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
               <button onClick={handleConfirm} disabled={loading||code.length!==6}
                 style={{ flex:1.5,padding:'13px',borderRadius:14,border:'none',
                   background:code.length===6
@@ -678,7 +683,7 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
                   color:code.length===6?'#fff':'var(--ak-text-muted)',
                   fontSize:13,fontWeight:800,cursor:code.length===6?'pointer':'not-allowed',
                   fontFamily:"'Nunito',sans-serif" }}>
-                {loading ? '…' : mode==='enable' ? 'Activate 2FA' : 'Disable 2FA'}
+                {loading ? '…' : mode==='enable' ? t('settings.activate_2fa') : t('settings.disable_2fa')}
               </button>
             </div>
           </>
@@ -690,6 +695,7 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
 
 /* ─── Subjects row ────────────────────────────────────────────── */
 function SubjectsRow({ subjects,onClick,color=BRAND }) {
+  const { t } = useLang();
   return (
     <div style={{ ...rowBase,flexDirection:'column',alignItems:'stretch',cursor:'pointer' }}
       onMouseEnter={e=>e.currentTarget.style.background='var(--ak-surface-hover)'}
@@ -700,10 +706,10 @@ function SubjectsRow({ subjects,onClick,color=BRAND }) {
           <Icon name="ti-book-2" size={17} color="var(--ak-text-sub)"/>
         </span>
         <div style={{ flex:1 }}>
-          <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Subjects</p>
+          <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>{t('settings.subjects')}</p>
         </div>
         <span style={{ fontSize:12.5,fontWeight:600,color:'var(--ak-text-sub)',marginRight:4 }}>
-          {subjects.length} added</span>
+          {subjects.length} {t('settings.subjects_added')}</span>
         <span style={{ color:'var(--ak-border3)',fontSize:16 }}>›</span>
       </div>
       {subjects.length>0&&(
@@ -718,6 +724,7 @@ function SubjectsRow({ subjects,onClick,color=BRAND }) {
 
 /* ─── Notification section ────────────────────────────────────── */
 function NotifSection({ notif, setNotif, onSaveNotif }) {
+  const { t } = useLang();
   const toggle = (key) => {
     const updated = { ...notif, [key]: !notif[key] };
     setNotif(updated);
@@ -737,18 +744,18 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
   );
   return (
     <>
-      <Section title="Notification Channels">
-        <NotifRow icon="ti-mail"   label="Email Notifications" sub="Class updates and reminders"     field="email"/>
-        <NotifRow icon="ti-phone"  label="SMS Notifications"   sub="Text message alerts"             field="sms"/>
-        <NotifRow icon="ti-bell"   label="Push Notifications"  sub="In-app and device alerts"        field="push"/>
-        <NotifRow icon="ti-brand-whatsapp" label="WhatsApp"    sub="WhatsApp messages"               field="whatsapp"/>
+      <Section title={t('settings.notif_channels')}>
+        <NotifRow icon="ti-mail"   label={t('settings.notif_email')} sub={t('settings.notif_email_sub')}     field="email"/>
+        <NotifRow icon="ti-phone"  label={t('settings.notif_sms')}   sub={t('settings.notif_sms_sub')}             field="sms"/>
+        <NotifRow icon="ti-bell"   label={t('settings.notif_push')}  sub={t('settings.notif_push_sub')}        field="push"/>
+        <NotifRow icon="ti-brand-whatsapp" label="WhatsApp"    sub={t('settings.notif_whatsapp_sub')}               field="whatsapp"/>
         {notif.whatsapp&&(
           <div style={{ ...rowBase }}>
             <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
               <Icon name="ti-device-mobile" size={17} color="var(--ak-text-sub)"/>
             </span>
             <div style={{ flex:1 }}>
-              <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>WhatsApp Number</p>
+              <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>{t('settings.whatsapp_number')}</p>
             </div>
             <input value={notif.whatsappNumber||''}
               onChange={e=>{
@@ -764,12 +771,12 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
           </div>
         )}
       </Section>
-      <Section title="Notification Events">
-        <NotifRow icon="ti-clock"          label="Session Reminders"  sub="Reminded before class starts"  field="sessionReminders"/>
-        <NotifRow icon="ti-player-play"    label="Session Started"    sub="When your live class begins"    field="sessionStarted"/>
-        <NotifRow icon="ti-player-stop"    label="Session Cancelled"  sub="If a class is cancelled"        field="sessionCancelled"/>
-        <NotifRow icon="ti-speakerphone"   label="Announcements"      sub="New posts from instructors"     field="announcements"/>
-        <NotifRow icon="ti-message-circle" label="Q&A Replies"        sub="When someone replies to you"    field="qaReplies"/>
+      <Section title={t('settings.notif_events')}>
+        <NotifRow icon="ti-clock"          label={t('settings.notif_reminders')}  sub={t('settings.notif_reminders_sub')}  field="sessionReminders"/>
+        <NotifRow icon="ti-player-play"    label={t('settings.notif_started')}    sub={t('settings.notif_started_sub')}    field="sessionStarted"/>
+        <NotifRow icon="ti-player-stop"    label={t('settings.notif_cancelled')}  sub={t('settings.notif_cancelled_sub')}        field="sessionCancelled"/>
+        <NotifRow icon="ti-speakerphone"   label={t('settings.notif_announcements')}      sub={t('settings.notif_announcements_sub')}     field="announcements"/>
+        <NotifRow icon="ti-message-circle" label={t('settings.notif_qa')}        sub={t('settings.notif_qa_sub')}    field="qaReplies"/>
       </Section>
     </>
   );
@@ -777,6 +784,7 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 
 /* ─── User tab ────────────────────────────────────────────────── */
 function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], guideMap = {}, onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage }) {
+  const { t } = useLang();
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -875,72 +883,72 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         </div>
       </div>
 
-      <Section title="Profile">
-        <Row icon="ti-user"  label="Full Name"    value={profile.fullName}
-          onClick={()=>openSheet('fullName','Full Name','text')}/>
-        <Row icon="ti-at"    label="Username"     value={`@${profile.username}`}
-          onClick={()=>openSheet('username','Username','text')}/>
-        <Row icon="ti-mail"  label="Email"        value={profile.email}
-          sub={profile.googleLinked?'Linked via Google':undefined}/>
-        <Row icon="ti-phone" label="Phone Number" value={profile.phone||'Not set'}
-          onClick={()=>openSheet('phone','Phone Number','text')}/>
-        <Row icon="ti-map-pin" label="Country"    value={profile.country||'Not set'}
-          onClick={()=>openSheet('country','Country','select',COUNTRIES)}/>
+      <Section title={t('settings.profile')}>
+        <Row icon="ti-user"  label={t('settings.full_name')}    value={profile.fullName}
+          onClick={()=>openSheet('fullName',t('settings.full_name'),'text')}/>
+        <Row icon="ti-at"    label={t('settings.username')}     value={`@${profile.username}`}
+          onClick={()=>openSheet('username',t('settings.username'),'text')}/>
+        <Row icon="ti-mail"  label={t('settings.email')}        value={profile.email}
+          sub={profile.googleLinked?t('settings.linked_via_google'):undefined}/>
+        <Row icon="ti-phone" label={t('settings.phone')} value={profile.phone||t('settings.not_set')}
+          onClick={()=>openSheet('phone',t('settings.phone'),'text')}/>
+        <Row icon="ti-map-pin" label={t('settings.country')}    value={profile.country||t('settings.not_set')}
+          onClick={()=>openSheet('country',t('settings.country'),'select',COUNTRIES)}/>
       </Section>
 
-      <Section title="Learn & Study">
-        <Row icon="ti-chalkboard" label="Teaching Guide"
+      <Section title={t('settings.learn_study')}>
+        <Row icon="ti-chalkboard" label={t('settings.teaching_guide')}
           value={`${profile.guideEmoji||'🧠'} ${profile.teachingGuide||'NaNa Esumai'}`}
-          onClick={()=>openSheet('teachingGuide','Teaching Guide','select',guides.length ? guides : GUIDES)}/>
-        <Row icon="ti-building" label="School Name" value={profile.school||'Not set'}
-          onClick={()=>openSheet('school','School Name','text')}/>
-        <Row icon="ti-school" label="School Type" value={profile.schoolType||'Not set'}
-          onClick={()=>openSheet('schoolType','School Type','select',SCHOOL_TYPES)}/>
-        <Row icon="ti-calendar" label="Year / Class" value={profile.year||'Not set'}
-          onClick={()=>openSheet('year','Year / Class','select',YEARS)}/>
+          onClick={()=>openSheet('teachingGuide',t('settings.teaching_guide'),'select',guides.length ? guides : GUIDES)}/>
+        <Row icon="ti-building" label={t('settings.school_name')} value={profile.school||t('settings.not_set')}
+          onClick={()=>openSheet('school',t('settings.school_name'),'text')}/>
+        <Row icon="ti-school" label={t('settings.school_type')} value={profile.schoolType||t('settings.not_set')}
+          onClick={()=>openSheet('schoolType',t('settings.school_type'),'select',SCHOOL_TYPES)}/>
+        <Row icon="ti-calendar" label={t('settings.year_class')} value={profile.year||t('settings.not_set')}
+          onClick={()=>openSheet('year',t('settings.year_class'),'select',YEARS)}/>
         <SubjectsRow subjects={profile.subjects||[]}
           onClick={()=>setSubjectSheet(true)} color={color}/>
       </Section>
 
-      <Section title="Account">
-        <Row icon="ti-calendar-event" label="Member Since" value={profile.memberSince}/>
-        <Row icon="ti-id" label="Account ID" sub="Tap to copy" value={profile.memberId} noArrow
-          onClick={()=>{navigator.clipboard?.writeText(profile.memberId);showToast('Copied ✓');}}/>
-        <Row icon="ti-link" label="Linked Accounts"
-          value={profile.googleLinked?'Google ✓':'None'}
-          sub={profile.googleLinked?'Google account connected':undefined}/>
+      <Section title={t('settings.account')}>
+        <Row icon="ti-calendar-event" label={t('settings.member_since')} value={profile.memberSince}/>
+        <Row icon="ti-id" label={t('settings.account_id')} sub={t('settings.tap_to_copy')} value={profile.memberId} noArrow
+          onClick={()=>{navigator.clipboard?.writeText(profile.memberId);showToast(t('settings.copied'));}}/>
+        <Row icon="ti-link" label={t('settings.linked_accounts')}
+          value={profile.googleLinked?'Google ✓':t('settings.none')}
+          sub={profile.googleLinked?t('settings.google_connected'):undefined}/>
       </Section>
 
-      <Section title="Plan & Usage">
-        <Row icon="ti-star" label="Current Plan" value={profile.plan||'Free'}/>
+      <Section title={t('settings.plan_usage')}>
+        <Row icon="ti-star" label={t('settings.current_plan')} value={profile.plan||'Free'}/>
         <div style={rowBase}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
             <Icon name="ti-chart-bar" size={17} color="var(--ak-text-sub)"/>
           </span>
           <div style={{ flex:1 }}>
-            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Sessions Used</p>
+            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>{t('settings.sessions_used')}</p>
             <div style={{ marginTop:6 }}><ProgressBar pct={xpPct} color={color}/></div>
           </div>
           <span style={{ fontSize:12.5,fontWeight:600,color:'var(--ak-text-sub)',marginLeft:10 }}>
             {profile.sessionsUsed||0}/{profile.sessionsLimit||30}</span>
         </div>
-        <Row icon="ti-clock" label="Teaching Hours" value={profile.teachingHours||'0h'}/>
-        <Row icon="ti-bolt"  label="XP Balance"     value={`${(profile.xpBalance||0).toLocaleString()} XP`}/>
-        <Row icon="ti-arrow-up" label="Upgrade Plan" sub="Get unlimited sessions"
-          onClick={()=>showToast('Upgrade flow coming soon!')}>
+        <Row icon="ti-clock" label={t('settings.teaching_hours')} value={profile.teachingHours||'0h'}/>
+        <Row icon="ti-bolt"  label={t('settings.xp_balance')}     value={`${(profile.xpBalance||0).toLocaleString()} XP`}/>
+        <Row icon="ti-arrow-up" label={t('settings.upgrade_plan')} sub={t('settings.upgrade_sub')}
+          onClick={()=>showToast(t('settings.upgrade_soon'))}>
           <span style={{ fontSize:12.5,fontWeight:800,color,marginRight:4 }}>Pro</span>
         </Row>
       </Section>
 
-      <Section title="Personalization & Appearance">
-        <Row icon="ti-language" label="Language"
+      <Section title={t('settings.personalization')}>
+        <Row icon="ti-language" label={t('settings.language')}
           value={profile.language||localStorage.getItem(LS_LANGUAGE)||'English'}
-          onClick={()=>openSheet('language','Language','select',LANGUAGES)}/>
-        <Row icon="ti-moon" label="Display Mode"
+          onClick={()=>openSheet('language',t('settings.language'),'select',LANGUAGES)}/>
+        <Row icon="ti-moon" label={t('settings.display_mode')}
           value={(() => { const m = profile.displayMode||localStorage.getItem(LS_DISPLAY)||'system'; return m.charAt(0).toUpperCase()+m.slice(1); })()}
-          onClick={()=>openSheet('displayMode','Display Mode','display-mode')}/>
-        <Row icon="ti-palette" label="Theme Accent"
-          onClick={()=>openSheet('accentColor','Accent Colour','accent')}>
+          onClick={()=>openSheet('displayMode',t('settings.display_mode'),'display-mode')}/>
+        <Row icon="ti-palette" label={t('settings.theme_accent')}
+          onClick={()=>openSheet('accentColor',t('settings.accent_colour'),'accent')}>
           <div style={{ width:18,height:18,borderRadius:'50%',background:color,marginRight:6,flexShrink:0 }}/>
         </Row>
       </Section>
@@ -950,23 +958,23 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         setNotif={n=>setProfile(p=>({...p,notif:n}))}
         onSaveNotif={onSaveNotif}/>
 
-      <Section title="Help & Support">
-        <Row icon="ti-message-circle" label="Contact Support"  onClick={()=>showToast('Opening support...')}/>
-        <Row icon="ti-help-circle"    label="Help Centre"      onClick={()=>showToast('Opening help centre...')}/>
-        <Row icon="ti-bug"            label="Report a Bug"     onClick={()=>showToast('Opening bug report...')}/>
-        <Row icon="ti-star"           label="Rate the App"     onClick={()=>showToast('Thanks for rating! ⭐')}/>
+      <Section title={t('settings.help_support')}>
+        <Row icon="ti-message-circle" label={t('settings.contact_support')}  onClick={()=>showToast(t('settings.opening_support'))}/>
+        <Row icon="ti-help-circle"    label={t('settings.help_centre')}      onClick={()=>showToast(t('settings.opening_help'))}/>
+        <Row icon="ti-bug"            label={t('settings.report_bug')}     onClick={()=>showToast(t('settings.opening_bug'))}/>
+        <Row icon="ti-star"           label={t('settings.rate_app')}     onClick={()=>showToast(t('settings.thanks_rating'))}/>
       </Section>
 
-      <Section title="About & Version">
-        <Row icon="ti-info-circle" label="App Version" value="v1.0.0"/>
-        <Row icon="ti-file-text"   label="Terms of Service"     onClick={()=>showToast('Opening terms...')}/>
-        <Row icon="ti-shield"      label="Privacy Policy"       onClick={()=>showToast('Opening privacy policy...')}/>
-        <Row icon="ti-license"     label="Open Source Licences" onClick={()=>showToast('Opening licences...')}/>
+      <Section title={t('settings.about_version')}>
+        <Row icon="ti-info-circle" label={t('settings.app_version')} value="v1.0.0"/>
+        <Row icon="ti-file-text"   label={t('settings.terms')}     onClick={()=>showToast(t('settings.opening_terms'))}/>
+        <Row icon="ti-shield"      label={t('settings.privacy_policy')}       onClick={()=>showToast(t('settings.opening_privacy'))}/>
+        <Row icon="ti-license"     label={t('settings.licences')} onClick={()=>showToast(t('settings.opening_licences'))}/>
       </Section>
 
-      <Section title="Privacy & Security">
-        <Row icon="ti-key" label="Change Password"
-          onClick={()=>openSheet('password','Change Password','change-password')}/>
+      <Section title={t('settings.privacy')}>
+        <Row icon="ti-key" label={t('settings.change_password')}
+          onClick={()=>openSheet('password',t('settings.change_password'),'change-password')}/>
         <div style={{ ...rowBase,cursor:'pointer' }}
           onMouseEnter={e=>e.currentTarget.style.background='var(--ak-surface-hover)'}
           onMouseLeave={e=>e.currentTarget.style.background='var(--ak-surface)'}
@@ -975,9 +983,9 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
             <Icon name="ti-lock" size={17} color="var(--ak-text-sub)"/>
           </span>
           <div style={{ flex:1 }}>
-            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>Two-Factor Auth</p>
+            <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>{t('settings.two_factor')}</p>
             <p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>
-              {profile.twoFactor ? 'Enabled — tap to disable' : 'Add extra security to your account'}
+              {profile.twoFactor ? t('settings.twofa_enabled') : t('settings.twofa_add')}
             </p>
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:8 }}>
@@ -988,12 +996,12 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
             <span style={{ color:'var(--ak-border3)',fontSize:16 }}>›</span>
           </div>
         </div>
-        <Row icon="ti-player-pause" label="Deactivate Account" danger
-          sub="Suspend your account temporarily"
-          onClick={()=>openSheet('deactivate','Deactivate Account','deactivate')}/>
-        <Row icon="ti-trash" label="Delete Account" danger
-          sub="Permanently delete all data"
-          onClick={()=>openSheet('deleteAccount','Delete Account','delete-confirm')}/>
+        <Row icon="ti-player-pause" label={t('settings.deactivate')} danger
+          sub={t('settings.deactivate_sub')}
+          onClick={()=>openSheet('deactivate',t('settings.deactivate'),'deactivate')}/>
+        <Row icon="ti-trash" label={t('settings.delete')} danger
+          sub={t('settings.delete_sub')}
+          onClick={()=>openSheet('deleteAccount',t('settings.delete'),'delete-confirm')}/>
       </Section>
       <div style={{ height:40 }}/>
 
@@ -1051,6 +1059,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
 
 /* ─── Agent tab ───────────────────────────────────────────────── */
 function AgentTab({ agent, setAgent, onSaveAgent }) {
+  const { t } = useLang();
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -1067,12 +1076,12 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
   }, [agent, onSaveAgent, setAgent]);
 
   const stats = [
-    { icon:'ti-book',          label:'Topics Taught',  value:(agent.totalSessions||0)*4 },
-    { icon:'ti-bulb',          label:'Avg Confidence', value:`${agent.knowledgeScore||0}%` },
-    { icon:'ti-circle-check',  label:'Sessions Done',  value:agent.totalSessions||0 },
-    { icon:'ti-message-circle',label:'Total Turns',    value:agent.totalTurns||0 },
-    { icon:'ti-bolt',          label:'XP Earned',      value:(agent.xpEarned||0).toLocaleString() },
-    { icon:'ti-star',          label:'Agent Level',    value:`Level ${agent.level||1}` },
+    { icon:'ti-book',          label:t('settings.topics_taught'),  value:(agent.totalSessions||0)*4 },
+    { icon:'ti-bulb',          label:t('settings.avg_confidence'), value:`${agent.knowledgeScore||0}%` },
+    { icon:'ti-circle-check',  label:t('agent.sessions_done'),  value:agent.totalSessions||0 },
+    { icon:'ti-message-circle',label:t('agent.total_turns'),    value:agent.totalTurns||0 },
+    { icon:'ti-bolt',          label:t('settings.xp_earned'),      value:(agent.xpEarned||0).toLocaleString() },
+    { icon:'ti-star',          label:t('settings.agent_level'),    value:`${t('agent.level')} ${agent.level||1}` },
   ];
   const color    = agent.color || ORANGE;
   const levelPct = Math.min(100,((agent.level||1)/10)*100);
@@ -1088,13 +1097,13 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           color={color} size={64} onPhotoClick={()=>setAvatarSheet(true)}/>
         <div style={{ flex:1 }}>
           <p style={{ margin:'0 0 2px',fontSize:17,fontWeight:900,
-            color:'var(--ak-text)',fontFamily:"'Nunito',sans-serif" }}>{agent.name||'My Agent'}</p>
+            color:'var(--ak-text)',fontFamily:"'Nunito',sans-serif" }}>{agent.name||t('agent.my_agent')}</p>
           <p style={{ margin:'0 0 8px',fontSize:12.5,color:'var(--ak-text-sub)',
-            fontFamily:"'Nunito',sans-serif" }}>Your AI learning agent</p>
+            fontFamily:"'Nunito',sans-serif" }}>{t('settings.your_ai_agent')}</p>
           <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
             <span style={{ fontSize:11,fontWeight:800,padding:'3px 10px',borderRadius:8,
               background:`${color}15`,color }}>
-              {agent.studyLevel||'Student'}</span>
+              {agent.studyLevel||t('settings.student')}</span>
             <span style={{ fontSize:11,fontWeight:800,padding:'3px 10px',borderRadius:8,
               background:'var(--ak-tag-bg)',color:'var(--ak-text-sub)' }}>
               Lv.{agent.level||1}</span>
@@ -1108,15 +1117,15 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8 }}>
           <span style={{ fontSize:12,fontWeight:800,color:'var(--ak-text-sec)',fontFamily:"'Nunito',sans-serif" }}>
             <Icon name="ti-star" size={13} color={color} style={{ marginRight:5 }}/>
-            Agent Level {agent.level||1}
+            {t('settings.agent_level')} {agent.level||1}
           </span>
           <span style={{ fontSize:11.5,fontWeight:600,color:'var(--ak-text-muted)',fontFamily:"'Nunito',sans-serif" }}>
-            {agent.totalTurns||0} turns · {(agent.xpEarned||0).toLocaleString()} XP
+            {agent.totalTurns||0} {t('settings.turns')} · {(agent.xpEarned||0).toLocaleString()} XP
           </span>
         </div>
         <ProgressBar pct={levelPct} color={color}/>
         <p style={{ fontSize:11,color:'var(--ak-text-muted)',margin:'6px 0 0',fontFamily:"'Nunito',sans-serif" }}>
-          Level {agent.level||1} → {(agent.level||1)+1} · {Math.round(100-levelPct)}% remaining
+          {t('agent.level')} {agent.level||1} → {(agent.level||1)+1} · {Math.round(100-levelPct)}% {t('settings.remaining')}
         </p>
       </div>
 
@@ -1133,38 +1142,38 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
         ))}
       </div>
 
-      <Section title="Agent Profile">
-        <Row icon="ti-tag" label="Agent Name" value={agent.name}
-          onClick={()=>openSheet('name','Agent Name','text')}/>
-        <Row icon="ti-writing" label="Personality"
-          sub={(agent.personality||'Not set').slice(0,40)+(agent.personality?.length>40?'…':'')}
-          onClick={()=>openSheet('personality','Agent Personality','textarea')}/>
-        <Row icon="ti-palette" label="Agent Colour"
-          onClick={()=>openSheet('color','Agent Colour','accent')}>
+      <Section title={t('settings.agent_profile')}>
+        <Row icon="ti-tag" label={t('settings.agent_name')} value={agent.name}
+          onClick={()=>openSheet('name',t('settings.agent_name'),'text')}/>
+        <Row icon="ti-writing" label={t('settings.personality')}
+          sub={(agent.personality||t('settings.not_set')).slice(0,40)+(agent.personality?.length>40?'…':'')}
+          onClick={()=>openSheet('personality',t('settings.agent_personality'),'textarea')}/>
+        <Row icon="ti-palette" label={t('settings.agent_colour')}
+          onClick={()=>openSheet('color',t('settings.agent_colour'),'accent')}>
           <div style={{ width:18,height:18,borderRadius:'50%',background:color,marginRight:6,flexShrink:0 }}/>
         </Row>
-        <Row icon="ti-droplet" label="Card Background"
-          onClick={()=>openSheet('bg','Card Background','bg')}>
+        <Row icon="ti-droplet" label={t('settings.card_bg')}
+          onClick={()=>openSheet('bg',t('settings.card_bg'),'bg')}>
           <div style={{ width:18,height:18,borderRadius:'50%',
             background:agent.bg||'#FEF0E6',border:'1px solid var(--ak-border2)',
             marginRight:6,flexShrink:0 }}/>
         </Row>
       </Section>
 
-      <Section title="Study Profile">
-        <Row icon="ti-school"      label="Study Level"  value={agent.studyLevel||'Not set'}
-          onClick={()=>openSheet('studyLevel','Study Level','select',STUDY_LEVELS)}/>
-        <Row icon="ti-calendar"    label="Year / Grade" value={agent.yearGroup||'Not set'}
-          onClick={()=>openSheet('yearGroup','Year / Grade','select',YEARS)}/>
-        <Row icon="ti-certificate" label="Exam Board"   value={agent.examBoard||'Not set'}
-          onClick={()=>openSheet('examBoard','Exam Board','select',EXAM_BOARDS)}/>
+      <Section title={t('settings.study_profile')}>
+        <Row icon="ti-school"      label={t('settings.study_level')}  value={agent.studyLevel||t('settings.not_set')}
+          onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
+        <Row icon="ti-calendar"    label={t('settings.year_grade')} value={agent.yearGroup||t('settings.not_set')}
+          onClick={()=>openSheet('yearGroup',t('settings.year_grade'),'select',YEARS)}/>
+        <Row icon="ti-certificate" label={t('settings.exam_board')}   value={agent.examBoard||t('settings.not_set')}
+          onClick={()=>openSheet('examBoard',t('settings.exam_board'),'select',EXAM_BOARDS)}/>
         <SubjectsRow subjects={agent.subjects||[]}
           onClick={()=>setSubjectSheet(true)} color={color}/>
       </Section>
 
-      <Section title="Learning Goal">
-        <Row icon="ti-target" label="Primary Goal" value={agent.goal||'Not set'}
-          onClick={()=>openSheet('goal','Primary Goal','select',GOALS)}/>
+      <Section title={t('settings.learning_goal')}>
+        <Row icon="ti-target" label={t('settings.primary_goal')} value={agent.goal||t('settings.not_set')}
+          onClick={()=>openSheet('goal',t('settings.primary_goal'),'select',GOALS)}/>
       </Section>
       <div style={{ height:40 }}/>
 
@@ -1226,7 +1235,7 @@ export default function SettingsPage() {
   const navigate                   = useNavigate();
   const { user, logout }           = useAuth();
   const { accentColor, setMode: onSetMode, setAccent: onSetAccent } = useTheme();
-  const { language, setLanguage: onSetLanguage }                    = useLang();
+  const { language, setLanguage: onSetLanguage, t }                 = useLang();
 
   const [tab,         setTab]         = useState('user');
   const [profile,     setProfile]     = useState(null);
@@ -1435,26 +1444,26 @@ export default function SettingsPage() {
             border:'1px solid var(--ak-border2)',borderRadius:8,padding:'6px 12px',
             cursor:'pointer',fontFamily:"'Nunito',sans-serif",
             fontSize:12,fontWeight:700,color:'var(--ak-text-sub)',flexShrink:0 }}>
-          <Icon name="ti-logout" size={15} color="var(--ak-text-sub)"/> Sign Out
+          <Icon name="ti-logout" size={15} color="var(--ak-text-sub)"/> {t('common.signout')}
         </button>
       </header>
 
       {/* Tabs */}
       <div style={{ display:'flex',background:'var(--ak-surface)',borderBottom:'1px solid var(--ak-border)',padding:'0 16px' }}>
-        {['user','agent'].map(t=>(
-          <button key={t} onClick={()=>setTab(t)}
+        {['user','agent'].map(tabKey=>(
+          <button key={tabKey} onClick={()=>setTab(tabKey)}
             style={{ flex:1,padding:'11px 0',background:'none',border:'none',
-              cursor:'pointer',fontSize:13,fontWeight:tab===t?900:600,
-              color:tab===t?BRAND:'var(--ak-text-muted)',
-              borderBottom:`2.5px solid ${tab===t?BRAND:'transparent'}`,
+              cursor:'pointer',fontSize:13,fontWeight:tab===tabKey?900:600,
+              color:tab===tabKey?BRAND:'var(--ak-text-muted)',
+              borderBottom:`2.5px solid ${tab===tabKey?BRAND:'transparent'}`,
               transition:'all .2s',fontFamily:"'Nunito',sans-serif",
               display:'flex',alignItems:'center',justifyContent:'center',gap:6 }}>
-            {t==='user'
-              ? <><Icon name="ti-user" size={14}/> Account</>
+            {tabKey==='user'
+              ? <><Icon name="ti-user" size={14}/> {t('settings.tab_account')}</>
               : <><span>{agent?.photoUrl
                   ? <img src={agent.photoUrl} style={{ width:16,height:16,borderRadius:'50%',objectFit:'cover' }}/>
                   : agent?.emoji||'🤖'
-                }</span> {agent?.name||'Agent'}</>
+                }</span> {agent?.name||t('settings.tab_agent')}</>
             }
           </button>
         ))}

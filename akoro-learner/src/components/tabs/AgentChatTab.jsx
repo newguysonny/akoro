@@ -18,7 +18,14 @@ const TASK_INTENTS = [
 ];
 const isTaskIntent = (text) => TASK_INTENTS.some((re) => re.test(text));
 
-const QUICK_PROMPTS = ["Create a task for me","What's due today?","Quiz me on Algebra","Check my progress","Explain Mitosis","Help with an essay"];
+const QUICK_PROMPTS = [
+  { text:"Create a task for me", key:"agent.qp_create" },
+  { text:"What's due today?",    key:"agent.qp_due" },
+  { text:"Quiz me on Algebra",   key:"agent.qp_quiz" },
+  { text:"Check my progress",    key:"agent.qp_progress" },
+  { text:"Explain Mitosis",      key:"agent.qp_explain" },
+  { text:"Help with an essay",   key:"agent.qp_essay" },
+];
 const AGENT_REPLIES = {
   "Create a task for me":"Sure! What do you need to get done? Tell me the subject and what it's about — I'll add it to your task list.",
   "What's due today?":"📋 Let me check your task list for today's items. Use the Tasks tab to see everything that's pending.",
@@ -120,7 +127,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     });
 
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
-  const PRI_LABEL = {high:"High",medium:"Medium",low:"Low"};
+  const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
 
   // Update greeting when agent name changes (customise flow)
@@ -238,11 +245,11 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
           <div>
             <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{agentName}</p>
-            <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>Online · Lv {AGENT_CONFIG.level} · Your learning agent</span></div>
+            <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${t('common.online')} · Lv ${AGENT_CONFIG.level} · ${t('agent.learning_agent')}`}</span></div>
           </div>
         </div>
         <button onClick={()=>{setDraftName(agentName);setDraftEmoji(agentEmoji);setCustOpen(true);}} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:11.5,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
-          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Customise
+          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>{t('agent.customise')}
         </button>
       </div>
       <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
@@ -256,7 +263,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       {innerTab==="chat"&&(
         <>
           <div style={{ display:"flex",gap:7,padding:"10px 18px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
-            {QUICK_PROMPTS.map(p=><button key={p} onClick={()=>sendMessage(p)} style={{ flexShrink:0,padding:"5px 12px",borderRadius:20,border:`1px solid ${BRAND}30`,background:`${BRAND}08`,color:BRAND,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap" }}>{p}</button>)}
+            {QUICK_PROMPTS.map(p=><button key={p.text} onClick={()=>sendMessage(p.text)} style={{ flexShrink:0,padding:"5px 12px",borderRadius:20,border:`1px solid ${BRAND}30`,background:`${BRAND}08`,color:BRAND,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap" }}>{t(p.key)}</button>)}
           </div>
           <div ref={feedRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12 }}>
             {messages.map(msg=>{
@@ -275,9 +282,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
             <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 16px" }}>
-              <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={`Ask ${agentName} anything...`} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
+              <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={t('agent.ask_anything').replace('{name}', agentName)} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
               <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
-                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Task
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>{t('agent.task')}
               </button>
               <button onClick={()=>sendMessage()} style={{ width:36,height:36,borderRadius:"50%",background:input.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:input.trim()?"pointer":"default",flexShrink:0,transition:"background .2s" }}><SendIcon size={15} color={input.trim()?"#fff":"var(--ak-text-muted)"}/></button>
             </div>
@@ -295,13 +302,13 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6 }}>{[["pending","To do"],["done","Done"]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div>
+            <div style={{ display:"flex",gap:6 }}>{[["pending",t('agent.to_do')],["done",t('agent.done')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div>
             <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
-              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Task
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>
           </div>
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?"No completed tasks yet.":"All done! 🎉"}</p></div>:filteredTasks.map(t=>(
+            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(t=>(
               <div key={t.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:t.status==="done"?.6:1 }}>
                 <button onClick={()=>toggleTask(t.id)} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${t.status==="done"?GREEN:"var(--ak-border3)"}`,background:t.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                   {t.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -323,15 +330,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
         <><div onClick={()=>setTaskOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>📋 Assign Task to {agentName}</p>
-          <p style={{ fontSize:12,color:"var(--ak-text-muted)",margin:"0 0 20px",lineHeight:1.5 }}>Give your agent a task to track and help you complete.</p>
-          <div style={{ marginBottom:14 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.task_title')}</label><input className="ak-chat-input" value={tTitle} onChange={e=>setTTitle(e.target.value)} placeholder="e.g. Revise Chapter 4" style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
-          <div style={{ marginBottom:18 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.description')} <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span></label><textarea className="ak-chat-input" value={tDesc} onChange={e=>setTDesc(e.target.value)} placeholder="Any context for your agent..." rows={3} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
-          <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('agent.priority')}</label><div style={{ display:"flex",gap:8 }}>{[["high","🔴 High"],["medium","🟡 Medium"],["low","🟢 Low"]].map(([k,l])=><button key={k} onClick={()=>setTPriority(k)} style={{ flex:1,padding:"9px 6px",borderRadius:12,border:`1.5px solid ${tPriority===k?PRI_COLOR[k]:"var(--ak-border2)"}`,background:tPriority===k?`${PRI_COLOR[k]}10`:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:tPriority===k?PRI_COLOR[k]:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div></div>
+          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>📋 {t('agent.assign_to')} {agentName}</p>
+          <p style={{ fontSize:12,color:"var(--ak-text-muted)",margin:"0 0 20px",lineHeight:1.5 }}>{t('agent.assign_sub')}</p>
+          <div style={{ marginBottom:14 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.task_title')}</label><input className="ak-chat-input" value={tTitle} onChange={e=>setTTitle(e.target.value)} placeholder={t('agent.task_title_ph')} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
+          <div style={{ marginBottom:18 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.description')} <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span></label><textarea className="ak-chat-input" value={tDesc} onChange={e=>setTDesc(e.target.value)} placeholder={t('agent.desc_ph')} rows={3} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
+          <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('agent.priority')}</label><div style={{ display:"flex",gap:8 }}>{[["high",t('agent.pri_high')],["medium",t('agent.pri_medium')],["low",t('agent.pri_low')]].map(([k,l])=><button key={k} onClick={()=>setTPriority(k)} style={{ flex:1,padding:"9px 6px",borderRadius:12,border:`1.5px solid ${tPriority===k?PRI_COLOR[k]:"var(--ak-border2)"}`,background:tPriority===k?`${PRI_COLOR[k]}10`:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:tPriority===k?PRI_COLOR[k]:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div></div>
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={()=>setTaskOpen(false)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
             <button onClick={addTask} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:tTitle.trim()?"pointer":"default",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Assign Task
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{t('agent.assign_task')}
             </button>
           </div>
         </div></>
@@ -340,17 +347,17 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
         <><div onClick={()=>setCustOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 48px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 18px" }}>✨ Customise Your Agent</p>
-          <div style={{ marginBottom:16 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.agent_name')}</label><input className="ak-chat-input" value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder="e.g. Aria, Sage, Nova..." style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:14,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
+          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 18px" }}>{t('agent.customise_title')}</p>
+          <div style={{ marginBottom:16 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.agent_name')}</label><input className="ak-chat-input" value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder={t('agent.name_ph')} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:14,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
           <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:10,letterSpacing:.3 }}>{t('agent.avatar')}</label><div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{AGENT_CONFIG.avatars.map(em=><button key={em} onClick={()=>setDraftEmoji(em)} style={{ width:46,height:46,borderRadius:12,border:`2px solid ${draftEmoji===em?BRAND:"var(--ak-border2)"}`,background:draftEmoji===em?`${BRAND}12`:"var(--ak-surface-hover)",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s" }}>{em}</button>)}</div></div>
           <div style={{ display:"flex",alignItems:"center",gap:12,background:`${BRAND}08`,border:`1px solid ${BRAND}20`,borderRadius:14,padding:"12px 14px",marginBottom:20 }}>
             <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{draftEmoji}</div>
-            <div><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{draftName||"Unnamed"}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>Online · Lv {AGENT_CONFIG.level}</p></div>
+            <div><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{draftName||t('agent.unnamed')}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{t('common.online')} · Lv {AGENT_CONFIG.level}</p></div>
           </div>
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={()=>setCustOpen(false)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
             <button onClick={saveCustomise} style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Save Agent
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{t('agent.save_agent')}
             </button>
           </div>
         </div></>

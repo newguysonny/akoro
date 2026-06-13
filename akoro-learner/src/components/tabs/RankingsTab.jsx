@@ -62,10 +62,10 @@ function RankingsTab() {
               <div style={{ flex:1,minWidth:0 }}>
                 <div style={{ display:"flex",alignItems:"center",gap:5 }}><span style={{ fontSize:13.5,fontWeight:800,color:isMe?BRAND:"var(--ak-text)" }}>{entry.name}</span>{isMe&&<span style={{ fontSize:9,fontWeight:800,color:BRAND,background:`${BRAND}15`,borderRadius:4,padding:"1px 5px" }}>{t('rankings.you')}</span>}</div>
                 <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:2 }}>
-                  {entry.streak!==undefined&&<span style={{ fontSize:10,fontWeight:700,color:"var(--ak-text-muted)" }}>🔥 {entry.streak}d streak</span>}
+                  {entry.streak!==undefined&&<span style={{ fontSize:10,fontWeight:700,color:"var(--ak-text-muted)" }}>🔥 {entry.streak}{t('rankings.day_streak')}</span>}
                   {entry.subject&&<span style={{ fontSize:10,fontWeight:700,color:subjectColor||"var(--ak-text-muted)",background:`${subjectColor}15`,borderRadius:4,padding:"1px 6px" }}>{SUBJECTS[entry.subject]?.icon} {SUBJECTS[entry.subject]?.label}</span>}
-                  {entry.completions!==undefined&&<span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>{entry.completions} completions</span>}
-                  {entry.students!==undefined&&<span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>👥 {entry.students} students</span>}
+                  {entry.completions!==undefined&&<span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>{entry.completions} {t('rankings.completions')}</span>}
+                  {entry.students!==undefined&&<span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>👥 {entry.students} {t('rankings.students')}</span>}
                 </div>
               </div>
               <div style={{ textAlign:"right",flexShrink:0 }}>
