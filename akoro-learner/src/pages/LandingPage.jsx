@@ -10,6 +10,7 @@ import {
   Layers, Settings, LayoutDashboard,
 } from 'lucide-react';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import { API } from '../services/api.js';
 import {
   FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter,
 } from 'react-icons/fa6';
@@ -406,8 +407,8 @@ function Courses() {
       setFetched(true);
       setLoading(true);
       Promise.all([
-        fetch('/api/courses/published').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/live-sessions').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${API}/api/courses/published`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${API}/api/live-sessions`).then(r => r.ok ? r.json() : null).catch(() => null),
       ]).then(([c, l]) => {
         setCourses(Array.isArray(c) ? c : c?.courses || []);
         setLive(Array.isArray(l) ? l : l?.sessions || []);
@@ -857,7 +858,7 @@ function Instructors() {
     const obs = new IntersectionObserver(([e]) => {
       if (!e.isIntersecting) return;
       obs.disconnect(); setFetched(true); setLoading(true);
-      fetch('/api/instructors/featured')
+      fetch(`${API}/api/instructors/featured`)
         .then(r => r.ok ? r.json() : null)
         .catch(() => null)
         .then(data => setInstructors(Array.isArray(data) ? data : data?.instructors || []))
