@@ -18,7 +18,7 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const { user, markOnboarded } = useAuth();
   const { displayMode, accentColor, setMode, setAccent } = useTheme();
-  const { language, setLanguage } = useLang();
+  const { language, setLanguage, t } = useLang();
 
   const [step, setStep]   = useState(0);
   const [saving, setSaving] = useState(false);
@@ -37,16 +37,16 @@ export default function OnboardingPage() {
   const toggleSubject = (s) =>
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
 
-  const STEPS = ['Profile', 'Your agent', 'Preferences'];
+  const STEPS = [t('onboarding.step_profile'), t('onboarding.step_agent'), t('onboarding.step_prefs')];
 
   const validateStep = () => {
     setErr('');
     if (step === 0) {
-      if (!fullName.trim())   { setErr('Please enter your name'); return false; }
-      if (!studyLevel)        { setErr('Please pick your study level'); return false; }
+      if (!fullName.trim())   { setErr(t('onboarding.err_name')); return false; }
+      if (!studyLevel)        { setErr(t('onboarding.err_level')); return false; }
     }
     if (step === 1) {
-      if (!agentName.trim())  { setErr('Give your agent a name'); return false; }
+      if (!agentName.trim())  { setErr(t('onboarding.err_agent')); return false; }
     }
     return true;
   };
@@ -77,7 +77,7 @@ export default function OnboardingPage() {
       });
       if (!profileRes.ok) {
         const j = await profileRes.json().catch(() => ({}));
-        throw new Error(j.message || 'Could not save your profile');
+        throw new Error(j.message || t('onboarding.err_profile'));
       }
 
       // 2. Save student AI agent to user_agents table (separate from instructor teaching guide)
@@ -148,31 +148,31 @@ export default function OnboardingPage() {
 
         {step === 0 && (
           <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>Welcome to Akoro 👋</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>Let's set up your learning profile.</p>
+            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.welcome')}</h1>
+            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.setup_profile')}</p>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Full name</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Alex Obi" style={inp}/>
+              <label style={lbl}>{t('onboarding.full_name')}</label>
+              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder={t('onboarding.name_ph')} style={inp}/>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Study level</label>
+              <label style={lbl}>{t('onboarding.study_level')}</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {STUDY_LEVELS.map(l => <span key={l} onClick={() => setStudyLevel(l)} style={chip(studyLevel === l)}>{l}</span>)}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
-                <label style={lbl}>Year / class <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>(optional)</span></label>
-                <input value={yearGroup} onChange={e => setYearGroup(e.target.value)} placeholder="Year 11 / SS2" style={inp}/>
+                <label style={lbl}>{t('onboarding.year_class')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
+                <input value={yearGroup} onChange={e => setYearGroup(e.target.value)} placeholder={t('onboarding.year_ph')} style={inp}/>
               </div>
               <div>
-                <label style={lbl}>School <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>(optional)</span></label>
-                <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder="Westwood Academy" style={inp}/>
+                <label style={lbl}>{t('onboarding.school')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
+                <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder={t('onboarding.school_ph')} style={inp}/>
               </div>
             </div>
             <div>
-              <label style={lbl}>Subjects you're studying <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>(optional)</span></label>
+              <label style={lbl}>{t('onboarding.subjects_studying')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {SUBJECT_OPTIONS.map(s => <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>)}
               </div>
@@ -182,8 +182,8 @@ export default function OnboardingPage() {
 
         {step === 1 && (
           <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>Meet your agent 🤖</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>You'll teach your agent — then it teaches you back. Give it a name and a face.</p>
+            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.meet_agent')}</h1>
+            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.agent_desc')}</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
               <div style={{ width: 76, height: 76, borderRadius: 22, background: `linear-gradient(135deg,${accentColor},#4C1DCC)`,
@@ -192,11 +192,11 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Agent name</label>
-              <input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder="NaNa Esumai" style={inp}/>
+              <label style={lbl}>{t('onboarding.agent_name')}</label>
+              <input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder={t('onboarding.agent_name_ph')} style={inp}/>
             </div>
             <div>
-              <label style={lbl}>Pick an avatar</label>
+              <label style={lbl}>{t('onboarding.pick_avatar')}</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {GUIDE_EMOJIS.map(em => (
                   <button key={em} onClick={() => setGuideEmoji(em)} style={{
@@ -212,17 +212,17 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <>
-            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>Make it yours 🎨</h1>
-            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>Choose how Akoro looks and the language you prefer.</p>
+            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.make_yours')}</h1>
+            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.appearance')}</p>
 
             <div style={{ marginBottom: 18 }}>
-              <label style={lbl}>Language</label>
+              <label style={lbl}>{t('onboarding.language')}</label>
               <select value={language} onChange={e => setLanguage(e.target.value)} style={inp}>
                 {SUPPORTED_LANGUAGES.map(l => <option key={l.code} value={l.label}>{l.label}</option>)}
               </select>
             </div>
             <div style={{ marginBottom: 18 }}>
-              <label style={lbl}>Theme</label>
+              <label style={lbl}>{t('onboarding.theme')}</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {['light', 'dark', 'system'].map(m => (
                   <span key={m} onClick={() => setMode(m)} style={{ ...chip(displayMode === m), textTransform: 'capitalize', flex: 1, textAlign: 'center' }}>{m}</span>
@@ -230,7 +230,7 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div>
-              <label style={lbl}>Accent colour</label>
+              <label style={lbl}>{t('onboarding.accent_colour')}</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {ACCENTS.map(c => (
                   <button key={c} onClick={() => setAccent(c)} style={{
@@ -254,14 +254,14 @@ export default function OnboardingPage() {
           {step > 0 && (
             <button onClick={back} disabled={saving} style={{ flex: '0 0 auto', padding: '13px 20px', borderRadius: 14,
               border: '1.5px solid var(--ak-border2)', background: 'var(--ak-surface)', color: 'var(--ak-text-sec)',
-              fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>← Back</button>
+              fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>{t('onboarding.back')}</button>
           )}
           <button onClick={step === 2 ? finish : next} disabled={saving} style={{ flex: 1, padding: '13px',
             borderRadius: 14, border: 'none', background: saving ? 'var(--ak-tag-bg)' : `linear-gradient(135deg,${accentColor},#4C1DCC)`,
             color: saving ? 'var(--ak-text-muted)' : '#fff', fontSize: 14, fontWeight: 800,
             cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'Nunito',sans-serif",
             boxShadow: saving ? 'none' : `0 4px 14px ${accentColor}44` }}>
-            {step === 2 ? (saving ? 'Setting up…' : 'Finish & start learning') : 'Continue'}
+            {step === 2 ? (saving ? t('onboarding.setting_up') : t('onboarding.finish')) : t('onboarding.continue')}
           </button>
         </div>
       </div>

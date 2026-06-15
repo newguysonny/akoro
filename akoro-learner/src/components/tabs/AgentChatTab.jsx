@@ -47,7 +47,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   // Greeting message — uses real agent name from parent
   const greeting = (name, emoji) => ({
     id:1, from:"agent",
-    text:`Hi Alex! 👋 I'm ${name} ${emoji}, your personal learning agent.\n\nI can help you create study sessions, quiz yourself, track your progress, or talk through any topic. What would you like to do today?`,
+    text: t('agent.greeting').replace('{user}','').replace('Hi !','Hi!').replace('{name}',name).replace('{emoji}',emoji),
     time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
   });
 
@@ -141,29 +141,29 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     const text=(overrideText??input).trim();
     if(!text||loading) return;
     if(!overrideText) setInput("");
-    const t=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const userMsg={id:Date.now(),from:"me",text,time:t};
+    const ts=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const userMsg={id:Date.now(),from:"me",text,time:ts};
     setMessages(prev=>[...prev,userMsg]); setLoading(true);
 
     // Agentic task intents ("quiz me", "explain…", "study plan", "remind me",
     // "challenge…") run a real task and stream the result back into the chat.
     if(isTaskIntent(text)){
-      pushAgent("On it — let me work on that for you… ⏳");
+      pushAgent(t('agent.error_working'));
       try {
         const task = await createTask({ title: text, priority: "medium" });
         if(!task?.id) throw new Error("no task");
         const { outputs, failed, timedOut } = await waitForTask(task.id);
         if(failed){
-          pushAgent("Hmm, I ran into a problem doing that. Mind rephrasing or trying again?");
+          pushAgent(t('agent.error_problem'));
         } else if(timedOut){
-          pushAgent("That's taking longer than usual — I'll keep working. Check the Tasks tab in a moment for the result.");
+          pushAgent(t('agent.error_timeout'));
         } else {
           const texts = formatTaskOutputs(outputs);
           if(texts.length) texts.forEach(pushAgent);
-          else pushAgent("All done! Check the Tasks tab for the details.");
+          else pushAgent(t('agent.all_done_tasks'));
         }
       } catch {
-        pushAgent("I couldn't start that task — please try again.");
+        pushAgent(t('agent.error_task'));
       }
       setLoading(false);
       return;
@@ -189,12 +189,12 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
         history: history.slice(-8),
         agentName,
       });
-      const reply = data.reply || data.content?.[0]?.text || "I'm here! Could you rephrase that?";
+      const reply = data.reply || data.content?.[0]?.text || t('agent.fallback');
       const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
       setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:reply,time:t2}]);
     } catch {
       const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:"Connection error — please try again.",time:t2}]);
+      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.error_connection'),time:t2}]);
     }
     setLoading(false);
   };
@@ -205,23 +205,23 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     // Persist to backend (non-critical)
     apiPost("/api/user/agent", { agent_name: name, agent_emoji: draftEmoji }).catch(()=>{});
     setCustOpen(false);
-    const t=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:`I've been updated! I'm now ${name} ${draftEmoji}. Same knowledge, fresh identity!`,time:t}]);
+    const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.updated').replace('{name}',name).replace('{emoji}',draftEmoji),time:t2}]);
   };
 
   const addTask=async()=>{
     if(!tTitle.trim()) return;
-    const t=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
+    const ts=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
     await createTask({ title:tTitle, description:tDesc, priority:tPriority });
-    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:`✅ Task assigned!\n\n📋 "${tTitle}"\nPriority: ${tPriority.charAt(0).toUpperCase()+tPriority.slice(1)}\n\nI'll track this for you!`,time:t}]);
+    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]),time:ts}]);
     setTTitle(""); setTDesc(""); setTPriority("medium"); setTaskOpen(false);
     if(innerTab!=="tasks") setInnerTab("tasks");
   };
 
-  const filteredTasks=tasks.filter(t=>taskFilter==="done"?t.status==="done":t.status!=="done");
-  const pendingCount=tasks.filter(t=>t.status!=="done").length;
-  const doneCount=tasks.filter(t=>t.status==="done").length;
-  const highCount=tasks.filter(t=>t.priority==="high"&&t.status!=="done").length;
+  const filteredTasks=tasks.filter(tk=>taskFilter==="done"?tk.status==="done":tk.status!=="done");
+  const pendingCount=tasks.filter(tk=>tk.status!=="done").length;
+  const doneCount=tasks.filter(tk=>tk.status==="done").length;
+  const highCount=tasks.filter(tk=>tk.priority==="high"&&tk.status!=="done").length;
 
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"var(--ak-surface)" }}>
@@ -308,15 +308,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
             </button>
           </div>
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(t=>(
-              <div key={t.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:t.status==="done"?.6:1 }}>
-                <button onClick={()=>toggleTask(t.id)} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${t.status==="done"?GREEN:"var(--ak-border3)"}`,background:t.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
-                  {t.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
+              <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
+                <button onClick={()=>toggleTask(tk.id)} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                  {tk.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>
-                  <p style={{ fontSize:13.5,fontWeight:t.status==="done"?500:700,color:t.status==="done"?"var(--ak-text-muted)":"var(--ak-text)",textDecoration:t.status==="done"?"line-through":"none",margin:"0 0 4px" }}>{t.title}</p>
-                  {t.description&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 5px",lineHeight:1.45 }}>{t.description}</p>}
-                  <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[t.priority],color:PRI_COLOR[t.priority] }}>{PRI_LABEL[t.priority]}</span>
+                  <p style={{ fontSize:13.5,fontWeight:tk.status==="done"?500:700,color:tk.status==="done"?"var(--ak-text-muted)":"var(--ak-text)",textDecoration:tk.status==="done"?"line-through":"none",margin:"0 0 4px" }}>{tk.title}</p>
+                  {tk.description&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 5px",lineHeight:1.45 }}>{tk.description}</p>}
+                  <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[tk.priority],color:PRI_COLOR[tk.priority] }}>{PRI_LABEL[tk.priority]}</span>
                 </div>
               </div>
             ))}
