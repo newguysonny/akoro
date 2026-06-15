@@ -397,9 +397,9 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
     background:'var(--ak-surface)',boxSizing:'border-box',marginTop:6 };
   const handle = () => {
     if(type==='change-password'){
-      if(!pw.current){alert('Enter current password');return;}
-      if(pw.next.length<8){alert('Need 8+ characters');return;}
-      if(pw.next!==pw.confirm){alert("Passwords don't match");return;}
+      if(!pw.current){alert(t('settings.enter_current_pw'));return;}
+      if(pw.next.length<8){alert(t('settings.pw_too_short'));return;}
+      if(pw.next!==pw.confirm){alert(t('settings.pw_no_match'));return;}
     }
     if(type==='delete-confirm'&&del!=='DELETE') return;
     onSave(field, type==='change-password'?pw:val);
@@ -417,9 +417,9 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
         <p style={{ fontSize:16,fontWeight:900,color:'var(--ak-text)',margin:'0 0 16px' }}>{label}</p>
 
         {type==='text'&&<input autoFocus value={val} onChange={e=>setVal(e.target.value)}
-          placeholder={`Enter ${label.toLowerCase()}`} style={inp}/>}
+          placeholder={t('settings.enter_field').replace('{field}', label.toLowerCase())} style={inp}/>}
         {type==='textarea'&&<textarea autoFocus value={val} onChange={e=>setVal(e.target.value)}
-          placeholder={`Enter ${label.toLowerCase()}`} rows={3}
+          placeholder={t('settings.enter_field').replace('{field}', label.toLowerCase())} rows={3}
           style={{ ...inp,resize:'vertical',lineHeight:1.6 }}/>}
         {type==='select'&&(
           <div style={{ display:'flex',flexDirection:'column',gap:8 }}>

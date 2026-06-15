@@ -30,8 +30,8 @@ export default function SignupPage() {
   const handleSubmit = async (e) => {
     e.preventDefault(); setFormErr(''); clearError();
     const { fullName, username, email, password } = form;
-    if (!fullName || !username || !email || !password) { setFormErr('Please fill in all fields'); return; }
-    if (password.length < 8) { setFormErr('Password must be at least 8 characters'); return; }
+    if (!fullName || !username || !email || !password) { setFormErr(t('auth.fill_all_fields')); return; }
+    if (password.length < 8) { setFormErr(t('auth.password_min8')); return; }
     try { await register({ fullName, username, email, password }); navigate('/app', { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
@@ -56,8 +56,8 @@ export default function SignupPage() {
       <div style={{ width:'100%', maxWidth:400, background:'var(--ak-surface)', borderRadius:24,
         padding:'32px 28px', boxShadow:'0 4px 32px rgba(0,0,0,.12)',
         border:'1px solid var(--ak-border)' }}>
-        <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Create your account</h1>
-        <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>Start learning with your AI agent today</p>
+        <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.create_account')}</h1>
+        <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.start_today')}</p>
         <button onClick={() => loginWithGoogle('/app')}
           style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
             gap:10, padding:'12px', borderRadius:14, border:'1.5px solid var(--ak-border2)',
@@ -67,7 +67,7 @@ export default function SignupPage() {
         </button>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
           <div style={{ flex:1, height:1, background:'var(--ak-border)' }}/>
-          <span style={{ fontSize:11, fontWeight:600, color:'var(--ak-text-muted)' }}>or</span>
+          <span style={{ fontSize:11, fontWeight:600, color:'var(--ak-text-muted)' }}>{t('auth.or')}</span>
           <div style={{ flex:1, height:1, background:'var(--ak-border)' }}/>
         </div>
         {formErr && (
@@ -80,22 +80,22 @@ export default function SignupPage() {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
             <div>
               <label style={lbl}>{t('auth.fullname')}</label>
-              <input value={form.fullName} onChange={set('fullName')} placeholder="Alex Obi" style={inp}/>
+              <input value={form.fullName} onChange={set('fullName')} placeholder={t('auth.fullname_ph')} style={inp}/>
             </div>
             <div>
               <label style={lbl}>{t('auth.username')}</label>
-              <input value={form.username} onChange={set('username')} placeholder="alex_obi" style={inp}/>
+              <input value={form.username} onChange={set('username')} placeholder={t('auth.username_ph')} style={inp}/>
             </div>
           </div>
           <div style={{ marginBottom:14 }}>
             <label style={lbl}>{t('auth.email')}</label>
             <input type="email" value={form.email} onChange={set('email')}
-              placeholder="you@example.com" style={inp}/>
+              placeholder={t('auth.email_ph')} style={inp}/>
           </div>
           <div style={{ marginBottom:20 }}>
-            <label style={lbl}>{t('auth.password')} <span style={{ fontWeight:500, color:'var(--ak-text-muted)' }}>(min 8 chars)</span></label>
+            <label style={lbl}>{t('auth.password')} <span style={{ fontWeight:500, color:'var(--ak-text-muted)' }}>({t('auth.password_min')})</span></label>
             <input type="password" value={form.password} onChange={set('password')}
-              placeholder="••••••••" style={inp}/>
+              placeholder={t('auth.password_ph')} style={inp}/>
           </div>
           <button type="submit" disabled={loading}
             style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
@@ -103,11 +103,11 @@ export default function SignupPage() {
               color:loading?'var(--ak-text-muted)':'#fff', fontSize:14, fontWeight:800,
               cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif",
               boxShadow:loading?'none':`0 4px 14px ${BRAND}44` }}>
-            {loading ? t('common.loading') : 'Create account'}
+            {loading ? t('common.loading') : t('auth.create_account_btn')}
           </button>
         </form>
         <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
-          Already have an account?{' '}
+          {t('auth.have_account')}{' '}
           <Link to="/signin" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signin')}</Link>
         </p>
       </div>

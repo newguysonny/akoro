@@ -5,8 +5,10 @@ import { buildInitialBlocks, buildMockQueue, buildContinuationHistory } from '..
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function TeachAgentModal({ session, config, onClose }) {
+  const { t } = useLang();
   const topic     = config?.topic    || session?.topic    || "your topic";
   const subject   = config?.subject  || session?.subject  || "science";
   const agentNm   = config?.agentName  || AGENT_CONFIG.name;
@@ -537,14 +539,14 @@ function TeachAgentModal({ session, config, onClose }) {
         display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif" }}>
         <div style={{ display:"flex",alignItems:"center",background:"rgba(255,255,255,.04)",
           borderBottom:"1px solid rgba(255,255,255,.06)",paddingTop:52 }}>
-          {["chat","summary"].map(t=>(
-            <button key={t} onClick={()=>setActiveTab(t)}
+          {["chat","summary"].map(tab=>(
+            <button key={tab} onClick={()=>setActiveTab(tab)}
               style={{ flex:1,padding:"10px 0",background:"none",border:"none",cursor:"pointer",
-                fontSize:12,fontWeight:activeTab===t?800:600,
-                color:activeTab===t?sc:"#475569",
-                borderBottom:`2px solid ${activeTab===t?sc:"transparent"}`,
+                fontSize:12,fontWeight:activeTab===tab?800:600,
+                color:activeTab===tab?sc:"#475569",
+                borderBottom:`2px solid ${activeTab===tab?sc:"transparent"}`,
                 fontFamily:"'Nunito',sans-serif",transition:"all .2s" }}>
-              {t==="chat"?"💬 Teaching Chat":"✨ Session Summary"}
+              {tab==="chat" ? t('teaching.tab_chat') : t('teaching.tab_summary')}
             </button>
           ))}
           <div onClick={onClose} style={{ width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.07)",
@@ -556,31 +558,31 @@ function TeachAgentModal({ session, config, onClose }) {
           {loading&&!summary?(
             <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:16 }}>
               <div style={{ width:56,height:56,borderRadius:"50%",background:`${sc}22`,border:`2px solid ${sc}`,display:"flex",alignItems:"center",justifyContent:"center",animation:"pulse-dot 1.2s ease-in-out infinite" }}><SparkleIcon size={22} color={sc}/></div>
-              <p style={{ fontSize:14,fontWeight:700,color:"#475569",margin:0 }}>Generating session summary…</p>
+              <p style={{ fontSize:14,fontWeight:700,color:"#475569",margin:0 }}>{t('teaching.generating_summary')}</p>
             </div>
           ):summary&&(
             <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
               <div style={{ background:`linear-gradient(135deg,${sc}22,${sc}10)`,border:`1.5px solid ${sc}30`,borderRadius:18,padding:"18px 16px" }}>
                 <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
-                  <div><p style={{ fontSize:11,fontWeight:800,color:sc,margin:"0 0 3px",letterSpacing:.4 }}>TEACHING SCORE</p><p style={{ fontSize:38,fontWeight:900,color:"#F1F5F9",margin:0,fontFamily:"monospace" }}>{summary.teachingScore}<span style={{ fontSize:16,color:"#475569" }}>/100</span></p></div>
-                  <div style={{ textAlign:"right" }}><p style={{ fontSize:10,fontWeight:700,color:"#475569",margin:"0 0 4px" }}>XP Earned</p><div style={{ display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end" }}><ZapIcon size={14} color={GOLD}/><span style={{ fontSize:20,fontWeight:900,color:GOLD }}>{summary.xpEarned}</span></div></div>
+                  <div><p style={{ fontSize:11,fontWeight:800,color:sc,margin:"0 0 3px",letterSpacing:.4 }}>{t('teaching.teaching_score')}</p><p style={{ fontSize:38,fontWeight:900,color:"#F1F5F9",margin:0,fontFamily:"monospace" }}>{summary.teachingScore}<span style={{ fontSize:16,color:"#475569" }}>/100</span></p></div>
+                  <div style={{ textAlign:"right" }}><p style={{ fontSize:10,fontWeight:700,color:"#475569",margin:"0 0 4px" }}>{t('teaching.xp_earned')}</p><div style={{ display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end" }}><ZapIcon size={14} color={GOLD}/><span style={{ fontSize:20,fontWeight:900,color:GOLD }}>{summary.xpEarned}</span></div></div>
                 </div>
               </div>
               <div style={{ background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:"14px" }}>
-                <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:8 }}><BrainIcon size={13} color={sc}/><span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.3 }}>AGENT FEEDBACK</span></div>
+                <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:8 }}><BrainIcon size={13} color={sc}/><span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.3 }}>{t('teaching.agent_feedback')}</span></div>
                 <p style={{ fontSize:13,fontWeight:600,color:"#CBD5E1",margin:0,lineHeight:1.6 }}>{summary.agentFeedback}</p>
               </div>
               {summary.keyConcepts?.length>0&&(
                 <div style={{ background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:"14px" }}>
-                  <p style={{ fontSize:10.5,fontWeight:800,color:"#94A3B8",margin:"0 0 10px",letterSpacing:.3 }}>📌 KEY CONCEPTS</p>
+                  <p style={{ fontSize:10.5,fontWeight:800,color:"#94A3B8",margin:"0 0 10px",letterSpacing:.3 }}>{t('teaching.key_concepts')}</p>
                   <div style={{ display:"flex",flexWrap:"wrap",gap:7 }}>{summary.keyConcepts.map((c,i)=><div key={i} style={{ background:`${sc}18`,border:`1px solid ${sc}30`,borderRadius:8,padding:"4px 11px" }}><span style={{ fontSize:11.5,fontWeight:700,color:sc }}>{c}</span></div>)}</div>
                 </div>
               )}
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-                <div style={{ background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GREEN,margin:"0 0 8px",letterSpacing:.3 }}>✅ STRENGTHS</p>{summary.strengthAreas?.map((s,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"#A7F3D0",margin:"0 0 4px",lineHeight:1.4 }}>· {s}</p>)}</div>
-                <div style={{ background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GOLD,margin:"0 0 8px",letterSpacing:.3 }}>⚡ GAPS</p>{summary.gapsIdentified?.map((g,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"#FDE68A",margin:"0 0 4px",lineHeight:1.4 }}>· {g}</p>)}</div>
+                <div style={{ background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GREEN,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.strengths')}</p>{summary.strengthAreas?.map((s,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"#A7F3D0",margin:"0 0 4px",lineHeight:1.4 }}>· {s}</p>)}</div>
+                <div style={{ background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GOLD,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.gaps')}</p>{summary.gapsIdentified?.map((g,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"#FDE68A",margin:"0 0 4px",lineHeight:1.4 }}>· {g}</p>)}</div>
               </div>
-              <button onClick={onClose} style={{ padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",marginBottom:8 }}>Save & Close Session</button>
+              <button onClick={onClose} style={{ padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",marginBottom:8 }}>{t('teaching.save_close')}</button>
             </div>
           )}
         </div>
@@ -630,9 +632,9 @@ function TeachAgentModal({ session, config, onClose }) {
               <div style={{ width:38,height:4,borderRadius:4,background:"rgba(255,255,255,.18)" }}/>
             </div>
             <div style={{ padding:"6px 18px 26px" }}>
-              <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"4px 0 3px" }}>⇄ Switch teacher</p>
+              <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"4px 0 3px" }}>{t('teaching.switch_teacher')}</p>
               <p style={{ fontSize:12,fontWeight:600,color:"#64748B",margin:"0 0 16px",lineHeight:1.5 }}>
-                Your agent keeps everything it has learned — only the teacher guiding this session changes.
+                {t('teaching.switch_sub')}
               </p>
               {!agentChoices ? (
                 [0,1].map(i => <div key={i} style={{ height:64,borderRadius:14,background:"rgba(255,255,255,.04)",marginBottom:9 }}/>)
@@ -651,10 +653,10 @@ function TeachAgentModal({ session, config, onClose }) {
                         <div style={{ flex:1,minWidth:0 }}>
                           <div style={{ fontSize:13.5,fontWeight:800,color:"#F1F5F9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{a.name}</div>
                           <div style={{ fontSize:11,fontWeight:600,color:"#64748B",marginTop:2 }}>
-                            {a.kind === "platform" ? "Platform default" : (a.teacher ? `by ${a.teacher}` : "Trained agent")}{a.subject ? ` · ${a.subject}` : ""}
+                            {a.kind === "platform" ? t('teaching.platform_default') : (a.teacher ? `by ${a.teacher}` : t('teaching.trained_agent'))}{a.subject ? ` · ${a.subject}` : ""}
                           </div>
                         </div>
-                        {active && <span style={{ fontSize:10,fontWeight:900,color:BRAND,background:`${BRAND}22`,padding:"3px 9px",borderRadius:20,flexShrink:0 }}>CURRENT</span>}
+                        {active && <span style={{ fontSize:10,fontWeight:900,color:BRAND,background:`${BRAND}22`,padding:"3px 9px",borderRadius:20,flexShrink:0 }}>{t('teaching.current')}</span>}
                       </button>
                     );
                   })}

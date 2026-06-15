@@ -1,8 +1,10 @@
 import React from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG } from '../../constants.js';
 import { ProgressBar } from '../common/ProgressBar.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function SessionCard({ session, onTap, decayAlert, agentProfile }) {
+  const { t } = useLang();
   const sc    = SUBJECT_COLORS[session.subject] || BRAND;
   const pri   = PRIORITY_CONFIG[session.priority] || PRIORITY_CONFIG.normal;
   const isDecay = !!decayAlert;
@@ -46,7 +48,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
           </span>
           <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
             {isDecay
-              ? `${agentProfile?.name || "Agent"} · needs your help`
+              ? `${agentProfile?.name || t('card.agent')} · ${t('card.needs_your_help')}`
               : session.topic}
           </span>
         </div>
@@ -55,7 +57,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
         {isDecay ? (
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
             <span style={{ fontSize:9.5,fontWeight:700,color:RED,fontFamily:"monospace" }}>
-              ⚠ confidence {decayAlert.confidence}% (was {decayAlert.prevConfidence}%)
+              ⚠ {t('card.confidence')} {decayAlert.confidence}% ({t('card.was')} {decayAlert.prevConfidence}%)
             </span>
             {decayAlert.misconceptions?.length > 0 && (
               <span style={{ fontSize:9.5,fontWeight:600,color:"var(--ak-text-muted)",fontFamily:"monospace" }}>
@@ -65,7 +67,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
           </div>
         ) : (
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
-            {[{v:session.id,c:"var(--ak-text-muted)"},{v:`🕐 ${session.time}`,c:"var(--ak-text-muted)"},{v:`📌 ${session.topics} topics`,c:sc},{v:`🔁 ${session.revisions} revisions`,c:"var(--ak-text-muted)"},{v:`⭐ ${session.reviews} reviews`,c:GOLD}].map(({v,c},i)=>(
+            {[{v:session.id,c:"var(--ak-text-muted)"},{v:`🕐 ${session.time}`,c:"var(--ak-text-muted)"},{v:`📌 ${session.topics} ${t('card.topics')}`,c:sc},{v:`🔁 ${session.revisions} ${t('card.revisions')}`,c:"var(--ak-text-muted)"},{v:`⭐ ${session.reviews} ${t('card.reviews')}`,c:GOLD}].map(({v,c},i)=>(
               <span key={i} style={{ fontSize:9.5,fontWeight:700,color:c,fontFamily:"monospace" }}>{v}</span>
             ))}
           </div>

@@ -10,8 +10,10 @@ const autoObjectives = (subtopic, topic) => [
 ];
 import { buildDecayHistory, buildMockQueue } from '../../services/mockBlocks.js';
 import SessionChatView from './SessionChatView.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function DecaySessionModal({ alert, onClose, agentProfile }) {
+  const { t } = useLang();
   const agentNm  = agentProfile?.name  || AGENT_CONFIG.name;
   const agentEm  = agentProfile?.emoji || AGENT_CONFIG.emoji;
   const subject  = alert.subject;
@@ -92,7 +94,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
     if (recording) {
       clearInterval(timerRef.current);
       setRecording(false);
-      handleSend(`[🎙 Voice note – ${fmt(seconds)}] Explained verbally.`);
+      handleSend(`[🎙 ${t('teaching.voice_note')} – ${fmt(seconds)}] ${t('teaching.explained_verbally')}`);
       setSeconds(0);
     } else {
       setRecording(true);

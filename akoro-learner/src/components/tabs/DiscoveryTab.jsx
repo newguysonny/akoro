@@ -26,9 +26,9 @@ import Toast from '../common/Toast.jsx';
 const FONT  = "'Nunito', sans-serif";
 const MKT    = '/api/adaptive/marketplace';
 
-const fmtPrice = (kobo, currency = 'NGN') =>
+const fmtPrice = (kobo, currency = 'NGN', freeLabel = 'Free') =>
   !kobo || kobo === 0
-    ? 'Free'
+    ? freeLabel
     : `${currency === 'NGN' ? '₦' : ''}${(kobo / 100).toLocaleString()}`;
 
 const fmtCount = (n) => {
@@ -80,7 +80,7 @@ function AgentCard({ listing, owned, onOpen }) {
             {t('discovery.by')} {listing.teacher_name || t('discovery.teacher')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, fontWeight: 800, color: sc, background: `${sc}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{listing.subject || 'General'}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: sc, background: `${sc}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               <Stars rating={listing.avg_rating} size={11} />
               <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{Number(listing.avg_rating || 0).toFixed(1)} ({listing.rating_count || 0})</span>
@@ -100,7 +100,7 @@ function AgentCard({ listing, owned, onOpen }) {
           👥 {fmtCount(listing.total_students)} {t('discovery.learning')}
         </span>
         <span style={{ fontSize: 13, fontWeight: 900, color: listing.is_free ? GREEN : BRAND }}>
-          {fmtPrice(listing.price_kobo, listing.currency)}
+          {fmtPrice(listing.price_kobo, listing.currency, t('discovery.free'))}
         </span>
       </div>
     </button>
@@ -198,8 +198,8 @@ function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy
 
           {/* subject + price row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: sc, background: `${sc}14`, padding: '4px 11px', borderRadius: 20, textTransform: 'capitalize' }}>{full.subject || 'General'}</span>
-            <span style={{ fontSize: 20, fontWeight: 900, color: full.is_free ? GREEN : BRAND }}>{fmtPrice(full.price_kobo, full.currency)}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: sc, background: `${sc}14`, padding: '4px 11px', borderRadius: 20, textTransform: 'capitalize' }}>{full.subject || t('discovery.general')}</span>
+            <span style={{ fontSize: 20, fontWeight: 900, color: full.is_free ? GREEN : BRAND }}>{fmtPrice(full.price_kobo, full.currency, t('discovery.free'))}</span>
           </div>
 
           {full.description && (
@@ -345,7 +345,7 @@ function PurchaseHistorySheet({ onClose }) {
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)' }}>{fmtPrice(p.amount_kobo, p.currency)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)' }}>{fmtPrice(p.amount_kobo, p.currency, t('discovery.free'))}</div>
                       <span style={{ fontSize: 9.5, fontWeight: 800, color: m.color, background: `${m.color}18`, padding: '2px 7px', borderRadius: 20 }}>{m.label}</span>
                     </div>
                   </div>

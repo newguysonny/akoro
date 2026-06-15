@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { MicIcon, SendIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon } from '../common/Icons.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function SessionChatView({
   blocks, loading, input, onInputChange, onSend,
@@ -13,6 +14,7 @@ function SessionChatView({
   guideLabel, onSwitchAgent, switching,
   onClose,
 }) {
+  const { t } = useLang();
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
   const scrollRef = useRef(null);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -44,7 +46,7 @@ function SessionChatView({
           <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:3 }}>
             <div style={{ width:7,height:7,borderRadius:"50%",background:sc,animation:"pulse-dot 1.4s ease-in-out infinite" }}/>
             <span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.5 }}>
-              {mode === "decay" ? "DECAY RE-TEACH" : "LEARN BY TEACHING"}
+              {mode === "decay" ? t('teaching.mode_decay') : t('teaching.mode_teach')}
             </span>
           </div>
           <p style={{ fontSize:15,fontWeight:900,color:"#F1F5F9",margin:0 }}>{topic}</p>
@@ -59,7 +61,7 @@ function SessionChatView({
                 border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"7px 11px",
                 cursor:switching?"default":"pointer",opacity:switching?.6:1 }}>
               <span style={{ fontSize:12 }}>⇄</span>
-              <span style={{ fontSize:11,fontWeight:800,color:"#CBD5E1" }}>{switching?"Switching…":"Switch"}</span>
+              <span style={{ fontSize:11,fontWeight:800,color:"#CBD5E1" }}>{switching ? t('teaching.switching') : t('teaching.switch')}</span>
             </div>
           )}
           {showSummarize && (
@@ -67,7 +69,7 @@ function SessionChatView({
               style={{ display:"flex",alignItems:"center",gap:5,background:`${sc}22`,
                 border:`1px solid ${sc}44`,borderRadius:12,padding:"7px 12px",cursor:"pointer" }}>
               <SparkleIcon size={13} color={sc}/>
-              <span style={{ fontSize:11,fontWeight:800,color:sc }}>Summarize</span>
+              <span style={{ fontSize:11,fontWeight:800,color:sc }}>{t('teaching.summarize')}</span>
             </div>
           )}
           <div onClick={handleCloseRequest}
@@ -83,8 +85,8 @@ function SessionChatView({
         <div style={{ display:"flex",alignItems:"center",gap:14,padding:"9px 20px",
           borderBottom:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)" }}>
           {[
-            { label:"Understanding", val:Math.round(cognitive.understanding ?? 0), color:GREEN },
-            { label:"Confusion",     val:Math.round(cognitive.confusion ?? 0),     color:GOLD  },
+            { label:t('teaching.understanding'), val:Math.round(cognitive.understanding ?? 0), color:GREEN },
+            { label:t('teaching.confusion'),     val:Math.round(cognitive.confusion ?? 0),     color:GOLD  },
           ].map(({label,val,color}) => (
             <div key={label} style={{ flex:1,minWidth:0 }}>
               <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
@@ -143,7 +145,7 @@ function SessionChatView({
               onClick={onToggleVoice}>
               <div style={{ width:8,height:8,borderRadius:"50%",background:RED,
                 animation:"pulse-dot 0.7s ease-in-out infinite" }}/>
-              <span style={{ fontSize:11,fontWeight:800,color:RED }}>Stop</span>
+              <span style={{ fontSize:11,fontWeight:800,color:RED }}>{t('teaching.stop')}</span>
             </div>
             {/* Live transcript */}
             <div style={{ flex:1,background:"rgba(255,255,255,.07)",
@@ -153,7 +155,7 @@ function SessionChatView({
                 ? <span style={{ fontSize:13,fontWeight:600,color:"#94A3B8",
                     fontStyle:"italic",lineHeight:1.5 }}>{interimText}</span>
                 : <span style={{ fontSize:12,fontWeight:600,color:"#475569" }}>
-                    Listening… speak now
+                    {t('teaching.listening')}
                   </span>
               }
             </div>
@@ -172,7 +174,7 @@ function SessionChatView({
                 justifyContent:"center",animation:"pulse-dot 1s ease-in-out infinite",flexShrink:0 }}>
                 <MicIcon size={12} color="#fff"/>
               </div>
-              <span style={{ fontSize:12,fontWeight:800,color:RED }}>● {fmt(seconds)} — Tap to stop</span>
+              <span style={{ fontSize:12,fontWeight:800,color:RED }}>● {fmt(seconds)} — {t('teaching.tap_to_stop')}</span>
             </div>
           </div>
         )}
@@ -186,7 +188,7 @@ function SessionChatView({
                 background:"rgba(255,255,255,.07)",border:"1.5px solid rgba(255,255,255,.10)",
                 borderRadius:12,padding:"9px 11px",cursor:"pointer",transition:"all .2s" }}>
               <MicIcon size={13} color="#64748B"/>
-              <span style={{ fontSize:10,fontWeight:700,color:"#64748B" }}>Audio</span>
+              <span style={{ fontSize:10,fontWeight:700,color:"#64748B" }}>{t('teaching.audio')}</span>
             </div>
             {/* Text input */}
             <div style={{ flex:1,display:"flex",alignItems:"center",
@@ -194,7 +196,7 @@ function SessionChatView({
               borderRadius:12,padding:"8px 12px" }}>
               <input value={input} onChange={e=>onInputChange(e.target.value)}
                 onKeyDown={handleKey}
-                placeholder={`Explain to ${agentName}…`}
+                placeholder={t('teaching.explain_ph').replace('{name}', agentName)}
                 style={{ flex:1,background:"none",border:"none",outline:"none",
                   fontSize:13,fontWeight:600,color:"#CBD5E1",
                   fontFamily:"'Nunito',sans-serif" }}/>
@@ -214,7 +216,7 @@ function SessionChatView({
                   background:`${RED}18`,border:`1.5px solid ${RED}44`,
                   borderRadius:12,padding:"9px 11px",cursor:"pointer",transition:"all .2s" }}>
                 <div style={{ width:8,height:8,borderRadius:"50%",background:RED }}/>
-                <span style={{ fontSize:10,fontWeight:700,color:RED }}>Voice</span>
+                <span style={{ fontSize:10,fontWeight:700,color:RED }}>{t('teaching.voice')}</span>
               </div>
             ) : (
               <div onClick={()=>onSend()}
@@ -231,7 +233,7 @@ function SessionChatView({
         {/* Turn counter */}
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
           <span style={{ fontSize:10.5,fontWeight:600,color:"#334155" }}>
-            {mode === "decay" ? "Re-teach turns" : mode === "continuation" ? "Continuation turns" : "Teaching turns"}: {userTurns} / 4
+            {mode === "decay" ? t('teaching.reteach_turns') : mode === "continuation" ? t('teaching.continuation_turns') : t('teaching.teaching_turns')}: {userTurns} / 4
           </span>
           <div style={{ display:"flex",gap:3 }}>
             {[0,1,2,3].map(i=>(
@@ -250,23 +252,23 @@ function SessionChatView({
           background:"#111827",borderRadius:"20px 20px 0 0",padding:"28px 22px 36px",
           fontFamily:"'Nunito',sans-serif",animation:"sheet-up .25s ease" }}>
           <div style={{ width:36,height:4,borderRadius:2,background:"rgba(255,255,255,.15)",margin:"0 auto 22px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"0 0 8px",textAlign:"center" }}>End this session?</p>
+          <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"0 0 8px",textAlign:"center" }}>{t('teaching.end_session_q')}</p>
           <p style={{ fontSize:13,color:"#64748B",margin:"0 0 24px",textAlign:"center",lineHeight:1.6 }}>
-            Your teaching is not complete yet.{"\n"}Progress will be saved automatically.
+            {t('teaching.not_complete')}{"\n"}{t('teaching.progress_saved')}
           </p>
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={()=>setConfirmClose(false)}
               style={{ flex:1,padding:"13px",borderRadius:14,border:"1px solid rgba(255,255,255,.12)",
                 background:"rgba(255,255,255,.06)",fontSize:13,fontWeight:800,color:"#94A3B8",
                 cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
-              Keep Teaching
+              {t('teaching.keep_teaching')}
             </button>
             <button onClick={()=>{ setConfirmClose(false); onClose(); }}
               style={{ flex:1.2,padding:"13px",borderRadius:14,border:"none",
                 background:`linear-gradient(135deg,${RED},#DC2626)`,
                 fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",
                 fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>
-              <XIcon size={13} color="#fff"/>End Session
+              <XIcon size={13} color="#fff"/>{t('teaching.end_session')}
             </button>
           </div>
         </div></>

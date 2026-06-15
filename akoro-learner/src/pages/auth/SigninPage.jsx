@@ -32,7 +32,7 @@ export default function SigninPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setFormErr(''); clearError();
-    if (!email || !password) { setFormErr('Please fill in all fields'); return; }
+    if (!email || !password) { setFormErr(t('auth.fill_all_fields')); return; }
     try {
       const data = await login({ email, password });
       if (data?.twoFactorRequired) { setChallenge(data.challengeToken); return; }
@@ -42,7 +42,7 @@ export default function SigninPage() {
 
   const handleVerify = async (e) => {
     e.preventDefault(); setFormErr('');
-    if (!/^\d{6}$/.test(code)) { setFormErr('Enter the 6-digit code'); return; }
+    if (!/^\d{6}$/.test(code)) { setFormErr(t('auth.enter_6digit')); return; }
     try { await verifyTwoFactor({ challengeToken: challenge, code }); navigate('/', { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
@@ -69,8 +69,8 @@ export default function SigninPage() {
 
         {challenge ? (
           <>
-            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Two-factor verification</h1>
-            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>Enter the 6-digit code from your authenticator app</p>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.2fa_title')}</h1>
+            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.2fa_sub')}</p>
             {formErr && (
               <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
                 padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>{formErr}</div>
@@ -84,19 +84,19 @@ export default function SigninPage() {
                   background:loading?'var(--ak-tag-bg)':`linear-gradient(135deg,${BRAND},#4C1DCC)`,
                   color:loading?'var(--ak-text-muted)':'#fff', fontSize:14, fontWeight:800,
                   cursor:loading?'not-allowed':'pointer', fontFamily:"'Nunito',sans-serif" }}>
-                {loading ? t('common.loading') : 'Verify & sign in'}
+                {loading ? t('common.loading') : t('auth.2fa_verify')}
               </button>
             </form>
             <button onClick={() => { setChallenge(null); setCode(''); setFormErr(''); }}
               style={{ width:'100%', marginTop:14, background:'none', border:'none',
                 color:'var(--ak-text-muted)', fontSize:13, fontWeight:700, cursor:'pointer' }}>
-              ← {t('common.back')} to sign in
+              ← {t('common.back')} {t('auth.back_to_signin')}
             </button>
           </>
         ) : (
           <>
-            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>Welcome back</h1>
-            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>Sign in to continue learning</p>
+            <h1 style={{ fontSize:22, fontWeight:900, color:'var(--ak-text)', margin:'0 0 6px' }}>{t('auth.welcome_back')}</h1>
+            <p style={{ fontSize:13, color:'var(--ak-text-sub)', margin:'0 0 24px' }}>{t('auth.continue_learning')}</p>
             <button onClick={() => loginWithGoogle('/app')}
               style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center',
                 gap:10, padding:'12px', borderRadius:14, border:'1.5px solid var(--ak-border2)',
@@ -106,25 +106,25 @@ export default function SigninPage() {
             </button>
             <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
               <div style={{ flex:1, height:1, background:'var(--ak-border)' }}/>
-              <span style={{ fontSize:11, fontWeight:600, color:'var(--ak-text-muted)' }}>or</span>
+              <span style={{ fontSize:11, fontWeight:600, color:'var(--ak-text-muted)' }}>{t('auth.or')}</span>
               <div style={{ flex:1, height:1, background:'var(--ak-border)' }}/>
             </div>
             {(formErr || urlError) && (
               <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
                 padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>
-                {formErr || (urlError==='google_failed'?'Google sign-in failed. Try again.':urlError)}
+                {formErr || (urlError==='google_failed'?t('auth.google_failed'):urlError)}
               </div>
             )}
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom:14 }}>
                 <label style={{ display:'block', fontSize:12, fontWeight:800, color:'var(--ak-text-sec)', marginBottom:6 }}>{t('auth.email')}</label>
                 <input type="email" value={email} onChange={e=>setEmail(e.target.value)}
-                  placeholder="you@example.com" style={inp}/>
+                  placeholder={t('auth.email_ph')} style={inp}/>
               </div>
               <div style={{ marginBottom:20 }}>
                 <label style={{ display:'block', fontSize:12, fontWeight:800, color:'var(--ak-text-sec)', marginBottom:6 }}>{t('auth.password')}</label>
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
-                  placeholder="••••••••" style={inp}/>
+                  placeholder={t('auth.password_ph')} style={inp}/>
               </div>
               <button type="submit" disabled={loading}
                 style={{ width:'100%', padding:'13px', borderRadius:14, border:'none',
@@ -136,7 +136,7 @@ export default function SigninPage() {
               </button>
             </form>
             <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
-              Don't have an account?{' '}
+              {t('auth.no_account')}{' '}
               <Link to="/signup" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signup')}</Link>
             </p>
           </>

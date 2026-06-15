@@ -12,10 +12,10 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
   const isContinuation = !isDecay && session.type === "agent" && !!session.hasHistory;
   const drop         = isDecay ? (decayAlert.prevConfidence||0) - (decayAlert.confidence||0) : 0;
 
-  const ctaLabel = isDecay       ? "Revise Teaching"
-    : isContinuation             ? "Continue Teaching"
-    : session.type === "live"    ? "Join Live"
-    :                              "Start Teaching";
+  const ctaLabel = isDecay       ? t('sheet.revise_teaching')
+    : isContinuation             ? t('sheet.continue_teaching')
+    : session.type === "live"    ? t('sheet.join_live')
+    :                              t('sheet.start_teaching');
 
   const ctaBg = isDecay
     ? `linear-gradient(135deg,${RED},#DC2626)`
@@ -42,15 +42,15 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
         <div style={{ flex:1 }}>
           <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{session.title}</p>
           <p style={{ fontSize:11.5,color:"var(--ak-text-muted)",margin:0,fontWeight:600 }}>
-            {isDecay ? `${agentProfile?.name||"Agent"} · needs your help`
-              : isContinuation ? `${agentProfile?.name||"Agent"} · ${session.daysSince||0}d ago`
+            {isDecay ? `${agentProfile?.name||t('card.agent')} · ${t('card.needs_your_help')}`
+              : isContinuation ? `${agentProfile?.name||t('card.agent')} · ${session.daysSince||0}${t('sheet.days_ago_short')}`
               : `${session.tutor||""} · ${session.level||""}`}
           </p>
         </div>
         <div style={{ background:isDecay?`${RED}12`:isContinuation?`${GREEN}12`:pri.bg,borderRadius:8,padding:"5px 12px",display:"flex",alignItems:"center",gap:5 }}>
           {(isDecay||isContinuation||pri.pulse)&&<div style={{ width:6,height:6,borderRadius:"50%",background:isDecay?RED:isContinuation?GREEN:pri.dot,animation:"pulse-dot 1.2s ease-in-out infinite" }}/>}
           <span style={{ fontSize:11,fontWeight:800,color:isDecay?RED:isContinuation?GREEN:pri.color }}>
-            {isDecay?"REVIEW":isContinuation?"CONTINUE":pri.label}
+            {isDecay?t('sheet.badge_review'):isContinuation?t('sheet.badge_continue'):pri.label}
           </span>
         </div>
       </div>
@@ -70,15 +70,15 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
             <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('sheet.confidence')}</span>
             <span style={{ fontSize:12,fontWeight:900,color:RED }}>{decayAlert.confidence}%{" "}
-              <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>(was {decayAlert.prevConfidence}%)</span>
+              <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>({t('card.was')} {decayAlert.prevConfidence}%)</span>
             </span>
           </div>
           <div style={{ height:6,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
             <div style={{ height:"100%",width:`${decayAlert.confidence}%`,background:`linear-gradient(90deg,${RED}88,${RED})`,borderRadius:99 }}/>
           </div>
           <div style={{ display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>
-            <span style={{ color:RED }}>▼ dropped {drop}%</span>
-            <span>{decayAlert.daysSince} days since last session</span>
+            <span style={{ color:RED }}>▼ {t('sheet.dropped')} {drop}%</span>
+            <span>{decayAlert.daysSince} {t('sheet.days_since_last_session')}</span>
           </div>
         </div>
         {decayAlert.misconceptions?.length>0&&(
@@ -115,7 +115,7 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
             <div style={{ height:"100%",width:`${session.avgConfidence||session.progress||0}%`,background:`linear-gradient(90deg,${GREEN}88,${GREEN})`,borderRadius:99 }}/>
           </div>
           <p style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
-            Last taught {session.daysSince===0?"today":session.daysSince===1?"yesterday":`${session.daysSince||0} days ago`}
+            {t('sheet.last_taught')} {session.daysSince===0?t('sheet.today'):session.daysSince===1?t('sheet.yesterday'):`${session.daysSince||0} ${t('sheet.days_ago')}`}
           </p>
         </div>
         {session.subtopicList?.length>0&&(

@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { apiGet } from '../../services/api.js';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 const FONT = "'Nunito', sans-serif";
 const CHAT = '/api/adaptive/chat';
@@ -21,6 +22,18 @@ const CHAT = '/api/adaptive/chat';
 const pct  = (v) => Math.round((v ?? 0) * (v <= 1 ? 100 : 1));   // accepts 0-1 or 0-100
 const sCol = (s) => SUBJECT_COLORS[(s || '').toLowerCase()] || BRAND;
 
+const HEALTH_COLORS = {
+  critical: RED,
+  high:     '#F97316',
+  medium:   GOLD,
+  low:      GREEN,
+};
+const healthLabel = (key, t) => ({
+  critical: t('stats.health_critical'),
+  high:     t('stats.health_needs_review'),
+  medium:   t('stats.health_fading'),
+  low:      t('stats.health_healthy'),
+}[key] || key);
 const HEALTH = {
   critical: { color: RED,    label: 'Critical' },
   high:     { color: '#F97316', label: 'Needs review' },
@@ -61,6 +74,7 @@ function Section({ title, children, hint }) {
 }
 
 export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Agent', agentEmoji = '🤖', onStartTeach }) {
+  const { t } = useLang();
   const [intel,    setIntel]    = useState(null);
   const [history,  setHistory]  = useState([]);
   const [dash,     setDash]     = useState(null);
@@ -106,31 +120,31 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
             <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{agentEmoji}</div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 900 }}>{agentName}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 700, opacity: .85 }}>Level {intel?.level ?? 1} · {intel?.knowledge_score ?? 0} knowledge score</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, opacity: .85 }}>{t('agent.level')} {intel?.level ?? 1} · {intel?.knowledge_score ?? 0} {t('stats.knowledge_score')}</div>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1 }}>{avgConf}%</div>
-            <div style={{ fontSize: 9.5, fontWeight: 700, opacity: .8, textTransform: 'uppercase', letterSpacing: .3 }}>Avg confidence</div>
+            <div style={{ fontSize: 9.5, fontWeight: 700, opacity: .8, textTransform: 'uppercase', letterSpacing: .3 }}>{t('stats.avg_confidence')}</div>
           </div>
         </div>
       </div>
 
       {/* Stat cells */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 12 }}>
-        <StatCell value={intel?.total_sessions ?? 0} label="Sessions" />
-        <StatCell value={intel?.total_turns ?? 0}    label="Turns" />
-        <StatCell value={intel?.total_knowledge_chunks ?? 0} label="Chunks" color={BRAND} />
-        <StatCell value={(intel?.subjects_learned?.length) ?? subjects.length ?? 0} label="Subjects" />
+        <StatCell value={intel?.total_sessions ?? 0} label={t('stats.sessions')} />
+        <StatCell value={intel?.total_turns ?? 0}    label={t('stats.turns')} />
+        <StatCell value={intel?.total_knowledge_chunks ?? 0} label={t('stats.chunks')} color={BRAND} />
+        <StatCell value={(intel?.subjects_learned?.length) ?? subjects.length ?? 0} label={t('stats.subjects')} />
       </div>
 
       {/* Knowledge health — subjects */}
-      <Section title="Knowledge health"
+      <Section title={t('stats.knowledge_health')}
         hint={summary.topicsNeedingAttention > 0
-          ? `${summary.topicsNeedingAttention} topic${summary.topicsNeedingAttention === 1 ? '' : 's'} need attention`
-          : 'Your agent is keeping its knowledge sharp.'}>
+          ? `${summary.topicsNeedingAttention} ${summary.topicsNeedingAttention === 1 ? t('stats.topic_needs_attention_one') : t('stats.topic_needs_attention_other')}`
+          : t('stats.knowledge_sharp')}>
         {subjects.length === 0 ? (
-          <Empty text="No subjects learned yet. Teach your agent to grow its knowledge." />
+          <Empty text={t('stats.no_subjects')} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {subjects.map((sub) => {
@@ -141,15 +155,15 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
                 <div key={sub.subject} style={{ background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
                     <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', textTransform: 'capitalize' }}>{sub.subject || 'General'}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: h.color, background: `${h.color}18`, padding: '2px 8px', borderRadius: 20 }}>{h.label} · {conf}%</span>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: h.color, background: `${h.color}18`, padding: '2px 8px', borderRadius: 20 }}>{healthLabel(healthOf(sub.avg_confidence), t)} · {conf}%</span>
                   </div>
                   <div style={{ height: 6, borderRadius: 4, background: 'var(--ak-border)', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${conf}%`, background: col, borderRadius: 4, transition: 'width .5s' }} />
                   </div>
                   <div style={{ display: 'flex', gap: 10, marginTop: 7, fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
-                    <span>{sub.topic_count ?? 0} topics</span>
-                    {sub.critical_count > 0 && <span style={{ color: RED }}>{sub.critical_count} critical</span>}
-                    {sub.last_activity && <span>· last {fmtAgo(sub.last_activity)}</span>}
+                    <span>{sub.topic_count ?? 0} {t('stats.topics')}</span>
+                    {sub.critical_count > 0 && <span style={{ color: RED }}>{sub.critical_count} {t('stats.critical')}</span>}
+                    {sub.last_activity && <span>· {t('stats.last')} {fmtAgo(sub.last_activity)}</span>}
                   </div>
                 </div>
               );
@@ -160,22 +174,22 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
 
       {/* Topics needing review */}
       {topicsToReview.length > 0 && (
-        <Section title="Due for revision" hint="Teach these again to reinforce before they fade.">
+        <Section title={t('stats.due_for_revision')} hint={t('stats.due_hint')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {topicsToReview.slice(0, 8).map((t, i) => {
-              const conf = pct(t.confidence);
-              const h = HEALTH[t.health_status || healthOf(t.confidence)];
+            {topicsToReview.slice(0, 8).map((tr, i) => {
+              const conf = pct(tr.confidence);
+              const h = HEALTH[tr.health_status || healthOf(tr.confidence)];
               return (
-                <div key={t.id || `${t.topic}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 13, padding: '10px 12px' }}>
+                <div key={tr.id || `${tr.topic}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 13, padding: '10px 12px' }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: h.color, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.topic}</div>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)', textTransform: 'capitalize' }}>{t.subject || 'General'} · {conf}% confidence</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{tr.topic}</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)', textTransform: 'capitalize' }}>{tr.subject || t('stats.general')} · {conf}% {t('stats.confidence')}</div>
                   </div>
                   {onStartTeach && (
-                    <button onClick={() => onStartTeach({ topic: t.topic, subject: t.subject, agentName, agentEmoji })}
+                    <button onClick={() => onStartTeach({ topic: tr.topic, subject: tr.subject, agentName, agentEmoji })}
                       style={{ flexShrink: 0, padding: '7px 13px', borderRadius: 10, border: 'none', background: `${BRAND}12`, color: BRAND, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                      Teach again
+                      {t('stats.teach_again')}
                     </button>
                   )}
                 </div>
@@ -186,9 +200,9 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
       )}
 
       {/* Growth timeline */}
-      <Section title="Growth timeline" hint="What your agent learned in recent sessions.">
+      <Section title={t('stats.growth_timeline')} hint={t('stats.growth_hint')}>
         {history.length === 0 ? (
-          <Empty text="No teaching sessions yet. Start a session to grow your agent." />
+          <Empty text={t('stats.no_history')} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {history.map((h, i) => {
@@ -197,13 +211,13 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
               return (
                 <div key={h.id || h.session_id || i} style={{ background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', textTransform: 'capitalize' }}>{h.topic || 'Session'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', textTransform: 'capitalize' }}>{h.topic || t('stats.session')}</span>
                     <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{fmtAgo(h.completed_at || h.started_at)}</span>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                     {h.subject && <span style={{ fontSize: 10, fontWeight: 800, color: col, background: `${col}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{h.subject}</span>}
-                    {delta !== 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: delta > 0 ? GREEN : RED }}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}% understanding</span>}
-                    {h.agent_knowledge_added > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-sub)' }}>+{h.agent_knowledge_added} chunks</span>}
+                    {delta !== 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: delta > 0 ? GREEN : RED }}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}% {t('stats.understanding')}</span>}
+                    {h.agent_knowledge_added > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-sub)' }}>+{h.agent_knowledge_added} {t('stats.chunks')}</span>}
                     {h.xp_earned > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: GOLD }}>+{h.xp_earned} XP</span>}
                   </div>
                   {h.concepts_learned?.length > 0 && (
