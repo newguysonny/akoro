@@ -27,6 +27,7 @@ import { body, validationResult }     from "express-validator";
 import passport                       from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { randomUUID }                 from "crypto";
+import { createHash }                 from "crypto";
 import db                             from "../../db.js";
 import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 import { generateSecret, otpauthURL, verifyTOTP } from "./totp.js";
@@ -709,6 +710,123 @@ router.get("/google/callback",
     const userParam = encodeURIComponent(JSON.stringify(safe));
     const target = portal === "instructor" ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
     res.redirect(`${target}/auth/callback?user=${userParam}`);
+  })
+);
+
+// ─── § FORGOT / RESET PASSWORD ────────────────────────────────────────────────
+
+const RESET_TTL_MS    = 60 * 60 * 1000;   // 1 hour
+const SMTP_FROM       = process.env.SMTP_FROM_EMAIL || "noreply@akoro.app";
+
+function hashToken(raw) {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+async function sendResetEmail({ to, name, resetUrl }) {
+  const { createTransport } = await import("nodemailer");
+  const transporter = createTransport({
+    host:   process.env.SMTP_HOST,
+    port:   parseInt(process.env.SMTP_PORT ?? "587", 10),
+    secure: process.env.SMTP_PORT === "465",
+    auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  await transporter.sendMail({
+    from:    `"Akoro Learning" <${SMTP_FROM}>`,
+    to,
+    subject: "Reset your Akoro password",
+    text:    `Hi ${name},\n\nClick the link below to reset your password (valid 1 hour):\n${resetUrl}\n\nIf you didn't request this, ignore this email.`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px">
+        <h2 style="color:#1A1A2E;margin-bottom:8px">Reset your password</h2>
+        <p style="color:#6B6B80;margin-bottom:24px">Hi ${name}, click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+        <a href="${resetUrl}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#6C3BFF,#4C1DCC);color:#fff;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">
+          Reset password
+        </a>
+        <p style="color:#9490A0;font-size:12px;margin-top:28px">If you didn't request a password reset, you can safely ignore this email. Your password won't change.</p>
+      </div>`,
+  });
+}
+
+/** POST /api/auth/forgot-password */
+router.post("/forgot-password", strictLimit,
+  body("email").isEmail().normalizeEmail(),
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    // Always respond 200 — never reveal whether an email is registered
+    const { data: user } = await db.from("users")
+      .select("id, full_name, email, is_active")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (user && user.is_active) {
+      // Invalidate any existing unused tokens for this user
+      await db.from("password_reset_tokens")
+        .update({ used_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .is("used_at", null);
+
+      const rawToken  = randomUUID();
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+
+      await db.from("password_reset_tokens").insert({
+        user_id:    user.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+      });
+
+      // Determine which frontend sent the request (Referer header)
+      const referer = req.get("Referer") || "";
+      const base    = referer.includes("instructor") ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
+      const resetUrl = `${base}/reset-password?token=${rawToken}`;
+
+      sendResetEmail({ to: user.email, name: user.full_name || "there", resetUrl })
+        .catch(() => {}); // fire-and-forget; don't leak email errors
+    }
+
+    res200(res, { message: "If that email is registered, a reset link has been sent." });
+  })
+);
+
+/** POST /api/auth/reset-password */
+router.post("/reset-password", strictLimit,
+  body("token").notEmpty(),
+  body("password").isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
+  runValidation,
+  asyncHandler(async (req, res) => {
+    const { token, password } = req.body;
+    const tokenHash = hashToken(token);
+
+    const { data: record } = await db.from("password_reset_tokens")
+      .select("id, user_id, expires_at, used_at")
+      .eq("token_hash", tokenHash)
+      .maybeSingle();
+
+    if (!record)                              return res400(res, "Invalid or expired reset link.");
+    if (record.used_at)                       return res400(res, "This reset link has already been used.");
+    if (new Date(record.expires_at) < new Date()) return res400(res, "This reset link has expired. Please request a new one.");
+
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+    // Mark token used + update password in one go
+    await Promise.all([
+      db.from("password_reset_tokens")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", record.id),
+      db.from("users")
+        .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+        .eq("id", record.user_id),
+    ]);
+
+    // Revoke all active refresh tokens for this user (force re-login everywhere)
+    await db.from("refresh_tokens")
+      .update({ used: true })
+      .eq("user_id", record.user_id)
+      .eq("used", false);
+
+    res200(res, { message: "Password updated. You can now sign in with your new password." });
   })
 );
 

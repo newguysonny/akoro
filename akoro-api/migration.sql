@@ -2249,3 +2249,15 @@ ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS knowledge_score INTEGER NOT NUL
 ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS photo_url      TEXT;
 ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS year_group     TEXT;
 ALTER TABLE user_agents ADD COLUMN IF NOT EXISTS study_level    TEXT;
+
+-- ─── Password reset tokens ────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_prt_user  ON password_reset_tokens(user_id);

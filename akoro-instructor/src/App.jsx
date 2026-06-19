@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
-import SigninPage   from './pages/auth/SigninPage.jsx';
-import SignupPage   from './pages/auth/SignupPage.jsx';
-import OnboardingPage from './pages/auth/OnboardingPage.jsx';
+import SigninPage         from './pages/auth/SigninPage.jsx';
+import SignupPage         from './pages/auth/SignupPage.jsx';
+import OnboardingPage     from './pages/auth/OnboardingPage.jsx';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
+import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
@@ -85,9 +87,11 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
       {/* Auth */}
-      <Route path="/signin" element={<GuestRoute><SigninPage /></GuestRoute>} />
-      <Route path="/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
-      <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
+      <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>} />
+      <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>} />
+      <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+      <Route path="/reset-password"  element={<ResetPasswordPage />} />
+      <Route path="/onboarding"      element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />

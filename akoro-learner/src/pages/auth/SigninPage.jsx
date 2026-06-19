@@ -122,7 +122,10 @@ export default function SigninPage() {
                   placeholder={t('auth.email_ph')} style={inp}/>
               </div>
               <div style={{ marginBottom:20 }}>
-                <label style={{ display:'block', fontSize:12, fontWeight:800, color:'var(--ak-text-sec)', marginBottom:6 }}>{t('auth.password')}</label>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                  <label style={{ display:'block', fontSize:12, fontWeight:800, color:'var(--ak-text-sec)' }}>{t('auth.password')}</label>
+                  <Link to="/forgot-password" style={{ fontSize:12, fontWeight:700, color:BRAND, textDecoration:'none' }}>Forgot password?</Link>
+                </div>
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
                   placeholder={t('auth.password_ph')} style={inp}/>
               </div>

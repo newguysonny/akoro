@@ -181,9 +181,16 @@ export default function SigninPage() {
               placeholder="you@example.com" style={inp} />
           </div>
           <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 }}>
-              Password
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>
+                Password
+              </label>
+              <button type="button" onClick={() => navigate('/forgot-password')}
+                style={{ background: 'none', border: 'none', color: AMBER, fontWeight: 700,
+                  cursor: 'pointer', fontSize: 12, fontFamily: "'DM Sans', sans-serif", padding: 0 }}>
+                Forgot password?
+              </button>
+            </div>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
               placeholder="••••••••" style={inp} />
           </div>
