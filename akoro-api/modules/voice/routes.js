@@ -12,6 +12,7 @@ import { Router }        from "express";
 import OpenAI, { toFile } from "openai";
 import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
+import { transcribeBufferDeepgram, hasDeepgram } from "./deepgram.js";
 
 const router  = Router();
 const openai  = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -28,20 +29,23 @@ const VALID_VOICES = ["alloy","echo","fable","onyx","nova","shimmer"];
 router.post("/transcribe", authenticateToken, upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No audio file provided" });
+    const language = req.body.language || "en";
 
-    const result = await openai.audio.transcriptions.create({
-      file:     await toFile(req.file.buffer, req.file.originalname || "audio.webm"),
-      model:    "whisper-1",
-      language: req.body.language || "en",
-      response_format:         "verbose_json",
-      timestamp_granularities: ["word"],
-    });
-
-    const transcript = result.text?.trim() || "";
-    const words      = (result.words || []).map(w => ({
-      word: w.word, start: w.start, end: w.end,
-    }));
-    const duration   = result.duration ?? 0;
+    let transcript, words, duration;
+    if (hasDeepgram()) {
+      ({ transcript, words, duration } = await transcribeBufferDeepgram(req.file.buffer, { language }));
+    } else {
+      const result = await openai.audio.transcriptions.create({
+        file:     await toFile(req.file.buffer, req.file.originalname || "audio.webm"),
+        model:    "whisper-1",
+        language,
+        response_format:         "verbose_json",
+        timestamp_granularities: ["word"],
+      });
+      transcript = result.text?.trim() || "";
+      words      = (result.words || []).map(w => ({ word: w.word, start: w.start, end: w.end }));
+      duration   = result.duration ?? 0;
+    }
 
     res.json({ success: true, transcript, confidence: transcript ? 1 : 0, words, duration });
 
@@ -98,14 +102,18 @@ router.post("/reply", authenticateToken, upload.single("audio"), async (req, res
   try {
     if (!req.file) return res.status(400).json({ error: "No audio file provided" });
 
-    // STT — OpenAI Whisper
-    const result = await openai.audio.transcriptions.create({
-      file:     await toFile(req.file.buffer, req.file.originalname || "audio.webm"),
-      model:    "whisper-1",
-      language: "en",
-    });
-
-    const transcript = result.text?.trim() || "";
+    // STT — Deepgram (falls back to OpenAI Whisper if no key)
+    let transcript;
+    if (hasDeepgram()) {
+      ({ transcript } = await transcribeBufferDeepgram(req.file.buffer));
+    } else {
+      const result = await openai.audio.transcriptions.create({
+        file:     await toFile(req.file.buffer, req.file.originalname || "audio.webm"),
+        model:    "whisper-1",
+        language: "en",
+      });
+      transcript = result.text?.trim() || "";
+    }
     if (!transcript) return res.json({ success: true, transcript: "", text: "" });
 
     res.json({ success: true, transcript, text: transcript });

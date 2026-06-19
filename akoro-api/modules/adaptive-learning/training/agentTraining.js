@@ -21,7 +21,7 @@ import fs   from "fs";
 import path from "path";
 import { deriveAndSaveOrchestrationConfig } from "./agentOrchestration.js";
 import { createRealtimeTranscriber } from "../../voice/openaiRealtime.js";
-import { transcribeFileDeepgram, hasDeepgram } from "../../voice/deepgram.js";
+import { transcribeFileDeepgram, transcribeBufferDeepgram, hasDeepgram } from "../../voice/deepgram.js";
 
 const router   = express.Router();
 const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -834,18 +834,22 @@ export async function receiveChunk(req, res) {
 
   let transcribed = text ?? "";
 
-  // If audio provided, transcribe via OpenAI Whisper
+  // If audio provided, transcribe (Deepgram primary, Whisper fallback)
   if (audio_base64 && !text) {
     try {
       const buffer = Buffer.from(audio_base64, "base64");
-      const result = await openai.audio.transcriptions.create({
-        file:     await toFile(buffer, "chunk.webm"),
-        model:    "whisper-1",
-        language: "en",
-      });
-      transcribed = result.text ?? "";
+      if (hasDeepgram()) {
+        ({ transcript: transcribed } = await transcribeBufferDeepgram(buffer));
+      } else {
+        const result = await openai.audio.transcriptions.create({
+          file:     await toFile(buffer, "chunk.webm"),
+          model:    "whisper-1",
+          language: "en",
+        });
+        transcribed = result.text ?? "";
+      }
     } catch (e) {
-      console.warn("[training/stream] Whisper transcription failed:", e.message);
+      console.warn("[training/stream] transcription failed:", e.message);
       return res.status(500).json({ error: "Transcription failed: " + e.message });
     }
   }

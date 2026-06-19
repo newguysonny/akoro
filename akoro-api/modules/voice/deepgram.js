@@ -30,20 +30,41 @@ const KEYTERMS = [
   "WAEC", "JAMB", "algebra", "trigonometry", "photosynthesis",
 ];
 
-export async function transcribeFileDeepgram(localPath, _mimeType) {
-  const buffer = fs.readFileSync(localPath);
-
+async function transcribeBuffer(buffer, opts = {}) {
   const { result, error } = await client().listen.prerecorded.transcribeFile(buffer, {
     model:        "nova-2",
     language:     "en",
     smart_format: true,
     punctuate:    true,
-    diarize:      true,
-    paragraphs:   true,
-    utterances:   true,
     keywords:     KEYTERMS,
+    ...opts,
   });
   if (error) throw error;
+  return result;
+}
+
+/**
+ * Transcribe a short audio buffer (e.g. a push-to-talk clip or a live chunk).
+ * Returns { transcript, words: [{ word, start, end }], duration }.
+ */
+export async function transcribeBufferDeepgram(buffer, { language = "en" } = {}) {
+  const result = await transcribeBuffer(buffer, { language });
+  const alt = result?.results?.channels?.[0]?.alternatives?.[0] || {};
+  return {
+    transcript: (alt.transcript || "").trim(),
+    words: (alt.words || []).map((w) => ({ word: w.punctuated_word || w.word, start: w.start, end: w.end })),
+    duration: result?.metadata?.duration ?? 0,
+  };
+}
+
+export async function transcribeFileDeepgram(localPath, _mimeType) {
+  const buffer = fs.readFileSync(localPath);
+
+  const result = await transcribeBuffer(buffer, {
+    diarize:    true,
+    paragraphs: true,
+    utterances: true,
+  });
 
   const channel = result?.results?.channels?.[0];
   const alt     = channel?.alternatives?.[0] || {};
