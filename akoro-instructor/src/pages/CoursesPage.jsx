@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { Btn, Modal, Inp, Txa, Sel, WizardSteps, StatusPill, PlatBadge, CoursTypeBadge, FileUploadZone, Toast, Skeleton } from '../components/Primitives.jsx';
+import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../components/Primitives.jsx';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import LiveClassWizard from '../components/LiveClassWizard.jsx';
+import OnDemandWizard from '../components/OnDemandWizard.jsx';
 import CourseCurriculum from '../components/CourseCurriculum.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
@@ -20,41 +21,6 @@ const MOCK_SESSIONS = [
   { id: 3, courseId: 2, title: 'Express Routing', startTime: new Date(Date.now() - 3600000).toISOString(), platform: 'zoom', status: 'completed', enrolledCount: 22 },
 ];
 
-
-/* ── On-Demand Builder ──────────────────────────────────────────────── */
-function OnDemandBuilder({ open, onClose, onSubmit }) {
-  const [form, setForm] = useState({ title: '', description: '', category: '', price: '' });
-  const [loading, setLoading] = useState(false);
-  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try { await onSubmit({ ...form, type: 'on-demand' }); onClose(); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="New On-Demand Course" width={500}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Inp label="Course Title" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="e.g. Python for Beginners" />
-        <Txa label="Description" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="What will students learn?" />
-        <Inp label="Category" value={form.category} onChange={e => setField('category', e.target.value)} placeholder="e.g. Programming, Design…" />
-        <Inp label="Price ($)" type="number" value={form.price} onChange={e => setField('price', e.target.value)} placeholder="0 for free" />
-        <div>
-          <label style={{ fontSize: 12, fontWeight: 600, color: INK, display: 'block', marginBottom: 6 }}>Course Videos</label>
-          <FileUploadZone label="Upload intro video or thumbnail" accept="video/*,image/*" />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-          <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
-          <Btn onClick={handleSubmit} disabled={loading || !form.title.trim()}>
-            {loading ? 'Creating…' : 'Create Course'}
-          </Btn>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 /* ── Schedule Session Modal ─────────────────────────────────────────── */
 function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
@@ -178,7 +144,7 @@ function SessionRow({ session, onDelete }) {
 
 /* ── Main Page ──────────────────────────────────────────────────────── */
 export default function CoursesPage() {
-  const { getCourses, createCourse, getSessions, createSession, deleteSession, commitSchedule } = useCoursesAPI();
+  const { getCourses, createCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
   const [courses,  setCourses]  = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -241,9 +207,37 @@ export default function CoursesPage() {
     load();
   };
 
-  const handleCreateOnDemand = async (form) => {
-    await createCourse({ ...form, type: 'on-demand' }).catch(console.warn);
-    showToast('On-demand course created!');
+  const handleCreateOnDemand = async ({ info, sections, pricing, published }) => {
+    // 1. Create the on-demand course shell.
+    const course = await createCourse({
+      title: info.title, description: info.description, type: 'on-demand',
+      subject: info.category, level: info.level, thumbnail: info.thumbnail,
+      price: pricing.isFree ? 0 : Number(pricing.price) || 0,
+      discountPrice: pricing.isFree ? null : (pricing.discountPrice ? Number(pricing.discountPrice) : null),
+      isFree: pricing.isFree,
+      status: published ? 'active' : 'draft',
+    }).catch((e) => { console.warn('createCourse failed:', e); return null; });
+    const courseId = course?.data?.id;
+    if (!courseId) { showToast('Could not create course.', 'error'); return; }
+
+    // 2. Commit the sections → video lessons tree.
+    try {
+      await commitCurriculum(courseId, {
+        sections: sections.map((s, si) => ({
+          title: s.title, orderIndex: si,
+          lessons: s.lessons.map((l, li) => ({
+            title: l.title, orderIndex: li,
+            videoUrl: l.videoUrl,
+            duration: Number(l.duration) || 0,   // minutes; backend converts to seconds
+            preview: !!l.preview,
+          })),
+        })),
+      });
+      showToast(published ? 'On-demand course published!' : 'Draft saved!');
+    } catch (e) {
+      console.warn('commitCurriculum failed:', e);
+      showToast('Course created, but curriculum failed to save.', 'error');
+    }
     load();
   };
 
@@ -329,7 +323,7 @@ export default function CoursesPage() {
 
       <CourseCurriculum open={!!curriculumFor} course={curriculumFor} onClose={() => { setCurriculumFor(null); load(); }} onToast={showToast} />
       <LiveClassWizard open={liveWizard} onClose={() => setLiveWizard(false)} onSubmit={handleCreateLive} />
-      <OnDemandBuilder open={onDemandModal} onClose={() => setOnDemandModal(false)} onSubmit={handleCreateOnDemand} />
+      <OnDemandWizard open={onDemandModal} onClose={() => setOnDemandModal(false)} onSubmit={handleCreateOnDemand} />
       <ScheduleSessionModal open={scheduleModal} onClose={() => setScheduleModal(false)} onSubmit={handleCreateSession} courses={courses} />
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

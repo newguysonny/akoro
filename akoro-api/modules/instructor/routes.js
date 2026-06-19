@@ -314,10 +314,12 @@ const listCourses = asyncHandler(async (req, res) => {
 const createCourse = asyncHandler(async (req, res) => {
   try {
     const {
-      title, description, subject = null,
+      title, description, subject = null, category = null,
       level, type, course_type, status,
       language      = "English",
       price         = 0,
+      discountPrice, discount_price,
+      isFree, is_free,
       thumbnail, thumbnail_url,
       maxStudents,  // not a courses column — ignored
     } = req.body;
@@ -327,6 +329,9 @@ const createCourse = asyncHandler(async (req, res) => {
     const lvl       = VALID_LEVELS.includes(level) ? level : "all";
     const dbType    = typeToDb(type ?? course_type);
     const published = status === "active" || status === "live" || status === "published";
+    const priceVal  = Math.round(Number(price) || 0);
+    const discount  = discountPrice ?? discount_price;
+    const free      = isFree ?? is_free ?? (priceVal === 0);
 
     const { data, error } = await db
       .from("courses")
@@ -335,10 +340,12 @@ const createCourse = asyncHandler(async (req, res) => {
         title,
         slug:            slugify(title),
         description:     description ?? null,
-        subject,
+        subject:         subject ?? category,
         level:           lvl,
         language,
-        price:           Math.round(Number(price) || 0),
+        price:           priceVal,
+        discount_price:  discount != null && discount !== "" ? Math.round(Number(discount)) : null,
+        is_free:         !!free,
         course_type:     dbType,
         cover_image_url: thumbnail ?? thumbnail_url ?? null,
         is_published:    published,
@@ -775,6 +782,62 @@ const commitSchedule = asyncHandler(async (req, res) => {
     }
 
     created(res, { modules: createdModules });
+  } catch (e) { err500(res, e); }
+});
+
+// POST /api/instructor/courses/:courseId/curriculum
+// Persist an on-demand course's sections → video lessons tree.
+// Sections map to course_modules; lessons map to the lessons table.
+const commitCurriculum = asyncHandler(async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    if (!(await ownCourse(courseId, req.user.id))) return err403(res, "You do not own this course");
+
+    const { sections = [] } = req.body || {};
+    if (!Array.isArray(sections) || sections.length === 0) return err400(res, "sections array is required");
+
+    const createdSections = [];
+    for (const [si, s] of sections.entries()) {
+      const { data: modRow, error: mErr } = await db
+        .from("course_modules")
+        .insert({
+          course_id:   courseId,
+          title:       s.title || `Section ${si + 1}`,
+          description: s.description ?? null,
+          order_index: Number(s.orderIndex ?? si),
+        })
+        .select()
+        .single();
+      if (mErr) throw new Error(mErr.message);
+
+      const createdLessons = [];
+      for (const [li, l] of (s.lessons ?? []).entries()) {
+        const durationSec = l.durationSeconds != null
+          ? Number(l.durationSeconds)
+          : Math.round((Number(l.duration) || 0) * 60);  // wizard sends minutes
+
+        const { data: lesson, error: lErr } = await db
+          .from("lessons")
+          .insert({
+            module_id:        modRow.id,
+            title:            l.title || `Lesson ${li + 1}`,
+            description:      l.description ?? null,
+            video_url:        l.videoUrl ?? l.video_url ?? null,
+            thumbnail_url:    l.thumbnailUrl ?? l.thumbnail_url ?? null,
+            duration_seconds: durationSec || null,
+            order_index:      Number(l.orderIndex ?? li),
+            is_preview:       !!(l.preview ?? l.is_preview),
+            lesson_type:      ["video", "quiz", "assignment", "reading"].includes(l.lessonType) ? l.lessonType : "video",
+          })
+          .select()
+          .single();
+        if (lErr) throw new Error(lErr.message);
+        createdLessons.push(lesson);
+      }
+      createdSections.push({ ...modRow, lessons: createdLessons });
+    }
+
+    created(res, { sections: createdSections });
   } catch (e) { err500(res, e); }
 });
 
@@ -1375,6 +1438,7 @@ router.patch ("/modules/:id",                        updateModule);
 router.delete("/modules/:id",                        deleteModule);
 router.post  ("/courses/:courseId/schedule/preview", previewSchedule);
 router.post  ("/courses/:courseId/schedule/commit",  commitSchedule);
+router.post  ("/courses/:courseId/curriculum",       commitCurriculum);
 
 // Session materials
 router.get   ("/sessions/:id/materials", listMaterials);

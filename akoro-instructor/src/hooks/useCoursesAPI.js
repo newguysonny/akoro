@@ -16,6 +16,7 @@ export function useCoursesAPI() {
   const deleteModule    = (id) => apiDelete(`/api/instructor/modules/${id}`);
   const previewSchedule = (courseId, spec) => apiPost(`/api/instructor/courses/${courseId}/schedule/preview`, spec);
   const commitSchedule  = (courseId, payload) => apiPost(`/api/instructor/courses/${courseId}/schedule/commit`, payload);
+  const commitCurriculum = (courseId, payload) => apiPost(`/api/instructor/courses/${courseId}/curriculum`, payload);
 
   // Session materials
   const getMaterials    = (sessionId) => apiGet(`/api/instructor/sessions/${sessionId}/materials`);
@@ -25,7 +26,7 @@ export function useCoursesAPI() {
   return {
     getCourses, createCourse, updateCourse,
     getSessions, createSession, updateSession, deleteSession,
-    getModules, createModule, updateModule, deleteModule, previewSchedule, commitSchedule,
+    getModules, createModule, updateModule, deleteModule, previewSchedule, commitSchedule, commitCurriculum,
     getMaterials, addMaterial, deleteMaterial,
   };
 }
