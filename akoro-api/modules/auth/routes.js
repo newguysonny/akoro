@@ -31,6 +31,12 @@ import { createHash }                 from "crypto";
 import db                             from "../../db.js";
 import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 import { generateSecret, otpauthURL, verifyTOTP } from "./totp.js";
+import {
+  sendWelcomeEmail,
+  sendLoginAlertEmail,
+  sendPasswordResetEmail,
+  sendPasswordChangedEmail,
+} from "./emails.js";
 
 // ─── § CONSTANTS ──────────────────────────────────────────────────────────────
 
@@ -395,6 +401,11 @@ const authHandlers = {
     if (error) return res400(res, "Registration failed");
 
     const payload = await issueTokenPair(res, user);
+
+    const loginUrl = role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+    sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role })
+      .catch(() => {});
+
     res201(res, payload);
   }),
 
@@ -438,6 +449,14 @@ const authHandlers = {
     }
 
     const payload = await issueTokenPair(res, user);
+
+    const signinUrl = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+    sendLoginAlertEmail({
+      to: user.email, name: user.full_name || user.username,
+      ip: req.ip, userAgent: req.headers["user-agent"],
+      time: new Date(), signinUrl,
+    }).catch(() => {});
+
     res200(res, payload);
   }),
 
@@ -458,6 +477,14 @@ const authHandlers = {
     if (!verifyTOTP(user.two_factor_secret, code)) return res401(res, "Invalid authentication code");
 
     const payload = await issueTokenPair(res, user);
+
+    const signinUrl2fa = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+    sendLoginAlertEmail({
+      to: user.email, name: user.full_name || user.username,
+      ip: req.ip, userAgent: req.headers["user-agent"],
+      time: new Date(), signinUrl: signinUrl2fa,
+    }).catch(() => {});
+
     res200(res, payload);
   }),
 
@@ -598,6 +625,17 @@ const authHandlers = {
       await DenyList.add(req.tokenJti, req.tokenExp * 1000);
     }
     clearAuthCookies(res);
+
+    const signinUrlChg = req.user.role === "instructor"
+      ? `${INSTRUCTOR_FRONTEND_URL}/signin`
+      : `${FRONTEND_URL}/signin`;
+    sendPasswordChangedEmail({
+      to: req.user.email,
+      name: req.user.fullName || req.user.username || "there",
+      ip: req.ip,
+      signinUrl: signinUrlChg,
+    }).catch(() => {});
+
     res200(res, { passwordChanged: true });
   }),
 };
@@ -709,6 +747,22 @@ router.get("/google/callback",
     const safe = safeUser(user);
     const userParam = encodeURIComponent(JSON.stringify(safe));
     const target = portal === "instructor" ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
+
+    // Send welcome for brand-new Google accounts, login alert for returning users
+    const isNew = !user.password_hash && !user.created_at_was_existing; // heuristic: no PW set = new
+    const emailName = user.full_name || user.username;
+    const signinUrlOauth = `${target}/signin`;
+    if (isNew) {
+      sendWelcomeEmail({ to: user.email, name: emailName, loginUrl: signinUrlOauth, role: user.role })
+        .catch(() => {});
+    } else {
+      sendLoginAlertEmail({
+        to: user.email, name: emailName,
+        ip: req.ip, userAgent: req.headers["user-agent"],
+        time: new Date(), signinUrl: signinUrlOauth,
+      }).catch(() => {});
+    }
+
     res.redirect(`${target}/auth/callback?user=${userParam}`);
   })
 );
@@ -716,31 +770,9 @@ router.get("/google/callback",
 // ─── § FORGOT / RESET PASSWORD ────────────────────────────────────────────────
 
 const RESET_TTL_MS = 60 * 60 * 1000;   // 1 hour
-const EMAIL_FROM   = process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
 
 function hashToken(raw) {
   return createHash("sha256").update(raw).digest("hex");
-}
-
-async function sendResetEmail({ to, name, resetUrl }) {
-  const { Resend } = await import("resend");
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  const { error } = await resend.emails.send({
-    from:    `Akoro Learning <${EMAIL_FROM}>`,
-    to:      [to],
-    subject: "Reset your Akoro password",
-    text:    `Hi ${name},\n\nClick the link below to reset your password (valid 1 hour):\n${resetUrl}\n\nIf you didn't request this, ignore this email.`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px">
-        <h2 style="color:#1A1A2E;margin-bottom:8px">Reset your password</h2>
-        <p style="color:#6B6B80;margin-bottom:24px">Hi ${name}, click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
-        <a href="${resetUrl}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#6C3BFF,#4C1DCC);color:#fff;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">
-          Reset password
-        </a>
-        <p style="color:#9490A0;font-size:12px;margin-top:28px">If you didn't request a password reset, you can safely ignore this email. Your password won't change.</p>
-      </div>`,
-  });
-  if (error) throw new Error(`Email send failed: ${error.message}`);
 }
 
 /** POST /api/auth/forgot-password */
@@ -778,7 +810,7 @@ router.post("/forgot-password", strictLimit,
       const base    = referer.includes("instructor") ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
       const resetUrl = `${base}/reset-password?token=${rawToken}`;
 
-      sendResetEmail({ to: user.email, name: user.full_name || "there", resetUrl })
+      sendPasswordResetEmail({ to: user.email, name: user.full_name || user.username || "there", resetUrl })
         .catch(() => {}); // fire-and-forget; don't leak email errors
     }
 
@@ -821,6 +853,23 @@ router.post("/reset-password", strictLimit,
       .update({ used: true })
       .eq("user_id", record.user_id)
       .eq("used", false);
+
+    // Notify the user their password was changed
+    const { data: resetUser } = await db.from("users")
+      .select("email, full_name, username, role")
+      .eq("id", record.user_id)
+      .maybeSingle();
+    if (resetUser) {
+      const signinUrl = resetUser.role === "instructor"
+        ? `${INSTRUCTOR_FRONTEND_URL}/signin`
+        : `${FRONTEND_URL}/signin`;
+      sendPasswordChangedEmail({
+        to: resetUser.email,
+        name: resetUser.full_name || resetUser.username || "there",
+        ip: req.ip,
+        signinUrl,
+      }).catch(() => {});
+    }
 
     res200(res, { message: "Password updated. You can now sign in with your new password." });
   })
