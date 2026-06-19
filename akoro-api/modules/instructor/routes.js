@@ -971,7 +971,25 @@ const enrolStudent = asyncHandler(async (req, res) => {
         .single();
 
       if (reErr) throw new Error(reErr.message);
-      return ok(res, { enrollment: reactivated, user });
+
+      // Re-add to classroom too (may have been removed)
+      const { data: classroom } = await db
+        .from("classrooms")
+        .select("id")
+        .eq("teacher_id", req.user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (classroom) {
+        await db.from("classroom_students")
+          .upsert(
+            { classroom_id: classroom.id, user_id: user.id, status: "active", joined_at: now() },
+            { onConflict: "classroom_id,user_id", ignoreDuplicates: false }
+          );
+      }
+
+      return ok(res, { enrollment: reactivated, user, classroomId: classroom?.id ?? null });
     }
 
     const { data: enrollment, error: enrolErr } = await db
@@ -987,7 +1005,26 @@ const enrolStudent = asyncHandler(async (req, res) => {
       .single();
 
     if (enrolErr) throw new Error(enrolErr.message);
-    created(res, { enrollment, user });
+
+    // Also add student to the instructor's classroom (if one exists).
+    // Uses upsert so re-adding a removed student just re-activates them.
+    const { data: classroom } = await db
+      .from("classrooms")
+      .select("id")
+      .eq("teacher_id", req.user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (classroom) {
+      await db.from("classroom_students")
+        .upsert(
+          { classroom_id: classroom.id, user_id: user.id, status: "active", joined_at: now() },
+          { onConflict: "classroom_id,user_id", ignoreDuplicates: false }
+        );
+    }
+
+    created(res, { enrollment, user, classroomId: classroom?.id ?? null });
   } catch (e) {
     err500(res, e);
   }
