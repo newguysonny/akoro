@@ -1,3 +1,4 @@
+import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API } from '../../services/api.js';
@@ -44,12 +45,8 @@ export default function ForgotPasswordPage() {
       alignItems: 'center', justifyContent: 'center', background: '#FAF8F5',
       padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
 
-      {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12,
-          background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: `0 4px 14px ${AMBER}44`, fontSize: 20 }}>🎓</div>
+        <AkoroLogo size={40} radius={12} />
         <div>
           <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
           <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>

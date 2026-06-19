@@ -1,3 +1,4 @@
+import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, REDIRECT_KEY } from '../../contexts/AuthContext.jsx';

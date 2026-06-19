@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import AkoroLogo from './common/AkoroLogo.jsx';
 import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -46,14 +47,9 @@ export function Sidebar() {
       {/* Logo */}
       <div style={{ padding: '24px 20px 16px', borderBottom: `1px solid rgba(255,255,255,.07)` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18,
-          }}>🎓</div>
+          <AkoroLogo size={36} radius={10} />
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Piabam</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
             <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Instructor Portal</div>
           </div>
         </div>

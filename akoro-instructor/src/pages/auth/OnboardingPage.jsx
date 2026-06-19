@@ -1,3 +1,4 @@
+import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -90,8 +91,7 @@ export default function OnboardingPage() {
 
       {/* Brand */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: `0 4px 14px ${AMBER}44` }}>🎓</div>
+        <AkoroLogo size={40} radius={12} />
         <div>
           <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
           <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>

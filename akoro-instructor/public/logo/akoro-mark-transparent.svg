@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 300 300">
+  <defs>
+    <linearGradient id="ga" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#3B6BF6"/>
+      <stop offset="100%" stop-color="#8B3CF7"/>
+    </linearGradient>
+    <mask id="cutout">
+      <rect x="0" y="0" width="300" height="300" fill="white"/>
+      <path d="M150,78
+               C154,108 162,124 186,130
+               C162,136 154,152 150,196
+               C146,152 138,136 114,130
+               C138,124 146,108 150,78 Z"
+            fill="black"/>
+      <path d="M150,176
+               C146,200 140,220 126,238
+               L150,228 L174,238
+               C160,220 154,200 150,176 Z"
+            fill="black"/>
+    </mask>
+  </defs>
+
+  <g mask="url(#cutout)">
+    <path d="M62,258 L132,82 Q150,40 168,82 L238,258"
+          fill="none" stroke="url(#ga)" stroke-width="52"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <path d="M150,224
+           L172,260 Q178,270 166,270
+           L134,270 Q122,270 128,260 Z"
+        fill="url(#ga)"/>
+</svg>

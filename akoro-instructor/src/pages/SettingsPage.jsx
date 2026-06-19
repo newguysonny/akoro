@@ -331,7 +331,7 @@ function LogoutModal({ onClose, onConfirm }) {
     <Sheet onClose={onClose}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ width: 52, height: 52, borderRadius: '50%', background: `${RED}12`, border: `1.5px solid ${RED}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}><LogOut size={22} color={RED} /></div>
-        <p style={{ fontSize: 17, fontWeight: 900, color: INK, margin: '0 0 8px' }}>Sign out of Piabam?</p>
+        <p style={{ fontSize: 17, fontWeight: 900, color: INK, margin: '0 0 8px' }}>Sign out of Akoro?</p>
         <p style={{ fontSize: 13, color: MUTED, margin: '0 0 24px', lineHeight: 1.6 }}>You'll need to sign back in to manage your courses and students.</p>
         <SheetButtons onClose={onClose} onSave={onConfirm} saveLabel="Sign out" danger />
       </div>
