@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
@@ -21,13 +21,14 @@ function useMediaQuery(query) {
 }
 
 const NAV = [
-  { to: '/',        icon: Home,          label: 'Home' },
-  { to: '/courses', icon: BookOpen,      label: 'Courses' },
-  { to: '/students',icon: Users,         label: 'Students' },
-  { to: '/battles', icon: Swords,        label: 'Battles' },
-  { to: '/tasks',   icon: CheckSquare,   label: 'Tasks' },
-  { to: '/chat',    icon: MessageSquare, label: 'AI Chat' },
-  { to: '/settings',icon: Settings,      label: 'Settings' },
+  { to: '/',         icon: Home,          label: 'Home' },
+  { to: '/courses',  icon: BookOpen,      label: 'Courses' },
+  { to: '/students', icon: Users,         label: 'Students' },
+  { to: '/battles',  icon: Swords,        label: 'Battles' },
+  { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
+  { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },
+  { to: '/profile',  icon: UserCircle,    label: 'Profile' },
+  { to: '/settings', icon: Settings,      label: 'Settings' },
 ];
 
 function NavItem({ to, icon: Icon, label, compact }) {
@@ -65,7 +66,7 @@ export function Sidebar() {
     <aside style={{
       width: compact ? 72 : 240, flexShrink: 0, background: INK,
       display: 'flex', flexDirection: 'column',
-      height: '100vh', position: 'sticky', top: 0,
+      height: '100vh', overflow: 'hidden',
       transition: 'width .15s',
     }}>
       {/* Logo */}
