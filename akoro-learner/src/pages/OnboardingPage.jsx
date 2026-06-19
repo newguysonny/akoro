@@ -81,21 +81,22 @@ export default function OnboardingPage() {
       }
 
       // 2. Save student AI agent to user_agents table (separate from instructor teaching guide)
+      const agentPayload = {
+        agent_name:  agentName.trim() || `Agent_${user?.username || 'me'}`,
+        agent_emoji: agentEmoji,
+        study_level: studyLevel || undefined,
+        year_group:  yearGroup.trim() || undefined,
+        subjects:    subjects.length ? subjects : undefined,
+      };
       const agentRes = await fetch(`${API}/api/user/agent`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent_name:  agentName.trim() || `Agent_${user?.username || 'me'}`,
-          agent_emoji: agentEmoji,
-          study_level: studyLevel || undefined,
-          year_group:  yearGroup.trim() || undefined,
-          subjects:    subjects.length ? subjects : undefined,
-        }),
+        body: JSON.stringify(agentPayload),
       });
       if (!agentRes.ok) {
-        // Non-fatal — agent row will be auto-created on first GET /api/user/agent
-        console.warn('Agent setup failed, will use defaults');
+        const j = await agentRes.json().catch(() => ({}));
+        throw new Error(j.message || 'Could not save your agent. Please try again.');
       }
 
       markOnboarded();
@@ -199,7 +200,7 @@ export default function OnboardingPage() {
               <label style={lbl}>{t('onboarding.pick_avatar')}</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {GUIDE_EMOJIS.map(em => (
-                  <button key={em} onClick={() => setGuideEmoji(em)} style={{
+                  <button key={em} onClick={() => setAgentEmoji(em)} style={{
                     width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
                     border: `2px solid ${agentEmoji === em ? accentColor : 'var(--ak-border2)'}`,
                     background: agentEmoji === em ? `${accentColor}18` : 'var(--ak-surface)',

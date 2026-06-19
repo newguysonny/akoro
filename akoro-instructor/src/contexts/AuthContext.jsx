@@ -108,7 +108,7 @@ export function AuthProvider({ children }) {
 
   const loginWithGoogle = useCallback((redirectAfter = '/') => {
     localStorage.setItem(REDIRECT_KEY, redirectAfter);
-    window.location.href = `${API}/api/auth/google`;
+    window.location.href = `${API}/api/auth/google?portal=instructor`;
   }, []);
 
   // Token is now in HttpOnly cookie — only user object comes via URL param

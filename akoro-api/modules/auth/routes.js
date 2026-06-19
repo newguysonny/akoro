@@ -38,7 +38,8 @@ const PUBLIC_KEY   = (process.env.JWT_PUBLIC_KEY   || "").replace(/\\n/g, "\n").
 
 const JWT_ISSUER   = process.env.JWT_ISSUER   || "https://api.akoro.app";
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
-const FRONTEND_URL = process.env.FRONTEND_URL || "https://akoro.app";
+const FRONTEND_URL            = process.env.FRONTEND_URL             || "https://akoro.app";
+const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL  || "https://instructor.akoro.app";
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 
 const ACCESS_TTL_SECS  = 15 * 60;        // 15 minutes
@@ -666,14 +667,34 @@ router.post("/2fa/disable", authenticateToken, authHandlers.twoFactorDisable);
 router.post("/change-password", authenticateToken, authHandlers.changePassword);
 
 // Google OAuth
-router.get("/google",
-  passport.authenticate("google", { scope: ["profile", "email"], session: false })
-);
+// ?portal=instructor  →  signals an instructor login attempt
+router.get("/google", (req, res, next) => {
+  const portal = req.query.portal === "instructor" ? "instructor" : "student";
+  passport.authenticate("google", {
+    scope:   ["profile", "email"],
+    session: false,
+    state:   portal,           // carried through to callback
+  })(req, res, next);
+});
 
 router.get("/google/callback",
-  passport.authenticate("google", { session: false, failureRedirect: `${FRONTEND_URL}/signin?error=google_failed` }),
+  (req, res, next) => {
+    // Determine which frontend to redirect failures to based on state
+    const portal = req.query.state === "instructor" ? "instructor" : "student";
+    const failUrl = portal === "instructor"
+      ? `${INSTRUCTOR_FRONTEND_URL}/signin?error=google_failed`
+      : `${FRONTEND_URL}/signin?error=google_failed`;
+    passport.authenticate("google", { session: false, failureRedirect: failUrl })(req, res, next);
+  },
   asyncHandler(async (req, res) => {
-    const user = req.user;
+    const user   = req.user;
+    const portal = req.query.state === "instructor" ? "instructor" : "student";
+
+    // Role enforcement: instructor portal only allows instructor/admin accounts
+    if (portal === "instructor" && user.role !== "instructor" && user.role !== "admin") {
+      return res.redirect(`${INSTRUCTOR_FRONTEND_URL}/signin?error=not_instructor`);
+    }
+
     const { token: accessToken } = signAccess(user);
     const family = randomUUID();
     const { token: refreshToken, jti: refreshJti } = signRefresh(user.id, family);
@@ -684,10 +705,10 @@ router.get("/google/callback",
     setAccessCookie(res, accessToken);
     setRefreshCookie(res, refreshToken);
 
-    // Pass safe user in URL for frontend to display — token is in cookie, not URL
     const safe = safeUser(user);
     const userParam = encodeURIComponent(JSON.stringify(safe));
-    res.redirect(`${FRONTEND_URL}/auth/callback?user=${userParam}`);
+    const target = portal === "instructor" ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
+    res.redirect(`${target}/auth/callback?user=${userParam}`);
   })
 );
 
