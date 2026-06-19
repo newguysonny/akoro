@@ -56,7 +56,7 @@ const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
 
 const io = new SocketServer(httpServer, {
-  cors:       { origin: config.server.corsOrigin, methods: ["GET", "POST"] },
+  cors:       { origin: allowedOrigins, credentials: true, methods: ["GET", "POST"] },
   transports: ["websocket", "polling"],
 });
 io.adapter(createAdapter(redisPub, redisSub));
@@ -87,8 +87,20 @@ app.use(helmet({
   contentSecurityPolicy: false,   // configured separately per-page if needed
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
+// Support comma-separated origins in CORS_ORIGIN env var
+//   e.g. CORS_ORIGIN=https://akoro.app,https://instructor.akoro.app
+const allowedOrigins = config.server.corsOrigin === '*'
+  ? '*'
+  : config.server.corsOrigin.split(',').map(s => s.trim()).filter(Boolean);
+
 app.use(cors({
-  origin:      config.server.corsOrigin,
+  origin: allowedOrigins === '*'
+    ? '*'
+    : (origin, cb) => {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+        cb(new Error(`CORS: origin ${origin} not allowed`));
+      },
   credentials: true,
   methods:     ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
