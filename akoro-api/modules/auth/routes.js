@@ -715,24 +715,19 @@ router.get("/google/callback",
 
 // ─── § FORGOT / RESET PASSWORD ────────────────────────────────────────────────
 
-const RESET_TTL_MS    = 60 * 60 * 1000;   // 1 hour
-const SMTP_FROM       = process.env.SMTP_FROM_EMAIL || "noreply@akoro.app";
+const RESET_TTL_MS = 60 * 60 * 1000;   // 1 hour
+const EMAIL_FROM   = process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
 
 function hashToken(raw) {
   return createHash("sha256").update(raw).digest("hex");
 }
 
 async function sendResetEmail({ to, name, resetUrl }) {
-  const { createTransport } = await import("nodemailer");
-  const transporter = createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   parseInt(process.env.SMTP_PORT ?? "587", 10),
-    secure: process.env.SMTP_PORT === "465",
-    auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-  await transporter.sendMail({
-    from:    `"Akoro Learning" <${SMTP_FROM}>`,
-    to,
+  const { Resend } = await import("resend");
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from:    `Akoro Learning <${EMAIL_FROM}>`,
+    to:      [to],
     subject: "Reset your Akoro password",
     text:    `Hi ${name},\n\nClick the link below to reset your password (valid 1 hour):\n${resetUrl}\n\nIf you didn't request this, ignore this email.`,
     html: `
@@ -745,6 +740,7 @@ async function sendResetEmail({ to, name, resetUrl }) {
         <p style="color:#9490A0;font-size:12px;margin-top:28px">If you didn't request a password reset, you can safely ignore this email. Your password won't change.</p>
       </div>`,
   });
+  if (error) throw new Error(`Email send failed: ${error.message}`);
 }
 
 /** POST /api/auth/forgot-password */
