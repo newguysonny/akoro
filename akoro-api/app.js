@@ -51,6 +51,12 @@ const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const app        = express();
 const httpServer = createServer(app);
 
+// ─── CORS origins ─────────────────────────────────────────────────────────────
+// Support comma-separated list: CORS_ORIGIN=https://akoro.app,https://instructor.akoro.app
+const allowedOrigins = config.server.corsOrigin === '*'
+  ? '*'
+  : config.server.corsOrigin.split(',').map(s => s.trim()).filter(Boolean);
+
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
@@ -87,12 +93,6 @@ app.use(helmet({
   contentSecurityPolicy: false,   // configured separately per-page if needed
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-// Support comma-separated origins in CORS_ORIGIN env var
-//   e.g. CORS_ORIGIN=https://akoro.app,https://instructor.akoro.app
-const allowedOrigins = config.server.corsOrigin === '*'
-  ? '*'
-  : config.server.corsOrigin.split(',').map(s => s.trim()).filter(Boolean);
-
 app.use(cors({
   origin: allowedOrigins === '*'
     ? '*'
