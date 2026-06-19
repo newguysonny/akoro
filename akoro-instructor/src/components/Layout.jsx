@@ -1,8 +1,24 @@
+import { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+
+/* Collapse the sidebar to icons-only on tablet widths (769–1024px).
+   Desktop (>1024px) and mobile (≤768px) are unchanged. */
+function useMediaQuery(query) {
+  const get = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false);
+  const [matches, setMatches] = useState(get);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
 
 const NAV = [
   { to: '/',        icon: Home,          label: 'Home' },
@@ -14,73 +30,93 @@ const NAV = [
   { to: '/settings',icon: Settings,      label: 'Settings' },
 ];
 
-function NavItem({ to, icon: Icon, label }) {
+function NavItem({ to, icon: Icon, label, compact }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
+      title={compact ? label : undefined}
       style={({ isActive }) => ({
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 16px', borderRadius: 10, margin: '2px 8px',
+        display: 'flex', alignItems: 'center',
+        gap: compact ? 0 : 12,
+        justifyContent: compact ? 'center' : 'flex-start',
+        padding: compact ? '11px 0' : '10px 16px',
+        borderRadius: 10, margin: compact ? '2px 10px' : '2px 8px',
         textDecoration: 'none', color: isActive ? WHITE : MUTED2,
         background: isActive ? `${AMBER}22` : 'transparent',
         fontFamily: FONT, fontSize: 14, fontWeight: isActive ? 600 : 400,
         transition: 'all .15s',
-        borderLeft: isActive ? `3px solid ${AMBER}` : '3px solid transparent',
+        borderLeft: compact
+          ? '3px solid transparent'
+          : (isActive ? `3px solid ${AMBER}` : '3px solid transparent'),
       })}
     >
       <Icon size={18} />
-      <span>{label}</span>
+      {!compact && <span>{label}</span>}
     </NavLink>
   );
 }
 
 export function Sidebar() {
   const { user, logout } = useAuth();
+  const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
 
   return (
     <aside style={{
-      width: 240, flexShrink: 0, background: INK,
+      width: compact ? 72 : 240, flexShrink: 0, background: INK,
       display: 'flex', flexDirection: 'column',
       height: '100vh', position: 'sticky', top: 0,
+      transition: 'width .15s',
     }}>
       {/* Logo */}
-      <div style={{ padding: '24px 20px 16px', borderBottom: `1px solid rgba(255,255,255,.07)` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{
+        padding: compact ? '24px 0 16px' : '24px 20px 16px',
+        borderBottom: `1px solid rgba(255,255,255,.07)`,
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: compact ? 'center' : 'flex-start', gap: 10,
+        }}>
           <AkoroLogo size={36} radius={10} />
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
-            <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Instructor Portal</div>
-          </div>
+          {!compact && (
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
+              <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Instructor Portal</div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {NAV.map(item => <NavItem key={item.to} {...item} />)}
+        {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
       </nav>
 
       {/* User */}
       <div style={{
         padding: '16px', borderTop: `1px solid rgba(255,255,255,.07)`,
-        display: 'flex', alignItems: 'center', gap: 10,
+        display: 'flex', flexDirection: compact ? 'column' : 'row',
+        alignItems: 'center', gap: compact ? 12 : 10,
       }}>
         <div style={{
           width: 36, height: 36, borderRadius: '50%',
           background: `linear-gradient(135deg, ${AMBER}, ${AMBER}88)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 14, fontWeight: 700, color: WHITE, flexShrink: 0,
-        }}>
+        }}
+        title={compact ? (user?.fullName || user?.email || '') : undefined}>
           {(user?.fullName || user?.email || 'T')[0].toUpperCase()}
         </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user?.fullName || 'Instructor'}
+        {!compact && (
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.fullName || 'Instructor'}
+            </div>
+            <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user?.email || ''}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user?.email || ''}
-          </div>
-        </div>
+        )}
         <button
           onClick={logout}
           title="Sign out"
