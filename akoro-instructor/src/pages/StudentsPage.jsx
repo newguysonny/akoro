@@ -1,87 +1,372 @@
-import { useState, useEffect } from 'react';
-import { Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp, Trash2, ChevronRight, Filter } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
+  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus,
+} from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
-import { Btn, Modal, Inp, Sel, StatusPill, Toast, Skeleton } from '../components/Primitives.jsx';
+import { Btn, Modal, Inp, StatusPill, Toast } from '../components/Primitives.jsx';
 import { useStudentsAPI } from '../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../hooks/useCoursesAPI.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
+import {
+  AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
+} from '../constants.js';
 
-/* ── Mock data ─────────────────────────────────────────────────────── */
-const MOCK_STUDENTS = [
-  { id: 1, enrollmentId: 'enr_1', fullName: 'Alice Johnson', email: 'alice@example.com', coursesEnrolled: 2, joinedAt: '2024-01-15', progress: 75, status: 'active', avatar: null },
-  { id: 2, enrollmentId: 'enr_2', fullName: 'Bob Smith',    email: 'bob@example.com',   coursesEnrolled: 1, joinedAt: '2024-02-20', progress: 42, status: 'active', avatar: null },
-  { id: 3, enrollmentId: 'enr_3', fullName: 'Carol White',  email: 'carol@example.com', coursesEnrolled: 3, joinedAt: '2023-11-05', progress: 91, status: 'active', avatar: null },
-  { id: 4, enrollmentId: 'enr_4', fullName: 'Dan Brown',    email: 'dan@example.com',   coursesEnrolled: 1, joinedAt: '2024-03-01', progress: 15, status: 'paused', avatar: null },
-  { id: 5, enrollmentId: 'enr_5', fullName: 'Eva Green',    email: 'eva@example.com',   coursesEnrolled: 2, joinedAt: '2024-01-28', progress: 60, status: 'active', avatar: null },
-];
+/* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
+function EnrolModal({ open, onClose, onDone, courses = [] }) {
+  const { addStudent, generateInvite, importCSV } = useStudentsAPI();
+  const [tab, setTab]       = useState('manual');
+  const [loading, setLoad]  = useState(false);
+  const [error, setError]   = useState('');
+  const [success, setOk]    = useState('');
+  const fileRef = useRef(null);
 
-/* ── Add Student Modal ──────────────────────────────────────────────── */
-function AddStudentModal({ open, onClose, onSubmit, courses = [] }) {
-  const [form, setForm] = useState({ email: '', fullName: '', courseId: '' });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  // Manual form
+  const [manual, setManual] = useState({ email: '', fullName: '', courseId: '' });
+  const setM = (k, v) => setManual(f => ({ ...f, [k]: v }));
 
-  // Reset form when modal opens
-  useEffect(() => { if (open) { setForm({ email: '', fullName: '', courseId: '' }); setError(''); } }, [open]);
+  // Invite form
+  const [inv, setInv]       = useState({ courseId: '', expiresInDays: 7, emails: '' });
+  const setI = (k, v) => setInv(f => ({ ...f, [k]: v }));
+  const [inviteUrl, setUrl] = useState('');
+  const [copied, setCopied] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.email)    { setError('Email is required'); return; }
-    if (!form.courseId) { setError('Please select a course to enrol the student in'); return; }
-    setLoading(true); setError('');
+  // CSV form
+  const [csv, setCsv]       = useState({ courseId: '', file: null });
+  const [csvResult, setCsvR] = useState(null);
+
+  useEffect(() => {
+    if (open) {
+      setTab('manual'); setLoad(false); setError(''); setOk('');
+      setManual({ email: '', fullName: '', courseId: '' });
+      setInv({ courseId: '', expiresInDays: 7, emails: '' });
+      setUrl(''); setCopied(false);
+      setCsv({ courseId: '', file: null }); setCsvR(null);
+    }
+  }, [open]);
+
+  const reset = () => { setError(''); setOk(''); };
+
+  /* Manual submit */
+  const submitManual = async (e) => {
+    e.preventDefault(); reset();
+    if (!manual.email)    { setError('Email is required'); return; }
+    if (!manual.courseId) { setError('Please select a course'); return; }
+    setLoad(true);
     try {
-      await onSubmit(form);
-      onClose();
+      await addStudent(manual);
+      setOk('Student added! They\'ll receive a welcome email to set their password.');
+      onDone?.();
     } catch (err) {
       setError(err.message || 'Failed to add student');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoad(false); }
   };
 
+  /* Invite link generate */
+  const submitInvite = async (e) => {
+    e.preventDefault(); reset();
+    if (!inv.courseId) { setError('Please select a course'); return; }
+    setLoad(true);
+    try {
+      const emailList = inv.emails.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+      const res = await generateInvite({
+        courseId: inv.courseId,
+        expiresInDays: Number(inv.expiresInDays) || 7,
+        emails: emailList,
+      });
+      setUrl(res.invite_url || res.inviteUrl || '');
+      if (emailList.length) setOk(`Invite sent to ${emailList.length} email(s).`);
+    } catch (err) {
+      setError(err.message || 'Failed to generate invite');
+    } finally { setLoad(false); }
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  /* CSV submit */
+  const submitCSV = async (e) => {
+    e.preventDefault(); reset();
+    if (!csv.file)     { setError('Please choose a CSV file'); return; }
+    if (!csv.courseId) { setError('Please select a course'); return; }
+    setLoad(true);
+    try {
+      const result = await importCSV(csv.file, csv.courseId);
+      setCsvR(result);
+      onDone?.();
+    } catch (err) {
+      setError(err.message || 'Import failed');
+    } finally { setLoad(false); }
+  };
+
+  const TAB_STYLE = (active) => ({
+    flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8,
+    background: active ? WHITE : 'transparent',
+    color: active ? AMBER : MUTED, fontWeight: active ? 700 : 500,
+    fontSize: 12, fontFamily: FONT, cursor: 'pointer',
+    boxShadow: active ? `0 1px 4px ${AMBER}22` : 'none',
+    transition: 'all .15s',
+  });
+
+  const CourseSelect = ({ value, onChange }) => (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
+        Enrol in Course *
+      </label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13,
+          color: value ? INK : MUTED, background: WHITE, outline: 'none',
+        }}
+      >
+        <option value="">— Select a course —</option>
+        {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+      </select>
+    </div>
+  );
+
+  const Feedback = () => (
+    <>
+      {error && (
+        <div style={{ background: '#FEF2F2', border: `1px solid #FECACA`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: RED }}>
+          {error}
+        </div>
+      )}
+      {success && (
+        <div style={{ background: '#F0FDF4', border: `1px solid #BBF7D0`, borderRadius: 10, padding: '10px 14px', fontSize: 13, color: GREEN }}>
+          {success}
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <Modal open={open} onClose={onClose} title="Add Student">
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {error && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#EF4444' }}>
-            {error}
+    <Modal open={open} onClose={onClose} title="Add a Student">
+      {/* Tab bar */}
+      <div style={{ display: 'flex', background: LIGHT, borderRadius: 10, padding: 4, marginBottom: 20, gap: 2 }}>
+        <button style={TAB_STYLE(tab === 'manual')} onClick={() => { setTab('manual'); reset(); }}>
+          ✏️ Manual Entry
+        </button>
+        <button style={TAB_STYLE(tab === 'invite')} onClick={() => { setTab('invite'); reset(); }}>
+          📧 Invite Link
+        </button>
+        <button style={TAB_STYLE(tab === 'csv')} onClick={() => { setTab('csv'); reset(); }}>
+          📋 Bulk CSV
+        </button>
+      </div>
+
+      {/* ── Manual ── */}
+      {tab === 'manual' && (
+        <form onSubmit={submitManual} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Feedback />
+          <Inp
+            label="Student Email *"
+            type="email"
+            value={manual.email}
+            onChange={e => setM('email', e.target.value)}
+            placeholder="student@example.com"
+          />
+          <Inp
+            label="Full Name (optional)"
+            value={manual.fullName}
+            onChange={e => setM('fullName', e.target.value)}
+            placeholder="Jane Doe"
+          />
+          <CourseSelect value={manual.courseId} onChange={v => setM('courseId', v)} />
+          <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
+            If the student doesn't have an Akoro account yet, one will be created automatically
+            and they can set their password via the welcome email.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
+            <Btn type="submit" disabled={loading}>{loading ? 'Adding…' : 'Add Student'}</Btn>
           </div>
-        )}
-        <Inp label="Student Email *" type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="student@example.com" />
-        <Inp label="Full Name (optional)" value={form.fullName} onChange={e => setField('fullName', e.target.value)} placeholder="Jane Doe" />
-        <div>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
-            Enrol in Course *
-          </label>
-          <select
-            value={form.courseId}
-            onChange={e => setField('courseId', e.target.value)}
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
-              fontFamily: FONT, fontSize: 13, color: form.courseId ? INK : MUTED, background: WHITE, outline: 'none' }}
+        </form>
+      )}
+
+      {/* ── Invite Link ── */}
+      {tab === 'invite' && (
+        <form onSubmit={submitInvite} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Feedback />
+          <CourseSelect value={inv.courseId} onChange={v => setI('courseId', v)} />
+
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
+              Link Expires In
+            </label>
+            <select
+              value={inv.expiresInDays}
+              onChange={e => setI('expiresInDays', e.target.value)}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10,
+                border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13,
+                color: INK, background: WHITE, outline: 'none',
+              }}
+            >
+              <option value={1}>1 day</option>
+              <option value={3}>3 days</option>
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+            </select>
+          </div>
+
+          <Inp
+            label="Also email the link to (optional)"
+            type="text"
+            value={inv.emails}
+            onChange={e => setI('emails', e.target.value)}
+            placeholder="alice@example.com, bob@example.com"
+          />
+
+          {inviteUrl && (
+            <div style={{
+              background: LIGHT, border: `1.5px solid ${BORDER}`, borderRadius: 10,
+              padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <Link2 size={14} color={AMBER} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 11, color: INK, fontFamily: FONT, wordBreak: 'break-all' }}>
+                {inviteUrl}
+              </span>
+              <button
+                type="button"
+                onClick={copyLink}
+                style={{
+                  background: copied ? GREEN : AMBER, border: 'none', borderRadius: 7,
+                  padding: '6px 10px', cursor: 'pointer', color: WHITE,
+                  display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontFamily: FONT,
+                }}
+              >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          )}
+
+          <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
+            Anyone with this link can join the selected course. Share it in a WhatsApp group, email, or anywhere.
+          </p>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <Btn variant="secondary" type="button" onClick={onClose}>Close</Btn>
+            <Btn type="submit" disabled={loading}>{loading ? 'Generating…' : inviteUrl ? 'Regenerate Link' : 'Generate Link'}</Btn>
+          </div>
+        </form>
+      )}
+
+      {/* ── Bulk CSV ── */}
+      {tab === 'csv' && (
+        <form onSubmit={submitCSV} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Feedback />
+
+          <CourseSelect value={csv.courseId} onChange={v => setCsv(f => ({ ...f, courseId: v }))} />
+
+          {/* Drop zone */}
+          <div
+            onClick={() => fileRef.current?.click()}
+            style={{
+              border: `2px dashed ${csv.file ? AMBER : BORDER}`, borderRadius: 12,
+              padding: '24px', textAlign: 'center', cursor: 'pointer',
+              background: csv.file ? `${AMBER}08` : LIGHT, transition: 'all .15s',
+            }}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) setCsv(c => ({ ...c, file: f }));
+            }}
           >
-            <option value="">— Select a course —</option>
-            {courses.map(c => (
-              <option key={c.id} value={c.id}>{c.title}</option>
-            ))}
-          </select>
-        </div>
-        <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
-          If the student doesn't have an Akoro account yet, one will be created automatically and they can set their password via the reset password flow.
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-          <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
-          <Btn type="submit" disabled={loading}>{loading ? 'Adding…' : 'Add Student'}</Btn>
-        </div>
-      </form>
+            <Upload size={22} color={csv.file ? AMBER : MUTED} style={{ marginBottom: 8 }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: csv.file ? AMBER : INK, fontFamily: FONT }}>
+              {csv.file ? csv.file.name : 'Drop CSV file here or click to browse'}
+            </div>
+            {csv.file && (
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 4, fontFamily: FONT }}>
+                {(csv.file.size / 1024).toFixed(1)} KB
+              </div>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              style={{ display: 'none' }}
+              onChange={e => setCsv(c => ({ ...c, file: e.target.files?.[0] || null }))}
+            />
+          </div>
+
+          <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 14px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: INK, marginBottom: 4, fontFamily: FONT }}>
+              CSV format — one student per row:
+            </div>
+            <code style={{ fontSize: 11, color: MUTED, fontFamily: 'monospace' }}>
+              name,email,phone<br />
+              Jane Doe,jane@example.com,+2348012345678<br />
+              John Smith,john@example.com,
+            </code>
+          </div>
+
+          {csvResult && (
+            <div style={{ background: '#F0FDF4', border: `1px solid #BBF7D0`, borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: GREEN, marginBottom: 6, fontFamily: FONT }}>
+                Import complete
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {[
+                  { label: 'New accounts', value: csvResult.accounts_created ?? 0 },
+                  { label: 'Already existed', value: csvResult.already_existed ?? 0 },
+                  { label: 'Enrolled', value: (csvResult.accounts_created ?? 0) + (csvResult.already_existed ?? 0) },
+                  { label: 'Failed rows', value: csvResult.failed ?? 0, warn: true },
+                ].map(({ label, value, warn }) => (
+                  <div key={label} style={{ fontSize: 12, color: warn && value ? RED : INK, fontFamily: FONT }}>
+                    <span style={{ fontWeight: 700 }}>{value}</span> {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+            <Btn variant="secondary" type="button" onClick={onClose}>Close</Btn>
+            <Btn type="submit" disabled={loading || !!csvResult}>
+              {loading ? 'Importing…' : 'Import Students'}
+            </Btn>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }
 
 /* ── Student detail sheet ───────────────────────────────────────────── */
-function StudentSheet({ student, onClose, onRemove }) {
+function StudentSheet({ student, courses = [], onClose, onRemove }) {
+  const { addStudent } = useStudentsAPI();
+  const [enrolCourse, setEnrolCourse] = useState('');
+  const [enrolLoading, setEnrolLoad] = useState(false);
+  const [enrolOk, setEnrolOk] = useState('');
+
+  useEffect(() => { if (student) { setEnrolCourse(''); setEnrolOk(''); } }, [student]);
+
   if (!student) return null;
+
+  const handleEnrolInCourse = async () => {
+    if (!enrolCourse) return;
+    setEnrolLoad(true);
+    try {
+      await addStudent({ email: student.email, courseId: enrolCourse });
+      setEnrolOk('Enrolled!');
+      setTimeout(() => setEnrolOk(''), 2500);
+    } catch (err) {
+      setEnrolOk('Error: ' + (err.message || 'failed'));
+    } finally { setEnrolLoad(false); }
+  };
+
   return (
     <div
       onClick={onClose}
@@ -158,6 +443,41 @@ function StudentSheet({ student, onClose, onRemove }) {
           </div>
         </div>
 
+        {/* Enrol in another course */}
+        {courses.length > 0 && (
+          <div style={{ background: LIGHT, borderRadius: 12, padding: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: FONT }}>
+              Enrol in another course
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                value={enrolCourse}
+                onChange={e => setEnrolCourse(e.target.value)}
+                style={{
+                  flex: 1, padding: '8px 10px', borderRadius: 8,
+                  border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 12,
+                  color: enrolCourse ? INK : MUTED, background: WHITE, outline: 'none',
+                }}
+              >
+                <option value="">— Select course —</option>
+                {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+              <Btn
+                size="sm"
+                disabled={!enrolCourse || enrolLoading}
+                onClick={handleEnrolInCourse}
+              >
+                {enrolLoading ? '…' : 'Enrol'}
+              </Btn>
+            </div>
+            {enrolOk && (
+              <div style={{ fontSize: 12, color: enrolOk.startsWith('Error') ? RED : GREEN, marginTop: 6, fontFamily: FONT }}>
+                {enrolOk}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Btn variant="danger" onClick={() => { onRemove(student.enrollmentId); onClose(); }}>
@@ -208,18 +528,18 @@ function StudentRow({ student, onClick }) {
 
 /* ── Main page ──────────────────────────────────────────────────────── */
 export default function StudentsPage() {
-  const { getStudents, addStudent, removeStudent } = useStudentsAPI();
+  const { getStudents, removeStudent } = useStudentsAPI();
   const { getCourses } = useCoursesAPI();
   const [searchParams] = useSearchParams();
 
-  const [students,   setStudents]   = useState([]);
-  const [filtered,   setFiltered]   = useState([]);
-  const [courses,    setCourses]    = useState([]);
-  const [search,     setSearch]     = useState('');
-  const [loading,    setLoading]    = useState(true);
-  const [addModal,   setAddModal]   = useState(searchParams.get('add') === '1');
-  const [selected,   setSelected]   = useState(null);
-  const [toast,      setToast]      = useState(null);
+  const [students, setStudents] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+  const [courses,  setCourses]  = useState([]);
+  const [search,   setSearch]   = useState('');
+  const [loading,  setLoading]  = useState(true);
+  const [modal,    setModal]    = useState(searchParams.get('add') === '1');
+  const [selected, setSelected] = useState(null);
+  const [toast,    setToast]    = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -229,22 +549,17 @@ export default function StudentsPage() {
   const load = async () => {
     try {
       const [studRes, courseRes] = await Promise.allSettled([getStudents(), getCourses()]);
-      const data = studRes.status === 'fulfilled' ? (studRes.value?.data || []) : MOCK_STUDENTS;
+      const data = studRes.status === 'fulfilled' ? (studRes.value?.data || []) : [];
       setStudents(data);
       setFiltered(data);
       if (courseRes.status === 'fulfilled') setCourses(courseRes.value?.data || []);
-    } catch (err) {
-      console.warn('Students API error, using mock:', err);
-      setStudents(MOCK_STUDENTS);
-      setFiltered(MOCK_STUDENTS);
-    } finally {
-      setLoading(false);
-    }
+    } catch {
+      setStudents([]); setFiltered([]);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
-  // Client-side search
   useEffect(() => {
     if (!search.trim()) { setFiltered(students); return; }
     const q = search.toLowerCase();
@@ -254,9 +569,8 @@ export default function StudentsPage() {
     ));
   }, [search, students]);
 
-  const handleAdd = async (form) => {
-    await addStudent(form); // throws on error — modal catches and displays it
-    showToast('Student added successfully!');
+  const handleDone = () => {
+    showToast('Students updated!');
     load();
   };
 
@@ -271,7 +585,7 @@ export default function StudentsPage() {
       title="Students"
       subtitle={`${loading ? '…' : students.length} enrolled learners`}
       action={
-        <Btn size="sm" onClick={() => setAddModal(true)}>
+        <Btn size="sm" onClick={() => setModal(true)}>
           <Plus size={14} /> Add Student
         </Btn>
       }
@@ -294,7 +608,9 @@ export default function StudentsPage() {
       {/* List */}
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 66, borderRadius: 12 }} />)}
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{ height: 66, borderRadius: 12, background: BORDER, opacity: .4, animation: 'shimmer 1.4s infinite linear', backgroundSize: '200% 100%', backgroundImage: `linear-gradient(90deg, ${BORDER} 0%, ${WHITE} 50%, ${BORDER} 100%)` }} />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 16, padding: '48px', textAlign: 'center' }}>
@@ -302,7 +618,13 @@ export default function StudentsPage() {
           <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: '0 0 16px' }}>
             {search ? 'No students match your search' : 'No students enrolled yet'}
           </p>
-          {!search && <Btn onClick={() => setAddModal(true)}><Plus size={14} /> Add your first student</Btn>}
+          {!search && (
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Btn onClick={() => setModal(true)}><UserPlus size={14} /> Manual Entry</Btn>
+              <Btn variant="secondary" onClick={() => setModal(true)}><Mail size={14} /> Send Invite</Btn>
+              <Btn variant="secondary" onClick={() => setModal(true)}><Upload size={14} /> Import CSV</Btn>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -312,8 +634,18 @@ export default function StudentsPage() {
         </div>
       )}
 
-      <AddStudentModal open={addModal} onClose={() => setAddModal(false)} onSubmit={handleAdd} courses={courses} />
-      <StudentSheet student={selected} onClose={() => setSelected(null)} onRemove={handleRemove} />
+      <EnrolModal
+        open={modal}
+        onClose={() => setModal(false)}
+        onDone={handleDone}
+        courses={courses}
+      />
+      <StudentSheet
+        student={selected}
+        courses={courses}
+        onClose={() => setSelected(null)}
+        onRemove={handleRemove}
+      />
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
