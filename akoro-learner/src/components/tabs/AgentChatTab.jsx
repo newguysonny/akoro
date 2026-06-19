@@ -180,16 +180,16 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       return;
     }
 
-    // Real API call — POST /api/adaptive/chat instead of direct Anthropic
+    // Normal AI chat — OpenAI educational tutor (no tasks/tools)
     try {
       const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
-      const data = await apiPost("/api/adaptive/chat", {
-        studentId: STUDENT_ID,
+      const data = await apiPost("/api/adaptive/chat/tutor", {
         message: text,
         history: history.slice(-8),
         agentName,
+        role: "student",
       });
-      const reply = data.reply || data.content?.[0]?.text || t('agent.fallback');
+      const reply = data.reply || data.response || t('agent.fallback');
       const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
       setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:reply,time:t2}]);
     } catch {

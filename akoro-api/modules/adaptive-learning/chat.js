@@ -797,6 +797,50 @@ router.post("/chat", async (req, res) => {
   } catch (err) { console.error("[/chat]", err); res.status(500).json({ error: err.message }); }
 });
 
+// ─── /chat/tutor — plain educational AI chat (OpenAI, no tools/tasks) ─────────
+// Used by the "Agent Chat" tab in both the learner and instructor apps for
+// normal conversation. Locked to educational topics; does NOT create tasks or
+// touch the knowledge base.
+function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}) {
+  const audience = role === "instructor"
+    ? "You assist teachers with academic subjects, lesson planning, pedagogy, assessment design, and explaining concepts so they can teach more effectively."
+    : "You assist students with academic subjects, studying, homework, exam preparation (e.g. WAEC, JAMB), and learning strategies.";
+  return `You are ${agentName}, an AI study tutor on the Akoro Learning Platform.
+${audience}
+Stay strictly on EDUCATIONAL topics. If asked about anything non-educational — relationships, politics, gossip, entertainment for its own sake, adult content, violence, illegal activity, financial/medical/legal advice, or idle chit-chat — politely decline in one short sentence and invite an academic question instead.
+Be clear, encouraging, and age-appropriate. Explain step by step with examples. Keep replies concise. Never fabricate facts; if you are unsure, say so.`;
+}
+
+router.post("/tutor", async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const { message, history = [], agentName, role } = req.body;
+    if (!message || !message.trim()) return res.status(400).json({ error: "message is required" });
+
+    const safeHistory = (Array.isArray(history) ? history : [])
+      .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+      .slice(-10);
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.6,
+      max_tokens: 700,
+      messages: [
+        { role: "system", content: tutorSystemPrompt({ agentName, role }) },
+        ...safeHistory,
+        { role: "user", content: message.trim() },
+      ],
+    });
+
+    const reply = completion.choices?.[0]?.message?.content?.trim()
+      || "I'm here to help with your studies — ask me anything about your subjects!";
+    res.json({ success: true, reply, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+  } catch (err) {
+    console.error("[/chat/tutor]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── handleStudentChatWithTools ──────────────────────────────────────────────
 // Global mini-ChatGPT handler for student /chat requests.
 // 1. Tries Anthropic with CHAT_TOOLS — executes up to 3 tool loops

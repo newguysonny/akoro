@@ -169,7 +169,19 @@ export default function ChatPage() {
         pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]);
       }
     } else {
-      setTimeout(() => pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]), 900);
+      // Normal AI chat — OpenAI educational tutor (no tasks/tools)
+      try {
+        const history = [...messages, { from: 'me', text: bodyText }]
+          .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
+          .slice(-8);
+        const data = await apiPost('/api/adaptive/chat/tutor', {
+          message: bodyText, history, agentName, role: 'instructor',
+        });
+        pushAgent(data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?");
+      } catch (e) {
+        console.warn('[chat] tutor reply failed:', e.message);
+        pushAgent('Sorry — I had trouble responding just now. Please try again.');
+      }
     }
   };
 
