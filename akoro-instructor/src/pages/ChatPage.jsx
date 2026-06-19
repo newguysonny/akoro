@@ -6,6 +6,7 @@ import {
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
 import TrainingProgress from '../components/TrainingProgress.jsx';
+import LiveRecorder from '../components/LiveRecorder.jsx';
 import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
@@ -174,13 +175,13 @@ export default function ChatPage() {
 
   // ── Training — real backend pipeline (/api/adaptive/training) ──
   const startTraining = async () => {
-    // Live device streaming needs mic capture — not wired into this view yet.
-    if (trainType === 'live') {
-      setToast({ message: 'Live device streaming is coming soon — upload an audio or video recording for now.', type: 'info' });
-      return;
-    }
     if (!trainFile) {
-      setToast({ message: 'Choose an audio or video file to train on first.', type: 'info' });
+      setToast({
+        message: trainType === 'live'
+          ? 'Record a lesson first, then start training.'
+          : 'Choose an audio or video file to train on first.',
+        type: 'info',
+      });
       return;
     }
     if (!user?.id || !agentId) {
@@ -536,12 +537,7 @@ export default function ChatPage() {
             onFile={setTrainFile}
           />
         )}
-        {trainType === 'live' && (
-          <div style={{ border: '2px dashed rgba(232,136,74,.4)', borderRadius: 14, padding: '24px 20px', textAlign: 'center', background: 'rgba(232,136,74,.04)', marginBottom: 14 }}>
-            <div style={{ fontWeight: 700, color: INK, marginBottom: 4 }}>Stream live from device</div>
-            <div style={{ fontSize: 12, color: MUTED }}>{agentName} learns in real time as you teach</div>
-          </div>
-        )}
+        {trainType === 'live' && <LiveRecorder onRecorded={setTrainFile} />}
         <Sel label="Assign to subject" value={trainSubj} onChange={(e) => setTrainSubj(e.target.value)}>
           {['Mathematics', 'Chemistry', 'Physics', 'Biology', 'English', 'Economics', 'Computer Science', 'General'].map((s) => <option key={s} value={s}>{s}</option>)}
         </Sel>

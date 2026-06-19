@@ -472,10 +472,12 @@ async function runPipeline(run, file, teacherId, agentId, subject, sessionTitle)
 
 // POST /training/upload
 router.post("/upload", upload.single("file"), async (req, res) => {
-  const { teacherId, agentId, subject = "General", sessionTitle } = req.body;
+  // teacherId is always the authenticated user — never trust the body, so a
+  // teacher can only ever train their own agent.
+  const teacherId = req.user.id;
+  const { agentId, subject = "General", sessionTitle } = req.body;
   const file = req.file;
   if (!file)      return res.status(400).json({ error: "No file received" });
-  if (!teacherId) return res.status(400).json({ error: "teacherId is required" });
   if (!agentId)   return res.status(400).json({ error: "agentId is required" });
 
   const runId = uuid(), sessionId = uuid();
@@ -609,8 +611,11 @@ router.post("/query", async (req, res) => {
 
 // POST /training/correct
 router.post("/correct", async (req, res) => {
-  const { teacherId, agentId, studentQuery, agentResponse, correction, subject } = req.body;
-  if (!teacherId || !correction) return res.status(400).json({ error: "teacherId and correction required" });
+  // Corrections write into the teacher's own knowledge base — bind to the
+  // authenticated user so nobody can inject training data into another agent.
+  const teacherId = req.user.id;
+  const { agentId, studentQuery, agentResponse, correction, subject } = req.body;
+  if (!correction) return res.status(400).json({ error: "correction required" });
   try {
     const correctionText = `Student asked: "${studentQuery}"\nAgent said (wrong): "${agentResponse}"\nTeacher correction: "${correction}"`;
     const embedding = await embed(correctionText);
@@ -622,6 +627,8 @@ router.post("/correct", async (req, res) => {
 
 // GET /training/sessions/:teacherId
 router.get("/sessions/:teacherId", async (req, res) => {
+  if (req.params.teacherId !== req.user.id && req.user.role !== "admin")
+    return res.status(403).json({ error: "Not authorised" });
   const { limit = 20, offset = 0 } = req.query;
   const { data, error } = await db
     .from("edu.training_sessions")
@@ -664,10 +671,11 @@ router.get("/chunks/:teacherId", async (req, res) => {
 
 // DELETE /training/session/:sessionId
 router.delete("/session/:sessionId", async (req, res) => {
-  const { teacherId } = req.body;
+  const teacherId = req.user.id;
   const { data: session } = await db.schema("edu").from("training_sessions")
     .select("teacher_id, file_path").eq("id", req.params.sessionId).single();
-  if (!session || session.teacher_id !== teacherId) return res.status(403).json({ error: "Not authorised" });
+  if (!session || (session.teacher_id !== teacherId && req.user.role !== "admin"))
+    return res.status(403).json({ error: "Not authorised" });
   if (session.file_path) await db.storage.from("training-assets").remove([session.file_path]);
   await db.schema("edu").from("training_chunks").delete().eq("session_id", req.params.sessionId);
   await db.schema("edu").from("training_sessions").delete().eq("id", req.params.sessionId);
