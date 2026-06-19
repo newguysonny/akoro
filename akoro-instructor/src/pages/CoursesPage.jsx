@@ -56,6 +56,7 @@ function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
             <option value="zoom">Zoom</option>
             <option value="meet">Google Meet</option>
             <option value="teams">Teams</option>
+            <option value="youtube">YouTube Live</option>
             <option value="akoro">Akoro Live</option>
           </Sel>
           <Inp label="Duration (min)" type="number" value={form.duration} onChange={e => setField('duration', e.target.value)} />

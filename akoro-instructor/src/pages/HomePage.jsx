@@ -21,9 +21,10 @@ const MOCK_STATS = {
 };
 
 const STREAM_META = {
-  zoom:  { label: 'Zoom',        color: '#2D8CFF' },
-  meet:  { label: 'Google Meet', color: '#00897B' },
-  teams: { label: 'MS Teams',    color: '#6264A7' },
+  zoom:    { label: 'Zoom',        color: '#2D8CFF' },
+  meet:    { label: 'Google Meet', color: '#00897B' },
+  teams:   { label: 'MS Teams',    color: '#6264A7' },
+  youtube: { label: 'YouTube Live', color: '#FF0000' },
 };
 
 const MOCK_PROFILE = {
@@ -125,7 +126,7 @@ function QuickAction({ icon: Icon, label, desc, color, onClick }) {
 }
 
 /* ── Streaming platforms panel (connected) ──────────────────────────── */
-const PLATFORM_KEYS = ['zoom', 'meet', 'teams'];
+const PLATFORM_KEYS = ['zoom', 'meet', 'teams', 'youtube'];
 const STREAM_ERRORS = {
   invalid_state:         'Security check failed — please try connecting again.',
   provider_mismatch:     'Security check failed — please try connecting again.',
@@ -259,8 +260,13 @@ function StreamingPanel({ onToast }) {
             Prefer <b>Connect</b> to authorize with your account so links are generated automatically.
             Or paste a personal meeting room link to reuse for every session.
           </p>
-          <Inp label="Personal meeting link" value={roomUrl} onChange={(e) => setRoomUrl(e.target.value)}
-            placeholder={connectFor === 'zoom' ? 'https://zoom.us/j/your-pmi' : connectFor === 'meet' ? 'https://meet.google.com/abc-defg-hij' : 'https://teams.microsoft.com/l/meetup-join/…'} />
+          <Inp label={connectFor === 'youtube' ? 'YouTube channel / live URL' : 'Personal meeting link'} value={roomUrl} onChange={(e) => setRoomUrl(e.target.value)}
+            placeholder={
+              connectFor === 'zoom'    ? 'https://zoom.us/j/your-pmi'
+              : connectFor === 'meet'  ? 'https://meet.google.com/abc-defg-hij'
+              : connectFor === 'youtube' ? 'https://youtube.com/@yourchannel/live'
+              : 'https://teams.microsoft.com/l/meetup-join/…'
+            } />
           {connectFor === 'zoom' && (
             <Inp label="Zoom host email (optional)" value={hostEmail} onChange={(e) => setHostEmail(e.target.value)}
               placeholder="you@example.com" />
