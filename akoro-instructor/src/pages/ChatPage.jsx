@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
-import TrainingSimulation from '../components/TrainingSimulation.jsx';
+import TrainingProgress from '../components/TrainingProgress.jsx';
+import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiPost } from '../services/api.js';
@@ -51,6 +52,7 @@ export default function ChatPage() {
   const [agentName, setAgentName]   = useState('Your Agent');
   const [agentEmoji, setAgentEmoji] = useState('🔮');
   const [agentLevel, setAgentLevel] = useState(1);
+  const [agentId, setAgentId]       = useState(null);
 
   const [trainModal, setTrainModal]   = useState(false);
   const [custModal, setCustModal]     = useState(false);
@@ -60,6 +62,9 @@ export default function ChatPage() {
 
   const [trainType, setTrainType]   = useState('audio');
   const [trainSubj, setTrainSubj]   = useState('Mathematics');
+  const [trainFile, setTrainFile]   = useState(null);
+  const [trainRunId, setTrainRunId] = useState(null);
+  const [uploadPct, setUploadPct]   = useState(0);
   const [trainingInChat, setTrainingInChat] = useState(false);
 
   const [taskTitle, setTaskTitle] = useState('');
@@ -85,6 +90,7 @@ export default function ChatPage() {
       .then((res) => {
         const agent = res?.data?.agent ?? res?.data?.user_agents?.[0] ?? res?.data;
         if (agent) {
+          if (agent.id) setAgentId(agent.id);
           setAgentName(agent.agent_name ?? 'Your Agent');
           setAgentEmoji(agent.agent_emoji ?? '🔮');
           setAgentLevel(agent.level ?? agent.total_xp ? Math.floor((agent.total_xp ?? 0) / 500) + 1 : 1);
@@ -166,28 +172,68 @@ export default function ChatPage() {
     }
   };
 
-  // ── Training ──
+  // ── Training — real backend pipeline (/api/adaptive/training) ──
   const startTraining = async () => {
+    // Live device streaming needs mic capture — not wired into this view yet.
+    if (trainType === 'live') {
+      setToast({ message: 'Live device streaming is coming soon — upload an audio or video recording for now.', type: 'info' });
+      return;
+    }
+    if (!trainFile) {
+      setToast({ message: 'Choose an audio or video file to train on first.', type: 'info' });
+      return;
+    }
+    if (!user?.id || !agentId) {
+      setToast({ message: 'Set up your agent (Edit) before training.', type: 'error' });
+      return;
+    }
+
+    const file = trainFile;
     setTrainModal(false);
     setTrainingInChat(true);
-    pushMe(`Start training on ${trainSubj} now.`);
+    setTrainRunId(null);
+    setUploadPct(0);
+    pushMe(`Start training on ${trainSubj} — ${file.name}`);
+
     try {
-      await apiPost('/api/tasks', {
-        title: `Train agent on ${trainSubj}`,
-        description: `Training session: ingest uploaded ${trainType} material for ${trainSubj}.`,
-        task_type: 'general',
-        priority: 'high',
+      const { runId } = await uploadTraining({
+        file, teacherId: user.id, agentId, subject: trainSubj,
+        sessionTitle: file.name,
+        onProgress: setUploadPct,
       });
+      if (!runId) throw new Error('No run id returned');
+      setTrainRunId(runId); // TrainingProgress takes over via polling
     } catch (e) {
-      console.warn('[chat] training task create failed:', e.message);
+      console.warn('[chat] training upload failed:', e.message);
+      setTrainingInChat(false);
+      setTrainFile(null);
+      pushAgent(`⚠️ Training couldn't start: ${e.message}. Please try again.`);
     }
   };
 
-  const handleTrainingComplete = () => {
+  const handleTrainingComplete = (summary) => {
     setTrainingInChat(false);
-    const concepts = Math.floor(Math.random() * 20 + 10);
-    const qs = Math.floor(Math.random() * 30 + 15);
-    pushAgent(`🎓 Training complete!\n\nI've absorbed the material on ${trainSubj}.\n\n• ${concepts} new concepts indexed\n• ${qs} practice questions generated\n\nReady to support your students!`);
+    setTrainRunId(null);
+    setTrainFile(null);
+    if (!summary) { pushAgent(`🎓 Training complete! ${agentName} has absorbed your material.`); return; }
+
+    const seg = summary.segmentBreakdown || {};
+    const segLines = Object.entries(seg).map(([k, v]) => `• ${v} ${k.replace(/_/g, ' ')}`).join('\n');
+    pushAgent(
+      `🎓 Training complete!\n\n${agentName} learned from ${summary.fileOriginal || 'your recording'} on ${summary.subject || trainSubj}.\n\n` +
+      `• ${summary.chunksStored ?? 0} knowledge chunks embedded\n` +
+      (segLines ? segLines + '\n' : '') +
+      `• Teaching style: ${summary.styleProfile?.pattern || 'captured'} · ${summary.styleProfile?.tone || ''}\n` +
+      (summary.orchestration?.flowType ? `• Unique ${summary.orchestration.flowType} flow with ${summary.orchestration.phaseCount} phases\n` : '') +
+      `\n+${summary.xpEarned ?? 0} XP earned. Ready to support your students!`
+    );
+  };
+
+  const handleTrainingError = () => {
+    setTrainingInChat(false);
+    setTrainRunId(null);
+    setTrainFile(null);
+    pushAgent('⚠️ Training run failed during processing. Please check the file and try again.');
   };
 
   // ── Attachment / OCR ──
@@ -326,8 +372,22 @@ export default function ChatPage() {
             );
           })}
 
-          {trainingInChat && (
-            <TrainingSimulation onComplete={handleTrainingComplete} agentName={agentName} />
+          {trainingInChat && !trainRunId && (
+            <div style={{ background: INK, borderRadius: 20, padding: 24, color: WHITE, fontFamily: FONT }}>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Uploading recording…</div>
+              <div style={{ height: 6, background: 'rgba(255,255,255,.1)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${uploadPct}%`, borderRadius: 3, background: `linear-gradient(90deg, ${AMBER}, ${PURPLE})`, transition: 'width .2s' }} />
+              </div>
+              <div style={{ textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,.5)', marginTop: 6 }}>{uploadPct}%</div>
+            </div>
+          )}
+          {trainingInChat && trainRunId && (
+            <TrainingProgress
+              runId={trainRunId}
+              agentName={agentName}
+              onComplete={handleTrainingComplete}
+              onError={handleTrainingError}
+            />
           )}
 
           {!trainingInChat && messages[messages.length - 1]?.from === 'me' && !messages[messages.length - 1]?.isTask && (
@@ -461,14 +521,21 @@ export default function ChatPage() {
         <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.55, marginBottom: 16 }}>Upload content for {agentName} to learn from.</p>
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           {[['audio', '🎙 Audio', 'Voice & lectures'], ['video', '📹 Video', 'Recordings'], ['live', '📡 Live', 'Stream from device']].map(([k, l, d]) => (
-            <button key={k} onClick={() => setTrainType(k)} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: bdr(1.5, trainType === k ? AMBER : BORDER), background: trainType === k ? 'rgba(232,136,74,.08)' : WHITE, cursor: 'pointer', textAlign: 'center', fontFamily: FONT }}>
+            <button key={k} onClick={() => { setTrainType(k); setTrainFile(null); }} style={{ flex: 1, padding: '10px 6px', borderRadius: 12, border: bdr(1.5, trainType === k ? AMBER : BORDER), background: trainType === k ? 'rgba(232,136,74,.08)' : WHITE, cursor: 'pointer', textAlign: 'center', fontFamily: FONT }}>
               <div style={{ fontSize: 16, marginBottom: 3 }}>{l.split(' ')[0]}</div>
               <div style={{ fontSize: 11, fontWeight: 700, color: trainType === k ? AMBER : INK }}>{l.split(' ').slice(1).join(' ')}</div>
               <div style={{ fontSize: 10, color: MUTED, marginTop: 1 }}>{d}</div>
             </button>
           ))}
         </div>
-        {trainType !== 'live' && <FileUploadZone label={`Upload ${trainType} files`} accept={trainType === 'audio' ? 'audio/*' : 'video/*'} />}
+        {trainType !== 'live' && (
+          <FileUploadZone
+            label={trainFile ? `Selected: ${trainFile.name}` : `Upload ${trainType} file`}
+            accept={trainType === 'audio' ? 'audio/*' : 'video/*'}
+            upload={false}
+            onFile={setTrainFile}
+          />
+        )}
         {trainType === 'live' && (
           <div style={{ border: '2px dashed rgba(232,136,74,.4)', borderRadius: 14, padding: '24px 20px', textAlign: 'center', background: 'rgba(232,136,74,.04)', marginBottom: 14 }}>
             <div style={{ fontWeight: 700, color: INK, marginBottom: 4 }}>Stream live from device</div>
