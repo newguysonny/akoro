@@ -21,6 +21,7 @@ import fs   from "fs";
 import path from "path";
 import { deriveAndSaveOrchestrationConfig } from "./agentOrchestration.js";
 import { createRealtimeTranscriber } from "../../voice/openaiRealtime.js";
+import { transcribeFileDeepgram, hasDeepgram } from "../../voice/deepgram.js";
 
 const router   = express.Router();
 const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -199,10 +200,15 @@ XP values: worked_example=80, analogy=60, concept_explanation=40, correction=50,
   return key ? result[key] : [];
 }
 
-// ── OpenAI Whisper transcription ──────────────────────────────
-// Note: Whisper API has a 25MB file limit and no speaker
-// diarization — speaker is null on all words/paragraphs.
-async function transcribeFile(localPath, _mimeType) {
+// ── Transcription ─────────────────────────────────────────────
+// Deepgram (nova-2) is the primary STT — real speaker diarization and no
+// 25MB cap. If DEEPGRAM_API_KEY is missing we fall back to OpenAI Whisper
+// (25MB limit, no diarization) so the pipeline still runs.
+async function transcribeFile(localPath, mimeType) {
+  if (hasDeepgram()) {
+    return transcribeFileDeepgram(localPath, mimeType);
+  }
+
   const result = await openai.audio.transcriptions.create({
     file:     await toFile(fs.createReadStream(localPath), path.basename(localPath)),
     model:    "whisper-1",
@@ -260,7 +266,7 @@ async function runPipeline(run, file, teacherId, agentId, subject, sessionTitle)
     runProgress(run, "store", 12, "File stored securely");
 
     // ── Phase 2: Transcribe ───────────────────────────────────
-    runProgress(run, "transcribe", 14, "Transcribing with OpenAI Whisper");
+    runProgress(run, "transcribe", 14, hasDeepgram() ? "Transcribing with Deepgram" : "Transcribing with OpenAI Whisper");
     const { data: fileData } = await db.storage.from("training-assets").download(storagePath);
     const tmpForDg = path.join(UPLOAD_DIR, `${run.sessionId}_dg${path.extname(file.filename)}`);
     fs.writeFileSync(tmpForDg, Buffer.from(await fileData.arrayBuffer()));
@@ -450,8 +456,9 @@ async function runPipeline(run, file, teacherId, agentId, subject, sessionTitle)
         vocabulary: styleProfile.vocabulary_level,
         summary:    styleProfile.overall_summary,
       },
-      model:       "gpt-4o",
-      embedding:   "text-embedding-3-small (1536 dim)",
+      model:         "gpt-4o",
+      transcription: hasDeepgram() ? "deepgram nova-2" : "whisper-1",
+      embedding:     "text-embedding-3-small (1536 dim)",
       completedAt: new Date().toISOString(),
     };
 
