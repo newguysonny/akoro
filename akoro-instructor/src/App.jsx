@@ -4,6 +4,7 @@ import GlobalStyles from './components/GlobalStyles.jsx';
 import SigninPage         from './pages/auth/SigninPage.jsx';
 import SignupPage         from './pages/auth/SignupPage.jsx';
 import OnboardingPage     from './pages/auth/OnboardingPage.jsx';
+import AuthCallback       from './pages/auth/AuthCallback.jsx';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
@@ -89,6 +90,7 @@ function AppRoutes() {
       {/* Auth */}
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>} />
       <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>} />
+      <Route path="/auth/callback"   element={<AuthCallback />} />
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
       <Route path="/reset-password"  element={<ResetPasswordPage />} />
       <Route path="/onboarding"      element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />

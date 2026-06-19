@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, Toast, Skeleton } from '../components/Primitives.jsx';
 import { useStudentsAPI } from '../hooks/useStudentsAPI.js';
+import { useCoursesAPI }  from '../hooks/useCoursesAPI.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
@@ -16,19 +17,28 @@ const MOCK_STUDENTS = [
 ];
 
 /* ── Add Student Modal ──────────────────────────────────────────────── */
-function AddStudentModal({ open, onClose, onSubmit }) {
+function AddStudentModal({ open, onClose, onSubmit, courses = [] }) {
   const [form, setForm] = useState({ email: '', fullName: '', courseId: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Reset form when modal opens
+  useEffect(() => { if (open) { setForm({ email: '', fullName: '', courseId: '' }); setError(''); } }, [open]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.email) { setError('Email is required'); return; }
+    if (!form.email)    { setError('Email is required'); return; }
+    if (!form.courseId) { setError('Please select a course to enrol the student in'); return; }
     setLoading(true); setError('');
-    try { await onSubmit(form); onClose(); setForm({ email: '', fullName: '', courseId: '' }); }
-    catch (err) { setError(err.message || 'Failed to add student'); }
-    finally { setLoading(false); }
+    try {
+      await onSubmit(form);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Failed to add student');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -41,7 +51,25 @@ function AddStudentModal({ open, onClose, onSubmit }) {
         )}
         <Inp label="Student Email *" type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="student@example.com" />
         <Inp label="Full Name (optional)" value={form.fullName} onChange={e => setField('fullName', e.target.value)} placeholder="Jane Doe" />
-        <Inp label="Course ID (optional)" value={form.courseId} onChange={e => setField('courseId', e.target.value)} placeholder="Enroll in a specific course" />
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
+            Enrol in Course *
+          </label>
+          <select
+            value={form.courseId}
+            onChange={e => setField('courseId', e.target.value)}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
+              fontFamily: FONT, fontSize: 13, color: form.courseId ? INK : MUTED, background: WHITE, outline: 'none' }}
+          >
+            <option value="">— Select a course —</option>
+            {courses.map(c => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+        </div>
+        <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
+          If the student doesn't have an Akoro account yet, one will be created automatically and they can set their password via the reset password flow.
+        </p>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
           <Btn type="submit" disabled={loading}>{loading ? 'Adding…' : 'Add Student'}</Btn>
@@ -181,10 +209,12 @@ function StudentRow({ student, onClick }) {
 /* ── Main page ──────────────────────────────────────────────────────── */
 export default function StudentsPage() {
   const { getStudents, addStudent, removeStudent } = useStudentsAPI();
+  const { getCourses } = useCoursesAPI();
   const [searchParams] = useSearchParams();
 
   const [students,   setStudents]   = useState([]);
   const [filtered,   setFiltered]   = useState([]);
+  const [courses,    setCourses]    = useState([]);
   const [search,     setSearch]     = useState('');
   const [loading,    setLoading]    = useState(true);
   const [addModal,   setAddModal]   = useState(searchParams.get('add') === '1');
@@ -198,10 +228,11 @@ export default function StudentsPage() {
 
   const load = async () => {
     try {
-      const res = await getStudents();
-      const data = res?.data || MOCK_STUDENTS;
+      const [studRes, courseRes] = await Promise.allSettled([getStudents(), getCourses()]);
+      const data = studRes.status === 'fulfilled' ? (studRes.value?.data || []) : MOCK_STUDENTS;
       setStudents(data);
       setFiltered(data);
+      if (courseRes.status === 'fulfilled') setCourses(courseRes.value?.data || []);
     } catch (err) {
       console.warn('Students API error, using mock:', err);
       setStudents(MOCK_STUDENTS);
@@ -224,7 +255,7 @@ export default function StudentsPage() {
   }, [search, students]);
 
   const handleAdd = async (form) => {
-    await addStudent(form).catch(console.warn);
+    await addStudent(form); // throws on error — modal catches and displays it
     showToast('Student added successfully!');
     load();
   };
@@ -281,7 +312,7 @@ export default function StudentsPage() {
         </div>
       )}
 
-      <AddStudentModal open={addModal} onClose={() => setAddModal(false)} onSubmit={handleAdd} />
+      <AddStudentModal open={addModal} onClose={() => setAddModal(false)} onSubmit={handleAdd} courses={courses} />
       <StudentSheet student={selected} onClose={() => setSelected(null)} onRemove={handleRemove} />
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
