@@ -34,6 +34,7 @@
  *   ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET, REDIRECT_URI_ZOOM
  *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI_GOOGLE
  *   TEAMS_CLIENT_ID, TEAMS_CLIENT_SECRET, REDIRECT_URI_TEAMS
+ *   YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, REDIRECT_URI_YOUTUBE
  *   REDIS_URL
  *   SUPABASE_URL, SUPABASE_SERVICE_KEY
  */
@@ -51,8 +52,8 @@ import { authenticateToken,
          requireRole }               from "../auth/routes.js";
 
 // ─── § PROVIDER NAMING + OAUTH STATE ──────────────────────────────────────────
-// The frontend speaks { zoom, meet, teams }; OAuth/storage use Google's real
-// name "google". Translate at the boundary so both sides stay consistent.
+// Frontend speaks { zoom, meet, teams, youtube }.
+// OAuth/storage use "google" for Google Meet. YouTube uses its own token slot.
 const toOAuth = (p) => (p === "meet" ? "google" : p);
 const toUi    = (p) => (p === "google" ? "meet" : p);
 
@@ -191,6 +192,12 @@ const providerConfig = (provider) => {
       clientId:     process.env.TEAMS_CLIENT_ID,
       clientSecret: process.env.TEAMS_CLIENT_SECRET,
       redirectUri:  process.env.REDIRECT_URI_TEAMS,
+    },
+    youtube: {
+      tokenUrl:     "https://oauth2.googleapis.com/token",
+      clientId:     process.env.YOUTUBE_CLIENT_ID     || process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri:  process.env.REDIRECT_URI_YOUTUBE  || `${process.env.API_URL || "https://api.akoro.app"}/api/meeting/auth/callback/youtube`,
     },
   };
   const cfg = configs[provider];
@@ -375,6 +382,69 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
       };
     }
 
+    case "youtube": {
+      // Create a scheduled live broadcast
+      const scheduledStartTime = new Date(startTime).toISOString();
+      const { data: broadcast } = await axios.post(
+        "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails",
+        {
+          snippet: {
+            title:              topic,
+            scheduledStartTime,
+            description:        `Live class on Akoro: ${topic}`,
+          },
+          status: {
+            privacyStatus:       "unlisted",   // share link directly; not public by default
+            selfDeclaredMadeForKids: false,
+          },
+          contentDetails: {
+            enableAutoStart: false,
+            enableAutoStop:  true,
+            recordFromStart: true,
+            enableDvr:       true,
+          },
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      // Create a live stream (RTMP ingestion point)
+      const { data: stream } = await axios.post(
+        "https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status",
+        {
+          snippet: { title: `${topic} — stream` },
+          cdn: {
+            frameRate:     "variable",
+            ingestionType: "rtmp",
+            resolution:    "variable",
+          },
+        },
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      // Bind the stream to the broadcast
+      await axios.post(
+        `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${broadcast.id}&part=id,contentDetails&streamId=${stream.id}`,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      const rtmpUrl    = stream.cdn?.ingestionInfo?.ingestionAddress;
+      const streamKey  = stream.cdn?.ingestionInfo?.streamName;
+      const watchUrl   = `https://www.youtube.com/watch?v=${broadcast.id}`;
+
+      return {
+        platform,
+        meetingId:  broadcast.id,
+        streamId:   stream.id,
+        meetingUrl: watchUrl,
+        joinUrl:    watchUrl,
+        startUrl:   `https://studio.youtube.com/video/${broadcast.id}/livestreaming`,
+        password:   null,
+        rtmpUrl,
+        streamKey,
+      };
+    }
+
     default:
       throw new Error(`Unsupported platform: ${platform}`);
   }
@@ -407,6 +477,17 @@ export const endMeeting = async (userId, platform, meetingId) => {
         `https://graph.microsoft.com/v1.0/me/calendar/events/${meetingId}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      break;
+
+    case "youtube":
+      // Transition broadcast to "complete" — stops the live stream
+      await axios.post(
+        `https://www.googleapis.com/youtube/v3/liveBroadcasts/transition?broadcastStatus=complete&id=${meetingId}&part=status`,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ).catch(() => {
+        // Broadcast may already be complete or never started; ignore the error
+      });
       break;
   }
 };
@@ -442,6 +523,15 @@ const meetingHandlers = {
       case "teams":
         authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${cfg.clientId}&response_type=code&redirect_uri=${redir}&scope=${encodeURIComponent("offline_access Calendars.ReadWrite OnlineMeetings.ReadWrite")}&prompt=consent&state=${state}`;
         break;
+      case "youtube": {
+        const youtubeScopes = [
+          "https://www.googleapis.com/auth/youtube",
+          "https://www.googleapis.com/auth/youtube.upload",
+          "https://www.googleapis.com/auth/youtube.readonly",
+        ].join(" ");
+        authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${cfg.clientId}&redirect_uri=${redir}&response_type=code&scope=${encodeURIComponent(youtubeScopes)}&access_type=offline&prompt=consent&state=${state}`;
+        break;
+      }
       default:
         return res.status(400).json({ success: false, message: "Invalid provider" });
     }
@@ -546,7 +636,7 @@ const meetingHandlers = {
 
     if (error) throw new Error(error.message);
 
-    const status = { zoom: null, meet: null, teams: null };
+    const status = { zoom: null, meet: null, teams: null, youtube: null };
     for (const row of (data ?? [])) {
       status[toUi(row.provider)] = {
         connected:         row.is_active,

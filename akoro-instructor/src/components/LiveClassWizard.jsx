@@ -10,7 +10,7 @@ const FREQ = [
   { key: '3x_weekly',  label: '3× Weekly' },
   { key: 'custom',     label: 'Custom' },
 ];
-const PLATFORMS = [['zoom', 'Zoom'], ['meet', 'Google Meet'], ['teams', 'Teams']];
+const PLATFORMS = [['zoom', 'Zoom'], ['meet', 'Google Meet'], ['teams', 'Teams'], ['youtube', 'YouTube Live']];
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
 
 /* ── Schedule builder (Step 1) ──────────────────────────────────────── */

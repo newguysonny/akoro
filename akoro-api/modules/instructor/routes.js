@@ -1293,7 +1293,7 @@ const deleteBattle = asyncHandler(async (req, res) => {
 
 // ─── § STREAMING ──────────────────────────────────────────────────────────────
 
-const STREAMING_PLATFORMS = ["zoom", "meet", "teams"];
+const STREAMING_PLATFORMS = ["zoom", "meet", "teams", "youtube"];
 
 const getStreaming = asyncHandler(async (req, res) => {
   try {
