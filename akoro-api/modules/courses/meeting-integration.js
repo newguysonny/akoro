@@ -590,8 +590,12 @@ const meetingHandlers = {
 
       res.redirect(`${settingsUrl}?connected=${toUi(provider)}`);
     } catch (err) {
-      console.error(`[meeting] OAuth callback error for ${provider}:`, err.response?.data ?? err.message);
-      fail("token_exchange_failed");
+      const googleError = err.response?.data;
+      console.error(`[meeting] OAuth callback error for ${provider}:`, googleError ?? err.message);
+      const reason = googleError?.error ?? "token_exchange_failed";
+      const desc   = googleError?.error_description ?? err.message ?? "";
+      console.error(`[meeting] Google error: ${reason} — ${desc}`);
+      fail(`token_exchange_failed:${reason}`);
     }
   }),
 

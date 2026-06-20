@@ -171,7 +171,13 @@ function StreamingPanel({ onToast }) {
     const error = params.get('streaming_error');
     if (connected || error) {
       if (connected) onToast?.(`${STREAM_META[connected]?.label ?? connected} connected`, 'success');
-      if (error) onToast?.(STREAM_ERRORS[error] || 'Could not connect platform', 'error');
+      if (error) {
+        const base = error.split(':')[0];
+        const googleCode = error.split(':')[1];
+        const msg = STREAM_ERRORS[base]
+          || (googleCode ? `Connection failed: ${googleCode.replace(/_/g, ' ')}` : 'Could not connect platform');
+        onToast?.(msg, 'error');
+      }
       params.delete('connected'); params.delete('streaming_error');
       const qs = params.toString();
       window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
