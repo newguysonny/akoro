@@ -31,9 +31,17 @@ const UPLOAD_DIR = path.join("/tmp", "akoro-uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const ALLOWED_MIME = new Set([
-  "audio/mpeg","audio/wav","audio/x-m4a","audio/mp4","audio/ogg","audio/webm",
-  "video/mp4","video/quicktime","video/x-matroska","video/webm","video/x-msvideo",
+  "audio/mpeg","audio/mp3","audio/wav","audio/x-wav","audio/wave",
+  "audio/x-m4a","audio/m4a","audio/mp4","audio/ogg","audio/webm",
+  "audio/aac","audio/x-aac","audio/flac","audio/x-flac","audio/3gpp",
+  "video/mp4","video/quicktime","video/x-matroska","video/webm",
+  "video/x-msvideo","video/mpeg","video/x-ms-wmv","video/3gpp",
+  "application/octet-stream", // fallback for undetected MIME types
 ]);
+
+class UnsupportedFileError extends Error {
+  constructor(mime) { super(`Unsupported file type: ${mime}`); this.status = 400; }
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -42,7 +50,7 @@ const upload = multer({
   }),
   limits:     { fileSize: 2 * 1024 * 1024 * 1024 },
   fileFilter: (_req, file, cb) =>
-    ALLOWED_MIME.has(file.mimetype) ? cb(null, true) : cb(new Error("Unsupported: " + file.mimetype)),
+    ALLOWED_MIME.has(file.mimetype) ? cb(null, true) : cb(new UnsupportedFileError(file.mimetype)),
 });
 
 // ── In-memory run store ───────────────────────────────────────
@@ -232,7 +240,7 @@ async function transcribeFile(localPath, mimeType) {
 // ── Teacher profile upsert ────────────────────────────────────
 async function upsertTeacherProfile(teacherId, agentId, updates) {
   const { error } = await db
-    .from("edu.teacher_profiles")
+    .schema("edu").from("teacher_profiles")
     .upsert({ teacher_id: teacherId, agent_id: agentId, ...updates, updated_at: new Date() },
             { onConflict: "teacher_id" });
   if (error) throw error;
@@ -477,15 +485,24 @@ async function runPipeline(run, file, teacherId, agentId, subject, sessionTitle)
 // ROUTES
 // =============================================================
 
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
 // POST /training/upload
-router.post("/upload", upload.single("file"), async (req, res) => {
-  // teacherId is always the authenticated user — never trust the body, so a
-  // teacher can only ever train their own agent.
+router.post("/upload", (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      const status = err.status || (err instanceof multer.MulterError ? 400 : 500);
+      return res.status(status).json({ error: err.message });
+    }
+    next();
+  });
+}, asyncHandler(async (req, res) => {
   const teacherId = req.user.id;
   const { agentId, subject = "General", sessionTitle } = req.body;
   const file = req.file;
-  if (!file)      return res.status(400).json({ error: "No file received" });
-  if (!agentId)   return res.status(400).json({ error: "agentId is required" });
+  if (!file)    return res.status(400).json({ error: "No file received" });
+  if (!agentId) return res.status(400).json({ error: "agentId is required" });
 
   const runId = uuid(), sessionId = uuid();
   const run   = createRun(runId, sessionId, teacherId, agentId, subject);
@@ -493,7 +510,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
   runPipeline(run, file, teacherId, agentId, subject, sessionTitle).catch(err => {
     errorRun(run, err.message); cleanTmp(file.path);
   });
-});
+}));
 
 // GET /training/run/:runId/stream  (SSE)
 router.get("/run/:runId/stream", (req, res) => {
