@@ -86,7 +86,7 @@ export function pollTrainingRun(runId, {
 
       failures = 0;
       if (status.status === 'complete') { stopped = true; onComplete?.(status.summary); return; }
-      if (status.status === 'error')    { stopped = true; onError?.(new Error('Training run failed')); return; }
+      if (status.status === 'error')    { stopped = true; onError?.(new Error(status.error || 'Training run failed')); return; }
     } catch (e) {
       // Tolerate transient errors (run not registered yet, brief network blips).
       if (++failures > 8) { stopped = true; onError?.(e); return; }

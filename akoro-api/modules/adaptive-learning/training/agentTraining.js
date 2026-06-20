@@ -363,9 +363,9 @@ async function runPipeline(run, file, teacherId, agentId, subject, sessionTitle)
     // ── Phase 6: Teacher profile ──────────────────────────────
     runProgress(run, "profile", 87, "Updating teacher profile");
     const { data: existing } = await db
-      .from("edu.teacher_profiles")
+      .schema("edu").from("teacher_profiles")
       .select("style_profile, total_hours_trained, session_count, concepts_taught")
-      .eq("teacher_id", teacherId).single();
+      .eq("teacher_id", teacherId).maybeSingle();
 
     const mergedConcepts = [...new Set([
       ...(existing?.concepts_taught || []),
@@ -575,12 +575,14 @@ router.get("/run/:runId/insights", (req, res) => {
 router.get("/run/:runId/status", (req, res) => {
   const run = runs.get(req.params.runId);
   if (!run) return res.status(404).json({ error: "Run not found" });
+  const lastError = [...run.logs].reverse().find(l => l.tag === "err");
   res.json({
     runId: run.runId, sessionId: run.sessionId, subject: run.subject,
     status: run.status, phase: run.phase, pct: run.pct,
     startedAt: run.startedAt, completedAt: run.completedAt,
     logCount: run.logs.length, insightCount: run.insights.length,
     totalXP: run.insights.reduce((s, i) => s + (i.xp || 0), 0),
+    error: run.status === "error" ? (lastError?.value || lastError?.message || "Training run failed") : null,
     summary: run.summary,
   });
 });
@@ -655,7 +657,7 @@ router.get("/sessions/:teacherId", async (req, res) => {
     return res.status(403).json({ error: "Not authorised" });
   const { limit = 20, offset = 0 } = req.query;
   const { data, error } = await db
-    .from("edu.training_sessions")
+    .schema("edu").from("training_sessions")
     .select("id, run_id, title, subject, file_type, status, chunks_stored, created_at, completed_at")
     .eq("teacher_id", req.params.teacherId)
     .order("created_at", { ascending: false })
@@ -667,8 +669,8 @@ router.get("/sessions/:teacherId", async (req, res) => {
 // GET /training/profile/:teacherId
 router.get("/profile/:teacherId", async (req, res) => {
   const { data, error } = await db
-    .from("edu.teacher_profiles").select("*")
-    .eq("teacher_id", req.params.teacherId).single();
+    .schema("edu").from("teacher_profiles").select("*")
+    .eq("teacher_id", req.params.teacherId).maybeSingle();
   if (error) return res.status(404).json({ error: "Profile not found" });
   res.json({ profile: data });
 });
@@ -676,8 +678,8 @@ router.get("/profile/:teacherId", async (req, res) => {
 // GET /training/orchestration/:agentId
 router.get("/orchestration/:agentId", async (req, res) => {
   const { data, error } = await db
-    .from("edu.agent_orchestration_config").select("*")
-    .eq("agent_id", req.params.agentId).single();
+    .schema("edu").from("agent_orchestration_config").select("*")
+    .eq("agent_id", req.params.agentId).maybeSingle();
   if (error) return res.status(404).json({ error: "Orchestration config not found" });
   res.json({ config: data });
 });

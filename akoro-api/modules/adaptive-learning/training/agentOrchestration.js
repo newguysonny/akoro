@@ -96,7 +96,7 @@ export async function deriveAndSaveOrchestrationConfig({
 
   // Upsert orchestration config
   const { error } = await db
-    .from("edu.agent_orchestration_config")
+    .schema("edu").from("agent_orchestration_config")
     .upsert(config, { onConflict: "agent_id" });
 
   if (error) throw new Error(`Orchestration config save failed: ${error.message}`);
@@ -376,11 +376,11 @@ export function buildRenderStyle(styleProfile) {
 
 export async function loadOrchestrationConfig(agentId) {
   const { data, error } = await db
-    .from("edu.agent_orchestration_config")
+    .schema("edu").from("agent_orchestration_config")
     .select("*")
     .eq("agent_id", agentId)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
   return data;
@@ -388,11 +388,11 @@ export async function loadOrchestrationConfig(agentId) {
 
 export async function loadOrchestrationConfigByTeacher(teacherId) {
   const { data, error } = await db
-    .from("edu.agent_orchestration_config")
+    .schema("edu").from("agent_orchestration_config")
     .select("*")
     .eq("teacher_id", teacherId)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
   return data;

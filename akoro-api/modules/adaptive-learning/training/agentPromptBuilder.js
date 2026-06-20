@@ -171,10 +171,10 @@ ${recentHistory}`;
 
 export async function loadTeacherProfile(teacherId) {
   const { data, error } = await db
-    .from("edu.teacher_profiles")
+    .schema("edu").from("teacher_profiles")
     .select("*")
     .eq("teacher_id", teacherId)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
   return data;
