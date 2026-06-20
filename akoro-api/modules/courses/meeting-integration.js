@@ -97,12 +97,17 @@ const saveTokens = async (userId, provider, { access_token, refresh_token, expir
 
   if (error) throw new Error(`saveTokens DB error: ${error.message}`);
 
-  // Warm Redis cache
-  await redis.set(
-    cacheKey(userId, provider),
-    JSON.stringify({ access_token, refresh_token, expires_at }),
-    "EX", CACHE_TTL
-  );
+  // Warm Redis cache — best-effort. Redis being down/over-quota must never
+  // break the OAuth flow, since the DB (source of truth) already has the token.
+  try {
+    await redis.set(
+      cacheKey(userId, provider),
+      JSON.stringify({ access_token, refresh_token, expires_at }),
+      "EX", CACHE_TTL
+    );
+  } catch (e) {
+    console.warn(`[tokens] ⚠️  Redis cache warm failed for ${provider} (non-fatal): ${e.message}`);
+  }
 
   console.log(`[tokens] ✅ Saved ${provider} tokens for user ${userId}`);
 };
@@ -113,9 +118,13 @@ const saveTokens = async (userId, provider, { access_token, refresh_token, expir
  * Returns { access_token, refresh_token, expires_at } or throws.
  */
 const getTokens = async (userId, provider) => {
-  // Fast path — Redis cache
-  const cached = await redis.get(cacheKey(userId, provider));
-  if (cached) return JSON.parse(cached);
+  // Fast path — Redis cache (best-effort; ignore Redis failures and fall to DB)
+  try {
+    const cached = await redis.get(cacheKey(userId, provider));
+    if (cached) return JSON.parse(cached);
+  } catch (e) {
+    console.warn(`[tokens] ⚠️  Redis read failed for ${provider} (falling back to DB): ${e.message}`);
+  }
 
   // Cache miss — read from Supabase
   const { data, error } = await db
@@ -132,8 +141,12 @@ const getTokens = async (userId, provider) => {
     );
   }
 
-  // Warm Redis cache for next request
-  await redis.set(cacheKey(userId, provider), JSON.stringify(data), "EX", CACHE_TTL);
+  // Warm Redis cache for next request — best-effort
+  try {
+    await redis.set(cacheKey(userId, provider), JSON.stringify(data), "EX", CACHE_TTL);
+  } catch (e) {
+    console.warn(`[tokens] ⚠️  Redis cache warm failed for ${provider} (non-fatal): ${e.message}`);
+  }
   return data;
 };
 
