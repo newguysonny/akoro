@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 
 export function useCoursesAPI() {
@@ -24,10 +25,10 @@ export function useCoursesAPI() {
   const addMaterial     = (sessionId, data) => apiPost(`/api/instructor/sessions/${sessionId}/materials`, data);
   const deleteMaterial  = (id) => apiDelete(`/api/instructor/materials/${id}`);
 
-  return {
+  return useMemo(() => ({
     getCourses, createCourse, updateCourse, deleteCourse,
     getSessions, createSession, updateSession, deleteSession,
     getModules, createModule, updateModule, deleteModule, previewSchedule, commitSchedule, commitCurriculum,
     getMaterials, addMaterial, deleteMaterial,
-  };
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
 }
