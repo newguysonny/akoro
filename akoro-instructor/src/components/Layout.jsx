@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
 /* Collapse the sidebar to icons-only on tablet widths (769–1024px).
@@ -133,6 +134,48 @@ export function Sidebar() {
   );
 }
 
+function BellButton() {
+  const navigate = useNavigate();
+  const [unread, setUnread] = useState(0);
+
+  const poll = useCallback(async () => {
+    try {
+      const res = await apiGet('/api/notifications?limit=1');
+      setUnread(res.unread ?? 0);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    poll();
+    const t = setInterval(poll, 60_000);
+    return () => clearInterval(t);
+  }, [poll]);
+
+  return (
+    <button
+      onClick={() => navigate('/notifications')}
+      style={{
+        position: 'relative', background: WHITE, border: `1.5px solid ${BORDER}`,
+        borderRadius: 10, padding: '8px', cursor: 'pointer', color: MUTED,
+        display: 'flex', alignItems: 'center',
+      }}
+    >
+      <Bell size={16} />
+      {unread > 0 && (
+        <span style={{
+          position: 'absolute', top: -4, right: -4,
+          background: AMBER, color: WHITE, borderRadius: '50%',
+          width: 16, height: 16, fontSize: 9, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: FONT, border: `2px solid ${WHITE}`,
+        }}>
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function TopBar({ title, subtitle, action }) {
   return (
     <div style={{
@@ -148,13 +191,7 @@ export function TopBar({ title, subtitle, action }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
-        <button style={{
-          background: WHITE, border: `1.5px solid ${BORDER}`,
-          borderRadius: 10, padding: '8px', cursor: 'pointer', color: MUTED,
-          display: 'flex', alignItems: 'center',
-        }}>
-          <Bell size={16} />
-        </button>
+        <BellButton />
       </div>
     </div>
   );

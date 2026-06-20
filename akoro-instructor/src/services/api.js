@@ -15,7 +15,11 @@ const BASE_OPTS = {
 
 export async function apiGet(path) {
   const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
-  if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+  if (!r.ok) {
+    let msg = `GET ${path} -> ${r.status}`;
+    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
@@ -25,7 +29,25 @@ export async function apiPost(path, body) {
     method: 'POST',
     body:   JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`POST ${path} -> ${r.status}`);
+  if (!r.ok) {
+    let msg = `POST ${path} -> ${r.status}`;
+    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+export async function apiPut(path, body) {
+  const r = await fetch(`${API}${path}`, {
+    ...BASE_OPTS,
+    method: 'PUT',
+    body:   JSON.stringify(body),
+  });
+  if (!r.ok) {
+    let msg = `PUT ${path} -> ${r.status}`;
+    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
@@ -35,12 +57,20 @@ export async function apiPatch(path, body) {
     method: 'PATCH',
     body:   JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`PATCH ${path} -> ${r.status}`);
+  if (!r.ok) {
+    let msg = `PATCH ${path} -> ${r.status}`;
+    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
 export async function apiDelete(path) {
   const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'DELETE' });
-  if (!r.ok) throw new Error(`DELETE ${path} -> ${r.status}`);
+  if (!r.ok) {
+    let msg = `DELETE ${path} -> ${r.status}`;
+    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }

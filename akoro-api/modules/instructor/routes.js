@@ -40,6 +40,11 @@ const err500 = (res, e)           => res.status(500).json({ error: e.message ?? 
 
 const now = () => new Date().toISOString();
 
+const notify = async (userId, { type, title, content = null, relatedId = null }) => {
+  await db.from("notifications").insert({ user_id: userId, type, title, content, related_id: relatedId })
+    .catch(e => console.warn("[notify] insert failed:", e.message));
+};
+
 // user_agents stores total_xp only; derive a display level (500 XP per level).
 const levelFromXp = (xp = 0) => Math.floor((xp ?? 0) / 500) + 1;
 
@@ -357,6 +362,12 @@ const createCourse = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, {
+      type:      "course_created",
+      title:     `Course "${title}" created`,
+      content:   `${typeToApi(dbType)} · ${lvl}`,
+      relatedId: data.id,
+    });
     created(res, mapCourse(data, 0));
   } catch (e) {
     err500(res, e);
@@ -517,6 +528,12 @@ const createSession = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, {
+      type:      "session_reminder",
+      title:     `Session "${title}" scheduled`,
+      content:   `Starts ${new Date(scheduledStart).toLocaleString()}`,
+      relatedId: data.id,
+    });
     created(res, mapSession(data));
   } catch (e) {
     err500(res, e);
@@ -1086,6 +1103,13 @@ const enrolStudent = asyncHandler(async (req, res) => {
           { onConflict: "classroom_id,user_id", ignoreDuplicates: false }
         );
     }
+
+    notify(req.user.id, {
+      type:      "student_enrolled",
+      title:     `${user.full_name || user.email} enrolled`,
+      content:   `Enrolled in course`,
+      relatedId: courseId,
+    });
 
     created(res, { enrollment, user, classroomId: classroom?.id ?? null });
   } catch (e) {

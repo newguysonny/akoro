@@ -347,24 +347,37 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
 /* ── Student detail sheet ───────────────────────────────────────────── */
 function StudentSheet({ student, courses = [], onClose, onRemove }) {
   const { addStudent } = useStudentsAPI();
-  const [enrolCourse, setEnrolCourse] = useState('');
-  const [enrolLoading, setEnrolLoad] = useState(false);
-  const [enrolOk, setEnrolOk] = useState('');
+  const [enrolCourses, setEnrolCourses] = useState([]);
+  const [enrolLoading, setEnrolLoad]    = useState(false);
+  const [enrolOk, setEnrolOk]           = useState('');
 
-  useEffect(() => { if (student) { setEnrolCourse(''); setEnrolOk(''); } }, [student]);
+  useEffect(() => { if (student) { setEnrolCourses([]); setEnrolOk(''); } }, [student]);
 
   if (!student) return null;
 
+  const toggleCourse = (id) =>
+    setEnrolCourses(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const toggleAll = () =>
+    setEnrolCourses(prev => prev.length === courses.length ? [] : courses.map(c => c.id));
+
   const handleEnrolInCourse = async () => {
-    if (!enrolCourse) return;
+    if (!enrolCourses.length) return;
     setEnrolLoad(true);
-    try {
-      await addStudent({ email: student.email, courseId: enrolCourse });
-      setEnrolOk('Enrolled!');
-      setTimeout(() => setEnrolOk(''), 2500);
-    } catch (err) {
-      setEnrolOk('Error: ' + (err.message || 'failed'));
-    } finally { setEnrolLoad(false); }
+    const errors = [];
+    for (const courseId of enrolCourses) {
+      try { await addStudent({ email: student.email, courseId }); }
+      catch (err) { errors.push(err.message); }
+    }
+    setEnrolLoad(false);
+    if (errors.length === enrolCourses.length) {
+      setEnrolOk('Error: ' + errors[0]);
+    } else {
+      const enrolled = enrolCourses.length - errors.length;
+      setEnrolOk(`Enrolled in ${enrolled} course${enrolled > 1 ? 's' : ''}!`);
+      setEnrolCourses([]);
+      setTimeout(() => setEnrolOk(''), 3000);
+    }
   };
 
   return (
@@ -443,33 +456,39 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
           </div>
         </div>
 
-        {/* Enrol in another course */}
+        {/* Enrol in another course — multi-select */}
         {courses.length > 0 && (
           <div style={{ background: LIGHT, borderRadius: 12, padding: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: FONT }}>
-              Enrol in another course
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                value={enrolCourse}
-                onChange={e => setEnrolCourse(e.target.value)}
-                style={{
-                  flex: 1, padding: '8px 10px', borderRadius: 8,
-                  border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 12,
-                  color: enrolCourse ? INK : MUTED, background: WHITE, outline: 'none',
-                }}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>Enrol in course(s)</div>
+              <button
+                onClick={toggleAll}
+                style={{ fontSize: 11, color: AMBER, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}
               >
-                <option value="">— Select course —</option>
-                {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-              </select>
-              <Btn
-                size="sm"
-                disabled={!enrolCourse || enrolLoading}
-                onClick={handleEnrolInCourse}
-              >
-                {enrolLoading ? '…' : 'Enrol'}
-              </Btn>
+                {enrolCourses.length === courses.length ? 'Deselect all' : 'All courses'}
+              </button>
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto', marginBottom: 10 }}>
+              {courses.map(c => (
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: INK, fontFamily: FONT }}>
+                  <input
+                    type="checkbox"
+                    checked={enrolCourses.includes(c.id)}
+                    onChange={() => toggleCourse(c.id)}
+                    style={{ accentColor: AMBER, width: 14, height: 14 }}
+                  />
+                  {c.title}
+                </label>
+              ))}
+            </div>
+            <Btn
+              size="sm"
+              disabled={!enrolCourses.length || enrolLoading}
+              onClick={handleEnrolInCourse}
+              style={{ width: '100%' }}
+            >
+              {enrolLoading ? '…' : `Enrol in ${enrolCourses.length || ''} course${enrolCourses.length !== 1 ? 's' : ''}`}
+            </Btn>
             {enrolOk && (
               <div style={{ fontSize: 12, color: enrolOk.startsWith('Error') ? RED : GREEN, marginTop: 6, fontFamily: FONT }}>
                 {enrolOk}

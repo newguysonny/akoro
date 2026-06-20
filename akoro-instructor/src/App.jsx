@@ -13,8 +13,9 @@ import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
-import SettingsPage  from './pages/SettingsPage.jsx';
-import ProfilePage   from './pages/ProfilePage.jsx';
+import SettingsPage       from './pages/SettingsPage.jsx';
+import ProfilePage        from './pages/ProfilePage.jsx';
+import NotificationsPage  from './pages/NotificationsPage.jsx';
 
 /* ── ProtectedRoute ─────────────────────────────────────────────────── */
 const INSTRUCTOR_ROLES = ['instructor', 'admin'];
@@ -86,8 +87,9 @@ function AppRoutes() {
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-      <Route path="/profile"  element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+      <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
       {/* Auth */}
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>} />
