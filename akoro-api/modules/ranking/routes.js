@@ -68,13 +68,17 @@ export const awardXP = async ({ userId, courseId = null, classroomId = null, rea
     });
 
     // Update agent XP
-    await db.rpc("increment_agent_xp", { user_id_input: userId, xp_amount: amount }).catch(() => {
-      // Fallback if RPC not set up
-      db.from("user_agents")
-        .update({ total_xp: db.raw(`total_xp + ${amount}`) })
-        .eq("user_id", userId)
-        .catch(() => {});
-    });
+    const { error: xpErr } = await db.rpc("increment_agent_xp", { user_id_input: userId, xp_amount: amount });
+    if (xpErr) {
+      // Fallback if RPC not set up — read-modify-write the XP total.
+      const { data: agentRow } = await db.from("user_agents")
+        .select("total_xp").eq("user_id", userId).maybeSingle();
+      if (agentRow) {
+        await db.from("user_agents")
+          .update({ total_xp: (agentRow.total_xp ?? 0) + amount })
+          .eq("user_id", userId);
+      }
+    }
   } catch (e) {
     console.warn("[ranking] awardXP failed:", e.message);
   }

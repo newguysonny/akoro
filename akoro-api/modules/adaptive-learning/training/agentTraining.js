@@ -929,11 +929,13 @@ export async function endLiveStream(req, res) {
     completed_at: new Date().toISOString(),
   }).eq("id", session_id);
 
-  await db.schema("edu").from("stream_tokens").insert({
-    session_id,
-    token_text:  fullText,
-    token_index: 0,
-  }).catch(() => {});
+  try {
+    await db.schema("edu").from("stream_tokens").insert({
+      session_id,
+      token_text:  fullText,
+      token_index: 0,
+    });
+  } catch {}
 
   res.json({
     session_id,

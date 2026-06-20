@@ -108,31 +108,36 @@ const getUserPreferences = async (userId) => {
 // ─── Notification queue logger ────────────────────────────────────────────────
 
 const logToQueue = async ({ userId, sessionId, notificationType, channel, recipient, subject, body, status }) => {
-  await db.from("notification_queue").insert({
-    user_id:           userId,
-    session_id:        sessionId ?? null,
-    notification_type: notificationType,
-    channel,
-    recipient,
-    subject:           subject ?? null,
-    body:              body ?? null,
-    status,
-  }).catch((e) => console.warn("[notificationService] Failed to log to queue:", e.message));
+  try {
+    await db.from("notification_queue").insert({
+      user_id:           userId,
+      session_id:        sessionId ?? null,
+      notification_type: notificationType,
+      channel,
+      recipient,
+      subject:           subject ?? null,
+      body:              body ?? null,
+      status,
+    });
+  } catch (e) {
+    console.warn("[notificationService] Failed to log to queue:", e.message);
+  }
 };
 
 const logError = async (channel, error, userId, sessionId, type) => {
   console.error(`[notificationService] ❌ ${channel} failed  user=${userId}:`, error.message);
-  await db
-    .from("notification_queue")
-    .update({ status: "failed", error_message: error.message, retry_count: 1 })
-    .eq("user_id", userId)
-    .eq("session_id", sessionId)
-    .eq("channel", channel)
-    .eq("notification_type", type)
-    .eq("status", "pending")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .catch(() => {});
+  try {
+    await db
+      .from("notification_queue")
+      .update({ status: "failed", error_message: error.message, retry_count: 1 })
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .eq("channel", channel)
+      .eq("notification_type", type)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1);
+  } catch {}
 };
 
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
@@ -203,13 +208,15 @@ export const sendSessionNotifications = async ({
     }
 
     // ── In-app notification ───────────────────────────────────────────────────
-    await db.from("notifications").insert({
-      user_id:    participant.user_id,
-      type,
-      title:      content.push.title,
-      content:    content.push.body,
-      related_id: sessionId ?? null,
-    }).catch(() => {});
+    try {
+      await db.from("notifications").insert({
+        user_id:    participant.user_id,
+        type,
+        title:      content.push.title,
+        content:    content.push.body,
+        related_id: sessionId ?? null,
+      });
+    } catch {}
   }
 
   await Promise.allSettled(dispatches);
@@ -227,10 +234,12 @@ export const sendDirectNotification = async ({
   const { data: user } = await db.from("users").select("email, full_name, phone").eq("id", userId).single();
 
   // In-app
-  await db.from("notifications").insert({
-    user_id: userId, type, title, content,
-    related_id: relatedId ?? null,
-  }).catch(() => {});
+  try {
+    await db.from("notifications").insert({
+      user_id: userId, type, title, content,
+      related_id: relatedId ?? null,
+    });
+  } catch {}
 
   if (prefs.email_enabled && user?.email && emailSubject && emailHtml) {
     await sendEmail({ to: user.email, subject: emailSubject, html: emailHtml, text: content ?? "" })

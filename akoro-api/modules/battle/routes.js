@@ -120,7 +120,7 @@ async function assignQuestions(battleId, courseId, topic, subject, difficulty, t
       correct_answer_index: q.correct_answer_index,
       topic: q.topic, xp_value: q.xp_value, time_limit_seconds: 15,
     });
-    await db.rpc("increment_question_uses", { q_id: q.id }).catch(() => {});
+    try { await db.rpc("increment_question_uses", { q_id: q.id }); } catch {}
   }
   return picked.length;
 }
@@ -182,15 +182,17 @@ async function updateKnowledgeConfidence(userId, topic, subject, isCorrect) {
 
       if (!isCorrect) {
         // Log a decay event so the student gets a review notification
-        await db.schema("edu").from("decay_notifications").insert({
-          student_id: userId,
-          agent_id:   agent.id,
-          subject:    subject ?? "General",
-          topic,
-          confidence: initialConf,
-          priority:   "critical",
-          message:    `You got a question on "${topic}" wrong in a battle — let's review it!`,
-        }).catch(() => {});
+        try {
+          await db.schema("edu").from("decay_notifications").insert({
+            student_id: userId,
+            agent_id:   agent.id,
+            subject:    subject ?? "General",
+            topic,
+            confidence: initialConf,
+            priority:   "critical",
+            message:    `You got a question on "${topic}" wrong in a battle — let's review it!`,
+          });
+        } catch {}
       }
     }
   } catch (e) {

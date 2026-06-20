@@ -226,8 +226,8 @@ const paymentHandlers = {
 
     // Record coupon use
     if (coupon_id) {
-      await db.from("coupon_uses").insert({ coupon_id, user_id, payment_id }).catch(() => {});
-      await db.rpc("increment_coupon_uses", { coupon_id_input: coupon_id }).catch(() => {});
+      try { await db.from("coupon_uses").insert({ coupon_id, user_id, payment_id }); } catch {}
+      try { await db.rpc("increment_coupon_uses", { coupon_id_input: coupon_id }); } catch {}
     }
 
     console.log(`[payments] ✅ Enrolled user=${user_id}  course=${course_id}  net=₦${(payment?.amount_paid ?? 0) / 100}`);

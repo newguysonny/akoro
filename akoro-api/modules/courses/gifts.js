@@ -237,7 +237,7 @@ const handlers = {
       redeemed_at:       now(),
     }).eq("id", gift.id);
 
-    await db.rpc("increment_course_students", { course_id_input: gift.course_id }).catch(() => {});
+    try { await db.rpc("increment_course_students", { course_id_input: gift.course_id }); } catch {}
 
     res200(res, {
       redeemed:     true,

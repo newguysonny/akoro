@@ -363,7 +363,7 @@ const handlers = {
           { user_id: userId, course_id: item.course_id, status: "active" },
           { onConflict: "user_id,course_id" }
         );
-        await db.rpc("increment_course_students", { course_id_input: item.course_id }).catch(() => {});
+        try { await db.rpc("increment_course_students", { course_id_input: item.course_id }); } catch {}
       }
       await db.from("cart_items").delete().eq("user_id", userId);
       return res200(res, { free: true, enrolled_count: checkoutItems.length, message: "Enrolled in all free courses" });
@@ -452,7 +452,7 @@ const handlers = {
         { user_id: userId, course_id: courseId, payment_id: paymentId, status: "active" },
         { onConflict: "user_id,course_id" }
       );
-      await db.rpc("increment_course_students", { course_id_input: courseId }).catch(() => {});
+      try { await db.rpc("increment_course_students", { course_id_input: courseId }); } catch {}
 
       // Create earnings record per instructor (correct commission per course)
       const { data: course } = await db
@@ -465,25 +465,27 @@ const handlers = {
         };
         split.net = perCourseKobo - split.commission;
 
-        await db.from("instructor_earnings").upsert({
-          instructor_id:      course.instructor_id,
-          course_id:          courseId,
-          payment_id:         paymentId,
-          student_id:         userId,
-          gross_amount:       perCourseKobo,
-          commission_percent: split.pct,
-          commission_amount:  split.commission,
-          net_amount:         split.net,
-          currency:           course.currency ?? "NGN",
-          status:             "pending",
-        }, { onConflict: "payment_id,course_id" }).catch(() => {});
+        try {
+          await db.from("instructor_earnings").upsert({
+            instructor_id:      course.instructor_id,
+            course_id:          courseId,
+            payment_id:         paymentId,
+            student_id:         userId,
+            gross_amount:       perCourseKobo,
+            commission_percent: split.pct,
+            commission_amount:  split.commission,
+            net_amount:         split.net,
+            currency:           course.currency ?? "NGN",
+            status:             "pending",
+          }, { onConflict: "payment_id,course_id" });
+        } catch {}
       }
     }
 
     // Record coupon use
     if (couponId) {
-      await db.from("coupon_uses").insert({ coupon_id: couponId, user_id: userId, payment_id: paymentId }).catch(() => {});
-      await db.rpc("increment_coupon_uses", { coupon_id_input: couponId }).catch(() => {});
+      try { await db.from("coupon_uses").insert({ coupon_id: couponId, user_id: userId, payment_id: paymentId }); } catch {}
+      try { await db.rpc("increment_coupon_uses", { coupon_id_input: couponId }); } catch {}
     }
 
     // Clear the cart
