@@ -22,8 +22,12 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const fileRef = useRef(null);
 
   // Manual form
-  const [manual, setManual] = useState({ email: '', fullName: '', courseId: '' });
+  const [manual, setManual] = useState({ email: '', fullName: '', courseIds: [] });
   const setM = (k, v) => setManual(f => ({ ...f, [k]: v }));
+  const toggleManualCourse = (id) =>
+    setManual(f => ({ ...f, courseIds: f.courseIds.includes(id) ? f.courseIds.filter(x => x !== id) : [...f.courseIds, id] }));
+  const toggleAllManualCourses = () =>
+    setManual(f => ({ ...f, courseIds: f.courseIds.length === courses.length ? [] : courses.map(c => c.id) }));
 
   // Invite form
   const [inv, setInv]       = useState({ courseId: '', expiresInDays: 7, emails: '' });
@@ -38,7 +42,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   useEffect(() => {
     if (open) {
       setTab('manual'); setLoad(false); setError(''); setOk('');
-      setManual({ email: '', fullName: '', courseId: '' });
+      setManual({ email: '', fullName: '', courseIds: [] });
       setInv({ courseId: '', expiresInDays: 7, emails: '' });
       setUrl(''); setCopied(false);
       setCsv({ courseId: '', file: null }); setCsvR(null);
@@ -50,16 +54,23 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   /* Manual submit */
   const submitManual = async (e) => {
     e.preventDefault(); reset();
-    if (!manual.email)    { setError('Email is required'); return; }
-    if (!manual.courseId) { setError('Please select a course'); return; }
+    if (!manual.email)              { setError('Email is required'); return; }
+    if (!manual.courseIds.length)   { setError('Please select at least one course'); return; }
     setLoad(true);
-    try {
-      await addStudent(manual);
-      setOk('Student added! They\'ll receive a welcome email to set their password.');
+    const errors = [];
+    for (const courseId of manual.courseIds) {
+      try {
+        await addStudent({ email: manual.email, fullName: manual.fullName, courseId });
+      } catch (err) { errors.push(err.message); }
+    }
+    setLoad(false);
+    if (errors.length === manual.courseIds.length) {
+      setError(errors[0] || 'Failed to add student');
+    } else {
+      const n = manual.courseIds.length - errors.length;
+      setOk(`Student added to ${n} course${n > 1 ? 's' : ''}! They'll receive a welcome email to set their password.${errors.length ? ` (${errors.length} skipped: ${errors[0]})` : ''}`);
       onDone?.();
-    } catch (err) {
-      setError(err.message || 'Failed to add student');
-    } finally { setLoad(false); }
+    }
   };
 
   /* Invite link generate */
@@ -111,6 +122,46 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
     boxShadow: active ? `0 1px 4px ${AMBER}22` : 'none',
     transition: 'all .15s',
   });
+
+  const CourseChecklist = ({ selected, onToggle, onToggleAll }) => (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>
+          Enrol in Course(s) *
+        </label>
+        <button
+          type="button"
+          onClick={onToggleAll}
+          style={{ fontSize: 11, color: AMBER, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 700 }}
+        >
+          {selected.length === courses.length && courses.length > 0 ? 'Deselect all' : 'All courses'}
+        </button>
+      </div>
+      <div style={{
+        border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: 8,
+        maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4,
+        background: WHITE,
+      }}>
+        {courses.length === 0 && (
+          <div style={{ fontSize: 12, color: MUTED, padding: '6px 4px', fontFamily: FONT }}>No courses yet — create one first.</div>
+        )}
+        {courses.map(c => (
+          <label key={c.id} style={{
+            display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+            fontSize: 13, color: INK, fontFamily: FONT, padding: '5px 4px', borderRadius: 6,
+          }}>
+            <input
+              type="checkbox"
+              checked={selected.includes(c.id)}
+              onChange={() => onToggle(c.id)}
+              style={{ accentColor: AMBER, width: 15, height: 15 }}
+            />
+            {c.title}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 
   const CourseSelect = ({ value, onChange }) => (
     <div>
@@ -179,7 +230,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
             onChange={e => setM('fullName', e.target.value)}
             placeholder="Jane Doe"
           />
-          <CourseSelect value={manual.courseId} onChange={v => setM('courseId', v)} />
+          <CourseChecklist selected={manual.courseIds} onToggle={toggleManualCourse} onToggleAll={toggleAllManualCourses} />
           <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
             If the student doesn't have an Akoro account yet, one will be created automatically
             and they can set their password via the welcome email.
@@ -376,6 +427,7 @@ function StudentSheet({ student, courses = [], onClose, onRemove }) {
       const enrolled = enrolCourses.length - errors.length;
       setEnrolOk(`Enrolled in ${enrolled} course${enrolled > 1 ? 's' : ''}!`);
       setEnrolCourses([]);
+      window.dispatchEvent(new Event('akoro:notifications-changed'));
       setTimeout(() => setEnrolOk(''), 3000);
     }
   };
@@ -590,12 +642,14 @@ export default function StudentsPage() {
 
   const handleDone = () => {
     showToast('Students updated!');
+    window.dispatchEvent(new Event('akoro:notifications-changed'));
     load();
   };
 
   const handleRemove = async (enrollmentId) => {
     await removeStudent(enrollmentId).catch(console.warn);
     setStudents(s => s.filter(x => x.enrollmentId !== enrollmentId));
+    window.dispatchEvent(new Event('akoro:notifications-changed'));
     showToast('Student removed.', 'info');
   };
 

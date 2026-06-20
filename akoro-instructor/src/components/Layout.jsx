@@ -148,7 +148,15 @@ function BellButton() {
   useEffect(() => {
     poll();
     const t = setInterval(poll, 60_000);
-    return () => clearInterval(t);
+    const onFocus  = () => poll();
+    const onChange = () => poll();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('akoro:notifications-changed', onChange);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('akoro:notifications-changed', onChange);
+    };
   }, [poll]);
 
   return (
