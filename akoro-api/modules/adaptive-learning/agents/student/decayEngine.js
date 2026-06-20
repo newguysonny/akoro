@@ -127,7 +127,7 @@ export class DecayEngine {
    */
   async applyDecay(agentId) {
     const { data: topics, error } = await supabase
-      .from("edu.agent_knowledge")
+      .schema("edu").from("agent_knowledge")
       .select("*")
       .eq("agent_id", agentId)
       .not("last_seen_at", "is", null);
@@ -154,7 +154,7 @@ export class DecayEngine {
 
       // Update DB
       await supabase
-        .from("edu.agent_knowledge")
+        .schema("edu").from("agent_knowledge")
         .update({
           confidence:      newConf,
           priority:        newPrio,
@@ -164,7 +164,7 @@ export class DecayEngine {
         .eq("id", topic.id);
 
       // Log the decay event
-      await supabase.from("edu.decay_events").insert({
+      await supabase.schema("edu").from("decay_events").insert({
         agent_id:          agentId,
         student_id:        topic.student_id,
         subject:           topic.subject,
@@ -198,7 +198,7 @@ export class DecayEngine {
   // ── Find topics that need review ─────────────────────────────
   async findTopicsNeedingReview(agentId, limit = 10) {
     const { data, error } = await supabase
-      .from("edu.agent_topic_health")
+      .schema("edu").from("agent_topic_health")
       .select("*")
       .eq("agent_id", agentId)
       .or("health_status.eq.critical,health_status.eq.high,next_review_due.lte." + new Date().toISOString())
@@ -212,7 +212,7 @@ export class DecayEngine {
   // ── Find decayed topics grouped by subject ───────────────────
   async getKnowledgeHealthBySubject(agentId) {
     const { data, error } = await supabase
-      .from("edu.agent_knowledge_by_subject")
+      .schema("edu").from("agent_knowledge_by_subject")
       .select("*")
       .eq("agent_id", agentId)
       .order("avg_confidence", { ascending: true });
@@ -229,7 +229,7 @@ export class DecayEngine {
   async generateDecaySession(agentId, studentId, subject, topic) {
     // Load topic health data
     const { data: topicData } = await supabase
-      .from("edu.agent_knowledge")
+      .schema("edu").from("agent_knowledge")
       .select("*")
       .eq("agent_id", agentId)
       .eq("subject", subject)
@@ -289,7 +289,7 @@ export class DecayEngine {
       performanceScore >= 0.40 ? "partial" : "incorrect";
 
     const { data: current } = await supabase
-      .from("edu.agent_knowledge")
+      .schema("edu").from("agent_knowledge")
       .select("confidence, decay_rate, times_seen")
       .eq("agent_id", agentId)
       .eq("subject", subject)
@@ -310,7 +310,7 @@ export class DecayEngine {
       : Math.min(0.25, current.decay_rate * 1.05);
 
     await supabase
-      .from("edu.agent_knowledge")
+      .schema("edu").from("agent_knowledge")
       .update({
         confidence:      newConf,
         priority:        newPrio,
@@ -325,7 +325,7 @@ export class DecayEngine {
       .ilike("topic", topic);
 
     // Log reinforcement event
-    await supabase.from("edu.decay_events").insert({
+    await supabase.schema("edu").from("decay_events").insert({
       agent_id:          agentId,
       student_id:        studentId,
       subject,
@@ -362,7 +362,7 @@ export class DecayEngine {
 
       // Save notification to DB
       const { data: notif } = await supabase
-        .from("edu.decay_notifications")
+        .schema("edu").from("decay_notifications")
         .insert({
           student_id: studentId,
           agent_id:   agentId,
@@ -403,7 +403,7 @@ export class DecayEngine {
       }
 
       // Log alert sent
-      await supabase.from("edu.decay_events").insert({
+      await supabase.schema("edu").from("decay_events").insert({
         agent_id:          agentId,
         student_id:        studentId,
         subject:           t.subject,
@@ -428,7 +428,7 @@ export class DecayEngine {
 
     // Get all active student agents
     const { data: agents } = await supabase
-      .from("edu.student_agents")
+      .schema("edu").from("student_agents")
       .select("id, student_id, total_sessions")
       .gt("total_sessions", 0); // Only agents that have been used
 
@@ -479,7 +479,7 @@ export class DecayEngine {
   // ── Get unread notifications for a student ───────────────────
   async getUnreadNotifications(studentId, limit = 20) {
     const { data, error } = await supabase
-      .from("edu.decay_notifications")
+      .schema("edu").from("decay_notifications")
       .select("*")
       .eq("student_id", studentId)
       .eq("is_read", false)
@@ -493,7 +493,7 @@ export class DecayEngine {
   // ── Mark notification as read ────────────────────────────────
   async markNotificationRead(notificationId) {
     await supabase
-      .from("edu.decay_notifications")
+      .schema("edu").from("decay_notifications")
       .update({ is_read: true, read_at: new Date() })
       .eq("id", notificationId);
   }
@@ -501,7 +501,7 @@ export class DecayEngine {
   // ── Mark notification as actioned (session started) ──────────
   async markNotificationActioned(notificationId, sessionId) {
     await supabase
-      .from("edu.decay_notifications")
+      .schema("edu").from("decay_notifications")
       .update({
         is_actioned: true,
         actioned_at: new Date(),
@@ -519,7 +519,7 @@ export class DecayEngine {
       this.findTopicsNeedingReview(agentId, 20),
       this.getUnreadNotifications(studentId),
       supabase
-        .from("edu.decay_events")
+        .schema("edu").from("decay_events")
         .select("subject, topic, event_type, confidence_before, confidence_after, created_at")
         .eq("agent_id", agentId)
         .order("created_at", { ascending: false })

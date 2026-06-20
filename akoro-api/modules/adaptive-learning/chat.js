@@ -622,7 +622,7 @@ router.get("/student/:studentId/knowledge", async (req, res) => {
   try {
     const { limit = 20, offset = 0, subject } = req.query;
     let q = db
-      .from("edu.student_knowledge")
+      .schema("edu").from("student_knowledge")
       .select("id, topic, subject, content, source, confidence, tags, created_at")
       .eq("student_id", req.params.studentId)
       .order("created_at", { ascending: false })

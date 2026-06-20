@@ -52,7 +52,7 @@ async function getUserEmail(userId) {
 async function grantAgentAccess(studentId, agentId, purchaseId) {
   // 1. Add to purchased_agents array
   const { data: prefs } = await db
-    .from("edu.user_agent_preferences")
+    .schema("edu").from("user_agent_preferences")
     .select("purchased_agents")
     .eq("user_id", studentId)
     .single();
@@ -60,7 +60,7 @@ async function grantAgentAccess(studentId, agentId, purchaseId) {
   const existing = prefs?.purchased_agents || [];
   if (!existing.includes(agentId)) {
     await db
-      .from("edu.user_agent_preferences")
+      .schema("edu").from("user_agent_preferences")
       .upsert(
         {
           user_id:          studentId,
@@ -73,7 +73,7 @@ async function grantAgentAccess(studentId, agentId, purchaseId) {
 
   // 2. Mark purchase access_granted
   await db
-    .from("edu.agent_purchases")
+    .schema("edu").from("agent_purchases")
     .update({
       access_granted: true,
       paystack_status: "success",
@@ -86,13 +86,13 @@ async function incrementListingStudents(listingId) {
   await db.rpc("increment_listing_students", { p_listing_id: listingId });
   // Fallback if RPC not created:
   const { data } = await db
-    .from("edu.marketplace_listings")
+    .schema("edu").from("marketplace_listings")
     .select("total_students")
     .eq("id", listingId)
     .single();
   if (data) {
     await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .update({ total_students: (data.total_students || 0) + 1, updated_at: new Date() })
       .eq("id", listingId);
   }
@@ -109,7 +109,7 @@ router.get("/listings", async (req, res) => {
     const { subject, free, limit = 20, offset = 0 } = req.query;
 
     let q = db
-      .from("edu.marketplace_summary")
+      .schema("edu").from("marketplace_summary")
       .select("*")
       .eq("is_active", true)
       .order("avg_rating",      { ascending: false })
@@ -136,7 +136,7 @@ router.get("/listings", async (req, res) => {
 router.get("/listings/:id", async (req, res) => {
   try {
     const { data, error } = await db
-      .from("edu.marketplace_summary")
+      .schema("edu").from("marketplace_summary")
       .select("*")
       .eq("id", req.params.id)
       .single();
@@ -153,7 +153,7 @@ router.get("/listings/subject/:subject", async (req, res) => {
   try {
     const { limit = 20, offset = 0 } = req.query;
     const { data, error } = await db
-      .from("edu.marketplace_summary")
+      .schema("edu").from("marketplace_summary")
       .select("*")
       .eq("subject", req.params.subject)
       .order("avg_rating", { ascending: false })
@@ -173,7 +173,7 @@ router.get("/search", async (req, res) => {
     if (!q) return res.status(400).json({ error: "q is required" });
 
     let query = db
-      .from("edu.marketplace_summary")
+      .schema("edu").from("marketplace_summary")
       .select("*")
       .or(`title.ilike.%${q}%,description.ilike.%${q}%,subject.ilike.%${q}%`)
       .limit(Number(limit));
@@ -205,7 +205,7 @@ router.post("/list", authenticateToken, requireRole(["teacher", "admin"]), async
 
     // Verify agent belongs to teacher
     const { data: config } = await db
-      .from("edu.agent_orchestration_config")
+      .schema("edu").from("agent_orchestration_config")
       .select("teacher_id, guide_config, flow_type")
       .eq("agent_id", agentId)
       .single();
@@ -220,7 +220,7 @@ router.post("/list", authenticateToken, requireRole(["teacher", "admin"]), async
       : `${config.guide_config?.tone || "Engaging"} teaching style — ${config.flow_type} approach`;
 
     const { data, error } = await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .insert({
         agent_id:       agentId,
         teacher_id:     teacherId,
@@ -254,7 +254,7 @@ router.put("/listings/:id", authenticateToken, requireRole(["teacher", "admin"])
     const { teacherId: _ignored, ...updates } = req.body;
 
     const { data: existing } = await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .select("teacher_id")
       .eq("id", req.params.id)
       .single();
@@ -273,7 +273,7 @@ router.put("/listings/:id", authenticateToken, requireRole(["teacher", "admin"])
     safeUpdates.updated_at = new Date();
 
     const { data, error } = await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .update(safeUpdates)
       .eq("id", req.params.id)
       .select()
@@ -292,7 +292,7 @@ router.delete("/listings/:id", authenticateToken, requireRole(["teacher", "admin
     const teacherId = req.user.id;
 
     const { data: existing } = await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .select("teacher_id")
       .eq("id", req.params.id)
       .single();
@@ -303,7 +303,7 @@ router.delete("/listings/:id", authenticateToken, requireRole(["teacher", "admin
 
     // Soft delete — set inactive rather than hard delete
     await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .update({ is_active: false, updated_at: new Date() })
       .eq("id", req.params.id);
 
@@ -332,7 +332,7 @@ router.post("/checkout", authenticateToken, async (req, res) => {
 
     // Load listing
     const { data: listing, error: listingErr } = await db
-      .from("edu.marketplace_listings")
+      .schema("edu").from("marketplace_listings")
       .select("*")
       .eq("id", listingId)
       .eq("is_active", true)
@@ -344,7 +344,7 @@ router.post("/checkout", authenticateToken, async (req, res) => {
 
     // Check not already purchased
     const { data: existingPurchase } = await db
-      .from("edu.agent_purchases")
+      .schema("edu").from("agent_purchases")
       .select("id, access_granted")
       .eq("student_id", studentId)
       .eq("listing_id",  listingId)
@@ -452,7 +452,7 @@ router.get("/verify/:reference", async (req, res) => {
 
     // Load purchase
     const { data: purchase } = await db
-      .from("edu.agent_purchases")
+      .schema("edu").from("agent_purchases")
       .select("*")
       .eq("paystack_ref", reference)
       .single();
@@ -478,7 +478,7 @@ router.get("/verify/:reference", async (req, res) => {
       });
     } else {
       await db
-        .from("edu.agent_purchases")
+        .schema("edu").from("agent_purchases")
         .update({ paystack_status: tx.status })
         .eq("id", purchase.id);
 
@@ -531,7 +531,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
 
       // Load purchase
       const { data: purchase } = await db
-        .from("edu.agent_purchases")
+        .schema("edu").from("agent_purchases")
         .select("id, access_granted")
         .eq("id", purchaseId)
         .single();
@@ -563,7 +563,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     if (event.event === "refund.processed") {
       const { transaction_reference } = event.data;
       await db
-        .from("edu.agent_purchases")
+        .schema("edu").from("agent_purchases")
         .update({ paystack_status: "refunded", access_granted: false })
         .eq("paystack_ref", transaction_reference);
     }
@@ -594,7 +594,7 @@ router.get("/payment/callback", async (req, res) => {
     if (tx.status === "success") {
       // Load purchase to get agentId
       const { data: purchase } = await db
-        .from("edu.agent_purchases")
+        .schema("edu").from("agent_purchases")
         .select("agent_id, student_id, listing_id, access_granted")
         .eq("paystack_ref", reference)
         .single();
@@ -630,7 +630,7 @@ router.get("/my-agents/:userId", authenticateToken, async (req, res) => {
 
     // Load preferences
     const { data: prefs } = await db
-      .from("edu.user_agent_preferences")
+      .schema("edu").from("user_agent_preferences")
       .select("*")
       .eq("user_id", userId)
       .single();
@@ -643,7 +643,7 @@ router.get("/my-agents/:userId", authenticateToken, async (req, res) => {
     let purchasedProfiles = [];
     if (purchasedAgents.length > 0) {
       const { data: listings } = await db
-        .from("edu.marketplace_listings")
+        .schema("edu").from("marketplace_listings")
         .select("id, agent_id, title, subject, teacher_name, teacher_avatar, style_summary, avg_rating")
         .in("agent_id", purchasedAgents)
         .eq("is_active", true);
@@ -718,7 +718,7 @@ router.post("/set-default", authenticateToken, async (req, res) => {
     }
 
     await db
-      .from("edu.user_agent_preferences")
+      .schema("edu").from("user_agent_preferences")
       .upsert(
         {
           user_id:         userId,
@@ -739,7 +739,7 @@ router.post("/set-default", authenticateToken, async (req, res) => {
 router.get("/purchases/:userId", authenticateToken, async (req, res) => {
   try {
     const { data, error } = await db
-      .from("edu.agent_purchases")
+      .schema("edu").from("agent_purchases")
       .select(`
         id, agent_id, amount_kobo, currency,
         paystack_status, access_granted, purchased_at,
@@ -773,7 +773,7 @@ router.post("/review", authenticateToken, async (req, res) => {
 
     // Verify student has purchased and has access
     const { data: purchase } = await db
-      .from("edu.agent_purchases")
+      .schema("edu").from("agent_purchases")
       .select("id")
       .eq("student_id",    studentId)
       .eq("listing_id",    listingId)
@@ -785,7 +785,7 @@ router.post("/review", authenticateToken, async (req, res) => {
     }
 
     const { data, error } = await db
-      .from("edu.marketplace_reviews")
+      .schema("edu").from("marketplace_reviews")
       .upsert(
         {
           listing_id:  listingId,
@@ -811,7 +811,7 @@ router.get("/reviews/:listingId", async (req, res) => {
   try {
     const { limit = 20, offset = 0 } = req.query;
     const { data, error } = await db
-      .from("edu.marketplace_reviews")
+      .schema("edu").from("marketplace_reviews")
       .select("id, rating, review_text, created_at")
       .eq("listing_id", req.params.listingId)
       .order("created_at", { ascending: false })

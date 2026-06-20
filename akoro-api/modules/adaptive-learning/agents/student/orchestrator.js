@@ -86,7 +86,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     let teacherId = null;
     if (this.teacherAgentId) {
       const { data: tc } = await supabase
-        .from("edu.agent_orchestration_config")
+        .schema("edu").from("agent_orchestration_config")
         .select("teacher_id")
         .eq("agent_id", this.teacherAgentId)
         .single();
@@ -424,7 +424,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
     // Reload updated agent record
     const { data: updatedAgent } = await supabase
-      .from("edu.student_agents")
+      .schema("edu").from("student_agents")
       .select("*")
       .eq("id", agentId)
       .single();

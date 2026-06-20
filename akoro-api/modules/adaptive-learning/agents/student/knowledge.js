@@ -35,7 +35,7 @@ export async function embed(text) {
 
 export async function getOrCreateStudentAgent(studentId) {
   const { data: existing } = await supabase
-    .from("edu.student_agents")
+    .schema("edu").from("student_agents")
     .select("*")
     .eq("student_id", studentId)
     .single();
@@ -43,7 +43,7 @@ export async function getOrCreateStudentAgent(studentId) {
   if (existing) return existing;
 
   const { data, error } = await supabase
-    .from("edu.student_agents")
+    .schema("edu").from("student_agents")
     .insert({
       student_id:      studentId,
       name:            "My Learning Agent",
@@ -62,7 +62,7 @@ export async function getOrCreateStudentAgent(studentId) {
 
 export async function incrementAgentStats(agentId, { turnsAdded, knowledgeAdded, xpEarned, subject }) {
   const { data: current } = await supabase
-    .from("edu.student_agents")
+    .schema("edu").from("student_agents")
     .select("total_sessions, total_turns, knowledge_score, level, subjects_learned")
     .eq("id", agentId)
     .single();
@@ -81,7 +81,7 @@ export async function incrementAgentStats(agentId, { turnsAdded, knowledgeAdded,
   }
 
   await supabase
-    .from("edu.student_agents")
+    .schema("edu").from("student_agents")
     .update({
       total_sessions:   newSessions,
       total_turns:      newTurns,
@@ -120,7 +120,7 @@ export async function retrieveAgentKnowledgeBySubject(agentId, subject, query, l
 
   // First try subject-filtered similarity search
   const { data: bySubject } = await supabase
-    .from("edu.agent_knowledge")
+    .schema("edu").from("agent_knowledge")
     .select("id, topic, subject, content, chunk_type, confidence, times_seen")
     .eq("agent_id", agentId)
     .eq("subject", subject)
@@ -136,7 +136,7 @@ export async function retrieveAgentKnowledgeBySubject(agentId, subject, query, l
  */
 export async function retrieveAgentKnowledgeByTopic(agentId, subject, topic, limit = 6) {
   const { data } = await supabase
-    .from("edu.agent_knowledge")
+    .schema("edu").from("agent_knowledge")
     .select("id, topic, subject, content, chunk_type, confidence, times_seen, last_seen_at")
     .eq("agent_id", agentId)
     .eq("subject", subject)
@@ -163,7 +163,7 @@ export async function saveAgentKnowledge({
 }) {
   // Check for existing knowledge on this subject+topic
   const { data: existing } = await supabase
-    .from("edu.agent_knowledge")
+    .schema("edu").from("agent_knowledge")
     .select("id, times_seen, confidence, decay_rate")
     .eq("agent_id", agentId)
     .eq("subject", subject || "general")
@@ -182,7 +182,7 @@ export async function saveAgentKnowledge({
     const nextDue      = getNextReviewDate(newConf, newPriority);
 
     await supabase
-      .from("edu.agent_knowledge")
+      .schema("edu").from("agent_knowledge")
       .update({
         content,
         confidence:      newConf,
@@ -206,7 +206,7 @@ export async function saveAgentKnowledge({
   const nextDue  = getNextReviewDate(confidence, priority);
 
   const { data, error } = await supabase
-    .from("edu.agent_knowledge")
+    .schema("edu").from("agent_knowledge")
     .insert({
       agent_id:        agentId,
       student_id:      studentId,
@@ -251,7 +251,7 @@ export async function batchSaveAgentKnowledge(chunks) {
  */
 export async function getAgentKnowledgeBySubject(agentId) {
   const { data, error } = await supabase
-    .from("edu.agent_knowledge_by_subject")
+    .schema("edu").from("agent_knowledge_by_subject")
     .select("*")
     .eq("agent_id", agentId)
     .order("avg_confidence", { ascending: true });
@@ -265,7 +265,7 @@ export async function getAgentKnowledgeBySubject(agentId) {
  */
 export async function getTopicsBySubject(agentId, subject) {
   const { data, error } = await supabase
-    .from("edu.agent_topic_health")
+    .schema("edu").from("agent_topic_health")
     .select("*")
     .eq("agent_id", agentId)
     .eq("subject", subject)
@@ -305,7 +305,7 @@ export async function saveStudentKnowledge({
   const embedding = await embed(content + " " + topic);
 
   const { error } = await supabase
-    .from("edu.student_knowledge")
+    .schema("edu").from("student_knowledge")
     .upsert(
       {
         student_id:  studentId,
@@ -430,7 +430,7 @@ export async function createSessionDelta({
   understandingStart,
 }) {
   const { data, error } = await supabase
-    .from("edu.session_knowledge_delta")
+    .schema("edu").from("session_knowledge_delta")
     .insert({
       session_id:          sessionId,
       agent_id:            agentId,
@@ -461,7 +461,7 @@ export async function finalizeSessionDelta({
   xpEarned,
 }) {
   await supabase
-    .from("edu.session_knowledge_delta")
+    .schema("edu").from("session_knowledge_delta")
     .update({
       understanding_end:      understandingEnd,
       understanding_delta:    understandingEnd,
@@ -480,7 +480,7 @@ export async function finalizeSessionDelta({
 
 export async function getAgentGrowthHistory(agentId, limit = 20) {
   const { data, error } = await supabase
-    .from("edu.session_knowledge_delta")
+    .schema("edu").from("session_knowledge_delta")
     .select("*")
     .eq("agent_id", agentId)
     .order("started_at", { ascending: false })
@@ -492,7 +492,7 @@ export async function getAgentGrowthHistory(agentId, limit = 20) {
 
 export async function getAgentIntelligence(agentId) {
   const { data } = await supabase
-    .from("edu.agent_intelligence_growth")
+    .schema("edu").from("agent_intelligence_growth")
     .select("*")
     .eq("agent_id", agentId)
     .single();
