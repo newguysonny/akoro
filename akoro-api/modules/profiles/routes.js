@@ -1031,6 +1031,26 @@ router.post("/invite-redeem", authenticateToken, asyncHandler(async (req, res) =
   await db.rpc("increment_course_students", { course_id_input: courseId }).catch(() => {});
 
   const { data: course } = await db.from("courses").select("title").eq("id", courseId).single();
+
+  // Notify the student they're in, and the teacher that someone joined via their link.
+  const { data: student } = await db.from("users").select("full_name, email").eq("id", userId).single();
+  await db.from("notifications").insert([
+    {
+      user_id:    userId,
+      type:       "enrolled_in_course",
+      title:      `You're enrolled in "${course?.title ?? "a course"}"`,
+      content:    `You joined via an invite link`,
+      related_id: courseId,
+    },
+    ...(payload.teacherId ? [{
+      user_id:    payload.teacherId,
+      type:       "student_enrolled",
+      title:      `${student?.full_name || student?.email || "A student"} joined`,
+      content:    `Joined "${course?.title ?? "a course"}" via invite link`,
+      related_id: courseId,
+    }] : []),
+  ]).catch((e) => console.warn("[notify] invite-redeem insert failed:", e.message));
+
   res200(res, { enrolled: true, course_id: courseId, course_title: course?.title });
 }));
 
@@ -1090,6 +1110,15 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
           { onConflict: "user_id,course_id" }
         );
         await db.rpc("increment_course_students", { course_id_input: course_id }).catch(() => {});
+
+        // Recipient side — notify the student they were enrolled.
+        await db.from("notifications").insert({
+          user_id:    user.id,
+          type:       "enrolled_in_course",
+          title:      `You're enrolled in "${course.title}"`,
+          content:    `You've been added to this course`,
+          related_id: course_id,
+        }).catch((e) => console.warn("[notify] CSV enrol insert failed:", e.message));
 
         // Send welcome email for new accounts
         if (isNew && tempPassword) {

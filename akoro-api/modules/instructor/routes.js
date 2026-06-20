@@ -45,6 +45,25 @@ const notify = async (userId, { type, title, content = null, relatedId = null })
     .catch(e => console.warn("[notify] insert failed:", e.message));
 };
 
+// Fan-out the same notification to many recipients (e.g. all enrolled students).
+const notifyMany = async (userIds, { type, title, content = null, relatedId = null }) => {
+  const ids = [...new Set((userIds ?? []).filter(Boolean))];
+  if (!ids.length) return;
+  const rows = ids.map((id) => ({ user_id: id, type, title, content, related_id: relatedId }));
+  await db.from("notifications").insert(rows)
+    .catch(e => console.warn("[notify] bulk insert failed:", e.message));
+};
+
+// Return the user_ids of all active students enrolled in a course.
+const enrolledStudentIds = async (courseId) => {
+  const { data } = await db
+    .from("enrollments")
+    .select("user_id")
+    .eq("course_id", courseId)
+    .eq("status", "active");
+  return (data ?? []).map((r) => r.user_id);
+};
+
 // user_agents stores total_xp only; derive a display level (500 XP per level).
 const levelFromXp = (xp = 0) => Math.floor((xp ?? 0) / 500) + 1;
 
@@ -548,6 +567,13 @@ const createSession = asyncHandler(async (req, res) => {
       content:   `Starts ${new Date(scheduledStart).toLocaleString()}`,
       relatedId: data.id,
     });
+    // Recipient side — notify every enrolled student of the new session.
+    notifyMany(await enrolledStudentIds(courseId), {
+      type:      "session_scheduled",
+      title:     `New session: "${title}"`,
+      content:   `Starts ${new Date(scheduledStart).toLocaleString()}`,
+      relatedId: data.id,
+    });
     created(res, mapSession(data));
   } catch (e) {
     err500(res, e);
@@ -598,6 +624,15 @@ const updateSession = asyncHandler(async (req, res) => {
 
     if (error) throw new Error(error.message);
     notify(req.user.id, { type: "session_updated", title: `Session "${data.title}" updated`, content: "Changes saved", relatedId: data.id });
+    // Recipient side — only notify students when the time changes (avoid noise).
+    if (updates.scheduled_start) {
+      notifyMany(await enrolledStudentIds(session.course_id), {
+        type:      "session_rescheduled",
+        title:     `Session "${data.title}" rescheduled`,
+        content:   `Now starts ${new Date(updates.scheduled_start).toLocaleString()}`,
+        relatedId: data.id,
+      });
+    }
     ok(res, mapSession(data));
   } catch (e) {
     err500(res, e);
@@ -1007,7 +1042,7 @@ const enrolStudent = asyncHandler(async (req, res) => {
     // Verify teacher owns course
     const { data: course } = await db
       .from("courses")
-      .select("id, instructor_id")
+      .select("id, instructor_id, title")
       .eq("id", courseId)
       .single();
 
@@ -1085,6 +1120,12 @@ const enrolStudent = asyncHandler(async (req, res) => {
           );
       }
 
+      notify(user.id, {
+        type:      "enrolled_in_course",
+        title:     `You're enrolled in "${course.title}"`,
+        content:   `Your access to this course has been restored`,
+        relatedId: courseId,
+      });
       return ok(res, { enrollment: reactivated, user, classroomId: classroom?.id ?? null });
     }
 
@@ -1123,7 +1164,14 @@ const enrolStudent = asyncHandler(async (req, res) => {
     notify(req.user.id, {
       type:      "student_enrolled",
       title:     `${user.full_name || user.email} enrolled`,
-      content:   `Enrolled in course`,
+      content:   `Enrolled in "${course.title}"`,
+      relatedId: courseId,
+    });
+    // Recipient side — tell the student they've been enrolled.
+    notify(user.id, {
+      type:      "enrolled_in_course",
+      title:     `You're enrolled in "${course.title}"`,
+      content:   `You've been added to this course`,
       relatedId: courseId,
     });
 
@@ -1265,6 +1313,13 @@ const createBattle = asyncHandler(async (req, res) => {
     global.io?.to(`user:${req.user.id}`).emit("battle.created", { battleId: battle.id });
 
     notify(req.user.id, { type: "battle_created", title: `Battle "${title}" created`, content: `${battleType} battle`, relatedId: battle.id });
+    // Recipient side — invite enrolled students to the battle.
+    notifyMany(await enrolledStudentIds(courseId), {
+      type:      "battle_invite",
+      title:     `New battle: "${title}"`,
+      content:   `A ${battleType} battle is open — join in!`,
+      relatedId: battle.id,
+    });
     created(res, mapBattle(battle));
   } catch (e) {
     err500(res, e);
