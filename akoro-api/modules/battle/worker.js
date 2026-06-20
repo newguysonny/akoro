@@ -9,8 +9,9 @@
 import { Worker, Queue } from "bullmq";
 import Redis             from "ioredis";
 import db                from "../../db.js";
+import { bullRedisOptions } from "../../lib/redisOptions.js";
 
-const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: null });
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
 
 export const battleQueue = new Queue("battles", {

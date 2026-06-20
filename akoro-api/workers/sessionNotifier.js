@@ -18,8 +18,9 @@ import { Queue, Worker, QueueEvents } from "bullmq";
 import Redis                          from "ioredis";
 import db                             from "../db.js";
 import { sendSessionNotifications }   from "../services/notificationService.js";
+import { bullRedisOptions }           from "../lib/redisOptions.js";
 
-const redisConn = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+const redisConn = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 
 // ─── Queue (producer side — imported by live-sessions.js) ────────────────────
 

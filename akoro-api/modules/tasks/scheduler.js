@@ -7,8 +7,9 @@
 import { Queue }    from "bullmq";
 import Redis        from "ioredis";
 import { TaskDB, TaskScheduleDB } from "./lib/db.js";
+import { bullRedisOptions }       from "../../lib/redisOptions.js";
 
-const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: null });
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 
 export const taskQueue = new Queue("task-runner", {
   connection: redis,

@@ -12,11 +12,12 @@ import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
+import { bullRedisOptions }                        from "../../lib/redisOptions.js";
 
 const MAX_TOOL_ITERATIONS = 20;
 const MODEL               = "claude-sonnet-4-6";
 
-const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: null });
+const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const taskWorker = new Worker("task-runner", async (job) => {
