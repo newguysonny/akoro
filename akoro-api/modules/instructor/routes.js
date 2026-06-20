@@ -144,17 +144,20 @@ const getStats = asyncHandler(async (req, res) => {
       if (enrollErr) throw new Error(enrollErr.message);
       totalStudents = studentCount ?? 0;
 
-      // Total revenue: count enrollments per course × course price
-      const { data: enrollmentsByCourse, error: revErr } = await db
+      // Total revenue: only count enrollments backed by an actual payment.
+      // Manually-added / invited / free enrollments have payment_id = NULL and
+      // must not inflate revenue.
+      const { data: paidEnrollments, error: revErr } = await db
         .from("enrollments")
         .select("course_id")
         .in("course_id", courseIds)
-        .eq("status", "active");
+        .eq("status", "active")
+        .not("payment_id", "is", null);
 
       if (revErr) throw new Error(revErr.message);
 
       const priceMap = Object.fromEntries((courses ?? []).map((c) => [c.id, c.price ?? 0]));
-      totalRevenue = (enrollmentsByCourse ?? []).reduce(
+      totalRevenue = (paidEnrollments ?? []).reduce(
         (sum, e) => sum + (priceMap[e.course_id] ?? 0),
         0,
       );
