@@ -58,7 +58,7 @@ const toOAuth = (p) => (p === "meet" ? "google" : p);
 const toUi    = (p) => (p === "google" ? "meet" : p);
 
 const STATE_SECRET   = process.env.OAUTH_STATE_SECRET || process.env.COOKIE_SECRET || "akoro-oauth-state";
-const INSTRUCTOR_URL = process.env.INSTRUCTOR_URL || process.env.FRONTEND_URL || "https://akoro.app";
+const INSTRUCTOR_URL = process.env.INSTRUCTOR_URL || "https://instructor.akoro.app";
 
 const signState = (userId, provider) =>
   jwt.sign({ uid: userId, provider, n: uuidv4() }, STATE_SECRET, { expiresIn: "10m" });
@@ -544,7 +544,7 @@ const meetingHandlers = {
   oauthCallback: asyncHandler(async (req, res) => {
     const provider          = toOAuth(req.params.provider);
     const { code, state }   = req.query;
-    const settingsUrl       = `${INSTRUCTOR_URL}/settings`;
+    const settingsUrl       = `${INSTRUCTOR_URL}/`;
     const fail = (reason) => res.redirect(`${settingsUrl}?streaming_error=${encodeURIComponent(reason)}`);
 
     if (!code)  return fail("missing_code");
