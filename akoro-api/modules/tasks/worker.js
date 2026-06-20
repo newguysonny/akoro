@@ -96,7 +96,14 @@ export const taskWorker = new Worker("task-runner", async (job) => {
     await deliverError(task, run, err.message);
     throw err;
   }
-}, { connection: redis, concurrency: 5 });
+}, {
+  connection:  redis,
+  concurrency: 5,
+  // Reduce idle Redis traffic on per-request-billed providers (Upstash):
+  // block the poll longer and check for stalled jobs far less often.
+  drainDelay:  60,                          // seconds the blocking poll waits when idle
+  settings:    { stalledInterval: 300_000 }, // 5 min between stalled-job scans
+});
 
 taskWorker.on("completed", (job) => console.log(`[tasks/worker] ✅ Job ${job.id} done`));
 taskWorker.on("failed",    (job, err) => console.error(`[tasks/worker] ❌ Job ${job?.id} failed:`, err.message));

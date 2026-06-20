@@ -142,6 +142,9 @@ const worker = new Worker(
     connection:  redisConn,
     concurrency: 5,
     limiter:     { max: 100, duration: 60_000 },  // 100 jobs/min rate cap
+    // Reduce idle Redis traffic on per-request-billed providers (Upstash).
+    drainDelay:  60,
+    settings:    { stalledInterval: 300_000 },
   }
 );
 

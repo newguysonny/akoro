@@ -34,7 +34,14 @@ const worker = new Worker("battles", async (job) => {
     case "refresh-leaderboard": return refreshLeaderboard(job.data.courseId, job.data.scope);
     default: throw new Error(`Unknown action: ${action}`);
   }
-}, { connection: redis, concurrency: 10 });
+}, {
+  connection:  redis,
+  concurrency: 10,
+  // Reduce idle Redis traffic on per-request-billed providers (Upstash):
+  // block the poll longer and check for stalled jobs far less often.
+  drainDelay:  60,                          // seconds the blocking poll waits when idle
+  settings:    { stalledInterval: 300_000 }, // 5 min between stalled-job scans
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
