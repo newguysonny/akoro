@@ -13,9 +13,9 @@ export function useStudentsAPI() {
   const removeStudent = (id) =>
     apiDelete(`/api/instructor/students/${id}`);
 
-  const generateInvite = ({ courseId, expiresInDays = 7, emails = [] }) =>
+  const generateInvite = ({ courseIds = [], expiresInDays = 7, emails = [] }) =>
     apiPost('/api/profiles/teacher/invite', {
-      course_id: courseId,
+      course_ids: courseIds,
       expires_in_days: Number(expiresInDays),
       send_to_emails: emails,
     });

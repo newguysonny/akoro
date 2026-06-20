@@ -30,8 +30,12 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
     setManual(f => ({ ...f, courseIds: f.courseIds.length === courses.length ? [] : courses.map(c => c.id) }));
 
   // Invite form
-  const [inv, setInv]       = useState({ courseId: '', expiresInDays: 7, emails: '' });
+  const [inv, setInv]       = useState({ courseIds: [], expiresInDays: 7, emails: '' });
   const setI = (k, v) => setInv(f => ({ ...f, [k]: v }));
+  const toggleInvCourse = (id) =>
+    setInv(f => ({ ...f, courseIds: f.courseIds.includes(id) ? f.courseIds.filter(x => x !== id) : [...f.courseIds, id] }));
+  const toggleAllInvCourses = () =>
+    setInv(f => ({ ...f, courseIds: f.courseIds.length === courses.length ? [] : courses.map(c => c.id) }));
   const [inviteUrl, setUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -43,7 +47,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
     if (open) {
       setTab('manual'); setLoad(false); setError(''); setOk('');
       setManual({ email: '', fullName: '', courseIds: [] });
-      setInv({ courseId: '', expiresInDays: 7, emails: '' });
+      setInv({ courseIds: [], expiresInDays: 7, emails: '' });
       setUrl(''); setCopied(false);
       setCsv({ courseId: '', file: null }); setCsvR(null);
     }
@@ -76,16 +80,19 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   /* Invite link generate */
   const submitInvite = async (e) => {
     e.preventDefault(); reset();
-    if (!inv.courseId) { setError('Please select a course'); return; }
+    if (!inv.courseIds.length) { setError('Please select at least one course'); return; }
     setLoad(true);
     try {
       const emailList = inv.emails.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
       const res = await generateInvite({
-        courseId: inv.courseId,
+        courseIds: inv.courseIds,
         expiresInDays: Number(inv.expiresInDays) || 7,
         emails: emailList,
       });
-      setUrl(res.invite_url || res.inviteUrl || '');
+      // Response is wrapped as { success, data: { invite_url, ... } }.
+      const url = res.data?.invite_url || res.invite_url || res.inviteUrl || '';
+      setUrl(url);
+      if (!url) { setError('Could not generate link. Please try again.'); return; }
       if (emailList.length) setOk(`Invite sent to ${emailList.length} email(s).`);
     } catch (err) {
       setError(err.message || 'Failed to generate invite');
@@ -246,7 +253,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
       {tab === 'invite' && (
         <form onSubmit={submitInvite} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Feedback />
-          <CourseSelect value={inv.courseId} onChange={v => setI('courseId', v)} />
+          <CourseChecklist selected={inv.courseIds} onToggle={toggleInvCourse} onToggleAll={toggleAllInvCourses} />
 
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>
@@ -302,7 +309,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           )}
 
           <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
-            Anyone with this link can join the selected course. Share it in a WhatsApp group, email, or anywhere.
+            Anyone with this link can join the selected course(s). Share it in a WhatsApp group, email, or anywhere.
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>

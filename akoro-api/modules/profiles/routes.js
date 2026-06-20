@@ -948,21 +948,38 @@ router.get("/instructor/students", authenticateToken, requireRole(["instructor",
  * URL format: https://akoro.app/join/:token
  */
 router.post("/teacher/invite", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
-  const { course_id, expires_in_days = 7, send_to_emails = [] } = req.body;
-  if (!course_id) return res400(res, "course_id is required");
+  const { course_id, course_ids, expires_in_days = 7, send_to_emails = [] } = req.body;
 
-  // Verify teacher owns the course
-  const { data: course } = await db.from("courses").select("id, title, instructor_id").eq("id", course_id).single();
-  if (!course || course.instructor_id !== req.user.id) return res403(res, "Not your course");
+  // Accept a single course_id (back-compat) or a course_ids array (multi-course).
+  const requestedIds = [...new Set(
+    (Array.isArray(course_ids) && course_ids.length ? course_ids : [course_id]).filter(Boolean)
+  )];
+  if (!requestedIds.length) return res400(res, "course_id or course_ids is required");
+
+  // Verify the teacher owns every requested course.
+  const { data: ownedCourses } = await db
+    .from("courses")
+    .select("id, title, instructor_id")
+    .in("id", requestedIds)
+    .eq("instructor_id", req.user.id);
+
+  const owned = ownedCourses ?? [];
+  if (owned.length !== requestedIds.length)
+    return res403(res, "One or more courses are not yours");
+
+  const courseIds   = owned.map((c) => c.id);
+  const courseTitle = owned.length === 1 ? owned[0].title : `${owned.length} courses`;
 
   const jwt = await import("jsonwebtoken");
   const token = jwt.default.sign(
-    { courseId: course_id, teacherId: req.user.id, type: "course_invite" },
+    // Encode all course IDs; keep courseId for back-compat with older redeemers.
+    { courseIds, courseId: courseIds[0], teacherId: req.user.id, type: "course_invite" },
     process.env.JWT_SECRET ?? "akoro-dev-secret",
     { expiresIn: `${expires_in_days}d` }
   );
 
   const inviteUrl = `https://akoro.app/join/${token}`;
+  const course = { title: courseTitle };
 
   // Optionally send invite emails
   const emailResults = [];
@@ -1016,42 +1033,53 @@ router.post("/invite-redeem", authenticateToken, asyncHandler(async (req, res) =
 
   if (payload.type !== "course_invite") return res400(res, "Invalid token type");
 
-  const { courseId } = payload;
-  const userId      = req.user.id;
+  const userId    = req.user.id;
+  // Support both new multi-course tokens and old single-course tokens.
+  const courseIds = [...new Set(
+    (Array.isArray(payload.courseIds) && payload.courseIds.length ? payload.courseIds : [payload.courseId]).filter(Boolean)
+  )];
+  if (!courseIds.length) return res400(res, "Invalid invite link");
 
-  const { data: existing } = await db.from("enrollments").select("id, status")
-    .eq("user_id", userId).eq("course_id", courseId).single();
+  const { data: existingRows } = await db.from("enrollments")
+    .select("course_id, status").eq("user_id", userId).in("course_id", courseIds);
+  const activeSet = new Set((existingRows ?? []).filter(r => r.status === "active").map(r => r.course_id));
 
-  if (existing?.status === "active") return res400(res, "Already enrolled");
+  // Enrol in every course the student isn't already active in.
+  const toEnrol = courseIds.filter(id => !activeSet.has(id));
+  if (!toEnrol.length) return res400(res, "Already enrolled");
 
-  await db.from("enrollments").upsert(
-    { user_id: userId, course_id: courseId, status: "active" },
-    { onConflict: "user_id,course_id" }
-  );
-  await db.rpc("increment_course_students", { course_id_input: courseId }).catch(() => {});
+  for (const id of toEnrol) {
+    await db.from("enrollments").upsert(
+      { user_id: userId, course_id: id, status: "active" },
+      { onConflict: "user_id,course_id" }
+    );
+    await db.rpc("increment_course_students", { course_id_input: id }).catch(() => {});
+  }
 
-  const { data: course } = await db.from("courses").select("title").eq("id", courseId).single();
+  const { data: courses } = await db.from("courses").select("id, title").in("id", toEnrol);
+  const titles = (courses ?? []).map(c => c.title);
+  const label  = titles.length === 1 ? `"${titles[0]}"` : `${titles.length} courses`;
 
-  // Notify the student they're in, and the teacher that someone joined via their link.
+  // Notify the student, and the teacher that someone joined via their link.
   const { data: student } = await db.from("users").select("full_name, email").eq("id", userId).single();
   await db.from("notifications").insert([
     {
       user_id:    userId,
       type:       "enrolled_in_course",
-      title:      `You're enrolled in "${course?.title ?? "a course"}"`,
+      title:      `You're enrolled in ${label}`,
       content:    `You joined via an invite link`,
-      related_id: courseId,
+      related_id: toEnrol[0],
     },
     ...(payload.teacherId ? [{
       user_id:    payload.teacherId,
       type:       "student_enrolled",
       title:      `${student?.full_name || student?.email || "A student"} joined`,
-      content:    `Joined "${course?.title ?? "a course"}" via invite link`,
-      related_id: courseId,
+      content:    `Joined ${label} via invite link`,
+      related_id: toEnrol[0],
     }] : []),
   ]).catch((e) => console.warn("[notify] invite-redeem insert failed:", e.message));
 
-  res200(res, { enrolled: true, course_id: courseId, course_title: course?.title });
+  res200(res, { enrolled: true, course_ids: toEnrol, course_titles: titles });
 }));
 
 /**
