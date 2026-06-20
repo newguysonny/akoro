@@ -1,18 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Check, CheckCheck, Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 
 const TYPE_META = {
-  student_enrolled:   { icon: Users,         color: GREEN,  label: 'Student enrolled'   },
-  course_created:     { icon: BookOpen,       color: BLUE,   label: 'Course created'     },
-  battle_started:     { icon: Swords,         color: PURPLE, label: 'Battle started'     },
-  session_reminder:   { icon: Calendar,       color: AMBER,  label: 'Session reminder'   },
-  task_complete:      { icon: CheckSquare,    color: GREEN,  label: 'Task complete'      },
-  message:            { icon: MessageSquare,  color: BLUE,   label: 'Message'            },
-  system:             { icon: Settings,       color: MUTED,  label: 'System'             },
+  student_enrolled:      { icon: Users,        color: GREEN,  label: 'Student enrolled'   },
+  student_removed:       { icon: Users,        color: RED,    label: 'Student removed'    },
+  course_created:        { icon: BookOpen,     color: BLUE,   label: 'Course created'     },
+  course_updated:        { icon: BookOpen,     color: AMBER,  label: 'Course updated'     },
+  course_deleted:        { icon: Trash2,       color: RED,    label: 'Course deleted'     },
+  session_reminder:      { icon: Calendar,     color: AMBER,  label: 'Session scheduled'  },
+  session_updated:       { icon: Calendar,     color: AMBER,  label: 'Session updated'    },
+  session_deleted:       { icon: Trash2,       color: RED,    label: 'Session deleted'    },
+  battle_created:        { icon: Swords,       color: PURPLE, label: 'Battle created'     },
+  battle_started:        { icon: Swords,       color: PURPLE, label: 'Battle started'     },
+  battle_updated:        { icon: Swords,       color: AMBER,  label: 'Battle updated'     },
+  battle_deleted:        { icon: Trash2,       color: RED,    label: 'Battle deleted'     },
+  profile_updated:       { icon: Settings,     color: BLUE,   label: 'Profile updated'    },
+  settings_updated:      { icon: Settings,     color: BLUE,   label: 'Settings updated'   },
+  streaming_connected:   { icon: Video,        color: GREEN,  label: 'Streaming connected'    },
+  streaming_disconnected:{ icon: Video,        color: MUTED,  label: 'Streaming disconnected' },
+  task_complete:         { icon: CheckSquare,  color: GREEN,  label: 'Task complete'      },
+  message:               { icon: MessageSquare,color: BLUE,   label: 'Message'            },
+  system:                { icon: Settings,     color: MUTED,  label: 'System'             },
 };
 
 function getMeta(type) {

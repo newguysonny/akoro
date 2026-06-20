@@ -229,6 +229,7 @@ const updateProfile = asyncHandler(async (req, res) => {
       if (/duplicate key|unique/i.test(error.message)) return err400(res, "That username is already taken");
       throw new Error(error.message);
     }
+    notify(req.user.id, { type: "profile_updated", title: "Profile updated", content: "Your profile details were saved" });
     ok(res, data);
   } catch (e) {
     err500(res, e);
@@ -256,6 +257,7 @@ const updateNotifications = asyncHandler(async (req, res) => {
       .upsert(row, { onConflict: "user_id" });
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, { type: "settings_updated", title: "Notification preferences updated", content: "Your notification settings were saved" });
     ok(res, { saved: true });
   } catch (e) {
     err500(res, e);
@@ -282,6 +284,7 @@ const updateAgent = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, { type: "settings_updated", title: "AI agent updated", content: `Agent is now ${data.agent_emoji ?? ""} ${data.agent_name ?? ""}`.trim() });
     ok(res, data);
   } catch (e) {
     err500(res, e);
@@ -415,6 +418,12 @@ const updateCourse = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, {
+      type:      "course_updated",
+      title:     `Course "${data.title}" updated`,
+      content:   `Changes saved`,
+      relatedId: data.id,
+    });
     ok(res, mapCourse(data, 0));
   } catch (e) {
     err500(res, e);
@@ -427,7 +436,7 @@ const deleteCourse = asyncHandler(async (req, res) => {
 
     const { data: existing } = await db
       .from("courses")
-      .select("id, instructor_id")
+      .select("id, instructor_id, title")
       .eq("id", id)
       .single();
 
@@ -437,6 +446,11 @@ const deleteCourse = asyncHandler(async (req, res) => {
     // No 'archived' state in schema — hard delete (cascades sessions/enrollments).
     const { error } = await db.from("courses").delete().eq("id", id);
     if (error) throw new Error(error.message);
+    notify(req.user.id, {
+      type:    "course_deleted",
+      title:   `Course "${existing.title}" deleted`,
+      content: `The course and its sessions were removed`,
+    });
     ok(res, { message: "Course deleted" });
   } catch (e) {
     err500(res, e);
@@ -583,6 +597,7 @@ const updateSession = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, { type: "session_updated", title: `Session "${data.title}" updated`, content: "Changes saved", relatedId: data.id });
     ok(res, mapSession(data));
   } catch (e) {
     err500(res, e);
@@ -613,6 +628,7 @@ const deleteSession = asyncHandler(async (req, res) => {
     const { error } = await db.from("live_sessions").delete().eq("id", id);
     if (error) throw new Error(error.message);
 
+    notify(req.user.id, { type: "session_deleted", title: "Session deleted", content: "A live session was removed" });
     ok(res, { message: "Session deleted" });
   } catch (e) {
     err500(res, e);
@@ -1142,6 +1158,7 @@ const removeStudent = asyncHandler(async (req, res) => {
     const { error } = await db.from("enrollments").delete().eq("id", enrollmentId);
     if (error) throw new Error(error.message);
 
+    notify(req.user.id, { type: "student_removed", title: "Student removed", content: "A student was removed from a course" });
     ok(res, { message: "Enrollment removed" });
   } catch (e) {
     err500(res, e);
@@ -1247,6 +1264,7 @@ const createBattle = asyncHandler(async (req, res) => {
 
     global.io?.to(`user:${req.user.id}`).emit("battle.created", { battleId: battle.id });
 
+    notify(req.user.id, { type: "battle_created", title: `Battle "${title}" created`, content: `${battleType} battle`, relatedId: battle.id });
     created(res, mapBattle(battle));
   } catch (e) {
     err500(res, e);
@@ -1287,6 +1305,7 @@ const updateBattle = asyncHandler(async (req, res) => {
       .single();
 
     if (error) throw new Error(error.message);
+    notify(req.user.id, { type: "battle_updated", title: `Battle "${data.title}" updated`, content: "Changes saved", relatedId: data.id });
     ok(res, mapBattle(data));
   } catch (e) {
     err500(res, e);
@@ -1309,6 +1328,7 @@ const deleteBattle = asyncHandler(async (req, res) => {
     const { error } = await db.from("battles").delete().eq("id", id);
     if (error) throw new Error(error.message);
 
+    notify(req.user.id, { type: "battle_deleted", title: "Battle deleted", content: "A battle was removed" });
     ok(res, { message: "Battle deleted" });
   } catch (e) {
     err500(res, e);
@@ -1382,6 +1402,7 @@ const connectStreaming = asyncHandler(async (req, res) => {
 
     if (error) throw new Error(error.message);
 
+    notify(req.user.id, { type: "streaming_connected", title: `${platform} connected`, content: "Streaming platform connected" });
     ok(res, {
       platform,
       connected:   true,
@@ -1420,6 +1441,7 @@ const disconnectStreaming = asyncHandler(async (req, res) => {
 
     if (error) throw new Error(error.message);
 
+    notify(req.user.id, { type: "streaming_disconnected", title: `${platform} disconnected`, content: "Streaming platform disconnected" });
     ok(res, { platform, connected: false, message: `${platform} disconnected` });
   } catch (e) {
     err500(res, e);

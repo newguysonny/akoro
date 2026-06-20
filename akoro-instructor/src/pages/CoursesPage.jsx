@@ -73,12 +73,76 @@ function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
   );
 }
 
+/* ── Edit Course Modal ──────────────────────────────────────────────── */
+function EditCourseModal({ open, course, onClose, onSave }) {
+  const [form, setForm] = useState({ title: '', description: '', level: 'all', status: 'active' });
+  const [loading, setLoading] = useState(false);
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (course) setForm({
+      title:       course.title || '',
+      description: course.description || '',
+      level:       course.level || 'all',
+      status:      course.status || 'active',
+    });
+  }, [course]);
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return;
+    setLoading(true);
+    try { await onSave(course.id, form); onClose(); }
+    catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Edit Course" width={480}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <Inp label="Course Title" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="Course title" />
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>Description</label>
+          <textarea
+            value={form.description}
+            onChange={e => setField('description', e.target.value)}
+            rows={3}
+            placeholder="What is this course about?"
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 10,
+              border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13,
+              color: INK, background: WHITE, outline: 'none', resize: 'vertical',
+            }}
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <Sel label="Level" value={form.level} onChange={e => setField('level', e.target.value)}>
+            <option value="all">All levels</option>
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </Sel>
+          <Sel label="Status" value={form.status} onChange={e => setField('status', e.target.value)}>
+            <option value="active">Active</option>
+            <option value="draft">Draft</option>
+          </Sel>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+          <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={handleSave} disabled={loading || !form.title.trim()}>
+            {loading ? 'Saving…' : 'Save Changes'}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ── Course Card ────────────────────────────────────────────────────── */
-function CourseCard({ course, onManage }) {
+function CourseCard({ course, onManage, onEdit, onDelete }) {
   return (
     <div style={{
       background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16,
-      overflow: 'hidden', transition: 'box-shadow .15s',
+      overflow: 'hidden', transition: 'box-shadow .15s', position: 'relative',
     }}
     onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.08)'}
     onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
@@ -86,11 +150,28 @@ function CourseCard({ course, onManage }) {
       {/* Thumbnail */}
       <div style={{
         height: 100, background: course.thumbnail ? `url(${course.thumbnail})` : `linear-gradient(135deg, ${AMBER}22, ${PURPLE}22)`,
-        backgroundSize: 'cover', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backgroundSize: 'cover', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       }}>
         {!course.thumbnail && (
           course.type === 'live' ? <Video size={32} color={AMBER} /> : <BookOpen size={32} color={PURPLE} />
         )}
+        {/* Edit/Delete actions */}
+        <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit?.(course); }}
+            title="Edit course"
+            style={{ background: 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: INK, display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
+          >
+            <Edit2 size={13} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete?.(course); }}
+            title="Delete course"
+            style={{ background: 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: '#DC2626', display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
       <div style={{ padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -145,7 +226,7 @@ function SessionRow({ session, onDelete }) {
 
 /* ── Main Page ──────────────────────────────────────────────────────── */
 export default function CoursesPage() {
-  const { getCourses, createCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
+  const { getCourses, createCourse, updateCourse, deleteCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
   const [courses,  setCourses]  = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -155,6 +236,7 @@ export default function CoursesPage() {
   const [onDemandModal,  setOnDemandModal]  = useState(false);
   const [scheduleModal,  setScheduleModal]  = useState(false);
   const [curriculumFor,  setCurriculumFor]  = useState(null);
+  const [editCourse,     setEditCourse]     = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -254,6 +336,23 @@ export default function CoursesPage() {
     showToast('Session removed.', 'info');
   };
 
+  const handleSaveCourse = async (id, data) => {
+    await updateCourse(id, data);
+    showToast('Course updated!');
+    load();
+  };
+
+  const handleDeleteCourse = async (course) => {
+    if (!window.confirm(`Delete "${course.title}"? This removes its sessions and enrollments and cannot be undone.`)) return;
+    try {
+      await deleteCourse(course.id);
+      setCourses(cs => cs.filter(c => c.id !== course.id));
+      showToast('Course deleted.', 'info');
+    } catch (err) {
+      showToast(err.message || 'Failed to delete course', 'error');
+    }
+  };
+
   return (
     <PageLayout
       title="Courses"
@@ -283,7 +382,7 @@ export default function CoursesPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-            {courses.map(c => <CourseCard key={c.id} course={c} onManage={setCurriculumFor} />)}
+            {courses.map(c => <CourseCard key={c.id} course={c} onManage={setCurriculumFor} onEdit={setEditCourse} onDelete={handleDeleteCourse} />)}
             {courses.length === 0 && (
               <div style={{
                 gridColumn: '1 / -1', background: WHITE, border: `1px dashed ${BORDER}`,
@@ -322,6 +421,7 @@ export default function CoursesPage() {
         )}
       </div>
 
+      <EditCourseModal open={!!editCourse} course={editCourse} onClose={() => setEditCourse(null)} onSave={handleSaveCourse} />
       <CourseCurriculum open={!!curriculumFor} course={curriculumFor} onClose={() => { setCurriculumFor(null); load(); }} onToast={showToast} />
       <LiveClassWizard open={liveWizard} onClose={() => setLiveWizard(false)} onSubmit={handleCreateLive} />
       <OnDemandWizard open={onDemandModal} onClose={() => setOnDemandModal(false)} onSubmit={handleCreateOnDemand} />
