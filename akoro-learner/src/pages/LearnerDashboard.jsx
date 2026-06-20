@@ -93,6 +93,17 @@ export default function LearnerDashboard() {
   const [decayAlerts,  setDecayAlerts]  = useState([]);
   const [agentSessions, setAgentSessions] = useState([]);
   const [userProfile,  setUserProfile]  = useState(null);
+  const [notifUnread,  setNotifUnread]  = useState(0);
+
+  useEffect(()=>{
+    let alive = true;
+    const poll = () => apiGet("/api/notifications?limit=1")
+      .then(d=>{ if(alive) setNotifUnread(d?.unread ?? 0); })
+      .catch(()=>{});
+    poll();
+    const t = setInterval(poll, 60000);
+    return ()=>{ alive=false; clearInterval(t); };
+  },[]);
 
   useEffect(()=>{
     // User profile — name, avatar, year group, XP for the header
@@ -380,6 +391,15 @@ export default function LearnerDashboard() {
               <button onClick={()=>navigate("/live")} title="Live Classes"
                 style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,padding:"6px 12px",cursor:"pointer",color:BRAND,fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif" }}>
                 🎥 {t('dash.live')}
+              </button>
+              <button onClick={()=>navigate("/notifications")} title="Notifications"
+                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer",fontSize:15 }}>
+                🔔
+                {notifUnread>0&&(
+                  <span style={{ position:"absolute",top:-3,right:-3,background:RED,color:"#fff",borderRadius:"50%",minWidth:16,height:16,padding:"0 4px",fontSize:9,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>
+                    {notifUnread>9?"9+":notifUnread}
+                  </span>
+                )}
               </button>
               <SubjectDropdown value={subjectFilter} onChange={setSubjectFilter}/>
               <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:"#F0EBFF",borderRadius:100,padding:4,cursor:"pointer",border:"1px solid #DDD3FF" }}>

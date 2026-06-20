@@ -14,6 +14,7 @@ import ForgotPasswordPage  from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage   from './pages/auth/ResetPasswordPage.jsx';
 import FDEAdminPage     from './pages/FDEAdminPage.jsx';
 import LiveClassesPage  from './pages/LiveClassesPage.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
 import NotFoundPage     from './pages/NotFoundPage.jsx';
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
@@ -55,6 +56,7 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/live" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
+      <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/live/:courseId" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>
       <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>
