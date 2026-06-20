@@ -1053,7 +1053,7 @@ router.post("/invite-redeem", authenticateToken, asyncHandler(async (req, res) =
       { user_id: userId, course_id: id, status: "active" },
       { onConflict: "user_id,course_id" }
     );
-    await db.rpc("increment_course_students", { course_id_input: id }).catch(() => {});
+    try { await db.rpc("increment_course_students", { course_id_input: id }); } catch {}
   }
 
   const { data: courses } = await db.from("courses").select("id, title").in("id", toEnrol);
@@ -1062,22 +1062,27 @@ router.post("/invite-redeem", authenticateToken, asyncHandler(async (req, res) =
 
   // Notify the student, and the teacher that someone joined via their link.
   const { data: student } = await db.from("users").select("full_name, email").eq("id", userId).single();
-  await db.from("notifications").insert([
-    {
-      user_id:    userId,
-      type:       "enrolled_in_course",
-      title:      `You're enrolled in ${label}`,
-      content:    `You joined via an invite link`,
-      related_id: toEnrol[0],
-    },
-    ...(payload.teacherId ? [{
-      user_id:    payload.teacherId,
-      type:       "student_enrolled",
-      title:      `${student?.full_name || student?.email || "A student"} joined`,
-      content:    `Joined ${label} via invite link`,
-      related_id: toEnrol[0],
-    }] : []),
-  ]).catch((e) => console.warn("[notify] invite-redeem insert failed:", e.message));
+  try {
+    const { error: notifErr } = await db.from("notifications").insert([
+      {
+        user_id:    userId,
+        type:       "enrolled_in_course",
+        title:      `You're enrolled in ${label}`,
+        content:    `You joined via an invite link`,
+        related_id: toEnrol[0],
+      },
+      ...(payload.teacherId ? [{
+        user_id:    payload.teacherId,
+        type:       "student_enrolled",
+        title:      `${student?.full_name || student?.email || "A student"} joined`,
+        content:    `Joined ${label} via invite link`,
+        related_id: toEnrol[0],
+      }] : []),
+    ]);
+    if (notifErr) console.warn("[notify] invite-redeem insert failed:", notifErr.message);
+  } catch (e) {
+    console.warn("[notify] invite-redeem insert threw:", e.message);
+  }
 
   res200(res, { enrolled: true, course_ids: toEnrol, course_titles: titles });
 }));
@@ -1137,16 +1142,21 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
           { user_id: user.id, course_id, status: "active" },
           { onConflict: "user_id,course_id" }
         );
-        await db.rpc("increment_course_students", { course_id_input: course_id }).catch(() => {});
+        try { await db.rpc("increment_course_students", { course_id_input: course_id }); } catch {}
 
         // Recipient side — notify the student they were enrolled.
-        await db.from("notifications").insert({
-          user_id:    user.id,
-          type:       "enrolled_in_course",
-          title:      `You're enrolled in "${course.title}"`,
-          content:    `You've been added to this course`,
-          related_id: course_id,
-        }).catch((e) => console.warn("[notify] CSV enrol insert failed:", e.message));
+        try {
+          const { error: notifErr } = await db.from("notifications").insert({
+            user_id:    user.id,
+            type:       "enrolled_in_course",
+            title:      `You're enrolled in "${course.title}"`,
+            content:    `You've been added to this course`,
+            related_id: course_id,
+          });
+          if (notifErr) console.warn("[notify] CSV enrol insert failed:", notifErr.message);
+        } catch (e) {
+          console.warn("[notify] CSV enrol insert threw:", e.message);
+        }
 
         // Send welcome email for new accounts
         if (isNew && tempPassword) {

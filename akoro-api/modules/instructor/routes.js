@@ -41,8 +41,13 @@ const err500 = (res, e)           => res.status(500).json({ error: e.message ?? 
 const now = () => new Date().toISOString();
 
 const notify = async (userId, { type, title, content = null, relatedId = null }) => {
-  await db.from("notifications").insert({ user_id: userId, type, title, content, related_id: relatedId })
-    .catch(e => console.warn("[notify] insert failed:", e.message));
+  try {
+    const { error } = await db.from("notifications")
+      .insert({ user_id: userId, type, title, content, related_id: relatedId });
+    if (error) console.warn("[notify] insert failed:", error.message);
+  } catch (e) {
+    console.warn("[notify] insert threw:", e.message);
+  }
 };
 
 // Fan-out the same notification to many recipients (e.g. all enrolled students).
@@ -50,8 +55,12 @@ const notifyMany = async (userIds, { type, title, content = null, relatedId = nu
   const ids = [...new Set((userIds ?? []).filter(Boolean))];
   if (!ids.length) return;
   const rows = ids.map((id) => ({ user_id: id, type, title, content, related_id: relatedId }));
-  await db.from("notifications").insert(rows)
-    .catch(e => console.warn("[notify] bulk insert failed:", e.message));
+  try {
+    const { error } = await db.from("notifications").insert(rows);
+    if (error) console.warn("[notify] bulk insert failed:", error.message);
+  } catch (e) {
+    console.warn("[notify] bulk insert threw:", e.message);
+  }
 };
 
 // Return the user_ids of all active students enrolled in a course.
