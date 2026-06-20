@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS enrollments (
 CREATE TABLE IF NOT EXISTS provider_tokens (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    provider          TEXT NOT NULL CHECK (provider IN ('zoom', 'google', 'teams')),
+    provider          TEXT NOT NULL CHECK (provider IN ('zoom', 'google', 'teams', 'youtube')),
     access_token      TEXT NOT NULL,
     refresh_token     TEXT NOT NULL,
     expires_at        TIMESTAMPTZ NOT NULL,
