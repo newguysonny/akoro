@@ -46,7 +46,7 @@ import { studentFeedRouter,
 import voiceModule               from "./modules/voice/routes.js";
 import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
 import contentModule             from "./modules/content/routes.js";
-import adminModule              from "./modules/admin/routes.js";
+import adminModule              from "./modules/admin/index.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));

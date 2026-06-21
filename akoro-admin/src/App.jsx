@@ -8,6 +8,10 @@ import CoursesPage          from './pages/CoursesPage.jsx';
 import BlogAdminPage        from './pages/BlogAdminPage.jsx';
 import BlogPostEditorPage   from './pages/BlogPostEditorPage.jsx';
 import CareersAdminPage     from './pages/CareersAdminPage.jsx';
+import AnalyticsPage        from './pages/AnalyticsPage.jsx';
+import PaymentsPage         from './pages/PaymentsPage.jsx';
+import ReviewsPage          from './pages/ReviewsPage.jsx';
+import CouponsPage          from './pages/CouponsPage.jsx';
 import NotificationsPage    from './pages/NotificationsPage.jsx';
 import SettingsPage         from './pages/SettingsPage.jsx';
 import PrivacyPolicyPage    from './pages/PrivacyPolicyPage.jsx';
@@ -62,6 +66,10 @@ export default function App() {
           <Route path="/content/blog/new"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
           <Route path="/content/blog/:id"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
           <Route path="/content/careers"   element={<AdminRoute><CareersAdminPage /></AdminRoute>} />
+          <Route path="/analytics"         element={<AdminRoute><AnalyticsPage /></AdminRoute>} />
+          <Route path="/payments"          element={<AdminRoute><PaymentsPage /></AdminRoute>} />
+          <Route path="/reviews"           element={<AdminRoute><ReviewsPage /></AdminRoute>} />
+          <Route path="/coupons"           element={<AdminRoute><CouponsPage /></AdminRoute>} />
           <Route path="/notifications"     element={<AdminRoute><NotificationsPage /></AdminRoute>} />
           <Route path="/settings"          element={<AdminRoute><SettingsPage /></AdminRoute>} />
           <Route path="/privacy"           element={<PrivacyPolicyPage />} />

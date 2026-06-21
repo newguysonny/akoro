@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, FileText, Briefcase, Bell, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -23,9 +23,13 @@ function useMediaQuery(query) {
 
 const NAV = [
   { to: '/',                 icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/analytics',        icon: BarChart2,       label: 'Analytics' },
   { to: '/users',            icon: Users,           label: 'Users' },
   { to: '/instructors',      icon: GraduationCap,   label: 'Instructors' },
   { to: '/courses',          icon: BookOpen,        label: 'Courses' },
+  { to: '/payments',         icon: CreditCard,      label: 'Payments' },
+  { to: '/reviews',          icon: Star,            label: 'Reviews' },
+  { to: '/coupons',          icon: Tag,             label: 'Coupons' },
   { to: '/content/blog',     icon: FileText,        label: 'Blog' },
   { to: '/content/careers',  icon: Briefcase,       label: 'Careers' },
   { to: '/notifications',    icon: Bell,            label: 'Notifications' },

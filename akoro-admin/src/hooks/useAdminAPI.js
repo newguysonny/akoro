@@ -44,5 +44,31 @@ export default function useAdminAPI() {
     deleteJob:           (id)     => apiDelete(`/api/content/admin/careers/jobs/${id}`).then(r => r.data),
 
     getApplications: (jobId) => apiGet(`/api/content/admin/careers/applications${jobId ? `?job_id=${jobId}` : ''}`).then(r => r.data),
+
+    // ─── Analytics ───────────────────────────────────────────────────────────
+    getRevenue:       (period = '30d') => apiGet(`/api/admin/analytics/revenue?period=${period}`).then(r => r.data),
+    getEnrollments:   (period = '30d') => apiGet(`/api/admin/analytics/enrollments?period=${period}`).then(r => r.data),
+    getUsersGrowth:   (period = '30d') => apiGet(`/api/admin/analytics/users-growth?period=${period}`).then(r => r.data),
+    getTopCourses:    ()               => apiGet(`/api/admin/analytics/top-courses`).then(r => r.data),
+
+    // ─── Payments ────────────────────────────────────────────────────────────
+    getPayments:      (p = {}) => apiGet(`/api/admin/payments?${new URLSearchParams(p)}`).then(r => r.data),
+    getPaymentStats:  ()       => apiGet(`/api/admin/payments/stats`).then(r => r.data),
+    refundPayment:    (id, reason) => apiPatch(`/api/admin/payments/${id}/refund`, { reason }).then(r => r.data),
+
+    // ─── Reviews ─────────────────────────────────────────────────────────────
+    getReviews:       (p = {}) => apiGet(`/api/admin/reviews?${new URLSearchParams(p)}`).then(r => r.data),
+    deleteReview:     (id)     => apiDelete(`/api/admin/reviews/${id}`).then(r => r.data),
+    clearReports:     (id)     => apiPatch(`/api/admin/reviews/${id}/clear-reports`).then(r => r.data),
+
+    // ─── Coupons ─────────────────────────────────────────────────────────────
+    getCoupons:       (p = {}) => apiGet(`/api/admin/coupons?${new URLSearchParams(p)}`).then(r => r.data),
+    createCoupon:     (d)      => apiPost(`/api/admin/coupons`, d).then(r => r.data),
+    updateCoupon:     (id, d)  => apiPatch(`/api/admin/coupons/${id}`, d).then(r => r.data),
+    deleteCoupon:     (id)     => apiDelete(`/api/admin/coupons/${id}`).then(r => r.data),
+    getCouponUses:    (id)     => apiGet(`/api/admin/coupons/${id}/uses`).then(r => r.data),
+
+    // ─── Announcements ────────────────────────────────────────────────────────
+    sendAnnouncement: (d) => apiPost(`/api/admin/announcements/send`, d).then(r => r.data),
   }), []);
 }
