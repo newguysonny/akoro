@@ -87,7 +87,7 @@ export function Sidebar() {
           {!compact && (
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
-              <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Instructor Portal</div>
+              <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Admin Portal</div>
             </div>
           )}
         </div>
