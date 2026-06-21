@@ -45,6 +45,7 @@ import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
 import voiceModule               from "./modules/voice/routes.js";
 import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
+import contentModule             from "./modules/content/routes.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -148,6 +149,7 @@ app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/voice",      aiLimit,       voiceModule);
+app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

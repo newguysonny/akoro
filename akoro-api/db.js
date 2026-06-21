@@ -37,4 +37,11 @@ export const checkDb = async () => {
   } catch { return false; }
 };
 
+// ─── Content schema client ──────────────────────────────────────────────────
+// Marketing / public-site content (blog, careers) lives in its own `content`
+// schema, isolated from the core app tables in `public`.
+// Requires `content` to be in the project's exposed schemas (see
+// migrations/2026-content-schema.sql header).
+export const contentDb = db.schema("content");
+
 export default db;
