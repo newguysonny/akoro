@@ -17,6 +17,9 @@ import LiveClassesPage  from './pages/LiveClassesPage.jsx';
 import NotificationsPage from './pages/NotificationsPage.jsx';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
+import AboutPage    from './pages/AboutPage.jsx';
+import ContactPage  from './pages/ContactPage.jsx';
+import CareersPage  from './pages/CareersPage.jsx';
 import NotFoundPage     from './pages/NotFoundPage.jsx';
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
@@ -60,8 +63,11 @@ function AppRoutes() {
       <Route path="/live" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/live/:courseId" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
-      <Route path="/privacy"          element={<PrivacyPolicyPage />}/>
-      <Route path="/terms"            element={<TermsOfServicePage />}/>
+      <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
+      <Route path="/terms"    element={<TermsOfServicePage />}/>
+      <Route path="/about"    element={<AboutPage />}/>
+      <Route path="/contact"  element={<ContactPage />}/>
+      <Route path="/careers"  element={<CareersPage />}/>
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>
       <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}/>
