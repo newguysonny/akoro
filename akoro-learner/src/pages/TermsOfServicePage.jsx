@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BRAND } from '../constants.js';
+import {
+  CheckCircle2, GraduationCap, UserCheck, Ruler, Copyright, CreditCard, Lock, Share2,
+  AlertTriangle, LogOut, Gavel, ScrollText, Ban, Scale, ArrowLeft, ArrowRight, Mail, Clock,
+} from 'lucide-react';
 
-const B = BRAND;
+const B = '#6C3BFF', B2 = '#4C1DCC', INK = '#0F0A1E', TEXT = '#3F3A52', MUTED = '#7A7588',
+  BORDER = '#ECEAF4', SURFACE = '#FAFAFB', TINT = '#F6F4FF';
 
 const SECTIONS = [
   {
     id: 'acceptance',
-    icon: '✅',
+    Icon: CheckCircle2,
     title: 'Acceptance of Terms',
     badge: 'Agreement',
     badgeColor: '#6366F1',
@@ -19,7 +23,7 @@ const SECTIONS = [
   },
   {
     id: 'service',
-    icon: '🎓',
+    Icon: GraduationCap,
     title: 'The Akoro Platform',
     badge: 'What We Offer',
     badgeColor: '#7C3AED',
@@ -31,7 +35,7 @@ const SECTIONS = [
   },
   {
     id: 'accounts',
-    icon: '👤',
+    Icon: UserCheck,
     title: 'Your Account',
     badge: 'Registration & Security',
     badgeColor: '#059669',
@@ -43,7 +47,7 @@ const SECTIONS = [
   },
   {
     id: 'acceptable-use',
-    icon: '📐',
+    Icon: Ruler,
     title: 'Acceptable Use',
     badge: 'Rules of the Platform',
     badgeColor: '#D97706',
@@ -57,7 +61,7 @@ const SECTIONS = [
   },
   {
     id: 'ip',
-    icon: '©️',
+    Icon: Copyright,
     title: 'Intellectual Property',
     badge: 'Ownership',
     badgeColor: '#6366F1',
@@ -69,7 +73,7 @@ const SECTIONS = [
   },
   {
     id: 'payments',
-    icon: '💳',
+    Icon: CreditCard,
     title: 'Subscriptions & Payments',
     badge: 'Billing',
     badgeColor: '#DC2626',
@@ -82,7 +86,7 @@ const SECTIONS = [
   },
   {
     id: 'privacy-data',
-    icon: '🔐',
+    Icon: Lock,
     title: 'Privacy & Data',
     badge: 'Data Processing',
     badgeColor: '#7C3AED',
@@ -94,7 +98,7 @@ const SECTIONS = [
   },
   {
     id: 'third-parties',
-    icon: '🔗',
+    Icon: Share2,
     title: 'Third-Party Services',
     badge: 'Integrations',
     badgeColor: '#6B7280',
@@ -105,7 +109,7 @@ const SECTIONS = [
   },
   {
     id: 'disclaimers',
-    icon: '⚠️',
+    Icon: AlertTriangle,
     title: 'Disclaimers & Liability',
     badge: 'Limitations',
     badgeColor: '#B45309',
@@ -117,7 +121,7 @@ const SECTIONS = [
   },
   {
     id: 'termination',
-    icon: '🚪',
+    Icon: LogOut,
     title: 'Termination',
     badge: 'Account Closure',
     badgeColor: '#DC2626',
@@ -129,7 +133,7 @@ const SECTIONS = [
   },
   {
     id: 'governing-law',
-    icon: '⚖️',
+    Icon: Gavel,
     title: 'Governing Law',
     badge: 'Legal Jurisdiction',
     badgeColor: '#374151',
@@ -141,7 +145,14 @@ const SECTIONS = [
   },
 ];
 
-const TOC = SECTIONS.map(({ id, title, icon }) => ({ id, title, icon }));
+const TOC = SECTIONS.map(({ id, title, Icon }) => ({ id, title, Icon }));
+
+const SUMMARY = [
+  { Icon: CheckCircle2, title: 'Plain language', desc: 'Written so you can actually read and understand it.', color: '#6366F1' },
+  { Icon: GraduationCap, title: 'For learners', desc: 'Designed with students, parents, and schools in mind.', color: '#059669' },
+  { Icon: Ban, title: 'No surprises', desc: '14 days\' notice for any material changes.', color: '#DC2626' },
+  { Icon: Scale, title: 'Fair disputes', desc: 'Good-faith resolution before any formal process.', color: '#7C3AED' },
+];
 
 export default function TermsOfServicePage() {
   const navigate = useNavigate();
@@ -155,74 +166,77 @@ export default function TermsOfServicePage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Nunito',sans-serif;background:#F3F1FF}
-        .tos-section{scroll-margin-top:80px}
-        .tos-toc-item:hover{background:${B}18!important;color:${B}!important}
+        body{font-family:'DM Sans',sans-serif;background:${SURFACE}}
+        .legal-section{scroll-margin-top:88px}
+        .legal-shell{display:grid;grid-template-columns:240px minmax(0,1fr);gap:36px;align-items:start}
+        .legal-toc-item{transition:all .15s}
+        .legal-toc-item:hover{background:${TINT}!important;color:${B}!important}
+        @media(max-width:860px){.legal-shell{grid-template-columns:1fr}.legal-toc{display:none}}
+        @media(max-width:560px){.legal-head{padding:12px 16px!important}.legal-head-cross{display:none!important}}
       `}</style>
 
-      <div style={{ minHeight: '100vh', background: '#F3F1FF', fontFamily: "'Nunito', sans-serif" }}>
+      <div style={{ minHeight: '100vh', background: SURFACE, fontFamily: "'DM Sans', sans-serif" }}>
 
         {/* Sticky Header */}
-        <div style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E9E6FF', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
+        <div className="legal-head" style={{ background: 'rgba(255,255,255,.9)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
           <button onClick={() => navigate(-1)}
-            style={{ background: `${B}12`, border: 'none', cursor: 'pointer', color: B, lineHeight: 1, padding: '8px 12px', borderRadius: 10, fontSize: 16, fontWeight: 800, fontFamily: "'Nunito',sans-serif" }}>
-            ← Back
+            style={{ background: TINT, border: `1px solid ${BORDER}`, cursor: 'pointer', color: B, lineHeight: 1, padding: '9px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <ArrowLeft size={16} /> Back
           </button>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#1A1040' }}>Terms of Service</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600 }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: INK, fontFamily: "'Nunito',sans-serif" }}>Terms of Service</div>
+            <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
           </div>
-          <button onClick={() => navigate('/privacy')}
-            style={{ background: `${B}12`, border: `1px solid ${B}30`, cursor: 'pointer', color: B, padding: '7px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, fontFamily: "'Nunito',sans-serif" }}>
-            Privacy Policy →
+          <button className="legal-head-cross" onClick={() => navigate('/privacy')}
+            style={{ background: '#fff', border: `1px solid ${BORDER}`, cursor: 'pointer', color: B, padding: '9px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            Privacy Policy <ArrowRight size={15} />
           </button>
         </div>
 
         {/* Hero Banner */}
-        <div style={{ background: 'linear-gradient(135deg, #1A1040 0%, #2D1B6E 100%)', padding: '48px 24px 52px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
-          <h1 style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 900, color: '#fff', marginBottom: 14, fontFamily: "'Nunito',sans-serif" }}>Terms of Service</h1>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,.80)', maxWidth: 560, margin: '0 auto 24px', lineHeight: 1.7, fontFamily: "'Nunito',sans-serif" }}>
+        <div style={{ background: 'linear-gradient(135deg, #1A1040, #2D1B6E)', padding: 'clamp(48px,7vw,72px) 20px', textAlign: 'center' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,.15)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+            <ScrollText size={28} color="#fff" />
+          </div>
+          <h1 style={{ fontSize: 'clamp(26px, 4vw, 40px)', fontWeight: 900, color: '#fff', marginBottom: 14, fontFamily: "'Nunito',sans-serif" }}>Terms of Service</h1>
+          <p style={{ fontSize: 15, color: 'rgba(255,255,255,.80)', maxWidth: 580, margin: '0 auto 26px', lineHeight: 1.7 }}>
             These terms govern your use of the Akoro platform. They are written in plain language — we want you to actually understand them.
           </p>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.12)', borderRadius: 20, padding: '8px 18px' }}>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700 }}>⏱ About 5 min read</span>
-            <span style={{ color: 'rgba(255,255,255,.4)' }}>·</span>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 700 }}>Last updated: 1 June 2025</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 20, padding: '8px 18px' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 600 }}><Clock size={14} /> About 5 min read</span>
+            <span style={{ color: 'rgba(255,255,255,.35)' }}>·</span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,.9)', fontWeight: 600 }}>Last updated: 1 June 2025</span>
           </div>
         </div>
 
-        <div style={{ maxWidth: 1040, margin: '0 auto', padding: '32px 20px 80px' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', padding: 'clamp(24px,5vw,40px)', display: 'flex', flexDirection: 'column', gap: 36 }}>
 
           {/* Key points summary */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 32 }}>
-            {[
-              { icon: '✅', title: 'Plain language', desc: 'Written so you can actually read and understand it.' },
-              { icon: '🎓', title: 'For learners', desc: 'Designed with students, parents, and schools in mind.' },
-              { icon: '🚫', title: 'No surprises', desc: '14 days\' notice for any material changes.' },
-              { icon: '⚖️', title: 'Fair disputes', desc: 'Good-faith resolution before any formal process.' },
-            ].map(({ icon, title, desc }) => (
-              <div key={title} style={{ background: '#fff', borderRadius: 14, padding: '18px 16px', boxShadow: '0 2px 8px rgba(0,0,0,.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <span style={{ fontSize: 26 }}>{icon}</span>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#1A1040' }}>{title}</div>
-                <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.5 }}>{desc}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+            {SUMMARY.map(({ Icon, title, desc, color }) => (
+              <div key={title} style={{ background: '#fff', borderRadius: 16, padding: '20px 18px', border: `1px solid ${BORDER}`, boxShadow: '0 1px 2px rgba(16,10,30,.04)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ width: 44, height: 44, borderRadius: 12, background: `${color}14`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={22} color={color} />
+                </span>
+                <div style={{ fontSize: 14, fontWeight: 800, color: INK, fontFamily: "'Nunito',sans-serif" }}>{title}</div>
+                <div style={{ fontSize: 13, color: MUTED, lineHeight: 1.5 }}>{desc}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '220px minmax(0,1fr)', gap: 32, alignItems: 'start' }}>
+          <div className="legal-shell">
 
             {/* Sticky TOC */}
-            <div style={{ position: 'sticky', top: 80 }}>
-              <div style={{ background: '#fff', borderRadius: 14, padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,.06)' }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 12 }}>Contents</div>
+            <div className="legal-toc" style={{ position: 'sticky', top: 88 }}>
+              <div style={{ background: '#fff', borderRadius: 16, padding: 16, border: `1px solid ${BORDER}`, boxShadow: '0 1px 2px rgba(16,10,30,.04)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: MUTED, marginBottom: 12 }}>Contents</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {TOC.map(({ id, title, icon }) => (
-                    <button key={id} className="tos-toc-item" onClick={() => scrollTo(id)}
-                      style={{ background: active === id ? `${B}14` : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '8px 10px', borderRadius: 9, fontSize: 12, fontWeight: active === id ? 800 : 600, color: active === id ? B : '#4B5563', fontFamily: "'Nunito',sans-serif", display: 'flex', alignItems: 'center', gap: 8, transition: 'all .15s' }}>
-                      <span style={{ fontSize: 14 }}>{icon}</span>{title}
+                  {TOC.map(({ id, title, Icon }) => (
+                    <button key={id} className="legal-toc-item" onClick={() => scrollTo(id)}
+                      style={{ background: active === id ? TINT : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', padding: '9px 10px', borderRadius: 10, fontSize: 13, fontWeight: active === id ? 700 : 500, color: active === id ? B : TEXT, fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Icon size={16} color={active === id ? B : MUTED} style={{ flexShrink: 0 }} />{title}
                     </button>
                   ))}
                 </div>
@@ -230,32 +244,30 @@ export default function TermsOfServicePage() {
             </div>
 
             {/* Sections */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {/* Intro card */}
-              <div style={{ background: 'rgba(26,16,64,.06)', borderRadius: 14, padding: '20px 22px', borderLeft: '4px solid #1A1040' }}>
-                <p style={{ fontSize: 13.5, lineHeight: 1.8, color: '#374151', fontWeight: 600 }}>
-                  These Terms of Service ("Terms") form a legally binding agreement between <strong style={{ color: '#1A1040' }}>you</strong> and <strong style={{ color: '#1A1040' }}>Akoro Technologies Ltd</strong> ("Akoro", "we", "us"). They govern your access to and use of the Akoro learner platform, instructor portal, mobile apps, and APIs. By creating an account or using the service, you agree to these Terms.
+              <div style={{ background: TINT, borderRadius: 16, padding: '22px 24px', borderLeft: `4px solid ${INK}` }}>
+                <p style={{ fontSize: 14, lineHeight: 1.8, color: TEXT }}>
+                  These Terms of Service ("Terms") form a legally binding agreement between <strong style={{ color: INK }}>you</strong> and <strong style={{ color: INK }}>Akoro Technologies Ltd</strong> ("Akoro", "we", "us"). They govern your access to and use of the Akoro learner platform, instructor portal, mobile apps, and APIs. By creating an account or using the service, you agree to these Terms.
                 </p>
               </div>
 
-              {SECTIONS.map(({ id, icon, title, badge, badgeColor, body }) => (
-                <div key={id} id={id} className="tos-section"
-                  style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.06)' }}>
-                  <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #F3F4F6', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                    <div style={{ width: 44, height: 44, borderRadius: 12, background: `${badgeColor}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{icon}</div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                        <h2 style={{ fontSize: 16, fontWeight: 900, color: '#1A1040', fontFamily: "'Nunito',sans-serif" }}>{title}</h2>
-                        <span style={{ background: `${badgeColor}14`, color: badgeColor, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, letterSpacing: '0.06em' }}>{badge}</span>
-                      </div>
+              {SECTIONS.map(({ id, Icon, title, badge, badgeColor, body }) => (
+                <div key={id} id={id} className="legal-section"
+                  style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', border: `1px solid ${BORDER}`, boxShadow: '0 1px 2px rgba(16,10,30,.04)' }}>
+                  <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: `${badgeColor}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icon size={22} color={badgeColor} />
                     </div>
+                    <h2 style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: "'Nunito',sans-serif" }}>{title}</h2>
+                    <span style={{ background: `${badgeColor}14`, color: badgeColor, fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{badge}</span>
                   </div>
-                  <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ padding: '18px 24px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {body.map(({ subtitle, text }) => (
                       <div key={subtitle}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: '#1A1040', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{subtitle}</div>
-                        <p style={{ fontSize: 13.5, lineHeight: 1.75, color: '#4B5563', whiteSpace: 'pre-line' }}>{text}</p>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{subtitle}</div>
+                        <p style={{ fontSize: 14, lineHeight: 1.75, color: TEXT, whiteSpace: 'pre-line' }}>{text}</p>
                       </div>
                     ))}
                   </div>
@@ -263,24 +275,26 @@ export default function TermsOfServicePage() {
               ))}
 
               {/* Contact card */}
-              <div style={{ background: 'linear-gradient(135deg, rgba(26,16,64,.07), rgba(26,16,64,.03))', borderRadius: 16, padding: '28px 24px', border: '1px solid rgba(26,16,64,.12)', textAlign: 'center' }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>📩</div>
-                <h3 style={{ fontSize: 17, fontWeight: 900, color: '#1A1040', marginBottom: 8 }}>Questions about these Terms?</h3>
-                <p style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 20 }}>Our legal team is happy to clarify anything. Reach out before raising a formal dispute.</p>
+              <div style={{ background: TINT, borderRadius: 16, padding: '32px 24px', border: `1px solid ${BORDER}`, textAlign: 'center' }}>
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: `${INK}10`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                  <Mail size={26} color={INK} />
+                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: INK, marginBottom: 8, fontFamily: "'Nunito',sans-serif" }}>Questions about these Terms?</h3>
+                <p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.6, marginBottom: 22, maxWidth: 460, marginInline: 'auto' }}>Our legal team is happy to clarify anything. Reach out before raising a formal dispute.</p>
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                   <a href="mailto:legal@akoro.app"
-                    style={{ background: '#1A1040', color: '#fff', padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 800, textDecoration: 'none', fontFamily: "'Nunito',sans-serif" }}>
+                    style={{ background: INK, color: '#fff', padding: '11px 22px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, textDecoration: 'none', fontFamily: "'DM Sans',sans-serif" }}>
                     legal@akoro.app
                   </a>
                   <button onClick={() => navigate('/privacy')}
-                    style={{ background: '#fff', color: '#1A1040', border: '1.5px solid rgba(26,16,64,.2)', padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+                    style={{ background: '#fff', color: INK, border: `1px solid ${BORDER}`, padding: '11px 22px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}>
                     Read Privacy Policy
                   </button>
                 </div>
               </div>
 
-              <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', lineHeight: 1.6 }}>
-                Akoro Technologies Ltd · RC 1234567 · Lagos, Nigeria<br/>
+              <p style={{ fontSize: 12, color: MUTED, textAlign: 'center', lineHeight: 1.6 }}>
+                Akoro Technologies Ltd · RC 1234567 · Lagos, Nigeria<br />
                 These Terms were last updated on 1 June 2025.
               </p>
             </div>

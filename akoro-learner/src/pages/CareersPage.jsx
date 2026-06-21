@@ -1,24 +1,30 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import {
+  Globe, BookOpen, Coins, HeartPulse, TrendingUp, Clock, Brain, Baby,
+  MapPin, ChevronDown, ArrowDown, ArrowRight, Mail,
+} from 'lucide-react';
 
-const B   = '#6C3BFF';
-const B2  = '#4C1DCC';
-const INK = '#1A1A2E';
-const MUTED = '#6B7280';
-const LIGHT = '#F5F3FF';
-const BORDER = '#E9E6FF';
-const GREEN = '#10B981';
+const B      = '#6C3BFF';
+const B2     = '#4C1DCC';
+const INK    = '#0F0A1E';
+const TEXT   = '#3F3A52';
+const MUTED  = '#7A7588';
+const BORDER = '#ECEAF4';
+const SURFACE = '#FAFAFB';
+const TINT   = '#F6F4FF';
+const GREEN  = '#10B981';
 
 const PERKS = [
-  { icon: '🌍', title: 'Remote-first', desc: 'Work from anywhere in Africa. Quarterly team gatherings in Lagos.' },
-  { icon: '📚', title: 'Learning budget', desc: '₦500,000/year for courses, books, and conferences of your choice.' },
-  { icon: '💰', title: 'Competitive pay', desc: 'Market-rate salaries benchmarked to local and global standards, paid in your local currency.' },
-  { icon: '🏥', title: 'Health cover', desc: 'Full HMO coverage for you and your immediate family from day one.' },
-  { icon: '📈', title: 'Equity', desc: 'All full-time employees receive stock options. We build this together.' },
-  { icon: '⏰', title: 'Flexible hours', desc: 'Core hours 10 AM – 3 PM WAT. Outside that, work when you do your best thinking.' },
-  { icon: '🧠', title: 'Mission-driven', desc: 'Your work directly improves learning outcomes for tens of thousands of students.' },
-  { icon: '👶', title: 'Parental leave', desc: '16 weeks fully paid for primary carers, 6 weeks for secondary carers.' },
+  { Icon: Globe, title: 'Remote-first', desc: 'Work from anywhere in Africa. Quarterly team gatherings in Lagos.' },
+  { Icon: BookOpen, title: 'Learning budget', desc: '₦500,000/year for courses, books, and conferences of your choice.' },
+  { Icon: Coins, title: 'Competitive pay', desc: 'Market-rate salaries benchmarked to local and global standards, paid in your local currency.' },
+  { Icon: HeartPulse, title: 'Health cover', desc: 'Full HMO coverage for you and your immediate family from day one.' },
+  { Icon: TrendingUp, title: 'Equity', desc: 'All full-time employees receive stock options. We build this together.' },
+  { Icon: Clock, title: 'Flexible hours', desc: 'Core hours 10 AM – 3 PM WAT. Outside that, work when you do your best thinking.' },
+  { Icon: Brain, title: 'Mission-driven', desc: 'Your work directly improves learning outcomes for tens of thousands of students.' },
+  { Icon: Baby, title: 'Parental leave', desc: '16 weeks fully paid for primary carers, 6 weeks for secondary carers.' },
 ];
 
 const ROLES = [
@@ -69,8 +75,11 @@ const PROCESS = [
   { step: '02', title: 'Intro call', desc: '30-minute conversation with a team member. We want to know you, not quiz you on algorithms yet.' },
   { step: '03', title: 'Skills assessment', desc: 'A focused take-home task (2–3 hours max). We pay you for your time — ₦15,000 stipend on completion.' },
   { step: '04', title: 'Panel interview', desc: 'Meet 2–3 team members. Half technical, half cultural. We share our values and you share yours.' },
-  { step: '05', title: 'Offer', desc: 'If we're a match, you get a written offer within 48 hours. We move fast.' },
+  { step: '05', title: 'Offer', desc: "If we're a match, you get a written offer within 48 hours. We move fast." },
 ];
+
+const EYEBROW = { fontSize: 11, fontWeight: 800, color: B, letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 12 };
+const HEADING = { fontSize: 'clamp(24px,4vw,48px)', fontWeight: 900, color: INK, fontFamily: "'Nunito', sans-serif", lineHeight: 1.15, letterSpacing: '-0.02em' };
 
 export default function CareersPage() {
   const navigate = useNavigate();
@@ -79,6 +88,7 @@ export default function CareersPage() {
 
   const depts = ['All', ...ROLES.map(r => r.dept)];
   const filtered = filter === 'All' ? ROLES : ROLES.filter(r => r.dept === filter);
+  const openCount = ROLES.reduce((n, r) => n + r.jobs.length, 0);
 
   return (
     <>
@@ -86,57 +96,87 @@ export default function CareersPage() {
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
         body{font-family:'DM Sans',sans-serif;background:#fff}
-        .job-card:hover{border-color:${B}!important;box-shadow:0 4px 16px rgba(108,59,255,.1)!important}
-        .job-card{transition:border-color .15s,box-shadow .15s}
-        .perk-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(108,59,255,.09)!important}
-        .perk-card{transition:transform .2s,box-shadow .2s}
+        @keyframes pulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.6);opacity:.4}100%{transform:scale(1);opacity:1}}
+
+        .crs-section{padding:clamp(48px,6vw,72px) 20px}
+        .crs-hero{padding:clamp(56px,8vw,96px) 20px}
+        .crs-container{max-width:1080px;margin:0 auto}
+
+        .crs-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+
+        .perk-card{background:#fff;border-radius:16px;padding:24px 20px;border:1px solid ${BORDER};box-shadow:0 1px 2px rgba(16,10,30,.04);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+        .perk-card:hover{transform:translateY(-4px);box-shadow:0 12px 28px rgba(108,59,255,.10);border-color:${B}33}
+
+        .job-card{background:#fff;border-radius:16px;border:1px solid ${BORDER};overflow:hidden;box-shadow:0 1px 2px rgba(16,10,30,.04);transition:border-color .18s ease,box-shadow .18s ease}
+        .job-card:hover{border-color:${B}55;box-shadow:0 6px 20px rgba(108,59,255,.08)}
+
+        .job-head{padding:20px 22px;display:flex;align-items:flex-start;gap:14px;cursor:pointer}
+        .job-meta{display:flex;gap:14px;flex-wrap:wrap}
+        .job-meta span{font-size:12.5px;color:${MUTED};display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+
+        .chip{padding:8px 18px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s ease;white-space:nowrap}
+
+        .crs-chev{color:${MUTED};flex-shrink:0;margin-top:2px;transition:transform .25s ease}
+        .crs-chev.open{transform:rotate(180deg);color:${B}}
+
+        .crs-cta-btn{transition:transform .15s ease,box-shadow .15s ease}
+        .crs-cta-btn:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(108,59,255,.28)}
+
+        @media (max-width:600px){
+          .crs-nav{padding:11px 16px!important}
+          .crs-nav-secondary{display:none!important}
+        }
       `}</style>
 
       <div style={{ minHeight: '100vh', background: '#fff', fontFamily: "'DM Sans', sans-serif" }}>
 
         {/* Nav */}
-        <div style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
+        <div className="crs-nav" style={{ background: 'rgba(255,255,255,.9)', backdropFilter: 'blur(14px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 200 }}>
           <button onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer' }}>
             <AkoroLogo size={32} radius={9} />
-            <span style={{ fontSize: 17, fontWeight: 700, color: INK }}>Akoro</span>
+            <span style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: "'Nunito', sans-serif" }}>Akoro</span>
           </button>
           <div style={{ flex: 1 }} />
-          <button onClick={() => navigate('/about')} style={{ background: 'none', border: `1px solid ${BORDER}`, cursor: 'pointer', color: MUTED, padding: '7px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>About us</button>
-          <button onClick={() => navigate('/contact')} style={{ background: B, border: 'none', cursor: 'pointer', color: '#fff', padding: '8px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}>Contact us</button>
+          <button className="crs-nav-secondary" onClick={() => navigate('/about')} style={{ background: 'none', border: `1px solid ${BORDER}`, cursor: 'pointer', color: TEXT, padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>About us</button>
+          <button onClick={() => navigate('/contact')} style={{ background: B, border: 'none', cursor: 'pointer', color: '#fff', padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}>Contact us</button>
         </div>
 
         {/* Hero */}
-        <div style={{ background: `linear-gradient(135deg, ${INK} 0%, #2D1B6E 100%)`, padding: 'clamp(64px,8vw,96px) 24px', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: `${B}60`, border: `1px solid ${B}`, borderRadius: 20, padding: '6px 16px', marginBottom: 24 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: GREEN, animation: 'pulse 2s infinite' }} />
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: '0.08em' }}>{ROLES.reduce((n, r) => n + r.jobs.length, 0)} open roles</span>
+        <div className="crs-hero" style={{ background: `linear-gradient(135deg, ${INK}, #2D1B6E)`, textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.16)', borderRadius: 999, padding: '7px 16px', marginBottom: 26 }}>
+            <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8 }}>
+              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: GREEN, animation: 'pulse 2s infinite' }} />
+              <span style={{ position: 'relative', width: 8, height: 8, borderRadius: '50%', background: GREEN }} />
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: '0.06em' }}>{openCount} open roles</span>
           </div>
-          <h1 style={{ fontSize: 'clamp(32px,5vw,56px)', fontWeight: 900, color: '#fff', marginBottom: 20, lineHeight: 1.15, fontFamily: "'Nunito', sans-serif", maxWidth: 700, margin: '0 auto 20px' }}>
+          <h1 style={{ ...HEADING, color: '#fff', maxWidth: 760, margin: '0 auto 20px' }}>
             Help us make learning actually stick — for every student in Africa
           </h1>
-          <p style={{ fontSize: 'clamp(14px,2vw,17px)', color: 'rgba(255,255,255,.8)', maxWidth: 560, margin: '0 auto 36px', lineHeight: 1.75 }}>
+          <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: 'rgba(255,255,255,.78)', maxWidth: 580, margin: '0 auto 36px', lineHeight: 1.7 }}>
             We're a small, high-conviction team building the learning tools we wish we'd had. If that sounds like your kind of problem, read on.
           </p>
-          <button onClick={() => document.getElementById('open-roles')?.scrollIntoView({ behavior: 'smooth' })}
-            style={{ background: B, color: '#fff', padding: '14px 32px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 800, fontFamily: "'Nunito', sans-serif" }}>
-            See open roles ↓
+          <button className="crs-cta-btn" onClick={() => document.getElementById('open-roles')?.scrollIntoView({ behavior: 'smooth' })}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: B, color: '#fff', padding: '14px 30px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 800, fontFamily: "'Nunito', sans-serif" }}>
+            See open roles <ArrowDown size={17} />
           </button>
         </div>
 
         {/* Perks */}
-        <div style={{ background: LIGHT, padding: 'clamp(48px,6vw,72px) 24px' }}>
-          <div style={{ maxWidth: 1040, margin: '0 auto' }}>
-            <div style={{ textAlign: 'center', marginBottom: 40 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: B, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Why Work Here</div>
-              <h2 style={{ fontSize: 'clamp(22px,3vw,32px)', fontWeight: 900, color: INK, fontFamily: "'Nunito', sans-serif" }}>We take care of our team</h2>
+        <div className="crs-section" style={{ background: SURFACE }}>
+          <div className="crs-container">
+            <div style={{ textAlign: 'center', marginBottom: 44 }}>
+              <div style={EYEBROW}>Why Work Here</div>
+              <h2 style={{ ...HEADING, fontSize: 'clamp(24px,3.4vw,38px)' }}>We take care of our team</h2>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-              {PERKS.map(({ icon, title, desc }) => (
-                <div key={title} className="perk-card"
-                  style={{ background: '#fff', borderRadius: 14, padding: '22px 18px', border: `1px solid ${BORDER}`, boxShadow: '0 1px 4px rgba(0,0,0,.04)' }}>
-                  <span style={{ fontSize: 28, display: 'block', marginBottom: 12 }}>{icon}</span>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: INK, marginBottom: 6, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
-                  <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.65 }}>{desc}</p>
+            <div className="crs-grid">
+              {PERKS.map(({ Icon, title, desc }) => (
+                <div key={title} className="perk-card">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 12, background: TINT, marginBottom: 16 }}>
+                    <Icon size={21} color={B} strokeWidth={2.2} />
+                  </span>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: INK, marginBottom: 7, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
+                  <p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7 }}>{desc}</p>
                 </div>
               ))}
             </div>
@@ -144,78 +184,79 @@ export default function CareersPage() {
         </div>
 
         {/* Open roles */}
-        <div id="open-roles" style={{ maxWidth: 1040, margin: '0 auto', padding: 'clamp(48px,6vw,72px) 24px' }}>
-          <div style={{ textAlign: 'center', marginBottom: 36 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: B, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>Open Positions</div>
-            <h2 style={{ fontSize: 'clamp(22px,3vw,32px)', fontWeight: 900, color: INK, fontFamily: "'Nunito', sans-serif" }}>Find your role</h2>
-          </div>
+        <div id="open-roles" className="crs-section">
+          <div className="crs-container">
+            <div style={{ textAlign: 'center', marginBottom: 36 }}>
+              <div style={EYEBROW}>Open Positions</div>
+              <h2 style={{ ...HEADING, fontSize: 'clamp(24px,3.4vw,38px)' }}>Find your role</h2>
+            </div>
 
-          {/* Filter chips */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 32, justifyContent: 'center' }}>
-            {depts.map(d => (
-              <button key={d} onClick={() => setFilter(d)}
-                style={{ padding: '8px 18px', borderRadius: 20, border: `1.5px solid ${filter === d ? B : BORDER}`, background: filter === d ? B : '#fff', color: filter === d ? '#fff' : MUTED, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
-                {d}
-              </button>
-            ))}
-          </div>
+            {/* Filter chips */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 36, justifyContent: 'center' }}>
+              {depts.map(d => (
+                <button key={d} className="chip" onClick={() => setFilter(d)}
+                  style={{ border: `1.5px solid ${filter === d ? B : BORDER}`, background: filter === d ? B : '#fff', color: filter === d ? '#fff' : TEXT }}>
+                  {d}
+                </button>
+              ))}
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-            {filtered.map(({ dept, color, jobs }) => (
-              <div key={dept}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  <div style={{ height: 2, flex: 1, background: `${color}20` }} />
-                  <span style={{ fontSize: 12, fontWeight: 800, color, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 12px', background: `${color}12`, borderRadius: 20 }}>{dept}</span>
-                  <div style={{ height: 2, flex: 1, background: `${color}20` }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {jobs.map(({ title, location, type, summary }) => {
-                    const key = `${dept}-${title}`;
-                    const open = expanded === key;
-                    return (
-                      <div key={title} className="job-card"
-                        style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${BORDER}`, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,.04)' }}>
-                        <div style={{ padding: '20px 22px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer' }} onClick={() => setExpanded(open ? null : key)}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
-                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 12, color: MUTED, display: 'flex', alignItems: 'center', gap: 4 }}>📍 {location}</span>
-                              <span style={{ fontSize: 12, color: MUTED, display: 'flex', alignItems: 'center', gap: 4 }}>🕐 {type}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
+              {filtered.map(({ dept, color, jobs }) => (
+                <div key={dept}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <div style={{ height: 1, flex: 1, background: BORDER }} />
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '5px 14px', background: `${color}14`, borderRadius: 999 }}>{dept}</span>
+                    <div style={{ height: 1, flex: 1, background: BORDER }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {jobs.map(({ title, location, type, summary }) => {
+                      const key = `${dept}-${title}`;
+                      const open = expanded === key;
+                      return (
+                        <div key={title} className="job-card">
+                          <div className="job-head" onClick={() => setExpanded(open ? null : key)}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 15.5, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
+                              <div className="job-meta">
+                                <span><MapPin size={14} color={MUTED} /> {location}</span>
+                                <span><Clock size={14} color={MUTED} /> {type}</span>
+                              </div>
                             </div>
+                            <ChevronDown size={20} className={`crs-chev${open ? ' open' : ''}`} />
                           </div>
-                          <div style={{ fontSize: 18, color: MUTED, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>⌄</div>
+                          {open && (
+                            <div style={{ padding: '0 22px 22px', borderTop: `1px solid ${BORDER}` }}>
+                              <p style={{ fontSize: 14, color: TEXT, lineHeight: 1.7, marginTop: 16, marginBottom: 20 }}>{summary}</p>
+                              <a href={`mailto:careers@akoro.app?subject=Application: ${title}`} className="crs-cta-btn"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: B, color: '#fff', padding: '11px 22px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, textDecoration: 'none', fontFamily: "'Nunito', sans-serif" }}>
+                                Apply for this role <ArrowRight size={16} />
+                              </a>
+                            </div>
+                          )}
                         </div>
-                        {open && (
-                          <div style={{ padding: '0 22px 22px', borderTop: `1px solid ${BORDER}` }}>
-                            <p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.75, marginTop: 16, marginBottom: 20 }}>{summary}</p>
-                            <a href={`mailto:careers@akoro.app?subject=Application: ${title}`}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: B, color: '#fff', padding: '10px 22px', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', fontFamily: "'Nunito', sans-serif" }}>
-                              Apply for this role →
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Hiring process */}
-        <div style={{ background: LIGHT, padding: 'clamp(48px,6vw,72px) 24px' }}>
-          <div style={{ maxWidth: 840, margin: '0 auto' }}>
+        <div className="crs-section" style={{ background: SURFACE }}>
+          <div className="crs-container">
             <div style={{ textAlign: 'center', marginBottom: 48 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: B, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 10 }}>How We Hire</div>
-              <h2 style={{ fontSize: 'clamp(22px,3vw,32px)', fontWeight: 900, color: INK, fontFamily: "'Nunito', sans-serif" }}>Our hiring process</h2>
-              <p style={{ fontSize: 14, color: MUTED, marginTop: 10 }}>From first application to offer — usually within 2 weeks.</p>
+              <div style={EYEBROW}>How We Hire</div>
+              <h2 style={{ ...HEADING, fontSize: 'clamp(24px,3.4vw,38px)' }}>Our hiring process</h2>
+              <p style={{ fontSize: 15, color: MUTED, marginTop: 12 }}>From first application to offer — usually within 2 weeks.</p>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+            <div className="crs-grid">
               {PROCESS.map(({ step, title, desc }) => (
-                <div key={step} style={{ background: '#fff', borderRadius: 14, padding: '22px 20px', border: `1px solid ${BORDER}` }}>
-                  <div style={{ fontSize: 11, fontWeight: 900, color: B, letterSpacing: '0.12em', marginBottom: 10 }}>STEP {step}</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: INK, marginBottom: 8, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
+                <div key={step} style={{ background: '#fff', borderRadius: 16, padding: '24px 22px', border: `1px solid ${BORDER}`, boxShadow: '0 1px 2px rgba(16,10,30,.04)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: B, letterSpacing: '0.12em', marginBottom: 12 }}>STEP {step}</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: INK, marginBottom: 8, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
                   <p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7 }}>{desc}</p>
                 </div>
               ))}
@@ -224,25 +265,27 @@ export default function CareersPage() {
         </div>
 
         {/* No role CTA */}
-        <div style={{ maxWidth: 680, margin: '0 auto', padding: 'clamp(40px,5vw,64px) 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 44, marginBottom: 16 }}>💌</div>
-          <h2 style={{ fontSize: 22, fontWeight: 900, color: INK, marginBottom: 10, fontFamily: "'Nunito', sans-serif" }}>Don't see the right role?</h2>
-          <p style={{ fontSize: 14, color: MUTED, lineHeight: 1.75, marginBottom: 24 }}>We're always open to hearing from exceptional people. Send us a short note about who you are and what you'd build at Akoro.</p>
-          <a href="mailto:careers@akoro.app?subject=Open application"
+        <div style={{ maxWidth: 680, margin: '0 auto', padding: 'clamp(48px,6vw,72px) 20px', textAlign: 'center' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 16, background: TINT, marginBottom: 20 }}>
+            <Mail size={26} color={B} strokeWidth={2.2} />
+          </span>
+          <h2 style={{ ...HEADING, fontSize: 'clamp(22px,3vw,30px)', marginBottom: 12 }}>Don't see the right role?</h2>
+          <p style={{ fontSize: 15, color: MUTED, lineHeight: 1.7, marginBottom: 26 }}>We're always open to hearing from exceptional people. Send us a short note about who you are and what you'd build at Akoro.</p>
+          <a href="mailto:careers@akoro.app?subject=Open application" className="crs-cta-btn"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: B, color: '#fff', padding: '13px 28px', borderRadius: 12, fontSize: 15, fontWeight: 800, textDecoration: 'none', fontFamily: "'Nunito', sans-serif" }}>
-            Send an open application →
+            Send an open application <ArrowRight size={17} />
           </a>
         </div>
 
         {/* Footer mini */}
-        <div style={{ background: '#F5F2EC', padding: '24px', textAlign: 'center', borderTop: '1px solid #E2DDD6' }}>
-          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ background: INK, padding: '28px 20px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', gap: 22, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
             {[['/', 'Home'], ['/about', 'About'], ['/contact', 'Contact'], ['/privacy', 'Privacy'], ['/terms', 'Terms']].map(([href, label]) => (
-              <a key={label} href={href} style={{ fontSize: 13, color: MUTED, textDecoration: 'none', fontWeight: 500 }}
-                onMouseEnter={e => e.target.style.color = B} onMouseLeave={e => e.target.style.color = MUTED}>{label}</a>
+              <a key={label} href={href} style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', textDecoration: 'none', fontWeight: 500 }}
+                onMouseEnter={e => e.target.style.color = '#fff'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,.6)'}>{label}</a>
             ))}
           </div>
-          <p style={{ fontSize: 12, color: '#9CA3AF' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</p>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,.4)' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</p>
         </div>
       </div>
     </>
