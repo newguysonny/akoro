@@ -231,7 +231,7 @@ router.post("/admin/blog/posts", adminOnly, blogWriteValidators,
     return res201(res, data);
   }));
 
-router.put("/admin/blog/posts/:id", adminOnly,
+router.patch("/admin/blog/posts/:id", adminOnly,
   asyncHandler(async (req, res) => {
     const p = req.body;
     const patch = {};
@@ -284,7 +284,7 @@ router.post("/admin/careers/departments", adminOnly,
     return res201(res, data);
   }));
 
-router.put("/admin/careers/departments/:id", adminOnly,
+router.patch("/admin/careers/departments/:id", adminOnly,
   asyncHandler(async (req, res) => {
     const patch = {};
     for (const k of ["name","color","sort"]) if (req.body[k] !== undefined) patch[k] = req.body[k];
@@ -317,7 +317,7 @@ router.post("/admin/careers/jobs", adminOnly,
     return res201(res, data);
   }));
 
-router.put("/admin/careers/jobs/:id", adminOnly,
+router.patch("/admin/careers/jobs/:id", adminOnly,
   asyncHandler(async (req, res) => {
     const p = req.body;
     const patch = {};
