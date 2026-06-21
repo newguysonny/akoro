@@ -251,13 +251,13 @@ export default function DashboardPage() {
           {/* Recent users table */}
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Recent Users</h2>
-            <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', overflowX: 'auto' }}>
               {loading ? (
                 <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {[1,2,3,4,5].map(i => <Skeleton key={i} height={40} />)}
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
                   <thead>
                     <tr style={{ background: LIGHT }}>
                       <th style={TH}>Name</th>

@@ -50,8 +50,8 @@ export default function BlogAdminPage() {
       action={<Btn onClick={() => navigate('/content/blog/new')}><Plus size={15} /> New Post</Btn>}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
           <thead>
             <tr>{['Image', 'Title', 'Category', 'Status', 'Author', 'Published', 'Actions'].map(h => <th key={h} style={TH}>{h}</th>)}</tr>
           </thead>

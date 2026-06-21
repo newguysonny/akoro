@@ -163,13 +163,13 @@ export default function PayoutsPage() {
 
         {/* By Instructor tab */}
         {activeTab === 'instructors' && (
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', overflowX: 'auto' }}>
             {loadingSum ? (
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[1,2,3,4].map(i => <Skeleton key={i} height={52} />)}
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
                 <thead>
                   <tr style={{ background: LIGHT }}>
                     <th style={TH}>Instructor</th>
@@ -233,13 +233,13 @@ export default function PayoutsPage() {
               ))}
             </div>
 
-            <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
+            <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', overflowX: 'auto' }}>
               {loadingTx ? (
                 <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {[1,2,3,4,5].map(i => <Skeleton key={i} height={52} />)}
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
                   <thead>
                     <tr style={{ background: LIGHT }}>
                       <th style={TH}>Date</th>

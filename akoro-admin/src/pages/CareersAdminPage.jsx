@@ -90,8 +90,8 @@ export default function CareersAdminPage() {
 
       {/* Jobs tab */}
       {tab === 'jobs' && (
-        <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 800 }}>
             <thead><tr>{['Title', 'Department', 'Location', 'Type', 'Status', 'Posted', 'Actions'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
             <tbody>
               {loading ? Array.from({ length: 4 }).map((_, i) => <tr key={i}><td colSpan={7} style={TD}><Skeleton height={20} /></td></tr>)
@@ -139,8 +139,8 @@ export default function CareersAdminPage() {
 
       {/* Applications tab */}
       {tab === 'applications' && (
-        <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, overflow: 'hidden', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead><tr>{['Applicant', 'Email', 'Job Applied For', 'Date'].map(h => <th key={h} style={TH}>{h}</th>)}</tr></thead>
             <tbody>
               {loading ? Array.from({ length: 4 }).map((_, i) => <tr key={i}><td colSpan={4} style={TD}><Skeleton height={20} /></td></tr>)

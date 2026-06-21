@@ -199,13 +199,13 @@ export default function ReportsPage() {
           <h2 style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>
             Top Instructors by Revenue
           </h2>
-          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', overflowX: 'auto' }}>
             {tiLoading ? (
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[1,2,3,4,5].map(i => <Skeleton key={i} height={48} />)}
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
                 <thead>
                   <tr style={{ background: LIGHT }}>
                     <th style={{ ...TH, width: 48 }}>#</th>
