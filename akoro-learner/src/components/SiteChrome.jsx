@@ -164,7 +164,7 @@ export function SiteFooter() {
   const cols = [
     { title: 'Product',     links: [['How it works','#'],['Courses','#'],['Live Classes','#'],['Pricing','#'],['Agent Battles','#'],['Certifications','#']] },
     { title: 'For Schools', links: [['Enterprise Starter','#'],['Enterprise Pro','#'],['School Dashboard','#'],['Pilot Programme','#'],['NDPR Compliance','#'],['Case Studies','#']] },
-    { title: 'Company',     links: [['About Us','/about'],['Blog','#'],['Careers','/careers'],['Press','#'],['Contact','/contact'],['Partners','#'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
+    { title: 'Company',     links: [['About Us','/about'],['Blog','/blog'],['Careers','/careers'],['Press','#'],['Contact','/contact'],['Partners','/partners'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
   ];
   const socials = [
     { icon: <FaXTwitter size={14}/>,  label: 'X' },
