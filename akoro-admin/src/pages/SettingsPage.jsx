@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Lock, User, Shield } from 'lucide-react';
+import { Settings, Lock, User, Shield, Megaphone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Toast } from '../components/Primitives.jsx';
@@ -9,16 +9,36 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } fro
 export default function SettingsPage() {
   const { user } = useAuth();
 
-  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
-  const [pwBusy, setPwBusy] = useState(false);
-  const [toast,  setToast]  = useState(null);
+  const [pwForm,    setPwForm]    = useState({ current: '', next: '', confirm: '' });
+  const [pwBusy,    setPwBusy]    = useState(false);
+  const [announce,  setAnnounce]  = useState({ title: '', message: '', target_role: 'all' });
+  const [annBusy,   setAnnBusy]   = useState(false);
+  const [toast,     setToast]     = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  const setPw = (k) => (e) => setPwForm(f => ({ ...f, [k]: e.target.value }));
+  const setPw  = (k) => (e) => setPwForm(f => ({ ...f, [k]: e.target.value }));
+  const setAnn = (k) => (e) => setAnnounce(f => ({ ...f, [k]: e.target.value }));
+
+  const handleAnnouncement = async (e) => {
+    e.preventDefault();
+    if (!announce.title.trim() || !announce.message.trim()) {
+      showToast('Title and message are required', 'error'); return;
+    }
+    setAnnBusy(true);
+    try {
+      const { sent } = await apiPost('/api/admin/announcements/send', announce).then(r => r.data ?? r);
+      showToast(`Announcement sent to ${sent} user${sent !== 1 ? 's' : ''}`);
+      setAnnounce({ title: '', message: '', target_role: 'all' });
+    } catch (err) {
+      showToast(err.message || 'Failed to send announcement', 'error');
+    } finally {
+      setAnnBusy(false);
+    }
+  };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -61,19 +81,60 @@ export default function SettingsPage() {
     <PageLayout title="Settings" subtitle="Platform settings and account management">
       <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
-        {/* Platform card — coming soon */}
+        {/* Announcements card */}
         <div style={cardStyle}>
-          {cardTitle('Platform', Settings)}
-          <div style={{
-            background: LIGHT, borderRadius: 12, padding: '32px 24px',
-            textAlign: 'center', border: `1px dashed ${BORDER}`,
-          }}>
-            <Settings size={32} color={MUTED} style={{ marginBottom: 12 }} />
-            <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: 0, lineHeight: 1.6 }}>
-              Platform-level settings are coming soon.<br />
-              Configuration options for branding, payments, and integrations will appear here.
-            </p>
-          </div>
+          {cardTitle('Send Announcement', Megaphone)}
+          <form onSubmit={handleAnnouncement} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 6 }}>
+                Audience
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['all','All Users'],['student','Students'],['instructor','Instructors']].map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setAnnounce(f => ({ ...f, target_role: val }))}
+                    style={{
+                      padding: '7px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                      fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                      background: announce.target_role === val ? AMBER : LIGHT,
+                      color: announce.target_role === val ? WHITE : MUTED,
+                      transition: 'all .15s',
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            <Inp
+              label="Title"
+              value={announce.title}
+              onChange={setAnn('title')}
+              placeholder="e.g. Scheduled maintenance this Sunday"
+            />
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 6 }}>
+                Message
+              </label>
+              <textarea
+                value={announce.message}
+                onChange={setAnn('message')}
+                placeholder="Write your announcement…"
+                rows={4}
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: 10,
+                  border: `1.5px solid ${BORDER}`, outline: 'none', resize: 'vertical',
+                  fontSize: 13, fontFamily: FONT, color: INK, background: WHITE,
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Btn type="submit" disabled={annBusy}>
+                <Megaphone size={14} /> {annBusy ? 'Sending…' : 'Send Announcement'}
+              </Btn>
+            </div>
+          </form>
         </div>
 
         {/* Admin account card */}

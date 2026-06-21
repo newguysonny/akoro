@@ -1,199 +1,91 @@
-import AkoroLogo from '../../components/common/AkoroLogo.jsx';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { API } from '../../services/api.js';
+import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 
 const AMBER = '#E8884A';
-const RED   = '#EF4444';
-const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemistry', 'Biology',
-  'Computer Science', 'English Language', 'English Literature', 'Economics', 'Geography', 'History'];
-const GUIDE_EMOJIS = ['🧠', '👩‍🏫', '👨‍🏫', '🎓', '📚', '💡', '🦉', '⚡', '🌟', '🔮', '🚀', '🎯'];
 
 export default function OnboardingPage() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
   const { user, markOnboarded } = useAuth();
 
-  const [step, setStep]   = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr]     = useState('');
-
-  const [fullName, setFullName]         = useState(user?.fullName || '');
-  const [schoolName, setSchoolName]     = useState('');
-  const [subjects, setSubjects]         = useState([]);
-  const [headline, setHeadline]         = useState('');
-  // Teaching guide — the instructor's AI persona for their students
-  const [guideName, setGuideName]       = useState('');
-  const [guideEmoji, setGuideEmoji]     = useState('🧠');
-
-  const toggleSubject = (s) =>
-    setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-
-  const STEPS = ['Profile', 'Teaching focus', 'Teaching guide'];
-
-  const validateStep = () => {
-    setErr('');
-    if (step === 0 && !fullName.trim()) { setErr('Please enter your name'); return false; }
-    if (step === 1 && subjects.length === 0) { setErr('Pick at least one subject you teach'); return false; }
-    return true;
-  };
-
-  const next = () => { if (validateStep()) setStep(s => s + 1); };
-  const back = () => { setErr(''); setStep(s => s - 1); };
-
   const finish = async () => {
-    if (!validateStep()) return;
-    setSaving(true); setErr('');
-    try {
-      const res = await fetch(`${API}/api/profiles/me`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName:      fullName.trim(),
-          schoolName:    schoolName.trim() || undefined,
-          subjects,
-          // Teaching guide persona — instructor's AI guide for their students
-          teachingGuide: guideName.trim() || undefined,
-          guideEmoji:    guideEmoji,
-          onboardingCompleted: true,
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || 'Could not save your setup');
-      }
-      markOnboarded();
-      navigate('/', { replace: true });
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setSaving(false);
-    }
+    await markOnboarded?.();
+    navigate('/', { replace: true });
   };
 
-  const inp = {
-    width: '100%', padding: '11px 14px', borderRadius: 12,
-    border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14,
-    fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box', background: '#fff',
-  };
-  const lbl = { display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 };
-  const chip = (active) => ({
-    padding: '8px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-    border: `1.5px solid ${active ? AMBER : '#EDE8E1'}`,
-    background: active ? AMBER : '#fff', color: active ? '#fff' : '#6B6B80',
-    fontFamily: "'DM Sans', sans-serif", transition: 'all .15s',
-  });
+  // If already onboarded, skip straight to dashboard
+  useEffect(() => {
+    if (user?.onboardingCompleted) navigate('/', { replace: true });
+  }, [user, navigate]);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', background: '#FAF8F5', padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
-
-      {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <AkoroLogo size={40} radius={12} />
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', background: '#FAF8F5',
+      padding: '24px 20px', fontFamily: "'DM Sans', sans-serif",
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 40 }}>
+        <AkoroLogo size={44} radius={13} />
         <div>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
+          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Admin Portal</span>
         </div>
       </div>
 
-      {/* Progress */}
-      <div style={{ width: '100%', maxWidth: 460, marginBottom: 16, display: 'flex', gap: 8 }}>
-        {STEPS.map((s, i) => (
-          <div key={s} style={{ flex: 1 }}>
-            <div style={{ height: 5, borderRadius: 99, background: i <= step ? AMBER : '#EDE8E1', transition: 'background .2s' }}/>
-            <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6, color: i === step ? '#1A1A2E' : '#9490A0' }}>{s}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Card */}
-      <div style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 24, padding: '28px 26px',
-        boxShadow: '0 4px 32px rgba(0,0,0,.07)', border: '1px solid #EDE8E1' }}>
-
-        {step === 0 && (
-          <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome, tutor 👋</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Tell students a little about you.</p>
-
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Full name</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Dr. Amara Osei" style={inp}/>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>School / institution <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder="Westwood Academy" style={inp}/>
-            </div>
-            <div>
-              <label style={lbl}>Short headline <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={headline} onChange={e => setHeadline(e.target.value)} placeholder="A-Level Maths examiner, 12 yrs" style={inp}/>
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>What do you teach?</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Pick the subjects you'll build courses and agents for.</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {SUBJECT_OPTIONS.map(s => <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>)}
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your teaching guide 🧠</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Name the AI guide that will help your students learn. You can always change this later.</p>
-
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, boxShadow: `0 6px 20px ${AMBER}55` }}>
-                {guideEmoji}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Guide name <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={guideName} onChange={e => setGuideName(e.target.value)}
-                placeholder="e.g. NaNa, Akobi, Sade…" style={inp}/>
-            </div>
-            <div>
-              <label style={lbl}>Guide avatar</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {GUIDE_EMOJIS.map(em => (
-                  <button key={em} onClick={() => setGuideEmoji(em)} style={{
-                    width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
-                    border: `2px solid ${guideEmoji === em ? AMBER : '#EDE8E1'}`,
-                    background: guideEmoji === em ? `${AMBER}18` : '#FAF8F5',
-                    fontFamily: "'DM Sans', sans-serif",
-                  }}>{em}</button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {err && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
-            padding: '10px 14px', marginTop: 18, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>
-        )}
-
-        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-          {step > 0 && (
-            <button onClick={back} disabled={saving} style={{ flex: '0 0 auto', padding: '13px 20px', borderRadius: 14,
-              border: '1.5px solid #EDE8E1', background: '#fff', color: '#6B6B80', fontSize: 14, fontWeight: 700,
-              cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>← Back</button>
-          )}
-          <button onClick={step === STEPS.length - 1 ? finish : next} disabled={saving} style={{ flex: 1, padding: '13px',
-            borderRadius: 14, border: 'none', background: saving ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-            color: saving ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
-            cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif",
-            boxShadow: saving ? 'none' : `0 4px 14px ${AMBER}44` }}>
-            {step === STEPS.length - 1 ? (saving ? 'Setting up…' : 'Finish & go to dashboard') : 'Continue'}
-          </button>
+      <div style={{
+        width: '100%', maxWidth: 460, background: '#fff', borderRadius: 24,
+        padding: '40px 36px', boxShadow: '0 4px 32px rgba(0,0,0,.07)',
+        border: '1px solid #EDE8E1', textAlign: 'center',
+      }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: '50%',
+          background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 28, margin: '0 auto 20px',
+        }}>
+          🛡️
         </div>
+
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A2E', margin: '0 0 10px', fontFamily: "'Instrument Serif', serif" }}>
+          Welcome, {user?.fullName?.split(' ')[0] || 'Admin'}
+        </h1>
+        <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 32px', lineHeight: 1.7 }}>
+          You have full administrative access to the Akoro platform. Manage users, courses, content, payments, and platform settings from your dashboard.
+        </p>
+
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 32,
+        }}>
+          {[
+            ['👥', 'Users & Instructors', 'Manage accounts and permissions'],
+            ['📚', 'Courses & Content', 'Review and moderate all content'],
+            ['💳', 'Payments', 'Track revenue and process refunds'],
+            ['📊', 'Analytics', 'Monitor platform growth'],
+          ].map(([emoji, title, desc]) => (
+            <div key={title} style={{
+              background: '#FAF8F5', borderRadius: 12, padding: '14px 12px',
+              border: '1px solid #EDE8E1', textAlign: 'left',
+            }}>
+              <div style={{ fontSize: 22, marginBottom: 6 }}>{emoji}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 2 }}>{title}</div>
+              <div style={{ fontSize: 11, color: '#9490A0' }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={finish}
+          style={{
+            width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+            background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
+            color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer',
+            fontFamily: "'DM Sans', sans-serif",
+            boxShadow: `0 4px 14px ${AMBER}44`,
+          }}
+        >
+          Go to Dashboard →
+        </button>
       </div>
     </div>
   );

@@ -116,7 +116,7 @@ export function Sidebar() {
         {!compact && (
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.fullName || 'Instructor'}
+              {user?.fullName || 'Admin'}
             </div>
             <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.email || ''}
