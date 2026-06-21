@@ -235,7 +235,7 @@ function Hero({ onSignup }) {
           <br/> you teach it —<br/>then teaches you back.
         </h1>
         <p className="fu3" style={{ fontSize: 'clamp(16px,2vw,19px)', color: '#6B6B80', maxWidth: 560, margin: '0 auto 20px', lineHeight: 1.7 }}>
-          For students and teachers who want to <strong style={{ color: '#1A1A2E' }}>actually remember</strong> what they learn. Your personal AI agent NaNa studies with you, battles for you, and grows alongside you.
+          For students and teachers who want to <strong style={{ color: '#1A1A2E' }}>actually remember</strong> what they learn. Teach your agent — NaNa Esumai guides every session, battles for you, and grows alongside you.
         </p>
         <div className="fu4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 32, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex' }}>{[...Array(5)].map((_, i) => <Star key={i} size={13} fill={GL} strokeWidth={0}/>)}</div>
