@@ -118,13 +118,29 @@ router.patch("/users/:id",
 );
 
 router.delete("/users/:id", adminOnly, asyncHandler(async (req, res) => {
-  // prevent self-delete
   if (req.params.id === req.user.id)
     return err400(res, "Cannot delete your own account");
 
   const { error } = await db.from("users").delete().eq("id", req.params.id);
   if (error) throw error;
   ok(res, { deleted: true });
+}));
+
+router.post("/users/:id/force-logout", adminOnly, asyncHandler(async (req, res) => {
+  if (req.params.id === req.user.id)
+    return err400(res, "Cannot force-logout yourself");
+
+  const now = new Date().toISOString();
+
+  // 1. Stamp force_logout_at — authenticateToken rejects tokens issued before this
+  await db.from("users")
+    .update({ force_logout_at: now, updated_at: now })
+    .eq("id", req.params.id);
+
+  // 2. Delete all refresh tokens so the user cannot obtain new access tokens
+  await db.from("refresh_tokens").delete().eq("user_id", req.params.id);
+
+  ok(res, { forced: true, at: now });
 }));
 
 // ── Instructors ──────────────────────────────────────────────────────────────

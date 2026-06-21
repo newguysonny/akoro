@@ -287,7 +287,7 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
   try {
     let user, dbErr;
     ({ data: user, error: dbErr } = await db.from("users")
-      .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed")
+      .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed,force_logout_at")
       .eq("id", decoded.sub).maybeSingle());
 
     if (dbErr) {
@@ -300,6 +300,8 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
 
     if (!user) return res401(res, "User not found");
     if (!user.is_active) return res401(res, "Account deactivated");
+    if (user.force_logout_at && decoded.iat && decoded.iat * 1000 < new Date(user.force_logout_at).getTime())
+      return res401(res, "Session terminated by administrator");
     req.user    = { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role, onboardingCompleted: user.onboarding_completed ?? false };
     req.tokenJti = decoded.jti;
     req.tokenExp = decoded.exp;

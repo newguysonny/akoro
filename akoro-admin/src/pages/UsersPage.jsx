@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Search, Filter, UserX, UserCheck, Trash2, Eye } from 'lucide-react';
+import { Users, Search, UserX, UserCheck, Trash2, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton, Inp } from '../components/Primitives.jsx';
@@ -45,9 +45,10 @@ export default function UsersPage() {
   const [search,     setSearch]     = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [page,       setPage]       = useState(1);
-  const [deleteModal, setDeleteModal] = useState({ open: false, id: null, name: '' });
-  const [busy,       setBusy]       = useState(false);
-  const [toast,      setToast]      = useState(null);
+  const [deleteModal,   setDeleteModal]   = useState({ open: false, id: null, name: '' });
+  const [logoutModal,   setLogoutModal]   = useState({ open: false, id: null, name: '' });
+  const [busy,          setBusy]          = useState(false);
+  const [toast,         setToast]         = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -96,6 +97,19 @@ export default function UsersPage() {
       }
     } catch (err) {
       showToast(err.message || 'Action failed', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmForceLogout = async () => {
+    setBusy(logoutModal.id);
+    try {
+      await api.forceLogout(logoutModal.id);
+      setLogoutModal({ open: false, id: null, name: '' });
+      showToast(`${logoutModal.name} has been logged out`);
+    } catch (err) {
+      showToast(err.message || 'Force logout failed', 'error');
     } finally {
       setBusy(null);
     }
@@ -202,6 +216,14 @@ export default function UsersPage() {
                           : <><UserCheck size={13} /> Activate</>}
                       </Btn>
                       <Btn
+                        size="sm" variant="secondary"
+                        title="Force logout — terminates all active sessions"
+                        disabled={busy === u.id}
+                        onClick={() => setLogoutModal({ open: true, id: u.id, name: u.full_name || u.fullName || u.email })}
+                      >
+                        <LogOut size={13} />
+                      </Btn>
+                      <Btn
                         size="sm" variant="danger"
                         onClick={() => setDeleteModal({ open: true, id: u.id, name: u.full_name || u.fullName || u.email })}
                       >
@@ -224,6 +246,18 @@ export default function UsersPage() {
           <Btn size="sm" variant="secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</Btn>
         </div>
       )}
+
+      {/* Force-logout confirm modal */}
+      <Modal open={logoutModal.open} onClose={() => setLogoutModal({ open: false, id: null, name: '' })} title="Force Logout User">
+        <p style={{ fontSize: 14, color: INK, fontFamily: FONT, margin: '0 0 20px', lineHeight: 1.6 }}>
+          This will immediately terminate all active sessions for <strong>{logoutModal.name}</strong>.
+          They will be required to sign in again. Their account will remain active.
+        </p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <Btn variant="secondary" onClick={() => setLogoutModal({ open: false, id: null, name: '' })}>Cancel</Btn>
+          <Btn variant="danger" disabled={!!busy} onClick={confirmForceLogout}>{busy ? 'Logging out…' : 'Force Logout'}</Btn>
+        </div>
+      </Modal>
 
       {/* Delete confirm modal */}
       <Modal open={deleteModal.open} onClose={() => setDeleteModal({ open: false, id: null, name: '' })} title="Delete User">

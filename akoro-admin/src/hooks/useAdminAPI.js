@@ -10,6 +10,7 @@ export default function useAdminAPI() {
     suspendUser:     (id)     => apiPatch(`/api/admin/users/${id}`, { is_active: false }).then(r => r.data),
     activateUser:    (id)     => apiPatch(`/api/admin/users/${id}`, { is_active: true }).then(r => r.data),
     deleteUser:      (id)     => apiDelete(`/api/admin/users/${id}`).then(r => r.data),
+    forceLogout:     (id)     => apiPost(`/api/admin/users/${id}/force-logout`).then(r => r.data),
 
     // ─── Instructors ─────────────────────────────────────────────────────
     getInstructors:  (p = {}) => apiGet(`/api/admin/instructors?${new URLSearchParams(p)}`).then(r => r.data),
