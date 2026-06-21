@@ -101,8 +101,14 @@ export default function BlogPostPage() {
         </div>
       </section>
 
+      {/* Cover image */}
+      <div style={{ maxWidth: 880, margin: '0 auto', padding: '0 24px', marginTop: -40, position: 'relative', zIndex: 1 }}>
+        <img src={post.image} alt={post.title} loading="lazy"
+          style={{ width: '100%', height: 'clamp(220px,42vw,420px)', objectFit: 'cover', borderRadius: 20, display: 'block', boxShadow: '0 20px 60px rgba(15,10,30,.25)' }} />
+      </div>
+
       {/* Body */}
-      <article style={{ maxWidth: 760, margin: '0 auto', padding: '56px 24px 24px' }}>
+      <article style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 24px' }}>
         <p style={{ fontSize: 20, lineHeight: 1.7, color: INK, fontWeight: 500, margin: '0 0 36px', paddingBottom: 32, borderBottom: `1.5px solid ${BORDER}` }}>{post.excerpt}</p>
         {post.body.map((block, i) => <Block key={i} block={block} />)}
       </article>
@@ -128,8 +134,9 @@ export default function BlogPostPage() {
               <article key={rp.id} onClick={() => navigate(`/blog/${rp.slug}`)} style={{ background: '#fff', border: `1.5px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow .2s, transform .2s' }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(108,59,255,.12)'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}>
-                <div style={{ background: `linear-gradient(135deg, ${rp.color} 0%, ${rp.color}88 100%)`, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <rp.Icon size={34} color={B} />
+                <div style={{ height: 140, overflow: 'hidden', background: rp.color }}>
+                  <img src={rp.image} alt={rp.title} loading="lazy"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </div>
                 <div style={{ padding: '18px 22px 22px' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: rp.color, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: INK, marginBottom: 10 }}>

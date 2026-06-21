@@ -79,8 +79,9 @@ export default function BlogPage() {
                 </span>
               </div>
             </div>
-            <div style={{ background: `linear-gradient(135deg, ${B} 0%, ${B2} 100%)`, borderRadius: 16, minHeight: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <featured.Icon size={80} color="rgba(255,255,255,.25)" />
+            <div style={{ borderRadius: 16, minHeight: 280, overflow: 'hidden', background: `linear-gradient(135deg, ${B} 0%, ${B2} 100%)` }}>
+              <img src={featured.image} alt={featured.title} loading="lazy"
+                style={{ width: '100%', height: '100%', minHeight: 280, objectFit: 'cover', display: 'block' }} />
             </div>
           </div>
         </section>
@@ -116,8 +117,9 @@ export default function BlogPage() {
               <article key={post.id} onClick={() => navigate(`/blog/${post.slug}`)} style={{ background: '#fff', border: `1.5px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow .2s, transform .2s' }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(108,59,255,.12)'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}>
-                <div style={{ background: `linear-gradient(135deg, ${post.color} 0%, ${post.color}88 100%)`, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <post.Icon size={40} color={B} />
+                <div style={{ height: 180, overflow: 'hidden', background: post.color, position: 'relative' }}>
+                  <img src={post.image} alt={post.title} loading="lazy"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </div>
                 <div style={{ padding: '20px 22px 24px' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: post.color, borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: INK, marginBottom: 12 }}>
