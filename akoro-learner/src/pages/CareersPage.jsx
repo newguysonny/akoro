@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import {
   Globe, BookOpen, Coins, HeartPulse, TrendingUp, Clock, Brain, Baby,
-  MapPin, ChevronDown, ArrowDown, ArrowRight, Mail,
+  MapPin, ChevronDown, ArrowDown, ArrowRight, Mail, Loader2,
 } from 'lucide-react';
+import { listJobs, applyToJob } from '../services/contentApi.js';
 
 const B      = '#6C3BFF';
 const B2     = '#4C1DCC';
@@ -81,12 +82,42 @@ const EYEBROW = { fontSize: 11, fontWeight: 800, color: B, letterSpacing: '0.16e
 const HEADING = { fontSize: 'clamp(24px,4vw,48px)', fontWeight: 900, color: INK, fontFamily: "'Nunito', sans-serif", lineHeight: 1.15, letterSpacing: '-0.02em' };
 
 export default function CareersPage() {
-  const [filter, setFilter] = useState('All');
+  const [filter, setFilter]   = useState('All');
   const [expanded, setExpanded] = useState(null);
+  const [roles, setRoles]     = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [rolesError, setRolesError]     = useState(false);
 
-  const depts = ['All', ...ROLES.map(r => r.dept)];
-  const filtered = filter === 'All' ? ROLES : ROLES.filter(r => r.dept === filter);
-  const openCount = ROLES.reduce((n, r) => n + r.jobs.length, 0);
+  // per-job application state: { [jobId]: 'idle'|'open'|'sending'|'done'|'error' }
+  const [applyState, setApplyState] = useState({});
+  const [applyForm, setApplyForm]   = useState({});
+
+  useEffect(() => {
+    let alive = true;
+    listJobs()
+      .then(data  => { if (alive) { setRoles(data || []); setRolesLoading(false); } })
+      .catch(()   => { if (alive) { setRolesError(true); setRolesLoading(false); } });
+    return () => { alive = false; };
+  }, []);
+
+  const depts    = ['All', ...roles.map(r => r.dept)];
+  const filtered = filter === 'All' ? roles : roles.filter(r => r.dept === filter);
+  const openCount = roles.reduce((n, r) => n + r.jobs.length, 0);
+
+  const setField = (jobId, k) => e =>
+    setApplyForm(f => ({ ...f, [jobId]: { ...(f[jobId] || {}), [k]: e.target.value } }));
+
+  const handleApply = async (e, jobId) => {
+    e.preventDefault();
+    const payload = applyForm[jobId] || {};
+    setApplyState(s => ({ ...s, [jobId]: 'sending' }));
+    try {
+      await applyToJob(jobId, { name: payload.name, email: payload.email, message: payload.message });
+      setApplyState(s => ({ ...s, [jobId]: 'done' }));
+    } catch {
+      setApplyState(s => ({ ...s, [jobId]: 'error' }));
+    }
+  };
 
   return (
     <>
@@ -191,46 +222,77 @@ export default function CareersPage() {
               ))}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
-              {filtered.map(({ dept, color, jobs }) => (
-                <div key={dept}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                    <div style={{ height: 1, flex: 1, background: BORDER }} />
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '5px 14px', background: `${color}14`, borderRadius: 999 }}>{dept}</span>
-                    <div style={{ height: 1, flex: 1, background: BORDER }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {jobs.map(({ title, location, type, summary }) => {
-                      const key = `${dept}-${title}`;
-                      const open = expanded === key;
-                      return (
-                        <div key={title} className="job-card">
-                          <div className="job-head" onClick={() => setExpanded(open ? null : key)}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 15.5, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
-                              <div className="job-meta">
-                                <span><MapPin size={14} color={MUTED} /> {location}</span>
-                                <span><Clock size={14} color={MUTED} /> {type}</span>
+            {rolesLoading ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: MUTED }}>
+                <Loader2 size={30} style={{ animation: 'pulse 1s linear infinite', marginBottom: 12 }} />
+                <p>Loading open roles…</p>
+              </div>
+            ) : rolesError ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: MUTED }}>
+                <p>Couldn't load roles right now — please refresh the page.</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: MUTED }}>
+                <p>No open roles in this department right now. Check back soon.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
+                {filtered.map(({ dept, color, jobs }) => (
+                  <div key={dept}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                      <div style={{ height: 1, flex: 1, background: BORDER }} />
+                      <span style={{ fontSize: 11.5, fontWeight: 800, color, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '5px 14px', background: `${color}14`, borderRadius: 999 }}>{dept}</span>
+                      <div style={{ height: 1, flex: 1, background: BORDER }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {jobs.map((job) => {
+                        const { id, title, location, type, summary } = job;
+                        const key  = id || `${dept}-${title}`;
+                        const open = expanded === key;
+                        const as   = applyState[key] || 'idle';
+                        const af   = applyForm[key]  || {};
+                        return (
+                          <div key={key} className="job-card">
+                            <div className="job-head" onClick={() => setExpanded(open ? null : key)}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 15.5, fontWeight: 700, color: INK, marginBottom: 8, fontFamily: "'Nunito', sans-serif" }}>{title}</div>
+                                <div className="job-meta">
+                                  <span><MapPin size={14} color={MUTED} /> {location}</span>
+                                  <span><Clock size={14} color={MUTED} /> {type}</span>
+                                </div>
                               </div>
+                              <ChevronDown size={20} className={`crs-chev${open ? ' open' : ''}`} />
                             </div>
-                            <ChevronDown size={20} className={`crs-chev${open ? ' open' : ''}`} />
+                            {open && (
+                              <div style={{ padding: '0 22px 24px', borderTop: `1px solid ${BORDER}` }}>
+                                <p style={{ fontSize: 14, color: TEXT, lineHeight: 1.7, marginTop: 16, marginBottom: 20 }}>{summary}</p>
+                                {as === 'done' ? (
+                                  <p style={{ color: '#22C55E', fontWeight: 700, fontSize: 14 }}>✓ Application received! We'll be in touch.</p>
+                                ) : (
+                                  <form onSubmit={e => handleApply(e, key)} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
+                                    <input required placeholder="Full name" value={af.name || ''} onChange={setField(key, 'name')}
+                                      style={{ padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 14, fontFamily: 'inherit', color: INK, outline: 'none' }} />
+                                    <input required type="email" placeholder="Email address" value={af.email || ''} onChange={setField(key, 'email')}
+                                      style={{ padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 14, fontFamily: 'inherit', color: INK, outline: 'none' }} />
+                                    <textarea placeholder="Why are you excited about this role? (optional)" rows={3} value={af.message || ''} onChange={setField(key, 'message')}
+                                      style={{ padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 14, fontFamily: 'inherit', color: INK, outline: 'none', resize: 'vertical' }} />
+                                    {as === 'error' && <p style={{ color: '#EF4444', fontSize: 13 }}>Something went wrong — please try again.</p>}
+                                    <button type="submit" disabled={as === 'sending'} className="crs-cta-btn"
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: as === 'sending' ? '#9E8CFF' : B, color: '#fff', padding: '11px 22px', borderRadius: 10, border: 'none', cursor: as === 'sending' ? 'default' : 'pointer', fontSize: 13.5, fontWeight: 700, fontFamily: "'Nunito', sans-serif", width: 'fit-content' }}>
+                                      {as === 'sending' ? 'Sending…' : <> Apply for this role <ArrowRight size={16} /> </>}
+                                    </button>
+                                  </form>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          {open && (
-                            <div style={{ padding: '0 22px 22px', borderTop: `1px solid ${BORDER}` }}>
-                              <p style={{ fontSize: 14, color: TEXT, lineHeight: 1.7, marginTop: 16, marginBottom: 20 }}>{summary}</p>
-                              <a href={`mailto:careers@akoro.app?subject=Application: ${title}`} className="crs-cta-btn"
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: B, color: '#fff', padding: '11px 22px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, textDecoration: 'none', fontFamily: "'Nunito', sans-serif" }}>
-                                Apply for this role <ArrowRight size={16} />
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

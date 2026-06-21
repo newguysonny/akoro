@@ -4,6 +4,17 @@ import { Brain, Lightbulb, GraduationCap, TrendingUp, BookOpen } from 'lucide-re
 
 export const CATS = ['All', 'Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies'];
 
+/* Visual meta per category — Icon + accent colour. Posts now come from the API
+   (which returns category strings), so the icon/colour is resolved client-side. */
+export const CAT_META = {
+  'Learning Science': { Icon: Brain,         color: '#EDE9FF' },
+  'Product':          { Icon: Lightbulb,     color: '#FFF3E0' },
+  'Education':        { Icon: GraduationCap,  color: '#E8F5E9' },
+  'AI & Future':      { Icon: TrendingUp,     color: '#EDE9FF' },
+  'Case Studies':     { Icon: BookOpen,       color: '#FFF3E0' },
+};
+export const catMeta = (cat) => CAT_META[cat] || { Icon: BookOpen, color: '#EDE9FF' };
+
 /* body block types:
    { type:'p', text }            paragraph
    { type:'h', text }            section heading
