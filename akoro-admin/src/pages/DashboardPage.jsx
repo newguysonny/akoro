@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, Activity, TrendingUp, FileText, Briefcase } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Users, GraduationCap, BookOpen, FileText, Star, Activity, CheckSquare, TrendingUp } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton, Toast } from '../components/Primitives.jsx';
 import useAdminAPI from '../hooks/useAdminAPI.js';
-import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
+import { apiGet } from '../services/api.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 
 function StatCard({ icon: Icon, label, value, sub, color = AMBER, loading }) {
   if (loading) return (
@@ -51,27 +52,99 @@ function RolePill({ role }) {
   );
 }
 
-function StatusDot({ active }) {
+function LoginTrendsChart({ data, loading }) {
+  const [tooltip, setTooltip] = useState(null);
+  const svgRef = useRef(null);
+
+  if (loading) return <Skeleton height={160} style={{ borderRadius: 12 }} />;
+  if (!data || data.length === 0) return (
+    <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: MUTED, fontSize: 13, fontFamily: FONT }}>
+      No login trend data available
+    </div>
+  );
+
+  const W = 600;
+  const H = 140;
+  const PAD = 8;
+  const maxVal = Math.max(...data.map(d => d.count || d.logins || 0), 1);
+
+  const pts = data.map((d, i) => {
+    const x = PAD + (i / Math.max(data.length - 1, 1)) * (W - PAD * 2);
+    const y = H - PAD - ((d.count || d.logins || 0) / maxVal) * (H - PAD * 2);
+    return { x, y, d };
+  });
+
+  const polyline = pts.map(p => `${p.x},${p.y}`).join(' ');
+  const areaPath = `M${pts[0].x},${H - PAD} ` +
+    pts.map(p => `L${p.x},${p.y}`).join(' ') +
+    ` L${pts[pts.length - 1].x},${H - PAD} Z`;
+
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      fontSize: 11, fontWeight: 600,
-      color: active ? GREEN : MUTED,
-    }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? GREEN : MUTED, display: 'inline-block' }} />
-      {active ? 'Active' : 'Suspended'}
-    </span>
+    <div style={{ position: 'relative', width: '100%' }}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: '100%', height: 160, display: 'block' }}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        <defs>
+          <linearGradient id="loginGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={AMBER} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={AMBER} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#loginGrad)" />
+        <polyline points={polyline} fill="none" stroke={AMBER} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((p, i) => (
+          <circle
+            key={i}
+            cx={p.x} cy={p.y} r={4}
+            fill={WHITE} stroke={AMBER} strokeWidth={2}
+            style={{ cursor: 'pointer' }}
+            onMouseEnter={(e) => {
+              const rect = svgRef.current?.getBoundingClientRect();
+              setTooltip({
+                label: p.d.date || p.d.day || '',
+                value: p.d.count || p.d.logins || 0,
+                x: rect ? p.x / W * rect.width + rect.left : e.clientX,
+                y: rect ? p.y / H * rect.height + rect.top : e.clientY,
+              });
+            }}
+            onMouseLeave={() => setTooltip(null)}
+          />
+        ))}
+        {pts.filter((_, i) => i % Math.ceil(pts.length / 8) === 0).map((p, labelIdx) => (
+          <text key={labelIdx} x={p.x} y={H - 1} textAnchor="middle"
+            style={{ fontSize: 9, fill: MUTED2, fontFamily: FONT }}>
+            {(p.d.date || p.d.day || '').slice(5)}
+          </text>
+        ))}
+      </svg>
+      {tooltip && (
+        <div style={{
+          position: 'fixed', top: tooltip.y, left: tooltip.x,
+          background: INK, color: WHITE, padding: '6px 10px', borderRadius: 8,
+          fontSize: 12, fontFamily: FONT, pointerEvents: 'none', zIndex: 999,
+          transform: 'translate(-50%, -110%)', whiteSpace: 'nowrap',
+        }}>
+          <div style={{ fontWeight: 700 }}>{tooltip.label}</div>
+          <div>{tooltip.value.toLocaleString()} logins</div>
+        </div>
+      )}
+    </div>
   );
 }
 
 export default function DashboardPage() {
   const api = useAdminAPI();
 
-  const [stats, setStats]     = useState(null);
-  const [users, setUsers]     = useState([]);
-  const [posts, setPosts]     = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast]     = useState(null);
+  const [stats,       setStats]       = useState(null);
+  const [extraStats,  setExtraStats]  = useState(null);
+  const [loginTrends, setLoginTrends] = useState([]);
+  const [users,       setUsers]       = useState([]);
+  const [posts,       setPosts]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [toast,       setToast]       = useState(null);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -81,12 +154,19 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, usersRes, postsRes] = await Promise.allSettled([
+      const [statsRes, usersRes, postsRes, extraRes, trendsRes] = await Promise.allSettled([
         api.getStats(),
         api.getUsers({ limit: 10, sort: 'newest' }),
         api.getBlogPosts(),
+        apiGet('/api/admin/dashboard/stats'),
+        apiGet('/api/admin/dashboard/login-trends'),
       ]);
       if (statsRes.status === 'fulfilled') setStats(statsRes.value);
+      if (extraRes.status === 'fulfilled') setExtraStats(extraRes.value);
+      if (trendsRes.status === 'fulfilled') {
+        const d = trendsRes.value;
+        setLoginTrends(Array.isArray(d) ? d : (d?.data || d?.trends || []));
+      }
       if (usersRes.status === 'fulfilled') {
         const d = usersRes.value;
         setUsers(Array.isArray(d) ? d : (d?.users || d?.data || []));
@@ -113,6 +193,12 @@ export default function DashboardPage() {
     return { bg: '#F3F4F6', color: MUTED };
   };
 
+  const avgRating = extraStats?.avg_course_rating ?? stats?.avg_course_rating;
+  const completionRate = extraStats?.completion_rate ?? stats?.completion_rate;
+  const dau = extraStats?.dau ?? stats?.dau;
+  const totalCompletions = extraStats?.total_completions ?? stats?.total_completions;
+  const totalUsers = stats?.total_users ?? 0;
+
   const TH = { fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', padding: '10px 14px', textAlign: 'left', fontFamily: FONT };
   const TD = { fontSize: 13, color: INK, padding: '13px 14px', fontFamily: FONT, borderBottom: `1px solid ${BORDER}` };
 
@@ -122,10 +208,42 @@ export default function DashboardPage() {
 
         {/* Stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
-          <StatCard icon={Users}        label="Total Users"        value={(stats?.total_users ?? 0).toLocaleString()}       sub="registered accounts"    color={BLUE}   loading={loading} />
-          <StatCard icon={GraduationCap} label="Total Instructors" value={(stats?.total_instructors ?? 0).toLocaleString()}  sub="teaching on platform"   color={AMBER}  loading={loading} />
-          <StatCard icon={BookOpen}     label="Total Courses"      value={(stats?.total_courses ?? 0).toLocaleString()}      sub="published & draft"      color={PURPLE} loading={loading} />
-          <StatCard icon={FileText}     label="Blog Posts"         value={(stats?.total_blog_posts ?? posts.length ?? 0).toLocaleString()} sub="content articles" color={GREEN} loading={loading} />
+          <StatCard
+            icon={Users} label="Total Users" color={BLUE}
+            value={loading ? '—' : totalUsers.toLocaleString()}
+            sub="registered accounts"
+            loading={loading}
+          />
+          <StatCard
+            icon={Star} label="Avg Rating" color={AMBER}
+            value={loading ? '—' : avgRating != null ? `★ ${Number(avgRating).toFixed(1)}` : '—'}
+            sub="avg course rating"
+            loading={loading}
+          />
+          <StatCard
+            icon={CheckSquare} label="Completion Rate" color={GREEN}
+            value={loading ? '—' : completionRate != null ? `${Math.round(completionRate)}%` : '—'}
+            sub="course completions"
+            loading={loading}
+          />
+          <StatCard
+            icon={Activity} label="DAU" color={PURPLE}
+            value={loading ? '—' : dau != null ? Number(dau).toLocaleString() : '—'}
+            sub="daily active users"
+            loading={loading}
+          />
+          <StatCard
+            icon={TrendingUp} label="Course Completions" color={RED}
+            value={loading ? '—' : totalCompletions != null ? Number(totalCompletions).toLocaleString() : '—'}
+            sub="total completions"
+            loading={loading}
+          />
+        </div>
+
+        {/* Login Trends sparkline */}
+        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 24, marginBottom: 32 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 18px', fontFamily: FONT }}>Login Trends (30 days)</h2>
+          <LoginTrendsChart data={loginTrends} loading={loading} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
@@ -152,7 +270,7 @@ export default function DashboardPage() {
                     {users.length === 0 ? (
                       <tr><td colSpan={4} style={{ ...TD, textAlign: 'center', color: MUTED }}>No users found</td></tr>
                     ) : users.map(u => (
-                      <tr key={u.id} style={{ cursor: 'default' }}
+                      <tr key={u.id}
                         onMouseEnter={e => e.currentTarget.style.background = '#FAF8F5'}
                         onMouseLeave={e => e.currentTarget.style.background = WHITE}>
                         <td style={TD}>

@@ -71,5 +71,33 @@ export default function useAdminAPI() {
 
     // ─── Announcements ────────────────────────────────────────────────────────
     sendAnnouncement: (d) => apiPost(`/api/admin/announcements/send`, d).then(r => r.data),
+
+    // ─── Dashboard extended ───────────────────────────────────────────────────
+    getDashboardStats:  ()  => apiGet(`/api/admin/dashboard/stats`).then(r => r.data),
+    getLoginTrends:     ()  => apiGet(`/api/admin/dashboard/login-trends`).then(r => r.data),
+
+    // ─── Courses extended ─────────────────────────────────────────────────────
+    getCourse:          (id)      => apiGet(`/api/admin/courses/${id}`).then(r => r.data),
+    getCourseCategories:()        => apiGet(`/api/admin/courses/categories`).then(r => r.data),
+    addModule:          (id, d)   => apiPost(`/api/admin/courses/${id}/modules`, d).then(r => r.data),
+    addLesson:          (id, mid, d) => apiPost(`/api/admin/courses/${id}/modules/${mid}/lessons`, d).then(r => r.data),
+
+    // ─── Users extended ───────────────────────────────────────────────────────
+    getUserEnrollments: (id)   => apiGet(`/api/admin/users/${id}/enrollments`).then(r => r.data),
+    inviteUser:         (d)    => apiPost(`/api/admin/users/invite`, d).then(r => r.data),
+    inviteCSV:          (rows) => apiPost(`/api/admin/users/invite-csv`, { rows }).then(r => r.data),
+
+    // ─── Payouts ──────────────────────────────────────────────────────────────
+    getPayouts:         (p = {}) => apiGet(`/api/admin/payouts?${new URLSearchParams(p)}`).then(r => r.data),
+    getPayoutsSummary:  ()       => apiGet(`/api/admin/payouts/summary`).then(r => r.data),
+    markPaid:           (id, d)  => apiPatch(`/api/admin/payouts/${id}/mark-paid`, d).then(r => r.data),
+
+    // ─── Analytics extended ───────────────────────────────────────────────────
+    getEngagement:      ()  => apiGet(`/api/admin/analytics/engagement`).then(r => r.data),
+    getTopInstructors:  ()  => apiGet(`/api/admin/analytics/top-instructors`).then(r => r.data),
+
+    // ─── Reports ──────────────────────────────────────────────────────────────
+    getRevenueExport:     (period = '30d') => apiGet(`/api/admin/reports/revenue-export?period=${period}`).then(r => r.data),
+    getEnrollmentsExport: (period = '30d') => apiGet(`/api/admin/reports/enrollments-export?period=${period}`).then(r => r.data),
   }), []);
 }
