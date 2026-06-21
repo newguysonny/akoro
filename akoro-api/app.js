@@ -46,6 +46,7 @@ import { studentFeedRouter,
 import voiceModule               from "./modules/voice/routes.js";
 import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
 import contentModule             from "./modules/content/routes.js";
+import adminModule              from "./modules/admin/routes.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -150,6 +151,7 @@ app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
+app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
