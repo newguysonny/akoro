@@ -92,7 +92,7 @@ export default function SigninPage() {
         border: '1px solid #EDE8E1',
       }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>
-          {challenge ? 'Two-factor verification' : 'Welcome, Tutor'}
+          {challenge ? 'Two-factor verification' : 'Welcome back'}
         </h1>
         <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
           {challenge ? 'Enter the 6-digit code from your authenticator app' : 'Sign in to the Akoro admin dashboard'}
@@ -202,13 +202,6 @@ export default function SigninPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p style={{ textAlign: 'center', fontSize: 13, color: '#6B6B80', marginTop: 20, marginBottom: 0 }}>
-          
-          <button
-          >
-            Create an account
-          </button>
-        </p>
         </>
         )}
       </div>
