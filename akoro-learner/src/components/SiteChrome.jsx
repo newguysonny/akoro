@@ -7,7 +7,7 @@
  * Exports: SiteNav, SiteFooter, Btn, SITE_B
  */
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Menu, X, ArrowRight, BookOpen, Zap, Map, TrendingUp, DollarSign, Users, MessageSquare } from 'lucide-react';
 import { FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter } from 'react-icons/fa6';
 import AkoroLogo from './common/AkoroLogo.jsx';
@@ -205,9 +205,17 @@ export function SiteFooter() {
               <h4 className="sc-fsyne" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#1A1A2E', marginBottom: 16 }}>{title}</h4>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10, margin: 0, padding: 0 }}>
                 {links.map(([label, href]) => (
-                  <li key={label}><a href={href} onClick={e => { if (href.startsWith('/')) { e.preventDefault(); go(href); } }} style={{ fontSize: 13.5, color: '#7A7880', transition: 'color .18s', textDecoration: 'none', cursor: 'pointer' }}
-                    onMouseEnter={e => e.target.style.color = B}
-                    onMouseLeave={e => e.target.style.color = '#7A7880'}>{label}</a></li>
+                  <li key={label}>
+                    {href.startsWith('/') ? (
+                      <Link to={href} style={{ fontSize: 13.5, color: '#7A7880', transition: 'color .18s', textDecoration: 'none' }}
+                        onMouseEnter={e => e.target.style.color = B}
+                        onMouseLeave={e => e.target.style.color = '#7A7880'}>{label}</Link>
+                    ) : (
+                      <a href={href} style={{ fontSize: 13.5, color: '#7A7880', transition: 'color .18s', textDecoration: 'none' }}
+                        onMouseEnter={e => e.target.style.color = B}
+                        onMouseLeave={e => e.target.style.color = '#7A7880'}>{label}</a>
+                    )}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -217,9 +225,15 @@ export function SiteFooter() {
           <span style={{ fontSize: 12, color: '#9490A0' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</span>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {legal.map(({ label, href }) => (
-              <a key={label} href={href} onClick={e => { if (href.startsWith('/') && !href.includes('#')) { e.preventDefault(); go(href); } }} style={{ fontSize: 12, color: '#9490A0', transition: 'color .18s', textDecoration: 'none' }}
-                onMouseEnter={e => e.target.style.color = B}
-                onMouseLeave={e => e.target.style.color = '#9490A0'}>{label}</a>
+              href.startsWith('/') && !href.includes('#') ? (
+                <Link key={label} to={href} style={{ fontSize: 12, color: '#9490A0', transition: 'color .18s', textDecoration: 'none' }}
+                  onMouseEnter={e => e.target.style.color = B}
+                  onMouseLeave={e => e.target.style.color = '#9490A0'}>{label}</Link>
+              ) : (
+                <a key={label} href={href} style={{ fontSize: 12, color: '#9490A0', transition: 'color .18s', textDecoration: 'none' }}
+                  onMouseEnter={e => e.target.style.color = B}
+                  onMouseLeave={e => e.target.style.color = '#9490A0'}>{label}</a>
+              )
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
