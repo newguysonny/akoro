@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import {
   Globe, BookOpen, Coins, HeartPulse, TrendingUp, Clock, Brain, Baby,
   MapPin, ChevronDown, ArrowDown, ArrowRight, Mail,
@@ -82,7 +81,6 @@ const EYEBROW = { fontSize: 11, fontWeight: 800, color: B, letterSpacing: '0.16e
 const HEADING = { fontSize: 'clamp(24px,4vw,48px)', fontWeight: 900, color: INK, fontFamily: "'Nunito', sans-serif", lineHeight: 1.15, letterSpacing: '-0.02em' };
 
 export default function CareersPage() {
-  const navigate = useNavigate();
   const [filter, setFilter] = useState('All');
   const [expanded, setExpanded] = useState(null);
 
@@ -131,15 +129,7 @@ export default function CareersPage() {
       <div style={{ minHeight: '100vh', background: '#fff', fontFamily: "'DM Sans', sans-serif" }}>
 
         {/* Nav */}
-        <div className="crs-nav" style={{ background: 'rgba(255,255,255,.9)', backdropFilter: 'blur(14px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 200 }}>
-          <button onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer' }}>
-            <AkoroLogo size={32} radius={9} />
-            <span style={{ fontSize: 17, fontWeight: 800, color: INK, fontFamily: "'Nunito', sans-serif" }}>Akoro</span>
-          </button>
-          <div style={{ flex: 1 }} />
-          <button className="crs-nav-secondary" onClick={() => navigate('/about')} style={{ background: 'none', border: `1px solid ${BORDER}`, cursor: 'pointer', color: TEXT, padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>About us</button>
-          <button onClick={() => navigate('/contact')} style={{ background: B, border: 'none', cursor: 'pointer', color: '#fff', padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700 }}>Contact us</button>
-        </div>
+        <SiteNav />
 
         {/* Hero */}
         <div className="crs-hero" style={{ background: `linear-gradient(135deg, ${INK}, #2D1B6E)`, textAlign: 'center' }}>
@@ -277,16 +267,8 @@ export default function CareersPage() {
           </a>
         </div>
 
-        {/* Footer mini */}
-        <div style={{ background: INK, padding: '28px 20px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', gap: 22, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-            {[['/', 'Home'], ['/about', 'About'], ['/contact', 'Contact'], ['/privacy', 'Privacy'], ['/terms', 'Terms']].map(([href, label]) => (
-              <a key={label} href={href} style={{ fontSize: 13, color: 'rgba(255,255,255,.6)', textDecoration: 'none', fontWeight: 500 }}
-                onMouseEnter={e => e.target.style.color = '#fff'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,.6)'}>{label}</a>
-            ))}
-          </div>
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,.4)' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</p>
-        </div>
+        {/* Footer */}
+        <SiteFooter />
       </div>
     </>
   );

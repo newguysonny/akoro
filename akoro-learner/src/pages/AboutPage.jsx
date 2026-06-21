@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import {
   Brain, Globe, FlaskConical, School, Eye, Scale,
   Check, Sparkles, Repeat, ArrowRight,
@@ -90,22 +90,7 @@ export default function AboutPage() {
       <div style={{ minHeight: '100vh', background: '#fff', fontFamily: "'DM Sans', sans-serif" }}>
 
         {/* Nav */}
-        <div className="about-nav" style={{ background: 'rgba(255,255,255,.85)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
-          <button onClick={() => navigate('/')}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer' }}>
-            <AkoroLogo size={32} radius={9} />
-            <span style={{ fontSize: 18, fontWeight: 800, color: INK, fontFamily: "'Nunito', sans-serif", letterSpacing: '-0.01em' }}>Akoro</span>
-          </button>
-          <div style={{ flex: 1 }} />
-          <button className="about-nav-sec" onClick={() => navigate('/contact')}
-            style={{ background: 'none', border: `1px solid ${BORDER}`, cursor: 'pointer', color: TEXT, padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif" }}>
-            Contact us
-          </button>
-          <button onClick={() => navigate('/careers')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: B, border: 'none', cursor: 'pointer', color: '#fff', padding: '9px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans', sans-serif", boxShadow: '0 2px 8px rgba(108,59,255,.25)' }}>
-            We're hiring <ArrowRight size={15} strokeWidth={2.5} />
-          </button>
-        </div>
+        <SiteNav />
 
         {/* Hero */}
         <div style={{ background: `linear-gradient(135deg, ${B} 0%, ${B2} 100%)`, padding: 'clamp(56px,8vw,96px) 20px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
@@ -261,15 +246,8 @@ export default function AboutPage() {
           </div>
         </div>
 
-        {/* Footer mini */}
-        <div style={{ background: '#fff', padding: '28px 20px', textAlign: 'center', borderTop: `1px solid ${BORDER}` }}>
-          <div style={{ display: 'flex', gap: 22, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-            {[['/', 'Home'], ['/privacy', 'Privacy'], ['/terms', 'Terms'], ['/contact', 'Contact'], ['/careers', 'Careers']].map(([href, label]) => (
-              <a key={label} href={href} className="about-foot-link" style={{ fontSize: 13.5, color: MUTED, textDecoration: 'none', fontWeight: 600 }}>{label}</a>
-            ))}
-          </div>
-          <p style={{ fontSize: 12.5, color: MUTED }}>© 2025 Akoro Technologies Ltd. All rights reserved.</p>
-        </div>
+        {/* Footer */}
+        <SiteFooter />
       </div>
     </>
   );

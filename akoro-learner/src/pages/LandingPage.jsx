@@ -10,6 +10,7 @@ import {
   Layers, Settings, LayoutDashboard,
 } from 'lucide-react';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
+import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import { API } from '../services/api.js';
 import {
   FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter,
@@ -1086,14 +1087,12 @@ function StickyBar({ onSignup }) {
 /* ══════════════ ROOT ══════════════ */
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [drawer, setDrawer] = useState(false);
   const goSignup = () => navigate('/signup');
 
   return (
     <div style={{ minHeight: '100vh', background: '#fff', color: '#1A1A2E', overflowX: 'hidden' }}>
       <FontStyle/>
-      <Header onDrawer={() => setDrawer(true)}/>
-      <Drawer open={drawer} onClose={() => setDrawer(false)}/>
+      <SiteNav/>
       <main>
         <Hero onSignup={goSignup}/>
         <TrustBar/>
@@ -1107,7 +1106,7 @@ export default function LandingPage() {
         <FAQ/>
         <FinalCTA onSignup={goSignup}/>
       </main>
-      <Footer/>
+      <SiteFooter/>
       <StickyBar onSignup={goSignup}/>
     </div>
   );

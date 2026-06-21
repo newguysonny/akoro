@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import {
   CheckCircle2, GraduationCap, UserCheck, Ruler, Copyright, CreditCard, Lock, Share2,
-  AlertTriangle, LogOut, Gavel, ScrollText, Ban, Scale, ArrowLeft, ArrowRight, Mail, Clock,
+  AlertTriangle, LogOut, Gavel, ScrollText, Ban, Scale, Mail, Clock,
 } from 'lucide-react';
 
 const B = '#6C3BFF', B2 = '#4C1DCC', INK = '#0F0A1E', TEXT = '#3F3A52', MUTED = '#7A7588',
@@ -179,21 +180,8 @@ export default function TermsOfServicePage() {
 
       <div style={{ minHeight: '100vh', background: SURFACE, fontFamily: "'DM Sans', sans-serif" }}>
 
-        {/* Sticky Header */}
-        <div className="legal-head" style={{ background: 'rgba(255,255,255,.9)', backdropFilter: 'blur(12px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, position: 'sticky', top: 0, zIndex: 200 }}>
-          <button onClick={() => navigate(-1)}
-            style={{ background: TINT, border: `1px solid ${BORDER}`, cursor: 'pointer', color: B, lineHeight: 1, padding: '9px 14px', borderRadius: 10, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <ArrowLeft size={16} /> Back
-          </button>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: INK, fontFamily: "'Nunito',sans-serif" }}>Terms of Service</div>
-            <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>Effective: 1 June 2025 · Akoro Technologies Ltd</div>
-          </div>
-          <button className="legal-head-cross" onClick={() => navigate('/privacy')}
-            style={{ background: '#fff', border: `1px solid ${BORDER}`, cursor: 'pointer', color: B, padding: '9px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            Privacy Policy <ArrowRight size={15} />
-          </button>
-        </div>
+        {/* Nav */}
+        <SiteNav />
 
         {/* Hero Banner */}
         <div style={{ background: 'linear-gradient(135deg, #1A1040, #2D1B6E)', padding: 'clamp(48px,7vw,72px) 20px', textAlign: 'center' }}>
@@ -300,6 +288,9 @@ export default function TermsOfServicePage() {
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <SiteFooter />
       </div>
     </>
   );
