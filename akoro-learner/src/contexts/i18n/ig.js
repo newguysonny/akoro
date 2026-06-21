@@ -25,7 +25,7 @@ export const IG = {
   /* ── Dashboard header / tabs ── */
   'dash.my_sessions':  'Nnọkọ M',
   'dash.challenges':   'Aghụghọ',
-  'dash.start_session':'Nkuzi Onye Nnọchite Gi',
+  'dash.start_session':'Malite Nnọkọ',
   'dash.live':         'Dị Ndụ',
 
   /* ── Session tabs / buckets ── */

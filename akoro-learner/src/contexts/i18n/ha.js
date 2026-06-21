@@ -19,7 +19,7 @@ export const HA = {
 
   'dash.my_sessions':  'Zaman Na',
   'dash.challenges':   'Ƙalubale',
-  'dash.start_session':'Koyar da Wakilinka',
+  'dash.start_session':'Fara Zama',
   'dash.live':         'Kai tsaye',
 
   'sessions.all':          'Duka',

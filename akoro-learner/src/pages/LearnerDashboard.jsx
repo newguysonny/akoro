@@ -416,16 +416,6 @@ export default function LearnerDashboard() {
           </div>
         </div>
 
-        {/* NaNa GUIDE STRIP */}
-        <div style={{ background:`linear-gradient(90deg,${BRAND}18,${BRAND}08)`,borderBottom:"1px solid #EDE9FE",padding:"8px 18px",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
-          <span style={{ fontSize:20 }}>{agentProfile.guideEmoji}</span>
-          <div style={{ flex:1,minWidth:0 }}>
-            <span style={{ fontSize:11.5,fontWeight:800,color:BRAND }}>{agentProfile.guideName}</span>
-            <span style={{ fontSize:11,color:"#6B7280",fontWeight:600 }}> · Your learning guide</span>
-          </div>
-          <span style={{ fontSize:10.5,fontWeight:700,color:BRAND,background:`${BRAND}14`,borderRadius:20,padding:"3px 10px",flexShrink:0 }}>Always here to help</span>
-        </div>
-
         {/* SCROLLABLE CONTENT */}
         <div style={{ flex:1,overflowY:"auto",paddingBottom:72 }}>
           {tab==="sessions"&&(

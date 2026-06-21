@@ -19,7 +19,7 @@ export const AR = {
 
   'dash.my_sessions':  'جلساتي',
   'dash.challenges':   'التحديات',
-  'dash.start_session':'علّم وكيلك',
+  'dash.start_session':'ابدأ جلسة',
   'dash.live':         'مباشر',
 
   'sessions.all':          'الكل',

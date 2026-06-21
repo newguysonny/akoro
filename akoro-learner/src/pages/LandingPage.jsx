@@ -325,7 +325,7 @@ function ProblemSolution() {
             <div style={card({ background: `linear-gradient(140deg,${B}08,${B}03)`, border: `1px solid ${B}25` })}>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: `${B}14`, border: `1px solid ${B}30`, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 20 }}><Sparkles size={10}/>The Akoro way</div>
               <h3 className="fs" style={{ fontSize: 26, color: '#1A1A2E', lineHeight: 1.25, marginBottom: 24 }}>Active, adaptive, deeply personal</h3>
-              {['Teach NaNa Esumai your AI, then she teaches you back — bidirectional', 'Spaced repetition knows exactly when to re-test you', 'Agent battles turn studying into competitive sport', 'Aligned to your exact school syllabus', '89% retention vs 17% from passive video — proven'].map(t => row(null, t, true))}
+              {['Teach your agent — NaNa Esumai guides every session, then she teaches you back — bidirectional', 'Spaced repetition knows exactly when to re-test you', 'Agent battles turn studying into competitive sport', 'Aligned to your exact school syllabus', '89% retention vs 17% from passive video — proven'].map(t => row(null, t, true))}
             </div>
           </Reveal>
         </div>
@@ -338,7 +338,7 @@ function ProblemSolution() {
 function HowItWorks() {
   const steps = [
     { num: '01', icon: <Target size={28} color={B}/>, title: 'Pick a topic', desc: 'Choose from curriculum subjects or create your own. Set subtopics and learning objectives — your agent starts calibrated, not cold.' },
-    { num: '02', icon: <Brain size={28} color={B}/>, title: 'Teach NaNa Esumai', desc: 'Explain concepts to your AI agent via chat or voice. NaNa listens, asks probing questions, and flags any misconceptions in real time.' },
+    { num: '02', icon: <Brain size={28} color={B}/>, title: 'Teach your agent', desc: 'Explain concepts via chat or voice. NaNa Esumai guides every step — she listens, asks probing questions, and flags misconceptions in real time.' },
     { num: '03', icon: <Repeat2 size={28} color={B}/>, title: 'Get assessed by Sargeant', desc: 'Sargeant tests your agent on everything you taught. Your confidence score updates after every assessment — before you forget.' },
     { num: '04', icon: <Trophy size={28} color={B}/>, title: 'Rise the ranks', desc: 'Climb classroom and inter-school leaderboards. Challenge friends, earn XP, and prove your knowledge in live battles.' },
   ];
@@ -607,11 +607,11 @@ function Courses() {
 /* ══════════════ FEATURES ══════════════ */
 function Features() {
   const feats = [
-    { icon: <Brain size={18}/>, title: 'Bidirectional AI Learning',    desc: 'Teach NaNa Esumai, then she quizzes you back at the exact forgetting-curve moment.', badge: 'Core feature' },
+    { icon: <Brain size={18}/>, title: 'Bidirectional AI Learning',    desc: 'Teach your agent — NaNa Esumai guides the session, then quizzes you back at the exact forgetting-curve moment.', badge: 'Core feature' },
     { icon: <Swords size={18}/>, title: 'Agent Battles',               desc: 'Your AI competes against other agents — inter-school, inter-class, 1v1. Revision becomes sport.', badge: 'Gamification' },
     { icon: <Repeat2 size={18}/>, title: 'Spaced Repetition Engine',   desc: 'Sargeant tracks every concept and resurfaces it at exactly the right time — before you forget.', badge: 'Science-backed' },
     { icon: <BarChart3 size={18}/>, title: 'Knowledge Progress Map',   desc: 'Visual map of every concept taught. See what you know, what\'s shaky, and what\'s next.', badge: 'Progress tracking' },
-    { icon: <Mic size={18}/>, title: 'Multi-modal Input',              desc: 'Teach via chat, voice, or whiteboard. NaNa understands all three.', badge: 'Accessibility' },
+    { icon: <Mic size={18}/>, title: 'Multi-modal Input',              desc: 'Teach your agent via chat, voice, or whiteboard. NaNa Esumai understands all three.', badge: 'Accessibility' },
     { icon: <School size={18}/>, title: 'School Dashboard',            desc: 'Teachers see class-wide agent performance, knowledge gaps, and battle rankings. NDPR-compliant.', badge: 'B2B / Schools' },
     { icon: <WifiOff size={18}/>, title: 'Offline Access',             desc: 'Built for students across Nigeria and Africa. Sync when you reconnect.', badge: 'Offline-first' },
     { icon: <Trophy size={18}/>, title: 'XP, Badges & Leaderboards',   desc: 'Every lesson, battle, and streak earns XP. Climb school and inter-school leaderboards.', badge: 'Gamification' },
@@ -1016,7 +1016,7 @@ function Footer() {
               <AkoroLogo size={32} radius={9}/>
               <span className="fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
             </div>
-            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents — where NaNa Esumai learns everything you teach her, then teaches you back.</p>
+            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents — teach your agent, NaNa Esumai guides every session and teaches you back.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {socials.map(({ icon, label }) => (
                 <button key={label} style={{ width: 34, height: 34, borderRadius: 8, background: '#fff', border: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7A7880', transition: 'all .18s' }}
