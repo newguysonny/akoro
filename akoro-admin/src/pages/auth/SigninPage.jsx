@@ -20,7 +20,7 @@ function GoogleIcon() {
 export default function SigninPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { login, verifyTwoFactor, loginWithGoogle, logout, loading, clearError } = useAuth();
+  const { login, verifyTwoFactor, loginWithGoogle, logoutSilent, loading, clearError } = useAuth();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [formErr,  setFormErr]  = useState('');
@@ -28,11 +28,13 @@ export default function SigninPage() {
   const [code,      setCode]      = useState('');
   const urlError = params.get('error');
 
-  const finishLogin = (data) => {
+  const finishLogin = async (data) => {
     const role = data?.user?.role || data?.role;
     if (role && role !== 'admin') {
-      setFormErr('This portal is for admins only');
-      logout();
+      // Clear the just-created session but stay on this page to show the error.
+      await logoutSilent();
+      setChallenge(null);
+      setFormErr('This account is not an admin. Access is restricted to Akoro administrators.');
       return;
     }
     navigate('/', { replace: true });

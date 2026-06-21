@@ -107,6 +107,14 @@ export function AuthProvider({ children }) {
     window.location.href = '/signin';
   }, [clearUser]);
 
+  // Same as logout but without the hard redirect — caller controls navigation.
+  const logoutSilent = useCallback(async () => {
+    try {
+      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+    } catch { /* ignore */ }
+    clearUser();
+  }, [clearUser]);
+
   const loginWithGoogle = useCallback((redirectAfter = '/') => {
     localStorage.setItem(REDIRECT_KEY, redirectAfter);
     window.location.href = `${API}/api/auth/google?portal=admin`;
@@ -137,7 +145,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, initializing, error, isAuthenticated,
-      login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
+      login, verifyTwoFactor, register, loginWithGoogle, logout, logoutSilent, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
     }}>
