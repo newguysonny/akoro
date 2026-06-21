@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth }   from './contexts/AuthContext.jsx';
 import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
@@ -55,9 +56,17 @@ function GuestRoute({ children }) {
   return children;
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
+
 function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       <Route path="/" element={<LandingPage />}/>
       <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>}/>
       <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
@@ -81,6 +90,7 @@ function AppRoutes() {
       <Route path="/auth/callback"   element={<AuthCallback />}/>
       <Route path="*" element={<NotFoundPage />}/>
     </Routes>
+    </>
   );
 }
 

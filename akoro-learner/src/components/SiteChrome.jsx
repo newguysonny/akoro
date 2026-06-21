@@ -225,7 +225,7 @@ export function SiteFooter() {
           <span style={{ fontSize: 12, color: '#9490A0' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</span>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {legal.map(({ label, href }) => (
-              href.startsWith('/') && !href.includes('#') ? (
+              href.startsWith('/') ? (
                 <Link key={label} to={href} style={{ fontSize: 12, color: '#9490A0', transition: 'color .18s', textDecoration: 'none' }}
                   onMouseEnter={e => e.target.style.color = B}
                   onMouseLeave={e => e.target.style.color = '#9490A0'}>{label}</Link>
