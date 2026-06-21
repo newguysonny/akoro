@@ -31,9 +31,10 @@ async function authFetch(path, body) {
 }
 
 export function AuthProvider({ children }) {
-  const [user,    setUser]    = useState(getStoredUser);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(null);
+  const [user,         setUser]         = useState(getStoredUser);
+  const [loading,      setLoading]      = useState(false);
+  const [initializing, setInitializing] = useState(true);   // true until session verified
+  const [error,        setError]        = useState(null);
 
   const isAuthenticated = !!user;
 
@@ -116,13 +117,14 @@ export function AuthProvider({ children }) {
     if (userObj) saveUser(userObj);
   }, [saveUser]);
 
-  // Verify session on mount
+  // Verify session on mount — sets initializing=false when done regardless of outcome
   useEffect(() => {
-    if (!getStoredUser()) return;
+    if (!getStoredUser()) { setInitializing(false); return; }
     fetch(`${API}/api/auth/me`, { credentials: 'include' })
       .then(r => r.json())
       .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
-      .catch(() => refresh());
+      .catch(() => refresh())
+      .finally(() => setInitializing(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Proactive refresh every 13 minutes (access token TTL = 15 min)
@@ -134,7 +136,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, error, isAuthenticated,
+      user, loading, initializing, error, isAuthenticated,
       login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
