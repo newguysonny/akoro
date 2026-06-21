@@ -996,9 +996,9 @@ function FinalCTA({ onSignup }) {
 /* ══════════════ FOOTER ══════════════ */
 function Footer() {
   const cols = [
-    { title: 'Product',     links: ['How it works','Courses','Live Classes','Pricing','Agent Battles','Certifications'] },
-    { title: 'For Schools', links: ['Enterprise Starter','Enterprise Pro','School Dashboard','Pilot Programme','NDPR Compliance','Case Studies'] },
-    { title: 'Company',     links: ['About Us','Blog','Careers','Press','Contact','Partners'] },
+    { title: 'Product',     links: [['How it works','#'],['Courses','#'],['Live Classes','#'],['Pricing','#'],['Agent Battles','#'],['Certifications','#']] },
+    { title: 'For Schools', links: [['Enterprise Starter','#'],['Enterprise Pro','#'],['School Dashboard','#'],['Pilot Programme','#'],['NDPR Compliance','#'],['Case Studies','#']] },
+    { title: 'Company',     links: [['About Us','#'],['Blog','#'],['Careers','#'],['Press','#'],['Contact','#'],['Partners','#'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
   ];
   const socials = [
     { icon: <FaXTwitter size={14}/>,   label: 'X' },
@@ -1031,10 +1031,10 @@ function Footer() {
             <div key={title}>
               <h4 className="fsyne" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#1A1A2E', marginBottom: 16 }}>{title}</h4>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {links.map(l => (
-                  <li key={l}><a href="#" style={{ fontSize: 13.5, color: '#7A7880', transition: 'color .18s' }}
+                {links.map(([label, href]) => (
+                  <li key={label}><a href={href} style={{ fontSize: 13.5, color: '#7A7880', transition: 'color .18s', textDecoration: 'none' }}
                     onMouseEnter={e => e.target.style.color = B}
-                    onMouseLeave={e => e.target.style.color = '#7A7880'}>{l}</a></li>
+                    onMouseLeave={e => e.target.style.color = '#7A7880'}>{label}</a></li>
                 ))}
               </ul>
             </div>
