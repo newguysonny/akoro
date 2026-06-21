@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TrendingUp, DollarSign, Users, BookOpen, RefreshCw } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, BookOpen, RefreshCw, Clock, CheckSquare, BarChart2 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Skeleton, Toast } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -85,7 +85,6 @@ function BarChart({ data, loading }) {
             </g>
           );
         })}
-        {/* x-axis labels: show every nth */}
         {data.filter((_, i) => i % Math.ceil(data.length / 10) === 0).map((d, labelIdx) => {
           const i = data.indexOf(d);
           const x = i * (barW + gap) + barW / 2;
@@ -119,7 +118,10 @@ export default function AnalyticsPage() {
   const [enrollments, setEnrollments] = useState(null);
   const [usersGrowth, setUsersGrowth] = useState(null);
   const [topCourses, setTopCourses] = useState([]);
+  const [engagement, setEngagement] = useState(null);
+  const [topLessons, setTopLessons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [engLoading, setEngLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
   const showToast = (message, type = 'success') => {
@@ -148,7 +150,22 @@ export default function AnalyticsPage() {
     }
   }, [period]);
 
+  const loadEngagement = useCallback(async () => {
+    setEngLoading(true);
+    try {
+      const res = await apiGet('/api/admin/analytics/engagement');
+      setEngagement(res);
+      const lessons = Array.isArray(res?.top_lessons) ? res.top_lessons : (res?.lessons || []);
+      setTopLessons(lessons);
+    } catch {
+      // non-fatal
+    } finally {
+      setEngLoading(false);
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadEngagement(); }, [loadEngagement]);
 
   const fmtMoney = (v) => `$${(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtNum   = (v) => (v || 0).toLocaleString();
@@ -209,7 +226,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Top courses table */}
-        <div>
+        <div style={{ marginBottom: 40 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Top Courses by Enrollments</h2>
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
             {loading ? (
@@ -242,6 +259,67 @@ export default function AnalyticsPage() {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+
+        {/* ── Engagement Section ── */}
+        <div style={{ borderTop: `2px solid ${BORDER}`, paddingTop: 36 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 800, color: INK, margin: '0 0 20px', fontFamily: FONT }}>Engagement</h2>
+
+          {/* Engagement stat cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
+            <StatCard
+              icon={CheckSquare} label="Avg Completion Rate" color={GREEN}
+              value={engLoading ? '—' : engagement?.avg_completion_rate != null ? `${Math.round(engagement.avg_completion_rate)}%` : '—'}
+              loading={engLoading}
+            />
+            <StatCard
+              icon={Clock} label="Avg Watch Time" color={BLUE}
+              value={engLoading ? '—' : engagement?.avg_watch_time_minutes != null ? `${Math.round(engagement.avg_watch_time_minutes)} min` : '—'}
+              loading={engLoading}
+            />
+            <StatCard
+              icon={BarChart2} label="Lessons Completed" color={PURPLE}
+              value={engLoading ? '—' : fmtNum(engagement?.lessons_completed || 0)}
+              loading={engLoading}
+            />
+          </div>
+
+          {/* Top Lessons table */}
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Top Lessons</h3>
+            <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden' }}>
+              {engLoading ? (
+                <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {[1,2,3,4,5].map(i => <Skeleton key={i} height={44} />)}
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: LIGHT }}>
+                      <th style={{ ...TH, width: 48 }}>Rank</th>
+                      <th style={TH}>Lesson Title</th>
+                      <th style={{ ...TH, textAlign: 'right' }}>Completions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topLessons.length === 0 ? (
+                      <tr><td colSpan={3} style={{ ...TD, textAlign: 'center', color: MUTED, borderBottom: 'none' }}>No lesson data available</td></tr>
+                    ) : topLessons.map((lesson, idx) => (
+                      <tr key={lesson.id || idx}
+                        onMouseEnter={e => e.currentTarget.style.background = '#FAF8F5'}
+                        onMouseLeave={e => e.currentTarget.style.background = WHITE}>
+                        <td style={{ ...TD, color: MUTED, fontWeight: 700, width: 48 }}>{idx + 1}</td>
+                        <td style={{ ...TD, fontWeight: 600 }}>{lesson.title || lesson.lesson_title || '—'}</td>
+                        <td style={{ ...TD, textAlign: 'right', color: GREEN, fontWeight: 700 }}>
+                          {fmtNum(lesson.completions || lesson.completion_count || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
 
