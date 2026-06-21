@@ -16,6 +16,8 @@ import ChatPage     from './pages/ChatPage.jsx';
 import SettingsPage       from './pages/SettingsPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
+import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
+import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
 
 /* ── ProtectedRoute ─────────────────────────────────────────────────── */
 const INSTRUCTOR_ROLES = ['instructor', 'admin'];
@@ -90,6 +92,10 @@ function AppRoutes() {
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+
+      {/* Legal */}
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms"   element={<TermsOfServicePage />} />
 
       {/* Auth */}
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>} />

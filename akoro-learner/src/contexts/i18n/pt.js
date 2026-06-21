@@ -26,7 +26,7 @@ export const PT = {
   /* ── Dashboard header / tabs ── */
   'dash.my_sessions':  'Minhas Sessões',
   'dash.challenges':   'Desafios',
-  'dash.start_session':'Iniciar Sessão',
+  'dash.start_session':'Ensine seu agente',
   'dash.live':         'Ao Vivo',
 
   /* ── Session tabs / buckets ── */

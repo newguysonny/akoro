@@ -1043,10 +1043,15 @@ function Footer() {
         <div style={{ paddingTop: 24, borderTop: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <span style={{ fontSize: 12, color: '#9490A0' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</span>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {['Privacy Policy','Terms of Service','Cookie Policy','Student Data Policy'].map(l => (
-              <a key={l} href="#" style={{ fontSize: 12, color: '#9490A0', transition: 'color .18s' }}
+            {[
+              { label: 'Privacy Policy', href: '/privacy' },
+              { label: 'Terms of Service', href: '/terms' },
+              { label: 'Cookie Policy', href: '/privacy#cookies' },
+              { label: 'Student Data Policy', href: '/privacy#student-data' },
+            ].map(({ label, href }) => (
+              <a key={label} href={href} style={{ fontSize: 12, color: '#9490A0', transition: 'color .18s', textDecoration: 'none' }}
                 onMouseEnter={e => e.target.style.color = B}
-                onMouseLeave={e => e.target.style.color = '#9490A0'}>{l}</a>
+                onMouseLeave={e => e.target.style.color = '#9490A0'}>{label}</a>
             ))}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

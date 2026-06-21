@@ -26,7 +26,7 @@ export const YO = {
   /* ── Dashboard header / tabs ── */
   'dash.my_sessions':  'Àwọn Ìpàdé Mi',
   'dash.challenges':   'Àwọn Ìpèníjà',
-  'dash.start_session':'Bẹ̀rẹ̀ Ìpàdé',
+  'dash.start_session':'Kọ́ Aṣojú Rẹ',
   'dash.live':         'Tààrà',
 
   /* ── Session tabs / buckets ── */

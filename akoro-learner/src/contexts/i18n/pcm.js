@@ -25,7 +25,7 @@ export const PCM = {
   /* ── Dashboard header / tabs ── */
   'dash.my_sessions':  'My Session dem',
   'dash.challenges':   'Challenge dem',
-  'dash.start_session':'Start Session',
+  'dash.start_session':'Teach Your Agent',
   'dash.live':         'Live',
 
   /* ── Session tabs / buckets ── */

@@ -19,7 +19,7 @@ export const FR = {
 
   'dash.my_sessions':  'Mes sessions',
   'dash.challenges':   'Défis',
-  'dash.start_session':'Démarrer une session',
+  'dash.start_session':'Enseigner votre agent',
   'dash.live':         'En direct',
 
   'sessions.all':          'Toutes',

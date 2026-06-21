@@ -28,7 +28,7 @@ export const EN = {
   /* ── Dashboard header / tabs ── */
   'dash.my_sessions':  'My Sessions',
   'dash.challenges':   'Challenges',
-  'dash.start_session':'Start Session',
+  'dash.start_session':'Teach your agent',
   'dash.live':         'Live',
 
   /* ── Session tabs / buckets ── */

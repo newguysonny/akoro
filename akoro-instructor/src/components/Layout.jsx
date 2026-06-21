@@ -130,6 +130,17 @@ export function Sidebar() {
           <LogOut size={16} />
         </button>
       </div>
+      {/* Legal links */}
+      {!compact && (
+        <div style={{ padding: '10px 20px 14px', display: 'flex', gap: 12 }}>
+          <a href="/privacy" style={{ fontSize: 10, color: MUTED2, textDecoration: 'none', fontFamily: FONT, transition: 'color .15s' }}
+            onMouseEnter={e => e.target.style.color = '#fff'}
+            onMouseLeave={e => e.target.style.color = MUTED2}>Privacy</a>
+          <a href="/terms" style={{ fontSize: 10, color: MUTED2, textDecoration: 'none', fontFamily: FONT, transition: 'color .15s' }}
+            onMouseEnter={e => e.target.style.color = '#fff'}
+            onMouseLeave={e => e.target.style.color = MUTED2}>Terms</a>
+        </div>
+      )}
     </aside>
   );
 }
