@@ -101,3 +101,19 @@ CREATE TRIGGER trg_blog_posts_touch BEFORE UPDATE ON content.blog_posts
 DROP TRIGGER IF EXISTS trg_jobs_touch ON content.jobs;
 CREATE TRIGGER trg_jobs_touch BEFORE UPDATE ON content.jobs
     FOR EACH ROW EXECUTE FUNCTION content.touch_updated_at();
+
+-- ─── Grants ──────────────────────────────────────────────────────────────────────
+-- A custom schema does NOT inherit the auto-grants Supabase applies to `public`.
+-- Without these, the API (service_role) and PostgREST roles cannot see the tables
+-- even though they exist. Also remember to add `content` to the project's
+-- Exposed schemas (Settings → API). Safe to re-run.
+
+GRANT USAGE ON SCHEMA content TO anon, authenticated, service_role;
+
+GRANT SELECT ON ALL TABLES IN SCHEMA content TO anon, authenticated;
+GRANT ALL    ON ALL TABLES IN SCHEMA content TO service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA content
+  GRANT SELECT ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA content
+  GRANT ALL ON TABLES TO service_role;
