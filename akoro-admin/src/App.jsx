@@ -24,9 +24,9 @@ import ForgotPasswordPage   from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage    from './pages/auth/ResetPasswordPage.jsx';
 
 function AdminRoute({ children }) {
-  const { isAuthenticated, user, loading, initializing } = useAuth();
+  const { isAuthenticated, user, initializing } = useAuth();
   const location = useLocation();
-  if (initializing || loading) return null;
+  if (initializing) return null;
   if (!isAuthenticated) return <Navigate to="/signin" state={{ from: location }} replace />;
   if (user?.role !== 'admin') return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontFamily:'DM Sans,sans-serif' }}>
@@ -41,8 +41,8 @@ function AdminRoute({ children }) {
 }
 
 function GuestRoute({ children }) {
-  const { isAuthenticated, user, loading, initializing } = useAuth();
-  if (initializing || loading) return null;
+  const { isAuthenticated, user, initializing } = useAuth();
+  if (initializing) return null;
   if (isAuthenticated && user?.role === 'admin') return <Navigate to="/" replace />;
   return children;
 }
