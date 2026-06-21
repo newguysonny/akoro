@@ -47,6 +47,13 @@ const JWT_ISSUER   = process.env.JWT_ISSUER   || "https://api.akoro.app";
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
 const FRONTEND_URL            = process.env.FRONTEND_URL             || "https://akoro.app";
 const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL  || "https://instructor.akoro.app";
+const ADMIN_FRONTEND_URL      = process.env.ADMIN_FRONTEND_URL       || "https://admin.akoro.app";
+
+// Map a portal name to its frontend base URL.
+const portalUrl = (portal) =>
+  portal === "instructor" ? INSTRUCTOR_FRONTEND_URL
+  : portal === "admin"    ? ADMIN_FRONTEND_URL
+  : FRONTEND_URL;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 
 const ACCESS_TTL_SECS  = 15 * 60;        // 15 minutes
@@ -708,9 +715,10 @@ router.post("/2fa/disable", authenticateToken, authHandlers.twoFactorDisable);
 router.post("/change-password", authenticateToken, authHandlers.changePassword);
 
 // Google OAuth
-// ?portal=instructor  →  signals an instructor login attempt
+// ?portal=instructor | admin  →  signals which portal the login came from
+const PORTALS = ["instructor", "admin", "student"];
 router.get("/google", (req, res, next) => {
-  const portal = req.query.portal === "instructor" ? "instructor" : "student";
+  const portal = PORTALS.includes(req.query.portal) ? req.query.portal : "student";
   passport.authenticate("google", {
     scope:   ["profile", "email"],
     session: false,
@@ -721,19 +729,20 @@ router.get("/google", (req, res, next) => {
 router.get("/google/callback",
   (req, res, next) => {
     // Determine which frontend to redirect failures to based on state
-    const portal = req.query.state === "instructor" ? "instructor" : "student";
-    const failUrl = portal === "instructor"
-      ? `${INSTRUCTOR_FRONTEND_URL}/signin?error=google_failed`
-      : `${FRONTEND_URL}/signin?error=google_failed`;
+    const portal = PORTALS.includes(req.query.state) ? req.query.state : "student";
+    const failUrl = `${portalUrl(portal)}/signin?error=google_failed`;
     passport.authenticate("google", { session: false, failureRedirect: failUrl })(req, res, next);
   },
   asyncHandler(async (req, res) => {
     const user   = req.user;
-    const portal = req.query.state === "instructor" ? "instructor" : "student";
+    const portal = PORTALS.includes(req.query.state) ? req.query.state : "student";
 
-    // Role enforcement: instructor portal only allows instructor/admin accounts
+    // Role enforcement per portal
     if (portal === "instructor" && user.role !== "instructor" && user.role !== "admin") {
       return res.redirect(`${INSTRUCTOR_FRONTEND_URL}/signin?error=not_instructor`);
+    }
+    if (portal === "admin" && user.role !== "admin") {
+      return res.redirect(`${ADMIN_FRONTEND_URL}/signin?error=not_admin`);
     }
 
     const { token: accessToken } = signAccess(user);
@@ -748,7 +757,7 @@ router.get("/google/callback",
 
     const safe = safeUser(user);
     const userParam = encodeURIComponent(JSON.stringify(safe));
-    const target = portal === "instructor" ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
+    const target = portalUrl(portal);
 
     // Send welcome for brand-new Google accounts, login alert for returning users
     const isNew = !user.password_hash && !user.created_at_was_existing; // heuristic: no PW set = new

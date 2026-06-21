@@ -30,10 +30,10 @@ export default function AuthCallback() {
 
       const userObj = JSON.parse(decodeURIComponent(userRaw));
 
-      // Role guard — only instructors/admins can use this portal
-      if (userObj.role !== 'instructor' && userObj.role !== 'admin') {
+      // Role guard — only admins can use this portal
+      if (userObj.role !== 'admin') {
         setStatus('Access denied. Redirecting...');
-        setTimeout(() => navigate('/signin?error=not_instructor'), 1500);
+        setTimeout(() => navigate('/signin?error=not_admin'), 1500);
         return;
       }
 
@@ -60,7 +60,7 @@ export default function AuthCallback() {
         border: `3px solid ${AMBER}22`, borderTop: `3px solid ${AMBER}`,
         animation: 'spin 0.8s linear infinite', marginBottom: 20 }} />
       <p style={{ fontSize: 15, fontWeight: 700, color: '#1A1A2E' }}>{status}</p>
-      <p style={{ fontSize: 12, color: '#9490A0', marginTop: 6 }}>Akoro · Instructor Portal</p>
+      <p style={{ fontSize: 12, color: '#9490A0', marginTop: 6 }}>Akoro · Admin Portal</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
