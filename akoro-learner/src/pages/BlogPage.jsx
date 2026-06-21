@@ -1,87 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
-import { Rss, BookOpen, Brain, Lightbulb, GraduationCap, TrendingUp, Clock, ArrowRight, Search, ChevronRight } from 'lucide-react';
+import { Rss, BookOpen, Clock, ArrowRight, Search, ChevronRight } from 'lucide-react';
+import { POSTS, CATS } from '../data/blogPosts.js';
 
 const B = '#6C3BFF', B2 = '#4C1DCC', INK = '#0F0A1E', TEXT = '#3F3A52', MUTED = '#7A7588', BORDER = '#ECEAF4', TINT = '#F6F4FF';
-
-const CATS = ['All', 'Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies'];
-
-const POSTS = [
-  {
-    id: 1,
-    category: 'Learning Science',
-    Icon: Brain,
-    title: 'Why Spacing and Retrieval Practice Beat Re-Reading Every Time',
-    excerpt: 'Decades of cognitive science research point to two techniques that dramatically outperform passive review. Here\'s how NaNa builds them into every session.',
-    author: 'Dr. Amara Osei',
-    authorRole: 'Head of Learning Science',
-    date: 'Jun 14, 2026',
-    readMin: 7,
-    featured: true,
-    color: '#EDE9FF',
-  },
-  {
-    id: 2,
-    category: 'Product',
-    Icon: Lightbulb,
-    title: 'Introducing Adaptive Battle Mode: Your Agent Fights Smarter',
-    excerpt: 'Battle Mode just got a major upgrade. NaNa now analyses your weak spots in real time and targets exactly the concepts you need most.',
-    author: 'Kwame Asante',
-    authorRole: 'Product Lead',
-    date: 'Jun 7, 2026',
-    readMin: 4,
-    color: '#FFF3E0',
-  },
-  {
-    id: 3,
-    category: 'Education',
-    Icon: GraduationCap,
-    title: 'How Ghanaian Secondary Schools Are Closing the STEM Gap with AI Tutors',
-    excerpt: 'Three schools. Eight months. A 23 % improvement in WAEC science scores. We break down what worked and what surprised us.',
-    author: 'Efua Mensah',
-    authorRole: 'Partnerships',
-    date: 'May 28, 2026',
-    readMin: 9,
-    color: '#E8F5E9',
-  },
-  {
-    id: 4,
-    category: 'AI & Future',
-    Icon: TrendingUp,
-    title: 'The Agent-Native Classroom: What Education Looks Like in 2030',
-    excerpt: 'Every student has a personal AI agent that knows their learning history, adapts in real time, and never gives up. We\'re building towards that future today.',
-    author: 'Nana Kofi Agyemang',
-    authorRole: 'Co-founder & CEO',
-    date: 'May 19, 2026',
-    readMin: 6,
-    color: '#EDE9FF',
-  },
-  {
-    id: 5,
-    category: 'Case Studies',
-    Icon: BookOpen,
-    title: 'From 42% to 78%: One Learner\'s Six-Month Journey with NaNa',
-    excerpt: 'Abena failed her BECE mock twice. Six months later she passed with distinction. This is her story — in her own words.',
-    author: 'Akoro Team',
-    authorRole: '',
-    date: 'May 10, 2026',
-    readMin: 5,
-    color: '#FFF3E0',
-  },
-  {
-    id: 6,
-    category: 'Learning Science',
-    Icon: Brain,
-    title: 'Interleaving: The Counterintuitive Study Strategy That Actually Works',
-    excerpt: 'Mixing topics feels harder. Students score lower on immediate tests. Yet they retain far more a week later. Here\'s the science behind interleaving.',
-    author: 'Dr. Amara Osei',
-    authorRole: 'Head of Learning Science',
-    date: 'Apr 30, 2026',
-    readMin: 8,
-    color: '#E8F5E9',
-  },
-];
 
 export default function BlogPage() {
   const [cat, setCat] = useState('All');
@@ -137,7 +60,7 @@ export default function BlogPage() {
       {featured && (
         <section style={{ maxWidth: 1120, margin: '0 auto', padding: '56px 24px 0' }}>
           <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: B, textTransform: 'uppercase', marginBottom: 20 }}>Featured</p>
-          <div className="blog-hero-inner" style={{ background: TINT, borderRadius: 20, padding: 40, border: `1.5px solid ${BORDER}`, cursor: 'pointer' }}>
+          <div className="blog-hero-inner" onClick={() => navigate(`/blog/${featured.slug}`)} style={{ background: TINT, borderRadius: 20, padding: 40, border: `1.5px solid ${BORDER}`, cursor: 'pointer' }}>
             <div>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: featured.color, borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 18 }}>
                 <featured.Icon size={13} /> {featured.category}
@@ -190,7 +113,7 @@ export default function BlogPage() {
         ) : (
           <div className="blog-grid">
             {visible.map(post => (
-              <article key={post.id} style={{ background: '#fff', border: `1.5px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow .2s, transform .2s' }}
+              <article key={post.id} onClick={() => navigate(`/blog/${post.slug}`)} style={{ background: '#fff', border: `1.5px solid ${BORDER}`, borderRadius: 16, overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow .2s, transform .2s' }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 32px rgba(108,59,255,.12)'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}>
                 <div style={{ background: `linear-gradient(135deg, ${post.color} 0%, ${post.color}88 100%)`, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
