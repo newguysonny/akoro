@@ -1,14 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiPost } from '../../services/api.js';
-// Local fallback constants (no mock dependency)
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
-const autoObjectives = (subtopic, topic) => [
-  `Define and explain ${subtopic} in the context of ${topic}`,
-  `Identify the key causes and effects of ${subtopic}`,
-  `Apply knowledge of ${subtopic} to real-world examples`,
-];
-import { buildDecayHistory, buildMockQueue } from '../../services/mockBlocks.js';
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -19,9 +12,11 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   const subject  = alert.subject;
   const topic    = alert.topic;
 
-  // Load history synchronously on first render — no blank screen wait
+  // The re-teach session is built by the backend (session_ready WebSocket
+  // event or the REST /decay/session/start endpoint). Start empty.
   const [sessionId, setSessionId] = useState(null);
-  const [blocks,    setBlocks]    = useState(() => buildDecayHistory(alert, agentNm, agentEm));
+  const [blocks,    setBlocks]    = useState([]);
+  const [initLoading, setInitLoading] = useState(true);
   const [input,     setInput]     = useState("");
   const [recording, setRecording] = useState(false);
   const [seconds,   setSeconds]   = useState(0);
@@ -29,15 +24,11 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   const [wsReady,   setWsReady]   = useState(false);
   const timerRef    = useRef(null);
   const wsRef       = useRef(null);
-  const mockQueueRef = useRef([]);
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
   useEffect(() => {
-    const decayConfig = { topic, subject, subtopics:[topic], objectives:{ [topic]: autoObjectives(topic, topic) } };
-    mockQueueRef.current = buildMockQueue(decayConfig, agentNm, agentEm);
-
     // Connect WebSocket for streaming
     const WS_URL = (typeof VITE_API_URL !== "undefined" ? VITE_API_URL : "https://akoro.app");
     if (typeof window !== "undefined" && window.io) {
@@ -58,10 +49,11 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
         setWsReady(true);
+        setInitLoading(false);
         if (d.historyBlocks?.length) setBlocks(d.historyBlocks);
       });
       // Backward compat
-      ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); });
+      ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); setInitLoading(false); });
 
       ws.on("typing_start", () => setLoading(true));
 
@@ -80,7 +72,8 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       }).then(d => {
         if (d.sessionId) setSessionId(d.sessionId);
         if (d.historyBlocks?.length) setBlocks(d.historyBlocks);
-      }).catch(()=>{});
+      }).catch(err => console.warn("[DecayModal] session start failed:", err.message))
+        .finally(() => setInitLoading(false));
     }
 
     return () => {
@@ -122,33 +115,23 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
           sessionId, message: text, studentId: STUDENT_ID,
         });
         if (data.blocks?.length) { setBlocks(prev=>[...prev,...data.blocks]); setLoading(false); return; }
-      } catch { /* fall through */ }
+      } catch (err) {
+        console.warn("[DecayModal] message failed:", err.message);
+      }
     }
 
-    // Mock fallback
-    const next = mockQueueRef.current.shift();
-    setTimeout(() => {
-      if (next?.length) {
-        setBlocks(prev => [...prev, ...next]);
-      } else {
-        const newConf = Math.min(alert.confidence + (userTurns+1)*12, 85);
-        setBlocks(prev => [...prev, {
-          type:"guide", agent:"NaNa Esumai", emoji:"🧠", phase:"Re-teach progress",
-          text:`${agentNm} is rebuilding the knowledge. Address the ${alert.misconceptions?.[0]||"gap"} specifically.`,
-        }, {
-          type:"student-agent", agent:agentNm, emoji:agentEm,
-          phase:`${agentNm} · re-learning · ${newConf}%`, confidence:newConf,
-          text:`That clears things up. The distinction is becoming clearer now.`,
-        }]);
-      }
-      setLoading(false);
-    }, 800);
+    // No live connection and no REST session — surface the failure honestly.
+    setBlocks(prev => [...prev, {
+      type:"system-divider",
+      label:"Couldn't reach the tutor. Check your connection and try again.",
+    }]);
+    setLoading(false);
   };
 
   return (
     <SessionChatView
       blocks={blocks}
-      loading={loading}
+      loading={loading || (initLoading && blocks.length === 0)}
       input={input}
       onInputChange={setInput}
       onSend={handleSend}

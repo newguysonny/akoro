@@ -26,18 +26,8 @@ const QUICK_PROMPTS = [
   { text:"Explain Mitosis",      key:"agent.qp_explain" },
   { text:"Help with an essay",   key:"agent.qp_essay" },
 ];
-const AGENT_REPLIES = {
-  "Create a task for me":"Sure! What do you need to get done? Tell me the subject and what it's about — I'll add it to your task list.",
-  "What's due today?":"📋 Let me check your task list for today's items. Use the Tasks tab to see everything that's pending.",
-  "Quiz me on Algebra":"Let's go! 🎯\n\nQ1: Solve for x: 3x + 7 = 22\n\nType your answer and I'll check it, then move to the next question.",
-  "Check my progress":"I'll pull up your progress now. Check the Stats tab for a full breakdown of your recent activity.",
-  "Explain Mitosis":"Great topic! 🔬\n\nMitosis is how a cell divides into two identical daughters. 4 main phases:\n\n1. Prophase — chromosomes condense\n2. Metaphase — chromosomes line up\n3. Anaphase — chromosomes pulled apart\n4. Telophase — two new nuclei form\n\nWant me to quiz you on this?",
-  "Help with an essay":"Happy to help! 📝 Tell me the topic or paste in what you have so far, and I'll give you feedback or help you structure your argument.",
-};
 const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
-const AGENT_LEVEL = 12;
-// Local agent config constants (no mock dependency)
-const AGENT_CONFIG = { name: '', level: AGENT_LEVEL, avatars: AGENT_AVATARS };
+const AGENT_CONFIG = { name: '', avatars: AGENT_AVATARS };
 
 function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const { t } = useLang();
@@ -169,17 +159,6 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       return;
     }
 
-    // Quick-reply shortcuts (unchanged)
-    const shortcut=AGENT_REPLIES[text];
-    if(shortcut){
-      setTimeout(()=>{
-        const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-        setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:shortcut,time:t2}]);
-        setLoading(false);
-      },900);
-      return;
-    }
-
     // Normal AI chat — OpenAI educational tutor (no tasks/tools)
     try {
       const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
@@ -245,7 +224,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
           <div>
             <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{agentName}</p>
-            <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${t('common.online')} · Lv ${AGENT_CONFIG.level} · ${t('agent.learning_agent')}`}</span></div>
+            <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${t('common.online')} · ${t('agent.learning_agent')}`}</span></div>
           </div>
         </div>
         <button onClick={()=>{setDraftName(agentName);setDraftEmoji(agentEmoji);setCustOpen(true);}} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:11.5,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
@@ -352,7 +331,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:10,letterSpacing:.3 }}>{t('agent.avatar')}</label><div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{AGENT_CONFIG.avatars.map(em=><button key={em} onClick={()=>setDraftEmoji(em)} style={{ width:46,height:46,borderRadius:12,border:`2px solid ${draftEmoji===em?BRAND:"var(--ak-border2)"}`,background:draftEmoji===em?`${BRAND}12`:"var(--ak-surface-hover)",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s" }}>{em}</button>)}</div></div>
           <div style={{ display:"flex",alignItems:"center",gap:12,background:`${BRAND}08`,border:`1px solid ${BRAND}20`,borderRadius:14,padding:"12px 14px",marginBottom:20 }}>
             <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{draftEmoji}</div>
-            <div><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{draftName||t('agent.unnamed')}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{t('common.online')} · Lv {AGENT_CONFIG.level}</p></div>
+            <div><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{draftName||t('agent.unnamed')}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{t('common.online')}</p></div>
           </div>
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={()=>setCustOpen(false)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>

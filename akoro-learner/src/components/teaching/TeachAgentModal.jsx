@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
-import { buildInitialBlocks, buildMockQueue, buildContinuationHistory } from '../../services/mockBlocks.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
@@ -21,26 +20,11 @@ function TeachAgentModal({ session, config, onClose }) {
   const prevSessId = config?.sessionId || config?.id || session?.id || null;
 
   const [sessionId,  setSessionId]  = useState(null);
-  // Initialize blocks synchronously — never hang on API call
-  const [blocks,     setBlocks]     = useState(() => {
-    if (mode === "continuation" && prevSessId) {
-      return buildContinuationHistory({
-        topic, subject,
-        id:            prevSessId,
-        subtopicList:  session?.subtopicList  || config?.subtopics  || [],
-        avgConfidence: session?.avgConfidence || session?.progress  || 70,
-        daysSince:     session?.daysSince     || 0,
-      }, agentNm, agentEm);
-    }
-    if (config) return buildInitialBlocks(config, agentNm, agentEm, guideNm, guideEm);
-    return [
-      { type:"guide", agent:guideNm, emoji:guideEm, phase:"Teach · ready",
-        text:`Let's start teaching **${topic}**. Explain it as simply as possible.` },
-      { type:"student-agent", agent:agentNm, emoji:agentEm,
-        phase:`${agentNm} · ready to learn`, confidence:10,
-        text:`I'm ready to learn about ${topic}. Please teach me!` },
-    ];
-  });
+  // Blocks come from the backend (REST /teaching/start, history endpoint, or
+  // the session_ready WebSocket event). Start empty and show a loading state
+  // until the server responds — no fabricated content.
+  const [blocks,     setBlocks]     = useState([]);
+  const [initLoading, setInitLoading] = useState(true);
   const [input,      setInput]      = useState("");
   const [recording,  setRecording]  = useState(false);
   const [seconds,    setSeconds]    = useState(0);
@@ -50,7 +34,6 @@ function TeachAgentModal({ session, config, onClose }) {
   const [wsReady,    setWsReady]    = useState(false);
   const timerRef      = useRef(null);
   const wsRef         = useRef(null);
-  const mockQueueRef  = useRef([]);
   const mediaRef      = useRef(null);    // MediaRecorder — audio (blob) mode
   const voiceMediaRef = useRef(null);    // PCM capture handle — voice (streaming) mode
   const voiceReadyRef = useRef(false);   // backend STT connection open
@@ -139,12 +122,11 @@ function TeachAgentModal({ session, config, onClose }) {
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
   useEffect(() => {
-    if (config) mockQueueRef.current = buildMockQueue(config, agentNm, agentEm, guideNm, guideEm);
-
-    // Background API call — blocks already shown, just replace if real data returns
+    // Load the real session from the backend. WebSocket session_ready may also
+    // supply history; whichever returns first populates the view.
     const loadAndInit = async () => {
-      if (mode === "continuation" && prevSessId) {
-        try {
+      try {
+        if (mode === "continuation" && prevSessId) {
           const data = await apiGet(`/api/adaptive/sessions/${prevSessId}/history`);
           if (data.historyBlocks?.length) {
             setBlocks([
@@ -152,17 +134,18 @@ function TeachAgentModal({ session, config, onClose }) {
               { type:"system-divider", label:"Continuing from here" },
             ]);
           }
-        } catch { /* keep mock history already shown */ }
-      } else if (config) {
-        // Fresh session — try to get real initial blocks from API
-        try {
+        } else if (config) {
           const data = await apiPost("/api/adaptive/teaching/start", {
             topic, subject, subtopics: config.subtopics,
             objectives: config.objectives, studentId: STUDENT_ID,
           });
           if (data.sessionId) setSessionId(data.sessionId);
           if (data.blocks?.length) setBlocks(data.blocks);
-        } catch { /* keep mock initial blocks already shown */ }
+        }
+      } catch (err) {
+        console.warn("[TeachModal] session init failed:", err.message);
+      } finally {
+        setInitLoading(false);
       }
     };
     loadAndInit();
@@ -187,6 +170,7 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
         setWsReady(true);
+        setInitLoading(false);
         if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: d.guideProfile.emoji || "🧠" });
         if (d.agentPairId) setCurrentPair(d.agentPairId);
         if (d.historyBlocks?.length) {
@@ -455,7 +439,7 @@ function TeachAgentModal({ session, config, onClose }) {
       return;
     }
 
-    // REST fallback
+    // REST fallback when the WebSocket isn't connected
     if (sessionId) {
       try {
         const data = await apiPost("/api/adaptive/teaching/message", {
@@ -468,21 +452,17 @@ function TeachAgentModal({ session, config, onClose }) {
           maybeSpeak(agentBlock?.text);
           return;
         }
-      } catch { /* fall through to mock */ }
+      } catch (err) {
+        console.warn("[TeachModal] message failed:", err.message);
+      }
     }
 
-    // Mock queue fallback
-    const next = mockQueueRef.current.shift();
-    setTimeout(() => {
-      const responseBlocks = next || [{
-        type:"guide", agent:guideNm, emoji:guideEm, phase:"Good progress",
-        text:`${agentNm} is processing. Keep going — give a real-world example.`,
-      }];
-      setBlocks(prev => [...prev, ...responseBlocks]);
-      setLoading(false);
-      const agentBlock = responseBlocks.find(b => b.type === "student-agent");
-      maybeSpeak(agentBlock?.text);
-    }, 800);
+    // No live connection and no REST session — surface the failure honestly.
+    setBlocks(prev => [...prev, {
+      type:"system-divider",
+      label:"Couldn't reach the tutor. Check your connection and try again.",
+    }]);
+    setLoading(false);
   };
 
   // ── Agent switching ────────────────────────────────────────────
@@ -511,23 +491,22 @@ function TeachAgentModal({ session, config, onClose }) {
     wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic, userId: STUDENT_ID });
   };
 
+  const [summaryErr, setSummaryErr] = useState("");
+
   const generateSummary = async () => {
     setActiveTab("summary");
+    setSummaryErr("");
     setLoading(true);
     if (sessionId) {
       try {
         const data = await apiPost("/api/adaptive/teaching/summary", { sessionId, studentId: STUDENT_ID });
         if (data.summary) { setSummary(data.summary); setLoading(false); return; }
-      } catch { /* fall through */ }
+      } catch (err) {
+        console.warn("[TeachModal] summary failed:", err.message);
+      }
     }
-    setSummary({
-      teachingScore: 72 + Math.floor(Math.random()*18),
-      xpEarned:      80 + Math.floor(Math.random()*60),
-      agentFeedback: `Good explanation of ${topic}! ${agentNm} picked up the key concepts well.`,
-      keyConcepts:   config?.subtopics?.slice(0,3) || [topic],
-      strengthAreas: ["Clear cause-and-effect explanations", "Good use of examples"],
-      gapsIdentified:["Secondary interactions could be deeper", "Edge cases not explored"],
-    });
+    // No real summary available — don't fabricate one.
+    setSummaryErr("We couldn't generate your session summary right now. Please try again.");
     setLoading(false);
   };
 
@@ -559,6 +538,11 @@ function TeachAgentModal({ session, config, onClose }) {
             <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:16 }}>
               <div style={{ width:56,height:56,borderRadius:"50%",background:`${sc}22`,border:`2px solid ${sc}`,display:"flex",alignItems:"center",justifyContent:"center",animation:"pulse-dot 1.2s ease-in-out infinite" }}><SparkleIcon size={22} color={sc}/></div>
               <p style={{ fontSize:14,fontWeight:700,color:"#475569",margin:0 }}>{t('teaching.generating_summary')}</p>
+            </div>
+          ):summaryErr?(
+            <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:14,padding:"0 24px",textAlign:"center" }}>
+              <p style={{ fontSize:14,fontWeight:700,color:"#94A3B8",margin:0,lineHeight:1.6 }}>{summaryErr}</p>
+              <button onClick={generateSummary} style={{ padding:"11px 22px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.retry') || 'Try again'}</button>
             </div>
           ):summary&&(
             <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
@@ -595,7 +579,7 @@ function TeachAgentModal({ session, config, onClose }) {
     <>
       <SessionChatView
         blocks={blocks}
-        loading={loading}
+        loading={loading || (initLoading && blocks.length === 0)}
         input={input}
         onInputChange={setInput}
         onSend={handleSend}

@@ -21,12 +21,14 @@
  */
 
 import { Router }                from "express";
+import cron                      from "node-cron";
 import trainingRouter            from "./training/agentTraining.js";
 import { startLiveStream, receiveChunk, endLiveStream } from "./training/agentTraining.js";
 import marketplaceRouter         from "./marketplace/routes.js";
 import chatRouter                from "./chat.js";
 import teachingSessionRouter     from "./teachingSession.js";
 import { setupWebSocket }        from "./websocket.js";
+import { decayEngine }           from "./agents/student/decayEngine.js";
 import { authenticateToken }     from "../auth/routes.js";
 
 // ─── HTTP Router ──────────────────────────────────────────────────────────────
@@ -108,6 +110,30 @@ router.use("/chat",          authenticateToken, chatRouter);
  *     agent_purchased          emitted after marketplace payment confirms
  *     error                    error message
  */
-export const setupAdaptiveWebSocket = (io) => setupWebSocket(io);
+export const setupAdaptiveWebSocket = (io) => {
+  setupWebSocket(io);
+
+  // ── Scheduled knowledge-decay check ───────────────────────────────
+  // Runs the forgetting-curve engine for every active agent, applies
+  // decay, and pushes review alerts over the same io instance.
+  // Nightly at 03:00 server time (off-peak). Guarded so overlapping
+  // runs can't pile up if a pass takes longer than expected.
+  let decayRunning = false;
+  cron.schedule("0 3 * * *", async () => {
+    if (decayRunning) {
+      console.log("[DecayEngine] Previous run still in progress — skipping.");
+      return;
+    }
+    decayRunning = true;
+    try {
+      await decayEngine.runDecayScheduler(io);
+    } catch (err) {
+      console.error("[DecayEngine] Scheduled run failed:", err.message);
+    } finally {
+      decayRunning = false;
+    }
+  });
+  console.log("[DecayEngine] Decay scheduler registered (nightly 03:00).");
+};
 
 export default router;

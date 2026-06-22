@@ -4,6 +4,15 @@ import { XIcon, ChevDownIcon } from '../common/Icons.jsx';
 import { apiPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
+// Default objective placeholders for a manually-added subtopic. These are just
+// editable prompts the user fills in before starting — the real subtopics and
+// AI-generated objectives come from POST /api/adaptive/teaching/configure.
+const autoObjectives = (subtopic, topic) => [
+  `Define and explain ${subtopic} in the context of ${topic}`,
+  `Identify the key causes and effects of ${subtopic}`,
+  `Apply knowledge of ${subtopic} to real-world examples`,
+];
+
 function ConfigModal({ initial, onStart, onCancel }) {
   const { t } = useLang();
   const [topic,      setTopic]      = useState(initial?.topic      || "");
@@ -28,26 +37,26 @@ function ConfigModal({ initial, onStart, onCancel }) {
     setObjs(o => { const n={...o}; delete n[st]; return n; });
   };
 
+  const [genError, setGenError] = useState("");
+
   const generate = async () => {
     if (!topic.trim()) return;
     setGenerating(true);
+    setGenError("");
     try {
-      // Try real API first
       const data = await apiPost("/api/adaptive/teaching/configure", { topic, subject });
       if (data.subtopics?.length) {
         setSubtopics(data.subtopics);
         setObjs(data.objectives || {});
-        setGenerating(false);
-        return;
+      } else {
+        setGenError("No subtopics were generated. Add them manually below.");
       }
-    } catch { /* fall through to mock */ }
-    // Mock fallback
-    const generated = autoSubtopics(topic, subject);
-    setSubtopics(generated);
-    const newObjs = {};
-    generated.forEach(st => { newObjs[st] = autoObjectives(st, topic); });
-    setObjs(newObjs);
-    setGenerating(false);
+    } catch (err) {
+      console.warn("[ConfigModal] generate failed:", err.message);
+      setGenError("Couldn't auto-generate subtopics. Add them manually below.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const updateObj = (st, idx, val) =>
@@ -90,6 +99,9 @@ function ConfigModal({ initial, onStart, onCancel }) {
               {generating?`⏳ ${t('config.generating')}`:`✨ ${t('config.autogen')}`}
             </button>
           </div>
+          {genError&&(
+            <div style={{ fontSize:11.5,fontWeight:600,color:RED,marginBottom:8 }}>{genError}</div>
+          )}
           {subtopics.length>0&&(
             <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:8 }}>
               {subtopics.map((st,i)=>(
