@@ -382,6 +382,37 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
   }
 
   // ── END SESSION ──────────────────────────────────────────────
+  // Read-only session summary — does NOT end or mutate the session, so the
+  // user can keep teaching after viewing it. Returns the shape the client
+  // summary view expects. Used by the `request_summary` WebSocket event.
+  async generateSummary() {
+    const { topic, history } = this.session;
+    const agentId = this.studentAgentRecord.id;
+
+    const state = await getStudentState(agentId);
+    const u = Math.round(state.cognitive.understanding * 100);
+
+    const evaluation = this.guideOrchestrator.guide?.evaluateSession
+      ? await this.guideOrchestrator.guide.evaluateSession(topic, history, u)
+      : {
+          overallScore: Math.round(u * 0.9),
+          strengths:    this.stats.conceptsLearned.map(c => `Taught: ${c}`).slice(0, 3),
+          nextTimeTip:  "Keep building on this foundation!",
+          nextLesson:   `Continue with ${topic}`,
+        };
+
+    return {
+      teachingScore:  evaluation.overallScore ?? Math.round(u * 0.9),
+      xpEarned:       this.stats.xpEarned,
+      agentFeedback:  evaluation.nextTimeTip || `Good work teaching ${topic}.`,
+      keyConcepts:    (this.stats.conceptsLearned || []).slice(0, 5),
+      strengthAreas:  evaluation.strengths || [],
+      gapsIdentified: this.stats.misconceptionsCleared?.length
+        ? this.stats.misconceptionsCleared.slice(0, 3)
+        : (evaluation.nextLesson ? [evaluation.nextLesson] : []),
+    };
+  }
+
   async endSession() {
     const { topic, history } = this.session;
     const agentId   = this.studentAgentRecord.id;

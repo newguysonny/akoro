@@ -548,6 +548,22 @@ export function setupWebSocket(io) {
       }
     });
 
+    // ── request_summary ───────────────────────────────────────
+    // Read-only mid/end-of-session summary. Does not end the session, so the
+    // user can keep teaching afterwards. Replaces the old REST /teaching/summary.
+    socket.on("request_summary", async () => {
+      const { sessionId } = socket.data;
+      const orchestrator = activeSessions.get(sessionId);
+      if (!orchestrator) return socket.emit("error", { message: "No active session." });
+      try {
+        const summary = await orchestrator.generateSummary();
+        socket.emit("session_summary", { summary });
+      } catch (err) {
+        console.error("[request_summary]", err);
+        socket.emit("summary_error", { message: err.message });
+      }
+    });
+
     // ── end_session ───────────────────────────────────────────
     socket.on("end_session", async () => {
       const { sessionId, agentId, agentPairId } = socket.data;

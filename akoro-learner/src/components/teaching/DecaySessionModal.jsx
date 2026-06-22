@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { API,  apiPost } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -12,8 +11,8 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   const subject  = alert.subject;
   const topic    = alert.topic;
 
-  // The re-teach session is built by the backend (session_ready WebSocket
-  // event or the REST /decay/session/start endpoint). Start empty.
+  // The re-teach session runs entirely over the WebSocket (mode "decay").
+  // Start empty; session_ready populates it.
   const [sessionId, setSessionId] = useState(null);
   const [blocks,    setBlocks]    = useState([]);
   const [initLoading, setInitLoading] = useState(true);
@@ -50,7 +49,13 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
         setSessionId(d.sessionId);
         setWsReady(true);
         setInitLoading(false);
-        if (d.historyBlocks?.length) setBlocks(d.historyBlocks);
+        const gName  = d.guideProfile?.name  || "NaNa Esumai";
+        const gEmoji = d.guideProfile?.emoji || "🧠";
+        const opening = d.message
+          ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Re-teach · ready", text:d.message }]
+          : [];
+        if (d.historyBlocks?.length) setBlocks([...d.historyBlocks, ...opening]);
+        else if (opening.length) setBlocks(opening);
       });
       // Backward compat
       ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); setInitLoading(false); });
@@ -66,14 +71,8 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       ws.on("guide_done",   () => {});
       ws.on("error", err => { console.warn("[DecayModal WS]", err.message); setLoading(false); });
     } else {
-      // No WS — try REST
-      apiPost("/api/adaptive/decay/session/start", {
-        studentId: STUDENT_ID, subject, topic, notificationId: alert.id,
-      }).then(d => {
-        if (d.sessionId) setSessionId(d.sessionId);
-        if (d.historyBlocks?.length) setBlocks(d.historyBlocks);
-      }).catch(err => console.warn("[DecayModal] session start failed:", err.message))
-        .finally(() => setInitLoading(false));
+      // No realtime transport available — the session can't run.
+      setInitLoading(false);
     }
 
     return () => {
@@ -102,28 +101,16 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
     setBlocks(prev => [...prev, { type:"user", text }]);
     setLoading(true);
 
-    // Use WebSocket if connected
+    // The session runs entirely over the WebSocket.
     if (wsRef.current?.connected && wsReady) {
       wsRef.current.emit("teacher_message", { message: text });
       return;
     }
 
-    // REST fallback — same teaching/message endpoint
-    if (sessionId) {
-      try {
-        const data = await apiPost("/api/adaptive/teaching/message", {
-          sessionId, message: text, studentId: STUDENT_ID,
-        });
-        if (data.blocks?.length) { setBlocks(prev=>[...prev,...data.blocks]); setLoading(false); return; }
-      } catch (err) {
-        console.warn("[DecayModal] message failed:", err.message);
-      }
-    }
-
-    // No live connection and no REST session — surface the failure honestly.
+    // No live connection — surface the failure honestly.
     setBlocks(prev => [...prev, {
       type:"system-divider",
-      label:"Couldn't reach the tutor. Check your connection and try again.",
+      label:"Lost connection to your tutor. Please reopen the session to continue.",
     }]);
     setLoading(false);
   };

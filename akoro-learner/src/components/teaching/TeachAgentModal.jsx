@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
-import { API, apiGet, apiPost } from '../../services/api.js';
+import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
@@ -20,9 +20,10 @@ function TeachAgentModal({ session, config, onClose }) {
   const prevSessId = config?.sessionId || config?.id || session?.id || null;
 
   const [sessionId,  setSessionId]  = useState(null);
-  // Blocks come from the backend (REST /teaching/start, history endpoint, or
-  // the session_ready WebSocket event). Start empty and show a loading state
-  // until the server responds — no fabricated content.
+  // The session is driven entirely over the WebSocket (start_adaptive_session →
+  // session_ready, teacher_message → turn_complete, request_summary →
+  // session_summary). Blocks start empty and a loading state shows until the
+  // server responds — no REST, no fabricated content.
   const [blocks,     setBlocks]     = useState([]);
   const [initLoading, setInitLoading] = useState(true);
   const [input,      setInput]      = useState("");
@@ -31,6 +32,7 @@ function TeachAgentModal({ session, config, onClose }) {
   const [loading,    setLoading]    = useState(false);
   const [activeTab,  setActiveTab]  = useState("chat");
   const [summary,    setSummary]    = useState(null);
+  const [summaryErr, setSummaryErr] = useState("");
   const [wsReady,    setWsReady]    = useState(false);
   const timerRef      = useRef(null);
   const wsRef         = useRef(null);
@@ -122,35 +124,7 @@ function TeachAgentModal({ session, config, onClose }) {
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
   useEffect(() => {
-    // Load the real session from the backend. WebSocket session_ready may also
-    // supply history; whichever returns first populates the view.
-    const loadAndInit = async () => {
-      try {
-        if (mode === "continuation" && prevSessId) {
-          const data = await apiGet(`/api/adaptive/sessions/${prevSessId}/history`);
-          if (data.historyBlocks?.length) {
-            setBlocks([
-              ...data.historyBlocks,
-              { type:"system-divider", label:"Continuing from here" },
-            ]);
-          }
-        } else if (config) {
-          const data = await apiPost("/api/adaptive/teaching/start", {
-            topic, subject, subtopics: config.subtopics,
-            objectives: config.objectives, studentId: STUDENT_ID,
-          });
-          if (data.sessionId) setSessionId(data.sessionId);
-          if (data.blocks?.length) setBlocks(data.blocks);
-        }
-      } catch (err) {
-        console.warn("[TeachModal] session init failed:", err.message);
-      } finally {
-        setInitLoading(false);
-      }
-    };
-    loadAndInit();
-
-    // Connect WebSocket
+    // Connect WebSocket — the session lives entirely here.
     const WS_URL = (typeof VITE_API_URL !== "undefined" ? VITE_API_URL : "https://akoro.app");
     if (typeof window !== "undefined" && window.io) {
       const ws = window.io(WS_URL, { transports:["websocket","polling"] });
@@ -171,18 +145,36 @@ function TeachAgentModal({ session, config, onClose }) {
         setSessionId(d.sessionId);
         setWsReady(true);
         setInitLoading(false);
-        if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: d.guideProfile.emoji || "🧠" });
+        const gName  = d.guideProfile?.name  || guideNm;
+        const gEmoji = d.guideProfile?.emoji || guideEm;
+        if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: gEmoji });
         if (d.agentPairId) setCurrentPair(d.agentPairId);
+
+        // The opening prompt from NaNa kicks off a fresh session.
+        const opening = d.message
+          ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Teach · ready", text:d.message }]
+          : [];
+
         if (d.historyBlocks?.length) {
           setBlocks(prev => {
             const fresh = prev.filter(b => !b.faded && b.type !== "system-divider");
-            return [...d.historyBlocks, { type:"system-divider", label:"Continuing from here" }, ...fresh];
+            return [...d.historyBlocks, { type:"system-divider", label:"Continuing from here" }, ...fresh, ...opening];
           });
+        } else if (opening.length) {
+          setBlocks(opening);
         }
       });
 
       // Backward compat
-      ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); });
+      ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); setInitLoading(false); });
+
+      // Summary delivered over the socket (replaces REST /teaching/summary).
+      ws.on("session_summary", ({ summary }) => { setSummary(summary); setLoading(false); });
+      ws.on("summary_error", ({ message }) => {
+        console.warn("[TeachModal] summary failed:", message);
+        setLoading(false);
+        setSummaryErr("We couldn't generate your session summary right now. Please try again.");
+      });
 
       ws.on("typing_start", () => setLoading(true));
       ws.on("turn_complete", ({ blocks: newBlocks, currentPhase }) => {
@@ -311,6 +303,9 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("tts_error", ({ message }) => {
         console.warn("[tts stream]", message);
       });
+    } else {
+      // No realtime transport available — the session can't run.
+      setInitLoading(false);
     }
 
     return () => {
@@ -433,34 +428,16 @@ function TeachAgentModal({ session, config, onClose }) {
     setBlocks(prev => [...prev, { type:"user", text, modality }]);
     setLoading(true);
 
-    // Use WebSocket if connected
+    // The session runs entirely over the WebSocket.
     if (wsRef.current?.connected && wsReady) {
       wsRef.current.emit("teacher_message", { message: text, modality });
       return;
     }
 
-    // REST fallback when the WebSocket isn't connected
-    if (sessionId) {
-      try {
-        const data = await apiPost("/api/adaptive/teaching/message", {
-          sessionId, message: text, studentId: STUDENT_ID, modality,
-        });
-        if (data.blocks?.length) {
-          setBlocks(prev=>[...prev,...data.blocks]);
-          setLoading(false);
-          const agentBlock = data.blocks.find(b => b.type === "student-agent");
-          maybeSpeak(agentBlock?.text);
-          return;
-        }
-      } catch (err) {
-        console.warn("[TeachModal] message failed:", err.message);
-      }
-    }
-
-    // No live connection and no REST session — surface the failure honestly.
+    // No live connection — surface the failure honestly.
     setBlocks(prev => [...prev, {
       type:"system-divider",
-      label:"Couldn't reach the tutor. Check your connection and try again.",
+      label:"Lost connection to your tutor. Please reopen the session to continue.",
     }]);
     setLoading(false);
   };
@@ -491,23 +468,18 @@ function TeachAgentModal({ session, config, onClose }) {
     wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic, userId: STUDENT_ID });
   };
 
-  const [summaryErr, setSummaryErr] = useState("");
-
-  const generateSummary = async () => {
+  const generateSummary = () => {
     setActiveTab("summary");
     setSummaryErr("");
-    setLoading(true);
-    if (sessionId) {
-      try {
-        const data = await apiPost("/api/adaptive/teaching/summary", { sessionId, studentId: STUDENT_ID });
-        if (data.summary) { setSummary(data.summary); setLoading(false); return; }
-      } catch (err) {
-        console.warn("[TeachModal] summary failed:", err.message);
-      }
+    // Summary is generated over the WebSocket; session_summary / summary_error
+    // events (registered above) resolve it.
+    if (wsRef.current?.connected && wsReady) {
+      setSummary(null);
+      setLoading(true);
+      wsRef.current.emit("request_summary");
+    } else {
+      setSummaryErr("We couldn't reach your tutor to generate a summary. Please try again.");
     }
-    // No real summary available — don't fabricate one.
-    setSummaryErr("We couldn't generate your session summary right now. Please try again.");
-    setLoading(false);
   };
 
   // Summary view — own fullscreen container
