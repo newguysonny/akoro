@@ -125,9 +125,8 @@ function TeachAgentModal({ session, config, onClose }) {
 
   useEffect(() => {
     // Connect WebSocket — the session lives entirely here.
-    const WS_URL = (typeof VITE_API_URL !== "undefined" ? VITE_API_URL : "https://akoro.app");
     if (typeof window !== "undefined" && window.io) {
-      const ws = window.io(WS_URL, { transports:["websocket","polling"] });
+      const ws = window.io(API, { transports:["websocket","polling"] });
       wsRef.current = ws;
 
       ws.on("connect", () => {

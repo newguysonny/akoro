@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
+import { API } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -29,9 +30,8 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
 
   useEffect(() => {
     // Connect WebSocket for streaming
-    const WS_URL = (typeof VITE_API_URL !== "undefined" ? VITE_API_URL : "https://akoro.app");
     if (typeof window !== "undefined" && window.io) {
-      const ws = window.io(WS_URL, { transports:["websocket","polling"] });
+      const ws = window.io(API, { transports:["websocket","polling"] });
       wsRef.current = ws;
 
       ws.on("connect", () => {

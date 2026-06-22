@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
-import { apiGet, apiPost, apiPatch } from '../services/api.js';
+import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 
 // Components
@@ -157,11 +157,10 @@ export default function LearnerDashboard() {
 
   // WebSocket — live class alerts + challenge notifications + decay alerts
   useEffect(()=>{
-    const WS_URL = (typeof VITE_API_URL !== "undefined" ? VITE_API_URL : "https://akoro.app");
     let socket;
     try {
       if (typeof window !== "undefined" && window.io) {
-        socket = window.io(WS_URL, { transports: ["websocket","polling"] });
+        socket = window.io(API, { transports: ["websocket","polling"] });
 
         socket.on("connect", () => {
           // Join user room (live alerts + challenges)
