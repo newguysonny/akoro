@@ -51,7 +51,9 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
         setInitLoading(false);
         const gName  = d.guideProfile?.name  || "NaNa Esumai";
         const gEmoji = d.guideProfile?.emoji || "🧠";
-        const opening = d.message
+        const opening = d.openingBlocks?.length
+          ? d.openingBlocks
+          : d.message
           ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Re-teach · ready", text:d.message }]
           : [];
         if (d.historyBlocks?.length) setBlocks([...d.historyBlocks, ...opening]);

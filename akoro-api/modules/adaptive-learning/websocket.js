@@ -457,6 +457,7 @@ export function setupWebSocket(io) {
           studentId,
           userId:               caller,
           sessionType,
+          subject,
           continuationSessionId: mode === "continuation" ? prevSessionId : null,
           decayPayload,
           // Prompt context injected here — orchestrator uses this to
@@ -490,6 +491,7 @@ export function setupWebSocket(io) {
           sessionType,
           topic,             subject,
           message:           init.openingPrompt,
+          openingBlocks:     init.openingBlocks,
           mustKnowParts:     init.mustKnowParts,
           agentLevel:        init.agentLevel,
           knowledgeScore:    init.knowledgeScore,

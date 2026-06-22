@@ -149,8 +149,12 @@ function TeachAgentModal({ session, config, onClose }) {
         if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: gEmoji });
         if (d.agentPairId) setCurrentPair(d.agentPairId);
 
-        // The opening prompt from NaNa kicks off a fresh session.
-        const opening = d.message
+        // Prefer the structured opening (subtopic header + phase plan +
+        // objectives checklist + guide card) the backend now sends; fall back
+        // to a single guide block from the opening message if absent.
+        const opening = d.openingBlocks?.length
+          ? d.openingBlocks
+          : d.message
           ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Teach · ready", text:d.message }]
           : [];
 

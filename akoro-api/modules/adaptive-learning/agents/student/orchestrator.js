@@ -48,6 +48,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
   constructor({ studentId, teacherAgentId = null, guideOrchestrator,
                 sessionType = "free_teaching",   // "free_teaching" | "decay_review"
+                subject = null,                  // free-teaching subject (decay carries its own)
                 decayPayload = null }) {          // pre-loaded subject+topic for decay sessions
     super();
     this.studentId          = studentId;
@@ -55,6 +56,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     this.guideOrchestrator  = guideOrchestrator;
     this.sessionType        = sessionType;
     this.decayPayload       = decayPayload;       // { subject, topic, confidence, priority, ... }
+    this.subject            = subject || decayPayload?.subject || null;
     this.studentAgentRecord = null;
     this.studentAgent       = null;
     this.sessionDeltaId     = null;
@@ -204,8 +206,44 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         : `Ready — start teaching! 🚀`,
     ].filter(l => l !== "").join("\n");
 
+    // ── Structured opening blocks (same typed shape the UI renders per turn) ──
+    // The must-know parts are this engine's "objectives" checklist; the first
+    // part is the opening subtopic. Built from real data — no fabricated content.
+    const guideEmoji = this.guideOrchestrator.guide?.emoji || "🧠";
+    const openGuideText = isDecaySession
+      ? `Let's reinforce ${topic}. Re-teach it to your agent and I'll guide you through the phases.`
+      : `Let's teach ${topic} to your agent. I'll guide you through 4 phases — start by explaining the basics in your own words.`;
+
+    const openingBlocks = [
+      {
+        type:     "subtopic-hdr",
+        subtopic: mustKnow[0] || topic,
+        idx:      0,
+        total:    mustKnow.length || 1,
+        topic,
+        subject:  this.subject || "",
+      },
+      { type: "plan", phases: [
+        "Phase 1 → what do they know",
+        "Phase 2 → must-know parts",
+        "Phase 3 → teach it back",
+        "Phase 4 → push further",
+      ] },
+      ...(mustKnow.length
+        ? [{ type: "objectives", subtopic: mustKnow[0] || topic, items: mustKnow }]
+        : []),
+      {
+        type:  "guide",
+        agent: guideName,
+        emoji: guideEmoji,
+        phase: STUDENT_PHASES.PHASE_1,
+        text:  openGuideText,
+      },
+    ];
+
     return {
       openingPrompt,
+      openingBlocks,
       topicBoundary:    boundary,
       mustKnowParts:    mustKnow,
       studentAgentName: agentRecord.name,
@@ -374,6 +412,13 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       phaseChanged, phaseLabel, subtopicAdvanced,
       currentSubtopic: mustKnowParts[this.session.mustKnowIndex] || null,
       currentPhase:    this.session.phase,
+      // Structured-block context — lets the UI render the subtopic header,
+      // phase plan and objectives checklist on each advance (real data).
+      topic,
+      subject:            this.subject || "",
+      subtopicIdx:        this.session.mustKnowIndex,
+      totalSubtopics:     (mustKnowParts || []).length || 1,
+      subtopicObjectives: subtopicAdvanced ? (mustKnowParts || []) : [],
       driftInfo:       drift,
       agentPairId:     "student-session",
       sessionType:     this.sessionType,
