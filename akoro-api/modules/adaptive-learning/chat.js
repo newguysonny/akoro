@@ -20,7 +20,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import db from "../../db.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
-import { clearStateCache, getAgentPreferences, saveAgentPreferences } from "./student-state.js";
+import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
 import {
   getOrCreateStudentAgent,
   getAgentGrowthHistory,
@@ -477,94 +477,6 @@ router.get("/decay/topics/:studentId/:subject", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /decay/session/start — start a focused decay review session (HTTP fallback)
-router.post("/decay/session/start", async (req, res) => {
-  try {
-    const { studentId, subject, topic, teacherAgentId, notificationId } = req.body;
-    if (!studentId || !subject || !topic)
-      return res.status(400).json({ error: "studentId, subject and topic required" });
-
-    const agent               = await getOrCreateStudentAgent(studentId);
-    const agentName           = agent.agent_name  || "Agent";
-    const agentEmoji          = agent.agent_emoji || "🤖";
-    const decaySessionPayload = await decayEngine.generateDecaySession(
-      agent.id, studentId, subject, topic
-    );
-
-    if (notificationId) {
-      await decayEngine.markNotificationRead(notificationId);
-    }
-
-    // Find most recent completed teaching session for this topic
-    const { data: prevSession } = await db.schema("edu")
-      .from("adaptive_sessions")
-      .select("id, completed_at, subtopics, objectives")
-      .eq("student_id", studentId)
-      .eq("topic", topic)
-      .eq("status", "complete")
-      .order("completed_at", { ascending: false })
-      .limit(1)
-      .single()
-      .catch(() => ({ data: null }));
-
-    // Reconstruct history blocks from previous session
-    const historyBlocks = prevSession
-      ? await reconstructHistoryBlocks(prevSession.id, topic, subject, agentName, agentEmoji)
-      : [];
-
-    // Fix 7: read student's saved preference if no explicit teacherAgentId
-    let resolvedTeacherAgentId = teacherAgentId || null;
-    if (!resolvedTeacherAgentId) {
-      try {
-        const prefs  = await getAgentPreferences(studentId);
-        const pairId = prefs.guide_pair_id;
-        if (pairId && pairId.startsWith("trained:")) {
-          resolvedTeacherAgentId = pairId.replace("trained:", "");
-        }
-      } catch { /* keep null */ }
-    }
-
-    const sessionId    = `decay_${studentId}_${Date.now()}`;
-    const orchestrator = await getOrchestrator({
-      mode:           "student",
-      studentId,
-      teacherAgentId: resolvedTeacherAgentId,
-      sessionType:    "decay_review",
-      decayPayload:   { ...decaySessionPayload, notificationId },
-    });
-
-    const init = await orchestrator.initialize(studentId, topic);
-    activeSessions.set(sessionId, orchestrator);
-
-    await saveChatMessage(studentId, "[DECAY SESSION START]", init.openingPrompt, {
-      sessionId, subject, topic, type: "decay_session_start",
-      decayPayload: decaySessionPayload,
-    }, "teaching");
-
-    res.json({
-      success:          true,
-      sessionId,
-      agentPairId:      "student-session",
-      sessionType:      "decay_review",
-      subject,
-      topic,
-      agentName,
-      agentEmoji,
-      message:          init.openingPrompt,
-      mustKnowParts:    init.mustKnowParts,
-      initialState:     init.initialState,
-      agentLevel:       init.agentLevel,
-      knowledgeScore:   init.knowledgeScore,
-      decayPayload:     decaySessionPayload,
-      // ← Frontend uses this to pre-populate session history
-      historyBlocks,
-    });
-
-  } catch (err) {
-    console.error("[/decay/session/start]", err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // POST /decay/acknowledge/:notifId — mark notification as read
 router.post("/decay/acknowledge/:notifId", async (req, res) => {
@@ -655,115 +567,6 @@ router.get("/student/agent/:studentId/knowledge-search", async (req, res) => {
     const chunks = await retrieveAgentKnowledge(agent.id, q, Number(limit));
     res.json({ success: true, chunks });
   } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// =============================================================
-// TEACHING SESSION ROUTES
-// =============================================================
-
-router.post("/teaching/start", async (req, res) => {
-  try {
-    const {
-      agentId, studentId, topic,
-      agentPairId: requestedPairId,
-      teacherAgentId,
-      mode = "teaching",
-    } = req.body;
-
-    if (!topic) return res.status(400).json({ error: "topic is required" });
-
-    let orchestrator, init, pairId = requestedPairId;
-
-    if (mode === "student" || studentId) {
-      if (!studentId) return res.status(400).json({ error: "studentId required" });
-      orchestrator = await getOrchestrator({
-        mode: "student", studentId, teacherAgentId: teacherAgentId || null,
-      });
-      init   = await orchestrator.initialize(studentId, topic);
-      pairId = "student-session";
-    } else {
-      if (!agentId) return res.status(400).json({ error: "agentId required" });
-      if (!pairId) { const prefs = await getAgentPreferences(agentId); pairId = prefs.guide_pair_id || "nana-sargeant"; }
-      orchestrator = await getOrchestrator({ agentPairId: pairId, agentId });
-      init = await orchestrator.initialize(agentId, topic);
-    }
-
-    const sessionId = `session_${agentId || studentId}_${Date.now()}`;
-    activeSessions.set(sessionId, orchestrator);
-    await saveChatMessage(agentId || studentId, "[SESSION START]", init.openingPrompt,
-      { sessionId, topic, agentPairId: pairId, mode, type: "session_start" }, "teaching");
-
-    res.json({
-      success: true, sessionId, agentPairId: pairId, mode, topic,
-      studentAgentName: init.studentAgentName, message: init.openingPrompt,
-      mustKnowParts: init.mustKnowParts, topicBoundary: init.topicBoundary,
-      initialState: init.initialState, teacherName: init.teacherName || null,
-      lecturePlan: init.lecturePlan || null,
-      agentLevel: init.agentLevel || null, knowledgeScore: init.knowledgeScore || null,
-    });
-  } catch (err) { console.error("[/teaching/start]", err); res.status(500).json({ error: err.message }); }
-});
-
-router.post("/teaching/message", async (req, res) => {
-  try {
-    const { sessionId, message } = req.body;
-    if (!sessionId || !message) return res.status(400).json({ error: "sessionId and message required" });
-    const orchestrator = activeSessions.get(sessionId);
-    if (!orchestrator) return res.status(404).json({ error: "Session not found." });
-    const result      = await orchestrator.processTeachingMessage(message);
-    const agentPairId = result.agentPairId || "nana-sargeant";
-    const blocks      = buildTurnBlocks(result, agentPairId);
-    const full        = blocks.join("\n\n");
-    const ownerId     = orchestrator.session?.agentId || orchestrator.studentId;
-    await saveChatMessage(ownerId, message, full,
-      { sessionId, type: result.type, phase: result.currentPhase, agentPairId, sessionType: result.sessionType }, "teaching");
-    res.json({ success: true, response: full, blocks, raw: result, agentPairId });
-  } catch (err) { console.error("[/teaching/message]", err); res.status(500).json({ error: err.message }); }
-});
-
-router.post("/teaching/end", async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    if (!sessionId) return res.status(400).json({ error: "sessionId required" });
-    const orchestrator = activeSessions.get(sessionId);
-    if (!orchestrator) return res.status(404).json({ error: "Session not found." });
-    const endResult  = await orchestrator.endSession();
-    const formatted  = fmtSessionEnd(endResult);
-    const ownerId    = orchestrator.session?.agentId || orchestrator.studentId;
-    await saveChatMessage(ownerId, "[SESSION END]", formatted,
-      { sessionId, type: "session_end", summary: endResult }, "teaching");
-    activeSessions.delete(sessionId);
-    await clearStateCache(ownerId);
-    res.json({ success: true, response: formatted, summary: endResult });
-  } catch (err) { console.error("[/teaching/end]", err); res.status(500).json({ error: err.message }); }
-});
-
-router.get("/teaching/status/:sessionId", (req, res) => {
-  const orch = activeSessions.get(req.params.sessionId);
-  if (!orch) return res.status(404).json({ active: false });
-  res.json({
-    active: true, sessionId: req.params.sessionId,
-    topic: orch.session.topic, phase: orch.session.phase,
-    turnCount: orch.session.turnCount,
-    mustKnowIndex: orch.session.mustKnowIndex || orch.session.moduleIndex || 0,
-    agentPairId: orch._profile?.id || orch.constructor.profile?.id,
-    sessionType: orch.sessionType || "free_teaching",
-  });
-});
-
-router.get("/teaching/sessions/:ownerId", (req, res) => {
-  const sessions = [];
-  for (const [id, orch] of activeSessions.entries()) {
-    if (id.includes(req.params.ownerId)) {
-      sessions.push({
-        sessionId:   id, topic: orch.session.topic,
-        phase:       orch.session.phase, turnCount: orch.session.turnCount,
-        agentPairId: orch._profile?.id || orch.constructor.profile?.id,
-        sessionType: orch.sessionType || "free_teaching",
-      });
-    }
-  }
-  res.json({ success: true, sessions, count: sessions.length });
 });
 
 // =============================================================
