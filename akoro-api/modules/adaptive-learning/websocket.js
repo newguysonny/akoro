@@ -50,6 +50,67 @@ function scheduleSessionReap(sessionId) {
   sessionReapTimers.set(sessionId, t);
 }
 
+// ── adaptive_sessions persistence ────────────────────────────────────────────
+// The WS flow already saves agent knowledge/stats/deltas. These helpers also
+// persist the session row + typed block transcript so the Sessions list
+// (GET /sessions) and "Continue Teaching" (continuation mode) work for WS
+// sessions. The DB row id is stashed on the orchestrator as `dbSessionId`.
+async function createSessionRecord(orchestrator, { studentId, topic, subject, openingBlocks }) {
+  try {
+    const { data, error } = await db.schema("edu").from("adaptive_sessions").insert({
+      student_id:             studentId,
+      student_agent_id:       orchestrator.studentAgentRecord?.id || null,
+      topic,
+      subject:                subject || null,
+      subtopics:              JSON.stringify(orchestrator.session?.mustKnowParts || []),
+      objectives:             "{}",
+      current_subtopic_idx:   0,
+      current_phase:          "1",
+      status:                 "active",
+      started_at:             new Date().toISOString(),
+      updated_at:             new Date().toISOString(),
+      session_history:        JSON.stringify([]),
+      objectives_covered:     "{}",
+      confidence_by_subtopic: "{}",
+      block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
+    }).select("id").single();
+    if (error) throw error;
+    orchestrator.dbSessionId = data.id;
+  } catch (e) {
+    console.warn("[adaptive_sessions create]", e.message);
+  }
+}
+
+async function appendSessionBlocks(orchestrator, newBlocks) {
+  const id = orchestrator?.dbSessionId;
+  if (!id || !newBlocks?.length) return;
+  try {
+    const { data } = await db.schema("edu").from("adaptive_sessions")
+      .select("block_history").eq("id", id).single();
+    const existing = Array.isArray(data?.block_history) ? data.block_history : [];
+    await db.schema("edu").from("adaptive_sessions").update({
+      block_history: [...existing, ...newBlocks],
+      updated_at:    new Date().toISOString(),
+    }).eq("id", id);
+  } catch (e) {
+    console.warn("[adaptive_sessions append]", e.message);
+  }
+}
+
+async function completeSessionRecord(orchestrator) {
+  const id = orchestrator?.dbSessionId;
+  if (!id) return;
+  try {
+    await db.schema("edu").from("adaptive_sessions").update({
+      status:       "complete",
+      completed_at: new Date().toISOString(),
+      updated_at:   new Date().toISOString(),
+    }).eq("id", id);
+  } catch (e) {
+    console.warn("[adaptive_sessions complete]", e.message);
+  }
+}
+
 // Wire io globally so webhook can emit agent_purchased
 // Call from server.js: global._io = io;
 
@@ -509,6 +570,12 @@ export function setupWebSocket(io) {
           topic, subject,                  // preserved for mid-session agent switch
         };
 
+        // Persist the session row + opening transcript so it shows in the
+        // Sessions list and can be continued later.
+        await createSessionRecord(orchestrator, {
+          studentId, topic, subject, openingBlocks: init.openingBlocks,
+        });
+
         // Single unified response event
         socket.emit("session_ready", {
           sessionId:         id,
@@ -568,6 +635,9 @@ export function setupWebSocket(io) {
           turnXP:         result.turnXP || 0,
           sessionType:    result.sessionType,
         });
+
+        // Persist the turn (human message + response blocks) to the transcript.
+        appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
       } catch (err) {
         console.error("[teacher_message]", err);
         socket.emit("student_done"); socket.emit("guide_done");
@@ -636,6 +706,7 @@ export function setupWebSocket(io) {
       try {
         const endResult = await orchestrator.endSession();
         const formatted = fmtSessionEnd(endResult);
+        await completeSessionRecord(orchestrator);   // mark the session row complete
         activeSessions.delete(sessionId);
         await clearStateCache(agentId);
         socket.emit("session_ended", {
