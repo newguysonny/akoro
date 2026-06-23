@@ -4,6 +4,10 @@
 -- aggregated server-side; the Q&A transcript and final verdict are persisted
 -- so results show in the learner's history and instructors can review flags.
 -- Safe to re-run.
+--
+-- ⚠️  REQUIRES the `edu` schema to be in the project's Exposed schemas list,
+--     or every db.schema("edu") call fails with PGRST106 "Invalid schema: edu".
+--     See migrations/2026-expose-edu-schema.sql.
 
 CREATE SCHEMA IF NOT EXISTS edu;
 
