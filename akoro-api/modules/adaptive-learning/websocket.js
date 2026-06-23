@@ -570,13 +570,7 @@ export function setupWebSocket(io) {
           topic, subject,                  // preserved for mid-session agent switch
         };
 
-        // Persist the session row + opening transcript so it shows in the
-        // Sessions list and can be continued later.
-        await createSessionRecord(orchestrator, {
-          studentId, topic, subject, openingBlocks: init.openingBlocks,
-        });
-
-        // Single unified response event
+        // Single unified response event — emit immediately, don't gate on DB write
         socket.emit("session_ready", {
           sessionId:         id,
           mode,
@@ -597,6 +591,11 @@ export function setupWebSocket(io) {
             ttsVoice:    orchestrator.profile?.renderStyle?.ttsVoice || "alloy",
           },
         });
+
+        // Persist in background — never blocks the session
+        createSessionRecord(orchestrator, {
+          studentId, topic, subject, openingBlocks: init.openingBlocks,
+        }).catch(e => console.warn("[createSessionRecord]", e.message));
 
       } catch (err) {
         console.error("[start_adaptive_session]", err);
