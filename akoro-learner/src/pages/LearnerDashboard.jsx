@@ -20,7 +20,7 @@ import RankingsTab   from '../components/tabs/RankingsTab.jsx';
 import DiscoveryTab  from '../components/tabs/DiscoveryTab.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
-import { ZapIcon, MicIcon, ChevDownIcon } from '../components/common/Icons.jsx';
+import { ZapIcon, MicIcon } from '../components/common/Icons.jsx';
 import React from 'react';
 
 // Hooks
@@ -30,29 +30,6 @@ import { useSessionAPI }   from '../hooks/useSessionAPI.js';
 import { useDecayAlerts }  from '../hooks/useDecayAlerts.js';
 import { useBattleAPI }    from '../hooks/useBattleAPI.js';
 
-function SubjectDropdown({ value, onChange }) {
-  const [open, setOpen] = React.useState(false);
-  const sel = SUBJECTS[value] || SUBJECTS.all;
-  return (
-    <div style={{ position:"relative" }}>
-      <div onClick={() => setOpen(o=>!o)} style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",borderRadius:100,padding:"5px 11px 5px 9px",border:"1px solid #DDD3FF",cursor:"pointer" }}>
-        <span style={{ fontSize:13 }}>{sel.icon}</span>
-        <span style={{ fontSize:11.5,fontWeight:800,color:BRAND }}>{sel.label}</span>
-        <ChevDownIcon size={12} color={BRAND}/>
-      </div>
-      {open && (
-        <div style={{ position:"absolute",top:"calc(100% + 6px)",left:0,background:"#fff",borderRadius:14,border:"1px solid #E5E7EB",boxShadow:"0 8px 28px rgba(0,0,0,.10)",zIndex:500,overflow:"hidden",minWidth:155 }}>
-          {Object.entries(SUBJECTS).map(([key,sub])=>(
-            <div key={key} onClick={()=>{onChange(key);setOpen(false);}} style={{ padding:"10px 14px",display:"flex",alignItems:"center",gap:8,cursor:"pointer",background:value===key?"#F0EBFF":"transparent",borderBottom:"1px solid #F9FAFB" }}>
-              <span style={{ fontSize:14 }}>{sub.icon}</span>
-              <span style={{ fontSize:13,fontWeight:700,color:value===key?BRAND:"#374151" }}>{sub.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function LearnerDashboard() {
   const navigate = useNavigate();
@@ -402,7 +379,6 @@ export default function LearnerDashboard() {
                   </span>
                 )}
               </button>
-              <SubjectDropdown value={subjectFilter} onChange={setSubjectFilter}/>
               <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:"#F0EBFF",borderRadius:100,padding:4,cursor:"pointer",border:"1px solid #DDD3FF" }}>
                 <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"#9CA3AF",fontSize:11,fontWeight:700,transition:"all .22s ease" }}>{isOnline?"● Online":"Online"}</div>
               </div>
@@ -475,9 +451,9 @@ export default function LearnerDashboard() {
               {/* ── Subject filter chips (all + agent tabs only) ── */}
               {sessionTab!=="live"&&(
                 <div style={{ display:"flex",gap:8,padding:"10px 18px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",flexShrink:0 }}>
-                  {["maths","english","science"].map(s=>{
-                    const color=SUBJECT_COLORS[s],cnt=sessions.filter(ses=>ses.subject===s).length,active=subjectFilter===s;
-                    return <div key={s} onClick={()=>setSubjectFilter(active?"all":s)} style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,background:active?`${color}16`:"#F9FAFB",border:`1.5px solid ${active?color:"#F3F4F6"}`,borderRadius:10,padding:"6px 12px",cursor:"pointer",transition:"all .2s" }}><span style={{ fontSize:12 }}>{SUBJECTS[s].icon}</span><span style={{ fontSize:11,fontWeight:800,color:active?color:"#6B7280" }}>{SUBJECTS[s].label}</span><span style={{ fontSize:10,fontWeight:700,color:active?color:"#9CA3AF",background:active?`${color}18`:"#F3F4F6",borderRadius:6,padding:"0 5px" }}>{cnt}</span></div>;
+                  {[{key:"all",label:"All",icon:"📚"},...["maths","english","science"].map(s=>({key:s,label:SUBJECTS[s].label,icon:SUBJECTS[s].icon}))].map(({key,label,icon})=>{
+                    const color=SUBJECT_COLORS[key]||BRAND,cnt=key==="all"?sessions.length:sessions.filter(ses=>ses.subject===key).length,active=subjectFilter===key;
+                    return <div key={key} onClick={()=>setSubjectFilter(key)} style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,background:active?`${color}16`:"#F9FAFB",border:`1.5px solid ${active?color:"#F3F4F6"}`,borderRadius:10,padding:"6px 12px",cursor:"pointer",transition:"all .2s" }}><span style={{ fontSize:12 }}>{icon}</span><span style={{ fontSize:11,fontWeight:800,color:active?color:"#6B7280" }}>{label}</span><span style={{ fontSize:10,fontWeight:700,color:active?color:"#9CA3AF",background:active?`${color}18`:"#F3F4F6",borderRadius:6,padding:"0 5px" }}>{cnt}</span></div>;
                   })}
                 </div>
               )}
