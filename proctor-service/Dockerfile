@@ -1,6 +1,8 @@
 # Akoro Proctoring Service — FastAPI + InsightFace (ArcFace) + YOLO.
-# CPU image by default; for GPU swap the base for an nvidia/cuda runtime and
-# install onnxruntime-gpu + a CUDA torch build.
+# CPU image, tuned for a small box (e.g. a $5 Railway/VM tier): light model
+# packs (buffalo_s + yolov8n) and both models pre-fetched at build time so the
+# first live frame isn't slow. For GPU swap the base for an nvidia/cuda runtime
+# and install onnxruntime-gpu.
 FROM python:3.11-slim
 
 # OpenCV / InsightFace runtime deps
@@ -10,14 +12,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Light model defaults — overridable at runtime.
+ENV FACE_PACK=buffalo_s \
+    YOLO_WEIGHTS=yolov8n.pt \
+    INSIGHTFACE_HOME=/app/.insightface
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-fetch YOLO weights at build time so the first request isn't slow.
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+# Pre-fetch model weights at build time so the first request isn't slow:
+#  • YOLO nano detector
+#  • InsightFace buffalo_s pack (downloaded + unpacked by prepare())
+RUN python -c "from ultralytics import YOLO; YOLO('${YOLO_WEIGHTS}')" && \
+    python -c "from insightface.app import FaceAnalysis; \
+fa=FaceAnalysis(name='${FACE_PACK}', providers=['CPUExecutionProvider']); \
+fa.prepare(ctx_id=0, det_size=(320,320))"
 
 COPY main.py .
 
+# Railway (and most PaaS) inject $PORT; default to 8700 for local/VM runs.
 ENV PORT=8700
 EXPOSE 8700
 

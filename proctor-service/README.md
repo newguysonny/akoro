@@ -5,7 +5,11 @@ The heavy vision tier for the **Session Assessment Gateway**. The browser
 service runs the GPU-class models the browser can't:
 
 - **InsightFace (ArcFace)** — face detection, face count, identity verification
-- **YOLOv8** — prohibited-item detection (phone, book, laptop, …)
+  (light `buffalo_s` pack by default; faster CPU inference, less RAM)
+- **YOLOv8** — prohibited-item detection (phone, book, laptop, …); `yolov8n`
+  nano by default
+
+**Deploying it as a separate service (Railway / VM)?** See [DEPLOY.md](./DEPLOY.md).
 
 It is **optional**. Without it the gateway still works using the client TF.js
 signals; this service upgrades accuracy (real object detection + identity match)
@@ -52,9 +56,11 @@ degrades to client signals — it never blocks the exam.
 
 | Env | Default | Meaning |
 |-----|---------|---------|
+| `FACE_PACK` | `buffalo_s` | InsightFace pack; `buffalo_l` = more accurate, more RAM |
 | `IDENTITY_THRESHOLD` | `0.38` | Cosine sim above which faces are the same person |
 | `OBJECT_CONF` | `0.4` | Min YOLO confidence to flag a prohibited item |
 | `YOLO_WEIGHTS` | `yolov8n.pt` | Swap for `yolov8s/m.pt` for higher accuracy |
+| `DET_SIZE` | `320` | Face detector input size; lower = faster |
 
 ## GPU
 

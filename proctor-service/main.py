@@ -37,6 +37,14 @@ IDENTITY_THRESHOLD = float(os.getenv("IDENTITY_THRESHOLD", "0.38"))
 PROHIBITED = {"cell phone", "book", "laptop", "tv", "remote", "keyboard", "tablet"}
 OBJECT_CONF = float(os.getenv("OBJECT_CONF", "0.4"))
 
+# Model packs — light defaults so the service fits a small CPU box (e.g. a
+# $5 Railway/VM tier). buffalo_s is the smaller InsightFace pack (faster CPU
+# inference, less RAM than buffalo_l); yolov8n is the nano detector. Both are
+# overridable via env if you have a bigger box.
+FACE_PACK    = os.getenv("FACE_PACK", "buffalo_s")
+YOLO_WEIGHTS = os.getenv("YOLO_WEIGHTS", "yolov8n.pt")
+DET_SIZE     = int(os.getenv("DET_SIZE", "320"))
+
 app = FastAPI(title="Akoro Proctoring Service", version="1.0")
 
 
@@ -49,15 +57,15 @@ class AnalyzeRequest(BaseModel):
 @lru_cache(maxsize=1)
 def face_model():
     from insightface.app import FaceAnalysis
-    fa = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-    fa.prepare(ctx_id=0, det_size=(320, 320))
+    fa = FaceAnalysis(name=FACE_PACK, providers=["CPUExecutionProvider"])
+    fa.prepare(ctx_id=0, det_size=(DET_SIZE, DET_SIZE))
     return fa
 
 
 @lru_cache(maxsize=1)
 def object_model():
     from ultralytics import YOLO
-    return YOLO(os.getenv("YOLO_WEIGHTS", "yolov8n.pt"))
+    return YOLO(YOLO_WEIGHTS)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,7 +100,12 @@ def _reference_embedding(ref_hash: str, ref_b64: str):
 # ── Routes ───────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"ok": True, "identity_threshold": IDENTITY_THRESHOLD}
+    return {
+        "ok": True,
+        "facePack": FACE_PACK,
+        "yoloWeights": YOLO_WEIGHTS,
+        "identity_threshold": IDENTITY_THRESHOLD,
+    }
 
 
 @app.post("/analyze")

@@ -1,0 +1,21 @@
+# Railway deployment config for the Akoro Proctoring Service.
+# Deploy this directory as its OWN Railway service (separate from akoro-api).
+#
+#   Root Directory: proctor-service
+#   Builder:        Dockerfile (set below)
+#
+# Railway injects $PORT; the Dockerfile CMD already binds to it.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Hit /health so Railway only routes traffic once the container is up.
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+# Single worker: the models are RAM-heavy; one process keeps memory bounded on
+# a small plan. Scale via more workers/replicas only on a bigger box.
+numReplicas = 1
