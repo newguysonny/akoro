@@ -24,6 +24,7 @@ import CareersPage  from './pages/CareersPage.jsx';
 import BlogPage     from './pages/BlogPage.jsx';
 import BlogPostPage from './pages/BlogPostPage.jsx';
 import PartnersPage from './pages/PartnersPage.jsx';
+import AssessmentPage  from './pages/AssessmentPage.jsx';
 import NotFoundPage     from './pages/NotFoundPage.jsx';
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
@@ -75,6 +76,7 @@ function AppRoutes() {
       <Route path="/live" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/live/:courseId" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
+      <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
       <Route path="/about"    element={<AboutPage />}/>
