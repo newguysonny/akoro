@@ -25,7 +25,23 @@ export const DIFFICULTY_CONFIG = {
   easy:   { label:"Easy",   color:"#10B981", bg:"rgba(16,185,129,0.10)" },
 };
 
-export const STUDENT_ID = "user-alex-01";
+// Resolve the active learner's id. The backend's `edu` tables type student_id
+// as a UUID, so we must use the authenticated user's real id (cached in
+// localStorage by AuthContext under `akoro_user`). The old hardcoded
+// "user-alex-01" placeholder is only a last-resort dev fallback — it is NOT a
+// valid UUID and will be rejected by Postgres once a real session starts.
+export function getStudentId() {
+  try {
+    const u = JSON.parse(localStorage.getItem("akoro_user"));
+    if (u?.id) return u.id;
+  } catch { /* ignore */ }
+  return "user-alex-01";
+}
+
+// Evaluated at import for the many call-sites that use it as a plain value.
+// On a protected dashboard the user is already cached, so this resolves to the
+// real UUID. Call getStudentId() directly if you need the freshest value.
+export const STUDENT_ID = getStudentId();
 
 export const AGENT_STYLES = {
   nana:    { name:"NaNa Esumai", emoji:"🧠", bg:"#EEEDFE", color:"#3C3489", ring:"#AFA9EC" },

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BRAND, RED, SUBJECTS, STUDENT_ID } from '../constants.js';
+import { BRAND, RED, SUBJECTS, getStudentId } from '../constants.js';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -36,7 +36,7 @@ export default function AssessmentPage() {
     if (!topic.trim()) { setError('Please enter a topic.'); return; }
     setError('');
     setSession({
-      studentId:     STUDENT_ID,
+      studentId:     getStudentId(),
       topic:         topic.trim(),
       subject:       subject || null,
       objectives:    objectives.trim()
@@ -51,7 +51,10 @@ export default function AssessmentPage() {
     return (
       <div style={{ position:'fixed', inset:0, zIndex:999, background:'#0F172A' }}>
         <AssessmentRoom
-          session={session}
+          topic={session.topic}
+          subject={session.subject}
+          objectives={session.objectives}
+          questionCount={session.questionCount}
           onClose={() => { setSession(null); navigate('/app'); }}
         />
       </div>

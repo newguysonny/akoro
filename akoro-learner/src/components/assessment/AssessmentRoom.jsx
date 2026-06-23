@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, getStudentId } from '../../constants.js';
 import { API } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
@@ -112,13 +112,14 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
     const img = captureReference();
     if (!img) { _beginExam(); return; }   // no camera — proceed without identity
     setRefSaving(true);
-    wsRef.current?.emit("register_reference", { studentId: STUDENT_ID, image: img });
+    wsRef.current?.emit("register_reference", { studentId: getStudentId(), image: img });
   };
 
   const _beginExam = () => {
     setPhase("exam");
+    const sid = getStudentId();
     wsRef.current?.emit("start_assessment", {
-      studentId: STUDENT_ID, topic, subject, objectives, questionCount, userId: STUDENT_ID,
+      studentId: sid, topic, subject, objectives, questionCount, userId: sid,
     });
   };
 
