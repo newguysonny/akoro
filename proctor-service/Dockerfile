@@ -1,11 +1,11 @@
 # Akoro Proctoring Service — FastAPI + InsightFace (ArcFace) + YOLO.
 # CPU image, tuned for a small box (e.g. a $5 Railway/VM tier): light model
-# packs (buffalo_s + yolov8n) and both models pre-fetched at build time so the
-# first live frame isn't slow. For GPU swap the base for an nvidia/cuda runtime
-# and install onnxruntime-gpu.
+# packs (buffalo_s + yolov8n), CPU-only torch, and both models pre-fetched at
+# build time so the first live frame isn't slow. For GPU swap the base for an
+# nvidia/cuda runtime and install onnxruntime-gpu + a CUDA torch build.
 FROM python:3.11-slim
 
-# OpenCV / InsightFace runtime deps
+# Runtime libs OpenCV / InsightFace need at execution time (kept in the image).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 libglib2.0-0 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -18,7 +18,14 @@ ENV FACE_PACK=buffalo_s \
     INSIGHTFACE_HOME=/app/.insightface
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+# insightface and stringzilla ship only sdists and must compile C/C++ extensions,
+# so a toolchain is required at build time. Install it, build the wheels, then
+# purge it in the SAME layer so the final image stays small.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pre-fetch model weights at build time so the first request isn't slow:
 #  • YOLO nano detector

@@ -1,3 +1,8 @@
+# NOTE: torch/torchvision are pinned to CPU-only wheels via the extra index
+# below. Without this, ultralytics drags in the full CUDA torch (~2GB of
+# nvidia-* wheels) — useless on a CPU box and far too big for a small plan.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
@@ -6,3 +11,5 @@ opencv-python-headless==4.10.0.84
 insightface==0.7.3
 onnxruntime==1.20.1
 ultralytics==8.3.40
+torch==2.3.1
+torchvision==0.18.1
