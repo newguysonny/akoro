@@ -25,6 +25,31 @@ import db from "../../db.js";
 
 export const activeSessions = new Map();
 
+// ── Session reap grace window ────────────────────────────────────────────────
+// When a socket drops we keep its orchestrator alive briefly so a reconnecting
+// client can resume the same session seamlessly. If no resume arrives within the
+// grace window, the orchestrator is reaped to bound memory.
+const sessionReapTimers      = new Map();   // sessionId → timeout
+const SESSION_REAP_GRACE_MS  = 5 * 60 * 1000;
+
+function cancelSessionReap(sessionId) {
+  const t = sessionReapTimers.get(sessionId);
+  if (t) { clearTimeout(t); sessionReapTimers.delete(sessionId); }
+}
+
+function scheduleSessionReap(sessionId) {
+  cancelSessionReap(sessionId);
+  const t = setTimeout(() => {
+    sessionReapTimers.delete(sessionId);
+    if (activeSessions.has(sessionId)) {
+      activeSessions.delete(sessionId);
+      console.log(`[session reap] ${sessionId} removed after ${SESSION_REAP_GRACE_MS / 1000}s grace`);
+    }
+  }, SESSION_REAP_GRACE_MS);
+  if (t.unref) t.unref();   // don't keep the process alive for a reap timer
+  sessionReapTimers.set(sessionId, t);
+}
+
 // Wire io globally so webhook can emit agent_purchased
 // Call from server.js: global._io = io;
 
@@ -566,10 +591,47 @@ export function setupWebSocket(io) {
       }
     });
 
+    // ── resume_session ────────────────────────────────────────
+    // Seamless reconnect: re-bind this fresh socket to an orchestrator that
+    // survived a transient drop. If the orchestrator is gone (server restart,
+    // landed on another instance, or grace window expired) the client is told
+    // to start fresh instead.
+    socket.on("resume_session", ({ sessionId, studentId, userId } = {}) => {
+      const orchestrator = sessionId ? activeSessions.get(sessionId) : null;
+      if (!orchestrator) return socket.emit("resume_failed", { sessionId: sessionId || null });
+
+      cancelSessionReap(sessionId);
+
+      const caller = userId || studentId || orchestrator.studentId;
+      socket.join(`session:${sessionId}`);
+      if (studentId || orchestrator.studentId) socket.join(`student:${studentId || orchestrator.studentId}`);
+      if (caller) socket.join(`user:${caller}`);
+
+      socket.data = {
+        ...socket.data,
+        sessionId,
+        agentId:     studentId || orchestrator.studentId,
+        agentPairId: "student-session",
+        userId:      caller,
+        mode:        orchestrator.sessionType === "decay_review" ? "decay" : (socket.data?.mode || "fresh"),
+        topic:       orchestrator.session?.topic,
+        subject:     orchestrator.subject,
+      };
+
+      socket.emit("session_resumed", {
+        sessionId,
+        currentPhase: orchestrator.session?.phase   || null,
+        currentSubtopic: orchestrator.session?.mustKnowParts?.[orchestrator.session?.mustKnowIndex] || null,
+        topic:        orchestrator.session?.topic   || null,
+        subject:      orchestrator.subject          || null,
+      });
+    });
+
     // ── end_session ───────────────────────────────────────────
     socket.on("end_session", async () => {
       const { sessionId, agentId, agentPairId } = socket.data;
       const orchestrator = activeSessions.get(sessionId);
+      if (sessionId) cancelSessionReap(sessionId);
       if (!orchestrator) return socket.emit("error", { message: "No active session." });
       try {
         const endResult = await orchestrator.endSession();
@@ -708,7 +770,11 @@ export function setupWebSocket(io) {
 
     // ── disconnect ────────────────────────────────────────────
     socket.on("disconnect", () => {
-      console.log(`🔌 Disconnected: ${socket.id} (session: ${socket.data?.sessionId || "none"})`);
+      const sid = socket.data?.sessionId;
+      // Keep the orchestrator alive through a grace window so a reconnecting
+      // client can resume it; reap it if no resume arrives.
+      if (sid && activeSessions.has(sid)) scheduleSessionReap(sid);
+      console.log(`🔌 Disconnected: ${socket.id} (session: ${sid || "none"})`);
     });
   });
 }

@@ -38,6 +38,8 @@ function TeachAgentModal({ session, config, onClose }) {
   const [connState,  setConnState]  = useState("connecting");
   const timerRef      = useRef(null);
   const wsRef         = useRef(null);
+  const sessionIdRef  = useRef(null);   // live session id — drives seamless resume on reconnect
+  const pendingSendRef = useRef(null);  // message typed during a drop — flushed on reconnect
   const mediaRef      = useRef(null);    // MediaRecorder — audio (blob) mode
   const voiceMediaRef = useRef(null);    // PCM capture handle — voice (streaming) mode
   const voiceReadyRef = useRef(false);   // backend STT connection open
@@ -131,27 +133,58 @@ function TeachAgentModal({ session, config, onClose }) {
       const ws = window.io(API, { transports:["websocket","polling"] });
       wsRef.current = ws;
 
+      const startSession = () => ws.emit("start_adaptive_session", {
+        studentId:      STUDENT_ID,
+        topic,          subject,
+        mode,
+        sessionId:      prevSessId,
+        teacherAgentId: config?.teacherAgentId || session?.teacherAgentId || AGENT_CONFIG.teacherAgentId,
+        userId:         STUDENT_ID,
+      });
+
       ws.on("connect", () => {
         setConnState("connected");
-        ws.emit("start_adaptive_session", {
-          studentId:      STUDENT_ID,
-          topic,          subject,
-          mode,
-          sessionId:      prevSessId,
-          teacherAgentId: config?.teacherAgentId || session?.teacherAgentId || AGENT_CONFIG.teacherAgentId,
-          userId:         STUDENT_ID,
-        });
+        // Seamless resume: if we already have a live session, re-bind to it
+        // instead of starting a fresh one. The backend keeps the orchestrator
+        // alive through a short grace window after a drop.
+        if (sessionIdRef.current) {
+          ws.emit("resume_session", {
+            sessionId: sessionIdRef.current,
+            studentId: STUDENT_ID,
+            userId:    STUDENT_ID,
+          });
+        } else {
+          startSession();
+        }
+      });
+
+      // Resumed onto the same orchestrator — local blocks are already intact,
+      // so just re-enable sending and flush any message typed during the drop.
+      ws.on("session_resumed", () => {
+        setWsReady(true); setInitLoading(false);
+        const p = pendingSendRef.current;
+        if (p) { pendingSendRef.current = null; ws.emit("teacher_message", { message: p.text, modality: p.modality }); }
+      });
+
+      // Orchestrator gone (server restart / different instance / grace expired)
+      // — fall back to a fresh session, marking the break in the transcript.
+      ws.on("resume_failed", () => {
+        sessionIdRef.current = null;
+        setBlocks(prev => prev.length
+          ? [...prev, { type:"system-divider", label:"Reconnected — starting a new session" }]
+          : prev);
+        startSession();
       });
 
       // Connection dropped or failing — surface a reconnecting chip. Socket.IO
-      // auto-reconnects; on success the "connect" handler above fires again and
-      // re-runs start_adaptive_session.
+      // auto-reconnects; on success the "connect" handler above resumes.
       ws.on("disconnect",     () => { setConnState("reconnecting"); setLoading(false); });
       ws.on("connect_error",  () => setConnState("reconnecting"));
       ws.io?.on?.("reconnect_attempt", () => setConnState("reconnecting"));
 
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
+        sessionIdRef.current = d.sessionId;
         setWsReady(true);
         setInitLoading(false);
         const gName  = d.guideProfile?.name  || guideNm;
@@ -174,12 +207,18 @@ function TeachAgentModal({ session, config, onClose }) {
             return [...d.historyBlocks, { type:"system-divider", label:"Continuing from here" }, ...fresh, ...opening];
           });
         } else if (opening.length) {
-          setBlocks(opening);
+          // Append (not replace) when a transcript already exists — e.g. a
+          // fresh start after resume_failed should keep the prior messages.
+          setBlocks(prev => prev.length ? [...prev, ...opening] : opening);
         }
+
+        // Flush a message the user typed during the drop, if any.
+        const p = pendingSendRef.current;
+        if (p) { pendingSendRef.current = null; ws.emit("teacher_message", { message: p.text, modality: p.modality }); }
       });
 
       // Backward compat
-      ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); setInitLoading(false); });
+      ws.on("student_session_ready", d => { setSessionId(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
 
       // Summary delivered over the socket (replaces REST /teaching/summary).
       ws.on("session_summary", ({ summary }) => { setSummary(summary); setLoading(false); });
@@ -448,7 +487,13 @@ function TeachAgentModal({ session, config, onClose }) {
       return;
     }
 
-    // No live connection — surface the failure honestly.
+    // Not connected right now. If we have a resumable session, hold the message
+    // and send it the moment we reconnect — the chip shows "Reconnecting…" and
+    // the spinner stays up. Otherwise surface an honest failure.
+    if (sessionIdRef.current) {
+      pendingSendRef.current = { text, modality };
+      return;
+    }
     setBlocks(prev => [...prev, {
       type:"system-divider",
       label:"Lost connection to your tutor. Please reopen the session to continue.",

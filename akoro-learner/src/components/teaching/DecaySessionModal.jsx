@@ -26,6 +26,8 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   const [connState, setConnState] = useState("connecting");
   const timerRef    = useRef(null);
   const wsRef       = useRef(null);
+  const sessionIdRef = useRef(null);   // live session id — drives seamless resume on reconnect
+  const pendingSendRef = useRef(null); // message typed during a drop — flushed on reconnect
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -36,15 +38,41 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       const ws = window.io(API, { transports:["websocket","polling"] });
       wsRef.current = ws;
 
+      const startSession = () => ws.emit("start_adaptive_session", {
+        studentId:      STUDENT_ID,
+        subject,        topic,
+        mode:           "decay",
+        notificationId: alert.id,
+        userId:         STUDENT_ID,
+      });
+
       ws.on("connect", () => {
         setConnState("connected");
-        ws.emit("start_adaptive_session", {
-          studentId:      STUDENT_ID,
-          subject,        topic,
-          mode:           "decay",
-          notificationId: alert.id,
-          userId:         STUDENT_ID,
-        });
+        // Seamless resume on reconnect — re-bind to the surviving orchestrator
+        // rather than restarting the re-teach.
+        if (sessionIdRef.current) {
+          ws.emit("resume_session", {
+            sessionId: sessionIdRef.current,
+            studentId: STUDENT_ID,
+            userId:    STUDENT_ID,
+          });
+        } else {
+          startSession();
+        }
+      });
+
+      ws.on("session_resumed", () => {
+        setWsReady(true); setInitLoading(false);
+        const p = pendingSendRef.current;
+        if (p) { pendingSendRef.current = null; ws.emit("teacher_message", { message: p.text }); }
+      });
+
+      ws.on("resume_failed", () => {
+        sessionIdRef.current = null;
+        setBlocks(prev => prev.length
+          ? [...prev, { type:"system-divider", label:"Reconnected — starting a new session" }]
+          : prev);
+        startSession();
       });
 
       // Connection dropped or failing — show a reconnecting chip. Socket.IO
@@ -56,6 +84,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       // New unified event
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
+        sessionIdRef.current = d.sessionId;
         setWsReady(true);
         setInitLoading(false);
         const gName  = d.guideProfile?.name  || "NaNa Esumai";
@@ -65,11 +94,15 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
           : d.message
           ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Re-teach · ready", text:d.message }]
           : [];
-        if (d.historyBlocks?.length) setBlocks([...d.historyBlocks, ...opening]);
-        else if (opening.length) setBlocks(opening);
+        if (d.historyBlocks?.length) setBlocks(prev => [...prev.filter(b => !b.faded), ...d.historyBlocks, ...opening]);
+        else if (opening.length) setBlocks(prev => prev.length ? [...prev, ...opening] : opening);
+
+        // Flush a message typed during the drop, if any.
+        const p = pendingSendRef.current;
+        if (p) { pendingSendRef.current = null; ws.emit("teacher_message", { message: p.text }); }
       });
       // Backward compat
-      ws.on("student_session_ready", d => { setSessionId(d.sessionId); setWsReady(true); setInitLoading(false); });
+      ws.on("student_session_ready", d => { setSessionId(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
 
       ws.on("typing_start", () => setLoading(true));
 
@@ -119,7 +152,12 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       return;
     }
 
-    // No live connection — surface the failure honestly.
+    // Not connected right now. With a resumable session, hold the message and
+    // send it on reconnect; otherwise surface an honest failure.
+    if (sessionIdRef.current) {
+      pendingSendRef.current = { text };
+      return;
+    }
     setBlocks(prev => [...prev, {
       type:"system-divider",
       label:"Lost connection to your tutor. Please reopen the session to continue.",
