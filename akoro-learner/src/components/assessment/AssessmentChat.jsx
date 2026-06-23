@@ -9,7 +9,8 @@ import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
  * Plus a composer at the bottom. Kept self-contained (not SessionChatView)
  * because the assessment block vocabulary differs from teaching.
  */
-function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disabled, progress }) {
+function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disabled, progress,
+  voiceMode = false, onToggleVoiceMode, listening = false, interim = "", onToggleListening }) {
   const endRef = useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [blocks, loading]);
 
@@ -37,19 +38,49 @@ function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disable
         <div ref={endRef} />
       </div>
 
-      <div style={{ padding:"10px 12px", borderTop:"1px solid rgba(255,255,255,.06)", display:"flex", gap:8 }}>
-        <input
-          value={input}
-          onChange={e => onInputChange(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
-          disabled={disabled || loading}
-          placeholder={disabled ? "Assessment ended" : "Type your answer…"}
-          style={{ flex:1, background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)",
-            borderRadius:12, padding:"11px 14px", color:"#F1F5F9", fontSize:14, fontFamily:"'Nunito',sans-serif", outline:"none" }} />
-        <button onClick={onSend} disabled={disabled || loading || !input.trim()}
-          style={{ padding:"0 18px", borderRadius:12, border:"none", cursor: (disabled||loading||!input.trim()) ? "default":"pointer",
-            background: (disabled||loading||!input.trim()) ? "rgba(255,255,255,.08)" : `linear-gradient(135deg,${BRAND},${BRAND}CC)`,
-            color:"#fff", fontSize:13, fontWeight:800, fontFamily:"'Nunito',sans-serif" }}>Send</button>
+      {voiceMode && (interim || listening) && (
+        <div style={{ padding:"6px 14px", fontSize:12.5, fontWeight:600, color: interim ? "#E2E8F0" : "#64748B",
+          fontStyle: interim ? "normal" : "italic" }}>
+          {interim || "Listening…"}
+        </div>
+      )}
+
+      <div style={{ padding:"10px 12px", borderTop:"1px solid rgba(255,255,255,.06)", display:"flex", gap:8, alignItems:"center" }}>
+        {/* Voice mode toggle */}
+        {onToggleVoiceMode && (
+          <button onClick={onToggleVoiceMode} disabled={disabled} title="Voice mode"
+            style={{ width:40, height:40, flexShrink:0, borderRadius:12, cursor: disabled?"default":"pointer",
+              border:`1px solid ${voiceMode ? BRAND : "rgba(255,255,255,.12)"}`,
+              background: voiceMode ? `${BRAND}22` : "rgba(255,255,255,.05)",
+              color: voiceMode ? BRAND : "#94A3B8", fontSize:17 }}>🔊</button>
+        )}
+
+        {voiceMode ? (
+          <button onClick={onToggleListening} disabled={disabled || loading}
+            style={{ flex:1, padding:"11px", borderRadius:12, border:"none", cursor:(disabled||loading)?"default":"pointer",
+              background: listening ? `linear-gradient(135deg,${RED},${RED}CC)` : `linear-gradient(135deg,${BRAND},${BRAND}CC)`,
+              color:"#fff", fontSize:13.5, fontWeight:800, fontFamily:"'Nunito',sans-serif",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            {listening
+              ? <><span style={{ width:9, height:9, borderRadius:"50%", background:"#fff", animation:"pulse-dot 1s ease-in-out infinite" }} /> Stop & submit</>
+              : <>🎙 Hold to answer</>}
+          </button>
+        ) : (
+          <>
+            <input
+              value={input}
+              onChange={e => onInputChange(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
+              disabled={disabled || loading}
+              placeholder={disabled ? "Assessment ended" : "Type your answer…"}
+              style={{ flex:1, background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)",
+                borderRadius:12, padding:"11px 14px", color:"#F1F5F9", fontSize:14, fontFamily:"'Nunito',sans-serif", outline:"none" }} />
+            <button onClick={onSend} disabled={disabled || loading || !input.trim()}
+              style={{ padding:"0 18px", borderRadius:12, border:"none", cursor: (disabled||loading||!input.trim()) ? "default":"pointer",
+                background: (disabled||loading||!input.trim()) ? "rgba(255,255,255,.08)" : `linear-gradient(135deg,${BRAND},${BRAND}CC)`,
+                color:"#fff", fontSize:13, fontWeight:800, fontFamily:"'Nunito',sans-serif" }}>Send</button>
+          </>
+        )}
       </div>
     </div>
   );

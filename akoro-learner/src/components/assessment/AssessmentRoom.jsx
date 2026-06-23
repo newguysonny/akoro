@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
+import { useVoiceSession } from '../../hooks/useVoiceSession.js';
 import ProctorMonitor from './ProctorMonitor.jsx';
 import AssessmentChat from './AssessmentChat.jsx';
 import { XIcon } from '../common/Icons.jsx';
@@ -31,8 +32,47 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   const [terminated, setTerminated] = useState(null);
   const [refSaving, setRefSaving] = useState(false);
 
+  const [voiceMode, setVoiceMode] = useState(false);
   const wsRef = useRef(null);
   const assessIdRef = useRef(null);
+  const spokenRef = useRef(0);   // index of last block spoken aloud
+
+  // Submit one answer (shared by text composer and voice transcript). The
+  // server echoes the user block back in assessment_turn, so we don't add it
+  // optimistically — just emit.
+  const submitAnswer = (text) => {
+    const t = (text || "").trim();
+    if (!t || !ready) return;
+    wsRef.current?.emit("assessment_message", { message: t });
+  };
+
+  // Voice I/O over the same socket — auto-submits the spoken answer.
+  const { listening, interim, startListening, stopListening, speak, stopSpeaking } = useVoiceSession({
+    wsRef,
+    ttsVoice: "alloy",
+    onTranscript: (text) => submitAnswer(text),
+  });
+
+  // When voice mode is on, read each new Sergeant question/feedback aloud.
+  useEffect(() => {
+    if (!voiceMode) return;
+    for (let i = spokenRef.current; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (b && (b.type === "question" || b.type === "sergeant" || b.type === "hint") && b.text) {
+        speak(b.text);
+      }
+    }
+    spokenRef.current = blocks.length;
+  }, [blocks, voiceMode, speak]);
+
+  const toggleVoiceMode = () => {
+    setVoiceMode(v => {
+      const next = !v;
+      if (!next) { stopListening(); stopSpeaking(); }
+      else spokenRef.current = blocks.length;   // don't replay backlog on enable
+      return next;
+    });
+  };
 
   // Local proctoring tier — only active once the exam is running.
   const { videoRef, canvasRef, status, signals, captureReference, FRAME_W, FRAME_H } = useProctoring({
@@ -83,10 +123,9 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   };
 
   const handleSend = () => {
-    const text = input.trim();
-    if (!text || loading || !ready) return;
+    if (!input.trim() || loading || !ready) return;
+    submitAnswer(input);
     setInput("");
-    wsRef.current?.emit("assessment_message", { message: text });
   };
 
   // ── Consent / identity capture screen ──────────────────────
@@ -179,7 +218,10 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
           background:"rgba(255,255,255,.02)", borderRadius:16, border:"1px solid rgba(255,255,255,.06)", overflow:"hidden" }}>
           <AssessmentChat
             blocks={blocks} input={input} onInputChange={setInput} onSend={handleSend}
-            loading={loading} disabled={!ready || Boolean(terminated)} progress={progress} />
+            loading={loading} disabled={!ready || Boolean(terminated)} progress={progress}
+            voiceMode={voiceMode} onToggleVoiceMode={toggleVoiceMode}
+            listening={listening} interim={interim}
+            onToggleListening={listening ? stopListening : startListening} />
         </div>
       </div>
     </Shell>
