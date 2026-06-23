@@ -13,6 +13,7 @@ import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
+import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
 import SettingsPage       from './pages/SettingsPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
@@ -88,6 +89,7 @@ function AppRoutes() {
       <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+      <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
