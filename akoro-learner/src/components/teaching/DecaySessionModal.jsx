@@ -113,7 +113,17 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
 
       ws.on("student_done", () => {});
       ws.on("guide_done",   () => {});
-      ws.on("error", err => { console.warn("[DecayModal WS]", err.message); setLoading(false); });
+      ws.on("error", err => {
+        console.warn("[DecayModal WS]", err.message);
+        setLoading(false);
+        if (!sessionIdRef.current) {
+          setInitLoading(false);
+          setBlocks(prev => prev.some(b => b.type === "system-divider") ? prev : [...prev, {
+            type:"system-divider",
+            label: err?.message ? `Couldn't start the session: ${err.message}` : "Couldn't start the session. Please try again.",
+          }]);
+        }
+      });
     } else {
       // No realtime transport available — the session can't run.
       setInitLoading(false);

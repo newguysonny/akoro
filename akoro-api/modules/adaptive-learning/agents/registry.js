@@ -94,21 +94,23 @@ async function _loadTrainedOrchestrator(agentId) {
 }
 
 async function _resolveGuideForStudent(teacherAgentId, callerId) {
-  if (!teacherAgentId) /* NaNa Esumai is used directly in teachingSession.js — no legacy orchestrator needed */
-return null;
+  // Default guide pair: NaNa Esumai (guide) + Sargeant (control). The student
+  // orchestrator dereferences guideOrchestrator.guide / .control, so this must
+  // never be null — fall back to the built-in NaNa pair.
+  const defaultGuide = () => new BUILTIN_REGISTRY["nana-esumai"].Orchestrator();
+
+  if (!teacherAgentId) return defaultGuide();
   try {
     if (callerId) {
       const owns = await userOwnsAgent(callerId, teacherAgentId);
-      if (!owns) /* NaNa Esumai is used directly in teachingSession.js — no legacy orchestrator needed */
-return null;
+      if (!owns) return defaultGuide();
     }
     const trained = await _loadTrainedOrchestrator(teacherAgentId);
     if (trained) return trained;
   } catch (err) {
     console.warn("[Registry] Teacher agent not found, using default:", err.message);
   }
-  /* NaNa Esumai is used directly in teachingSession.js — no legacy orchestrator needed */
-return null;
+  return defaultGuide();
 }
 
 export async function listAgentPairs(userId = null) {

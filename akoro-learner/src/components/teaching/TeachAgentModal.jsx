@@ -277,7 +277,19 @@ function TeachAgentModal({ session, config, onClose }) {
       });
       ws.on("student_done", ()=>{});
       ws.on("guide_done",   ()=>{});
-      ws.on("error", err => { console.warn("[TeachModal WS]", err.message); setLoading(false); setSwitching(false); });
+      ws.on("error", err => {
+        console.warn("[TeachModal WS]", err.message);
+        setLoading(false); setSwitching(false);
+        // If the session never came up, surface the failure instead of leaving
+        // the user on a silent spinner.
+        if (!sessionIdRef.current) {
+          setInitLoading(false);
+          setBlocks(prev => prev.some(b => b.type === "system-divider") ? prev : [...prev, {
+            type:"system-divider",
+            label: err?.message ? `Couldn't start the session: ${err.message}` : "Couldn't start the session. Please try again.",
+          }]);
+        }
+      });
 
       // ── Voice streaming events ─────────────────────────────────
       ws.on("voice_stream_ready", () => {
