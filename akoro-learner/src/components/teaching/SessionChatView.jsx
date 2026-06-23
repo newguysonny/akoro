@@ -12,6 +12,7 @@ function SessionChatView({
   voiceStreaming, interimText, onToggleVoice,
   cognitive,
   guideLabel, onSwitchAgent, switching,
+  connState = "connected",
   onClose,
 }) {
   const { t } = useLang();
@@ -48,6 +49,21 @@ function SessionChatView({
             <span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.5 }}>
               {mode === "decay" ? t('teaching.mode_decay') : t('teaching.mode_teach')}
             </span>
+            {connState !== "connected" && (
+              <span style={{ display:"inline-flex",alignItems:"center",gap:5,
+                fontSize:9.5,fontWeight:800,letterSpacing:.4,
+                color: connState === "connecting" ? "#FBBF24" : "#F87171",
+                background: connState === "connecting" ? "rgba(251,191,36,.12)" : "rgba(248,113,113,.12)",
+                border:`1px solid ${connState === "connecting" ? "rgba(251,191,36,.3)" : "rgba(248,113,113,.3)"}`,
+                borderRadius:20,padding:"2px 8px" }}>
+                <span style={{ width:5,height:5,borderRadius:"50%",
+                  background: connState === "connecting" ? "#FBBF24" : "#F87171",
+                  animation:"pulse-dot 1s ease-in-out infinite" }}/>
+                {connState === "connecting"
+                  ? (t('teaching.connecting') || 'Connecting…')
+                  : (t('teaching.reconnecting') || 'Reconnecting…')}
+              </span>
+            )}
           </div>
           <p style={{ fontSize:15,fontWeight:900,color:"#F1F5F9",margin:0 }}>{topic}</p>
           <p style={{ fontSize:11,fontWeight:600,color:"#475569",margin:0 }}>

@@ -34,6 +34,8 @@ function TeachAgentModal({ session, config, onClose }) {
   const [summary,    setSummary]    = useState(null);
   const [summaryErr, setSummaryErr] = useState("");
   const [wsReady,    setWsReady]    = useState(false);
+  // Socket lifecycle for the connection chip: "connecting" | "connected" | "reconnecting"
+  const [connState,  setConnState]  = useState("connecting");
   const timerRef      = useRef(null);
   const wsRef         = useRef(null);
   const mediaRef      = useRef(null);    // MediaRecorder — audio (blob) mode
@@ -130,6 +132,7 @@ function TeachAgentModal({ session, config, onClose }) {
       wsRef.current = ws;
 
       ws.on("connect", () => {
+        setConnState("connected");
         ws.emit("start_adaptive_session", {
           studentId:      STUDENT_ID,
           topic,          subject,
@@ -139,6 +142,13 @@ function TeachAgentModal({ session, config, onClose }) {
           userId:         STUDENT_ID,
         });
       });
+
+      // Connection dropped or failing — surface a reconnecting chip. Socket.IO
+      // auto-reconnects; on success the "connect" handler above fires again and
+      // re-runs start_adaptive_session.
+      ws.on("disconnect",     () => { setConnState("reconnecting"); setLoading(false); });
+      ws.on("connect_error",  () => setConnState("reconnecting"));
+      ws.io?.on?.("reconnect_attempt", () => setConnState("reconnecting"));
 
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
@@ -309,6 +319,7 @@ function TeachAgentModal({ session, config, onClose }) {
     } else {
       // No realtime transport available — the session can't run.
       setInitLoading(false);
+      setConnState("reconnecting");
     }
 
     return () => {
@@ -576,6 +587,7 @@ function TeachAgentModal({ session, config, onClose }) {
         guideLabel={`${guide.emoji} ${guide.name}`}
         onSwitchAgent={wsReady ? openSwitch : null}
         switching={switching}
+        connState={connState}
         onClose={onClose}
       />
 

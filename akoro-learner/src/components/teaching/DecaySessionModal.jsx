@@ -22,6 +22,8 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   const [seconds,   setSeconds]   = useState(0);
   const [loading,   setLoading]   = useState(false);
   const [wsReady,   setWsReady]   = useState(false);
+  // Socket lifecycle for the connection chip: "connecting" | "connected" | "reconnecting"
+  const [connState, setConnState] = useState("connecting");
   const timerRef    = useRef(null);
   const wsRef       = useRef(null);
 
@@ -35,6 +37,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       wsRef.current = ws;
 
       ws.on("connect", () => {
+        setConnState("connected");
         ws.emit("start_adaptive_session", {
           studentId:      STUDENT_ID,
           subject,        topic,
@@ -43,6 +46,12 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
           userId:         STUDENT_ID,
         });
       });
+
+      // Connection dropped or failing — show a reconnecting chip. Socket.IO
+      // auto-reconnects and re-fires "connect" on success.
+      ws.on("disconnect",    () => { setConnState("reconnecting"); setLoading(false); });
+      ws.on("connect_error", () => setConnState("reconnecting"));
+      ws.io?.on?.("reconnect_attempt", () => setConnState("reconnecting"));
 
       // New unified event
       ws.on("session_ready", d => {
@@ -75,6 +84,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
     } else {
       // No realtime transport available — the session can't run.
       setInitLoading(false);
+      setConnState("reconnecting");
     }
 
     return () => {
@@ -134,6 +144,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       recording={recording}
       onToggleRecording={toggleRecording}
       seconds={seconds}
+      connState={connState}
       onClose={onClose}
     />
   );

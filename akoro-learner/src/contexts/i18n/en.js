@@ -484,6 +484,8 @@ export const EN = {
   /* ── Teaching session chat ── */
   'teaching.mode_decay':          'DECAY RE-TEACH',
   'teaching.mode_teach':          'LEARN BY TEACHING',
+  'teaching.connecting':          'Connecting…',
+  'teaching.reconnecting':        'Reconnecting…',
   'teaching.switching':           'Switching…',
   'teaching.switch':              'Switch',
   'teaching.summarize':           'Summarize',
