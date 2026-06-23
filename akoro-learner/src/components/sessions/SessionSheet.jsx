@@ -4,7 +4,7 @@ import { PlayIcon, PhoneIcon, MessageIcon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile }) {
+function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, agentProfile }) {
   const { t } = useLang();
   const sc           = SUBJECT_COLORS[session.subject] || BRAND;
   const pri          = PRIORITY_CONFIG[session.priority] || { dot:BRAND, bg:`${BRAND}10`, color:BRAND, label:"Upcoming", pulse:false };
@@ -163,6 +163,16 @@ function SessionSheet({ session, onClose, onStartTeach, decayAlert, agentProfile
           </div>
         )}
       </>)}
+
+      {/* Proctored assessment — offered once there's something to assess */}
+      {onAssess && (
+        <button onClick={()=>{onClose();onAssess(session);}}
+          style={{ width:"100%",padding:"12px",borderRadius:14,border:"1.5px solid rgba(245,158,11,.4)",
+            background:"rgba(245,158,11,.1)",fontSize:13,fontWeight:800,color:"#F59E0B",cursor:"pointer",
+            fontFamily:"'Nunito',sans-serif",marginBottom:10 }}>
+          ⚡ Take proctored assessment
+        </button>
+      )}
 
       {/* CTA buttons */}
       <div style={{ display:"flex",gap:10 }}>

@@ -28,6 +28,7 @@ import marketplaceRouter         from "./marketplace/routes.js";
 import chatRouter                from "./chat.js";
 import teachingSessionRouter     from "./teachingSession.js";
 import { setupWebSocket }        from "./websocket.js";
+import { setupAssessmentGateway } from "./assessmentGateway.js";
 import { decayEngine }           from "./agents/student/decayEngine.js";
 import { authenticateToken }     from "../auth/routes.js";
 
@@ -112,6 +113,7 @@ router.use("/chat",          authenticateToken, chatRouter);
  */
 export const setupAdaptiveWebSocket = (io) => {
   setupWebSocket(io);
+  setupAssessmentGateway(io);   // proctored Session Assessment Gateway (Sergeant)
 
   // ── Scheduled knowledge-decay check ───────────────────────────────
   // Runs the forgetting-curve engine for every active agent, applies

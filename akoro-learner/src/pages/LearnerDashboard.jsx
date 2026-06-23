@@ -11,6 +11,7 @@ import BlockRenderer  from '../components/sessions/BlockRenderer.jsx';
 import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
 import DecaySessionModal from '../components/teaching/DecaySessionModal.jsx';
 import ConfigModal       from '../components/teaching/ConfigModal.jsx';
+import AssessmentRoom     from '../components/assessment/AssessmentRoom.jsx';
 import BattleModal       from '../components/battles/BattleModal.jsx';
 import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
@@ -69,6 +70,7 @@ export default function LearnerDashboard() {
   const [configOpen,        setConfigOpen]        = useState(false); // FAB → ConfigModal
   const [configInitial,     setConfigInitial]     = useState(null);  // pre-fill from session sheet
   const [decaySession,      setDecaySession]      = useState(null); // decay alert object
+  const [assessSession,     setAssessSession]     = useState(null); // proctored assessment target
   const [acceptedIds,       setAcceptedIds]       = useState(new Set());
   const [battles,           setBattles]           = useState([]);
   const [toast,             setToast]             = useState(null);
@@ -671,11 +673,22 @@ export default function LearnerDashboard() {
         )}
 
         {selectedChallenge && <ChallengeModal challenge={selectedChallenge} onAccept={handleAcceptChallenge} onDecline={()=>setSelectedChallenge(null)} onClose={()=>setSelectedChallenge(null)}/>}
+        {/* AssessmentRoom — proctored Sergeant assessment (TF.js + WS gateway) */}
+        {assessSession && (
+          <AssessmentRoom
+            topic={assessSession.topic}
+            subject={assessSession.subject}
+            objectives={assessSession.objectives || []}
+            onClose={() => setAssessSession(null)}
+          />
+        )}
+
         {selectedSession && <SessionSheet
           session={selectedSession}
           decayAlert={decayBySession[selectedSession.id]||null}
           agentProfile={agentProfile}
           onClose={()=>setSelectedSession(null)}
+          onAssess={s => { setSelectedSession(null); setAssessSession(s); }}
           onStartTeach={s=>{
             setSelectedSession(null);
             const decay = decayBySession[s.id];
