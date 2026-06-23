@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
@@ -128,9 +129,12 @@ function TeachAgentModal({ session, config, onClose }) {
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
   useEffect(() => {
-    // Connect WebSocket — the session lives entirely here.
-    if (typeof window !== "undefined" && window.io) {
-      const ws = window.io(API, { transports:["websocket","polling"] });
+    // Connect WebSocket — the session lives entirely here. Import the socket
+    // client directly (don't depend on a global window.io that may be unset
+    // in some builds).
+    const connect = io || (typeof window !== "undefined" ? window.io : null);
+    if (connect) {
+      const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
       wsRef.current = ws;
 
       const startSession = () => ws.emit("start_adaptive_session", {
