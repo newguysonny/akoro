@@ -1,6 +1,50 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon } from '../common/Icons.jsx';
+
+// ── Inline replayable voice player ───────────────────────────────
+// Used by user (recorded audio) and agent (streamed TTS) bubbles so any
+// spoken turn can be played back. `tint` colours the control to match the
+// owning bubble; `dark` flips the text/track colours for dark agent bubbles.
+function AudioPlayer({ url, tint = BRAND, dark = false }) {
+  const ref = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const a = ref.current;
+    if (!a) return;
+    const onEnd  = () => { setPlaying(false); setProgress(0); };
+    const onTime = () => setProgress(a.duration ? (a.currentTime / a.duration) * 100 : 0);
+    a.addEventListener("ended", onEnd);
+    a.addEventListener("timeupdate", onTime);
+    return () => { a.removeEventListener("ended", onEnd); a.removeEventListener("timeupdate", onTime); };
+  }, [url]);
+
+  const toggle = () => {
+    const a = ref.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+  };
+
+  const trackBg = dark ? "rgba(255,255,255,.18)" : "rgba(255,255,255,.45)";
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:6 }}>
+      <audio ref={ref} src={url} preload="metadata" />
+      <div onClick={toggle} style={{ width:26, height:26, borderRadius:"50%", flexShrink:0,
+        background: dark ? `${tint}33` : "rgba(255,255,255,.55)", display:"flex",
+        alignItems:"center", justifyContent:"center", cursor:"pointer",
+        border:`1px solid ${dark ? `${tint}66` : "rgba(255,255,255,.7)"}` }}>
+        <span style={{ fontSize:12, color: dark ? tint : "#fff", lineHeight:1 }}>{playing ? "❚❚" : "▶"}</span>
+      </div>
+      <div style={{ flex:1, height:4, borderRadius:3, background:trackBg, overflow:"hidden", minWidth:60 }}>
+        <div style={{ height:"100%", width:`${progress}%`, background: dark ? tint : "#fff",
+          borderRadius:3, transition:"width .1s linear" }}/>
+      </div>
+    </div>
+  );
+}
 
 function BlockRenderer({ block, agentName, agentEmoji }) {
   const student = { ...AGENT_STYLES.student, name: agentName || "Agent", emoji: agentEmoji || "🤖" };
@@ -114,6 +158,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
           background:student.bg, border:`0.5px solid ${student.ring}`,
           color:student.color, fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:500 }}>
           {block.text}
+          {block.audioUrl && <AudioPlayer url={block.audioUrl} tint={student.color} dark />}
         </div>
         <div style={{ fontSize:10, color:"rgba(255,255,255,.35)", marginTop:2 }}>{student.name}</div>
       </div>
@@ -235,7 +280,13 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
       <div style={{ maxWidth:"78%", padding:"9px 13px",
         borderRadius:"18px 18px 4px 18px", background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,
         color:"#fff", fontSize:13.5, lineHeight:1.55, whiteSpace:"pre-wrap", fontWeight:500 }}>
+        {(block.modality === "audio" || block.modality === "live") && (
+          <span style={{ fontSize:10, fontWeight:700, opacity:.75, display:"block", marginBottom:2 }}>
+            {block.modality === "live" ? "🎙 Voice" : "🎤 Audio"}
+          </span>
+        )}
         {block.text}
+        {block.audioUrl && <AudioPlayer url={block.audioUrl} dark={false} />}
       </div>
     </div>
   );

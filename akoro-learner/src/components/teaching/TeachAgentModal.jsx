@@ -56,6 +56,7 @@ function TeachAgentModal({ session, config, onClose }) {
   const ttsSbRef    = useRef(null);   // SourceBuffer
   const ttsQueueRef = useRef([]);     // pending ArrayBuffers while SourceBuffer is busy
   const ttsDoneRef  = useRef(false);  // server signalled stream complete
+  const ttsChunksRef = useRef([]);    // accumulated mp3 bytes → replayable agent bubble
 
   const stopTts = () => {
     wsRef.current?.emit("stop_tts_stream");
@@ -68,6 +69,7 @@ function TeachAgentModal({ session, config, onClose }) {
     ttsSbRef.current    = null;
     ttsQueueRef.current = [];
     ttsDoneRef.current  = false;
+    ttsChunksRef.current = [];
   };
 
   const streamTts = (text, seq) => {
@@ -292,6 +294,13 @@ function TeachAgentModal({ session, config, onClose }) {
             type:"system-divider",
             label: err?.message ? `Couldn't start the session: ${err.message}` : "Couldn't start the session. Please try again.",
           }]);
+        } else {
+          // Mid-session failure (e.g. the turn errored). Surface it instead of
+          // leaving the user staring at silence, and re-enable the composer.
+          setBlocks(prev => [...prev, {
+            type:"system-divider",
+            label: err?.message ? `Couldn't get a reply: ${err.message}` : "Couldn't get a reply. Tap to try again.",
+          }]);
         }
       });
 
@@ -333,6 +342,7 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("tts_audio_chunk", ({ chunk, seq }) => {
         if (seq !== speakSeqRef.current) return;  // stale turn
         const bytes = Uint8Array.from(atob(chunk), c => c.charCodeAt(0));
+        ttsChunksRef.current.push(bytes);         // keep a copy for replay
         const sb    = ttsSbRef.current;
         if (!sb) {
           // sourceopen hasn't fired yet — queue for later flush
@@ -352,6 +362,19 @@ function TeachAgentModal({ session, config, onClose }) {
         const sb = ttsSbRef.current;
         if (sb && !sb.updating && ttsQueueRef.current.length === 0) {
           try { ttsMsRef.current?.endOfStream(); } catch {}
+        }
+        // Attach the full spoken reply to the latest agent bubble so it can be
+        // replayed (with its transcription already shown as the block text).
+        if (ttsChunksRef.current.length) {
+          const blob = new Blob(ttsChunksRef.current, { type:"audio/mpeg" });
+          const url  = URL.createObjectURL(blob);
+          setBlocks(prev => {
+            const copy = [...prev];
+            for (let i = copy.length - 1; i >= 0; i--) {
+              if (copy[i].type === "student-agent") { copy[i] = { ...copy[i], audioUrl: url }; break; }
+            }
+            return copy;
+          });
         }
       });
 
@@ -403,6 +426,8 @@ function TeachAgentModal({ session, config, onClose }) {
           stream.getTracks().forEach(t => t.stop());
           const blob = new Blob(chunksRef.current, { type:"audio/webm" });
           if (blob.size < 1000) return;
+          // Keep the recording so it shows as a replayable bubble in the chat.
+          const audioUrl = URL.createObjectURL(blob);
           setLoading(true);
           try {
             const form = new FormData();
@@ -411,9 +436,17 @@ function TeachAgentModal({ session, config, onClose }) {
               method:"POST", credentials:"include", body:form });
             const data = await r.json();
             const transcript = data.transcript?.trim();
-            if (transcript) { setLoading(false); await handleSend(transcript, "audio"); }
-            else setLoading(false);
-          } catch { setLoading(false); }
+            if (transcript) { setLoading(false); await handleSend(transcript, "audio", audioUrl); }
+            else {
+              setLoading(false);
+              setBlocks(prev => [...prev, { type:"system-divider",
+                label:"Couldn't hear that clearly — please try recording again." }]);
+            }
+          } catch {
+            setLoading(false);
+            setBlocks(prev => [...prev, { type:"system-divider",
+              label:"Audio couldn't be processed. Please try again." }]);
+          }
         };
         mr.start();
         setRecording(true);
@@ -488,13 +521,13 @@ function TeachAgentModal({ session, config, onClose }) {
     }
   };
 
-  const handleSend = async (overrideText, modality = "text") => {
+  const handleSend = async (overrideText, modality = "text", audioUrl = null) => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
     if (!overrideText) setInput("");
     lastModalityRef.current = modality;
     speakSeqRef.current += 1;            // invalidate any queued speech from the prior turn
-    setBlocks(prev => [...prev, { type:"user", text, modality }]);
+    setBlocks(prev => [...prev, { type:"user", text, modality, audioUrl }]);
     setLoading(true);
 
     // The session runs entirely over the WebSocket.
