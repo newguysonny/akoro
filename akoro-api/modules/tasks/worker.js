@@ -18,6 +18,7 @@ const MAX_TOOL_ITERATIONS = 20;
 const MODEL               = "claude-sonnet-4-6";
 
 const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+redis.on("error", (err) => console.error("[tasks/worker Redis]", err.message));
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const taskWorker = new Worker("task-runner", async (job) => {

@@ -10,6 +10,7 @@ import { TaskDB, TaskScheduleDB } from "./lib/db.js";
 import { bullRedisOptions }       from "../../lib/redisOptions.js";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+redis.on("error", (err) => console.error("[tasks/scheduler Redis]", err.message));
 
 export const taskQueue = new Queue("task-runner", {
   connection: redis,

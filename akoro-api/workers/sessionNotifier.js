@@ -21,6 +21,7 @@ import { sendSessionNotifications }   from "../services/notificationService.js";
 import { bullRedisOptions }           from "../lib/redisOptions.js";
 
 const redisConn = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+redisConn.on("error", (err) => console.error("[sessionNotifier/Redis]", err.message));
 
 // ─── Queue (producer side — imported by live-sessions.js) ────────────────────
 

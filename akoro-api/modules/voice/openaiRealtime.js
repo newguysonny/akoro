@@ -1,8 +1,8 @@
 /**
  * voice/openaiRealtime.js
  * ─────────────────────────────────────────────────────────────
- * Shared OpenAI Realtime transcription client (replaces Deepgram live).
- * Uses Node 22's native WebSocket — no extra dependency.
+ * OpenAI Realtime transcription client — GA API (wss://api.openai.com/v1/realtime).
+ * Uses the `transcription` session type (intent=transcription removed in GA).
  *
  * Audio in: base64 PCM16 mono @ 24kHz (input_audio_buffer.append).
  *
@@ -11,7 +11,8 @@
  *   → { sendAudio(base64), close() }
  */
 
-const REALTIME_URL = "wss://api.openai.com/v1/realtime?intent=transcription";
+// GA endpoint — the beta ?intent=transcription parameter is no longer valid.
+const REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-transcribe";
 
 export function createRealtimeTranscriber({
   onOpen          = () => {},
@@ -32,9 +33,11 @@ export function createRealtimeTranscriber({
   let closed = false;
 
   ws.addEventListener("open", () => {
+    // GA session.update for transcription-only sessions (no response generation).
     ws.send(JSON.stringify({
-      type: "transcription_session.update",
+      type: "session.update",
       session: {
+        modalities: ["text"],
         input_audio_format: "pcm16",
         input_audio_transcription: {
           model:    "gpt-4o-mini-transcribe",
@@ -57,6 +60,7 @@ export function createRealtimeTranscriber({
     try { msg = JSON.parse(event.data); } catch { return; }
 
     switch (msg.type) {
+      // GA event names (same as beta for transcription)
       case "conversation.item.input_audio_transcription.delta":
         if (msg.delta) onDelta(msg.delta);
         break;

@@ -62,6 +62,8 @@ const allowedOrigins = config.server.corsOrigin === '*'
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
+redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
+redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
 const io = new SocketServer(httpServer, {
   cors:       { origin: allowedOrigins, credentials: true, methods: ["GET", "POST"] },
