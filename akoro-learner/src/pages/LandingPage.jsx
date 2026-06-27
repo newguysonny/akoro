@@ -30,14 +30,14 @@ const BG = '#F5F3FF';   // light purple tint
 /* ── Global styles injected once ── */
 const FontStyle = () => (
   <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html{scroll-behavior:smooth}
     body{font-family:'DM Sans',sans-serif;background:#fff;color:#1A1A2E;overflow-x:hidden}
-    .fs{font-family:'Instrument Serif',Georgia,serif}
-    .fsyne{font-family:'Syne',sans-serif}
+    .fs{font-family:'Poppins',sans-serif;font-weight:700;letter-spacing:-0.02em}
+    .fs em{font-style:normal!important}
+    .fsyne{font-family:'Poppins',sans-serif}
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-    @keyframes lpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.78)}}
     @keyframes lspin{to{transform:rotate(360deg)}}
     @keyframes livepulse{0%,100%{opacity:1}50%{opacity:.35}}
     .fu1{animation:fadeUp .6s ease .08s both}
@@ -45,15 +45,11 @@ const FontStyle = () => (
     .fu3{animation:fadeUp .6s ease .32s both}
     .fu4{animation:fadeUp .6s ease .44s both}
     .fu5{animation:fadeUp .6s ease .56s both}
-    .pdot{animation:lpulse 2s ease infinite}
     .ldot{animation:livepulse 1.4s ease infinite}
     .spin{animation:lspin .8s linear infinite}
-    .hero-grid{
-      background-image:linear-gradient(rgba(108,59,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(108,59,255,.06) 1px,transparent 1px);
-      background-size:56px 56px;
-      mask-image:radial-gradient(ellipse 80% 65% at 50% 0%,black 0%,transparent 80%);
-      -webkit-mask-image:radial-gradient(ellipse 80% 65% at 50% 0%,black 0%,transparent 80%);
-    }
+    /* Frosted-glass surface — used on the solid colour hero/CTA blocks */
+    .glass{background:rgba(255,255,255,.10);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.20)}
+    .glass-light{background:rgba(255,255,255,.7);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.65)}
     ::-webkit-scrollbar{width:4px}
     ::-webkit-scrollbar-thumb{background:#d1c9ff;border-radius:2px}
     a{text-decoration:none;color:inherit}
@@ -111,7 +107,7 @@ function Reveal({ children, delay = 0, style = {} }) {
 const SL = ({ children, center = false }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, justifyContent: center ? 'center' : 'flex-start' }}>
     <div style={{ width: 20, height: 2, background: B, flexShrink: 0 }} />
-    <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: B }}>{children}</span>
+    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: B }}>{children}</span>
   </div>
 );
 
@@ -120,11 +116,11 @@ const Btn = ({ children, v = 'primary', sz = 'md', onClick, style: s = {} }) => 
   const base = { display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: "'DM Sans',sans-serif", fontWeight: 600, borderRadius: 99, cursor: 'pointer', border: 'none', transition: 'all .2s', whiteSpace: 'nowrap' };
   const sizes = { sm: { padding: '9px 20px', fontSize: 13 }, md: { padding: '11px 22px', fontSize: 14 }, lg: { padding: '14px 30px', fontSize: 15 } };
   const variants = {
-    primary: { background: `linear-gradient(135deg,${B},${B2})`, color: '#fff', boxShadow: `0 4px 18px ${B}40` },
+    primary: { background: B, color: '#fff', border: `1.5px solid ${B}` },
     outline:  { background: '#fff', color: '#3A3A52', border: `1.5px solid #D4CEC4` },
     ghost:    { background: 'transparent', color: '#7A7880', border: '1.5px solid transparent' },
-    dark:     { background: '#1A1A2E', color: '#fff', boxShadow: '0 4px 18px rgba(26,26,46,.2)', border: '1.5px solid #1A1A2E' },
-    green:    { background: G, color: '#fff', boxShadow: `0 4px 18px ${G}30`, border: `1.5px solid ${G}` },
+    dark:     { background: '#1A1A2E', color: '#fff', border: '1.5px solid #1A1A2E' },
+    green:    { background: G, color: '#fff', border: `1.5px solid ${G}` },
   };
   return <button onClick={onClick} style={{ ...base, ...sizes[sz], ...variants[v], ...s }}>{children}</button>;
 };
@@ -217,44 +213,39 @@ function Drawer({ open, onClose }) {
 /* ══════════════ HERO ══════════════ */
 function Hero({ onSignup }) {
   const stats = [
-    { icon: <Cpu size={20} color={B}/>, label: 'Active Agents',   val: '12,400+', sub: 'students worldwide' },
-    { icon: <Brain size={20} color={B}/>, label: 'Avg Retention', val: '89%',     sub: 'vs 17% passive video' },
-    { icon: <Swords size={20} color={B}/>, label: 'Agent Battles',val: '340K+',   sub: 'knowledge duels fought' },
-    { icon: <School size={20} color={B}/>, label: 'Partner Schools',val: '280+',  sub: 'across Nigeria & Africa' },
+    { icon: <Cpu size={20} color="#C4B5FD"/>, label: 'Active Agents',   val: '12,400+', sub: 'students worldwide' },
+    { icon: <Brain size={20} color="#C4B5FD"/>, label: 'Avg Retention', val: '89%',     sub: 'vs 17% passive video' },
+    { icon: <Swords size={20} color="#C4B5FD"/>, label: 'Agent Battles',val: '340K+',   sub: 'knowledge duels fought' },
+    { icon: <School size={20} color="#C4B5FD"/>, label: 'Partner Schools',val: '280+',  sub: 'across Nigeria & Africa' },
   ];
   return (
-    <section style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: '#fff', overflow: 'hidden' }}>
-      <div className="hero-grid" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}/>
-      <div style={{ position: 'absolute', top: -200, left: '50%', transform: 'translateX(-50%)', width: 700, height: 500, borderRadius: '50%', background: `radial-gradient(circle,${B}20 0%,transparent 70%)`, filter: 'blur(60px)', pointerEvents: 'none' }}/>
-      <div className="ak-hero-inner" style={{ position: 'relative', zIndex: 1, maxWidth: 820, width: '100%', padding: '120px 24px 80px' }}>
-        <div className="fu1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: `${B}10`, border: `1px solid ${B}30`, borderRadius: 99, padding: '6px 16px', marginBottom: 28 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: B }} className="pdot"/>
-          <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 11, fontWeight: 700, color: B, letterSpacing: '0.12em', textTransform: 'uppercase' }}>AI-Powered Adaptive Learning</span>
+    <section style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: `linear-gradient(180deg,${B2} 0%,#3A12A8 100%)`, overflow: 'hidden' }}>
+      <div className="ak-hero-inner" style={{ position: 'relative', zIndex: 1, maxWidth: 880, width: '100%', padding: '140px 24px 96px' }}>
+        <div className="fu1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 99, padding: '7px 16px', marginBottom: 28 }}>
+          <span className="glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 99, padding: '7px 16px' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4B5FD' }} className="ldot"/>
+            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 600, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Adaptive Learning Platform</span>
+          </span>
         </div>
-        <h1 className="fu2 fs" style={{ fontSize: 'clamp(38px,6.5vw,72px)', lineHeight: 1.08, color: '#1A1A2E', letterSpacing: '-0.025em', marginBottom: 20 }}>
-          Your AI learns <em style={{ color: B, fontStyle: 'italic' }}>everything</em>
-          <br/> you teach it —<br/>then teaches you back.
+        <h1 className="fu2 fs" style={{ fontSize: 'clamp(40px,7vw,76px)', lineHeight: 1.05, color: '#fff', letterSpacing: '-0.03em', marginBottom: 22, fontWeight: 800 }}>
+          Teach your agent.<br/>It teaches you back.
         </h1>
-        <p className="fu3" style={{ fontSize: 'clamp(16px,2vw,19px)', color: '#6B6B80', maxWidth: 560, margin: '0 auto 20px', lineHeight: 1.7 }}>
-          For students and teachers who want to <strong style={{ color: '#1A1A2E' }}>actually remember</strong> what they learn. Teach your agent — NaNa Esumai guides every session, battles for you, and grows alongside you.
+        <p className="fu3" style={{ fontSize: 'clamp(16px,2vw,20px)', color: 'rgba(255,255,255,.82)', maxWidth: 580, margin: '0 auto 36px', lineHeight: 1.65 }}>
+          For students and teachers who want to actually remember what they learn. NaNa Esumai guides every session, battles for you, and grows alongside you.
         </p>
-        <div className="fu4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 32, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex' }}>{[...Array(5)].map((_, i) => <Star key={i} size={13} fill={GL} strokeWidth={0}/>)}</div>
-          <span style={{ fontSize: 13, color: '#9490A0' }}>Trusted by <strong style={{ color: '#1A1A2E' }}>12,400+</strong> students across <strong style={{ color: '#1A1A2E' }}>38</strong> countries</span>
-        </div>
-        <div className="fu5 ak-hero-btns" style={{ alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 64 }}>
-          <Btn v="primary" sz="lg" onClick={onSignup}>Get your first lesson free <ArrowRight size={16}/></Btn>
-          <Btn v="outline" sz="lg"><Play size={14} fill={B} color={B} style={{ flexShrink: 0 }}/> See how it works</Btn>
+        <div className="fu5 ak-hero-btns" style={{ alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 56 }}>
+          <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}>Get your first lesson free <ArrowRight size={16}/></Btn>
+          <Btn v="outline" sz="lg" style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}><Play size={14} fill="#fff" color="#fff" style={{ flexShrink: 0 }}/> See how it works</Btn>
         </div>
         <div className="fu5 ak-stats-grid">
           {stats.map(({ icon, label, val, sub }, i) => (
-            <div key={i} style={{ background: '#fff', border: '1px solid #EDE8E1', borderRadius: 16, padding: '18px 20px', textAlign: 'left', boxShadow: '0 2px 12px rgba(0,0,0,.05)', transition: 'transform .2s,box-shadow .2s', cursor: 'default' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 10px 28px ${B}14`; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,.05)'; }}>
+            <div key={i} className="glass" style={{ borderRadius: 18, padding: '18px 20px', textAlign: 'left', transition: 'transform .2s', cursor: 'default' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'none'; }}>
               <div style={{ marginBottom: 10 }}>{icon}</div>
-              <div className="fsyne" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 4 }}>{label}</div>
-              <div className="fsyne" style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.1 }}>{val}</div>
-              <div style={{ fontSize: 11, color: '#9490A0', marginTop: 3 }}>{sub}</div>
+              <div className="fsyne" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,.6)', marginBottom: 4 }}>{label}</div>
+              <div className="fsyne" style={{ fontSize: 24, fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>{val}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.55)', marginTop: 3 }}>{sub}</div>
             </div>
           ))}
         </div>
@@ -771,8 +762,8 @@ function Pricing() {
             <div style={{ maxWidth: 420, width: '100%' }}>
               {indiv.map(plan => (
                 <Reveal key={plan.tier}>
-                  <div style={{ position: 'relative', borderRadius: 24, padding: '40px 36px', border: `1px solid ${B}30`, background: `linear-gradient(150deg,${B}06,${B}02)`, boxShadow: `0 6px 36px ${B}18` }}>
-                    <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${B},${B2})`, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 16px', borderRadius: 99, boxShadow: `0 4px 14px ${B}40`, whiteSpace: 'nowrap' }}>Most popular</div>
+                  <div style={{ position: 'relative', borderRadius: 24, padding: '40px 36px', border: `1.5px solid ${B}`, background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,.06)' }}>
+                    <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: B, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 16px', borderRadius: 99, whiteSpace: 'nowrap' }}>Most popular</div>
                     <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 8 }}>{plan.tier}</div>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, background: '#F0ECE6', fontSize: 10, fontWeight: 600, color: '#6B6B80', marginBottom: 12 }}><School size={10}/>{plan.badge}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6 }}>
@@ -811,8 +802,8 @@ function Pricing() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 20, maxWidth: 720, margin: '0 auto' }}>
               {enterprise.map(plan => (
                 <Reveal key={plan.tier}>
-                  <div style={{ position: 'relative', borderRadius: 24, padding: '32px 28px', border: plan.featured ? `1px solid ${B}30` : '1px solid #EDE8E1', background: plan.featured ? `linear-gradient(150deg,${B}06,${B}02)` : '#fff', boxShadow: plan.featured ? `0 6px 36px ${B}18` : '0 2px 14px rgba(0,0,0,.05)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-                    {plan.featured && <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${B},${B2})`, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 14px', borderRadius: 99, whiteSpace: 'nowrap' }}>Full Platform</div>}
+                  <div style={{ position: 'relative', borderRadius: 24, padding: '32px 28px', border: plan.featured ? `1.5px solid ${B}` : '1px solid #EDE8E1', background: '#fff', boxShadow: plan.featured ? '0 4px 24px rgba(0,0,0,.06)' : '0 2px 14px rgba(0,0,0,.05)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    {plan.featured && <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: B, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 14px', borderRadius: 99, whiteSpace: 'nowrap' }}>Full Platform</div>}
                     <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 8 }}>{plan.tier}</div>
                     {plan.monthlyPrice === null
                       ? <div className="fsyne" style={{ fontSize: 40, fontWeight: 800, color: '#1A1A2E', lineHeight: 1, marginBottom: 6 }}>Custom</div>
@@ -968,23 +959,21 @@ function FAQ() {
 function FinalCTA({ onSignup }) {
   const navigate = useNavigate();
   return (
-    <section style={{ position: 'relative', padding: '96px 24px', textAlign: 'center', overflow: 'hidden', background: `linear-gradient(160deg,${B}08,${B}03,${B}06)`, fontFamily: "'DM Sans',sans-serif" }}>
-      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 55% 55% at 50% 50%,${B}18 0%,transparent 70%)`, pointerEvents: 'none' }}/>
+    <section style={{ position: 'relative', padding: '96px 24px', textAlign: 'center', overflow: 'hidden', background: `linear-gradient(180deg,${B2} 0%,#3A12A8 100%)`, fontFamily: "'DM Sans',sans-serif" }}>
       <Reveal>
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 640, margin: '0 auto' }}>
-          <SL center>Get started</SL>
-          <h2 className="fs" style={{ fontSize: 'clamp(32px,5vw,58px)', color: '#1A1A2E', letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 14 }}>
-            Your agent is waiting.<br/>Start learning <em style={{ color: B, fontStyle: 'italic' }}>for real.</em>
+          <h2 className="fs" style={{ fontSize: 'clamp(32px,5vw,58px)', color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.08, marginBottom: 14, fontWeight: 800 }}>
+            Your agent is waiting.<br/>Start learning for real.
           </h2>
-          <p style={{ fontSize: 17, color: '#6B6B80', marginBottom: 36, lineHeight: 1.65 }}>Free to start. No credit card. Cancel anytime.</p>
+          <p style={{ fontSize: 17, color: 'rgba(255,255,255,.8)', marginBottom: 36, lineHeight: 1.65 }}>Free to start. No credit card. Cancel anytime.</p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-            <Btn v="primary" sz="lg" onClick={onSignup}>🎓 Learner Login <ArrowRight size={16}/></Btn>
-            <Btn v="dark" sz="lg" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signin`; }}><School size={16}/> Instructor Login</Btn>
+            <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}>🎓 Learner Login <ArrowRight size={16}/></Btn>
+            <Btn v="outline" sz="lg" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signin`; }} style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}><School size={16}/> Instructor Login</Btn>
           </div>
-          <p style={{ fontSize: 12, color: '#9490A0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Shield size={11} color={B}/>30-day money-back</span>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Shield size={11} color="#C4B5FD"/>30-day money-back</span>
             <span>·</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Lock size={11} color={B}/>NDPR & GDPR compliant</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Lock size={11} color="#C4B5FD"/>NDPR & GDPR compliant</span>
             <span>·</span>
             <span>Cancel anytime</span>
           </p>
