@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
@@ -20,11 +21,6 @@ const bdr = (w, c) => `${w}px solid ${c}`;
 
 const AGENT_AVATARS = ['🤖', '🔮', '⚡', '🌀', '✨', '🔺', '🌙', '💎', '🦊', '🧠', '🚀', '🎯'];
 
-const QUICK_PROMPTS = [
-  'Generate quiz', 'Check student progress', 'Battle report',
-  'Draft lesson plan', 'Send reminder', 'Grade submissions',
-];
-
 const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
 ];
@@ -40,6 +36,7 @@ const REPLIES = [
 const now = () => new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
 
 export default function ChatPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { getProfile, updateAgent } = useStatsAPI();
   const { on, off } = useInstructorSocket(user?.id);
@@ -361,25 +358,23 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Quick prompts + unlocked tools */}
+        {/* Tool commands — only the instructor's UNLOCKED Tools & Assets show
+            here. A new agent has none until items are purchased. */}
         <div className="ci-quickbar">
-          {/* Unlocked Tools & Assets — shown first as green pills */}
-          {myTools.map((t) => {
-            const active = taskChips.includes(t.name);
-            return (
-              <button key={t.id} className={'ci-qp ci-tool' + (active ? ' active' : '')} onClick={() => (active ? removeChip(t.name) : handleQuickPrompt(t.name))} title={t.description}>
-                <span style={{ fontSize: 11 }}>{t.emoji}</span>{t.name}{active && <X size={9} />}
-              </button>
-            );
-          })}
-          {QUICK_PROMPTS.map((p) => {
-            const active = taskChips.includes(p);
-            return (
-              <button key={p} className={'ci-qp' + (active ? ' active' : '')} onClick={() => (active ? removeChip(p) : handleQuickPrompt(p))}>
-                <CheckSquare size={9} style={{ opacity: active ? 1 : 0.45 }} />{p}{active && <X size={9} />}
-              </button>
-            );
-          })}
+          {myTools.length > 0 ? (
+            myTools.map((t) => {
+              const active = taskChips.includes(t.name);
+              return (
+                <button key={t.id} className={'ci-qp ci-tool' + (active ? ' active' : '')} onClick={() => (active ? removeChip(t.name) : handleQuickPrompt(t.name))} title={t.description}>
+                  <span style={{ fontSize: 11 }}>{t.emoji}</span>{t.name}{active && <X size={9} />}
+                </button>
+              );
+            })
+          ) : (
+            <button className="ci-qp" onClick={() => navigate('/marketplace')} title="Unlock tools & assets for your agent">
+              🔒 Unlock tools
+            </button>
+          )}
         </div>
 
         {/* Message feed */}
