@@ -137,6 +137,50 @@ router.get("/templates", authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/instructor/tools/templates/defaults
+// → { defaults: { lesson_plan: "<templateId>", worksheet: null, ... } }
+router.get("/templates/defaults", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await db.schema("edu").from("instructor_template_defaults")
+      .select("tool_target, template_id")
+      .eq("instructor_id", req.user.id);
+    if (error) throw error;
+    const defaults = Object.fromEntries((data || []).map((r) => [r.tool_target, r.template_id]));
+    res.json({ success: true, defaults });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/instructor/tools/templates/defaults
+// Body: { toolTarget, templateId|null } — null clears the default (AI direct)
+router.put("/templates/defaults", authenticateToken, requireRole(["instructor", "teacher", "admin"]), async (req, res) => {
+  try {
+    const { toolTarget, templateId = null } = req.body;
+    if (!VALID_TARGETS.includes(toolTarget)) return res.status(400).json({ error: "invalid toolTarget" });
+
+    if (!templateId) {
+      await db.schema("edu").from("instructor_template_defaults")
+        .delete().eq("instructor_id", req.user.id).eq("tool_target", toolTarget);
+      return res.json({ success: true, toolTarget, templateId: null });
+    }
+
+    // Verify the template exists and belongs to the instructor or is a sample.
+    const { data: tpl } = await db.schema("edu").from("instructor_templates")
+      .select("id, instructor_id, is_sample").eq("id", templateId).single();
+    if (!tpl || (tpl.instructor_id && tpl.instructor_id !== req.user.id && !tpl.is_sample)) {
+      return res.status(404).json({ error: "Template not found" });
+    }
+
+    await db.schema("edu").from("instructor_template_defaults").upsert({
+      instructor_id: req.user.id, tool_target: toolTarget, template_id: templateId, updated_at: new Date(),
+    }, { onConflict: "instructor_id,tool_target" });
+    res.json({ success: true, toolTarget, templateId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // DELETE /api/instructor/tools/templates/:id
 router.delete("/templates/:id", authenticateToken, async (req, res) => {
   try {

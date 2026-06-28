@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
-import { saveToolOutput, loadTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
+import { saveToolOutput, resolveTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
 
 export const worksheetFillDefinition = {
   name: "worksheet_fill",
@@ -37,7 +37,7 @@ const schema = z.object({
 
 export async function executeWorksheetFill(rawInput, ctx) {
   const input = schema.parse(rawInput);
-  const tpl = await loadTemplate(input.templateId, ctx);
+  const tpl = await resolveTemplate({ toolTarget: "worksheet", templateId: input.templateId, ctx });
 
   const ws = await llmJson(
     `Create a worksheet on "${input.topic}" (${input.subject}, ${input.yearGroup}).

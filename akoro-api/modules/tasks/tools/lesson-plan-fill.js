@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
-import { saveToolOutput, loadTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
+import { saveToolOutput, resolveTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
 
 export const lessonPlanFillDefinition = {
   name: "lesson_plan_fill",
@@ -39,7 +39,7 @@ const schema = z.object({
 
 export async function executeLessonPlanFill(rawInput, ctx) {
   const input = schema.parse(rawInput);
-  const tpl = await loadTemplate(input.templateId, ctx);
+  const tpl = await resolveTemplate({ toolTarget: "lesson_plan", templateId: input.templateId, ctx });
 
   const plan = await llmJson(
     `Create a detailed lesson plan.

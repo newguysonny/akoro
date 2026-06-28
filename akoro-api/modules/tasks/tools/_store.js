@@ -62,6 +62,33 @@ export async function loadTemplate(templateId, ctx) {
 }
 
 /**
+ * resolveTemplate — pick the template a tool should use:
+ *   1. an explicit templateId (passed by the agent), else
+ *   2. the instructor's default template for this tool target, else
+ *   3. null (the tool generates directly from the LLM).
+ */
+export async function resolveTemplate({ toolTarget, templateId, ctx }) {
+  if (templateId) return loadTemplate(templateId, ctx);
+  try {
+    let instructorId = null;
+    if (ctx?.taskId) {
+      const task = await TaskDB.findById(ctx.taskId);
+      instructorId = task?.creator_id ?? null;
+    }
+    if (!instructorId) return null;
+    const { data } = await db.schema("edu").from("instructor_template_defaults")
+      .select("template_id")
+      .eq("instructor_id", instructorId)
+      .eq("tool_target", toolTarget)
+      .maybeSingle();
+    if (data?.template_id) return loadTemplate(data.template_id, ctx);
+  } catch (e) {
+    console.warn("[resolveTemplate] failed:", e.message);
+  }
+  return null;
+}
+
+/**
  * fillTemplateBody — when a template has a markdown body, have the LLM FILL it
  * (preserving headings/layout, replacing {{placeholders}}) using the context.
  * Returns the filled markdown string, or null.

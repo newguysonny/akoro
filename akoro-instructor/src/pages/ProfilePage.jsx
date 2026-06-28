@@ -11,6 +11,7 @@ import {
   publishAgentToMarketplace, unpublishListing,
   loadListingId, saveListingId,
 } from '../services/settingsApi.js';
+import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
 
 const BRAND = AMBER;
@@ -275,6 +276,58 @@ function SubjectsRow({ subjects, onClick, color = BRAND }) {
   );
 }
 
+/* ─── Tool template defaults ──────────────────────────────────── */
+const TPL_TOOLS = [
+  { target: 'lesson_plan', label: 'Lesson Plan',       icon: '📝' },
+  { target: 'worksheet',   label: 'Worksheet',         icon: '📄' },
+  { target: 'report',      label: 'Report',            icon: '🗒️' },
+  { target: 'exam_prep',   label: 'Exam / Assessment', icon: '🎯' },
+];
+
+function ToolTemplatesSection() {
+  const [templates, setTemplates] = useState([]);
+  const [defaults, setDefaults]   = useState({});
+
+  useEffect(() => {
+    apiGet('/api/instructor/tools/templates').then((r) => setTemplates(r.templates || [])).catch(() => {});
+    apiGet('/api/instructor/tools/templates/defaults').then((r) => setDefaults(r.defaults || {})).catch(() => {});
+  }, []);
+
+  const choose = async (target, templateId) => {
+    setDefaults((p) => ({ ...p, [target]: templateId || undefined }));
+    try { await apiPut('/api/instructor/tools/templates/defaults', { toolTarget: target, templateId: templateId || null }); }
+    catch { /* ignore */ }
+  };
+
+  return (
+    <Section title="Tool Templates">
+      {TPL_TOOLS.map(({ target, label, icon }) => {
+        const opts = templates.filter((t) => t.tool_target === target);
+        const val  = defaults[target] || '';
+        return (
+          <div key={target} style={{ ...rowBase, alignItems: 'center' }}>
+            <span style={{ width: 28, flexShrink: 0, fontSize: 16 }}>{icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13.5, fontWeight: 700, margin: 0, color: INK }}>{label}</p>
+              <p style={{ fontSize: 11.5, color: val ? GREEN : MUTED2, margin: '2px 0 0', fontWeight: val ? 700 : 400 }}>
+                {val ? 'Using template' : 'AI default (no template)'}
+              </p>
+            </div>
+            <select value={val} onChange={(e) => choose(target, e.target.value)}
+              style={{ maxWidth: 150, padding: '7px 9px', borderRadius: 10, border: `1.5px solid ${val ? AMBER : BORDER}`, fontSize: 12.5, fontFamily: FONTF, color: INK, background: '#fff', cursor: 'pointer' }}>
+              <option value="">AI default</option>
+              {opts.map((o) => <option key={o.id} value={o.id}>{o.title}{o.is_sample ? ' (sample)' : ''}</option>)}
+            </select>
+          </div>
+        );
+      })}
+      <div style={{ padding: '10px 16px 12px', fontSize: 11.5, color: MUTED2, lineHeight: 1.5 }}>
+        Pick a default template per tool. If none is chosen, the agent generates directly.
+      </div>
+    </Section>
+  );
+}
+
 /* ─── Profile tab ─────────────────────────────────────────────── */
 function ProfileTab({ profile, setProfile, stats, onSaveField }) {
   const [sheet, setSheet]           = useState(null);
@@ -312,6 +365,8 @@ function ProfileTab({ profile, setProfile, stats, onSaveField }) {
         <Row icon={GraduationCap} label="Institution Type" value={profile.schoolType || 'Not set'} onClick={() => open('schoolType', 'Institution Type', 'select', SCHOOL_TYPES)} />
         <SubjectsRow subjects={profile.subjects || []} onClick={() => setSubSheet(true)} color={color} />
       </Section>
+
+      <ToolTemplatesSection />
 
       <Section title="Overview">
         <Row icon={BookOpen}  label="Active Courses"  value={stats.active_courses ?? 0} />
