@@ -41,6 +41,7 @@ import adaptiveModule, {
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
+import instructorToolsModule      from "./modules/instructor/tools.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
 import voiceModule               from "./modules/voice/routes.js";
@@ -150,6 +151,7 @@ app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
+app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD

@@ -28,7 +28,7 @@ const NAV = [
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
   { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
-  { to: '/marketplace', icon: Store,       label: 'Marketplace' },
+  { to: '/marketplace', icon: Store,       label: 'Tools & Assets' },
   { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },
   { to: '/profile',  icon: UserCircle,    label: 'Profile' },
   { to: '/settings', icon: Settings,      label: 'Settings' },
