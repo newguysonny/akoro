@@ -10,7 +10,7 @@ import LiveRecorder from '../components/LiveRecorder.jsx';
 import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
-import { apiPost } from '../services/api.js';
+import { apiGet, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
@@ -49,6 +49,7 @@ export default function ChatPage() {
   const [isTask, setIsTask]       = useState(false);
   const [taskChips, setTaskChips] = useState([]);
   const [toast, setToast]         = useState(null);
+  const [myTools, setMyTools]     = useState([]);   // unlocked Tools & Assets
 
   const [agentName, setAgentName]   = useState('Your Agent');
   const [agentEmoji, setAgentEmoji] = useState('🔮');
@@ -102,6 +103,17 @@ export default function ChatPage() {
       .catch((e) => console.warn('[chat] profile load failed, using defaults:', e.message));
   }, []); // eslint-disable-line
 
+  // ── Load unlocked Tools & Assets (shown as quick-prompt pills) ──
+  const loadMyTools = useCallback(() => {
+    apiGet('/api/instructor/tools')
+      .then((res) => {
+        const owned = [...(res.tools || []), ...(res.assets || [])].filter((i) => i.owned);
+        setMyTools(owned);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadMyTools(); }, [loadMyTools]);
+
   // ── WebSocket: agent task completion pushes a reply ──
   useEffect(() => {
     const handler = (evt) => {
@@ -110,6 +122,16 @@ export default function ChatPage() {
     on('task.completed', handler);
     return () => off('task.completed', handler);
   }, [on, off]);
+
+  // ── WebSocket: a tool was unlocked → refresh pills + notify ──
+  useEffect(() => {
+    const handler = (evt) => {
+      loadMyTools();
+      if (evt?.toolName) setToast({ message: `🔓 ${evt.toolName} unlocked`, type: 'success' });
+    };
+    on('tool_unlocked', handler);
+    return () => off('tool_unlocked', handler);
+  }, [on, off, loadMyTools]);
 
   // ── auto-scroll ──
   useEffect(() => {
@@ -308,6 +330,8 @@ export default function ChatPage() {
         .ci-qp{flex-shrink:0;padding:5px 11px;border-radius:20px;border:1.5px solid ${BORDER};background:#fff;color:${MUTED};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:${FONT};transition:all .15s;display:inline-flex;align-items:center;gap:4px}
         .ci-qp:hover{border-color:${AMBER};color:${AMBER}}
         .ci-qp.active{border-color:${AMBER};color:${AMBER};background:rgba(232,136,74,.12)}
+        .ci-qp.ci-tool{border-color:rgba(16,185,129,.4);color:${GREEN};background:rgba(16,185,129,.08)}
+        .ci-qp.ci-tool.active{border-color:${GREEN};background:rgba(16,185,129,.16)}
         .ci-quickbar{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
         .ci-quickbar::-webkit-scrollbar{display:none}
         .ci-attach-menu{position:absolute;bottom:48px;left:0;background:#fff;border-radius:16px;border:1px solid ${BORDER};box-shadow:0 8px 32px rgba(0,0,0,.12);padding:8px;min-width:210px;z-index:50}
@@ -337,8 +361,17 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Quick prompts */}
+        {/* Quick prompts + unlocked tools */}
         <div className="ci-quickbar">
+          {/* Unlocked Tools & Assets — shown first as green pills */}
+          {myTools.map((t) => {
+            const active = taskChips.includes(t.name);
+            return (
+              <button key={t.id} className={'ci-qp ci-tool' + (active ? ' active' : '')} onClick={() => (active ? removeChip(t.name) : handleQuickPrompt(t.name))} title={t.description}>
+                <span style={{ fontSize: 11 }}>{t.emoji}</span>{t.name}{active && <X size={9} />}
+              </button>
+            );
+          })}
           {QUICK_PROMPTS.map((p) => {
             const active = taskChips.includes(p);
             return (

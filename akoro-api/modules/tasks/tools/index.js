@@ -68,5 +68,21 @@ export const getToolsForTask = async (task) => {
   }
   const byName = new Map();
   for (const t of [...dynamicTools, ...staticTools]) byName.set(t.definition.name, t);
+
+  // Enforcement: platform tools the instructor hasn't purchased are removed
+  // from the agent's tool set, so the agent simply can't invoke them.
+  try {
+    const { TOOL_GATES, getUnlockedToolKeys } = await import("../../instructor/toolAccess.js");
+    const gatedNames = Object.keys(TOOL_GATES).filter((n) => byName.has(n));
+    if (gatedNames.length) {
+      const unlocked = await getUnlockedToolKeys(task?.creator_id);
+      for (const name of gatedNames) {
+        if (!unlocked.has(TOOL_GATES[name])) byName.delete(name);
+      }
+    }
+  } catch (e) {
+    console.warn("[tasks/tools] tool-gate check skipped:", e.message);
+  }
+
   return [...byName.values()];
 };

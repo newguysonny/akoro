@@ -519,6 +519,38 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
         return res.sendStatus(200); // acknowledge but ignore
       }
 
+      // 2a. Platform tool/asset purchase (instructor unlock) — keyed by reference
+      if (metadata?.kind === "platform_tool") {
+        const { data: row } = await db
+          .schema("edu").from("instructor_tool_access")
+          .select("id, instructor_id, access_granted")
+          .eq("paystack_ref", reference)
+          .single();
+
+        if (row && !row.access_granted) {
+          await db.schema("edu").from("instructor_tool_access").update({
+            access_granted:  true,
+            paystack_status: "success",
+            verified_at:     new Date(),
+          }).eq("id", row.id);
+
+          if (global._io && row.instructor_id) {
+            const payload = {
+              toolId:   metadata.tool_id,
+              toolName: metadata.tool_name,
+              message:  `🔓 "${metadata.tool_name}" unlocked for your agent.`,
+              timestamp: new Date().toISOString(),
+            };
+            // The instructor socket joins `user:{id}` (subscribe-notifications);
+            // emit to both rooms so the unlock reaches the chat live.
+            global._io.to(`user:${row.instructor_id}`).emit("tool_unlocked", payload);
+            global._io.to(`instructor:${row.instructor_id}`).emit("tool_unlocked", payload);
+          }
+          console.log(`[Webhook] ✅ Tool unlocked: instructor=${row.instructor_id} tool=${metadata.tool_id}`);
+        }
+        return res.sendStatus(200);
+      }
+
       const purchaseId = metadata?.purchase_id;
       const studentId  = metadata?.student_id;
       const agentId    = metadata?.agent_id;
