@@ -74,27 +74,30 @@ router.post("/templates", authenticateToken, requireRole(["instructor", "teacher
     if (!sourceText.trim()) return res.status(400).json({ error: "sourceText required (upload a sample first)" });
     const target = VALID_TARGETS.includes(toolTarget) ? toolTarget : "generic";
 
-    // Extract a reusable template spec from the teacher's raw material.
+    // Extract a reusable template spec (jsonb) AND a fillable markdown body.
     let structure = {};
+    let bodyMarkdown = req.body.bodyMarkdown || null;
     try {
       const resp = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 1500,
+        max_tokens: 2000,
         messages: [{
           role: "user",
           content:
             `A teacher uploaded a sample of their existing ${target.replace("_", " ")} material. ` +
-            `Extract a REUSABLE TEMPLATE describing its structure so future AI-generated ` +
-            `${target.replace("_", " ")}s match their style.\n\nMaterial:\n"""${sourceText.slice(0, 6000)}"""\n\n` +
-            `Return JSON only: { "sections": ["<ordered section/heading>", ...], ` +
-            `"style": "<tone & formatting notes>", "conventions": ["<numbering, layout, phrasing rule>", ...] }`,
+            `Produce (1) a reusable structure spec and (2) a fillable markdown body that ` +
+            `mirrors its layout, using {{placeholder}} tokens where content varies.\n\n` +
+            `Material:\n"""${sourceText.slice(0, 6000)}"""\n\n` +
+            `Return JSON only:\n{\n  "structure": { "sections": ["<ordered heading>", ...], "style": "<tone/formatting notes>", "conventions": ["<rule>", ...] },\n  "bodyMarkdown": "<markdown template with {{placeholders}} preserving the original headings & layout>"\n}`,
         }],
       });
       const text = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim()
         .replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-      structure = JSON.parse(text);
+      const parsed = JSON.parse(text);
+      structure    = parsed.structure || {};
+      bodyMarkdown = bodyMarkdown || parsed.bodyMarkdown || null;
     } catch (e) {
-      console.warn("[templates] structure extraction failed:", e.message);
+      console.warn("[templates] extraction failed:", e.message);
       structure = { sections: [], style: "", conventions: [], raw: sourceText.slice(0, 2000) };
     }
 
@@ -105,7 +108,8 @@ router.post("/templates", authenticateToken, requireRole(["instructor", "teacher
       source_text:   sourceText.slice(0, 12000),
       source_url:    sourceUrl,
       structure,
-    }).select("id, tool_target, title, structure, created_at").single();
+      body_markdown: bodyMarkdown,
+    }).select("id, tool_target, title, structure, body_markdown, is_sample, created_at").single();
     if (error) throw error;
 
     res.status(201).json({ success: true, template: data });
@@ -116,11 +120,13 @@ router.post("/templates", authenticateToken, requireRole(["instructor", "teacher
 });
 
 // GET /api/instructor/tools/templates[?toolTarget=]
+// Returns the instructor's own templates plus platform sample templates.
 router.get("/templates", authenticateToken, async (req, res) => {
   try {
     let q = db.schema("edu").from("instructor_templates")
-      .select("id, tool_target, title, structure, created_at")
-      .eq("instructor_id", req.user.id)
+      .select("id, tool_target, title, structure, body_markdown, is_sample, created_at")
+      .or(`instructor_id.eq.${req.user.id},is_sample.eq.true`)
+      .order("is_sample", { ascending: true })
       .order("created_at", { ascending: false });
     if (req.query.toolTarget) q = q.eq("tool_target", req.query.toolTarget);
     const { data, error } = await q;

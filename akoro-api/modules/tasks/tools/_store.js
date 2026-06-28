@@ -47,14 +47,39 @@ export async function loadTemplate(templateId, ctx) {
       const task = await TaskDB.findById(ctx.taskId);
       instructorId = task?.creator_id ?? null;
     }
+    // Allow the instructor's own template OR a platform sample template.
     let q = db.schema("edu").from("instructor_templates")
-      .select("id, title, tool_target, structure")
+      .select("id, title, tool_target, structure, body_markdown, instructor_id, is_sample")
       .eq("id", templateId);
-    if (instructorId) q = q.eq("instructor_id", instructorId);
     const { data } = await q.single();
-    return data ?? null;
+    if (!data) return null;
+    if (data.instructor_id && instructorId && data.instructor_id !== instructorId && !data.is_sample) return null;
+    return data;
   } catch (e) {
     console.warn("[tool_outputs] template load failed:", e.message);
+    return null;
+  }
+}
+
+/**
+ * fillTemplateBody — when a template has a markdown body, have the LLM FILL it
+ * (preserving headings/layout, replacing {{placeholders}}) using the context.
+ * Returns the filled markdown string, or null.
+ */
+export async function fillTemplateBody(tpl, context) {
+  if (!tpl?.body_markdown) return null;
+  try {
+    const { llmText } = await import("./_llm.js");
+    const filled = await llmText(
+      `Fill in this markdown template. Preserve ALL headings, sections, order and ` +
+      `layout EXACTLY. Replace every {{placeholder}} and complete each section using ` +
+      `this context:\n${JSON.stringify(context).slice(0, 4000)}\n\n` +
+      `TEMPLATE:\n${tpl.body_markdown}\n\nReturn ONLY the filled markdown — no commentary.`,
+      { maxTokens: 2500 }
+    );
+    return filled.trim();
+  } catch (e) {
+    console.warn("[template fill] failed:", e.message);
     return null;
   }
 }

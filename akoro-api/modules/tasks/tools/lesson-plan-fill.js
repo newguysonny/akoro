@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
-import { saveToolOutput, loadTemplate, templatePromptFragment } from "./_store.js";
+import { saveToolOutput, loadTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
 
 export const lessonPlanFillDefinition = {
   name: "lesson_plan_fill",
@@ -71,17 +71,21 @@ Return JSON:
     { maxTokens: 2500 }
   );
 
+  // If the chosen template has a markdown body, fill it (AI fills the template).
+  const filledBody = await fillTemplateBody(tpl, { ...plan, ...input });
+  const content = { type: "lesson_plan", tool: "lesson_plan_fill", ...plan, ...(filledBody ? { body: filledBody, templateId: tpl?.id } : {}) };
+
   await TaskOutputDB.create({
     runId: ctx.runId, taskId: ctx.taskId,
     outputType: "lesson_plan",
-    content: { type: "lesson_plan", tool: "lesson_plan_fill", ...plan },
+    content,
     delivered: false,
   });
 
   const savedId = await saveToolOutput({
     ctx, tool: "lesson_plan_fill", kind: "lesson_plan",
-    title: plan.title, subject: input.subject, content: plan,
+    title: plan.title, subject: input.subject, content,
   });
 
-  return { success: true, id: savedId, title: plan.title, phases: plan.phases?.length ?? 0 };
+  return { success: true, id: savedId, title: plan.title, phases: plan.phases?.length ?? 0, usedTemplate: !!filledBody };
 }

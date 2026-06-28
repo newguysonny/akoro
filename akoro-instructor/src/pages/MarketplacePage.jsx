@@ -113,6 +113,41 @@ function CreateTemplateModal({ onClose, onSaved }) {
   );
 }
 
+/* ─── View-template modal (structure + fillable body) ────────────── */
+function ViewTemplateModal({ tpl, onClose }) {
+  const s = tpl.structure || {};
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', background: '#fff', borderRadius: 22, padding: '22px 20px 26px', boxShadow: '0 12px 48px rgba(0,0,0,.22)', fontFamily: FONTF, animation: 'sheet-up .25s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: 0 }}>{tpl.title}</p>
+          {tpl.is_sample && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${GREEN}15`, color: GREEN }}>SAMPLE</span>}
+        </div>
+        <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 16px' }}>{(TEMPLATE_TARGETS.find((x) => x.value === tpl.tool_target) || {}).label || tpl.tool_target}</p>
+
+        {s.sections?.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 7px' }}>Structure</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {s.sections.map((sec, i) => <span key={i} style={{ fontSize: 12, fontWeight: 700, color: INK, background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '4px 10px' }}>{i + 1}. {sec}</span>)}
+            </div>
+            {s.style && <p style={{ fontSize: 12.5, color: MUTED, margin: '10px 0 0' }}><b>Style:</b> {s.style}</p>}
+          </div>
+        )}
+
+        {tpl.body_markdown && (
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1, textTransform: 'uppercase', margin: '0 0 7px' }}>Template body (AI fills this)</p>
+            <pre style={{ fontSize: 12.5, color: INK, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px', margin: 0, fontFamily: 'ui-monospace, Menlo, monospace' }}>{tpl.body_markdown}</pre>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{ width: '100%', marginTop: 18, padding: '12px', borderRadius: 14, border: `1.5px solid ${BORDER}`, background: LIGHT, fontSize: 13, fontWeight: 800, color: MUTED, cursor: 'pointer', fontFamily: FONTF }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Item card ───────────────────────────────────────────────────── */
 function ItemCard({ item, busy, onBuy }) {
   return (
@@ -154,6 +189,7 @@ export default function MarketplacePage() {
   const [toast, setToast]   = useState('');
   const [templates, setTemplates] = useState([]);
   const [showTplModal, setShowTpl] = useState(false);
+  const [viewTpl, setViewTpl] = useState(null);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
@@ -249,13 +285,16 @@ export default function MarketplacePage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {templates.map((t) => (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px' }}>
+                  <div key={t.id} onClick={() => setViewTpl(t)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
                     <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color={BRAND} /></div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                        {t.is_sample && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 7px', borderRadius: 20, background: `${GREEN}15`, color: GREEN, flexShrink: 0 }}>SAMPLE</span>}
+                      </div>
                       <div style={{ fontSize: 11, color: MUTED2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
                     </div>
-                    <button onClick={() => deleteTemplate(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4 }}><Trash2 size={15} /></button>
+                    {!t.is_sample && <button onClick={(e) => { e.stopPropagation(); deleteTemplate(t.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4 }}><Trash2 size={15} /></button>}
                   </div>
                 ))}
               </div>
@@ -297,6 +336,8 @@ export default function MarketplacePage() {
           onSaved={(tpl) => { setShowTpl(false); if (tpl) setTemplates((prev) => [tpl, ...prev]); showToast('Template saved ✓'); }}
         />
       )}
+
+      {viewTpl && <ViewTemplateModal tpl={viewTpl} onClose={() => setViewTpl(null)} />}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>

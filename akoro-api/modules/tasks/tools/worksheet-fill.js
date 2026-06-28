@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
-import { saveToolOutput, loadTemplate, templatePromptFragment } from "./_store.js";
+import { saveToolOutput, loadTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
 
 export const worksheetFillDefinition = {
   name: "worksheet_fill",
@@ -56,17 +56,20 @@ Return JSON:
     { maxTokens: 3000 }
   );
 
+  const filledBody = await fillTemplateBody(tpl, { ...ws, ...input });
+  const content = { type: "worksheet", tool: "worksheet_fill", subject: input.subject, ...ws, ...(filledBody ? { body: filledBody, templateId: tpl?.id } : {}) };
+
   await TaskOutputDB.create({
     runId: ctx.runId, taskId: ctx.taskId,
     outputType: "worksheet",
-    content: { type: "worksheet", tool: "worksheet_fill", subject: input.subject, ...ws },
+    content,
     delivered: false,
   });
 
   const savedId = await saveToolOutput({
     ctx, tool: "worksheet_fill", kind: "worksheet",
-    title: ws.title, subject: input.subject, content: ws,
+    title: ws.title, subject: input.subject, content,
   });
 
-  return { success: true, id: savedId, title: ws.title, questionCount: ws.questions?.length ?? 0 };
+  return { success: true, id: savedId, title: ws.title, questionCount: ws.questions?.length ?? 0, usedTemplate: !!filledBody };
 }
