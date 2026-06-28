@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -28,6 +28,7 @@ const NAV = [
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
   { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
+  { to: '/marketplace', icon: Store,       label: 'Marketplace' },
   { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },
   { to: '/profile',  icon: UserCircle,    label: 'Profile' },
   { to: '/settings', icon: Settings,      label: 'Settings' },
