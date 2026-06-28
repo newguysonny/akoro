@@ -57,9 +57,8 @@ function CreateTemplateModal({ onClose, onSaved }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)' }} />
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100, background: '#fff', borderRadius: '22px 22px 0 0', padding: '0 18px 36px', boxShadow: '0 -8px 40px rgba(0,0,0,.12)', animation: 'sheet-up .3s ease', fontFamily: FONTF, maxHeight: '90vh', overflowY: 'auto', maxWidth: 520, margin: '0 auto' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#D1D5DB', margin: '14px auto 16px' }} />
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ zIndex: 3100, width: '100%', background: '#fff', borderRadius: 22, padding: '20px 18px 28px', boxShadow: '0 12px 48px rgba(0,0,0,.22)', animation: 'sheet-up .25s ease', fontFamily: FONTF, maxHeight: '90vh', overflowY: 'auto', maxWidth: 520 }}>
         <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 4px' }}>Create a template</p>
         <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 18px', lineHeight: 1.5 }}>Upload a photo of your existing notes, worksheet or report. We’ll turn it into a reusable template your agent copies when generating new material.</p>
 
@@ -108,6 +107,7 @@ function CreateTemplateModal({ onClose, onSaved }) {
             </button>
           )}
         </div>
+      </div>
       </div>
     </>
   );
