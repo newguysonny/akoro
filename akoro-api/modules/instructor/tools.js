@@ -16,6 +16,7 @@
  */
 
 import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import {
@@ -25,6 +26,8 @@ import {
 } from "../adaptive-learning/marketplace/paystackService.js";
 
 const router = Router();
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const VALID_TARGETS = ["lesson_plan", "worksheet", "report", "exam_prep", "generic"];
 const INSTRUCTOR_APP_URL =
   process.env.INSTRUCTOR_APP_URL || "https://instructor.akoro.app";
 
@@ -54,6 +57,93 @@ async function grantToolAccess(instructorId, toolId, { ref, amountKobo } = {}) {
     { onConflict: "instructor_id,tool_id" }
   );
 }
+
+// =============================================================
+// TEMPLATES — instructor uploads their own material → reusable template
+// =============================================================
+
+// POST /api/instructor/tools/templates
+// Body: { title, toolTarget, sourceText, sourceUrl? }
+// sourceText is the OCR-extracted text of the uploaded image/doc (done client
+// side via the existing OCR pipeline). We structure it into a reusable spec.
+router.post("/templates", authenticateToken, requireRole(["instructor", "teacher", "admin"]), async (req, res) => {
+  try {
+    const instructorId = req.user.id;
+    const { title, toolTarget = "generic", sourceText = "", sourceUrl = null } = req.body;
+    if (!title?.trim()) return res.status(400).json({ error: "title required" });
+    if (!sourceText.trim()) return res.status(400).json({ error: "sourceText required (upload a sample first)" });
+    const target = VALID_TARGETS.includes(toolTarget) ? toolTarget : "generic";
+
+    // Extract a reusable template spec from the teacher's raw material.
+    let structure = {};
+    try {
+      const resp = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1500,
+        messages: [{
+          role: "user",
+          content:
+            `A teacher uploaded a sample of their existing ${target.replace("_", " ")} material. ` +
+            `Extract a REUSABLE TEMPLATE describing its structure so future AI-generated ` +
+            `${target.replace("_", " ")}s match their style.\n\nMaterial:\n"""${sourceText.slice(0, 6000)}"""\n\n` +
+            `Return JSON only: { "sections": ["<ordered section/heading>", ...], ` +
+            `"style": "<tone & formatting notes>", "conventions": ["<numbering, layout, phrasing rule>", ...] }`,
+        }],
+      });
+      const text = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim()
+        .replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+      structure = JSON.parse(text);
+    } catch (e) {
+      console.warn("[templates] structure extraction failed:", e.message);
+      structure = { sections: [], style: "", conventions: [], raw: sourceText.slice(0, 2000) };
+    }
+
+    const { data, error } = await db.schema("edu").from("instructor_templates").insert({
+      instructor_id: instructorId,
+      tool_target:   target,
+      title:         title.trim(),
+      source_text:   sourceText.slice(0, 12000),
+      source_url:    sourceUrl,
+      structure,
+    }).select("id, tool_target, title, structure, created_at").single();
+    if (error) throw error;
+
+    res.status(201).json({ success: true, template: data });
+  } catch (e) {
+    console.error("[templates/create]", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/instructor/tools/templates[?toolTarget=]
+router.get("/templates", authenticateToken, async (req, res) => {
+  try {
+    let q = db.schema("edu").from("instructor_templates")
+      .select("id, tool_target, title, structure, created_at")
+      .eq("instructor_id", req.user.id)
+      .order("created_at", { ascending: false });
+    if (req.query.toolTarget) q = q.eq("tool_target", req.query.toolTarget);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ success: true, templates: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/instructor/tools/templates/:id
+router.delete("/templates/:id", authenticateToken, async (req, res) => {
+  try {
+    const { error } = await db.schema("edu").from("instructor_templates")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("instructor_id", req.user.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── GET /api/instructor/tools/outputs ────────────────────────────────────────
 // The instructor's saved tool artifacts (lesson plans, worksheets, etc.).

@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
-import { saveToolOutput } from "./_store.js";
+import { saveToolOutput, loadTemplate, templatePromptFragment } from "./_store.js";
 
 export const worksheetFillDefinition = {
   name: "worksheet_fill",
@@ -20,6 +20,7 @@ export const worksheetFillDefinition = {
       yearGroup:  { type: "string", description: "Year/grade/class level" },
       questionCount: { type: "number", description: "Number of questions (default 10)" },
       includeAnswerKey: { type: "boolean", description: "Include an answer key (default true)" },
+      templateId: { type: "string", description: "Optional instructor template id to mirror the teacher's own format" },
     },
     required: ["topic"],
   },
@@ -31,15 +32,18 @@ const schema = z.object({
   yearGroup:        z.string().default("Senior Secondary"),
   questionCount:    z.number().min(1).max(40).default(10),
   includeAnswerKey: z.boolean().default(true),
+  templateId:       z.string().optional(),
 });
 
 export async function executeWorksheetFill(rawInput, ctx) {
   const input = schema.parse(rawInput);
+  const tpl = await loadTemplate(input.templateId, ctx);
 
   const ws = await llmJson(
     `Create a worksheet on "${input.topic}" (${input.subject}, ${input.yearGroup}).
 Generate ${input.questionCount} questions of mixed type (fill-in-the-blank, short answer, multiple choice, one problem-solving).
 ${input.includeAnswerKey ? "Include the correct answer for every question." : "Do not include answers."}
+${templatePromptFragment(tpl)}
 
 Return JSON:
 {

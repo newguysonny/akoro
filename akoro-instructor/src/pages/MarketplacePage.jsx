@@ -1,12 +1,117 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Check, Lock, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Check, Lock, Loader2, Plus, Trash2, Upload, FileText } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { apiGet, apiPost } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, GREEN, FONT } from '../constants.js';
+import { apiGet, apiPost, API } from '../services/api.js';
+import { uploadAndOcr } from '../services/uploadApi.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, GREEN, RED, FONT } from '../constants.js';
 
 const BRAND = AMBER;
 const FONTF = FONT;
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
+
+const TEMPLATE_TARGETS = [
+  { value: 'lesson_plan', label: 'Lesson Plan' },
+  { value: 'worksheet',   label: 'Worksheet' },
+  { value: 'report',      label: 'Report' },
+  { value: 'exam_prep',   label: 'Exam / Assessment' },
+  { value: 'generic',     label: 'Other' },
+];
+
+/* ─── Create-template modal (upload sample → OCR → save) ──────────── */
+function CreateTemplateModal({ onClose, onSaved }) {
+  const fileRef = useRef(null);
+  const [stage, setStage]   = useState('upload');   // upload | extracting | review
+  const [fileName, setFile] = useState('');
+  const [text, setText]     = useState('');
+  const [title, setTitle]   = useState('');
+  const [target, setTarget] = useState('worksheet');
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  const pick = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setFile(f.name); setError(''); setStage('extracting');
+    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''));
+    try {
+      const ocr = await uploadAndOcr(f);
+      setText(ocr || '');
+      setStage('review');
+    } catch (err) {
+      setError(err.message || 'Could not read that file'); setStage('upload');
+    }
+  };
+
+  const save = async () => {
+    if (!title.trim() || !text.trim()) { setError('Add a title and some sample content.'); return; }
+    setSaving(true); setError('');
+    try {
+      const res = await apiPost('/api/instructor/tools/templates', { title: title.trim(), toolTarget: target, sourceText: text });
+      onSaved(res.template);
+    } catch (err) {
+      setError(err.message || 'Could not save template'); setSaving(false);
+    }
+  };
+
+  const inp = { width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13.5, fontFamily: FONTF, color: INK, boxSizing: 'border-box' };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)' }} />
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100, background: '#fff', borderRadius: '22px 22px 0 0', padding: '0 18px 36px', boxShadow: '0 -8px 40px rgba(0,0,0,.12)', animation: 'sheet-up .3s ease', fontFamily: FONTF, maxHeight: '90vh', overflowY: 'auto', maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#D1D5DB', margin: '14px auto 16px' }} />
+        <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 4px' }}>Create a template</p>
+        <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 18px', lineHeight: 1.5 }}>Upload a photo of your existing notes, worksheet or report. We’ll turn it into a reusable template your agent copies when generating new material.</p>
+
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={pick} />
+
+        {stage !== 'review' && (
+          <div onClick={() => stage !== 'extracting' && fileRef.current?.click()} style={{ border: `2px dashed ${BORDER}`, borderRadius: 16, padding: '30px 20px', textAlign: 'center', cursor: stage === 'extracting' ? 'default' : 'pointer', marginBottom: 16 }}>
+            {stage === 'extracting' ? (
+              <>
+                <Loader2 size={26} color={BRAND} style={{ animation: 'spin .8s linear infinite', marginBottom: 8 }} />
+                <p style={{ fontSize: 13.5, fontWeight: 700, color: INK, margin: 0 }}>Reading {fileName}…</p>
+                <p style={{ fontSize: 12, color: MUTED2, margin: '4px 0 0' }}>Extracting the structure</p>
+              </>
+            ) : (
+              <>
+                <Upload size={26} color={MUTED2} style={{ marginBottom: 8 }} />
+                <p style={{ fontSize: 13.5, fontWeight: 800, color: INK, margin: 0 }}>Tap to upload a sample</p>
+                <p style={{ fontSize: 12, color: MUTED2, margin: '4px 0 0' }}>Image or PDF · lesson notes, worksheet, report…</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {stage === 'review' && (
+          <>
+            <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Template name</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...inp, marginTop: 6, marginBottom: 14 }} placeholder="e.g. My weekly worksheet format" />
+
+            <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Use for</label>
+            <select value={target} onChange={(e) => setTarget(e.target.value)} style={{ ...inp, marginTop: 6, marginBottom: 14, cursor: 'pointer' }}>
+              {TEMPLATE_TARGETS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+
+            <label style={{ fontSize: 12, fontWeight: 800, color: '#374151' }}>Extracted content — edit if needed</label>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} style={{ ...inp, marginTop: 6, resize: 'vertical', lineHeight: 1.55 }} />
+          </>
+        )}
+
+        {error && <p style={{ fontSize: 12.5, fontWeight: 600, color: RED, margin: '12px 0 0' }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, border: `1.5px solid ${BORDER}`, background: LIGHT, fontSize: 13, fontWeight: 800, color: MUTED, cursor: 'pointer', fontFamily: FONTF }}>Cancel</button>
+          {stage === 'review' && (
+            <button onClick={save} disabled={saving} style={{ flex: 1.5, padding: '13px', borderRadius: 14, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg,${BRAND},#D4651E)`, color: saving ? '#9CA3AF' : '#fff', fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONTF }}>
+              {saving ? 'Saving…' : 'Save template'}
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
 
 /* ─── Item card ───────────────────────────────────────────────────── */
 function ItemCard({ item, busy, onBuy }) {
@@ -47,8 +152,22 @@ export default function MarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast]   = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [showTplModal, setShowTpl] = useState(false);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const loadTemplates = useCallback(() => {
+    apiGet('/api/instructor/tools/templates')
+      .then((res) => setTemplates(res.templates || []))
+      .catch(() => {});
+  }, []);
+
+  const deleteTemplate = async (id) => {
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
+    try { await fetch(`${API}/api/instructor/tools/templates/${id}`, { method: 'DELETE', credentials: 'include' }); }
+    catch { /* ignore */ }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -76,7 +195,8 @@ export default function MarketplacePage() {
     } else {
       load();
     }
-  }, [load]);
+    loadTemplates();
+  }, [load, loadTemplates]);
 
   const buy = async (item) => {
     setBusyId(item.id);
@@ -113,6 +233,36 @@ export default function MarketplacePage() {
           ))}
         </div>
 
+        {/* ── My Templates (Assets tab) ── */}
+        {tab === 'assets' && (
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 2px' }}>
+              <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>My Templates</p>
+              <button onClick={() => setShowTpl(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${BRAND}`, background: 'rgba(232,136,74,.08)', color: BRAND, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONTF }}>
+                <Plus size={13} /> Create template
+              </button>
+            </div>
+            {templates.length === 0 ? (
+              <div style={{ padding: '18px', borderRadius: 14, border: `1.5px dashed ${BORDER}`, background: LIGHT, textAlign: 'center', fontSize: 12.5, color: MUTED }}>
+                Upload a photo of your notes or worksheet to make a reusable template your agent copies.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {templates.map((t) => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '11px 13px' }}>
+                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, background: `${BRAND}12`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={16} color={BRAND} /></div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                      <div style={{ fontSize: 11, color: MUTED2 }}>{(TEMPLATE_TARGETS.find((x) => x.value === t.tool_target) || {}).label || t.tool_target}</div>
+                    </div>
+                    <button onClick={() => deleteTemplate(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4 }}><Trash2 size={15} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Summary strip */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, padding: '0 2px' }}>
           <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>
@@ -140,6 +290,13 @@ export default function MarketplacePage() {
           </div>
         )}
       </div>
+
+      {showTplModal && (
+        <CreateTemplateModal
+          onClose={() => setShowTpl(false)}
+          onSaved={(tpl) => { setShowTpl(false); if (tpl) setTemplates((prev) => [tpl, ...prev]); showToast('Template saved ✓'); }}
+        />
+      )}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: '#fff', padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>

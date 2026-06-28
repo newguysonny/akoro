@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
-import { saveToolOutput } from "./_store.js";
+import { saveToolOutput, loadTemplate, templatePromptFragment } from "./_store.js";
 
 export const lessonPlanFillDefinition = {
   name: "lesson_plan_fill",
@@ -22,6 +22,7 @@ export const lessonPlanFillDefinition = {
       yearGroup:  { type: "string",  description: "Year/grade/class, e.g. 'SS2' or 'Year 9'" },
       durationMins: { type: "number", description: "Lesson length in minutes (default 40)" },
       objectives: { type: "array", items: { type: "string" }, description: "Learning objectives (optional — generated if omitted)" },
+      templateId: { type: "string", description: "Optional instructor template id to mirror the teacher's own format" },
     },
     required: ["topic"],
   },
@@ -33,10 +34,12 @@ const schema = z.object({
   yearGroup:    z.string().default("Senior Secondary"),
   durationMins: z.number().min(10).max(180).default(40),
   objectives:   z.array(z.string()).default([]),
+  templateId:   z.string().optional(),
 });
 
 export async function executeLessonPlanFill(rawInput, ctx) {
   const input = schema.parse(rawInput);
+  const tpl = await loadTemplate(input.templateId, ctx);
 
   const plan = await llmJson(
     `Create a detailed lesson plan.
@@ -45,6 +48,7 @@ Subject: ${input.subject}
 Class/Year: ${input.yearGroup}
 Duration: ${input.durationMins} minutes
 ${input.objectives.length ? `Objectives to cover:\n- ${input.objectives.join("\n- ")}` : "Generate 3-4 measurable learning objectives."}
+${templatePromptFragment(tpl)}
 
 Return JSON:
 {
