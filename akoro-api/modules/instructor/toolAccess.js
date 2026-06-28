@@ -22,8 +22,13 @@ export const TOOL_GATES = {
   export_report:      "export-report",
   create_battle:      "create-battle",
   grade_submissions:  "grading",
-  // Future catalog-backed tools (no executor yet): lesson-plan, worksheets,
-  // report-writing, attendance, interactive, exam-prep.
+  // Catalog-backed orchestrated tools
+  lesson_plan_fill:     "lesson-plan",
+  worksheet_fill:       "worksheets",
+  report_writing:       "report-writing",
+  exam_prep:            "exam-prep",
+  attendance_rollcall:  "attendance",
+  interactive_material: "interactive",
 };
 
 /**

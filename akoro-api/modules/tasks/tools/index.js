@@ -10,6 +10,13 @@ import { explainConceptDefinition,   executeExplainConcept   } from "./explain-c
 import { studyPlanDefinition,        executeStudyPlan        } from "./study-plan.js";
 import { setStudyReminderDefinition, executeSetStudyReminder } from "./set-study-reminder.js";
 import { challengePeerDefinition,    executeChallengePeer    } from "./challenge-peer.js";
+// Catalog-backed instructor tools (orchestrated workflows)
+import { lessonPlanFillDefinition,      executeLessonPlanFill      } from "./lesson-plan-fill.js";
+import { worksheetFillDefinition,       executeWorksheetFill       } from "./worksheet-fill.js";
+import { reportWritingDefinition,       executeReportWriting       } from "./report-writing.js";
+import { examPrepDefinition,            executeExamPrep            } from "./exam-prep.js";
+import { attendanceRollcallDefinition,  executeAttendanceRollcall  } from "./attendance-rollcall.js";
+import { interactiveMaterialDefinition, executeInteractiveMaterial } from "./interactive-material.js";
 
 export const ALL_TOOLS = [
   { definition: generateQuizDefinition,     execute: executeGenerateQuiz     },
@@ -24,6 +31,12 @@ export const ALL_TOOLS = [
   { definition: studyPlanDefinition,        execute: executeStudyPlan         },
   { definition: setStudyReminderDefinition, execute: executeSetStudyReminder  },
   { definition: challengePeerDefinition,    execute: executeChallengePeer     },
+  { definition: lessonPlanFillDefinition,      execute: executeLessonPlanFill      },
+  { definition: worksheetFillDefinition,       execute: executeWorksheetFill       },
+  { definition: reportWritingDefinition,       execute: executeReportWriting       },
+  { definition: examPrepDefinition,            execute: executeExamPrep            },
+  { definition: attendanceRollcallDefinition,  execute: executeAttendanceRollcall  },
+  { definition: interactiveMaterialDefinition, execute: executeInteractiveMaterial },
 ];
 
 const tool = (name) => {
@@ -45,6 +58,12 @@ export const TOOLS_BY_TYPE = {
   create_study_plan:  [tool("create_study_plan")],
   set_study_reminder: [tool("set_study_reminder")],
   challenge_peer:     [tool("challenge_peer")],
+  lesson_plan_fill:     [tool("lesson_plan_fill")],
+  worksheet_fill:       [tool("worksheet_fill")],
+  report_writing:       [tool("report_writing"),      tool("fetch_student_data")],
+  exam_prep:            [tool("exam_prep")],
+  attendance_rollcall:  [tool("attendance_rollcall"),  tool("fetch_student_data")],
+  interactive_material: [tool("interactive_material")],
   general:            ALL_TOOLS,
 };
 
