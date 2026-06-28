@@ -55,6 +55,43 @@ async function grantToolAccess(instructorId, toolId, { ref, amountKobo } = {}) {
   );
 }
 
+// ── GET /api/instructor/tools/outputs ────────────────────────────────────────
+// The instructor's saved tool artifacts (lesson plans, worksheets, etc.).
+// Optional ?kind=lesson_plan&limit=20&offset=0
+router.get("/outputs", authenticateToken, async (req, res) => {
+  try {
+    const { kind, limit = 30, offset = 0 } = req.query;
+    let q = db
+      .schema("edu").from("tool_outputs")
+      .select("id, tool, kind, title, subject, created_at")
+      .eq("instructor_id", req.user.id)
+      .order("created_at", { ascending: false })
+      .range(Number(offset), Number(offset) + Number(limit) - 1);
+    if (kind) q = q.eq("kind", kind);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ success: true, outputs: data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/instructor/tools/outputs/:id ────────────────────────────────────
+router.get("/outputs/:id", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await db
+      .schema("edu").from("tool_outputs")
+      .select("*")
+      .eq("id", req.params.id)
+      .eq("instructor_id", req.user.id)
+      .single();
+    if (error || !data) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true, output: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── GET /api/instructor/tools ────────────────────────────────────────────────
 // Returns the full catalog split into tools/assets, each flagged with `owned`.
 router.get("/", authenticateToken, async (req, res) => {

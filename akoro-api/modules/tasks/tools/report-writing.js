@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
+import { saveToolOutput } from "./_store.js";
 
 export const reportWritingDefinition = {
   name: "report_writing",
@@ -63,5 +64,10 @@ Return JSON:
     delivered: false,
   });
 
-  return { success: true, studentName: report.studentName };
+  const savedId = await saveToolOutput({
+    ctx, tool: "report_writing", kind: "report",
+    title: `${report.studentName} — ${input.subject}`, subject: input.subject, content: report,
+  });
+
+  return { success: true, id: savedId, studentName: report.studentName };
 }

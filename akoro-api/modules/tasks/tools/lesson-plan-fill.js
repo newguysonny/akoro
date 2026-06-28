@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
+import { saveToolOutput } from "./_store.js";
 
 export const lessonPlanFillDefinition = {
   name: "lesson_plan_fill",
@@ -73,5 +74,10 @@ Return JSON:
     delivered: false,
   });
 
-  return { success: true, title: plan.title, phases: plan.phases?.length ?? 0 };
+  const savedId = await saveToolOutput({
+    ctx, tool: "lesson_plan_fill", kind: "lesson_plan",
+    title: plan.title, subject: input.subject, content: plan,
+  });
+
+  return { success: true, id: savedId, title: plan.title, phases: plan.phases?.length ?? 0 };
 }

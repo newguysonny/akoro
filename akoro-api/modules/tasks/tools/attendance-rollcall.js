@@ -8,6 +8,7 @@ import { z } from "zod";
 import db from "../../../db.js";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
+import { saveToolOutput } from "./_store.js";
 
 export const attendanceRollcallDefinition = {
   name: "attendance_rollcall",
@@ -86,5 +87,16 @@ Return JSON { "present": ["<exact roster name>", ...] } listing roster names tha
     delivered: false,
   });
 
-  return { success: true, total: marked.length, present: presentCount, absent: marked.length - presentCount };
+  const savedId = await saveToolOutput({
+    ctx, tool: "attendance_rollcall", kind: "attendance",
+    title: `Roll call — ${new Date().toISOString().slice(0, 10)}`,
+    subject: null,
+    content: {
+      courseId: input.courseId ?? null, takenAt: new Date().toISOString(),
+      total: marked.length, present: presentCount, absent: marked.length - presentCount,
+      register: marked,
+    },
+  });
+
+  return { success: true, id: savedId, total: marked.length, present: presentCount, absent: marked.length - presentCount };
 }

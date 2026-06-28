@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
+import { saveToolOutput } from "./_store.js";
 
 export const worksheetFillDefinition = {
   name: "worksheet_fill",
@@ -58,5 +59,10 @@ Return JSON:
     delivered: false,
   });
 
-  return { success: true, title: ws.title, questionCount: ws.questions?.length ?? 0 };
+  const savedId = await saveToolOutput({
+    ctx, tool: "worksheet_fill", kind: "worksheet",
+    title: ws.title, subject: input.subject, content: ws,
+  });
+
+  return { success: true, id: savedId, title: ws.title, questionCount: ws.questions?.length ?? 0 };
 }

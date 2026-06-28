@@ -6,6 +6,7 @@
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson, llmText } from "./_llm.js";
+import { saveToolOutput } from "./_store.js";
 
 export const interactiveMaterialDefinition = {
   name: "interactive_material",
@@ -95,7 +96,13 @@ Return JSON:
     delivered: false,
   });
 
-  return { success: true, title: deck.title, slides: deck.slides?.length ?? 0, gamma: !!gamma };
+  const savedId = await saveToolOutput({
+    ctx, tool: "interactive_material", kind: "interactive",
+    title: deck.title, subject: input.subject,
+    content: { ...deck, gamma: gamma || null },
+  });
+
+  return { success: true, id: savedId, title: deck.title, slides: deck.slides?.length ?? 0, gamma: !!gamma };
 }
 
 // Exported in case a delivery step wants a narrative summary.

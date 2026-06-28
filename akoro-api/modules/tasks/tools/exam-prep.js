@@ -6,6 +6,7 @@ import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { TaskOutputDB } from "../lib/db.js";
 import { llmJson } from "./_llm.js";
+import { saveToolOutput } from "./_store.js";
 
 export const examPrepDefinition = {
   name: "exam_prep",
@@ -72,5 +73,11 @@ Return JSON:
     delivered: false,
   });
 
-  return { success: true, title: assessment.title, questionCount: questions.length };
+  const savedId = await saveToolOutput({
+    ctx, tool: "exam_prep", kind: "assessment",
+    title: assessment.title, subject: input.subject,
+    content: { ...assessment, questions },
+  });
+
+  return { success: true, id: savedId, title: assessment.title, questionCount: questions.length };
 }
