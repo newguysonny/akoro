@@ -134,7 +134,7 @@ router.get("/courses/:id/full", async (req, res) => {
     const { id } = req.params;
     const { data: c, error } = await db
       .from("courses")
-      .select("id, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, instructor:users!instructor_id(full_name), course_modules(id, title, order_index, lessons(id, title, lesson_type, duration_seconds, order_index, is_preview))")
+      .select("id, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, instructor:users!instructor_id(id, full_name, avatar_url), course_modules(id, title, order_index, lessons(id, title, lesson_type, duration_seconds, order_index, is_preview))")
       .eq("id", id)
       .single();
 
@@ -156,6 +156,49 @@ router.get("/courses/:id/full", async (req, res) => {
           })),
       }));
 
+    // Schedule — live sessions for this course
+    let schedule = [];
+    try {
+      const { data: sessions } = await db
+        .from("live_sessions")
+        .select("title, topic, status, scheduled_start, scheduled_end")
+        .eq("course_id", id)
+        .order("scheduled_start", { ascending: true });
+      schedule = (sessions || []).map((s) => {
+        const { date, time } = formatSchedule(s.scheduled_start, s.scheduled_end);
+        return {
+          topic:  s.topic || s.title,
+          date, time,
+          status: s.status === "live" ? "live" : s.status === "ended" || s.status === "recorded" ? "recorded" : "upcoming",
+        };
+      });
+    } catch { /* ignore */ }
+
+    // Reviews — public list
+    let reviews = [];
+    try {
+      const { data: rv } = await db
+        .from("reviews")
+        .select("rating, comment, created_at, users!reviews_user_id_fkey(full_name, avatar_url)")
+        .eq("course_id", id)
+        .order("helpful_count", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(12);
+      reviews = (rv || []).map((r) => ({
+        name:   r.users?.full_name || "Student",
+        rating: r.rating,
+        text:   r.comment || "",
+        date:   r.created_at ? new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "",
+      }));
+    } catch { /* ignore */ }
+
+    // Teachers — the course instructor
+    const teachers = c.instructor ? [{
+      name:      c.instructor.full_name || "Instructor",
+      avatarUrl: c.instructor.avatar_url || null,
+      title:     "Lead Instructor",
+    }] : [];
+
     res.json({
       success: true,
       course: {
@@ -175,6 +218,9 @@ router.get("/courses/:id/full", async (req, res) => {
         emoji:           m.emoji,
         enrolled:        false,
         modules,
+        schedule,
+        reviews,
+        teachers,
       },
     });
   } catch (err) {

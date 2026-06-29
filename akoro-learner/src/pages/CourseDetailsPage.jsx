@@ -597,13 +597,18 @@ const RevisionSection = () => {
   );
 };
 
-const ReviewsSection = () => {
-  const reviews=[
+const REVIEW_AVATARS = ["👦🏾","👧🏾","👨🏾‍💼","👩🏻","🧑🏽","👨🏿","👩🏾"];
+const REVIEW_BGS = ["#D4EAD8","#E4D4F0","#C8D8E8","#F0E4C8","#F8E8FF","#FFE8C0"];
+const ReviewsSection = ({ reviews: realReviews }) => {
+  const DEFAULT_REVIEWS=[
     {emoji:"👦🏾",bg:"#D4EAD8",name:"Chukwuemeka O.",role:"SS3, Lagos",rating:5,date:"2 days ago",text:"Dr. Amara breaks down chain rule in a way that finally clicked. Agent battles keep me sharp.",result:"D7 → B2"},
     {emoji:"👧🏾",bg:"#E4D4F0",name:"Ngozi A.",role:"SS2, Abuja",rating:5,date:"1 week ago",text:"Live sessions are interactive, not just lectures. The group revision rooms are unreal for accountability.",result:"+38 pts JAMB mock"},
     {emoji:"👨🏾‍💼",bg:"#C8D8E8",name:"Babatunde F.",role:"A-Level, UK",rating:4,date:"2 weeks ago",text:"Solid class. AI agent feedback on answers feels like a personal tutor. Would love more practice Q.",result:"C → A* target"},
     {emoji:"👩🏻",bg:"#F0E4C8",name:"Zainab I.",role:"University yr1, Kano",rating:5,date:"3 weeks ago",text:"Failed first-year calculus twice. Started this class and I finally get it. Spaced repetition is magic.",result:"Passed resit"},
   ];
+  const reviews = realReviews?.length
+    ? realReviews.map((r,i)=>({ emoji:REVIEW_AVATARS[i%REVIEW_AVATARS.length], bg:REVIEW_BGS[i%REVIEW_BGS.length], name:r.name, role:"Student", rating:r.rating, date:r.date, text:r.text, result:null }))
+    : DEFAULT_REVIEWS;
   return(
     <section>
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
@@ -617,7 +622,7 @@ const ReviewsSection = () => {
               <div className="flex items-center gap-3"><Avatar emoji={r.emoji} bg={r.bg} size={40}/><div><div className="text-sm font-bold">{r.name}</div><div className="text-[11px] text-[#9490A0]">{r.role}</div></div><span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E8F8EE] text-[#2AA76E]">Verified</span></div>
               <div className="flex items-center justify-between"><div className="flex">{[...Array(r.rating)].map((_,j)=><Star key={j} size={12} fill="#E8884A" strokeWidth={0}/>)}</div><span className="text-[11px] text-[#9490A0]">{r.date}</span></div>
               <p className="text-sm text-[#3A3A52] leading-relaxed italic flex-1">"{r.text}"</p>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEF0E6] text-[#E8884A] text-[11px] font-bold mt-auto"><TrendingUp size={10}/>{r.result}</div>
+              {r.result&&<div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FEF0E6] text-[#E8884A] text-[11px] font-bold mt-auto"><TrendingUp size={10}/>{r.result}</div>}
             </div>
           </div>
         ))}
@@ -679,7 +684,7 @@ const ClassProfile = ({ courseType, isEnrolled, course = DEFAULT_COURSE, modules
   const isVideo = courseType === "video";
   const MODULES = modules;
 
-  const schedule = [
+  const DEFAULT_SCHEDULE = [
     {date:"Today",      time:"2:00 – 3:30 PM", topic:"Chain Rule & Product Rule",  status:"live"},
     {date:"Thu 19 Jun", time:"2:00 – 3:30 PM", topic:"Integration by Parts",       status:"upcoming"},
     {date:"Fri 20 Jun", time:"2:00 – 3:30 PM", topic:"Differential Equations I",   status:"upcoming"},
@@ -687,10 +692,14 @@ const ClassProfile = ({ courseType, isEnrolled, course = DEFAULT_COURSE, modules
     {date:"Mon 9 Jun",  time:"2:00 – 3:30 PM", topic:"Limits & Continuity",        status:"recorded"},
     {date:"Wed 11 Jun", time:"2:00 – 3:30 PM", topic:"Basic Differentiation",      status:"recorded"},
   ];
-  const teachers = [
+  const DEFAULT_TEACHERS = [
     {emoji:"👩🏾‍💻",bg:"#C8E8D4",name:"Dr. Amara Diallo",  title:"Lead Instructor",   rating:4.9,reviews:"2.4k",bio:"PhD Cape Town · Former WAEC examiner · 14 years Further Maths",    hasAgent:true, agentName:"Pythia",agentEmoji:"🔮"},
     {emoji:"👨🏾‍🎓",bg:"#D4C8E8",name:"Mr. Tobi Adeyemi",  title:"Teaching Assistant",rating:4.7,reviews:"880",  bio:"MSc Mathematics · UNILAG · Agent battles champion 2024",         hasAgent:true, agentName:"Axiom", agentEmoji:"⚡"},
   ];
+  const schedule = course.schedule || DEFAULT_SCHEDULE;
+  const teachers = course.teachers
+    ? course.teachers.map((t) => ({ emoji:"👩🏾‍🏫", bg:"#C8E8D4", name:t.name, title:t.title||"Instructor", rating:course.rating, reviews:course.ratingCount, bio:`Instructor for ${course.title}.`, hasAgent:false }))
+    : DEFAULT_TEACHERS;
   const doneLessons = MODULES.reduce((a,m)=>a+m.lessons.filter(l=>l.done).length,0);
   const totalLessons = MODULES.reduce((a,m)=>a+m.lessons.length,0);
   const visibleTabs = isVideo ? ["about","content","teachers"] : ["about","schedule","content","teachers"];
@@ -1103,7 +1112,7 @@ const EnrolledVideoView = ({ course = DEFAULT_COURSE, modules = DEFAULT_MODULES 
         {activeTab==="overview"     && <ClassProfile courseType="video" isEnrolled={true} course={course} modules={modules}/>}
         {activeTab==="qa"           && <QnATab/>}
         {activeTab==="announcements"&& <AnnouncementsTab/>}
-        {activeTab==="reviews"      && <ReviewsSection/>}
+        {activeTab==="reviews"      && <ReviewsSection reviews={course.reviews}/>}
         {activeTab==="battles"      && <ChallengesSection/>}
         {activeTab==="revisions"    && <RevisionSection/>}
       </div>
@@ -1143,6 +1152,9 @@ function mapCourse(api) {
       priceLabel,
       priceOld:    api.price_old ? `₦${Number(api.price_old).toLocaleString("en-NG")}` : null,
       emoji:       api.emoji || DEFAULT_COURSE.emoji,
+      schedule:    Array.isArray(api.schedule) && api.schedule.length ? api.schedule : null,
+      reviews:     Array.isArray(api.reviews)  && api.reviews.length  ? api.reviews  : null,
+      teachers:    Array.isArray(api.teachers) && api.teachers.length ? api.teachers : null,
     },
   };
 }
@@ -1212,7 +1224,7 @@ export default function CourseDetailsPage() {
               <ClassProfile courseType={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}/>
               <RevisionSection/>
               <ChallengesSection/>
-              <ReviewsSection/>
+              <ReviewsSection reviews={view.course.reviews}/>
             </>
           )}
         </div>
