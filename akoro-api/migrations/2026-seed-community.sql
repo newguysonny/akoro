@@ -72,6 +72,15 @@ BEGIN
           (bid, a1.user_id, a1.id, 'creator',  7, 70),
           (bid, a2.user_id, a2.id, 'opponent', 5, 80);
 
+        -- scheduled (upcoming) battle
+        INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
+        SELECT cid, '1v1', 'Demo Battle · Integration Masters', '1v1 integration battle', 'Further Mathematics', 'medium', 100, 100, 600, 'scheduled', 0, now() + interval '45 minutes', now() + interval '1 day', c.instructor_id
+        FROM public.courses c WHERE c.id = cid
+        RETURNING id INTO bid;
+        INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp) VALUES
+          (bid, a1.user_id, a1.id, 'creator',  0, 100),
+          (bid, a2.user_id, a2.id, 'opponent', 0, 100);
+
         -- completed battle
         INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
         SELECT cid, '1v1', 'Demo Battle · WAEC Prep', '1v1 exam-prep battle', 'Further Mathematics', 'hard', 150, 150, 600, 'completed', 0, now() - interval '2 hours', now() + interval '1 day', c.instructor_id

@@ -315,19 +315,48 @@ function BattleCard({ b }) {
 
 function BattlesSection({ battles: real, leaderboard: realLb }) {
   const BATTLE_LIST = real?.length ? real : BATTLES;
+  const [filter, setFilter] = useState('all');
   const live = BATTLE_LIST.filter((b) => b.status === 'live');
+  const upcoming = BATTLE_LIST.filter((b) => b.status === 'upcoming');
+  const completed = BATTLE_LIST.filter((b) => b.status === 'completed');
   const leaderboard = realLb?.length
     ? realLb.map((ag) => ({ ...ag, bg: `${ag.color || BRAND}1A` }))
     : AGENTS.map((ag) => ({ ...ag, pts: BATTLES.reduce((s, b) => s + (b.a === AGENTS.indexOf(ag) ? b.sa : b.b === AGENTS.indexOf(ag) ? b.sb : 0), 0) })).sort((x, y) => y.pts - x.pts).slice(0, 5);
+
+  const Group = ({ label, color, items }) => items.length === 0 ? null : (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, animation: color === RED ? 'cp-pulse 1.3s ease infinite' : 'none' }} />
+        <span style={{ fontSize: 11.5, fontWeight: 900, letterSpacing: '.04em', textTransform: 'uppercase', color }}>{label} · {items.length}</span>
+      </div>
+      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{items.map((b) => <BattleCard key={b.id} b={b} />)}</div>
+    </div>
+  );
+
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SectionTitle sub="Agents battle around the clock on this class's curriculum.">24/7 Knowledge Battles</SectionTitle>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12 }}>
-        {[['Live', live.length, RED], ['Upcoming', BATTLE_LIST.filter((b) => b.status === 'upcoming').length, BRAND], ['Completed', BATTLE_LIST.filter((b) => b.status === 'completed').length, GREEN], ['Battles', BATTLE_LIST.length, '#2563EB']].map(([l, v, c]) => (
+        {[['Live', live.length, RED], ['Upcoming', upcoming.length, BRAND], ['Completed', completed.length, GREEN], ['Battles', BATTLE_LIST.length, '#2563EB']].map(([l, v, c]) => (
           <div key={l} style={{ ...card, padding: 14 }}><div style={{ fontSize: 20, fontWeight: 900, color: c }}>{v}</div><div style={{ fontSize: 11.5, color: MUTED }}>{l}</div></div>
         ))}
       </div>
-      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{BATTLE_LIST.map((b) => <BattleCard key={b.id} b={b} />)}</div>
+      {/* Filter */}
+      <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 12, width: 'fit-content' }}>
+        {[['all', 'All battles'], ['live', '🔴 Live now']].map(([k, l]) => (
+          <button key={k} onClick={() => setFilter(k)} style={{ padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 800, background: filter === k ? INK : 'transparent', color: filter === k ? '#fff' : MUTED }}>{l}</button>
+        ))}
+      </div>
+      {/* Grouped lists */}
+      {filter === 'live' ? (
+        live.length ? <Group label="Live now" color={RED} items={live} /> : <div style={{ ...card, padding: 24, textAlign: 'center', color: MUTED2, fontSize: 13 }}>No live battles right now.</div>
+      ) : (
+        <>
+          <Group label="Live now" color={RED} items={live} />
+          <Group label="Starting soon" color={BRAND} items={upcoming} />
+          <Group label="Completed" color={MUTED2} items={completed} />
+        </>
+      )}
       <div style={{ ...card, padding: 18 }}>
         <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 10 }}>Class Leaderboard</div>
         {leaderboard.map((ag, i) => (
