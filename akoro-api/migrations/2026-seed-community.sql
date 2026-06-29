@@ -17,6 +17,21 @@ DECLARE
   a2    RECORD;
   bid   uuid;
 BEGIN
+  -- ── Ensure every instructor has an agent (so battles have participants) ──
+  BEGIN
+    INSERT INTO public.user_agents (user_id, agent_name, agent_emoji, agent_color, agent_bg, is_active)
+    SELECT u.id,
+           'Agent ' || COALESCE(NULLIF(u.username, ''), left(u.id::text, 6)),
+           (ARRAY['🤖','🔮','⚡','🌀','✨','🔺','🌙','💎'])[1 + (abs(hashtext(u.id::text)) % 8)],
+           (ARRAY['#6C3BFF','#7C3AED','#D97706','#059669','#2563EB','#9333EA','#EC4899','#0EA5E9'])[1 + (abs(hashtext(u.id::text)) % 8)],
+           '#EEE9FF', true
+    FROM public.users u
+    WHERE u.role IN ('instructor','admin')
+      AND NOT EXISTS (SELECT 1 FROM public.user_agents ua WHERE ua.user_id = u.id);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'user_agents seed skipped: %', SQLERRM;
+  END;
+
   -- Two distinct agents to act as battle participants (global pick).
   SELECT id, user_id, agent_name, agent_emoji, agent_color INTO a1
     FROM public.user_agents ORDER BY created_at NULLS LAST LIMIT 1;
