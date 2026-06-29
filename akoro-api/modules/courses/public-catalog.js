@@ -125,6 +125,64 @@ router.get("/courses/published", async (req, res) => {
 });
 
 // =============================================================
+// GET /courses/:id/full
+// Unified single-course detail for the course details page. One endpoint;
+// the frontend renders live vs video off the `type` field.
+// =============================================================
+router.get("/courses/:id/full", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: c, error } = await db
+      .from("courses")
+      .select("id, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, instructor:users!instructor_id(full_name), course_modules(id, title, order_index, lessons(id, title, lesson_type, duration_seconds, order_index, is_preview))")
+      .eq("id", id)
+      .single();
+
+    if (error || !c) return res.status(404).json({ error: "Course not found" });
+
+    const m = meta(c.subject);
+    const fmtDur = (secs) => (secs ? `${Math.round(secs / 60)}min` : "—");
+    const modules = (c.course_modules || [])
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+      .map((mod) => ({
+        title: mod.title,
+        lessons: (mod.lessons || [])
+          .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+          .map((l) => ({
+            title:    l.title,
+            type:     l.lesson_type === "quiz" ? "quiz" : "video",
+            duration: l.lesson_type === "quiz" ? "—" : fmtDur(l.duration_seconds),
+            done:     false,
+          })),
+      }));
+
+    res.json({
+      success: true,
+      course: {
+        id:              c.id,
+        title:           c.title,
+        description:     c.description,
+        subject:         c.subject,
+        type:            c.course_type === "video" ? "video" : "live",
+        level:           titleCase(c.level),
+        rating:          c.rating ? Number(Number(c.rating).toFixed(1)) : null,
+        rating_count:    compact(c.total_students),
+        total_students:  c.total_students || 0,
+        total_hours:     c.total_hours || 0,
+        instructor_name: c.instructor?.full_name || null,
+        is_free:         c.is_free,
+        price:           c.is_free ? 0 : Math.round((c.price || 0) / 100),
+        emoji:           m.emoji,
+        enrolled:        false,
+        modules,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =============================================================
 // GET /live-sessions
 // Upcoming + currently-live sessions (not ended/cancelled).
 // =============================================================
