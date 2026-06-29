@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { io } from 'socket.io-client';
-import './tailwind.css';
 import App from './App.jsx';
 
 // The teaching/decay sessions and live cognitive state connect through a
