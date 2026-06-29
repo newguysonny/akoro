@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight,
+  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check,
 } from 'lucide-react';
 import { API } from '../services/api.js';
 import { BRAND } from '../constants.js';
@@ -420,6 +420,23 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
   const isVideo = type === 'video';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
   const [tab, setTab] = useState('about');
+  const [calAdded, setCalAdded] = useState(false);
+  const [agentLinked, setAgentLinked] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const shareClass = async () => {
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    try {
+      if (navigator.share) { await navigator.share({ title: course.title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    } catch { /* cancelled */ }
+  };
+  const actions = [
+    { key: 'cal', label: calAdded ? 'Added ✓' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v), hide: isVideo },
+    { key: 'agent', label: agentLinked ? 'Agent linked ✓' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
+    { key: 'share', label: copied ? 'Link copied ✓' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: shareClass },
+    { key: 'report', label: 'Report', icon: <Flag size={13} />, onClick: () => {} },
+  ].filter((a) => !a.hide);
   const done = modules.reduce((a, m) => a + m.lessons.filter((l) => l.done).length, 0);
   const total = modules.reduce((a, m) => a + m.lessons.length, 0);
   const teachers = course.teachers
@@ -461,6 +478,15 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
             <div style={{ height: 5, background: 'rgba(255,255,255,.15)', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: `${total ? (done / total) * 100 : 0}%`, background: BRAND, borderRadius: 4 }} /></div>
           </div>
         )}
+      </div>
+
+      {/* Action chips */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {actions.map((a) => (
+          <button key={a.key} onClick={a.onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 800, border: `1.5px solid ${a.active ? BRAND : '#DDD8CF'}`, background: a.active ? BRAND : '#fff', color: a.active ? '#fff' : MUTED }}>
+            {a.icon}{a.label}
+          </button>
+        ))}
       </div>
 
       {/* Tabs */}
