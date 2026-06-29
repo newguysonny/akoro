@@ -50,16 +50,29 @@ BEGIN
           VALUES (cid, mods[i], i)
           RETURNING id INTO m;
 
-          INSERT INTO public.lessons (module_id, title, lesson_type, duration_seconds, order_index, is_preview) VALUES
-            (m, 'Lesson ' || i || '.1 — Core concepts',   'video', 540, 1, (i = 1)),
-            (m, 'Lesson ' || i || '.2 — Worked examples',  'video', 720, 2, false),
-            (m, 'Lesson ' || i || '.3 — Guided practice',  'video', 660, 3, false),
-            (m, 'Quiz ' || i || ' — Check your understanding', 'quiz', NULL, 4, false);
+          -- video_url points at a public sample HLS stream so the player works out of the box.
+          INSERT INTO public.lessons (module_id, title, lesson_type, duration_seconds, order_index, is_preview, video_url) VALUES
+            (m, 'Lesson ' || i || '.1 — Core concepts',   'video', 540, 1, (i = 1), 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+            (m, 'Lesson ' || i || '.2 — Worked examples',  'video', 720, 2, false,   'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+            (m, 'Lesson ' || i || '.3 — Guided practice',  'video', 660, 3, false,   'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+            (m, 'Quiz ' || i || ' — Check your understanding', 'quiz', NULL, 4, false, NULL);
         END LOOP;
       END IF;
     END LOOP;
   END LOOP;
 END $$;
 
+-- Backfill: if the demo courses were already seeded before this revision,
+-- attach the sample HLS stream to their video lessons.
+UPDATE public.lessons l
+SET video_url = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'
+FROM public.course_modules cm
+JOIN public.courses c ON c.id = cm.course_id
+WHERE l.module_id = cm.id
+  AND c.slug LIKE 'demo-fmaths-%'
+  AND l.lesson_type = 'video'
+  AND (l.video_url IS NULL OR l.video_url = '');
+
 -- Verify:
 -- SELECT instructor_id, title, course_type, is_published FROM public.courses WHERE slug LIKE 'demo-fmaths-%';
+-- SELECT title, video_url FROM public.lessons l JOIN public.course_modules cm ON cm.id=l.module_id JOIN public.courses c ON c.id=cm.course_id WHERE c.slug LIKE 'demo-fmaths-%' LIMIT 5;
