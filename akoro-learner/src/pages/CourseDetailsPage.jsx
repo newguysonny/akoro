@@ -1159,17 +1159,20 @@ export default function CourseDetailsPage() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`${API}/api/courses/${id}/full`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((res) => {
-        if (!alive) return;
-        const mapped = mapCourse(res?.course || res);
-        setData(mapped);
-        setCourseType(mapped.type);
-        setIsEnrolled(mapped.enrolled);
-      })
-      .catch(() => { if (alive) setData(mapCourse(null)); })
-      .finally(() => { if (alive) setLoading(false); });
+    // One endpoint drives the course; a lightweight progress probe tells us if
+    // the signed-in user is enrolled (404 = not enrolled) so video courses can
+    // open straight into the player view.
+    Promise.all([
+      fetch(`${API}/api/courses/${id}/full`, { credentials: "include" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`${API}/api/courses/${id}/progress`, { credentials: "include" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([res, prog]) => {
+      if (!alive) return;
+      const mapped = mapCourse(res?.course || res);
+      const enrolled = !!(prog && prog.success !== false && (prog.data || prog.overall_progress != null || prog.modules));
+      setData(mapped);
+      setCourseType(mapped.type);
+      setIsEnrolled(enrolled || mapped.enrolled);
+    }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [id]);
 

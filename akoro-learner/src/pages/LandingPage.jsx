@@ -383,6 +383,7 @@ function HowItWorks() {
 
 /* ══════════════ COURSES (lazy-loaded from backend only) ══════════════ */
 function Courses() {
+  const navigate = useNavigate();
   const [mainTab, setMainTab] = useState('recorded');
   const [subTab, setSubTab]   = useState('all');
   const [openSyl, setOpenSyl] = useState(null);
@@ -504,10 +505,10 @@ function Courses() {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 12, borderTop: '1px solid #EDE8E1' }}>
                         <span className="fsyne" style={{ fontSize: 17, fontWeight: 800, color: c.priceNum === 0 ? B : '#1A1A2E' }}>{c.price}</span>
-                        <button style={{ padding: '6px 14px', borderRadius: 99, border: `1.5px solid #DDD8CF`, background: 'transparent', fontSize: 12, fontWeight: 600, color: '#6B6B80', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}
+                        <button onClick={() => c.id && navigate(`/course/${c.id}`)} style={{ padding: '6px 14px', borderRadius: 99, border: `1.5px solid #DDD8CF`, background: 'transparent', fontSize: 12, fontWeight: 600, color: '#6B6B80', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}
                           onMouseEnter={e => { e.currentTarget.style.borderColor = B; e.currentTarget.style.color = B; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = '#DDD8CF'; e.currentTarget.style.color = '#6B6B80'; }}>
-                          Enrol now
+                          View course
                         </button>
                       </div>
                       <button onClick={() => setOpenSyl(openSyl === i ? null : i)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 12, paddingTop: 10, borderTop: '1px solid #EDE8E1', border: 'none', background: 'transparent', fontSize: 12, color: '#9490A0', cursor: 'pointer', fontFamily: 'inherit', transition: 'color .18s' }}

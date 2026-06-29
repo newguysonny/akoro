@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight } from 'lucide-react';
+import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRight, Share2, Check } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../components/Primitives.jsx';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
@@ -138,7 +138,19 @@ function EditCourseModal({ open, course, onClose, onSave }) {
 }
 
 /* ── Course Card ────────────────────────────────────────────────────── */
+const LEARNER_URL = import.meta.env.VITE_LEARNER_URL || 'https://akoro.app';
+
 function CourseCard({ course, onManage, onEdit, onDelete }) {
+  const [copied, setCopied] = useState(false);
+  const shareLink = async (e) => {
+    e.stopPropagation();
+    const url = `${LEARNER_URL}/course/${course.id}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: course.title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    } catch { /* user cancelled / no clipboard */ }
+  };
   return (
     <div style={{
       background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16,
@@ -157,6 +169,13 @@ function CourseCard({ course, onManage, onEdit, onDelete }) {
         )}
         {/* Edit/Delete actions */}
         <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 6 }}>
+          <button
+            onClick={shareLink}
+            title="Copy course link"
+            style={{ background: copied ? GREEN : 'rgba(255,255,255,.92)', border: 'none', borderRadius: 8, padding: 6, cursor: 'pointer', color: copied ? '#fff' : INK, display: 'flex', boxShadow: '0 1px 4px rgba(0,0,0,.1)' }}
+          >
+            {copied ? <Check size={13} /> : <Share2 size={13} />}
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onEdit?.(course); }}
             title="Edit course"
