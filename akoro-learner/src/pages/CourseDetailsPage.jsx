@@ -923,51 +923,103 @@ const ClassProfile = ({ courseType, isEnrolled, course = DEFAULT_COURSE, modules
   );
 };
 
-/* ─── VIDEO PLAYER ─── */
-const VideoPlayer = ({ lesson }) => {
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [progress, setProgress] = useState(22);
-  const intervalRef = useRef(null);
+/* ─── VIDEO PLAYER (HLS via hls.js) ─── */
+const VideoPlayer = ({ lesson, courseEmoji = "🧮" }) => {
+  const videoRef = useRef(null);
+  const hlsRef   = useRef(null);
+  const saveRef  = useRef(0);
+  const [stream, setStream]   = useState(null);   // { url, lastPosition }
+  const [status, setStatus]   = useState("idle");  // idle | loading | ready | empty | error
 
-  useEffect(()=>{
-    if(playing){intervalRef.current=setInterval(()=>setProgress(p=>Math.min(100,p+0.15)),100);}
-    else clearInterval(intervalRef.current);
-    return()=>clearInterval(intervalRef.current);
-  },[playing]);
-  useEffect(()=>{setProgress(0);setPlaying(false);},[lesson?.title]);
+  // Fetch the lesson's stream + resume position whenever the lesson changes.
+  useEffect(() => {
+    let alive = true;
+    if (!lesson?.id) { setStream(null); setStatus("empty"); return; }
+    setStatus("loading");
+    fetch(`${API}/api/lessons/${lesson.id}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        if (!alive) return;
+        const d = res?.data || res || {};
+        const url = d.video_url || null;
+        if (!url) { setStream(null); setStatus("empty"); return; }
+        setStream({ url, lastPosition: d.progress?.last_position_seconds || 0 });
+        setStatus("ready");
+      })
+      .catch(() => { if (alive) setStatus("error"); });
+    return () => { alive = false; };
+  }, [lesson?.id]);
 
-  const totalSecs=538;
-  const elapsed=Math.floor((progress/100)*totalSecs);
-  const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+  // Attach the stream to the <video> element (HLS via hls.js, or native HLS/MP4).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !stream?.url) return;
+    let cancelled = false;
 
-  return(
-    <div className={`video-player ${!playing?"paused":""}`}>
-      <div style={{width:"100%",height:"100%",background:"linear-gradient(135deg,#0d1a2e,#1a1f3a,#0d2137)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,minHeight:260,cursor:"pointer"}} onClick={()=>setPlaying(p=>!p)}>
-        <div style={{fontSize:72,opacity:0.5}}>🧮</div>
-        <div style={{color:"rgba(255,255,255,.5)",fontFamily:"'Instrument Serif',serif",fontSize:18,textAlign:"center",padding:"0 20px"}}>{lesson?.title||"Chain Rule"}</div>
-        {!playing&&<div style={{width:64,height:64,borderRadius:"50%",background:"rgba(232,136,74,.9)",display:"flex",alignItems:"center",justifyContent:"center",position:"absolute",animation:"glow 2s ease-in-out infinite"}}><Play size={24} color="#fff" fill="#fff"/></div>}
-      </div>
-      <div className="video-controls">
-        <div className="video-progress" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setProgress(((e.clientX-r.left)/r.width)*100);}}>
-          <div style={{height:"100%",background:"#E8884A",borderRadius:4,width:progress+"%",transition:"width .5s linear"}}/>
-        </div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={()=>setProgress(p=>Math.max(0,p-5))} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",display:"flex"}}><SkipBack size={16}/></button>
-            <button onClick={()=>setPlaying(p=>!p)} style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",cursor:"pointer",borderRadius:"50%",width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              {playing?<span style={{display:"flex",gap:3}}><span style={{width:3,height:12,background:"#fff",borderRadius:2}}/><span style={{width:3,height:12,background:"#fff",borderRadius:2}}/></span>:<Play size={14} fill="#fff" color="#fff"/>}
-            </button>
-            <button onClick={()=>setProgress(p=>Math.min(100,p+5))} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",display:"flex"}}><SkipForward size={16}/></button>
-            <button onClick={()=>setMuted(m=>!m)} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",display:"flex"}}>{muted?<VolumeX size={15}/>:<Volume2 size={15}/>}</button>
-            <span style={{color:"rgba(255,255,255,.7)",fontSize:12}}>{fmt(elapsed)} / {fmt(totalSecs)}</span>
+    const start = () => {
+      if (stream.lastPosition && stream.lastPosition < (video.duration || Infinity)) {
+        try { video.currentTime = stream.lastPosition; } catch { /* ignore */ }
+      }
+    };
+
+    const isHls = /\.m3u8($|\?)/i.test(stream.url);
+    let detach = () => {};
+
+    (async () => {
+      if (isHls) {
+        const Hls = (await import("hls.js")).default;
+        if (cancelled) return;
+        if (Hls.isSupported()) {
+          const hls = new Hls({ enableWorker: true });
+          hlsRef.current = hls;
+          hls.loadSource(stream.url);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, start);
+          detach = () => { try { hls.destroy(); } catch { /* ignore */ } hlsRef.current = null; };
+          return;
+        }
+      }
+      // Native HLS (Safari) or progressive MP4
+      video.src = stream.url;
+      video.addEventListener("loadedmetadata", start, { once: true });
+      detach = () => { video.removeAttribute("src"); video.load?.(); };
+    })();
+
+    return () => { cancelled = true; detach(); };
+  }, [stream]);
+
+  // Persist watch position (throttled) + mark complete near the end.
+  const onTime = () => {
+    const video = videoRef.current;
+    if (!video || !lesson?.id || !video.duration) return;
+    const now = Date.now();
+    if (now - saveRef.current < 10000) return;     // throttle to every 10s
+    saveRef.current = now;
+    const position = Math.floor(video.currentTime);
+    fetch(`${API}/api/lessons/${lesson.id}/progress`, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ position }),
+    }).catch(() => {});
+    if (position >= video.duration - 5) {
+      fetch(`${API}/api/lessons/${lesson.id}/complete`, { method: "POST", credentials: "include" }).catch(() => {});
+    }
+  };
+
+  return (
+    <div className="video-player">
+      {status === "ready" && stream?.url ? (
+        <video ref={videoRef} controls playsInline onTimeUpdate={onTime}
+          style={{ width: "100%", height: "100%", background: "#000", aspectRatio: "16/9" }} />
+      ) : (
+        <div style={{width:"100%",height:"100%",background:"linear-gradient(135deg,#0d1a2e,#1a1f3a,#0d2137)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,minHeight:260}}>
+          <div style={{fontSize:72,opacity:0.5}}>{courseEmoji}</div>
+          <div style={{color:"rgba(255,255,255,.55)",fontFamily:"'Instrument Serif',serif",fontSize:18,textAlign:"center",padding:"0 20px"}}>{lesson?.title||"Lesson"}</div>
+          <div style={{color:"rgba(255,255,255,.35)",fontSize:12}}>
+            {status==="loading"?"Loading stream…":status==="error"?"Couldn't load this lesson":"Video coming soon"}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{color:"rgba(255,255,255,.5)",fontSize:11,background:"rgba(0,0,0,.4)",padding:"2px 8px",borderRadius:6}}>1x</span>
-            <button style={{background:"none",border:"none",color:"rgba(255,255,255,.7)",cursor:"pointer",display:"flex"}}><Maximize size={15}/></button>
-          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -1031,7 +1083,14 @@ const AnnouncementsTab = () => (
 /* ─── ENROLLED VIDEO VIEW ─── */
 const EnrolledVideoView = ({ course = DEFAULT_COURSE, modules = DEFAULT_MODULES }) => {
   const MODULES = modules;
-  const [currentLesson, setCurrentLesson] = useState({title:"Chain Rule",duration:"14min",done:true,type:"video",module:"Module 2: Differentiation Techniques"});
+  const firstLesson = (() => {
+    for (const m of MODULES) {
+      const l = (m.lessons || []).find((x) => x.type === "video");
+      if (l) return { ...l, module: m.title };
+    }
+    return { title: "Lesson", type: "video", module: MODULES[0]?.title };
+  })();
+  const [currentLesson, setCurrentLesson] = useState(firstLesson);
   const [activeTab, setActiveTab] = useState("content");
   const [moduleOpen, setModuleOpen] = useState(1);
 
@@ -1052,7 +1111,7 @@ const EnrolledVideoView = ({ course = DEFAULT_COURSE, modules = DEFAULT_MODULES 
     <div className="flex flex-col gap-0">
       {/* Video + header */}
       <div style={{background:"#000",margin:"-28px -20px 0"}}>
-        <VideoPlayer lesson={currentLesson}/>
+        <VideoPlayer lesson={currentLesson} courseEmoji={course.emoji}/>
         <div className="video-bar">
           <div><div style={{color:"rgba(255,255,255,.4)",fontSize:11,marginBottom:2}}>{currentLesson?.module}</div><div style={{color:"#fff",fontWeight:600,fontSize:14}}>{currentLesson?.title||"Chain Rule"}</div></div>
           <Btn v="glass" size="sm"><Radio size={12}/>Join live</Btn>
@@ -1129,8 +1188,8 @@ function mapCourse(api) {
     ? api.modules.map((m) => ({
         title: m.title,
         lessons: (m.lessons || []).map((l) => ({
-          title: l.title, duration: l.duration || "—",
-          done: !!l.done, type: l.type || "video",
+          id: l.id, title: l.title, duration: l.duration || "—",
+          done: !!l.done, type: l.type || "video", isPreview: !!l.isPreview,
         })),
       }))
     : DEFAULT_MODULES;

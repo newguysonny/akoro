@@ -149,10 +149,12 @@ router.get("/courses/:id/full", async (req, res) => {
         lessons: (mod.lessons || [])
           .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
           .map((l) => ({
-            title:    l.title,
-            type:     l.lesson_type === "quiz" ? "quiz" : "video",
-            duration: l.lesson_type === "quiz" ? "—" : fmtDur(l.duration_seconds),
-            done:     false,
+            id:        l.id,
+            title:     l.title,
+            type:      l.lesson_type === "quiz" ? "quiz" : "video",
+            duration:  l.lesson_type === "quiz" ? "—" : fmtDur(l.duration_seconds),
+            isPreview: !!l.is_preview,
+            done:      false,
           })),
       }));
 
