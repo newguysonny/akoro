@@ -16,6 +16,7 @@ DECLARE
   a1    RECORD;
   a2    RECORD;
   bid   uuid;
+  bt    RECORD;
 BEGIN
   -- ── Ensure every instructor has an agent (so battles have participants) ──
   BEGIN
@@ -58,41 +59,31 @@ BEGIN
       RAISE NOTICE 'revisions seed skipped for %: %', cid, SQLERRM;
     END;
 
-    -- ── Battles + participants ────────────────────────────────
-    BEGIN
-      IF a1.id IS NOT NULL AND a2.id IS NOT NULL
-         AND NOT EXISTS (SELECT 1 FROM public.battles WHERE course_id = cid AND title LIKE 'Demo Battle%') THEN
-
-        -- live battle
-        INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
-        SELECT cid, '1v1', 'Demo Battle · Chain Rule Gauntlet', '1v1 calculus battle', 'Further Mathematics', 'medium', 100, 100, 600, 'active', 23, now(), now() + interval '1 day', c.instructor_id
-        FROM public.courses c WHERE c.id = cid
-        RETURNING id INTO bid;
-        INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp) VALUES
-          (bid, a1.user_id, a1.id, 'creator',  7, 70),
-          (bid, a2.user_id, a2.id, 'opponent', 5, 80);
-
-        -- scheduled (upcoming) battle
-        INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
-        SELECT cid, '1v1', 'Demo Battle · Integration Masters', '1v1 integration battle', 'Further Mathematics', 'medium', 100, 100, 600, 'scheduled', 0, now() + interval '45 minutes', now() + interval '1 day', c.instructor_id
-        FROM public.courses c WHERE c.id = cid
-        RETURNING id INTO bid;
-        INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp) VALUES
-          (bid, a1.user_id, a1.id, 'creator',  0, 100),
-          (bid, a2.user_id, a2.id, 'opponent', 0, 100);
-
-        -- completed battle
-        INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
-        SELECT cid, '1v1', 'Demo Battle · WAEC Prep', '1v1 exam-prep battle', 'Further Mathematics', 'hard', 150, 150, 600, 'completed', 0, now() - interval '2 hours', now() + interval '1 day', c.instructor_id
-        FROM public.courses c WHERE c.id = cid
-        RETURNING id INTO bid;
-        INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp) VALUES
-          (bid, a1.user_id, a1.id, 'creator',  9, 100),
-          (bid, a2.user_id, a2.id, 'opponent', 7, 0);
-      END IF;
-    EXCEPTION WHEN OTHERS THEN
-      RAISE NOTICE 'battles seed skipped for %: %', cid, SQLERRM;
-    END;
+    -- ── Battles + participants (each guarded by its own title, so a
+    --     re-run tops up any state that's missing) ──────────────
+    IF a1.id IS NOT NULL AND a2.id IS NOT NULL THEN
+      FOR bt IN
+        SELECT * FROM (VALUES
+          ('Demo Battle · Chain Rule Gauntlet', 'active',    'medium', 100, 23, now(),                     7, 5, 70, 80),
+          ('Demo Battle · Integration Masters', 'scheduled', 'medium', 100,  0, now() + interval '45 minutes', 0, 0, 100, 100),
+          ('Demo Battle · WAEC Prep',           'completed', 'hard',   150,  0, now() - interval '2 hours', 9, 7, 100, 0)
+        ) AS t(title, status, difficulty, xp, viewers, start, sa, sb, ha, hb)
+      LOOP
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM public.battles WHERE course_id = cid AND title = bt.title) THEN
+            INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
+            SELECT cid, '1v1', bt.title, '1v1 battle', 'Further Mathematics', bt.difficulty, bt.xp, bt.xp, 600, bt.status, bt.viewers, bt.start, now() + interval '1 day', c.instructor_id
+            FROM public.courses c WHERE c.id = cid
+            RETURNING id INTO bid;
+            INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp) VALUES
+              (bid, a1.user_id, a1.id, 'creator',  bt.sa, bt.ha),
+              (bid, a2.user_id, a2.id, 'opponent', bt.sb, bt.hb);
+          END IF;
+        EXCEPTION WHEN OTHERS THEN
+          RAISE NOTICE 'battle "%" skipped for %: %', bt.title, cid, SQLERRM;
+        END;
+      END LOOP;
+    END IF;
 
   END LOOP;
 END $$;
