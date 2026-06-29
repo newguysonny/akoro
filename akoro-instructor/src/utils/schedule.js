@@ -9,10 +9,18 @@ const WEEK_STEP = { weekly: 1, biweekly: 2, '3x_weekly': 1, custom: 1 };
 
 // Frequency → suggested default weekday set (0=Sun…6=Sat).
 export const FREQ_DEFAULT_DAYS = {
-  weekly:    [1],          // Monday
-  biweekly:  [1],
-  '3x_weekly': [1, 3, 5],  // Mon / Wed / Fri
+  weekly:    [1],          // Monday — 1 day
+  biweekly:  [1, 3],       // Mon / Wed — 2 days
+  '3x_weekly': [1, 3, 5],  // Mon / Wed / Fri — 3 days
   custom:    [1, 3, 5],
+};
+
+// Max selectable days per frequency. Weekly = 1, Bi-weekly = 2, 3× Weekly = 3.
+// Custom is unlimited (no entry).
+export const FREQ_MAX_DAYS = {
+  weekly:      1,
+  biweekly:    2,
+  '3x_weekly': 3,
 };
 
 export const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

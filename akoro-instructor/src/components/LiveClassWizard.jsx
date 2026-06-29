@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Plus, Trash2, Calendar, Clock, Link2, FileText, StickyNote, ChevronDown, Wand2, Pencil, Users } from 'lucide-react';
 import { Btn, Modal, Inp, Txa, Sel, WizardSteps, FileUploadZone } from './Primitives.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
-import { generateSchedule, recomputeSession, FREQ_DEFAULT_DAYS, DAY_LABELS } from '../utils/schedule.js';
+import { generateSchedule, recomputeSession, FREQ_DEFAULT_DAYS, FREQ_MAX_DAYS, DAY_LABELS } from '../utils/schedule.js';
+import { fileToDataUrl } from '../utils/image.js';
 
 const FREQ = [
   { key: 'weekly',     label: 'Weekly' },
@@ -16,9 +17,27 @@ const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { wee
 /* ── Schedule builder (Step 1) ──────────────────────────────────────── */
 function ScheduleStep({ spec, setSpec, onGenerate, onManual }) {
   const set = (k, v) => setSpec((s) => ({ ...s, [k]: v }));
+  const maxDays = FREQ_MAX_DAYS[spec.frequency];   // undefined => unlimited (custom)
   const toggleDay = (d) =>
-    setSpec((s) => ({ ...s, daysOfWeek: s.daysOfWeek.includes(d) ? s.daysOfWeek.filter((x) => x !== d) : [...s.daysOfWeek, d].sort() }));
-  const pickFreq = (key) => setSpec((s) => ({ ...s, frequency: key, daysOfWeek: FREQ_DEFAULT_DAYS[key] || s.daysOfWeek }));
+    setSpec((s) => {
+      const max = FREQ_MAX_DAYS[s.frequency];
+      if (s.daysOfWeek.includes(d)) {                       // deselect
+        return { ...s, daysOfWeek: s.daysOfWeek.filter((x) => x !== d) };
+      }
+      if (max === 1) {                                      // single-select: replace
+        return { ...s, daysOfWeek: [d] };
+      }
+      if (max && s.daysOfWeek.length >= max) {              // at cap: block
+        return s;
+      }
+      return { ...s, daysOfWeek: [...s.daysOfWeek, d].sort((a, b) => a - b) };
+    });
+  const pickFreq = (key) => setSpec((s) => {
+    const max = FREQ_MAX_DAYS[key];
+    let days = FREQ_DEFAULT_DAYS[key] || s.daysOfWeek;
+    if (max) days = days.slice(0, max);
+    return { ...s, frequency: key, daysOfWeek: [...days].sort((a, b) => a - b) };
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -32,12 +51,22 @@ function ScheduleStep({ spec, setSpec, onGenerate, onManual }) {
       </div>
 
       <div>
-        <label style={lbl}>Days of week</label>
+        <label style={lbl}>Days of week{maxDays ? ` · pick ${maxDays}` : ''}</label>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {DAY_LABELS.map((d, i) => (
-            <button key={i} onClick={() => toggleDay(i)} style={dayPill(spec.daysOfWeek.includes(i))}>{d}</button>
-          ))}
+          {DAY_LABELS.map((d, i) => {
+            const selected = spec.daysOfWeek.includes(i);
+            const atCap = !!maxDays && !selected && spec.daysOfWeek.length >= maxDays;
+            return (
+              <button key={i} onClick={() => toggleDay(i)} style={{ ...dayPill(selected), ...(atCap && maxDays > 1 ? { opacity: 0.4 } : {}) }}>{d}</button>
+            );
+          })}
         </div>
+        {maxDays && (
+          <p style={{ fontSize: 11.5, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>
+            {spec.frequency === 'weekly' ? 'Weekly — pick 1 day (choosing another replaces it).'
+              : `${spec.frequency === 'biweekly' ? 'Bi-weekly' : '3× Weekly'} — pick up to ${maxDays} days.`}
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -209,7 +238,9 @@ export default function LiveClassWizard({ open, onClose, onSubmit }) {
           <Inp label="Max Students" type="number" value={info.maxStudents} onChange={(e) => setInfo({ ...info, maxStudents: e.target.value })} />
           <div>
             <label style={lbl}>Thumbnail (optional)</label>
-            <FileUploadZone label="Upload course thumbnail" accept="image/*" onUploaded={({ fileUrl }) => setInfo({ ...info, thumbnail: fileUrl })} />
+            <FileUploadZone label="Upload course thumbnail" accept="image/*" upload={false}
+              onFile={async (f) => { try { const url = await fileToDataUrl(f); setInfo((p) => ({ ...p, thumbnail: url })); } catch { /* ignore */ } }} />
+            {info.thumbnail && <img src={info.thumbnail} alt="" style={{ marginTop: 10, width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 10, border: `1px solid ${BORDER}` }} />}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <Btn variant="secondary" onClick={onClose}>Cancel</Btn>

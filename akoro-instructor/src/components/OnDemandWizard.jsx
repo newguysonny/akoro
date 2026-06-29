@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, ChevronDown, Video, Play, BookOpen, Tag, DollarSign, Eye, Users, Clock, GripVertical, FileText } from 'lucide-react';
 import { Btn, Modal, Inp, Txa, Sel, WizardSteps, FileUploadZone } from './Primitives.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, FONT } from '../constants.js';
+import { fileToDataUrl } from '../utils/image.js';
 
 const LEVELS = [['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['advanced', 'Advanced'], ['all', 'All Levels']];
 
@@ -130,7 +131,9 @@ export default function OnDemandWizard({ open, onClose, onSubmit }) {
           </div>
           <div>
             <label style={lbl}>Thumbnail (optional)</label>
-            <FileUploadZone label="Upload course thumbnail" accept="image/*" onUploaded={({ fileUrl }) => setInfo({ ...info, thumbnail: fileUrl })} />
+            <FileUploadZone label="Upload course thumbnail" accept="image/*" upload={false}
+              onFile={async (f) => { try { const url = await fileToDataUrl(f); setInfo((p) => ({ ...p, thumbnail: url })); } catch { /* ignore */ } }} />
+            {info.thumbnail && <img src={info.thumbnail} alt="" style={{ marginTop: 10, width: '100%', maxHeight: 150, objectFit: 'cover', borderRadius: 10, border: `1px solid ${BORDER}` }} />}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <Btn variant="secondary" onClick={close}>Cancel</Btn>
