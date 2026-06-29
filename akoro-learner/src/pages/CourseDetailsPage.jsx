@@ -272,17 +272,20 @@ const BATTLES = [
 ];
 
 function BattleCard({ b }) {
-  const A = AGENTS[b.a], B = AGENTS[b.b];
-  const aWin = b.status === 'completed' && b.sa > b.sb;
-  const bWin = b.status === 'completed' && b.sb > b.sa;
+  // b.a / b.b may be agent indices (demo) or agent objects (real)
+  const A = typeof b.a === 'object' ? b.a : AGENTS[b.a];
+  const B = typeof b.b === 'object' ? b.b : AGENTS[b.b];
+  const sa = b.sa != null ? b.sa : (A.score || 0), sb = b.sb != null ? b.sb : (B.score || 0);
+  const aWin = b.status === 'completed' && sa > sb;
+  const bWin = b.status === 'completed' && sb > sa;
   const Side = ({ ag, score, win }) => (
     <div style={{ flex: 1, textAlign: 'center' }}>
       <div style={{ position: 'relative', display: 'inline-block' }}>
-        <Avatar emoji={ag.emoji} bg={ag.bg} size={42} ring={ag.isYou ? true : undefined} />
+        <Avatar emoji={ag.emoji} bg={ag.bg || `${ag.color || BRAND}1A`} size={42} ring={ag.isYou ? true : undefined} />
         {win && <div style={{ position: 'absolute', top: -8, right: -8, fontSize: 15 }}>👑</div>}
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 800, color: INK, marginTop: 4 }}>{ag.name}</div>
-      <div style={{ fontSize: 10.5, color: MUTED2 }}>{ag.owner}</div>
+      {ag.owner && <div style={{ fontSize: 10.5, color: MUTED2 }}>{ag.owner}</div>}
       {ag.isTeacher && <div style={{ fontSize: 9, fontWeight: 800, color: BRAND }}>Teacher</div>}
       <div style={{ fontSize: 19, fontWeight: 900, color: ag.color, marginTop: 2 }}>{score}</div>
     </div>
@@ -299,9 +302,9 @@ function BattleCard({ b }) {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Side ag={A} score={b.sa} win={aWin} />
+        <Side ag={A} score={sa} win={aWin} />
         <div style={{ width: 34, height: 34, borderRadius: '50%', background: INK, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>VS</div>
-        <Side ag={B} score={b.sb} win={bWin} />
+        <Side ag={B} score={sb} win={bWin} />
       </div>
       <Btn variant={b.status === 'live' ? 'primary' : 'outline'} size="sm" style={{ width: '100%' }}>
         {b.status === 'live' ? <><Swords size={12} />Watch live</> : b.status === 'upcoming' ? <><Play size={12} />Preview</> : <>View result</>}
@@ -310,25 +313,28 @@ function BattleCard({ b }) {
   );
 }
 
-function BattlesSection() {
-  const live = BATTLES.filter((b) => b.status === 'live');
-  const leaderboard = AGENTS.map((ag) => ({ ...ag, wins: BATTLES.filter((b) => b.status === 'completed' && ((b.a === AGENTS.indexOf(ag) && b.sa > b.sb) || (b.b === AGENTS.indexOf(ag) && b.sb > b.sa))).length, pts: BATTLES.reduce((s, b) => s + (b.a === AGENTS.indexOf(ag) ? b.sa : b.b === AGENTS.indexOf(ag) ? b.sb : 0), 0) })).sort((x, y) => y.pts - x.pts).slice(0, 5);
+function BattlesSection({ battles: real, leaderboard: realLb }) {
+  const BATTLE_LIST = real?.length ? real : BATTLES;
+  const live = BATTLE_LIST.filter((b) => b.status === 'live');
+  const leaderboard = realLb?.length
+    ? realLb.map((ag) => ({ ...ag, bg: `${ag.color || BRAND}1A` }))
+    : AGENTS.map((ag) => ({ ...ag, pts: BATTLES.reduce((s, b) => s + (b.a === AGENTS.indexOf(ag) ? b.sa : b.b === AGENTS.indexOf(ag) ? b.sb : 0), 0) })).sort((x, y) => y.pts - x.pts).slice(0, 5);
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <SectionTitle sub="Agents battle around the clock on this class's curriculum.">24/7 Knowledge Battles</SectionTitle>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12 }}>
-        {[['Live', live.length, RED], ['Upcoming', BATTLES.filter((b) => b.status === 'upcoming').length, BRAND], ['Today', BATTLES.filter((b) => b.status === 'completed').length, GREEN], ['Agents', AGENTS.length, '#2563EB']].map(([l, v, c]) => (
+        {[['Live', live.length, RED], ['Upcoming', BATTLE_LIST.filter((b) => b.status === 'upcoming').length, BRAND], ['Completed', BATTLE_LIST.filter((b) => b.status === 'completed').length, GREEN], ['Battles', BATTLE_LIST.length, '#2563EB']].map(([l, v, c]) => (
           <div key={l} style={{ ...card, padding: 14 }}><div style={{ fontSize: 20, fontWeight: 900, color: c }}>{v}</div><div style={{ fontSize: 11.5, color: MUTED }}>{l}</div></div>
         ))}
       </div>
-      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{BATTLES.map((b) => <BattleCard key={b.id} b={b} />)}</div>
+      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{BATTLE_LIST.map((b) => <BattleCard key={b.id} b={b} />)}</div>
       <div style={{ ...card, padding: 18 }}>
         <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 10 }}>Class Leaderboard</div>
         {leaderboard.map((ag, i) => (
-          <div key={ag.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: i < leaderboard.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+          <div key={ag.id || ag.name || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: i < leaderboard.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
             <div style={{ width: 22, textAlign: 'center', fontSize: 15, fontWeight: 900, color: i === 0 ? GOLD : MUTED2 }}>{i === 0 ? '👑' : i + 1}</div>
-            <Avatar emoji={ag.emoji} bg={ag.bg} size={32} ring={ag.isYou ? true : undefined} />
-            <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{ag.name}{ag.isYou && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: '#fff', background: INK, padding: '1px 7px', borderRadius: 100 }}>You</span>}</div><div style={{ fontSize: 11, color: MUTED2 }}>{ag.owner}</div></div>
+            <Avatar emoji={ag.emoji} bg={ag.bg || `${ag.color || BRAND}1A`} size={32} ring={ag.isYou ? true : undefined} />
+            <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{ag.name}{ag.isYou && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: '#fff', background: INK, padding: '1px 7px', borderRadius: 100 }}>You</span>}</div>{ag.owner && <div style={{ fontSize: 11, color: MUTED2 }}>{ag.owner}</div>}</div>
             <div style={{ fontWeight: 900, color: ag.isYou ? BRAND : INK }}>{ag.pts} <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>pts</span></div>
           </div>
         ))}
@@ -343,12 +349,17 @@ const REVISIONS = [
   { id: 2, topic: 'Integration by Parts Q&A', host: 'Ngozi A.', emoji: '👧🏾', bg: '#E4D4F0', time: 'Live now', joined: 6, max: 10, status: 'live' },
   { id: 3, topic: 'Differential Equations Study Hall', host: 'Tobi M.', emoji: '👦🏾', bg: '#C8D8E8', time: 'Tomorrow · 4 PM', joined: 0, max: 15, status: 'upcoming' },
 ];
-function RevisionsSection() {
+const RV_HOST_EMOJI = ['👦🏾', '👧🏾', '🧑🏽', '👨🏿'];
+const RV_HOST_BG = ['#D4EAD8', '#E4D4F0', '#C8D8E8', '#F0E4C8'];
+function RevisionsSection({ revisions }) {
+  const list = revisions?.length
+    ? revisions.map((s, i) => ({ id: i, topic: s.topic, host: s.host, emoji: RV_HOST_EMOJI[i % RV_HOST_EMOJI.length], bg: RV_HOST_BG[i % RV_HOST_BG.length], time: s.time, joined: s.joined, max: s.max, status: s.status === 'live' ? 'live' : 'upcoming' }))
+    : REVISIONS;
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <SectionTitle sub="Student-hosted group review sessions.">Peer Revision</SectionTitle>
       <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>
-        {REVISIONS.map((s) => (
+        {list.map((s) => (
           <div key={s.id} style={{ ...card, padding: 18, flex: '0 0 min(300px,82vw)', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <div style={{ marginBottom: 6 }}>
@@ -397,6 +408,9 @@ function mapCourse(api) {
       schedule: Array.isArray(api.schedule) && api.schedule.length ? api.schedule : null,
       reviews: Array.isArray(api.reviews) && api.reviews.length ? api.reviews : null,
       teachers: Array.isArray(api.teachers) && api.teachers.length ? api.teachers : null,
+      battles: Array.isArray(api.battles) && api.battles.length ? api.battles : null,
+      leaderboard: Array.isArray(api.leaderboard) && api.leaderboard.length ? api.leaderboard : null,
+      revisions: Array.isArray(api.revisions) && api.revisions.length ? api.revisions : null,
     },
   };
 }
@@ -534,8 +548,8 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
       {tab === 'reviews' && <Reviews reviews={course.reviews} />}
 
       {/* Always-on community sections */}
-      <BattlesSection />
-      <RevisionsSection />
+      <BattlesSection battles={course.battles} leaderboard={course.leaderboard} />
+      <RevisionsSection revisions={course.revisions} />
     </div>
   );
 }
@@ -570,8 +584,8 @@ function EnrolledVideoView({ course, modules }) {
       {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} />}
       {tab === 'about' && <div style={{ ...card, padding: 22 }}><p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7, margin: 0 }}>{course.description || 'A complete course covering the full syllabus with lessons and quizzes.'}</p></div>}
       {tab === 'reviews' && <Reviews reviews={course.reviews} />}
-      {tab === 'battles' && <BattlesSection />}
-      {tab === 'revisions' && <RevisionsSection />}
+      {tab === 'battles' && <BattlesSection battles={course.battles} leaderboard={course.leaderboard} />}
+      {tab === 'revisions' && <RevisionsSection revisions={course.revisions} />}
     </div>
   );
 }

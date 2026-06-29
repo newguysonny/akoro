@@ -158,12 +158,13 @@ router.get("/courses/:id/full", async (req, res) => {
           })),
       }));
 
-    // Schedule — live sessions for this course
+    // Schedule + Peer revisions — both come from live_sessions for this course
     let schedule = [];
+    let revisions = [];
     try {
       const { data: sessions } = await db
         .from("live_sessions")
-        .select("title, topic, status, scheduled_start, scheduled_end")
+        .select("title, topic, status, platform, scheduled_start, scheduled_end, current_participants, max_participants, host:users!instructor_id(full_name, avatar_url)")
         .eq("course_id", id)
         .order("scheduled_start", { ascending: true });
       schedule = (sessions || []).map((s) => {
@@ -174,6 +175,57 @@ router.get("/courses/:id/full", async (req, res) => {
           status: s.status === "live" ? "live" : s.status === "ended" || s.status === "recorded" ? "recorded" : "upcoming",
         };
       });
+      // Revisions = currently live / upcoming community sessions
+      revisions = (sessions || [])
+        .filter((s) => s.status === "live" || s.status === "scheduled" || s.status === "starting")
+        .slice(0, 8)
+        .map((s) => {
+          const { date, time } = formatSchedule(s.scheduled_start, s.scheduled_end);
+          return {
+            topic:  s.topic || s.title,
+            host:   s.host?.full_name || "Host",
+            time:   s.status === "live" ? "Live now" : `${date}${time ? ` · ${time}` : ""}`,
+            joined: s.current_participants || 0,
+            max:    s.max_participants || 20,
+            status: s.status === "live" ? "live" : "upcoming",
+          };
+        });
+    } catch { /* ignore */ }
+
+    // Battles + leaderboard — real battles for this course
+    let battles = [];
+    let leaderboard = [];
+    try {
+      const { data: bts } = await db
+        .from("battles")
+        .select("id, title, topic, subject, status, peak_viewers, created_at, battle_participants(score, role, user_agents(agent_name, agent_emoji, agent_color))")
+        .eq("course_id", id)
+        .order("created_at", { ascending: false })
+        .limit(12);
+
+      battles = (bts || []).map((b) => {
+        const parts = (b.battle_participants || []);
+        const A = parts[0] || {}, B = parts[1] || {};
+        const agA = A.user_agents || {}, agB = B.user_agents || {};
+        return {
+          id:     b.id,
+          topic:  b.title || b.topic || "Battle",
+          status: b.status === "active" || b.status === "live" ? "live" : b.status === "scheduled" ? "upcoming" : "completed",
+          viewers: b.peak_viewers || 0,
+          a: { name: agA.agent_name || "Agent A", emoji: agA.agent_emoji || "🤖", color: agA.agent_color || "#6C3BFF", score: A.score || 0 },
+          b: { name: agB.agent_name || "Agent B", emoji: agB.agent_emoji || "⚡", color: agB.agent_color || "#2563EB", score: B.score || 0 },
+        };
+      });
+
+      // Leaderboard — aggregate scores per agent across the course's battles
+      const agg = {};
+      (bts || []).forEach((b) => (b.battle_participants || []).forEach((p) => {
+        const name = p.user_agents?.agent_name;
+        if (!name) return;
+        if (!agg[name]) agg[name] = { name, emoji: p.user_agents.agent_emoji || "🤖", color: p.user_agents.agent_color || "#6C3BFF", pts: 0 };
+        agg[name].pts += p.score || 0;
+      }));
+      leaderboard = Object.values(agg).sort((x, y) => y.pts - x.pts).slice(0, 6);
     } catch { /* ignore */ }
 
     // Reviews — public list
@@ -223,6 +275,9 @@ router.get("/courses/:id/full", async (req, res) => {
         schedule,
         reviews,
         teachers,
+        battles,
+        leaderboard,
+        revisions,
       },
     });
   } catch (err) {
