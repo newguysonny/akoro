@@ -255,6 +255,127 @@ function Reviews({ reviews }) {
   );
 }
 
+/* ── battles ──────────────────────────────────────────────── */
+const AGENTS = [
+  { id: 'nexus', name: 'Nexus', emoji: '🤖', owner: 'You', bg: `${BRAND}1A`, color: BRAND, isYou: true },
+  { id: 'pythia', name: 'Pythia', emoji: '🔮', owner: 'Dr. Amara', bg: '#EDE8F8', color: '#7C3AED', isTeacher: true },
+  { id: 'axiom', name: 'Axiom', emoji: '⚡', owner: 'Mr. Tobi', bg: '#FFF4C8', color: '#D97706', isTeacher: true },
+  { id: 'zeno', name: 'Zeno', emoji: '🌀', owner: 'Chukwuemeka', bg: '#D4EAD8', color: '#059669' },
+  { id: 'ada', name: 'Ada', emoji: '✨', owner: 'Ngozi', bg: '#E4D4F0', color: '#7C3AED' },
+  { id: 'sigma', name: 'Sigma', emoji: '🔺', owner: 'Babatunde', bg: '#C8D8E8', color: '#2563EB' },
+];
+const BATTLES = [
+  { id: 1, topic: 'Chain Rule Gauntlet', a: 0, b: 1, sa: 7, sb: 5, status: 'live', viewers: 23 },
+  { id: 2, topic: 'Limits Speed Round', a: 2, b: 3, sa: 4, sb: 6, status: 'live', viewers: 11 },
+  { id: 3, topic: 'Integration Masters', a: 4, b: 5, sa: 0, sb: 0, status: 'upcoming', viewers: 0 },
+  { id: 4, topic: 'WAEC Prep Battle', a: 1, b: 4, sa: 9, sb: 7, status: 'completed', viewers: 0 },
+];
+
+function BattleCard({ b }) {
+  const A = AGENTS[b.a], B = AGENTS[b.b];
+  const aWin = b.status === 'completed' && b.sa > b.sb;
+  const bWin = b.status === 'completed' && b.sb > b.sa;
+  const Side = ({ ag, score, win }) => (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <Avatar emoji={ag.emoji} bg={ag.bg} size={42} ring={ag.isYou ? true : undefined} />
+        {win && <div style={{ position: 'absolute', top: -8, right: -8, fontSize: 15 }}>👑</div>}
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: INK, marginTop: 4 }}>{ag.name}</div>
+      <div style={{ fontSize: 10.5, color: MUTED2 }}>{ag.owner}</div>
+      {ag.isTeacher && <div style={{ fontSize: 9, fontWeight: 800, color: BRAND }}>Teacher</div>}
+      <div style={{ fontSize: 19, fontWeight: 900, color: ag.color, marginTop: 2 }}>{score}</div>
+    </div>
+  );
+  return (
+    <div style={{ ...card, padding: 18, flex: '0 0 min(300px,82vw)', display: 'flex', flexDirection: 'column', gap: 12, border: b.status === 'live' ? `1px solid ${BRAND}` : `1px solid ${BORDER}` }}>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: INK, marginBottom: 4 }}>{b.topic}</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {b.status === 'live' && <LiveBadge />}
+          {b.status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 100, background: `${BRAND}14`, color: BRAND }}>Starting soon</span>}
+          {b.status === 'completed' && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 100, background: '#E8F8EE', color: '#2AA76E' }}>Ended</span>}
+          {b.status === 'live' && <span style={{ fontSize: 10.5, color: MUTED2, display: 'flex', alignItems: 'center', gap: 3 }}><Users size={10} />{b.viewers}</span>}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Side ag={A} score={b.sa} win={aWin} />
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: INK, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>VS</div>
+        <Side ag={B} score={b.sb} win={bWin} />
+      </div>
+      <Btn variant={b.status === 'live' ? 'primary' : 'outline'} size="sm" style={{ width: '100%' }}>
+        {b.status === 'live' ? <><Swords size={12} />Watch live</> : b.status === 'upcoming' ? <><Play size={12} />Preview</> : <>View result</>}
+      </Btn>
+    </div>
+  );
+}
+
+function BattlesSection() {
+  const live = BATTLES.filter((b) => b.status === 'live');
+  const leaderboard = AGENTS.map((ag) => ({ ...ag, wins: BATTLES.filter((b) => b.status === 'completed' && ((b.a === AGENTS.indexOf(ag) && b.sa > b.sb) || (b.b === AGENTS.indexOf(ag) && b.sb > b.sa))).length, pts: BATTLES.reduce((s, b) => s + (b.a === AGENTS.indexOf(ag) ? b.sa : b.b === AGENTS.indexOf(ag) ? b.sb : 0), 0) })).sort((x, y) => y.pts - x.pts).slice(0, 5);
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <SectionTitle sub="Agents battle around the clock on this class's curriculum.">24/7 Knowledge Battles</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12 }}>
+        {[['Live', live.length, RED], ['Upcoming', BATTLES.filter((b) => b.status === 'upcoming').length, BRAND], ['Today', BATTLES.filter((b) => b.status === 'completed').length, GREEN], ['Agents', AGENTS.length, '#2563EB']].map(([l, v, c]) => (
+          <div key={l} style={{ ...card, padding: 14 }}><div style={{ fontSize: 20, fontWeight: 900, color: c }}>{v}</div><div style={{ fontSize: 11.5, color: MUTED }}>{l}</div></div>
+        ))}
+      </div>
+      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{BATTLES.map((b) => <BattleCard key={b.id} b={b} />)}</div>
+      <div style={{ ...card, padding: 18 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 10 }}>Class Leaderboard</div>
+        {leaderboard.map((ag, i) => (
+          <div key={ag.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: i < leaderboard.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+            <div style={{ width: 22, textAlign: 'center', fontSize: 15, fontWeight: 900, color: i === 0 ? GOLD : MUTED2 }}>{i === 0 ? '👑' : i + 1}</div>
+            <Avatar emoji={ag.emoji} bg={ag.bg} size={32} ring={ag.isYou ? true : undefined} />
+            <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{ag.name}{ag.isYou && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: '#fff', background: INK, padding: '1px 7px', borderRadius: 100 }}>You</span>}</div><div style={{ fontSize: 11, color: MUTED2 }}>{ag.owner}</div></div>
+            <div style={{ fontWeight: 900, color: ag.isYou ? BRAND : INK }}>{ag.pts} <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>pts</span></div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ── peer revisions ───────────────────────────────────────── */
+const REVISIONS = [
+  { id: 1, topic: 'Chain Rule deep-dive', host: 'Chukwuemeka O.', emoji: '👦🏾', bg: '#D4EAD8', time: 'Starts in 12 min', joined: 8, max: 12, status: 'starting' },
+  { id: 2, topic: 'Integration by Parts Q&A', host: 'Ngozi A.', emoji: '👧🏾', bg: '#E4D4F0', time: 'Live now', joined: 6, max: 10, status: 'live' },
+  { id: 3, topic: 'Differential Equations Study Hall', host: 'Tobi M.', emoji: '👦🏾', bg: '#C8D8E8', time: 'Tomorrow · 4 PM', joined: 0, max: 15, status: 'upcoming' },
+];
+function RevisionsSection() {
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <SectionTitle sub="Student-hosted group review sessions.">Peer Revision</SectionTitle>
+      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>
+        {REVISIONS.map((s) => (
+          <div key={s.id} style={{ ...card, padding: 18, flex: '0 0 min(300px,82vw)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <div style={{ marginBottom: 6 }}>
+                {s.status === 'live' && <LiveBadge />}
+                {s.status === 'starting' && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 100, background: `${BRAND}14`, color: BRAND }}>Starting soon</span>}
+                {s.status === 'upcoming' && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 100, background: '#F0ECE6', color: MUTED2 }}>Upcoming</span>}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>{s.topic}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Avatar emoji={s.emoji} bg={s.bg} size={32} />
+              <div><div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{s.host}</div><div style={{ fontSize: 11, color: MUTED2, display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{s.time}</div></div>
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED2, marginBottom: 5 }}><span><Users size={10} style={{ display: 'inline', marginRight: 3 }} />{s.joined}/{s.max}</span><span>{Math.round((s.joined / s.max) * 100)}% full</span></div>
+              <div style={{ height: 5, background: '#EDE8E1', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(s.joined / s.max) * 100}%`, background: BRAND, borderRadius: 4 }} /></div>
+            </div>
+            <Btn variant={s.status === 'upcoming' ? 'outline' : s.status === 'live' ? 'green' : 'primary'} size="sm" style={{ width: '100%' }}>
+              {s.status === 'upcoming' ? <><CalendarPlus size={12} />Reserve</> : <><Radio size={12} />{s.status === 'live' ? 'Join' : 'Join early'}</>}
+            </Btn>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /* ── map API → view shape ─────────────────────────────────── */
 function mapCourse(api) {
   if (!api) return { course: DEFAULT_COURSE, modules: DEFAULT_MODULES, type: 'live', enrolled: false };
@@ -411,6 +532,10 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
 
       {/* Reviews */}
       {tab === 'reviews' && <Reviews reviews={course.reviews} />}
+
+      {/* Always-on community sections */}
+      <BattlesSection />
+      <RevisionsSection />
     </div>
   );
 }
@@ -437,7 +562,7 @@ function EnrolledVideoView({ course, modules }) {
       </div>
 
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
-        {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews']].map(([id, label]) => (
+        {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews'], ['battles', '⚔️ Battles'], ['revisions', 'Live revisions']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, background: tab === id ? INK : 'transparent', color: tab === id ? '#fff' : MUTED }}>{label}</button>
         ))}
       </div>
@@ -445,6 +570,8 @@ function EnrolledVideoView({ course, modules }) {
       {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} />}
       {tab === 'about' && <div style={{ ...card, padding: 22 }}><p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7, margin: 0 }}>{course.description || 'A complete course covering the full syllabus with lessons and quizzes.'}</p></div>}
       {tab === 'reviews' && <Reviews reviews={course.reviews} />}
+      {tab === 'battles' && <BattlesSection />}
+      {tab === 'revisions' && <RevisionsSection />}
     </div>
   );
 }
