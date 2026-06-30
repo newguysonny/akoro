@@ -202,7 +202,12 @@ export default function SigninPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p style={{ textAlign: 'center', fontSize: 13, color: '#6B6B80', marginTop: 20, marginBottom: 0 }}>
+        <p style={{ textAlign: 'center', fontSize: 11.5, color: '#9490A0', marginTop: 14, marginBottom: 0, lineHeight: 1.6 }}>
+          By signing in, you agree to our{' '}
+          <a href="https://akoro.app/terms" target="_blank" rel="noreferrer" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Terms of Service</a>{' '}and{' '}
+          <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Privacy Policy</a>.
+        </p>
+        <p style={{ textAlign: 'center', fontSize: 13, color: '#6B6B80', marginTop: 16, marginBottom: 0 }}>
           New instructor?{' '}
           <button
             onClick={() => navigate('/signup')}

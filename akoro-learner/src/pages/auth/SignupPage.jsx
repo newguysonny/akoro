@@ -106,6 +106,11 @@ export default function SignupPage() {
             {loading ? t('common.loading') : t('auth.create_account_btn')}
           </button>
         </form>
+        <p style={{ textAlign:'center', fontSize:11.5, color:'var(--ak-text-muted)', marginTop:14, marginBottom:0, lineHeight:1.6 }}>
+          By signing up, you agree to our{' '}
+          <a href="https://akoro.app/terms" target="_blank" rel="noreferrer" style={{ color:BRAND, fontWeight:700, textDecoration:'none' }}>Terms of Service</a>{' '}and{' '}
+          <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color:BRAND, fontWeight:700, textDecoration:'none' }}>Privacy Policy</a>.
+        </p>
         <p style={{ textAlign:'center', fontSize:13, color:'var(--ak-text-sub)', marginTop:20, marginBottom:0 }}>
           {t('auth.have_account')}{' '}
           <Link to="/signin" style={{ color:BRAND, fontWeight:800, textDecoration:'none' }}>{t('auth.signin')}</Link>
