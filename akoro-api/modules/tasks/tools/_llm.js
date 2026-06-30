@@ -28,4 +28,13 @@ export async function llmJson(prompt, opts = {}) {
   return JSON.parse(cleaned);
 }
 
+// Shared pedagogy enrichment — appended to teaching-content prompts so outputs
+// drive active participation and varied learning experiences.
+export const ENRICHMENT =
+  "Enrich the content with practical activities that ensure students' active " +
+  "participation in class and provide various learning experiences. Explicitly " +
+  "include: Real World Connections (where this applies in everyday life), Lesson " +
+  "Hooks (an engaging way to spark curiosity at the start), and Common " +
+  "Misconceptions (mistakes students often make and how to address them).";
+
 export { MODEL };

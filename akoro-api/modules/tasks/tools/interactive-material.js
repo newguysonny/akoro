@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
-import { llmJson, llmText } from "./_llm.js";
+import { llmJson, llmText, ENRICHMENT } from "./_llm.js";
 import { saveToolOutput } from "./_store.js";
 
 export const interactiveMaterialDefinition = {
@@ -62,6 +62,9 @@ export async function executeInteractiveMaterial(rawInput, ctx) {
     `Design an interactive slide deck.
 Topic: "${input.topic}" · Subject: ${input.subject} · Audience: ${input.audience}
 Target ~${input.slideCount} slides.
+
+${ENRICHMENT}
+Open with a Lesson Hook slide, weave in Real World Connections, and add a slide addressing Common Misconceptions.
 
 Return JSON:
 {

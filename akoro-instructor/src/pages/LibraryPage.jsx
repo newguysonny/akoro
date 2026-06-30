@@ -45,6 +45,7 @@ function ArtifactDetail({ output }) {
       return (
         <div>
           {c.objectives?.length > 0 && <Section title="Objectives"><List items={c.objectives} /></Section>}
+          {c.lessonHook && <Section title="Lesson Hook"><p style={{ fontSize: 13, color: INK, margin: 0, lineHeight: 1.55 }}>{c.lessonHook}</p></Section>}
           {c.materials?.length > 0 && <Section title="Materials"><List items={c.materials} /></Section>}
           {c.phases?.length > 0 && (
             <Section title="Lesson Flow">
@@ -62,6 +63,8 @@ function ArtifactDetail({ output }) {
               <p style={{ fontSize: 13, color: INK, margin: '4px 0 0' }}><b>Stretch:</b> {c.differentiation.stretch}</p>
             </Section>
           )}
+          {c.realWorldConnections?.length > 0 && <Section title="Real World Connections"><List items={c.realWorldConnections} /></Section>}
+          {c.commonMisconceptions?.length > 0 && <Section title="Common Misconceptions"><List items={c.commonMisconceptions} /></Section>}
           {c.assessment && <Section title="Assessment"><p style={{ fontSize: 13, color: INK, margin: 0 }}>{c.assessment}</p></Section>}
           {c.homework && <Section title="Homework"><p style={{ fontSize: 13, color: INK, margin: 0 }}>{c.homework}</p></Section>}
         </div>
@@ -71,6 +74,8 @@ function ArtifactDetail({ output }) {
       return (
         <div>
           {c.instructions && <p style={{ fontSize: 13, color: MUTED, marginBottom: 14 }}>{c.instructions}</p>}
+          {c.realWorldConnections?.length > 0 && <Section title="Real World Connections"><List items={c.realWorldConnections} /></Section>}
+          {c.commonMisconceptions?.length > 0 && <Section title="Common Misconceptions"><List items={c.commonMisconceptions} /></Section>}
           {(c.questions || []).map((q, i) => (
             <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{q.n}. {q.question} {q.marks ? <span style={{ color: MUTED2, fontWeight: 600 }}>({q.marks} mks)</span> : null}</div>

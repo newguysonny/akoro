@@ -47,6 +47,7 @@ Subject: ${input.subject}
 Topic(s): "${input.topic}"
 Questions: ${input.questionCount}
 Duration: ${input.durationMins} minutes
+Design multiple-choice distractors around common student misconceptions, and include real-world/applied questions where the topic allows.
 
 Return JSON:
 {

@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
-import { llmJson } from "./_llm.js";
+import { llmJson, ENRICHMENT } from "./_llm.js";
 import { saveToolOutput, resolveTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
 
 export const worksheetFillDefinition = {
@@ -43,12 +43,17 @@ export async function executeWorksheetFill(rawInput, ctx) {
     `Create a worksheet on "${input.topic}" (${input.subject}, ${input.yearGroup}).
 Generate ${input.questionCount} questions of mixed type (fill-in-the-blank, short answer, multiple choice, one problem-solving).
 ${input.includeAnswerKey ? "Include the correct answer for every question." : "Do not include answers."}
+
+${ENRICHMENT}
+Frame several questions with real-world contexts, and include at least one question that targets a common misconception.
 ${templatePromptFragment(tpl)}
 
 Return JSON:
 {
   "title": "<worksheet title>",
   "instructions": "<instructions for students>",
+  "realWorldConnections": ["<real-world application of this topic>", ...],
+  "commonMisconceptions": ["<a common misconception and the correction>", ...],
   "questions": [
     { "n": 1, "type": "mcq|fill_blank|short|problem", "question": "<text>", "options": ["..."]?, "answer": "<answer>"? }
   ]

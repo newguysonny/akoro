@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import { TaskOutputDB } from "../lib/db.js";
-import { llmJson } from "./_llm.js";
+import { llmJson, ENRICHMENT } from "./_llm.js";
 import { saveToolOutput, resolveTemplate, templatePromptFragment, fillTemplateBody } from "./_store.js";
 
 export const lessonPlanFillDefinition = {
@@ -48,6 +48,8 @@ Subject: ${input.subject}
 Class/Year: ${input.yearGroup}
 Duration: ${input.durationMins} minutes
 ${input.objectives.length ? `Objectives to cover:\n- ${input.objectives.join("\n- ")}` : "Generate 3-4 measurable learning objectives."}
+
+${ENRICHMENT}
 ${templatePromptFragment(tpl)}
 
 Return JSON:
@@ -59,11 +61,14 @@ Return JSON:
   "objectives": ["<measurable objective>", ...],
   "materials": ["<material/resource>", ...],
   "keyVocabulary": ["<term>", ...],
+  "lessonHook": "<an engaging hook to open the lesson and spark curiosity>",
   "phases": [
     { "name": "Starter", "minutes": <int>, "activity": "<what teacher & students do>" },
     { "name": "Main", "minutes": <int>, "activity": "..." },
     { "name": "Plenary", "minutes": <int>, "activity": "..." }
   ],
+  "realWorldConnections": ["<how this topic shows up in everyday life / careers>", ...],
+  "commonMisconceptions": ["<a common student misconception and how to address it>", ...],
   "differentiation": { "support": "<for strugglers>", "stretch": "<for able>" },
   "assessment": "<how learning is checked>",
   "homework": "<optional follow-up task>"
