@@ -144,7 +144,7 @@ function CourseCard({ course, onManage, onEdit, onDelete }) {
   const [copied, setCopied] = useState(false);
   const shareLink = async (e) => {
     e.stopPropagation();
-    const url = `${LEARNER_URL}/course/${course.id}`;
+    const url = `${LEARNER_URL}/course/${course.slug || course.id}`;
     try {
       if (navigator.share) { await navigator.share({ title: course.title, url }); return; }
       await navigator.clipboard.writeText(url);

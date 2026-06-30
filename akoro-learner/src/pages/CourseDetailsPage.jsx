@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check,
+  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video,
 } from 'lucide-react';
 import { API } from '../services/api.js';
 import { BRAND } from '../constants.js';
@@ -59,6 +59,43 @@ const StarRow = ({ rating, count }) => (
     <strong style={{ color: INK }}>{rating || '—'}</strong>{count && <span>({count})</span>}
   </span>
 );
+
+const PLATFORMS = { zoom: ['#2D8CFF', 'Zoom'], meet: ['#34A853', 'Google Meet'], teams: ['#5B5EA6', 'MS Teams'], youtube: ['#FF0000', 'YouTube Live'] };
+const PlatformBadge = ({ platform }) => {
+  const cfg = PLATFORMS[platform];
+  if (!cfg) return null;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px', borderRadius: 100, background: cfg[0], color: '#fff', fontSize: 10, fontWeight: 800 }}><Video size={10} />{cfg[1]}</span>;
+};
+
+function ActionChips({ course }) {
+  const [calAdded, setCalAdded] = useState(false);
+  const [agentLinked, setAgentLinked] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const share = async () => {
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    try {
+      if (navigator.share) { await navigator.share({ title: course.title, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    } catch { /* cancelled */ }
+  };
+  const chips = [
+    { key: 'cal', label: calAdded ? 'Added ✓' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v) },
+    { key: 'agent', label: agentLinked ? 'Agent linked ✓' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
+    { key: 'share', label: copied ? 'Link copied ✓' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: share },
+    { key: 'host', label: 'Host revision session', icon: <Plus size={13} />, onClick: () => {} },
+    { key: 'report', label: 'Report', icon: <Flag size={13} />, onClick: () => {} },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {chips.map((a) => (
+        <button key={a.key} onClick={a.onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 800, border: `1.5px solid ${a.active ? BRAND : '#DDD8CF'}`, background: a.active ? BRAND : '#fff', color: a.active ? '#fff' : MUTED }}>
+          {a.icon}{a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const SectionTitle = ({ children, sub }) => (
   <div style={{ marginBottom: 14 }}>
@@ -358,7 +395,7 @@ function BattlesSection({ battles: real, leaderboard: realLb }) {
         </>
       )}
       <div style={{ ...card, padding: 18 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 10 }}>Class Leaderboard</div>
+        <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 10 }}>Course Leaderboard</div>
         {leaderboard.map((ag, i) => (
           <div key={ag.id || ag.name || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: i < leaderboard.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
             <div style={{ width: 22, textAlign: 'center', fontSize: 15, fontWeight: 900, color: i === 0 ? GOLD : MUTED2 }}>{i === 0 ? '👑' : i + 1}</div>
@@ -429,6 +466,7 @@ function mapCourse(api) {
     enrolled: !!api.enrolled,
     modules,
     course: {
+      id: api.id || null, slug: api.slug || null, platform: api.platform || null,
       title: api.title || DEFAULT_COURSE.title, subject: api.subject || DEFAULT_COURSE.subject,
       level: api.level || DEFAULT_COURSE.level, rating: api.rating != null ? Number(api.rating) : null,
       ratingCount: api.rating_count || '', students: api.total_students || 0, hours: api.total_hours || 0,
@@ -449,23 +487,6 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
   const isVideo = type === 'video';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
   const [tab, setTab] = useState('about');
-  const [calAdded, setCalAdded] = useState(false);
-  const [agentLinked, setAgentLinked] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const shareClass = async () => {
-    const url = typeof window !== 'undefined' ? window.location.href : '';
-    try {
-      if (navigator.share) { await navigator.share({ title: course.title, url }); return; }
-      await navigator.clipboard.writeText(url);
-      setCopied(true); setTimeout(() => setCopied(false), 1800);
-    } catch { /* cancelled */ }
-  };
-  const actions = [
-    { key: 'cal', label: calAdded ? 'Added ✓' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v), hide: isVideo },
-    { key: 'agent', label: agentLinked ? 'Agent linked ✓' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
-    { key: 'share', label: copied ? 'Link copied ✓' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: shareClass },
-    { key: 'report', label: 'Report', icon: <Flag size={13} />, onClick: () => {} },
-  ].filter((a) => !a.hide);
   const done = modules.reduce((a, m) => a + m.lessons.filter((l) => l.done).length, 0);
   const total = modules.reduce((a, m) => a + m.lessons.length, 0);
   const teachers = course.teachers
@@ -482,6 +503,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
           <div style={{ flex: 1, minWidth: 240 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
               {isVideo ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 900, padding: '2px 9px', borderRadius: 100, background: BRAND, color: '#fff' }}>🎬 VIDEO COURSE</span> : <LiveBadge />}
+              {!isVideo && course.platform && <PlatformBadge platform={course.platform} />}
               <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,.7)', background: 'rgba(255,255,255,.1)', padding: '3px 10px', borderRadius: 100 }}>{course.subject}</span>
             </div>
             <h1 style={{ fontFamily: FONT, color: '#fff', fontSize: 24, fontWeight: 900, lineHeight: 1.2, margin: '0 0 6px' }}>{course.title}</h1>
@@ -510,13 +532,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
       </div>
 
       {/* Action chips */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {actions.map((a) => (
-          <button key={a.key} onClick={a.onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 100, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 800, border: `1.5px solid ${a.active ? BRAND : '#DDD8CF'}`, background: a.active ? BRAND : '#fff', color: a.active ? '#fff' : MUTED }}>
-            {a.icon}{a.label}
-          </button>
-        ))}
-      </div>
+      <ActionChips course={course} />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
@@ -630,6 +646,9 @@ function EnrolledVideoView({ course, modules }) {
         </div>
       </div>
 
+      {/* Action chips */}
+      <ActionChips course={course} />
+
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
         {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews'], ['battles', '⚔️ Battles'], ['revisions', 'Live revisions']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, background: tab === id ? INK : 'transparent', color: tab === id ? '#fff' : MUTED }}>{label}</button>
@@ -647,7 +666,7 @@ function EnrolledVideoView({ course, modules }) {
 
 /* ── page ─────────────────────────────────────────────────── */
 export default function CourseDetailsPage() {
-  const { id } = useParams();
+  const { slug } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [courseType, setCourseType] = useState('live');
@@ -657,19 +676,23 @@ export default function CourseDetailsPage() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    Promise.all([
-      fetch(`${API}/api/courses/${id}/full`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`${API}/api/courses/${id}/progress`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]).then(([res, prog]) => {
-      if (!alive) return;
+    (async () => {
+      // Fetch the course by name (slug) or id, then probe enrollment with its real id.
+      const res = await fetch(`${API}/api/courses/${slug}/full`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const mapped = mapCourse(res?.course || res);
-      const enrolled = !!(prog && prog.success !== false && (prog.data || prog.overall_progress != null || prog.modules));
+      let enrolled = mapped.enrolled;
+      const cid = mapped.course.id;
+      if (cid) {
+        const prog = await fetch(`${API}/api/courses/${cid}/progress`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        enrolled = enrolled || !!(prog && prog.success !== false && (prog.data || prog.overall_progress != null || prog.modules));
+      }
+      if (!alive) return;
       setData(mapped);
       setCourseType(mapped.type);
-      setIsEnrolled(enrolled || mapped.enrolled);
-    }).finally(() => { if (alive) setLoading(false); });
+      setIsEnrolled(enrolled);
+    })().finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [id]);
+  }, [slug]);
 
   const view = data || mapCourse(null);
 

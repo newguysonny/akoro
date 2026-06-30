@@ -78,7 +78,7 @@ function AppRoutes() {
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/live/:courseId" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
       <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
-      <Route path="/course/:id"  element={<CourseDetailsPage />}/>
+      <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
       <Route path="/about"    element={<AboutPage />}/>

@@ -87,7 +87,7 @@ router.get("/courses/published", async (req, res) => {
 
     const { data, error } = await db
       .from("courses")
-      .select("id, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, course_modules(title, order_index)")
+      .select("id, slug, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, course_modules(title, order_index)")
       .eq("is_published", true)
       .order("rating", { ascending: false })
       .order("total_students", { ascending: false })
@@ -103,6 +103,7 @@ router.get("/courses/published", async (req, res) => {
         .slice(0, 6);
       return {
         id:       c.id,
+        slug:     c.slug,
         cat:      m.cat,
         emoji:    m.emoji,
         grad:     m.grad,
@@ -129,16 +130,18 @@ router.get("/courses/published", async (req, res) => {
 // Unified single-course detail for the course details page. One endpoint;
 // the frontend renders live vs video off the `type` field.
 // =============================================================
-router.get("/courses/:id/full", async (req, res) => {
+router.get("/courses/:idOrSlug/full", async (req, res) => {
   try {
-    const { id } = req.params;
+    const { idOrSlug } = req.params;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
     const { data: c, error } = await db
       .from("courses")
-      .select("id, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, instructor:users!instructor_id(id, full_name, avatar_url), course_modules(id, title, order_index, lessons(id, title, lesson_type, duration_seconds, order_index, is_preview))")
-      .eq("id", id)
+      .select("id, slug, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, instructor:users!instructor_id(id, full_name, avatar_url), course_modules(id, title, order_index, lessons(id, title, lesson_type, duration_seconds, order_index, is_preview))")
+      .eq(isUuid ? "id" : "slug", idOrSlug)
       .single();
 
     if (error || !c) return res.status(404).json({ error: "Course not found" });
+    const id = c.id;   // real course id for the sub-queries below
 
     const m = meta(c.subject);
     const fmtDur = (secs) => (secs ? `${Math.round(secs / 60)}min` : "—");
@@ -161,6 +164,7 @@ router.get("/courses/:id/full", async (req, res) => {
     // Schedule + Peer revisions — both come from live_sessions for this course
     let schedule = [];
     let revisions = [];
+    let platform = null;   // streaming platform of the live / next session
     try {
       const { data: sessions } = await db
         .from("live_sessions")
@@ -190,6 +194,10 @@ router.get("/courses/:id/full", async (req, res) => {
             status: s.status === "live" ? "live" : "upcoming",
           };
         });
+      // Platform from the live session if any, else the soonest scheduled one.
+      const liveS = (sessions || []).find((s) => s.status === "live");
+      const nextS = (sessions || []).find((s) => s.status === "scheduled" || s.status === "starting");
+      platform = (liveS || nextS)?.platform || null;
     } catch { /* ignore */ }
 
     // Battles + leaderboard — real battles for this course
@@ -257,9 +265,11 @@ router.get("/courses/:id/full", async (req, res) => {
       success: true,
       course: {
         id:              c.id,
+        slug:            c.slug,
         title:           c.title,
         description:     c.description,
         subject:         c.subject,
+        platform,
         type:            c.course_type === "video" ? "video" : "live",
         level:           titleCase(c.level),
         rating:          c.rating ? Number(Number(c.rating).toFixed(1)) : null,
