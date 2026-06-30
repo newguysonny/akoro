@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Brain, Zap, Swords, BarChart3, Mic, School, WifiOff, Trophy,
-  Link2, Menu, X, ChevronDown, Star, Check, ArrowRight, Play,
+  Link2, Menu, X, ChevronDown, ChevronLeft, ChevronRight, Star, Check, ArrowRight, Play,
   Shield, Globe, BookOpen, DollarSign, MessageSquare, Cpu, Target,
   Repeat2, Map, Users, Building2, Sparkles, GraduationCap, Clock,
   TrendingUp, Award, Lock, AlertCircle, CheckCircle2, XCircle,
@@ -80,6 +80,16 @@ const FontStyle = () => (
       .ak-hero-btns{flex-direction:column;align-items:stretch}
       .ak-hero-btns button{width:100%;justify-content:center}
     }
+    /* ── Agent spotlight ── */
+    .ak-agent-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .ak-agent-arrows{display:none}
+    @media(max-width:900px){
+      .ak-agent-grid{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:16px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+      .ak-agent-grid::-webkit-scrollbar{display:none}
+      .ak-agent-card{flex:0 0 88%;scroll-snap-align:center}
+      .ak-agent-arrows{display:flex}
+    }
+    @keyframes ak-orbit{to{transform:rotate(360deg)}}
   `}</style>
 );
 
@@ -1075,6 +1085,79 @@ function StickyBar({ onSignup }) {
 }
 
 /* ══════════════ ROOT ══════════════ */
+/* ══════════════ AGENT SPOTLIGHT ══════════════ */
+const SPOTLIGHT_AGENTS = [
+  {
+    name: 'NaNa Esumai', role: 'Teaching Guide', emoji: '🧠', color: B,
+    tools: ['Lesson Guidance', 'Phase Planner', 'Misconception Flags', 'Knowledge Map', 'Voice Coaching'],
+  },
+  {
+    name: 'Sargeant', role: 'Assessor & Proctor', emoji: '⚡', color: '#EF4444',
+    tools: ['Assessment Gate', 'Live Proctoring', 'Confidence Score', 'Spaced Repetition', 'Battle Referee'],
+  },
+];
+const CHIP_POS = [{ top: '4%', left: '50%' }, { top: '26%', left: '90%' }, { top: '72%', left: '88%' }, { top: '95%', left: '50%' }, { top: '48%', left: '8%' }];
+const SPOT_INTEGRATIONS = ['📘', '🔬', '🧮', '📖', '🌍'];
+
+function AgentCard({ a }) {
+  return (
+    <div className="ak-agent-card" style={{ position: 'relative', borderRadius: 24, padding: '24px 20px 20px', background: 'linear-gradient(160deg,#1A1342,#0D1B3A)', overflow: 'hidden', minHeight: 400 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, position: 'relative', zIndex: 2 }}>
+        <span style={{ width: 36, height: 36, borderRadius: 11, background: `${a.color}26`, border: `1px solid ${a.color}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{a.emoji}</span>
+        <div>
+          <div className="fsyne" style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>{a.name}</div>
+          <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 12 }}>{a.role}</div>
+        </div>
+      </div>
+      {/* orbit area */}
+      <div style={{ position: 'relative', height: 300, marginTop: 8 }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', width: 250, height: 250, marginTop: -125, marginLeft: -125, borderRadius: '50%', border: '1.5px dashed rgba(255,255,255,.14)' }} />
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 112, height: 112, borderRadius: '50%', background: `linear-gradient(135deg,${a.color},${a.color}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 50, boxShadow: `0 0 0 4px rgba(255,255,255,.06),0 8px 30px ${a.color}55` }}>{a.emoji}</div>
+        {a.tools.map((t, i) => (
+          <div key={t} style={{ position: 'absolute', top: CHIP_POS[i].top, left: CHIP_POS[i].left, transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: 100, padding: '6px 12px', fontSize: 11.5, fontWeight: 700, color: '#1A1A2E', boxShadow: '0 4px 14px rgba(0,0,0,.25)', whiteSpace: 'nowrap' }}>{t}</div>
+        ))}
+      </div>
+      {/* integrations */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 4, position: 'relative', zIndex: 2 }}>
+        <div style={{ display: 'flex' }}>{SPOT_INTEGRATIONS.map((e, i) => (
+          <span key={i} style={{ width: 30, height: 30, borderRadius: '50%', background: '#fff', border: '2px solid #0D1B3A', marginLeft: i ? -8 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>{e}</span>
+        ))}</div>
+        <span style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, fontWeight: 600 }}>+80 integrations</span>
+      </div>
+    </div>
+  );
+}
+
+function AgentSpotlight() {
+  const trackRef = useRef(null);
+  const scroll = (dir) => { const el = trackRef.current; if (el) el.scrollBy({ left: dir * el.clientWidth * 0.9, behavior: 'smooth' }); };
+  const arrowBtn = { width: 40, height: 40, borderRadius: '50%', border: '1.5px solid #E2DDD6', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#3A3A52' };
+  return (
+    <section id="agents" className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
+      <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, marginBottom: 40, flexWrap: 'wrap' }}>
+          <div>
+            <SL>Meet your agents</SL>
+            <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em', margin: 0 }}>
+              Two AI agents, <em style={{ color: B, fontStyle: 'italic' }}>one for every job</em>
+            </h2>
+            <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 560, marginTop: 10, lineHeight: 1.65 }}>
+              NaNa Esumai guides your teaching; Sargeant assesses and proctors — each with the tools and integrations they need.
+            </p>
+          </div>
+          <div className="ak-agent-arrows" style={{ gap: 8 }}>
+            <button onClick={() => scroll(-1)} aria-label="Previous agent" style={arrowBtn}><ChevronLeft size={18} /></button>
+            <button onClick={() => scroll(1)} aria-label="Next agent" style={arrowBtn}><ChevronRight size={18} /></button>
+          </div>
+        </div>
+        <div className="ak-agent-grid" ref={trackRef}>
+          {SPOTLIGHT_AGENTS.map((a) => <AgentCard key={a.name} a={a} />)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const goSignup = () => navigate('/signup');
@@ -1088,6 +1171,7 @@ export default function LandingPage() {
         <TrustBar/>
         <ProblemSolution/>
         <HowItWorks/>
+        <AgentSpotlight/>
         <Courses/>
         <Features/>
         <Outcomes/>
