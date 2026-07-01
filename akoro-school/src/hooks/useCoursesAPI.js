@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 
 export function useCoursesAPI() {
-  const getCourses    = () => apiGet('/api/instructor/courses');
+  const getCourses    = () => apiGet('/api/school/courses');   // school-scoped: all instructors' courses
   const createCourse  = (data) => apiPost('/api/instructor/courses', data);
   const updateCourse  = (id, data) => apiPatch(`/api/instructor/courses/${id}`, data);
   const deleteCourse  = (id) => apiDelete(`/api/instructor/courses/${id}`);

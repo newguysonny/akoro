@@ -131,6 +131,37 @@ router.post("/instructors/invite", authenticateToken, requireRole(SCHOOL_ROLES),
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── GET /api/school/courses ──────────────────────────────────────────────────
+// All courses across the school's instructors (+ the admin's own), shaped like
+// the instructor course list so the Courses page renders unchanged.
+router.get("/courses", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: teachers } = await db.from("school_teachers").select("teacher_id").eq("school_id", school.id);
+    const ids = [...new Set([...(teachers || []).map((t) => t.teacher_id), req.user.id])];
+
+    const { data: courses } = await db
+      .from("courses")
+      .select("id, slug, title, description, subject, level, is_published, is_free, price, course_type, cover_image_url, total_students, rating, total_hours, created_at, instructor:users!instructor_id(full_name)")
+      .in("instructor_id", ids)
+      .order("created_at", { ascending: false });
+
+    const shaped = await Promise.all((courses || []).map(async (c) => {
+      const { count } = await db.from("enrollments").select("id", { count: "exact", head: true }).eq("course_id", c.id).eq("status", "active");
+      return {
+        ...c,
+        type:             c.course_type === "video" ? "on-demand" : "live",
+        status:           c.is_published ? "active" : "draft",
+        studentsEnrolled: count || 0,
+        thumbnail:        c.cover_image_url || null,
+        instructor_name:  c.instructor?.full_name || null,
+      };
+    }));
+    res.json({ success: true, data: shaped });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GET /api/school/students ─────────────────────────────────────────────────
 router.get("/students", authenticateToken, async (req, res) => {
   try {
