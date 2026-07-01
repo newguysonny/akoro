@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen } from 'lucide-react';
+import {
+  Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen, Clock,
+  FileText, UserCircle, Grid3x3, PieChart, PenTool, AlertTriangle, ArrowLeftRight, TrendingUp,
+} from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, BLUE, PURPLE, FONT } from '../constants.js';
 
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 
@@ -11,6 +14,47 @@ const CATEGORIES = [
   { key: 'tools',  label: 'Tools',  icon: Wrench },
   { key: 'assets', label: 'Assets', icon: BookOpen },
 ];
+
+/* Built-in school-management apps (mock — not part of the paid catalog) */
+const SCHOOL_APPS = [
+  { id: 'qpg',  name: 'Question Paper Generator', desc: 'Generate offline exam papers with Excel import, multi-section support, and print-ready PDFs.', icon: FileText,      iconBg: BLUE,   badge: 'New',  status: 'active' },
+  { id: 's360', name: 'Student 360 View',         desc: 'Unified student profile — attendance, fees, marks, and notes in one page.',                    icon: UserCircle,    iconBg: GREEN,  badge: 'New',  status: 'active' },
+  { id: 'seat', name: 'Seating Arrangement Generator', desc: 'Auto-generate exam hall seating with class interleaving and hall tickets.',                icon: Grid3x3,       iconBg: AMBER,  badge: 'New',  status: 'active' },
+  { id: 'fin',  name: 'Financial Analytics & Reports', desc: 'Advanced P&L, Cash Flow summaries, and Tally exports.',                                    icon: PieChart,      iconBg: INK,    badge: 'New',  status: 'active' },
+  { id: 'wb',   name: 'Digital Whiteboard',       desc: 'Create, save, and share digital whiteboards for teaching and planning using Excalidraw.',      icon: PenTool,       iconBg: INK,    badge: 'New',  status: 'active' },
+  { id: 'risk', name: 'At-Risk Student Detector', desc: 'Flag students at academic risk using attendance and marks trends.',                           icon: AlertTriangle, iconBg: GREEN,  badge: null,   status: 'soon' },
+  { id: 'imp',  name: 'Data Import/Export Utility', desc: 'Bulk import students via Excel and export class data for any module.',                       icon: ArrowLeftRight, iconBg: INK,   badge: null,   status: 'soon' },
+  { id: 'res',  name: 'Result Analysis Tool',     desc: 'Subject-wise averages, pass/fail counts, mark distribution, and rank lists.',                  icon: TrendingUp,    iconBg: BLUE,   badge: null,   status: 'soon' },
+];
+
+/* ── School-management app card ──────────────────────────────────── */
+function SchoolAppCard({ app }) {
+  const soon = app.status === 'soon';
+  const [hover, setHover] = useState(false);
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{
+      background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '24px 22px 20px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', fontFamily: FONT,
+      boxShadow: hover ? '0 10px 30px rgba(26,26,46,.10)' : '0 1px 3px rgba(26,26,46,.04)',
+      transform: hover ? 'translateY(-3px)' : 'none', transition: 'all .18s',
+    }}>
+      <div style={{ width: 60, height: 60, borderRadius: 16, background: app.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: `0 6px 16px ${app.iconBg}44` }}>
+        <app.icon size={28} color={WHITE} strokeWidth={2} />
+      </div>
+      <h3 style={{ fontSize: 15.5, fontWeight: 800, color: INK, margin: '0 0 7px' }}>{app.name}</h3>
+      <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, margin: '0 0 14px', minHeight: 38 }}>{app.desc}</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginBottom: 14, minHeight: 22 }}>
+        {app.badge && <span style={{ padding: '4px 10px', borderRadius: 999, background: '#FEE2E2', color: '#DC2626', fontSize: 11, fontWeight: 800 }}>{app.badge}</span>}
+        {soon && !app.badge && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: '#F1F0EE', color: MUTED2, fontSize: 11, fontWeight: 700 }}><Clock size={11} /> Coming Soon</span>}
+      </div>
+      {soon ? (
+        <button disabled style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#F1F0EE', color: MUTED2, fontSize: 13, fontWeight: 800, fontFamily: FONT, cursor: 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Clock size={15} /> Coming Soon</button>
+      ) : (
+        <button style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: BLUE, color: WHITE, fontSize: 13, fontWeight: 800, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><ArrowRight size={15} /> Open Tool</button>
+      )}
+    </div>
+  );
+}
 
 /* ── Tool / asset card ───────────────────────────────────────────── */
 function AppCard({ item, busy, onBuy }) {
@@ -152,6 +196,23 @@ export default function AppsCenterPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* School management apps */}
+      <div style={{ marginBottom: 30 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>School Management Apps</h2>
+          <span style={{ fontSize: 12, color: MUTED2, fontFamily: FONT }}>Built-in tools for running your school</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
+          {SCHOOL_APPS.map((app) => <SchoolAppCard key={app.id} app={app} />)}
+        </div>
+      </div>
+
+      {/* Agent tools & assets catalog */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>Agent Tools & Assets</h2>
+        <span style={{ fontSize: 12, color: MUTED2, fontFamily: FONT }}>Unlock tools & resources your AI agent uses</span>
       </div>
 
       {/* Search + filters */}
