@@ -6,7 +6,7 @@ import {
   Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog,
   AlertTriangle, Eye, EyeOff, RefreshCw, Check, Languages, Moon, Palette,
   Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, MessageCircle, FileText,
-  ChevronRight,
+  ChevronRight, Globe,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../constants.js';
@@ -24,6 +24,7 @@ const TABS = [
 const EXTERNAL = [
   { key: 'social',        label: 'Social Media',  icon: Facebook, external: true, to: '/settings-social-media' },
   { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true, to: '/settings-telegram' },
+  { key: 'domain',        label: 'Domain',        icon: Globe,    external: true, to: '/settings-domain' },
   { key: 'notifications', label: 'Notifications', icon: Bell,     external: true, to: '/settings-notifications' },
 ];
 const LANGUAGES = ['English', 'Yoruba', 'Igbo', 'Hausa', 'Pidgin', 'French', 'Arabic'];

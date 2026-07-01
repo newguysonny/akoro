@@ -23,6 +23,7 @@ import AppsCenterPage      from './pages/AppsCenterPage.jsx';
 import SettingsBillingPage from './pages/SettingsBillingPage.jsx';
 import SocialMediaPage     from './pages/SocialMediaPage.jsx';
 import TelegramBotPage     from './pages/TelegramBotPage.jsx';
+import DomainPage          from './pages/DomainPage.jsx';
 import NotificationCenterPage from './pages/NotificationCenterPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
@@ -109,6 +110,7 @@ function AppRoutes() {
       <Route path="/settings-billing" element={<ProtectedRoute><SettingsBillingPage /></ProtectedRoute>} />
       <Route path="/settings-social-media" element={<ProtectedRoute><SocialMediaPage /></ProtectedRoute>} />
       <Route path="/settings-telegram" element={<ProtectedRoute><TelegramBotPage /></ProtectedRoute>} />
+      <Route path="/settings-domain" element={<ProtectedRoute><DomainPage /></ProtectedRoute>} />
       <Route path="/settings-notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
