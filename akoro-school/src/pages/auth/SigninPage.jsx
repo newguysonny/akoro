@@ -30,8 +30,8 @@ export default function SigninPage() {
 
   const finishLogin = (data) => {
     const role = data?.user?.role || data?.role;
-    if (role && role !== 'instructor' && role !== 'admin') {
-      setFormErr('This portal is for instructors only');
+    if (role && !['school', 'school_admin', 'instructor', 'admin'].includes(role)) {
+      setFormErr('This portal is for schools only');
       logout();
       return;
     }
@@ -81,7 +81,7 @@ export default function SigninPage() {
         <AkoroLogo size={40} radius={12} />
         <div>
           <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>School Portal</span>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ export default function SigninPage() {
           {challenge ? 'Two-factor verification' : 'Welcome, Tutor'}
         </h1>
         <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
-          {challenge ? 'Enter the 6-digit code from your authenticator app' : 'Sign in to your instructor dashboard'}
+          {challenge ? 'Enter the 6-digit code from your authenticator app' : 'Sign in to your school dashboard'}
         </p>
 
         {challenge ? (
@@ -159,7 +159,7 @@ export default function SigninPage() {
           }}>
             {formErr
               || (urlError === 'google_failed' ? 'Google sign-in failed. Try again.'
-              : urlError === 'not_instructor' ? 'This portal is for instructors only. Your account does not have access.'
+              : urlError === 'not_instructor' ? 'This portal is for schools only. Your account does not have access.'
               : urlError)}
           </div>
         )}
@@ -208,7 +208,7 @@ export default function SigninPage() {
           <a href="https://akoro.app/privacy" target="_blank" rel="noreferrer" style={{ color: AMBER, fontWeight: 700, textDecoration: 'none' }}>Privacy Policy</a>.
         </p>
         <p style={{ textAlign: 'center', fontSize: 13, color: '#6B6B80', marginTop: 16, marginBottom: 0 }}>
-          New instructor?{' '}
+          New school?{' '}
           <button
             onClick={() => navigate('/signup')}
             style={{ background: 'none', border: 'none', color: AMBER, fontWeight: 700, cursor: 'pointer', fontSize: 13, fontFamily: "'DM Sans', sans-serif", padding: 0 }}
@@ -221,7 +221,7 @@ export default function SigninPage() {
       </div>
 
       <p style={{ fontSize: 12, color: '#9490A0', marginTop: 20, textAlign: 'center' }}>
-        This portal is exclusively for instructors and administrators.
+        This portal is exclusively for schools and administrators.
       </p>
     </div>
   );
