@@ -10,6 +10,7 @@ import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
 import InstructorsPage from './pages/InstructorsPage.jsx';
+import ClassroomsPage from './pages/ClassroomsPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
@@ -90,6 +91,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/courses" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
       <Route path="/instructors" element={<ProtectedRoute><InstructorsPage /></ProtectedRoute>} />
+      <Route path="/classes" element={<ProtectedRoute><ClassroomsPage /></ProtectedRoute>} />
       <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />

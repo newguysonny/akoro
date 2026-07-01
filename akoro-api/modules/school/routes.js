@@ -186,6 +186,105 @@ router.get("/students", authenticateToken, async (req, res) => {
 });
 
 // =============================================================
+// CLASSROOMS — create classes, add students, assign a teacher.
+// =============================================================
+
+async function ownClassroom(schoolId, classroomId) {
+  const { data } = await db.from("classrooms").select("id, school_id, name").eq("id", classroomId).maybeSingle();
+  return data && data.school_id === schoolId ? data : null;
+}
+
+// find-or-create a user with the given role, by email
+async function findOrCreateUser(email, fullName, role) {
+  const safe = (email || "").toLowerCase().trim();
+  const { data: existing } = await db.from("users").select("id, full_name, email").eq("email", safe).maybeSingle();
+  if (existing) return existing;
+  const tempPassword = crypto.randomBytes(8).toString("base64").slice(0, 10);
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const base = (safe.split("@")[0] || `user${Date.now()}`).replace(/[^a-zA-Z0-9_]/g, "_");
+  const { data, error } = await db.from("users").insert({
+    email: safe, username: `${base}_${Math.floor(Math.random() * 9000) + 1000}`,
+    password_hash: passwordHash, full_name: fullName || null, role, is_active: true, must_change_password: true,
+  }).select("id, full_name, email").single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// ── GET /api/school/classrooms ───────────────────────────────────────────────
+router.get("/classrooms", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: rooms } = await db
+      .from("classrooms")
+      .select("id, name, description, teacher_id, teacher:users!classrooms_teacher_id_fkey(full_name), classroom_students(id)")
+      .eq("school_id", school.id)
+      .order("created_at", { ascending: false });
+    const shaped = (rooms || []).map((c) => ({
+      id: c.id, name: c.name, description: c.description,
+      teacher_id: c.teacher_id, teacher_name: c.teacher?.full_name || null,
+      student_count: c.classroom_students?.length || 0,
+    }));
+    res.json({ success: true, data: shaped });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/classrooms ──────────────────────────────────────────────
+router.post("/classrooms", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { name, description, teacher_id } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "Class name is required" });
+    const { data, error } = await db.from("classrooms").insert({
+      school_id: school.id, teacher_id: teacher_id || null, name: name.trim(),
+      description: description?.trim() || null, student_limit: 9999, is_upgraded: true,
+    }).select("id, name, description, teacher_id").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data: { ...data, student_count: 0 } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/classrooms/:id/teacher ──────────────────────────────────
+router.post("/classrooms/:id/teacher", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const room = await ownClassroom(school.id, req.params.id);
+    if (!room) return res.status(404).json({ error: "Classroom not found" });
+    const { teacher_id } = req.body;
+    if (!teacher_id) return res.status(400).json({ error: "teacher_id required" });
+    // Teacher must belong to this school
+    const { data: link } = await db.from("school_teachers").select("teacher_id").eq("school_id", school.id).eq("teacher_id", teacher_id).maybeSingle();
+    if (!link) return res.status(400).json({ error: "That teacher is not in your school" });
+    await db.from("classrooms").update({ teacher_id }).eq("id", req.params.id);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/classrooms/:id/students ─────────────────────────────────
+// Body: { user_id } to add an existing student, or { email, full_name } to create+add.
+router.post("/classrooms/:id/students", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const room = await ownClassroom(school.id, req.params.id);
+    if (!room) return res.status(404).json({ error: "Classroom not found" });
+
+    let userId = req.body.user_id;
+    if (!userId) {
+      if (!req.body.email?.trim()) return res.status(400).json({ error: "user_id or email required" });
+      const u = await findOrCreateUser(req.body.email, req.body.full_name, "student");
+      userId = u.id;
+    }
+    const { data: already } = await db.from("classroom_students").select("id").eq("classroom_id", room.id).eq("user_id", userId).maybeSingle();
+    if (already) return res.status(409).json({ error: "Student already in this class" });
+    await db.from("classroom_students").insert({ classroom_id: room.id, user_id: userId, status: "active" });
+    res.status(201).json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =============================================================
 // SCHOOL AGENT — the school's dedicated AI agent (one per school).
 // Reuses the user_agents record of the school-admin account, so the whole
 // chat / training / tools pipeline works, but it's presented and defaulted

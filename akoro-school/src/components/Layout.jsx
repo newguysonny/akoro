@@ -26,6 +26,7 @@ const NAV = [
   { to: '/courses',  icon: BookOpen,      label: 'Courses' },
   { to: '/instructors', icon: GraduationCap, label: 'Instructors' },
   { to: '/students', icon: Users,         label: 'Students' },
+  { to: '/classes',  icon: Library,       label: 'Classes' },
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
   { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
