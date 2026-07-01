@@ -47,7 +47,7 @@ const NAV_SECTIONS = [
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
     { label: 'Assessments', icon: FileCheck, to: '/assessments' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
-    { label: 'Marketplace', icon: Store, to: '/marketplace' },
+    { label: 'Tools & Assets', icon: Store, to: '/marketplace' },
     { label: 'Content Library', icon: Library, to: '/library' },
     // Placeholder module groups (pages not built yet)
     { label: 'Study Center', icon: BookOpenCheck, children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },

@@ -251,15 +251,20 @@ export default function MarketplacePage() {
     }
   };
 
-  const items     = tab === 'tools' ? tools : assets;
-  const ownedCount = items.filter((i) => i.owned).length;
+  // This page shows only what the instructor already owns; browsing/unlocking
+  // lives in the App Center.
+  const items      = (tab === 'tools' ? tools : assets).filter((i) => i.owned);
+  const ownedCount = items.length;
 
   return (
-    <PageLayout title="Tools & Assets" subtitle="Unlock platform tools & exam resources for your agent">
+    <PageLayout title="Tools & Assets" subtitle="Your unlocked tools, assets & templates">
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         {/* Tabs */}
         <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${BORDER}`, gap: 4 }}>
-          {[['tools', `🛠️ Tools${tools.length ? ` (${tools.length})` : ''}`], ['assets', `📚 Assets${assets.length ? ` (${assets.length})` : ''}`]].map(([t, label]) => (
+          {(() => {
+            const ot = tools.filter((i) => i.owned).length, oa = assets.filter((i) => i.owned).length;
+            return [['tools', `🛠️ Tools${ot ? ` (${ot})` : ''}`], ['assets', `📚 Assets${oa ? ` (${oa})` : ''}`]];
+          })().map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)} style={{
               flex: 1, padding: '9px 0', borderRadius: 9, border: 'none',
               background: tab === t ? BRAND : 'transparent',
@@ -307,7 +312,7 @@ export default function MarketplacePage() {
           <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>
             {tab === 'tools' ? 'Teaching Tools' : 'Exam Resources'}
           </p>
-          {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>{ownedCount} of {items.length} unlocked</span>}
+          {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>{ownedCount} unlocked</span>}
         </div>
 
         {/* List */}
@@ -318,8 +323,9 @@ export default function MarketplacePage() {
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 24px', color: MUTED2, fontSize: 14 }}>
-            Nothing here yet — check back soon.
+          <div style={{ textAlign: 'center', padding: '40px 24px', color: MUTED2, fontSize: 13.5, lineHeight: 1.6 }}>
+            You haven’t unlocked any {tab} yet.<br />
+            <a href="/apps" style={{ color: BRAND, fontWeight: 800, textDecoration: 'none' }}>Browse the App Center →</a>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
