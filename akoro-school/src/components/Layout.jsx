@@ -8,6 +8,7 @@ import {
   Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
   LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
   User, Settings, ShieldQuestion,
+  BookOpen, Presentation, Swords, ListTodo, FileCheck, Store,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
@@ -37,6 +38,18 @@ const NAV_SECTIONS = [
     { label: 'Assessment', icon: ShieldCheck, children: ['Assessment Dashboard','Assessments','Assessment Guide','Assessment Reports'] },
   ]},
   { section: 'MODULES', items: [
+    // Live pages already built in the dashboard
+    { label: 'Courses', icon: BookOpen, to: '/courses' },
+    { label: 'Instructors', icon: Presentation, to: '/instructors' },
+    { label: 'Classes', icon: GraduationCap, to: '/classes' },
+    { label: 'Students', icon: Users, to: '/students' },
+    { label: 'Battles', icon: Swords, to: '/battles' },
+    { label: 'Tasks', icon: ListTodo, to: '/tasks' },
+    { label: 'Assessments', icon: FileCheck, to: '/assessments' },
+    { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
+    { label: 'Marketplace', icon: Store, to: '/marketplace' },
+    { label: 'Content Library', icon: Library, to: '/library' },
+    // Placeholder module groups (pages not built yet)
     { label: 'Study Center', icon: BookOpenCheck, children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },
     { label: 'Certificates', icon: Award, children: ['Certificate Templates','Generate Document'] },
     { label: 'Communicate', icon: Megaphone, children: ['Notice Board','Events & Holidays','Compose Broadcast','Broadcast History','Image Gallery'] },
@@ -56,8 +69,8 @@ const NAV_SECTIONS = [
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
   ]},
   { section: 'ACCOUNT', items: [
-    { label: 'My Profile', icon: User, to: '#' },
-    { label: 'Account Settings', icon: Settings, to: '#' },
+    { label: 'My Profile', icon: User, to: '/profile' },
+    { label: 'Account Settings', icon: Settings, to: '/settings' },
     { label: 'Help & Support', icon: ShieldQuestion, to: '#' },
   ]},
 ];
