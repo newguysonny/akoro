@@ -1,91 +1,125 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, GraduationCap } from 'lucide-react';
+import {
+  LayoutDashboard, Banknote, Landmark, Users, GraduationCap, DoorOpen,
+  ClipboardList, Layers, Laptop, UserCog, CalendarClock, NotebookPen,
+  ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone,
+  Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
+  LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, FONT } from '../constants.js';
 
-/* Collapse the sidebar to icons-only on tablet widths (769–1024px).
-   Desktop (>1024px) and mobile (≤768px) are unchanged. */
-function useMediaQuery(query) {
-  const get = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false);
-  const [matches, setMatches] = useState(get);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const onChange = () => setMatches(mql.matches);
-    onChange();
-    mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
-  }, [query]);
-  return matches;
-}
-
-const NAV = [
-  { to: '/',         icon: Home,          label: 'Home' },
-  { to: '/courses',  icon: BookOpen,      label: 'Courses' },
-  { to: '/instructors', icon: GraduationCap, label: 'Instructors' },
-  { to: '/students', icon: Users,         label: 'Students' },
-  { to: '/classes',  icon: Library,       label: 'Classes' },
-  { to: '/battles',  icon: Swords,        label: 'Battles' },
-  { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
-  { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
-  { to: '/marketplace', icon: Store,       label: 'Tools & Assets' },
-  { to: '/library',  icon: Library,       label: 'Library' },
-  { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },
-  { to: '/profile',  icon: UserCircle,    label: 'Profile' },
-  { to: '/settings', icon: Settings,      label: 'Settings' },
+/* ── Nav tree ──────────────────────────────────────────────────────
+   Leaves with a real `to` navigate; children (strings) are placeholders
+   for now (pages not built yet). Groups expand/collapse. */
+const NAV_SECTIONS = [
+  { section: 'MAIN NAVIGATION', items: [
+    { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
+    { label: 'Finance & Fees', icon: Banknote, children: ['Fees Dashboard','Collect Fees','Search Due Fees','All Transactions','Online Transactions','Fee Challans','Assign Fees','Fees Carry Forward','Fee Groups','Fees Discount','Fee Types','Generate Due Slip','Due Slip History'] },
+    { label: 'Accounts', icon: Landmark, children: ['Accounts Dashboard','Income','Expense','Income Heads','Expense Heads','Bank Accounts'] },
+    { label: 'Student Information', icon: Users, children: ['Student Dashboard','Student Admission','Student List','Student Attendance','Behavior Records','Student Houses','Student Categories','Disabled Students','Health Records'] },
+    { label: 'Academics', icon: GraduationCap, children: ['Academic Dashboard','Academic Sessions','Classes','Sections','Subjects','Assign Subjects','Assign Electives','Assign Class Teacher','Manage Periods','Class Timetable','Promote Students'] },
+    { label: 'Front Office', icon: DoorOpen, children: ['Front Office Dashboard','Admission Enquiries','Visitor Book','Complaints','Postal Records'] },
+    { label: 'Offline Examinations', icon: ClipboardList, children: ['Exam Dashboard','Manage Offline Exams','Exam Types','Schedule & Marks Setup','Enter Marks','Cocurricular Areas','Cocurricular Grades','Manage Grades','Report Card Setups','Generate Marksheet','Upload Marksheet','Manage Uploads','Teacher Remarks'] },
+    { label: 'CBC Academics', icon: Layers, children: ['CBC Dashboard','Strands & Outcomes','CBC Assessments','Core Competencies','Pathways & Tracks','CBC Reports'] },
+    { label: 'Online Examinations', icon: Laptop, children: ['Manage Online Exams','Question Bank'] },
+    { label: 'Human Resource', icon: UserCog, children: ['HR Dashboard','Staff Directory','Staff Attendance','Payroll','Set Salary','Approve Leave','Leave Types','Departments','Designations','Leave Management','Staff ID Card','HR Settings','Manage Staff Loans','Salary Templates','Appraisal Cycles','Appraisal Criteria','Appraisals'] },
+    { label: 'PTM Meetings', icon: CalendarClock, children: ['PTM Dashboard','PTM Schedule Meetings','PTM Guide','PTM Attendance & Remarks','PTM Follow-ups','PTM Reports'] },
+    { label: 'Lesson Planner', icon: NotebookPen, children: ['Lesson Planner Dashboard','Lesson Plans','Lesson Planner Guide','Lesson Plan Review','Lesson Plan Approvals','Lesson Plan Coverage','Lesson Plan Reports','Lesson Planner Settings'] },
+    { label: 'OSM Module', icon: ClipboardCheck, children: ['OSM Dashboard','OSM Sessions','OSM Evaluate','OSM Reports','OSM Guide','OSM Moderation'] },
+    { label: 'QR Code Attendance', icon: QrCode, children: ['QR Attendance','QR Attendance Setting','QR Attendance Report'] },
+    { label: 'Assessment', icon: ShieldCheck, children: ['Assessment Dashboard','Assessments','Assessment Guide','Assessment Reports'] },
+    { label: 'Study Center', icon: BookOpenCheck, children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },
+    { label: 'Certificates', icon: Award, children: ['Certificate Templates','Generate Document'] },
+    { label: 'Communicate', icon: Megaphone, children: ['Notice Board','Events & Holidays','Compose Broadcast','Broadcast History','Image Gallery'] },
+    { label: 'Library', icon: Library, children: ['Library Dashboard','Issue/Return Book','Manage Books','Book Categories'] },
+    { label: 'Inventory', icon: Package, children: ['Inventory Dashboard','Issue Item','Add Stock','Item List','Item Categories','Suppliers','Point of Sale','Sales History','Purchase Orders','Goods Receipts','Supplier Payments'] },
+    { label: 'Transport', icon: Bus, children: ['Transport Dashboard','Manage Vehicles','Manage Routes','Live Vehicle Tracking'] },
+    { label: 'Hostel', icon: BedDouble, children: ['Hostel Dashboard','Student Allocation','Manage Rooms','Room Types','Manage Hostels'] },
+    { label: 'Help Center', icon: LifeBuoy, children: ['Manage Categories','Browse Articles','AI Chatbot'] },
+    { label: 'Asset Management', icon: Boxes, children: ['Asset Dashboard','Asset Register','Asset Categories','Asset Assignments','Asset Depreciation','Asset Maintenance','Asset Disposals','Asset Audits','Asset Reports'] },
+  ]},
+  { section: 'MODULES', items: [
+    { label: 'Reports & Analytics', icon: BarChart3, to: '#' },
+    { label: 'Settings & Billing', icon: CreditCard, children: ['School Settings','Backup Management','Custom Fields','Roles & Permissions','Payment Gateway','Notification Settings','Admission Settings','Audit Trail','Subscription','Subscription History','Module Settings','Biometric Devices','School Website'] },
+  ]},
+  { section: 'SYSTEM', items: [
+    { label: 'Apps Center', icon: LayoutGrid, to: '#' },
+  ]},
+  { section: 'COMMUNICATION', items: [
+    { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
+  ]},
 ];
 
-function NavItem({ to, icon: Icon, label, compact }) {
+/* ── Leaf (real link or placeholder) ─────────────────────────────── */
+function Leaf({ item, collapsed }) {
+  const base = {
+    display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12,
+    justifyContent: collapsed ? 'center' : 'flex-start',
+    padding: collapsed ? '11px 0' : '9px 16px', borderRadius: 10,
+    margin: collapsed ? '2px 10px' : '2px 8px', textDecoration: 'none',
+    fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', border: 'none',
+    background: 'transparent', width: collapsed ? 'auto' : 'calc(100% - 16px)',
+  };
+  if (item.to && item.to !== '#') {
+    return (
+      <NavLink to={item.to} end={item.to === '/'} title={collapsed ? item.label : undefined}
+        style={({ isActive }) => ({ ...base, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', fontWeight: isActive ? 600 : 400, borderLeft: !collapsed && isActive ? `3px solid ${AMBER}` : '3px solid transparent' })}>
+        <item.icon size={18} />{!collapsed && <span>{item.label}</span>}
+      </NavLink>
+    );
+  }
   return (
-    <NavLink
-      to={to}
-      end={to === '/'}
-      title={compact ? label : undefined}
-      style={({ isActive }) => ({
-        display: 'flex', alignItems: 'center',
-        gap: compact ? 0 : 12,
-        justifyContent: compact ? 'center' : 'flex-start',
-        padding: compact ? '11px 0' : '10px 16px',
-        borderRadius: 10, margin: compact ? '2px 10px' : '2px 8px',
-        textDecoration: 'none', color: isActive ? WHITE : MUTED2,
-        background: isActive ? `${AMBER}22` : 'transparent',
-        fontFamily: FONT, fontSize: 14, fontWeight: isActive ? 600 : 400,
-        transition: 'all .15s',
-        borderLeft: compact
-          ? '3px solid transparent'
-          : (isActive ? `3px solid ${AMBER}` : '3px solid transparent'),
-      })}
-    >
-      <Icon size={18} />
-      {!compact && <span>{label}</span>}
-    </NavLink>
+    <button title={collapsed ? item.label : undefined} style={{ ...base, color: MUTED2, textAlign: 'left' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = WHITE; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED2; }}>
+      <item.icon size={18} />{!collapsed && <span>{item.label}</span>}
+    </button>
   );
 }
 
-export function Sidebar() {
+/* ── Group (expandable) ──────────────────────────────────────────── */
+function Group({ item, collapsed, open, onToggle }) {
+  return (
+    <div>
+      <button title={collapsed ? item.label : undefined} onClick={onToggle}
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '9px 16px', margin: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, background: open && !collapsed ? 'rgba(255,255,255,.04)' : 'transparent', color: open ? WHITE : MUTED2 }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = WHITE; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = open ? WHITE : MUTED2; }}>
+        <item.icon size={18} />
+        {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
+        {!collapsed && <ChevronDown size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
+      </button>
+      {open && !collapsed && (
+        <div style={{ margin: '2px 8px 6px 8px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
+          {item.children.map((c) => (
+            <button key={c} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, color: MUTED2, textAlign: 'left', borderRadius: 8 }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = WHITE; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED2; }}>
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{c}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Sidebar({ collapsed }) {
   const { user, logout } = useAuth();
-  const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+  const [open, setOpen] = useState({});
+  const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
 
   return (
-    <aside style={{
-      width: compact ? 72 : 240, flexShrink: 0, background: INK,
-      display: 'flex', flexDirection: 'column',
-      height: '100vh', overflow: 'hidden',
-      transition: 'width .15s',
-    }}>
+    <aside style={{ width: collapsed ? 72 : 256, flexShrink: 0, background: INK, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width .15s' }}>
       {/* Logo */}
-      <div style={{
-        padding: compact ? '24px 0 16px' : '24px 20px 16px',
-        borderBottom: `1px solid rgba(255,255,255,.07)`,
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          justifyContent: compact ? 'center' : 'flex-start', gap: 10,
-        }}>
-          <AkoroLogo size={36} radius={10} />
-          {!compact && (
+      <div style={{ padding: collapsed ? '20px 0 14px' : '20px 20px 14px', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 10 }}>
+          <AkoroLogo size={34} radius={10} />
+          {!collapsed && (
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
               <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>School Portal</div>
@@ -95,57 +129,31 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
+      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
+        {NAV_SECTIONS.map((sec) => (
+          <div key={sec.section} style={{ marginBottom: 6 }}>
+            {!collapsed && <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, color: 'rgba(255,255,255,.35)', padding: '10px 20px 4px', fontFamily: FONT }}>{sec.section}</div>}
+            {collapsed && <div style={{ height: 1, background: 'rgba(255,255,255,.06)', margin: '8px 14px' }} />}
+            {sec.items.map((item) => item.children
+              ? <Group key={item.label} item={item} collapsed={collapsed} open={!!open[item.label]} onToggle={() => toggle(item.label)} />
+              : <Leaf key={item.label} item={item} collapsed={collapsed} />)}
+          </div>
+        ))}
       </nav>
 
-      {/* User */}
-      <div style={{
-        padding: '16px', borderTop: `1px solid rgba(255,255,255,.07)`,
-        display: 'flex', flexDirection: compact ? 'column' : 'row',
-        alignItems: 'center', gap: compact ? 12 : 10,
-      }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: '50%',
-          background: `linear-gradient(135deg, ${AMBER}, ${AMBER}88)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, fontWeight: 700, color: WHITE, flexShrink: 0,
-        }}
-        title={compact ? (user?.fullName || user?.email || '') : undefined}>
-          {(user?.fullName || user?.email || 'T')[0].toUpperCase()}
+      {/* Account / user */}
+      <div style={{ padding: '14px', borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', flexDirection: collapsed ? 'column' : 'row', alignItems: 'center', gap: collapsed ? 10 : 10 }}>
+        <div title={collapsed ? (user?.fullName || user?.email || '') : undefined} style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${AMBER}, ${AMBER}88)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: WHITE, flexShrink: 0 }}>
+          {(user?.fullName || user?.email || 'S')[0].toUpperCase()}
         </div>
-        {!compact && (
+        {!collapsed && (
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.fullName || 'Instructor'}
-            </div>
-            <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.email || ''}
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.fullName || 'School Admin'}</div>
+            <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email || ''}</div>
           </div>
         )}
-        <button
-          onClick={logout}
-          title="Sign out"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: MUTED2, padding: 4, borderRadius: 6, flexShrink: 0,
-          }}
-        >
-          <LogOut size={16} />
-        </button>
+        <button onClick={logout} title="Sign out" style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2, padding: 4, borderRadius: 6, flexShrink: 0 }}><LogOut size={16} /></button>
       </div>
-      {/* Legal links */}
-      {!compact && (
-        <div style={{ padding: '10px 20px 14px', display: 'flex', gap: 12 }}>
-          <a href="/privacy" style={{ fontSize: 10, color: MUTED2, textDecoration: 'none', fontFamily: FONT, transition: 'color .15s' }}
-            onMouseEnter={e => e.target.style.color = '#fff'}
-            onMouseLeave={e => e.target.style.color = MUTED2}>Privacy</a>
-          <a href="/terms" style={{ fontSize: 10, color: MUTED2, textDecoration: 'none', fontFamily: FONT, transition: 'color .15s' }}
-            onMouseEnter={e => e.target.style.color = '#fff'}
-            onMouseLeave={e => e.target.style.color = MUTED2}>Terms</a>
-        </div>
-      )}
     </aside>
   );
 }
@@ -153,65 +161,36 @@ export function Sidebar() {
 function BellButton() {
   const navigate = useNavigate();
   const [unread, setUnread] = useState(0);
-
   const poll = useCallback(async () => {
-    try {
-      const res = await apiGet('/api/notifications?limit=1');
-      setUnread(res.unread ?? 0);
-    } catch {}
+    try { const res = await apiGet('/api/notifications?limit=1'); setUnread(res.unread ?? 0); } catch {}
   }, []);
-
   useEffect(() => {
     poll();
     const t = setInterval(poll, 60_000);
-    const onFocus  = () => poll();
-    const onChange = () => poll();
+    const onFocus = () => poll();
     window.addEventListener('focus', onFocus);
-    window.addEventListener('akoro:notifications-changed', onChange);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('akoro:notifications-changed', onChange);
-    };
+    return () => { clearInterval(t); window.removeEventListener('focus', onFocus); };
   }, [poll]);
-
   return (
-    <button
-      onClick={() => navigate('/notifications')}
-      style={{
-        position: 'relative', background: WHITE, border: `1.5px solid ${BORDER}`,
-        borderRadius: 10, padding: '8px', cursor: 'pointer', color: MUTED,
-        display: 'flex', alignItems: 'center',
-      }}
-    >
+    <button onClick={() => navigate('/notifications')} style={{ position: 'relative', background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: MUTED, display: 'flex', alignItems: 'center' }}>
       <Bell size={16} />
-      {unread > 0 && (
-        <span style={{
-          position: 'absolute', top: -4, right: -4,
-          background: AMBER, color: WHITE, borderRadius: '50%',
-          width: 16, height: 16, fontSize: 9, fontWeight: 700,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: FONT, border: `2px solid ${WHITE}`,
-        }}>
-          {unread > 9 ? '9+' : unread}
-        </span>
-      )}
+      {unread > 0 && <span style={{ position: 'absolute', top: -4, right: -4, background: AMBER, color: WHITE, borderRadius: '50%', width: 16, height: 16, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, border: `2px solid ${WHITE}` }}>{unread > 9 ? '9+' : unread}</span>}
     </button>
   );
 }
 
-export function TopBar({ title, subtitle, action }) {
+export function TopBar({ title, subtitle, action, onToggleSidebar }) {
   return (
-    <div style={{
-      position: 'sticky', top: 0, zIndex: 10,
-      background: 'rgba(250,248,245,.95)', backdropFilter: 'blur(8px)',
-      borderBottom: `1px solid ${BORDER}`,
-      padding: '16px 28px',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    }}>
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
-        {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
+    <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(250,248,245,.95)', backdropFilter: 'blur(8px)', borderBottom: `1px solid ${BORDER}`, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* Hamburger — collapses the sidebar to icons-only */}
+        <button onClick={onToggleSidebar} title="Toggle sidebar" style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
+          <Menu size={17} />
+        </button>
+        <div>
+          <h1 style={{ fontSize: 19, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
+          {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
@@ -221,47 +200,17 @@ export function TopBar({ title, subtitle, action }) {
   );
 }
 
-export function BottomNav() {
-  return (
-    <div style={{
-      display: 'none',
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
-      background: WHITE, borderTop: `1px solid ${BORDER}`,
-      padding: '8px 0 12px',
-    }}
-    className="bottom-nav"
-    >
-      {NAV.map(({ to, icon: Icon, label }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === '/'}
-          style={({ isActive }) => ({
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            flex: 1, textDecoration: 'none',
-            color: isActive ? AMBER : MUTED,
-            fontSize: 10, fontFamily: FONT, fontWeight: isActive ? 600 : 400,
-          })}
-        >
-          <Icon size={20} />
-          {label}
-        </NavLink>
-      ))}
-    </div>
-  );
-}
+export function BottomNav() { return null; }
 
 export function PageLayout({ children, title, subtitle, action }) {
+  const [collapsed, setCollapsed] = useState(false);
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+      <Sidebar collapsed={collapsed} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <TopBar title={title} subtitle={subtitle} action={action} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-          {children}
-        </main>
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={() => setCollapsed((c) => !c)} />
+        <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>{children}</main>
       </div>
-      <BottomNav />
     </div>
   );
 }
