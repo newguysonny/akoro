@@ -62,7 +62,21 @@ const NAV_SECTIONS = [
     { label: 'Reports & Analytics', icon: BarChart3, to: '#' },
   ]},
   { section: 'SYSTEM', items: [
-    { label: 'Settings & Billing', icon: CreditCard, to: '/settings-billing' },
+    { label: 'Settings & Billing', icon: CreditCard, children: [
+      { label: 'School Settings', to: '/settings-billing' },
+      'Backup Management',
+      'Custom Fields',
+      'Roles & Permissions',
+      'Payment Gateway',
+      'Notification Settings',
+      'Admission Settings',
+      'Audit Trail',
+      'Subscription',
+      'Subscription History',
+      'Module Settings',
+      'Biometric Devices',
+      'School Website',
+    ] },
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
   ]},
   { section: 'COMMUNICATION', items: [
@@ -104,6 +118,7 @@ function Leaf({ item, collapsed }) {
 
 /* ── Group (expandable) ──────────────────────────────────────────── */
 function Group({ item, collapsed, open, onToggle }) {
+  const navigate = useNavigate();
   return (
     <div>
       <button title={collapsed ? item.label : undefined} onClick={onToggle}
@@ -116,13 +131,18 @@ function Group({ item, collapsed, open, onToggle }) {
       </button>
       {open && !collapsed && (
         <div style={{ margin: '2px 8px 6px 8px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
-          {item.children.map((c) => (
-            <button key={c} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, color: MUTED2, textAlign: 'left', borderRadius: 8 }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = WHITE; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED2; }}>
-              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{c}
-            </button>
-          ))}
+          {item.children.map((c) => {
+            const label = typeof c === 'string' ? c : c.label;
+            const to = typeof c === 'string' ? null : c.to;
+            return (
+              <button key={label} onClick={() => to && navigate(to)}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, color: MUTED2, textAlign: 'left', borderRadius: 8 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.05)'; e.currentTarget.style.color = WHITE; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED2; }}>
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{label}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -143,7 +163,7 @@ export function Sidebar({ collapsed }) {
           .map((item) => {
             if (item.label.toLowerCase().includes(q)) return item;
             if (item.children) {
-              const kids = item.children.filter((c) => c.toLowerCase().includes(q));
+              const kids = item.children.filter((c) => (typeof c === 'string' ? c : c.label).toLowerCase().includes(q));
               if (kids.length) return { ...item, children: kids };
             }
             return null;

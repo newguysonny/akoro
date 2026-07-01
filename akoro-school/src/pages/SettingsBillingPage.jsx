@@ -538,7 +538,7 @@ export default function SettingsBillingPage() {
   };
 
   return (
-    <PageLayout title="Settings & Billing" subtitle="Manage your school profile, formats and integrations">
+    <PageLayout title="School Settings" subtitle="Manage your school profile, formats and integrations">
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left tab rail */}
         <aside style={{ width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
