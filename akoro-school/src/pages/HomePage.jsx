@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords } from 'lucide-react';
+import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords, GraduationCap } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../components/Primitives.jsx';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
@@ -361,12 +361,10 @@ export default function HomePage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 16, marginBottom: 28,
         }}>
-          <StatCard icon={Users}    label="Total Students" value={(stats?.total_students ?? 0).toLocaleString()} sub="enrolled across all courses" color={BLUE}   loading={loading} />
-          <StatCard icon={BookOpen} label="Active Courses" value={stats?.active_courses ?? 0}                   sub="currently live"               color={AMBER}  loading={loading} />
-          <StatCard icon={Layers}   label="Total Courses"  value={stats?.total_courses ?? 0}                    sub="published & draft"            color={PURPLE} loading={loading} />
-          <StatCard icon={Wallet}   label="Revenue"        value={`₦${(stats?.total_revenue ?? 0).toLocaleString()}`} sub="from enrollments"      color={GREEN}  loading={loading} />
-          <StatCard icon={Zap}      label="Agent XP"       value={(stats?.agent_xp ?? 0).toLocaleString()}      sub={`Level ${stats?.agent_level ?? 1}`} color={AMBER} loading={loading} />
-          <StatCard icon={Flame}    label="Streak"         value={`${stats?.streak_days ?? 0}d`}                sub="keep it going"                color={GREEN}  loading={loading} />
+          <StatCard icon={Users}          label="Students"    value={(stats?.total_students ?? 0).toLocaleString()} sub="across the school" color={BLUE}   loading={loading} />
+          <StatCard icon={GraduationCap}  label="Instructors" value={stats?.total_instructors ?? 0}                 sub="teaching staff"    color={AMBER}  loading={loading} />
+          <StatCard icon={BookOpen}       label="Courses"     value={stats?.total_courses ?? 0}                     sub="published & draft" color={PURPLE} loading={loading} />
+          <StatCard icon={Layers}         label="Classrooms"  value={stats?.total_classrooms ?? 0}                  sub="active groups"     color={GREEN}  loading={loading} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>

@@ -2,9 +2,16 @@ import { apiGet, apiPost, apiDelete } from '../services/api.js';
 import { API } from '../constants.js';
 
 export function useStudentsAPI() {
-  const getStudents = (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return apiGet(`/api/instructor/students${q ? '?' + q : ''}`);
+  // School-scoped: all students across the school's classrooms.
+  const getStudents = async () => {
+    const res = await apiGet('/api/school/students');
+    const rows = (res?.data || []).map((r) => ({
+      ...r,
+      fullName:        r.full_name,
+      coursesEnrolled: r.course_count || 0,
+      enrollmentId:    r.id,
+    }));
+    return { data: rows };
   };
 
   const addStudent = (data) =>

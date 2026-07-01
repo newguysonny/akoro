@@ -34,6 +34,7 @@ export default function OnboardingPage() {
   const validateStep = () => {
     setErr('');
     if (step === 0 && !fullName.trim()) { setErr('Please enter your name'); return false; }
+    if (step === 0 && !schoolName.trim()) { setErr('Please enter your school name'); return false; }
     if (step === 1 && subjects.length === 0) { setErr('Pick at least one subject you teach'); return false; }
     return true;
   };
@@ -63,6 +64,18 @@ export default function OnboardingPage() {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.message || 'Could not save your setup');
       }
+      // Create the school profile (sets role → school_admin). Skip if one
+      // already exists for this account.
+      try {
+        const existing = await fetch(`${API}/api/school`, { credentials: 'include' });
+        if (!existing.ok && schoolName.trim()) {
+          await fetch(`${API}/api/profiles/schools`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: schoolName.trim() }),
+          });
+        }
+      } catch { /* non-fatal — school can be created later */ }
       markOnboarded();
       navigate('/', { replace: true });
     } catch (e) {
