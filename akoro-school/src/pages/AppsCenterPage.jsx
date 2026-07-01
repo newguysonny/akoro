@@ -10,9 +10,10 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, BLUE, PURPLE, FONT } f
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 
 const CATEGORIES = [
-  { key: 'all',    label: 'All',    icon: LayoutGrid },
-  { key: 'tools',  label: 'Tools',  icon: Wrench },
-  { key: 'assets', label: 'Assets', icon: BookOpen },
+  { key: 'all',    label: 'All',              icon: LayoutGrid },
+  { key: 'mgmt',   label: 'Management Tools', icon: Grid3x3 },
+  { key: 'tools',  label: 'Agent Tools',      icon: Wrench },
+  { key: 'assets', label: 'Assets',           icon: BookOpen },
 ];
 
 /* Built-in school-management apps (mock — not part of the paid catalog) */
@@ -156,14 +157,18 @@ export default function AppsCenterPage() {
     finally { setBusyId(null); }
   };
 
+  const mgmt = useMemo(() => SCHOOL_APPS.map((a) => ({ ...a, _kind: 'mgmt' })), []);
+
   const q = query.trim().toLowerCase();
   const catalog = useMemo(() => {
-    let list = cat === 'tools' ? tools : cat === 'assets' ? assets : [...tools, ...assets];
-    if (q) list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q));
+    let list = cat === 'mgmt' ? mgmt
+      : cat === 'tools' ? tools
+      : cat === 'assets' ? assets
+      : [...mgmt, ...tools, ...assets];
+    if (q) list = list.filter((i) => (i.name || '').toLowerCase().includes(q) || (i.description || i.desc || '').toLowerCase().includes(q));
     return list;
-  }, [cat, q, tools, assets]);
+  }, [cat, q, mgmt, tools, assets]);
 
-  const total    = tools.length + assets.length;
   const unlocked = [...tools, ...assets].filter((i) => i.owned).length;
 
   return (
@@ -186,9 +191,10 @@ export default function AppsCenterPage() {
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           {[
-            { n: tools.length,  l: 'TOOLS',    c: AMBER },
-            { n: assets.length, l: 'ASSETS',   c: WHITE },
-            { n: unlocked,      l: 'UNLOCKED', c: GREEN },
+            { n: mgmt.length,   l: 'MGMT TOOLS', c: BLUE },
+            { n: tools.length,  l: 'AGENT TOOLS', c: AMBER },
+            { n: assets.length, l: 'ASSETS',      c: WHITE },
+            { n: unlocked,      l: 'UNLOCKED',    c: GREEN },
           ].map((s) => (
             <div key={s.l} style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12, padding: '12px 18px', textAlign: 'center', minWidth: 74 }}>
               <div style={{ fontSize: 24, fontWeight: 800, color: s.c }}>{s.n}</div>
@@ -196,23 +202,6 @@ export default function AppsCenterPage() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* School management apps */}
-      <div style={{ marginBottom: 30 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>School Management Apps</h2>
-          <span style={{ fontSize: 12, color: MUTED2, fontFamily: FONT }}>Built-in tools for running your school</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
-          {SCHOOL_APPS.map((app) => <SchoolAppCard key={app.id} app={app} />)}
-        </div>
-      </div>
-
-      {/* Agent tools & assets catalog */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>Agent Tools & Assets</h2>
-        <span style={{ fontSize: 12, color: MUTED2, fontFamily: FONT }}>Unlock tools & resources your AI agent uses</span>
       </div>
 
       {/* Search + filters */}
@@ -250,7 +239,9 @@ export default function AppsCenterPage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
-          {catalog.map((item) => <AppCard key={`${item._kind}-${item.id}`} item={item} busy={busyId === item.id} onBuy={buy} />)}
+          {catalog.map((item) => item._kind === 'mgmt'
+            ? <SchoolAppCard key={`mgmt-${item.id}`} app={item} />
+            : <AppCard key={`${item._kind}-${item.id}`} item={item} busy={busyId === item.id} onBuy={buy} />)}
         </div>
       )}
 
