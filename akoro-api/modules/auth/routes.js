@@ -54,6 +54,7 @@ const SCHOOL_FRONTEND_URL     = process.env.SCHOOL_FRONTEND_URL      || "https:/
 const portalUrl = (portal) =>
   portal === "instructor" ? INSTRUCTOR_FRONTEND_URL
   : portal === "admin"    ? ADMIN_FRONTEND_URL
+  : portal === "school"   ? SCHOOL_FRONTEND_URL
   : FRONTEND_URL;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 
@@ -719,7 +720,7 @@ router.post("/change-password", authenticateToken, authHandlers.changePassword);
 
 // Google OAuth
 // ?portal=instructor | admin  →  signals which portal the login came from
-const PORTALS = ["instructor", "admin", "student"];
+const PORTALS = ["instructor", "admin", "student", "school"];
 router.get("/google", (req, res, next) => {
   const portal = PORTALS.includes(req.query.portal) ? req.query.portal : "student";
   passport.authenticate("google", {
@@ -746,6 +747,9 @@ router.get("/google/callback",
     }
     if (portal === "admin" && user.role !== "admin") {
       return res.redirect(`${ADMIN_FRONTEND_URL}/signin?error=not_admin`);
+    }
+    if (portal === "school" && !["school", "school_admin", "admin"].includes(user.role)) {
+      return res.redirect(`${SCHOOL_FRONTEND_URL}/signin?error=not_instructor`);
     }
 
     const { token: accessToken } = signAccess(user);

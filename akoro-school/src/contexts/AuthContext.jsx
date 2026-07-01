@@ -19,14 +19,23 @@ function getStoredUser() {
 }
 
 async function authFetch(path, body) {
-  const res = await fetch(`${API}${path}`, {
-    method:      'POST',
-    credentials: 'include',
-    headers:     { 'Content-Type': 'application/json' },
-    body:        JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `${path} failed`);
+  let res;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("Couldn't reach the server. Check your connection and try again.");
+  }
+  // Tolerate empty / non-JSON bodies (e.g. rate-limit or gateway errors) so we
+  // surface a clear message instead of "Unexpected end of JSON input".
+  const text = await res.text();
+  let json = {};
+  if (text) { try { json = JSON.parse(text); } catch { json = {}; } }
+  if (!res.ok) throw new Error(json.message || json.error || `Request failed (${res.status})`);
   return json;
 }
 
@@ -108,7 +117,7 @@ export function AuthProvider({ children }) {
 
   const loginWithGoogle = useCallback((redirectAfter = '/') => {
     localStorage.setItem(REDIRECT_KEY, redirectAfter);
-    window.location.href = `${API}/api/auth/google?portal=instructor`;
+    window.location.href = `${API}/api/auth/google?portal=school`;
   }, []);
 
   // Token is now in HttpOnly cookie — only user object comes via URL param
@@ -120,7 +129,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!getStoredUser()) return;
     fetch(`${API}/api/auth/me`, { credentials: 'include' })
-      .then(r => r.json())
+      .then(async (r) => { const t = await r.text(); try { return t ? JSON.parse(t) : {}; } catch { return {}; } })
       .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
       .catch(() => refresh());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
