@@ -6,7 +6,8 @@ import {
   ClipboardList, Layers, Laptop, UserCog, CalendarClock, NotebookPen,
   ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone,
   Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
-  LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu,
+  LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
+  User, Settings, ShieldQuestion,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
@@ -18,6 +19,8 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, FONT } from '../constants.js'
 const NAV_SECTIONS = [
   { section: 'MAIN NAVIGATION', items: [
     { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
+  ]},
+  { section: 'MANAGEMENT', items: [
     { label: 'Finance & Fees', icon: Banknote, children: ['Fees Dashboard','Collect Fees','Search Due Fees','All Transactions','Online Transactions','Fee Challans','Assign Fees','Fees Carry Forward','Fee Groups','Fees Discount','Fee Types','Generate Due Slip','Due Slip History'] },
     { label: 'Accounts', icon: Landmark, children: ['Accounts Dashboard','Income','Expense','Income Heads','Expense Heads','Bank Accounts'] },
     { label: 'Student Information', icon: Users, children: ['Student Dashboard','Student Admission','Student List','Student Attendance','Behavior Records','Student Houses','Student Categories','Disabled Students','Health Records'] },
@@ -51,6 +54,11 @@ const NAV_SECTIONS = [
   ]},
   { section: 'COMMUNICATION', items: [
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
+  ]},
+  { section: 'ACCOUNT', items: [
+    { label: 'My Profile', icon: User, to: '#' },
+    { label: 'Account Settings', icon: Settings, to: '#' },
+    { label: 'Help & Support', icon: ShieldQuestion, to: '#' },
   ]},
 ];
 
@@ -111,7 +119,25 @@ function Group({ item, collapsed, open, onToggle }) {
 export function Sidebar({ collapsed }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState({});
+  const [query, setQuery] = useState('');
   const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
+
+  const q = query.trim().toLowerCase();
+  const sections = q
+    ? NAV_SECTIONS.map((sec) => ({
+        ...sec,
+        items: sec.items
+          .map((item) => {
+            if (item.label.toLowerCase().includes(q)) return item;
+            if (item.children) {
+              const kids = item.children.filter((c) => c.toLowerCase().includes(q));
+              if (kids.length) return { ...item, children: kids };
+            }
+            return null;
+          })
+          .filter(Boolean),
+      })).filter((sec) => sec.items.length)
+    : NAV_SECTIONS;
 
   return (
     <aside style={{ width: collapsed ? 72 : 256, flexShrink: 0, background: INK, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width .15s' }}>
@@ -128,17 +154,39 @@ export function Sidebar({ collapsed }) {
         </div>
       </div>
 
+      {/* Search menu */}
+      {!collapsed ? (
+        <div style={{ padding: '12px 14px 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '8px 12px' }}>
+            <Search size={15} color={MUTED2} style={{ flexShrink: 0 }} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search menu…"
+              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: WHITE, fontSize: 13, fontFamily: FONT, minWidth: 0 }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+          <Search size={17} color={MUTED2} />
+        </div>
+      )}
+
       {/* Nav */}
       <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
-        {NAV_SECTIONS.map((sec) => (
+        {sections.map((sec) => (
           <div key={sec.section} style={{ marginBottom: 6 }}>
             {!collapsed && <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, color: 'rgba(255,255,255,.35)', padding: '10px 20px 4px', fontFamily: FONT }}>{sec.section}</div>}
             {collapsed && <div style={{ height: 1, background: 'rgba(255,255,255,.06)', margin: '8px 14px' }} />}
             {sec.items.map((item) => item.children
-              ? <Group key={item.label} item={item} collapsed={collapsed} open={!!open[item.label]} onToggle={() => toggle(item.label)} />
+              ? <Group key={item.label} item={item} collapsed={collapsed} open={q ? true : !!open[item.label]} onToggle={() => toggle(item.label)} />
               : <Leaf key={item.label} item={item} collapsed={collapsed} />)}
           </div>
         ))}
+        {q && sections.length === 0 && (
+          <div style={{ padding: '16px 20px', fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No menu matches “{query}”.</div>
+        )}
       </nav>
 
       {/* Account / user */}
