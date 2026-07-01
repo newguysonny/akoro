@@ -70,8 +70,8 @@ const NAV_SECTIONS = [
   ]},
   { section: 'ACCOUNT', items: [
     { label: 'My Profile', icon: User, to: '/profile' },
-    { label: 'Account Settings', icon: Settings, to: '/settings' },
-    { label: 'Help & Support', icon: ShieldQuestion, to: '#' },
+    { label: 'Account Settings', icon: Settings, to: '/settings-billing' },
+    { label: 'Help & Support', icon: ShieldQuestion, to: '/settings-billing' },
   ]},
 ];
 

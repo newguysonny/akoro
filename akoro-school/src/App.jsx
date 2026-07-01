@@ -16,7 +16,6 @@ import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
-import SettingsPage       from './pages/SettingsPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import MarketplacePage     from './pages/MarketplacePage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
@@ -101,7 +100,7 @@ function AppRoutes() {
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
-      <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/settings"       element={<Navigate to="/settings-billing" replace />} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
       <Route path="/library"        element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />

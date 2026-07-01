@@ -5,9 +5,20 @@ import {
   UserX, BookOpen, KeyRound, Laptop, Video, Library, Bus, MapPin,
   CheckSquare, FileText, AlertTriangle, ClipboardList, Cake, LogOut,
   CalendarClock, NotebookPen, PartyPopper, ClipboardCheck, Edit3, Settings,
+  UserPlus2, Swords, ListChecks, Megaphone, Volume2, Monitor,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+
+const PREFERENCES = [
+  { key: 'newStudent',      label: 'New student enrolled', icon: UserPlus2, on: true },
+  { key: 'sessionReminder', label: 'Session reminders',    icon: Clock,     on: true },
+  { key: 'battleChallenge', label: 'Battle challenges',    icon: Swords,    on: true },
+  { key: 'taskDeadline',    label: 'Task deadlines',       icon: ListChecks, on: true },
+  { key: 'platformUpdates', label: 'Platform updates',     icon: Megaphone, on: false },
+  { key: 'inAppSound',      label: 'In-app sounds',        icon: Volume2,   on: true },
+  { key: 'desktopPush',     label: 'Desktop push',         icon: Monitor,   on: false },
+];
 
 const ALERTS = [
   { id: 1,  name: 'Parent Fee Paid',        desc: 'Sent to parent when an online fee payment is successful.',    icon: CreditCard,      color: BLUE,   active: true,  editable: false, push: true,  email: false },
@@ -66,8 +77,10 @@ function StatCard({ n, label, color }) {
 export default function NotificationCenterPage() {
   const [rows, setRows] = useState(ALERTS.map((a) => ({ ...a, push: a.push })));
   const [query, setQuery] = useState('');
+  const [prefs, setPrefs] = useState(() => Object.fromEntries(PREFERENCES.map((p) => [p.key, p.on])));
 
   const togglePush = (id) => setRows((prev) => prev.map((r) => (r.id === id ? { ...r, push: !r.push } : r)));
+  const togglePref = (key) => setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -88,6 +101,25 @@ export default function NotificationCenterPage() {
         <StatCard n={activeCount} label="Active Alerts"   color={GREEN} />
         <StatCard n={smsLocked}   label="SMS Locked"      color={RED} />
         <StatCard n={whatsapp}    label="WhatsApp Enabled" color={BLUE} />
+      </div>
+
+      {/* Notification preferences */}
+      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px', marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <Bell size={16} color={AMBER} />
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Notification Preferences</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 4 }}>
+          {PREFERENCES.map((p) => (
+            <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: `${AMBER}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <p.icon size={15} color={AMBER} />
+              </div>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: INK, fontFamily: FONT }}>{p.label}</span>
+              <MiniToggle on={prefs[p.key]} onChange={() => togglePref(p.key)} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Search + config toggle */}

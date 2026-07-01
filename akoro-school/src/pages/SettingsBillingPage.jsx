@@ -4,24 +4,30 @@ import {
   Building2, SlidersHorizontal, Clock, ShieldCheck, Plug, Facebook, Send,
   Bell, BookOpen, Info, Sparkles, Save, ExternalLink, Upload,
   Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog,
-  AlertTriangle, Eye, EyeOff, RefreshCw, Check,
+  AlertTriangle, Eye, EyeOff, RefreshCw, Check, Languages, Moon, Palette,
+  Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, MessageCircle, FileText,
+  ChevronRight,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../constants.js';
 
 /* ── Tab config ──────────────────────────────────────────────────── */
 const TABS = [
-  { key: 'profile',      label: 'School Profile',   icon: Building2 },
-  { key: 'formats',      label: 'System & Formats', icon: SlidersHorizontal },
-  { key: 'attendance',   label: 'Attendance',       icon: Clock },
-  { key: 'security',      label: 'Security',        icon: ShieldCheck },
-  { key: 'integrations', label: 'Integrations',     icon: Plug },
+  { key: 'profile',      label: 'School Profile',    icon: Building2 },
+  { key: 'formats',      label: 'System & Formats',  icon: SlidersHorizontal },
+  { key: 'attendance',   label: 'Attendance',        icon: Clock },
+  { key: 'security',     label: 'Privacy & Security', icon: ShieldCheck },
+  { key: 'integrations', label: 'Integrations',      icon: Plug },
+  { key: 'help',         label: 'Help & Support',    icon: HelpCircle },
+  { key: 'about',        label: 'About',             icon: Info },
 ];
 const EXTERNAL = [
   { key: 'social',        label: 'Social Media',  icon: Facebook, external: true, to: '/settings-social-media' },
   { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true, to: '#' },
   { key: 'notifications', label: 'Notifications', icon: Bell,     external: true, to: '/settings-notifications' },
 ];
+const LANGUAGES = ['English', 'Yoruba', 'Igbo', 'Hausa', 'Pidgin', 'French', 'Arabic'];
+const ACCENTS   = [AMBER, '#6C3BFF', '#3B82F6', '#10B981', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 /* Mock school record (replace with GET /api/school later) */
 const MOCK = {
@@ -97,6 +103,37 @@ function UploadTile({ label, preview }) {
   );
 }
 
+function Row({ icon: Icon, label, sublabel, right, onClick, danger, last }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14, padding: '13px 4px',
+        borderBottom: last ? 'none' : `1px solid ${BORDER}`, cursor: onClick ? 'pointer' : 'default',
+        color: danger ? RED : INK, transition: 'background .1s', borderRadius: 8,
+      }}
+      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.background = LIGHT; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      {Icon && (
+        <div style={{
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          background: danger ? `${RED}15` : `${AMBER}18`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: danger ? RED : AMBER,
+        }}>
+          <Icon size={16} />
+        </div>
+      )}
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, fontFamily: FONT }}>{label}</div>
+        {sublabel && <div style={{ fontSize: 11.5, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>{sublabel}</div>}
+      </div>
+      {right ?? (onClick && <ChevronRight size={16} color={MUTED2} />)}
+    </div>
+  );
+}
+
 /* ── School Profile panel ────────────────────────────────────────── */
 function SchoolProfilePanel() {
   const [form, setForm] = useState(MOCK);
@@ -146,6 +183,9 @@ function SystemFormatsPanel() {
   const [taxLabel, setTaxLabel] = useState('VAT');
   const [taxId, setTaxId] = useState('TIN');
   const [prefix, setPrefix] = useState('SCH');
+  const [lang, setLang] = useState('English');
+  const [darkMode, setDarkMode] = useState(false);
+  const [accent, setAccent] = useState(AMBER);
 
   return (
     <div>
@@ -215,6 +255,44 @@ function SystemFormatsPanel() {
         Live Preview: <b style={{ color: BLUE }}>{prefix || 'SCH'}-2027-2028-JUL26-0005</b>
       </div>
       <Field label="Receipt Prefix"><input style={{ ...inputStyle, maxWidth: 260 }} value={prefix} onChange={(e) => setPrefix(e.target.value)} /></Field>
+
+      <div style={{ marginTop: 26 }}>
+        <SectionHeader color={AMBER} icon={Palette} title="Personalisation" />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <Row
+            icon={Languages}
+            label="Language"
+            sublabel={lang}
+            right={
+              <select value={lang} onChange={(e) => setLang(e.target.value)}
+                style={{ border: `1.5px solid ${BORDER}`, borderRadius: 8, padding: '6px 10px', fontFamily: FONT, fontSize: 13, background: WHITE, color: INK, cursor: 'pointer' }}>
+                {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
+              </select>
+            }
+          />
+          <Row
+            icon={Moon}
+            label="Dark Mode"
+            sublabel="Currently in preview"
+            right={<Toggle on={darkMode} onChange={setDarkMode} />}
+          />
+          <Row
+            icon={Palette}
+            label="Accent Colour"
+            last
+            right={
+              <div style={{ display: 'flex', gap: 6 }}>
+                {ACCENTS.map((c) => (
+                  <div key={c} onClick={() => setAccent(c)} style={{
+                    width: 20, height: 20, borderRadius: '50%', background: c, cursor: 'pointer',
+                    outline: accent === c ? `2px solid ${c}` : 'none', outlineOffset: 2,
+                  }} />
+                ))}
+              </div>
+            }
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -305,9 +383,18 @@ function SecurityPanel() {
         <span style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>Enable Maintenance Mode</span>
         <Toggle on={maintenance} onChange={setMaintenance} />
       </div>
-      <p style={{ fontSize: 12, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.6 }}>
+      <p style={{ fontSize: 12, color: MUTED, margin: '0 0 26px', fontFamily: FONT, lineHeight: 1.6 }}>
         When active, <b style={{ color: INK }}>Students and Parents</b> will be blocked from accessing the portal and mobile app. Staff and Admins still have access to the panel.
       </p>
+
+      <SectionHeader color={AMBER} icon={ShieldCheck} title="Privacy & Security" />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <Row icon={Key}         label="Change Password" sublabel="Update your account password"     onClick={() => {}} />
+        <Row icon={ShieldCheck} label="Two-Factor Auth"  sublabel="Add an extra layer of security"    onClick={() => {}} />
+        <Row icon={Lock}        label="Active Sessions"  sublabel="View and revoke active sessions"   onClick={() => {}} />
+        <Row icon={PauseCircle} label="Deactivate Account" sublabel="Temporarily disable your account" onClick={() => {}} danger />
+        <Row icon={Trash2}      label="Delete Account"   sublabel="Permanently remove all your data"  onClick={() => {}} danger last />
+      </div>
     </div>
   );
 }
@@ -346,6 +433,34 @@ function IntegrationsPanel() {
   );
 }
 
+/* ── Help & Support panel ────────────────────────────────────────── */
+function HelpSupportPanel() {
+  return (
+    <div>
+      <SectionHeader color={BLUE} icon={HelpCircle} title="Help & Support" />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <Row icon={HelpCircle}    label="Help Centre"  sublabel="Browse guides and FAQs"       onClick={() => {}} />
+        <Row icon={Bug}           label="Report a Bug" sublabel="Something not working right?"  onClick={() => {}} />
+        <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => {}} last />
+      </div>
+    </div>
+  );
+}
+
+/* ── About panel ──────────────────────────────────────────────────── */
+function AboutPanel() {
+  return (
+    <div>
+      <SectionHeader color={AMBER} icon={Info} title="About" />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <Row icon={FileText} label="Terms of Service" onClick={() => {}} />
+        <Row icon={FileText} label="Privacy Policy"   onClick={() => {}} />
+        <Row icon={Info}     label="App Version"       last right={<span style={{ fontSize: 13, color: MUTED2, fontFamily: FONT }}>1.0.0</span>} />
+      </div>
+    </div>
+  );
+}
+
 const QUICK_GUIDE = {
   profile: [
     { t: 'Acronyms', d: 'Short names (e.g. “YIS”) are used in automated SMS templates to save characters and reduce carrier costs.' },
@@ -368,6 +483,13 @@ const QUICK_GUIDE = {
   ],
   integrations: [
     { t: 'API Key', d: 'Never share this key. It is the cryptographic handshake that allows your physical Windows terminal to sync securely directly into this cloud database.' },
+  ],
+  help: [
+    { t: 'Response Time', d: 'Our team typically replies to support tickets within one business day.' },
+    { t: 'Bug Reports', d: 'Include screenshots and steps to reproduce so we can fix it faster.' },
+  ],
+  about: [
+    { t: 'Updates', d: 'Akoro School is updated regularly — check back here for the latest app version.' },
   ],
 };
 
@@ -437,6 +559,8 @@ export default function SettingsBillingPage() {
           {tab === 'attendance'   && <AttendancePanel />}
           {tab === 'security'     && <SecurityPanel />}
           {tab === 'integrations' && <IntegrationsPanel />}
+          {tab === 'help'         && <HelpSupportPanel />}
+          {tab === 'about'        && <AboutPanel />}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 26, paddingTop: 18, borderTop: `1px solid ${BORDER}` }}>
             <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, boxShadow: `0 4px 14px ${AMBER}44` }}>
