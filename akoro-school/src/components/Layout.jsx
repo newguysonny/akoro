@@ -35,6 +35,8 @@ const NAV_SECTIONS = [
     { label: 'OSM Module', icon: ClipboardCheck, children: ['OSM Dashboard','OSM Sessions','OSM Evaluate','OSM Reports','OSM Guide','OSM Moderation'] },
     { label: 'QR Code Attendance', icon: QrCode, children: ['QR Attendance','QR Attendance Setting','QR Attendance Report'] },
     { label: 'Assessment', icon: ShieldCheck, children: ['Assessment Dashboard','Assessments','Assessment Guide','Assessment Reports'] },
+  ]},
+  { section: 'MODULES', items: [
     { label: 'Study Center', icon: BookOpenCheck, children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },
     { label: 'Certificates', icon: Award, children: ['Certificate Templates','Generate Document'] },
     { label: 'Communicate', icon: Megaphone, children: ['Notice Board','Events & Holidays','Compose Broadcast','Broadcast History','Image Gallery'] },
@@ -44,12 +46,10 @@ const NAV_SECTIONS = [
     { label: 'Hostel', icon: BedDouble, children: ['Hostel Dashboard','Student Allocation','Manage Rooms','Room Types','Manage Hostels'] },
     { label: 'Help Center', icon: LifeBuoy, children: ['Manage Categories','Browse Articles','AI Chatbot'] },
     { label: 'Asset Management', icon: Boxes, children: ['Asset Dashboard','Asset Register','Asset Categories','Asset Assignments','Asset Depreciation','Asset Maintenance','Asset Disposals','Asset Audits','Asset Reports'] },
-  ]},
-  { section: 'MODULES', items: [
     { label: 'Reports & Analytics', icon: BarChart3, to: '#' },
-    { label: 'Settings & Billing', icon: CreditCard, children: ['School Settings','Backup Management','Custom Fields','Roles & Permissions','Payment Gateway','Notification Settings','Admission Settings','Audit Trail','Subscription','Subscription History','Module Settings','Biometric Devices','School Website'] },
   ]},
   { section: 'SYSTEM', items: [
+    { label: 'Settings & Billing', icon: CreditCard, children: ['School Settings','Backup Management','Custom Fields','Roles & Permissions','Payment Gateway','Notification Settings','Admission Settings','Audit Trail','Subscription','Subscription History','Module Settings','Biometric Devices','School Website'] },
     { label: 'Apps Center', icon: LayoutGrid, to: '#' },
   ]},
   { section: 'COMMUNICATION', items: [
