@@ -185,4 +185,52 @@ router.get("/students", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// =============================================================
+// SCHOOL AGENT — the school's dedicated AI agent (one per school).
+// Reuses the user_agents record of the school-admin account, so the whole
+// chat / training / tools pipeline works, but it's presented and defaulted
+// as the SCHOOL's agent (named after the school).
+// =============================================================
+const AGENT_SELECT = "id, agent_name, agent_emoji, agent_color, agent_bg, total_xp, personality, teacher_agent_id, guide_name, guide_emoji, guide_render_style, is_active";
+
+// ── GET /api/school/agent ────────────────────────────────────────────────────
+router.get("/agent", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+
+    let { data: agent } = await db.from("user_agents").select(AGENT_SELECT).eq("user_id", req.user.id).maybeSingle();
+    if (!agent) {
+      const { data: created, error } = await db.from("user_agents").insert({
+        user_id:      req.user.id,
+        agent_name:   `${school.name} Agent`,
+        agent_emoji:  "🏫",
+        agent_color:  "#E8884A",
+        agent_bg:     "#FEF0E6",
+        teacher_agent_id: "nana-sargeant",
+        guide_name:   "NaNa Esumai",
+        guide_emoji:  "🧠",
+        is_active:    true,
+      }).select(AGENT_SELECT).single();
+      if (error) throw new Error(error.message);
+      agent = created;
+    }
+    res.json({ success: true, data: { agent, school: { id: school.id, name: school.name } } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PATCH /api/school/agent ──────────────────────────────────────────────────
+router.patch("/agent", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const allowed = ["agent_name", "agent_emoji", "agent_color", "agent_bg", "personality"];
+    const patch = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
+    if (!Object.keys(patch).length) return res.status(400).json({ error: "No valid fields (agent_name, agent_emoji, agent_color, agent_bg, personality)" });
+    patch.updated_at = new Date();
+
+    const { data, error } = await db.from("user_agents").update(patch).eq("user_id", req.user.id).select(AGENT_SELECT).single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;

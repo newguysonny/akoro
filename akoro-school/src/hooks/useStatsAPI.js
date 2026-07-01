@@ -14,6 +14,8 @@ export function useStatsAPI() {
     } };
   };
   const getProfile  = () => apiGet('/api/instructor/profile');
-  const updateAgent = (data) => apiPatch('/api/instructor/profile/agent', data);
-  return { getStats, getProfile, updateAgent };
+  // The school's dedicated agent (chat + training operate on this).
+  const getAgent    = () => apiGet('/api/school/agent');
+  const updateAgent = (data) => apiPatch('/api/school/agent', data);
+  return { getStats, getProfile, getAgent, updateAgent };
 }

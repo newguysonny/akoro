@@ -38,7 +38,7 @@ const now = () => new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minu
 export default function ChatPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { getProfile, updateAgent } = useStatsAPI();
+  const { getAgent, updateAgent } = useStatsAPI();
   const { on, off } = useInstructorSocket(user?.id);
 
   const [messages, setMessages]   = useState(CHAT_INIT);
@@ -85,7 +85,7 @@ export default function ChatPage() {
 
   // ── Load agent profile ──
   useEffect(() => {
-    getProfile()
+    getAgent()
       .then((res) => {
         const agent = res?.data?.agent ?? res?.data?.user_agents?.[0] ?? res?.data;
         if (agent) {

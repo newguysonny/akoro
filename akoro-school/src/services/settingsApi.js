@@ -19,7 +19,7 @@ export const patchAgent = (agentPatch) => {
   const body = {};
   if (agentPatch.name  != null) body.agent_name  = agentPatch.name;
   if (agentPatch.emoji != null) body.agent_emoji = agentPatch.emoji;
-  return apiPatch('/api/instructor/profile/agent', body);
+  return apiPatch('/api/school/agent', body);   // the school's dedicated agent
 };
 
 /* ── Two-factor authentication ───────────────────────────────────── */
