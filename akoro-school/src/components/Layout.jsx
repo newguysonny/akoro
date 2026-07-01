@@ -62,7 +62,7 @@ const NAV_SECTIONS = [
     { label: 'Reports & Analytics', icon: BarChart3, to: '#' },
   ]},
   { section: 'SYSTEM', items: [
-    { label: 'Settings & Billing', icon: CreditCard, children: ['School Settings','Backup Management','Custom Fields','Roles & Permissions','Payment Gateway','Notification Settings','Admission Settings','Audit Trail','Subscription','Subscription History','Module Settings','Biometric Devices','School Website'] },
+    { label: 'Settings & Billing', icon: CreditCard, to: '/settings-billing' },
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
   ]},
   { section: 'COMMUNICATION', items: [
