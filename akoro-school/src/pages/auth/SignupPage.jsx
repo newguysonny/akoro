@@ -63,7 +63,7 @@ export default function SignupPage() {
         <AkoroLogo size={40} radius={12} />
         <div>
           <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>School Portal</span>
         </div>
       </div>
 
@@ -74,10 +74,10 @@ export default function SignupPage() {
         border: '1px solid #EDE8E1',
       }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>
-          Become an instructor
+          Register your school
         </h1>
         <p style={{ fontSize: 14, color: '#6B6B80', margin: '0 0 24px' }}>
-          Create your instructor account to publish courses and host live classes
+          Create your school account to manage teachers, classes and students
         </p>
 
         {/* Google */}
@@ -142,7 +142,7 @@ export default function SignupPage() {
               boxShadow: loading ? 'none' : `0 4px 14px ${AMBER}44`,
             }}
           >
-            {loading ? 'Creating account…' : 'Create instructor account'}
+            {loading ? 'Creating account…' : 'Create school account'}
           </button>
         </form>
 
@@ -164,7 +164,7 @@ export default function SignupPage() {
       </div>
 
       <p style={{ fontSize: 12, color: '#9490A0', marginTop: 20, textAlign: 'center', maxWidth: 360 }}>
-        By creating an account you agree to teach in line with Akoro's instructor guidelines.
+        By creating an account you agree to Akoro's school partner guidelines.
       </p>
     </div>
   );
