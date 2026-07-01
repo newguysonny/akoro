@@ -48,6 +48,7 @@ const JWT_AUDIENCE = process.env.JWT_AUDIENCE || "https://akoro.app";
 const FRONTEND_URL            = process.env.FRONTEND_URL             || "https://akoro.app";
 const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL  || "https://instructor.akoro.app";
 const ADMIN_FRONTEND_URL      = process.env.ADMIN_FRONTEND_URL       || "https://admin.akoro.app";
+const SCHOOL_FRONTEND_URL     = process.env.SCHOOL_FRONTEND_URL      || "https://school.akoro.app";
 
 // Map a portal name to its frontend base URL.
 const portalUrl = (portal) =>
@@ -332,7 +333,7 @@ const rules = {
     body("username").trim().notEmpty().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
     body("password").isLength({ min: 8 }),
     body("fullName").optional().trim().isLength({ max: 120 }),
-    body("role").optional().isIn(["student", "instructor"]),
+    body("role").optional().isIn(["student", "instructor", "school_admin"]),
   ],
   login: [
     body("email").trim().isEmail().normalizeEmail(),
@@ -411,7 +412,9 @@ const authHandlers = {
 
     const payload = await issueTokenPair(res, user);
 
-    const loginUrl = role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
+    const loginUrl = role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin`
+      : role === "school_admin" ? `${SCHOOL_FRONTEND_URL}/signin`
+      : `${FRONTEND_URL}/signin`;
     sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role })
       .catch(() => {});
 

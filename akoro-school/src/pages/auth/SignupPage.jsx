@@ -36,8 +36,9 @@ export default function SignupPage() {
     }
     if (password.length < 8) { setFormErr('Password must be at least 8 characters'); return; }
     try {
-      // role: 'instructor' is the AuthContext default, set explicitly for clarity.
-      await register({ fullName, username, email, password, role: 'instructor' });
+      // School accounts register directly as school_admin; onboarding then
+      // creates the school profile.
+      await register({ fullName, username, email, password, role: 'school_admin' });
       navigate('/', { replace: true });
     } catch (err) {
       setFormErr(err.message);
