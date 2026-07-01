@@ -23,7 +23,7 @@ const TABS = [
 ];
 const EXTERNAL = [
   { key: 'social',        label: 'Social Media',  icon: Facebook, external: true, to: '/settings-social-media' },
-  { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true, to: '#' },
+  { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true, to: '/settings-telegram' },
   { key: 'notifications', label: 'Notifications', icon: Bell,     external: true, to: '/settings-notifications' },
 ];
 const LANGUAGES = ['English', 'Yoruba', 'Igbo', 'Hausa', 'Pidgin', 'French', 'Arabic'];
