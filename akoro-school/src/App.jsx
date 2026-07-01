@@ -22,6 +22,8 @@ import MarketplacePage     from './pages/MarketplacePage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
 import AppsCenterPage      from './pages/AppsCenterPage.jsx';
 import SettingsBillingPage from './pages/SettingsBillingPage.jsx';
+import SocialMediaPage     from './pages/SocialMediaPage.jsx';
+import NotificationCenterPage from './pages/NotificationCenterPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
@@ -105,6 +107,8 @@ function AppRoutes() {
       <Route path="/library"        element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
       <Route path="/apps"           element={<ProtectedRoute><AppsCenterPage /></ProtectedRoute>} />
       <Route path="/settings-billing" element={<ProtectedRoute><SettingsBillingPage /></ProtectedRoute>} />
+      <Route path="/settings-social-media" element={<ProtectedRoute><SocialMediaPage /></ProtectedRoute>} />
+      <Route path="/settings-notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
       {/* Legal */}

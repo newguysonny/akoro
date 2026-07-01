@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Building2, SlidersHorizontal, Clock, ShieldCheck, Plug, Facebook, Send,
   Bell, BookOpen, Info, Sparkles, Save, ExternalLink, Upload,
@@ -17,9 +18,9 @@ const TABS = [
   { key: 'integrations', label: 'Integrations',     icon: Plug },
 ];
 const EXTERNAL = [
-  { key: 'social',        label: 'Social Media',  icon: Facebook, external: true },
-  { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true },
-  { key: 'notifications', label: 'Notifications', icon: Bell,     external: true },
+  { key: 'social',        label: 'Social Media',  icon: Facebook, external: true, to: '/settings-social-media' },
+  { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true, to: '#' },
+  { key: 'notifications', label: 'Notifications', icon: Bell,     external: true, to: '/settings-notifications' },
 ];
 
 /* Mock school record (replace with GET /api/school later) */
@@ -389,12 +390,17 @@ function QuickGuide({ tab }) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function SettingsBillingPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState('profile');
 
   const TabButton = ({ t }) => {
     const on = tab === t.key;
+    const go = () => {
+      if (t.external) { if (t.to && t.to !== '#') navigate(t.to); return; }
+      setTab(t.key);
+    };
     return (
-      <button onClick={() => !t.external && setTab(t.key)} style={{
+      <button onClick={go} style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
         padding: '11px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
         background: on ? BLUE : 'transparent', color: on ? WHITE : MUTED,
