@@ -63,7 +63,7 @@ const NAV_SECTIONS = [
   ]},
   { section: 'SYSTEM', items: [
     { label: 'Settings & Billing', icon: CreditCard, children: ['School Settings','Backup Management','Custom Fields','Roles & Permissions','Payment Gateway','Notification Settings','Admission Settings','Audit Trail','Subscription','Subscription History','Module Settings','Biometric Devices','School Website'] },
-    { label: 'Apps Center', icon: LayoutGrid, to: '#' },
+    { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
   ]},
   { section: 'COMMUNICATION', items: [
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
