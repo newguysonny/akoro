@@ -35,21 +35,22 @@ const NAV_SECTIONS = [
     { label: 'Lesson Planner', icon: NotebookPen, moduleKey: 'lesson_planner', children: ['Lesson Planner Dashboard','Lesson Plans','Lesson Planner Guide','Lesson Plan Review','Lesson Plan Approvals','Lesson Plan Coverage','Lesson Plan Reports','Lesson Planner Settings'] },
     { label: 'OSM Module', icon: ClipboardCheck, moduleKey: 'digital_evaluation', children: ['OSM Dashboard','OSM Sessions','OSM Evaluate','OSM Reports','OSM Guide','OSM Moderation'] },
     { label: 'QR Code Attendance', icon: QrCode, moduleKey: 'qr_attendance', children: ['QR Attendance','QR Attendance Setting','QR Attendance Report'] },
-    { label: 'Assessment', icon: ShieldCheck, moduleKey: 'assessment', children: ['Assessment Dashboard','Assessments','Assessment Guide','Assessment Reports'] },
   ]},
   { section: 'MODULES', items: [
-    // Live pages already built in the dashboard
+    // Real, live pages — the only things this section contains.
     { label: 'Courses', icon: BookOpen, to: '/courses' },
     { label: 'Instructors', icon: Presentation, to: '/instructors' },
     { label: 'Classes', icon: GraduationCap, to: '/classes' },
     { label: 'Students', icon: Users, to: '/students' },
     { label: 'Battles', icon: Swords, to: '/battles' },
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
-    { label: 'Assessments', icon: FileCheck, to: '/assessments' },
+    { label: 'Assessments', icon: FileCheck, moduleKey: 'assessment', to: '/assessments' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
     { label: 'Tools & Assets', icon: Store, to: '/marketplace' },
     { label: 'Content Library', icon: Library, to: '/library' },
-    // Placeholder module groups (pages not built yet)
+  ]},
+  { section: 'FACILITIES & SERVICES', items: [
+    // Auxiliary / supplementary modules — all placeholder groups (pages not built yet).
     { label: 'Study Center', icon: BookOpenCheck, moduleKey: 'study_center', children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },
     { label: 'Certificates', icon: Award, children: ['Certificate Templates','Generate Document'] },
     { label: 'Communicate', icon: Megaphone, moduleKey: 'communications', children: ['Notice Board','Events & Holidays','Compose Broadcast','Broadcast History','Image Gallery'] },
