@@ -21,6 +21,7 @@ import MarketplacePage     from './pages/MarketplacePage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
 import AppsCenterPage      from './pages/AppsCenterPage.jsx';
 import SettingsBillingPage from './pages/SettingsBillingPage.jsx';
+import { AcademicStaffPage, NonAcademicStaffPage, StaffGroupPage } from './pages/StaffTeamPages.jsx';
 import SocialMediaPage     from './pages/SocialMediaPage.jsx';
 import TelegramBotPage     from './pages/TelegramBotPage.jsx';
 import DomainPage          from './pages/DomainPage.jsx';
@@ -187,6 +188,9 @@ function AppRoutes() {
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
       <Route path="/library"        element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
       <Route path="/apps"           element={<ProtectedRoute><AppsCenterPage /></ProtectedRoute>} />
+      <Route path="/staff/academic"          element={<ProtectedRoute><AcademicStaffPage /></ProtectedRoute>} />
+      <Route path="/staff/non-academic"      element={<ProtectedRoute><NonAcademicStaffPage /></ProtectedRoute>} />
+      <Route path="/staff/:staffClass/:group" element={<ProtectedRoute><StaffGroupPage /></ProtectedRoute>} />
       <Route path="/settings-billing" element={<ProtectedRoute><SettingsBillingPage /></ProtectedRoute>} />
       <Route path="/settings-social-media" element={<ProtectedRoute><SocialMediaPage /></ProtectedRoute>} />
       <Route path="/settings-telegram" element={<ProtectedRoute><TelegramBotPage /></ProtectedRoute>} />

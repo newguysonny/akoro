@@ -55,6 +55,7 @@ export default function ResourcePage({
   listFilters = [], fixedFilters = {}, searchKeys,
   canCreate = true, canEdit = true, canDelete = true,
   createLabel = 'New Record', startOpen = false, embedded = false,
+  rowActions = [],
 }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,7 +121,8 @@ export default function ResourcePage({
         const res = await apiPut(`${BASE}/${resource}/${modal.row.id}`, form);
         setRows((prev) => prev.map((r) => (r.id === modal.row.id ? res.data : r)));
       } else {
-        const res = await apiPost(`${BASE}/${resource}`, form);
+        // New rows inherit the page's fixed scope (e.g. staff_class / staff_group)
+        const res = await apiPost(`${BASE}/${resource}`, { ...fixedFilters, ...form });
         setRows((prev) => [res.data, ...prev]);
       }
       setModal(null);
@@ -181,16 +183,22 @@ export default function ResourcePage({
               <thead>
                 <tr style={{ background: LIGHT }}>
                   {columns.map((c) => <th key={c.key} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2, letterSpacing: .4, whiteSpace: 'nowrap' }}>{c.label.toUpperCase()}</th>)}
-                  {(canEdit || canDelete) && <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>ACTIONS</th>}
+                  {(canEdit || canDelete || rowActions.length > 0) && <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>ACTIONS</th>}
                 </tr>
               </thead>
               <tbody>
                 {visible.map((row) => (
                   <tr key={row.id} style={{ borderTop: `1px solid ${BORDER}` }}>
                     {columns.map((c) => <td key={c.key} style={{ padding: '11px 14px', fontSize: 12.5, color: INK }}>{cellValue(row, c)}</td>)}
-                    {(canEdit || canDelete) && (
+                    {(canEdit || canDelete || rowActions.length > 0) && (
                       <td style={{ padding: '11px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: 6 }}>
+                          {rowActions.map((a, i) => (
+                            <button key={i} onClick={() => a.onClick(row)} disabled={busyId === row.id} title={a.title}
+                              style={{ height: 28, padding: a.label ? '0 10px' : 0, width: a.label ? 'auto' : 28, borderRadius: 7, border: 'none', background: `${a.color || MUTED2}15`, color: a.color || MUTED2, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
+                              {a.icon}{a.label ? <span>{a.label}</span> : null}
+                            </button>
+                          ))}
                           {canEdit && <button onClick={() => openEdit(row)} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: `${BLUE}15`, color: BLUE, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Pencil size={13} /></button>}
                           {canDelete && (
                             <button onClick={() => remove(row)} disabled={busyId === row.id} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: `${RED}12`, color: RED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>

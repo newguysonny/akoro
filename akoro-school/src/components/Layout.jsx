@@ -21,6 +21,10 @@ const NAV_SECTIONS = [
   { section: 'MAIN NAVIGATION', items: [
     { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
   ]},
+  { section: 'STAFF & TEAM', items: [
+    { label: 'Academic Staff', icon: GraduationCap, to: '/staff/academic' },
+    { label: 'Non-Academic Staff', icon: UserCog, to: '/staff/non-academic' },
+  ]},
   { section: 'MANAGEMENT', items: [
     { label: 'Finance & Fees', icon: Banknote, children: [
       { label: 'Fees Dashboard', to: '/mgmt/fees-dashboard' },

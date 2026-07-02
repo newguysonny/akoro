@@ -80,10 +80,10 @@ const RESOURCES = {
   "departments":  { table: "departments",  fields: ["name"], required: ["name"], orderBy: "name", asc: true },
   "designations": { table: "designations", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
   "staff": { table: "staff",
-    fields: ["staff_no","first_name","last_name","gender","phone","email","photo_url","department_id","designation_id","employment_type","monthly_salary","joined_on","status"],
+    fields: ["staff_no","first_name","last_name","gender","phone","email","photo_url","department_id","designation_id","employment_type","monthly_salary","joined_on","status","staff_class","staff_group"],
     required: ["staff_no","first_name","last_name"],
     refs: { department_id: ["departments","name"], designation_id: ["designations","name"] },
-    filters: ["department_id","designation_id","status"] },
+    filters: ["department_id","designation_id","status","staff_class","staff_group"] },
   "staff-attendance": { table: "staff_attendance", fields: ["staff_id","date","status","note"], required: ["staff_id","date"], refs: { staff_id: ["staff", studentLabel] }, filters: ["date","staff_id","status"], orderBy: "date", asc: false },
   "leave-types": { table: "leave_types", fields: ["name","days_allowed"], required: ["name"], orderBy: "name", asc: true },
   "leave-requests": { table: "leave_requests", fields: ["staff_id","leave_type_id","from_date","to_date","reason","status","decided_by"], required: ["staff_id","from_date","to_date"], refs: { staff_id: ["staff", studentLabel], leave_type_id: ["leave_types","name"] }, filters: ["status","staff_id"] },
@@ -563,6 +563,28 @@ router.post("/fees/carry-forward", authenticateToken, requireRole(SCHOOL_ROLES),
     })));
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, carried: dues.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Force-log-out a staff member's app sessions ──────────────────────────
+// Matches the staff's email to a public.users account and stamps
+// force_logout_at = now(), which authenticateToken uses to reject any token
+// issued earlier. No-op (but not an error) if the staff has no linked account.
+router.post("/staff/:id/logout", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: staff } = await M().from("staff").select("id, email")
+      .eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!staff) return res.status(404).json({ error: "Staff not found" });
+    if (!staff.email) return res.json({ success: true, loggedOut: false, message: "This staff has no email/login account." });
+
+    const { data: user } = await db.from("users").select("id").eq("email", staff.email).maybeSingle();
+    if (!user) return res.json({ success: true, loggedOut: false, message: "No app account is linked to this staff's email." });
+
+    const { error } = await db.from("users").update({ force_logout_at: new Date() }).eq("id", user.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, loggedOut: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
