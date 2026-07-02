@@ -50,6 +50,9 @@ import {
   FrontOfficeDashboardPage, AdmissionEnquiriesPage, VisitorBookPage, ComplaintsPage, PostalRecordsPage,
 } from './pages/mgmt/frontOfficePages.jsx';
 import {
+  OnlineAdmissionsPage, ResultPinsPage, OnlinePaymentsPage,
+} from './pages/mgmt/publicPortalPages.jsx';
+import {
   AccountsDashboardPage, IncomePage, ExpensePage, IncomeHeadsPage, ExpenseHeadsPage, BankAccountsPage,
 } from './pages/mgmt/accountsPages.jsx';
 import {
@@ -234,6 +237,9 @@ function AppRoutes() {
       {/* Management — Front Office */}
       <Route path="/mgmt/front-office-dashboard" element={<ProtectedRoute><FrontOfficeDashboardPage /></ProtectedRoute>} />
       <Route path="/mgmt/enquiries"            element={<ProtectedRoute><AdmissionEnquiriesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/online-admissions"    element={<ProtectedRoute><OnlineAdmissionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/result-pins"          element={<ProtectedRoute><ResultPinsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/online-payments"      element={<ProtectedRoute><OnlinePaymentsPage /></ProtectedRoute>} />
       <Route path="/mgmt/visitor-book"         element={<ProtectedRoute><VisitorBookPage /></ProtectedRoute>} />
       <Route path="/mgmt/complaints"           element={<ProtectedRoute><ComplaintsPage /></ProtectedRoute>} />
       <Route path="/mgmt/postal-records"       element={<ProtectedRoute><PostalRecordsPage /></ProtectedRoute>} />

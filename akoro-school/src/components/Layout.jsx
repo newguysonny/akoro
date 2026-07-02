@@ -28,6 +28,7 @@ const NAV_SECTIONS = [
       { label: 'Search Due Fees', to: '/mgmt/search-due-fees' },
       { label: 'All Transactions', to: '/mgmt/all-transactions' },
       { label: 'Online Transactions', to: '/mgmt/online-transactions' },
+      { label: 'Online Payments (Public)', to: '/mgmt/online-payments' },
       { label: 'Fee Challans', to: '/mgmt/fee-challans' },
       { label: 'Assign Fees', to: '/mgmt/assign-fees' },
       { label: 'Fees Carry Forward', to: '/mgmt/fees-carry-forward' },
@@ -48,6 +49,7 @@ const NAV_SECTIONS = [
     { label: 'Student Information', icon: Users, children: [
       { label: 'Student Dashboard', to: '/mgmt/student-dashboard' },
       { label: 'Student Admission', to: '/mgmt/student-admission' },
+      { label: 'Online Admissions', to: '/mgmt/online-admissions' },
       { label: 'Student List', to: '/mgmt/students' },
       { label: 'Student Attendance', to: '/mgmt/student-attendance' },
       { label: 'Behavior Records', to: '/mgmt/behavior-records' },
@@ -87,6 +89,7 @@ const NAV_SECTIONS = [
       { label: 'Manage Grades', to: '/mgmt/manage-grades' },
       { label: 'Report Card Setups', to: '/mgmt/report-card-setups' },
       { label: 'Generate Marksheet', to: '/mgmt/generate-marksheet' },
+      { label: 'Result PINs', to: '/mgmt/result-pins' },
       { label: 'Upload Marksheet', to: '/mgmt/upload-marksheet' },
       { label: 'Manage Uploads', to: '/mgmt/manage-uploads' },
       { label: 'Teacher Remarks', to: '/mgmt/teacher-remarks' },

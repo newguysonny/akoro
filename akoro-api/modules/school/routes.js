@@ -32,6 +32,8 @@ import {
   verifyProjectDomain, getDomainConfig, removeDomainFromProject, buildDnsRecords,
 } from "./vercelDomains.js";
 import mgmtRouter from "./mgmt.js";
+import publicPortalRouter from "./publicPortal.js";
+import { resolveSchoolByHost, getSchoolGateway, SITE_BASE_DOMAIN } from "./tenant.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -782,36 +784,11 @@ const shapeWebsite = (w) => ({
 // tenants are resolved either by slug (/site/:slug) or by hostname
 // (<slug>.akoro.app wildcard subdomains and verified custom domains).
 // =============================================================
-const SITE_BASE_DOMAIN = (process.env.SITE_BASE_DOMAIN || "akoro.app").toLowerCase();
+// Hostname → school lives in tenant.js (shared with the public portal).
 const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, principal_name";
 
-// host → school row (or null). Handles ports, www., wildcard subdomains and
-// verified custom domains in edu.school_domains.
-async function resolveSchoolByHost(rawHost) {
-  let host = String(rawHost || "").toLowerCase().split(":")[0].trim();
-  if (!host) return null;
-  const bare = host.startsWith("www.") ? host.slice(4) : host;
-
-  // <slug>.akoro.app wildcard subdomain
-  if (bare.endsWith(`.${SITE_BASE_DOMAIN}`)) {
-    const sub = bare.slice(0, -(SITE_BASE_DOMAIN.length + 1));
-    if (sub && !sub.includes(".")) {
-      const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("slug", sub).maybeSingle();
-      if (data) return data;
-    }
-  }
-
-  // Verified custom domain (exact, then www-stripped)
-  for (const candidate of [host, bare]) {
-    const { data: dom } = await db.schema("edu").from("school_domains")
-      .select("school_id").eq("domain", candidate).eq("verified", true).maybeSingle();
-    if (dom) {
-      const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("id", dom.school_id).maybeSingle();
-      if (data) return data;
-    }
-  }
-  return null;
-}
+// Public portal — /apply, /pay, /results served on each tenant's own domain.
+router.use("/public", publicPortalRouter);
 
 async function renderSchoolSiteHtml(school) {
   const website = await getWebsiteConfig(school.id);
@@ -826,12 +803,29 @@ async function renderSchoolSiteHtml(school) {
     : { data: [] };
   const { data: classRows } = await db.from("classrooms").select("name").eq("school_id", school.id);
 
+  // Public portal availability — drives the Apply / Pay Fees / Results links.
+  const today = new Date().toISOString().slice(0, 10);
+  const [{ data: adm }, gateway, { data: noticeRows }, { data: eventRows }] = await Promise.all([
+    db.schema("edu").from("school_admission_settings").select("enabled").eq("school_id", school.id).maybeSingle(),
+    getSchoolGateway(school.id),
+    db.schema("mgmt").from("notices").select("title, body, publish_on, expires_on, pinned")
+      .eq("school_id", school.id).or(`expires_on.is.null,expires_on.gte.${today}`)
+      .order("pinned", { ascending: false }).order("publish_on", { ascending: false }).limit(6),
+    db.schema("mgmt").from("school_events").select("title, description, event_type, starts_on")
+      .eq("school_id", school.id).gte("starts_on", today).order("starts_on", { ascending: true }).limit(6),
+  ]);
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "";
   const ctx = buildContext(school, website, {
     email: null,
     year: new Date().getFullYear(),
     teachers: (teacherLinks || []).map((t) => ({ name: t.users?.full_name })).filter((t) => t.name),
     courses: (courseRows || []).map((c) => ({ title: c.title, subject: c.subject, level: c.level, price: c.is_free ? "Free" : `₦${Number(c.price || 0).toLocaleString("en-NG")}` })),
     classes: (classRows || []).map((c) => ({ name: c.name })),
+    notices: (noticeRows || []).filter((n) => !n.publish_on || n.publish_on <= today)
+      .map((n) => ({ title: n.title, body: n.body || "", date: fmtDate(n.publish_on), pinned: !!n.pinned })),
+    events: (eventRows || []).map((e) => ({ title: e.title, description: e.description || "", type: e.event_type || "", date: fmtDate(e.starts_on) })),
+    portal: { apply: !!adm?.enabled, pay: !!gateway.ok, results: true },
   });
 
   let html;

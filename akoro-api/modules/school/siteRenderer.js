@@ -116,15 +116,40 @@ const SECTION_RENDERERS = {
       <div class="wrap">
         <h1>${escapeHtml(w.hero_title || c.school_name)}</h1>
         <p>${escapeHtml(w.hero_subtitle || "")}</p>
-        <a class="btn" href="/login">Parent / Student Login</a>
+        ${c.portal?.apply ? `<a class="btn" href="/apply">Apply for Admission</a> ` : ""}
+        <a class="btn${c.portal?.apply ? " btn-outline" : ""}" href="/login">Parent / Student Login</a>
       </div>
     </section>`,
   about: (w) => w.about_text ? `
     <section class="about" id="about"><div class="wrap">
       <h2>About Us</h2><p>${escapeHtml(w.about_text)}</p>
     </div></section>` : "",
-  notices:  () => "",
-  events:   () => "",
+  notices: (w, c) => (c.notices || []).length ? `
+    <section class="notices" id="notices"><div class="wrap">
+      <h2>Notice Board</h2>
+      <div class="cards">
+        ${c.notices.map((n) => `
+        <div class="card">
+          ${n.pinned ? `<span class="tag">Pinned</span>` : ""}
+          <h3>${escapeHtml(n.title)}</h3>
+          ${n.date ? `<small>${escapeHtml(n.date)}</small>` : ""}
+          ${n.body ? `<p>${escapeHtml(n.body)}</p>` : ""}
+        </div>`).join("")}
+      </div>
+    </div></section>` : "",
+  events: (w, c) => (c.events || []).length ? `
+    <section class="events" id="events"><div class="wrap">
+      <h2>Upcoming Events</h2>
+      <div class="cards">
+        ${c.events.map((e) => `
+        <div class="card">
+          ${e.type ? `<span class="tag">${escapeHtml(e.type)}</span>` : ""}
+          <h3>${escapeHtml(e.title)}</h3>
+          ${e.date ? `<small>${escapeHtml(e.date)}</small>` : ""}
+          ${e.description ? `<p>${escapeHtml(e.description)}</p>` : ""}
+        </div>`).join("")}
+      </div>
+    </div></section>` : "",
   gallery:  () => "",
   contact:  (w, c) => `
     <section class="contact" id="contact"><div class="wrap">
@@ -176,6 +201,14 @@ ${w.og_image_url ? `<meta property="og:image" content="${escapeHtml(w.og_image_u
   .hero h1{font-size:44px;font-weight:900;margin-bottom:14px;}
   .hero p{font-size:18px;color:var(--secondary);max-width:620px;margin:0 auto 28px;}
   .btn{display:inline-block;padding:14px 30px;border-radius:50px;font-weight:700;text-decoration:none;background:var(--primary);color:#fff;}
+  .btn-outline{background:transparent;color:var(--primary);border:2px solid var(--primary);}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px;}
+  .card{border:1px solid #e7e7ef;border-radius:12px;padding:20px;background:#fff;}
+  .card h3{font-size:17px;margin:6px 0 4px;color:#1a1a2e;}
+  .card small{color:var(--secondary);}
+  .card p{font-size:14px;color:#444;margin-top:8px;}
+  .tag{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);}
+  nav .links a{color:#1a1a2e;text-decoration:none;font-weight:600;margin-right:18px;font-size:14px;}
   h2{font-size:28px;font-weight:800;margin-bottom:16px;color:var(--primary);}
   .stats-grid{display:flex;gap:32px;justify-content:center;flex-wrap:wrap;text-align:center;}
   .stats-grid b{display:block;font-size:38px;color:var(--accent);}
@@ -188,7 +221,12 @@ ${w.header_scripts || ""}
 <body>
 <nav>
   <div class="logo">${ctx.school_logo ? `<img src="${escapeHtml(ctx.school_logo)}" alt="">` : ""}${escapeHtml(ctx.school_name)}</div>
-  <div><a href="/login" style="color:var(--primary);font-weight:700;text-decoration:none;">Login</a></div>
+  <div class="links">
+    ${ctx.portal?.apply ? `<a href="/apply">Admissions</a>` : ""}
+    ${ctx.portal?.pay ? `<a href="/pay">Pay Fees</a>` : ""}
+    ${ctx.portal?.results ? `<a href="/results">Check Result</a>` : ""}
+    <a href="/login" style="color:var(--primary);font-weight:700;">Login</a>
+  </div>
 </nav>
 ${body}
 <footer>
@@ -224,6 +262,11 @@ export function buildContext(school, website, data) {
     courses: data.courses || [],
     teachers: data.teachers || [],
     classes: data.classes || [],
+    notices: data.notices || [],
+    events: data.events || [],
+    // Public-portal links ({{#if portal.apply}}<a href="{{apply_url}}">…)
+    portal: data.portal || { apply: false, pay: false, results: false },
+    apply_url: "/apply", pay_url: "/pay", results_url: "/results",
     stats: { courses: (data.courses || []).length, teachers: (data.teachers || []).length, classes: (data.classes || []).length },
   };
 }

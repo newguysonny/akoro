@@ -29,6 +29,12 @@ if (isPortalHost) {
       <App />
     </React.StrictMode>
   );
+} else if (/^\/(apply|pay|results)(\/|$)/.test(window.location.pathname)) {
+  // Public portal pages (non-Vercel fallback — the Edge Middleware normally
+  // rewrites these before the SPA loads). Redirect to the API-served page.
+  const q = new URLSearchParams(window.location.search);
+  q.set('host', host);
+  window.location.replace(`${API}/api/school/public${window.location.pathname}?${q}`);
 } else {
   // Tenant public site: fetch the server-rendered page for this hostname and
   // replace the document with it (styles/scripts in the payload included).

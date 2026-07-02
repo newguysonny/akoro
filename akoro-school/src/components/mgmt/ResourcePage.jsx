@@ -54,7 +54,7 @@ export default function ResourcePage({
   title, subtitle, resource, columns, fields = [],
   listFilters = [], fixedFilters = {}, searchKeys,
   canCreate = true, canEdit = true, canDelete = true,
-  createLabel = 'New Record', startOpen = false,
+  createLabel = 'New Record', startOpen = false, embedded = false,
 }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -146,8 +146,10 @@ export default function ResourcePage({
     return rows.filter((r) => keys.some((k) => String(r[k] ?? '').toLowerCase().includes(q)));
   }, [rows, q, searchKeys, columns]);
 
+  // embedded = render inside another PageLayout (no wrapper of its own)
+  const Wrapper = embedded ? ({ children }) => <div>{children}</div> : PageLayout;
   return (
-    <PageLayout title={title} subtitle={subtitle}>
+    <Wrapper title={title} subtitle={subtitle}>
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
@@ -237,6 +239,6 @@ export default function ResourcePage({
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}
-    </PageLayout>
+    </Wrapper>
   );
 }

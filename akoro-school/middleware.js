@@ -37,5 +37,15 @@ export default function middleware(request) {
   }
 
   const api = (process.env.API_URL || process.env.VITE_API_URL || 'https://akoro.app').replace(/\/$/, '');
+
+  // Public portal pages live on the tenant domain: /apply, /pay (+ /pay/init,
+  // /pay/verify), /results. Forward path + query (Paystack's ?reference=…)
+  // to the API's public portal, keeping the method (form POSTs included).
+  if (/^\/(apply|pay|results)(\/|$)/.test(url.pathname)) {
+    const qs = url.searchParams;
+    qs.set('host', host);
+    return rewrite(`${api}/api/school/public${url.pathname}?${qs.toString()}`);
+  }
+
   return rewrite(`${api}/api/school/site/by-host?host=${encodeURIComponent(host)}`);
 }

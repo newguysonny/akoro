@@ -15,6 +15,7 @@
  */
 
 import { Router } from "express";
+import crypto from "crypto";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 
@@ -185,6 +186,11 @@ const RESOURCES = {
   "asset-maintenance": { table: "asset_maintenance", fields: ["asset_id","maintenance_type","cost","performed_on","note"], required: ["asset_id"], refs: { asset_id: ["assets","name"] } },
   "asset-disposals": { table: "asset_disposals", fields: ["asset_id","disposal_type","amount","disposed_on","note"], required: ["asset_id"], refs: { asset_id: ["assets","name"] } },
   "asset-audits": { table: "asset_audits", fields: ["audit_date","auditor","findings","status"], required: [], filters: ["status"], orderBy: "audit_date", asc: false },
+
+  // Public portal (online admissions / payments / result PINs)
+  "admission-applications": { table: "admission_applications", fields: ["status","note"], required: [], filters: ["status","fee_status"], orderBy: "created_at", asc: false, readOnlyCreate: true },
+  "result-pins": { table: "result_pins", fields: [], refs: { student_id: ["students", studentLabel], exam_id: ["exams","name"] }, filters: ["exam_id","student_id"], readOnly: true },
+  "online-payments": { table: "online_payments", fields: [], refs: { student_id: ["students", studentLabel] }, filters: ["status","purpose"], readOnly: true },
 
   // Front Office
   "enquiries": { table: "enquiries", fields: ["name","phone","email","class_interest","source","status","note","follow_up_on"], required: ["name"], filters: ["status"] },
@@ -845,6 +851,71 @@ router.post("/certificates/generate", authenticateToken, requireRole(SCHOOL_ROLE
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ── Public portal admin: admit applicants + generate result PINs ─────────- */
+
+// Admit an online application → creates the mgmt.students row and links it.
+// Body: { class_id?, admission_no? } (admission_no auto-generated if omitted)
+router.post("/admissions/:id/admit", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: app } = await M().from("admission_applications").select("*")
+      .eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!app) return res.status(404).json({ error: "Application not found" });
+    if (app.status === "admitted" && app.student_id) return res.status(409).json({ error: "Already admitted" });
+
+    const admissionNo = (req.body.admission_no || "").trim() ||
+      `ADM-${Date.now().toString(36).toUpperCase()}`;
+    const { data: student, error } = await M().from("students").insert({
+      school_id: school.id, admission_no: admissionNo,
+      first_name: app.first_name, last_name: app.last_name,
+      gender: app.gender, dob: app.dob,
+      class_id: req.body.class_id || null,
+      guardian_name: app.guardian_name, guardian_phone: app.guardian_phone,
+      guardian_email: app.email, address: app.address,
+      status: "active", admitted_on: new Date().toISOString().slice(0, 10),
+    }).select("id, admission_no").single();
+    if (error) {
+      if (error.code === "23505") return res.status(409).json({ error: "That admission number already exists" });
+      throw new Error(error.message);
+    }
+    await M().from("admission_applications").update({
+      status: "admitted", student_id: student.id, reviewed_at: new Date(),
+    }).eq("id", app.id);
+    res.status(201).json({ success: true, data: { student_id: student.id, admission_no: student.admission_no } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Generate result PINs for an exam — every active student in the class (or
+// the whole school). Skips students who already have a PIN for that exam.
+// Body: { exam_id, class_id?, max_uses? }
+router.post("/result-pins/generate", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { exam_id, class_id, max_uses = 10 } = req.body;
+    if (!exam_id) return res.status(400).json({ error: "exam_id is required" });
+
+    let sq = M().from("students").select("id").eq("school_id", school.id).eq("status", "active");
+    if (class_id) sq = sq.eq("class_id", class_id);
+    const { data: students } = await sq;
+    if (!students?.length) return res.json({ success: true, generated: 0, message: "No active students matched." });
+
+    const { data: existing } = await M().from("result_pins").select("student_id")
+      .eq("school_id", school.id).eq("exam_id", exam_id);
+    const has = new Set((existing || []).map((r) => r.student_id));
+    const pinFor = () => crypto.randomBytes(4).toString("hex").toUpperCase().replace(/^(.{4})/, "$1-");
+    const rows = students.filter((s) => !has.has(s.id)).map((s) => ({
+      school_id: school.id, exam_id, student_id: s.id,
+      pin: pinFor(), max_uses: Number(max_uses) || 10,
+    }));
+    if (!rows.length) return res.json({ success: true, generated: 0, message: "All matched students already have PINs for this exam." });
+    const { error } = await M().from("result_pins").insert(rows);
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, generated: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 
 router.get("/:resource", authenticateToken, async (req, res) => {
@@ -867,7 +938,7 @@ router.get("/:resource", authenticateToken, async (req, res) => {
 router.post("/:resource", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
-    if (!cfg || cfg.readOnly) return res.status(404).json({ error: "Unknown resource" });
+    if (!cfg || cfg.readOnly || cfg.readOnlyCreate) return res.status(404).json({ error: "Unknown resource" });
     const school = await getMySchool(req, res);
     if (!school) return;
     const body = cleanBody(cfg, req.body);
