@@ -38,9 +38,12 @@ const args = process.argv.slice(2);
 const groupArg = (args.find((a) => a.startsWith("--group=")) || "--group=schema").split("=")[1];
 const continueOnError = args.includes("--continue-on-error");
 
-const url = process.env.DATABASE_URL || process.env.DB_URL;
+// Prefer a migration-specific URL if set — lets you point migrations at the
+// SESSION pooler (port 5432, best for one-off DDL jobs) while the app keeps
+// using the TRANSACTION pooler (6543) via DATABASE_URL. Falls back to DATABASE_URL.
+const url = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL || process.env.DB_URL;
 if (!url) {
-  console.error("ERROR: set DATABASE_URL to your direct Postgres connection string.");
+  console.error("ERROR: set DATABASE_URL (or MIGRATION_DATABASE_URL) to your Postgres connection string.");
   process.exit(1);
 }
 
