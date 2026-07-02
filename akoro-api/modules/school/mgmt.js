@@ -80,7 +80,7 @@ const RESOURCES = {
   "departments":  { table: "departments",  fields: ["name"], required: ["name"], orderBy: "name", asc: true },
   "designations": { table: "designations", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
   "staff": { table: "staff",
-    fields: ["staff_no","first_name","last_name","gender","phone","email","photo_url","department_id","designation_id","employment_type","monthly_salary","joined_on","status","staff_class","staff_group"],
+    fields: ["staff_no","first_name","last_name","gender","phone","email","photo_url","department_id","designation_id","employment_type","monthly_salary","joined_on","status","staff_class","staff_group","duty","qualification","experience_years","year_of_graduation"],
     required: ["staff_no","first_name","last_name"],
     refs: { department_id: ["departments","name"], designation_id: ["designations","name"] },
     filters: ["department_id","designation_id","status","staff_class","staff_group"] },

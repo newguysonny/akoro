@@ -23,6 +23,7 @@
     "2026-mgmt-schema-2.sql",
     "2026-mgmt-schema-3.sql",
     "2026-staff-team.sql",
+    "2026-staff-columns.sql",
     "2026-school-domains-vercel.sql",
     "2026-public-portal.sql"
   ],
@@ -34,6 +35,7 @@
     "2026-seed-school-portal.sql",
     "2026-seed-mgmt.sql",
     "2026-seed-mgmt-2.sql",
-    "2026-seed-mgmt-3.sql"
+    "2026-seed-mgmt-3.sql",
+    "2026-seed-staff.sql"
   ]
 }

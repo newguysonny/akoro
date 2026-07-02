@@ -129,6 +129,25 @@ const statusPill = (v) => {
   return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{v || '—'}</span>;
 };
 
+// Name cell: photo (or initials) + "First LASTNAME" with qualification beneath,
+// mirroring the staff-directory display (e.g. "Opeyemi BELLO / (BSc. Accounting 2012)").
+function StaffName({ row }) {
+  const first = row.first_name || '';
+  const last = row.last_name || '';
+  const initials = `${first[0] || ''}${last[0] || ''}`.toUpperCase();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+        {row.photo_url ? <img src={row.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>{first} {last.toUpperCase()}</div>
+        {row.qualification && <div style={{ fontSize: 11, color: MUTED2, marginTop: 1 }}>({row.qualification})</div>}
+      </div>
+    </div>
+  );
+}
+
 export function StaffGroupPage() {
   const navigate = useNavigate();
   const params = useParams();
@@ -171,19 +190,25 @@ export function StaffGroupPage() {
             resource="staff"
             fixedFilters={{ staff_class: staffClassValue, staff_group: group.name }}
             createLabel="Add Staff"
-            searchKeys={['staff_no', 'first_name', 'last_name', 'phone', 'email']}
+            searchKeys={['staff_no', 'first_name', 'last_name', 'phone', 'email', 'duty', 'qualification']}
             columns={[
-              { key: 'staff_no', label: 'Staff No' },
-              { key: 'first_name', label: 'Name', render: (r) => <b>{[r.first_name, r.last_name].filter(Boolean).join(' ')}</b> },
+              { key: 'first_name', label: 'Name', render: (r) => <StaffName row={r} /> },
+              { key: 'duty', label: 'Duty' },
+              { key: 'qualification', label: 'Qualification', render: (r) => r.qualification || '—' },
+              { key: 'experience_years', label: 'Exp.', render: (r) => (r.experience_years != null && r.experience_years !== '' ? `${r.experience_years} yrs` : '—') },
+              { key: 'year_of_graduation', label: 'Grad.', render: (r) => r.year_of_graduation || '—' },
               { key: 'phone', label: 'Phone' },
-              { key: 'email', label: 'Email' },
-              { key: 'employment_type', label: 'Type', render: (r) => (EMPLOYMENT.find((e) => e.value === r.employment_type) || {}).label || r.employment_type },
               { key: 'status', label: 'Status', render: (r) => statusPill(r.status) },
             ]}
             fields={[
               { key: 'staff_no', label: 'Staff No', required: true },
               { key: 'first_name', label: 'First Name', required: true },
               { key: 'last_name', label: 'Last Name', required: true },
+              { key: 'duty', label: 'Duty / Subject', placeholder: 'e.g. Geography/SOS' },
+              { key: 'qualification', label: 'Qualification / Degree', placeholder: 'e.g. NCE 1993, B.Ed 1998, M.A. Ed 2015' },
+              { key: 'experience_years', label: 'Experience (years)', type: 'number' },
+              { key: 'year_of_graduation', label: 'Year of Graduation', type: 'number', placeholder: 'e.g. 2012' },
+              { key: 'photo_url', label: 'Photo URL', placeholder: 'https://…' },
               { key: 'gender', label: 'Gender', type: 'select', options: [{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }] },
               { key: 'phone', label: 'Phone' },
               { key: 'email', label: 'Email', placeholder: 'Used for their app login & logout' },
