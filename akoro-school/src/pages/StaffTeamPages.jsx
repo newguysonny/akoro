@@ -14,7 +14,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Crown, GraduationCap, ClipboardList, HeartHandshake, Users, ArrowLeft,
   LogOut, ChevronRight, Briefcase, Calculator, Headphones, Shield, Sparkles,
-  Bus, UtensilsCrossed, Wrench, Stethoscope, Monitor,
+  Bus, UtensilsCrossed, Wrench, Stethoscope, Monitor, BookOpen,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import ResourcePage from '../components/mgmt/ResourcePage.jsx';
@@ -52,27 +52,62 @@ const NON_ACADEMIC = {
 };
 const SECTIONS = { academic: ACADEMIC, 'non-academic': NON_ACADEMIC };
 
+/* ── Quick / Setup guide (matches Settings & Domain pages) ───────────────── */
+function Guide({ title = 'Quick Guide', items }) {
+  return (
+    <div style={{ background: `${BLUE}08`, border: `1px solid ${BLUE}22`, borderRadius: 14, padding: '14px 15px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+        <BookOpen size={15} color={BLUE} />
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: BLUE, fontFamily: FONT }}>{title}</span>
+      </div>
+      {items.map((it, i) => (
+        <p key={it.t} style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.6, margin: i === 0 ? 0 : '10px 0 0', fontFamily: FONT, ...(i > 0 ? { paddingTop: 10, borderTop: `1px solid ${BLUE}18` } : {}) }}>
+          <b style={{ color: INK }}>{it.t}:</b> {it.d}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+const GRID_GUIDE = (label) => [
+  { t: 'Step 1', d: `Pick a role card below to open that group's staff list.` },
+  { t: 'Step 2', d: 'Inside a group, click “Add Staff” to register a team member — they’re filed under that group automatically.' },
+  { t: 'Step 3', d: 'Add each staff member’s email so their app login is linked (needed for “Log out”).' },
+  { t: 'Step 4', d: `Edit or delete staff anytime; set status to Inactive to keep records without counting them as active ${label.toLowerCase()}.` },
+];
+const TABLE_GUIDE = [
+  { t: 'Add staff', d: 'New staff you add here are automatically tagged to this group.' },
+  { t: 'Email', d: 'Set the staff’s email to link their app account — required for “Log out” to end their sessions.' },
+  { t: 'Log out', d: 'Instantly revokes all of that staff member’s active app sessions (they’ll need to sign in again).' },
+  { t: 'Status', d: 'Mark a staff Inactive to keep their record without them showing as active staff.' },
+];
+
 /* ── Card grid (one per staff class) ─────────────────────────────────────── */
 function StaffGroupsPage({ section }) {
   const navigate = useNavigate();
   return (
     <PageLayout title={section.label} subtitle={section.subtitle}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
-        {section.groups.map((g) => (
-          <button key={g.name} onClick={() => navigate(`${section.path}/${slug(g.name)}`)}
-            style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '16px 16px', borderRadius: 14, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT, transition: 'all .12s' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; e.currentTarget.style.background = LIGHT; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = WHITE; }}>
-            <div style={{ width: 44, height: 44, borderRadius: 11, background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <g.icon size={20} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>{g.name}</div>
-              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 2 }}>{g.desc}</div>
-            </div>
-            <ChevronRight size={17} color={MUTED2} style={{ flexShrink: 0 }} />
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '2 1 460px', minWidth: 300, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+          {section.groups.map((g) => (
+            <button key={g.name} onClick={() => navigate(`${section.path}/${slug(g.name)}`)}
+              style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', padding: '16px 16px', borderRadius: 14, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT, transition: 'all .12s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; e.currentTarget.style.background = LIGHT; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = WHITE; }}>
+              <div style={{ width: 44, height: 44, borderRadius: 11, background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <g.icon size={20} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>{g.name}</div>
+                <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 2 }}>{g.desc}</div>
+              </div>
+              <ChevronRight size={17} color={MUTED2} style={{ flexShrink: 0 }} />
+            </button>
+          ))}
+        </div>
+        <aside style={{ flex: '1 1 260px', minWidth: 240, maxWidth: 340 }}>
+          <Guide title="Setup Guide" items={GRID_GUIDE(section.label)} />
+        </aside>
       </div>
     </PageLayout>
   );
@@ -129,36 +164,43 @@ export function StaffGroupPage() {
         </button>
       </div>
 
-      <ResourcePage
-        embedded
-        resource="staff"
-        fixedFilters={{ staff_class: staffClassValue, staff_group: group.name }}
-        createLabel="Add Staff"
-        searchKeys={['staff_no', 'first_name', 'last_name', 'phone', 'email']}
-        columns={[
-          { key: 'staff_no', label: 'Staff No' },
-          { key: 'first_name', label: 'Name', render: (r) => <b>{[r.first_name, r.last_name].filter(Boolean).join(' ')}</b> },
-          { key: 'phone', label: 'Phone' },
-          { key: 'email', label: 'Email' },
-          { key: 'employment_type', label: 'Type', render: (r) => (EMPLOYMENT.find((e) => e.value === r.employment_type) || {}).label || r.employment_type },
-          { key: 'status', label: 'Status', render: (r) => statusPill(r.status) },
-        ]}
-        fields={[
-          { key: 'staff_no', label: 'Staff No', required: true },
-          { key: 'first_name', label: 'First Name', required: true },
-          { key: 'last_name', label: 'Last Name', required: true },
-          { key: 'gender', label: 'Gender', type: 'select', options: [{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }] },
-          { key: 'phone', label: 'Phone' },
-          { key: 'email', label: 'Email', placeholder: 'Used for their app login & logout' },
-          { key: 'employment_type', label: 'Employment Type', type: 'select', default: 'full_time', options: EMPLOYMENT },
-          { key: 'monthly_salary', label: 'Monthly Salary', type: 'number' },
-          { key: 'joined_on', label: 'Joined On', type: 'date' },
-          { key: 'status', label: 'Status', type: 'select', default: 'active', options: STATUSES },
-        ]}
-        rowActions={[
-          { icon: <LogOut size={13} />, label: 'Log out', title: 'Force-log-out this staff', color: RED, onClick: logout },
-        ]}
-      />
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '2 1 460px', minWidth: 300 }}>
+          <ResourcePage
+            embedded
+            resource="staff"
+            fixedFilters={{ staff_class: staffClassValue, staff_group: group.name }}
+            createLabel="Add Staff"
+            searchKeys={['staff_no', 'first_name', 'last_name', 'phone', 'email']}
+            columns={[
+              { key: 'staff_no', label: 'Staff No' },
+              { key: 'first_name', label: 'Name', render: (r) => <b>{[r.first_name, r.last_name].filter(Boolean).join(' ')}</b> },
+              { key: 'phone', label: 'Phone' },
+              { key: 'email', label: 'Email' },
+              { key: 'employment_type', label: 'Type', render: (r) => (EMPLOYMENT.find((e) => e.value === r.employment_type) || {}).label || r.employment_type },
+              { key: 'status', label: 'Status', render: (r) => statusPill(r.status) },
+            ]}
+            fields={[
+              { key: 'staff_no', label: 'Staff No', required: true },
+              { key: 'first_name', label: 'First Name', required: true },
+              { key: 'last_name', label: 'Last Name', required: true },
+              { key: 'gender', label: 'Gender', type: 'select', options: [{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }] },
+              { key: 'phone', label: 'Phone' },
+              { key: 'email', label: 'Email', placeholder: 'Used for their app login & logout' },
+              { key: 'employment_type', label: 'Employment Type', type: 'select', default: 'full_time', options: EMPLOYMENT },
+              { key: 'monthly_salary', label: 'Monthly Salary', type: 'number' },
+              { key: 'joined_on', label: 'Joined On', type: 'date' },
+              { key: 'status', label: 'Status', type: 'select', default: 'active', options: STATUSES },
+            ]}
+            rowActions={[
+              { icon: <LogOut size={13} />, label: 'Log out', title: 'Force-log-out this staff', color: RED, onClick: logout },
+            ]}
+          />
+        </div>
+        <aside style={{ flex: '1 1 260px', minWidth: 240, maxWidth: 340 }}>
+          <Guide title="Quick Guide" items={TABLE_GUIDE} />
+        </aside>
+      </div>
     </PageLayout>
   );
 }
