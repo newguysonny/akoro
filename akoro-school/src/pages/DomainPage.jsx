@@ -1,13 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Globe, ArrowLeft, Copy, Pencil, Trash2, Plus, Info, ShieldCheck,
-  CheckCircle2, Clock, RefreshCw, X, ArrowRight,
+  CheckCircle2, Clock, RefreshCw, X, ArrowRight, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPost, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
-
-const DEFAULT_DOMAIN = 'yug-international.akoro.app';
 
 function DomainRow({ domain, sub, verified, onCopy, onDelete }) {
   return (
@@ -34,30 +33,60 @@ function DomainRow({ domain, sub, verified, onCopy, onDelete }) {
 
 export default function DomainPage() {
   const navigate = useNavigate();
+  const [defaultDomain, setDefaultDomain] = useState('');
   const [customDomains, setCustomDomains] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newDomain, setNewDomain] = useState('');
   const [copied, setCopied] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [toast, setToast] = useState('');
+
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
   const inputStyle = {
     width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
     outline: 'none', fontSize: 13.5, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box',
   };
 
+  const load = useCallback(() => {
+    apiGet('/api/school/domains')
+      .then((res) => { setDefaultDomain(res.data.defaultDomain); setCustomDomains(res.data.customDomains || []); })
+      .catch((e) => showToast(e.message || 'Could not load domains'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
   const copyDefault = () => {
-    navigator.clipboard?.writeText(`https://${DEFAULT_DOMAIN}`);
+    navigator.clipboard?.writeText(`https://${defaultDomain}`);
     setCopied(true); setTimeout(() => setCopied(false), 1800);
   };
 
-  const addDomain = () => {
+  const addDomain = async () => {
     const d = newDomain.trim().toLowerCase();
     if (!d) return;
-    setCustomDomains((prev) => [...prev, { id: Date.now(), domain: d, verified: false }]);
-    setNewDomain(''); setAdding(false);
+    try {
+      const res = await apiPost('/api/school/domains', { domain: d });
+      setCustomDomains((prev) => [...prev, res.data]);
+      setNewDomain(''); setAdding(false);
+    } catch (e) { showToast(e.message || 'Could not add domain'); }
   };
 
-  const verify = (id) => setCustomDomains((prev) => prev.map((d) => (d.id === id ? { ...d, verified: true } : d)));
-  const remove = (id) => setCustomDomains((prev) => prev.filter((d) => d.id !== id));
+  const verify = async (id) => {
+    setBusyId(id);
+    try {
+      const res = await apiPost(`/api/school/domains/${id}/verify`, {});
+      if (res.verified) setCustomDomains((prev) => prev.map((d) => (d.id === id ? { ...d, verified: true } : d)));
+      showToast(res.message);
+    } catch (e) { showToast(e.message || 'Could not verify domain'); }
+    finally { setBusyId(null); }
+  };
+
+  const remove = async (id) => {
+    setCustomDomains((prev) => prev.filter((d) => d.id !== id));
+    try { await apiDelete(`/api/school/domains/${id}`); } catch { /* already removed locally */ }
+  };
 
   return (
     <PageLayout title="Domain" subtitle="Manage your school website's domains">
@@ -79,32 +108,38 @@ export default function DomainPage() {
               Access your school website over HTTPS with the following domain.
             </p>
 
-            <DomainRow domain={DEFAULT_DOMAIN} sub="School Website" verified onCopy={copyDefault} />
-            {copied && <p style={{ fontSize: 11.5, color: GREEN, margin: '8px 0 0', fontFamily: FONT, fontWeight: 700 }}>Copied to clipboard ✓</p>}
+            {loading ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /></div>
+            ) : (
+              <>
+                <DomainRow domain={defaultDomain} sub="School Website" verified onCopy={copyDefault} />
+                {copied && <p style={{ fontSize: 11.5, color: GREEN, margin: '8px 0 0', fontFamily: FONT, fontWeight: 700 }}>Copied to clipboard ✓</p>}
 
-            {customDomains.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-                {customDomains.map((d) => (
-                  <div key={d.id}>
-                    <DomainRow domain={d.domain} sub="School Website" verified={d.verified}
-                      onCopy={() => { navigator.clipboard?.writeText(`https://${d.domain}`); }}
-                      onDelete={() => remove(d.id)} />
-                    {!d.verified && (
-                      <div style={{ marginTop: 8, background: `${AMBER}0C`, border: `1px solid ${AMBER}33`, borderRadius: 10, padding: '10px 13px' }}>
-                        <p style={{ fontSize: 11.5, color: INK, margin: '0 0 8px', fontFamily: FONT, fontWeight: 700 }}>Add this DNS record to verify ownership:</p>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11.5, fontFamily: 'ui-monospace, Menlo, monospace', color: MUTED, marginBottom: 10 }}>
-                          <span><b style={{ color: INK }}>Type:</b> CNAME</span>
-                          <span><b style={{ color: INK }}>Name:</b> {d.domain.split('.')[0]}</span>
-                          <span><b style={{ color: INK }}>Value:</b> cname.akoro.app</span>
-                        </div>
-                        <button onClick={() => verify(d.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: 'none', background: AMBER, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                          <RefreshCw size={12} /> Verify DNS
-                        </button>
+                {customDomains.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                    {customDomains.map((d) => (
+                      <div key={d.id}>
+                        <DomainRow domain={d.domain} sub="School Website" verified={d.verified}
+                          onCopy={() => { navigator.clipboard?.writeText(`https://${d.domain}`); }}
+                          onDelete={() => remove(d.id)} />
+                        {!d.verified && (
+                          <div style={{ marginTop: 8, background: `${AMBER}0C`, border: `1px solid ${AMBER}33`, borderRadius: 10, padding: '10px 13px' }}>
+                            <p style={{ fontSize: 11.5, color: INK, margin: '0 0 8px', fontFamily: FONT, fontWeight: 700 }}>Add this DNS record to verify ownership:</p>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11.5, fontFamily: 'ui-monospace, Menlo, monospace', color: MUTED, marginBottom: 10 }}>
+                              <span><b style={{ color: INK }}>Type:</b> CNAME</span>
+                              <span><b style={{ color: INK }}>Name:</b> {d.domain.split('.')[0]}</span>
+                              <span><b style={{ color: INK }}>Value:</b> {d.cnameTarget || 'cname.akoro.app'}</span>
+                            </div>
+                            <button onClick={() => verify(d.id)} disabled={busyId === d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: 'none', background: AMBER, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                              {busyId === d.id ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <RefreshCw size={12} />} Verify DNS
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
 
             <div style={{ marginTop: 16 }}>
@@ -146,6 +181,10 @@ export default function DomainPage() {
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+      )}
     </PageLayout>
   );
 }

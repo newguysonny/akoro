@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Settings2, ArrowLeft, Save, CheckCircle2, Wand2, Terminal, Code2, Eye,
-  ChevronDown, ChevronUp, Monitor, Tablet, Smartphone, RefreshCw,
+  ChevronDown, ChevronUp, Monitor, Tablet, Smartphone, RefreshCw, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
 
 const VARIABLES = ['{{school_name}}', '{{school_logo}}', '{{principal_name}}', '{{school_address}}', '{{contact_email}}', '{{contact_phone}}'];
@@ -35,16 +36,40 @@ export default function WebsiteTemplateEditorPage() {
   const seed = state?.template;
 
   const [name, setName] = useState(seed?.name || id || 'untitled-template');
-  const [desc, setDesc] = useState(seed?.desc || '');
-  const [active] = useState(seed?.active ?? false);
+  const [desc, setDesc] = useState(seed?.description || '');
+  const [active, setActive] = useState(seed?.active ?? false);
   const [html, setHtml] = useState(seed?.html || '<!DOCTYPE html>\n<html>\n<head><title>New Template</title></head>\n<body>\n  <h1>Hello, {{school_name}}</h1>\n</body>\n</html>');
   const [tab, setTab] = useState('editor'); // 'editor' | 'preview'
   const [viewport, setViewport] = useState('desktop');
   const [openVars, setOpenVars] = useState(false);
   const [openShortcuts, setOpenShortcuts] = useState(false);
+  const [loading, setLoading] = useState(!seed?.html);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [toast, setToast] = useState('');
 
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  useEffect(() => {
+    if (seed?.html) { setLoading(false); return; }
+    apiGet(`/api/school/website/templates/${id}`)
+      .then((res) => {
+        const t = res.data;
+        setName(t.name); setDesc(t.description || ''); setActive(t.active); setHtml(t.html || '');
+      })
+      .catch((e) => showToast(e.message || 'Could not load template'))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiPut(`/api/school/website/templates/${id}`, { name, description: desc, html });
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setSaving(false); }
+  };
 
   const viewportWidth = viewport === 'mobile' ? 380 : viewport === 'tablet' ? 620 : '100%';
 
@@ -61,6 +86,7 @@ export default function WebsiteTemplateEditorPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16 }}>
           <Settings2 size={16} color={AMBER} />
           <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Settings</span>
+          {loading && <Loader2 size={13} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} />}
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -79,8 +105,8 @@ export default function WebsiteTemplateEditorPage() {
           </div>
         )}
 
-        <button onClick={save} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          <Save size={15} /> {saved ? 'Saved ✓' : 'Save Template'}
+        <button onClick={save} disabled={saving} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
+          {saving ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={15} />} {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Template'}
         </button>
       </div>
 
@@ -133,6 +159,10 @@ export default function WebsiteTemplateEditorPage() {
           </div>
         )}
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+      )}
     </PageLayout>
   );
 }

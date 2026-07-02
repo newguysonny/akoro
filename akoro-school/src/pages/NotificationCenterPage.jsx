@@ -1,13 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Bell, Search, HelpCircle, CheckCircle2, Lock, MessageCircle, Save,
   CreditCard, GraduationCap, ShieldAlert, Send, UserPlus, Wallet, Clock,
   UserX, BookOpen, KeyRound, Laptop, Video, Library, Bus, MapPin,
   CheckSquare, FileText, AlertTriangle, ClipboardList, Cake, LogOut,
   CalendarClock, NotebookPen, PartyPopper, ClipboardCheck, Edit3, Settings,
-  UserPlus2, Swords, ListChecks, Megaphone, Volume2, Monitor,
+  UserPlus2, Swords, ListChecks, Megaphone, Volume2, Monitor, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
 const PREFERENCES = [
@@ -78,9 +79,46 @@ export default function NotificationCenterPage() {
   const [rows, setRows] = useState(ALERTS.map((a) => ({ ...a, push: a.push })));
   const [query, setQuery] = useState('');
   const [prefs, setPrefs] = useState(() => Object.fromEntries(PREFERENCES.map((p) => [p.key, p.on])));
+  const [loading, setLoading] = useState(true);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [toast, setToast] = useState('');
 
-  const togglePush = (id) => setRows((prev) => prev.map((r) => (r.id === id ? { ...r, push: !r.push } : r)));
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  useEffect(() => {
+    Promise.all([
+      apiGet('/api/school/settings'),
+      apiGet('/api/school/notifications/alerts'),
+    ]).then(([settingsRes, alertsRes]) => {
+      const savedPrefs = settingsRes.data?.notificationPrefs || {};
+      setPrefs((prev) => ({ ...prev, ...savedPrefs }));
+
+      const overrides = alertsRes.data || {};
+      setRows(ALERTS.map((a) => {
+        const o = overrides[a.id] || {};
+        return { ...a, push: o.push !== undefined ? o.push : a.push };
+      }));
+    }).catch((e) => showToast(e.message || 'Could not load notification settings'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const togglePush = async (id) => {
+    const row = rows.find((r) => r.id === id);
+    const next = !row.push;
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, push: next } : r)));
+    try { await apiPut(`/api/school/notifications/alerts/${id}`, { push: next }); }
+    catch (e) { showToast(e.message || 'Could not save'); setRows((prev) => prev.map((r) => (r.id === id ? { ...r, push: !next } : r))); }
+  };
   const togglePref = (key) => setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const savePrefs = async () => {
+    setSavingPrefs(true);
+    try {
+      await apiPut('/api/school/settings/notification-prefs', prefs);
+      showToast('Notification preferences saved ✓');
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setSavingPrefs(false); }
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -105,9 +143,14 @@ export default function NotificationCenterPage() {
 
       {/* Notification preferences */}
       <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px', marginBottom: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <Bell size={16} color={AMBER} />
-          <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Notification Preferences</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Bell size={16} color={AMBER} />
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Notification Preferences</span>
+          </div>
+          <button onClick={savePrefs} disabled={savingPrefs} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: 'none', background: savingPrefs ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: savingPrefs ? '#9CA3AF' : WHITE, fontSize: 12, fontWeight: 800, cursor: savingPrefs ? 'default' : 'pointer', fontFamily: FONT }}>
+            {savingPrefs ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={12} />} {savingPrefs ? 'Saving…' : 'Save'}
+          </button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 4 }}>
           {PREFERENCES.map((p) => (
@@ -196,11 +239,15 @@ export default function NotificationCenterPage() {
             <div><Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} /> WhatsApp requires the API configuration to be active above.</div>
             <div><Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} /> Push requires Firebase to be enabled above.</div>
           </div>
-          <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: BLUE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+          <button onClick={() => showToast('Alert preferences are saved automatically ✓')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: BLUE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
             <Save size={14} /> Save Notification Preferences
           </button>
         </div>
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+      )}
     </PageLayout>
   );
 }

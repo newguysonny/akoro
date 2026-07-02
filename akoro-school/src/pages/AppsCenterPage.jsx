@@ -16,21 +16,27 @@ const CATEGORIES = [
   { key: 'assets', label: 'Assets',           icon: BookOpen },
 ];
 
-/* Built-in school-management apps (mock — priced & lockable like the agent catalog) */
-const SCHOOL_APPS = [
-  { id: 'qpg',  name: 'Question Paper Generator', desc: 'Generate offline exam papers with Excel import, multi-section support, and print-ready PDFs.', icon: FileText,      iconBg: BLUE,   badge: 'New',  status: 'active', price: 15000 },
-  { id: 's360', name: 'Student 360 View',         desc: 'Unified student profile — attendance, fees, marks, and notes in one page.',                    icon: UserCircle,    iconBg: GREEN,  badge: 'New',  status: 'active', price: 0 },
-  { id: 'seat', name: 'Seating Arrangement Generator', desc: 'Auto-generate exam hall seating with class interleaving and hall tickets.',                icon: Grid3x3,       iconBg: AMBER,  badge: 'New',  status: 'active', price: 10000 },
-  { id: 'fin',  name: 'Financial Analytics & Reports', desc: 'Advanced P&L, Cash Flow summaries, and Tally exports.',                                    icon: PieChart,      iconBg: INK,    badge: 'New',  status: 'active', price: 25000 },
-  { id: 'wb',   name: 'Digital Whiteboard',       desc: 'Create, save, and share digital whiteboards for teaching and planning using Excalidraw.',      icon: PenTool,       iconBg: INK,    badge: 'New',  status: 'active', price: 8000 },
-  { id: 'risk', name: 'At-Risk Student Detector', desc: 'Flag students at academic risk using attendance and marks trends.',                           icon: AlertTriangle, iconBg: GREEN,  badge: null,   status: 'soon',   price: 20000 },
-  { id: 'imp',  name: 'Data Import/Export Utility', desc: 'Bulk import students via Excel and export class data for any module.',                       icon: ArrowLeftRight, iconBg: INK,   badge: null,   status: 'soon',   price: 5000 },
-  { id: 'res',  name: 'Result Analysis Tool',     desc: 'Subject-wise averages, pass/fail counts, mark distribution, and rank lists.',                  icon: TrendingUp,    iconBg: BLUE,   badge: null,   status: 'soon',   price: 12000 },
-];
+/* Management tools are served by the same DB catalog as Agent Tools/Assets
+   (edu.platform_tools, kind='management') — this just maps each stable `key`
+   to its icon + accent color for display. */
+const MGMT_ICONS = {
+  'mgmt-question-paper':  { icon: FileText,      iconBg: BLUE },
+  'mgmt-student-360':     { icon: UserCircle,    iconBg: GREEN },
+  'mgmt-seating':         { icon: Grid3x3,       iconBg: AMBER },
+  'mgmt-financial':       { icon: PieChart,      iconBg: INK },
+  'mgmt-whiteboard':      { icon: PenTool,       iconBg: INK },
+  'mgmt-at-risk':         { icon: AlertTriangle, iconBg: GREEN },
+  'mgmt-import-export':   { icon: ArrowLeftRight, iconBg: INK },
+  'mgmt-result-analysis': { icon: TrendingUp,    iconBg: BLUE },
+};
+const DEFAULT_MGMT_ICON = { icon: Grid3x3, iconBg: BLUE };
 
 /* ── School-management app card (locked/unlocked, priced, same language as agent tools) ── */
-function SchoolAppCard({ app, owned, busy, onBuy }) {
+function SchoolAppCard({ app, busy, onBuy }) {
   const soon = app.status === 'soon';
+  const owned = app.owned;
+  const { icon: Icon, iconBg } = MGMT_ICONS[app.key] || DEFAULT_MGMT_ICON;
+  const badge = !soon && app.status === 'active' ? 'New' : null;
   const [hover, setHover] = useState(false);
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{
@@ -39,18 +45,18 @@ function SchoolAppCard({ app, owned, busy, onBuy }) {
       boxShadow: hover ? '0 10px 30px rgba(26,26,46,.10)' : '0 1px 3px rgba(26,26,46,.04)',
       transform: hover ? 'translateY(-3px)' : 'none', transition: 'all .18s',
     }}>
-      <div style={{ width: 60, height: 60, borderRadius: 16, background: app.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: `0 6px 16px ${app.iconBg}44` }}>
-        <app.icon size={28} color={WHITE} strokeWidth={2} />
+      <div style={{ width: 60, height: 60, borderRadius: 16, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: `0 6px 16px ${iconBg}44` }}>
+        <Icon size={28} color={WHITE} strokeWidth={2} />
       </div>
       <h3 style={{ fontSize: 15.5, fontWeight: 800, color: INK, margin: '0 0 7px' }}>{app.name}</h3>
-      <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, margin: '0 0 14px', minHeight: 38 }}>{app.desc}</p>
+      <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, margin: '0 0 14px', minHeight: 38 }}>{app.description}</p>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 14, gap: 8 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, background: `${BLUE}12`, color: BLUE, fontSize: 11, fontWeight: 700 }}>
           <Grid3x3 size={11} /> Management
         </span>
-        {app.badge && <span style={{ padding: '4px 10px', borderRadius: 999, background: '#FEE2E2', color: '#DC2626', fontSize: 11, fontWeight: 800 }}>{app.badge}</span>}
-        {soon && !app.badge && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: '#F1F0EE', color: MUTED2, fontSize: 11, fontWeight: 700 }}><Clock size={11} /> Coming Soon</span>}
+        {badge && <span style={{ padding: '4px 10px', borderRadius: 999, background: '#FEE2E2', color: '#DC2626', fontSize: 11, fontWeight: 800 }}>{badge}</span>}
+        {soon && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: '#F1F0EE', color: MUTED2, fontSize: 11, fontWeight: 700 }}><Clock size={11} /> Coming Soon</span>}
       </div>
 
       <div style={{ width: '100%', marginBottom: 14 }}>
@@ -139,15 +145,14 @@ function AppCard({ item, busy, onBuy }) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function AppsCenterPage() {
-  const [tools, setTools]   = useState([]);
-  const [assets, setAssets] = useState([]);
+  const [tools, setTools]     = useState([]);
+  const [assets, setAssets]   = useState([]);
+  const [mgmt, setMgmt]       = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState(null);
-  const [toast, setToast]   = useState('');
-  const [cat, setCat]       = useState('all');
-  const [query, setQuery]   = useState('');
-  const [mgmtOwned, setMgmtOwned] = useState(() => new Set(SCHOOL_APPS.filter((a) => a.price === 0).map((a) => a.id)));
-  const [mgmtBusy, setMgmtBusy]   = useState(null);
+  const [busyId, setBusyId]   = useState(null);
+  const [toast, setToast]     = useState('');
+  const [cat, setCat]         = useState('all');
+  const [query, setQuery]     = useState('');
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
@@ -156,6 +161,7 @@ export default function AppsCenterPage() {
       const res = await apiGet('/api/instructor/tools');
       setTools((res.tools || []).map((t) => ({ ...t, _kind: 'tool' })));
       setAssets((res.assets || []).map((a) => ({ ...a, _kind: 'asset' })));
+      setMgmt((res.management || []).map((m) => ({ ...m, _kind: 'mgmt' })));
     } catch (e) {
       showToast(e.message || 'Could not load catalog');
     } finally { setLoading(false); }
@@ -184,28 +190,17 @@ export default function AppsCenterPage() {
     finally { setBusyId(null); }
   };
 
-  const buyMgmt = (app) => {
-    setMgmtBusy(app.id);
-    setTimeout(() => {
-      setMgmtOwned((prev) => new Set(prev).add(app.id));
-      setMgmtBusy(null);
-      showToast('Unlocked ✓');
-    }, 700);
-  };
-
-  const mgmt = useMemo(() => SCHOOL_APPS.map((a) => ({ ...a, _kind: 'mgmt', owned: mgmtOwned.has(a.id) })), [mgmtOwned]);
-
   const q = query.trim().toLowerCase();
   const catalog = useMemo(() => {
     let list = cat === 'mgmt' ? mgmt
       : cat === 'tools' ? tools
       : cat === 'assets' ? assets
       : [...mgmt, ...tools, ...assets];
-    if (q) list = list.filter((i) => (i.name || '').toLowerCase().includes(q) || (i.description || i.desc || '').toLowerCase().includes(q));
+    if (q) list = list.filter((i) => (i.name || '').toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
     return list;
   }, [cat, q, mgmt, tools, assets]);
 
-  const unlocked = [...tools, ...assets].filter((i) => i.owned).length + mgmtOwned.size;
+  const unlocked = [...tools, ...assets, ...mgmt].filter((i) => i.owned).length;
 
   return (
     <PageLayout title="Apps Center" subtitle="Browse and unlock tools & assets for your agent">
@@ -276,7 +271,7 @@ export default function AppsCenterPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
           {catalog.map((item) => item._kind === 'mgmt'
-            ? <SchoolAppCard key={`mgmt-${item.id}`} app={item} owned={item.owned} busy={mgmtBusy === item.id} onBuy={buyMgmt} />
+            ? <SchoolAppCard key={`mgmt-${item.id}`} app={item} busy={busyId === item.id} onBuy={buy} />
             : <AppCard key={`${item._kind}-${item.id}`} item={item} busy={busyId === item.id} onBuy={buy} />)}
         </div>
       )}

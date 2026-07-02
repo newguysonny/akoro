@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Send, ArrowLeft, SlidersHorizontal, CheckCircle2, Info, Bell, AlertTriangle,
+  Send, ArrowLeft, SlidersHorizontal, CheckCircle2, Info, Bell, AlertTriangle, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPut, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
 function Toggle({ on, onChange }) {
@@ -31,10 +32,63 @@ const ALERTS = [
 
 export default function TelegramBotPage() {
   const navigate = useNavigate();
-  const [active, setActive] = useState(true);
+  const [active, setActive] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
   const [token, setToken] = useState('');
   const [chatId, setChatId] = useState('');
   const [validated, setValidated] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState('');
+
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  useEffect(() => {
+    apiGet('/api/school/telegram')
+      .then((res) => {
+        const d = res.data || {};
+        setActive(!!d.active);
+        setHasToken(!!d.hasToken);
+        setChatId(d.chatId || '');
+        setValidated(!!d.hasToken);
+      })
+      .catch((e) => showToast(e.message || 'Could not load Telegram config'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const validate = async () => {
+    if (!token) return;
+    setValidating(true);
+    try {
+      const res = await apiPost('/api/school/telegram/validate', { botToken: token });
+      if (res.success) { setValidated(true); showToast(`Connected to @${res.data.username} ✓`); }
+    } catch (e) { setValidated(false); showToast(e.message || 'Invalid bot token'); }
+    finally { setValidating(false); }
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body = { chatId, active };
+      if (token) body.botToken = token;
+      await apiPut('/api/school/telegram', body);
+      setHasToken(hasToken || !!token);
+      setToken('');
+      showToast('Saved ✓');
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setSaving(false); }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      const res = await apiPost('/api/school/telegram/test', {});
+      showToast(res.message || 'Test message sent!');
+    } catch (e) { showToast(e.message || 'Could not send test message'); }
+    finally { setTesting(false); }
+  };
 
   const inputStyle = {
     width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`,
@@ -73,11 +127,12 @@ export default function TelegramBotPage() {
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>Bot Token</label>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <input value={token} onChange={(e) => { setToken(e.target.value); setValidated(false); }} placeholder="123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style={{ ...inputStyle, flex: 1, minWidth: 200 }} />
-                  <button onClick={() => setValidated(!!token)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${validated ? GREEN : BLUE}`, background: validated ? `${GREEN}10` : WHITE, color: validated ? GREEN : BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                    <CheckCircle2 size={13} /> {validated ? 'Validated' : 'Validate'}
+                  <input value={token} onChange={(e) => { setToken(e.target.value); setValidated(false); }} placeholder={hasToken ? 'Saved — enter a new token to replace it' : '123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'} style={{ ...inputStyle, flex: 1, minWidth: 200 }} />
+                  <button onClick={validate} disabled={!token || validating} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${validated ? GREEN : BLUE}`, background: validated ? `${GREEN}10` : WHITE, color: validated ? GREEN : BLUE, fontSize: 12.5, fontWeight: 800, cursor: token ? 'pointer' : 'not-allowed', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                    {validating ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <CheckCircle2 size={13} />} {validated ? 'Validated' : 'Validate'}
                   </button>
                 </div>
+                {hasToken && !token && <p style={{ fontSize: 11, color: GREEN, margin: '6px 0 0', fontFamily: FONT, fontWeight: 700 }}>A bot token is already saved for this school.</p>}
               </div>
 
               <div style={{ marginBottom: 6 }}>
@@ -90,11 +145,11 @@ export default function TelegramBotPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, padding: '14px 20px', borderTop: `1px solid ${BORDER}`, background: LIGHT, flexWrap: 'wrap' }}>
-              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 9, border: 'none', background: '#0EA5E9', color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                <Send size={13} /> Send Test Message
+              <button onClick={sendTest} disabled={testing || !hasToken || !chatId} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 9, border: 'none', background: (!hasToken || !chatId) ? '#E5E7EB' : '#0EA5E9', color: (!hasToken || !chatId) ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: (!hasToken || !chatId) ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+                {testing ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />} Send Test Message
               </button>
-              <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                Save Settings
+              <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
+                {saving ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : null} {saving ? 'Saving…' : 'Save Settings'}
               </button>
             </div>
           </div>
@@ -138,6 +193,10 @@ export default function TelegramBotPage() {
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+      )}
     </PageLayout>
   );
 }

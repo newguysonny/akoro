@@ -259,7 +259,9 @@ router.get("/", authenticateToken, async (req, res) => {
       name:        r.name,
       description: r.description,
       emoji:       r.emoji,
-      tag:         r.tag,
+      tag:         r.kind === "management" ? undefined : r.tag,
+      // Management tools repurpose `tag` as a lifecycle status ('active' | 'soon').
+      status:      r.kind === "management" ? (r.tag || "active") : undefined,
       priceKobo:   r.price_kobo,
       price:       toNaira(r.price_kobo),
       currency:    r.currency,
@@ -268,9 +270,10 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const items  = (catalog || []).map(shape);
     res.json({
-      success: true,
-      tools:   items.filter((i) => i.kind === "tool"),
-      assets:  items.filter((i) => i.kind === "asset"),
+      success:    true,
+      tools:      items.filter((i) => i.kind === "tool"),
+      assets:     items.filter((i) => i.kind === "asset"),
+      management: items.filter((i) => i.kind === "management"),
     });
   } catch (e) {
     res.status(500).json({ error: e.message });

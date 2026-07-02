@@ -1,16 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Facebook, Instagram, ArrowLeft, CheckCircle2, RefreshCw, Send, Info,
-  ShieldCheck, XCircle,
+  ShieldCheck, XCircle, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPatch } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
-const ACCOUNTS = [
-  { id: 'fb', name: 'Yug International School Official', handle: 'Page ID: 102345678901234', icon: Facebook, color: '#1877F2' },
-  { id: 'ig', name: '@yug_international_school', handle: 'IG User ID: 17841400123456789', icon: Instagram, color: '#E1306C' },
-];
+const PROVIDER_META = {
+  facebook:  { icon: Facebook,  color: '#1877F2' },
+  instagram: { icon: Instagram, color: '#E1306C' },
+};
 
 const CONTENT_TYPES = [
   { key: 'notices',  label: 'School Notices',  emoji: '📢', fb: 'Text Post',    ig: '— Text only — no image' },
@@ -39,8 +40,31 @@ function StepList() {
 
 export default function SocialMediaPage() {
   const navigate = useNavigate();
-  const [active, setActive] = useState('Yug International School Official (+ IG: @yug_international)');
-  const [connected, setConnected] = useState(true);
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [busyId, setBusyId]     = useState(null);
+  const [toast, setToast]       = useState('');
+
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const load = useCallback(() => {
+    apiGet('/api/school/social-accounts')
+      .then((res) => setAccounts(res.data || []))
+      .catch((e) => showToast(e.message || 'Could not load social accounts'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggleActive = async (acc) => {
+    setBusyId(acc.id);
+    try {
+      await apiPatch(`/api/school/social-accounts/${acc.id}`, { active: !acc.active });
+      setAccounts((prev) => prev.map((a) => (a.id === acc.id ? { ...a, active: !a.active } : a)));
+      showToast(acc.active ? 'Disconnected' : 'Reconnected ✓');
+    } catch (e) { showToast(e.message || 'Could not update'); }
+    finally { setBusyId(null); }
+  };
 
   const btn = (bg, color = WHITE) => ({
     display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9,
@@ -65,39 +89,48 @@ export default function SocialMediaPage() {
               <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>Connected Accounts</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {ACCOUNTS.map((a) => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 8, background: `${a.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <a.icon size={16} color={a.color} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <p style={{ fontSize: 13, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>{a.name}</p>
-                    <p style={{ fontSize: 11, color: MUTED2, margin: '2px 0 0', fontFamily: FONT }}>{a.handle}</p>
-                  </div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, background: `${GREEN}15`, color: GREEN, fontSize: 11.5, fontWeight: 800, fontFamily: FONT }}>
-                    <CheckCircle2 size={12} /> Active
-                  </span>
-                </div>
-              ))}
-            </div>
+            {loading ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT }}><Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /></div>
+            ) : accounts.length === 0 ? (
+              <div style={{ padding: '18px', border: `1.5px dashed ${BORDER}`, borderRadius: 10, textAlign: 'center', color: MUTED2, fontSize: 12.5, fontFamily: FONT, marginBottom: 16 }}>
+                No social accounts connected yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                {accounts.map((a) => {
+                  const meta = PROVIDER_META[a.provider] || PROVIDER_META.facebook;
+                  return (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <meta.icon size={16} color={meta.color} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <p style={{ fontSize: 13, fontWeight: 800, color: INK, margin: 0, fontFamily: FONT }}>{a.pageName}</p>
+                        <p style={{ fontSize: 11, color: MUTED2, margin: '2px 0 0', fontFamily: FONT }}>{a.provider === 'instagram' ? 'IG User ID' : 'Page ID'}: {a.pageId}</p>
+                      </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, background: a.active ? `${GREEN}15` : `${RED}12`, color: a.active ? GREEN : RED, fontSize: 11.5, fontWeight: 800, fontFamily: FONT }}>
+                        <CheckCircle2 size={12} /> {a.active ? 'Active' : 'Disconnected'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
-            <p style={{ fontSize: 12, fontWeight: 700, color: INK, margin: '0 0 6px', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <RefreshCw size={12} color={MUTED2} /> Switch Active Page
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-              <select value={active} onChange={(e) => setActive(e.target.value)} style={{ flex: 1, minWidth: 200, padding: '10px 12px', borderRadius: 9, border: `1.5px solid ${BORDER}`, fontSize: 12.5, fontFamily: FONT, color: INK, background: WHITE }}>
-                <option>Yug International School Official (+ IG: @yug_international)</option>
-              </select>
-              <button style={btn(BLUE)}><RefreshCw size={13} /> Switch</button>
-            </div>
-
-            <p style={{ fontSize: 11, color: MUTED2, margin: '0 0 14px', fontFamily: FONT }}>
-              Connected: 11 May 2026, 01:05 PM &nbsp;|&nbsp; Token expires: 4 days from now
-            </p>
+            {accounts[0] && (
+              <p style={{ fontSize: 11, color: MUTED2, margin: '0 0 14px', fontFamily: FONT }}>
+                Connected: {new Date(accounts[0].connectedAt).toLocaleString('en-NG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {accounts[0].expiresAt && <> &nbsp;|&nbsp; Token expires: {new Date(accounts[0].expiresAt).toLocaleDateString()}</>}
+              </p>
+            )}
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={() => setConnected(false)} style={btn(RED)}><XCircle size={13} /> Disconnect</button>
+              {accounts.map((a) => (
+                <button key={a.id} onClick={() => toggleActive(a)} disabled={busyId === a.id} style={btn(a.active ? RED : GREEN)}>
+                  {busyId === a.id ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : a.active ? <XCircle size={13} /> : <RefreshCw size={13} />}
+                  {a.active ? `Disconnect ${a.provider === 'instagram' ? 'Instagram' : 'Facebook'}` : `Reconnect ${a.provider === 'instagram' ? 'Instagram' : 'Facebook'}`}
+                </button>
+              ))}
               <button style={btn('#0EA5E9')}><Send size={13} /> Send Test Post</button>
             </div>
           </div>
@@ -164,6 +197,10 @@ export default function SocialMediaPage() {
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+      )}
     </PageLayout>
   );
 }

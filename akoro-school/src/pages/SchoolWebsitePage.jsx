@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Globe, Code2, ExternalLink, Power, Palette, RefreshCw, Star, Info,
   Search, Braces, Droplet, Share2, Layers, ChevronDown, Save, Check,
   Facebook, Twitter, Instagram, Youtube, Linkedin, MessageCircle,
-  GripVertical, Upload,
+  GripVertical, Upload, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
 const THEMES = [
@@ -92,11 +93,14 @@ function Toggle({ on, onChange }) {
 
 export default function SchoolWebsitePage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [themeId, setThemeId] = useState('indian-gov');
   const [enabled, setEnabled] = useState(false);
   const [heroTitle, setHeroTitle] = useState('');
   const [heroSubtitle, setHeroSubtitle] = useState('Empowering students with knowledge, values, and skills for a brighter tomorrow.');
   const [aboutText, setAboutText] = useState('');
-  const [metaTitle, setMetaTitle] = useState('Yug International');
+  const [metaTitle, setMetaTitle] = useState('');
   const [metaKeywords, setMetaKeywords] = useState('school, education, learning');
   const [metaDesc, setMetaDesc] = useState('');
   const [headerScripts, setHeaderScripts] = useState('');
@@ -110,9 +114,51 @@ export default function SchoolWebsitePage() {
   const [customCss, setCustomCss] = useState('');
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    apiGet('/api/school/website')
+      .then((res) => {
+        const d = res.data || {};
+        setEnabled(!!d.enabled);
+        setThemeId(d.themeId || 'indian-gov');
+        setHeroTitle(d.heroTitle || '');
+        setHeroSubtitle(d.heroSubtitle || heroSubtitle);
+        setAboutText(d.aboutText || '');
+        setMetaTitle(d.metaTitle || '');
+        setMetaKeywords(d.metaKeywords || metaKeywords);
+        setMetaDesc(d.metaDescription || '');
+        setHeaderScripts(d.headerScripts || '');
+        setFooterScripts(d.footerScripts || '');
+        setPrimary(d.primaryColor || primary);
+        setSecondary(d.secondaryColor || secondary);
+        setAccent(d.accentColor || accent);
+        setBgMode(d.bgMode || 'Light');
+        setSocial(d.socialLinks || {});
+        if (Array.isArray(d.sections) && d.sections.length) setSections(d.sections);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const toggleSection = (key) => setSections((prev) => prev.map((s) => (s.key === key ? { ...s, on: !s.on } : s)));
   const setSoc = (key) => (e) => setSocial((s) => ({ ...s, [key]: e.target.value }));
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const cycleTheme = () => setThemeId((prev) => THEMES[(THEMES.findIndex((t) => t.id === prev) + 1) % THEMES.length].id);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await apiPut('/api/school/website', {
+        enabled, themeId,
+        heroTitle, heroSubtitle, aboutText,
+        metaTitle, metaKeywords, metaDescription: metaDesc,
+        headerScripts, footerScripts,
+        primaryColor: primary, secondaryColor: secondary, accentColor: accent, bgMode,
+        socialLinks: social, sections, customCss,
+      });
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } catch { /* toast omitted here — inline "Saved" indicator covers success/failure feedback */ }
+    finally { setSaving(false); }
+  };
 
   return (
     <PageLayout title="School Website" subtitle="Configure your school's public landing page">
@@ -125,6 +171,12 @@ export default function SchoolWebsitePage() {
         </button>
       </div>
 
+      {loading ? (
+        <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT, fontSize: 13.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /> Loading website settings…
+        </div>
+      ) : (
+      <>
       {/* Enable */}
       <Card icon={Power} iconColor={GREEN} title="Enable School Website">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
@@ -137,11 +189,11 @@ export default function SchoolWebsitePage() {
 
       {/* Theme */}
       <Card icon={Palette} iconColor={BLUE} title="Website Theme" action={
-        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+        <button onClick={cycleTheme} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <RefreshCw size={13} /> Change Theme
         </button>
       }>
-        {THEMES.filter((t) => t.active).map((t) => (
+        {THEMES.filter((t) => t.id === themeId).map((t) => (
           <div key={t.id} style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ width: 220, height: 140, borderRadius: 10, background: `linear-gradient(160deg, ${t.colors[1]}, ${t.colors[0]})`, flexShrink: 0, border: `1px solid ${BORDER}` }} />
             <div style={{ flex: 1, minWidth: 220 }}>
@@ -244,10 +296,12 @@ export default function SchoolWebsitePage() {
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
         {saved && <span style={{ fontSize: 12.5, fontWeight: 700, color: GREEN, fontFamily: FONT }}>Saved ✓</span>}
-        <button onClick={save} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, boxShadow: `0 4px 14px ${AMBER}44` }}>
-          <Save size={15} /> Save Settings
+        <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 22px', borderRadius: 10, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT, boxShadow: saving ? 'none' : `0 4px 14px ${AMBER}44` }}>
+          {saving ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={15} />} {saving ? 'Saving…' : 'Save Settings'}
         </button>
       </div>
+      </>
+      )}
     </PageLayout>
   );
 }

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Code2, ArrowLeft, Plus, ToggleLeft, Palette, CheckCircle2, Pencil, Layers } from 'lucide-react';
+import { ArrowLeft, Plus, ToggleLeft, Palette, CheckCircle2, Pencil, Layers, Loader2 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { apiGet, apiPost, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
 
 const DEFAULT_HTML = `<!DOCTYPE html>
@@ -9,63 +10,82 @@ const DEFAULT_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yug International — Welcome</title>
-  <meta name="description" content="Welcome to Yug International. Empowering students with knowledge, values, and skills for a brighter tomorrow.">
+  <title>My School — Welcome</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; color: #1a1a2e; }
-    nav { padding: 20px 40px; display: flex; align-items: center; justify-content: space-between; background: #fff; }
-    .logo { font-size: 24px; font-weight: 900; color: #1a56db; }
-    .nav-links { display: flex; gap: 24px; list-style: none; }
-    .nav-links a { font-size: 14px; font-weight: 600; color: #333; text-decoration: none; }
     .hero { min-height: 80vh; display: flex; align-items: center; justify-content: center; text-align: center; background: linear-gradient(160deg,#eef2ff,#fff); }
-    .hero h1 { font-size: 48px; font-weight: 900; margin-bottom: 16px; }
-    .hero span { color: #1a56db; }
-    .hero p { font-size: 18px; color: #666; max-width: 600px; margin: 0 auto 32px; }
-    .btn-primary { display: inline-block; padding: 14px 32px; border-radius: 50px; font-weight: 700; text-decoration: none; background: #1a56db; color: #fff; }
-    footer { background: #1a202c; color: #ccc; padding: 40px; text-align: center; font-size: 14px; }
+    .hero h1 { font-size: 40px; font-weight: 900; }
   </style>
 </head>
 <body>
-  <nav>
-    <div class="logo">Yug International</div>
-    <ul class="nav-links">
-      <li><a href="#about">About</a></li>
-      <li><a href="#contact">Contact</a></li>
-      <li><a href="/login">Login</a></li>
-    </ul>
-  </nav>
-
-  <section class="hero">
-    <div>
-      <h1>Welcome to <span>Yug International</span></h1>
-      <p>Empowering students with knowledge, values, and skills for a brighter tomorrow.</p>
-      <a href="/login" class="btn-primary">Parent / Student Login</a>
-    </div>
-  </section>
-
-  <footer>
-    <p>&copy; 2026 Yug International. All Rights Reserved.</p>
-  </footer>
+  <section class="hero"><h1>Welcome to {{school_name}}</h1></section>
 </body>
 </html>`;
 
-const INITIAL_TEMPLATES = [
-  { id: 'demo-templates', name: 'demo-templates', desc: '', updated: '1 month ago', active: true, html: DEFAULT_HTML },
-];
+const timeAgo = (iso) => {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+};
 
 export default function WebsiteTemplatesPage() {
   const navigate = useNavigate();
-  const [templates, setTemplates] = useState(INITIAL_TEMPLATES);
-  const [mode, setMode] = useState('template'); // 'template' | 'theme'
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [mode, setMode] = useState('theme'); // 'template' | 'theme'
+  const [toast, setToast] = useState('');
 
-  const activate = (id) => setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
-  const newTemplate = () => {
-    const id = `template-${Date.now()}`;
-    const tpl = { id, name: 'untitled-template', desc: '', updated: 'just now', active: false, html: DEFAULT_HTML };
-    setTemplates((prev) => [...prev, tpl]);
-    navigate(`/settings-website/templates/${id}`, { state: { template: tpl } });
+  const load = useCallback(() => {
+    Promise.all([
+      apiGet('/api/school/website/templates'),
+      apiGet('/api/school/website'),
+    ]).then(([tRes, wRes]) => {
+      setTemplates(tRes.data || []);
+      setMode(wRes.data?.mode || 'theme');
+    }).catch((e) => showToast(e.message || 'Could not load templates'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const activate = async (id) => {
+    setBusyId(id);
+    try {
+      await apiPost(`/api/school/website/templates/${id}/activate`, {});
+      setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
+      setMode('template');
+      showToast('Template activated ✓');
+    } catch (e) { showToast(e.message || 'Could not activate'); }
+    finally { setBusyId(null); }
+  };
+
+  const newTemplate = async () => {
+    setCreating(true);
+    try {
+      const res = await apiPost('/api/school/website/templates', { name: 'untitled-template', description: '', html: DEFAULT_HTML });
+      navigate(`/settings-website/templates/${res.data.id}`, { state: { template: res.data } });
+    } catch (e) { showToast(e.message || 'Could not create template'); }
+    finally { setCreating(false); }
+  };
+
+  const switchMode = async () => {
+    const next = mode === 'template' ? 'theme' : 'template';
+    try {
+      await apiPut('/api/school/website', { mode: next });
+      setMode(next);
+    } catch (e) { showToast(e.message || 'Could not switch mode'); }
   };
 
   return (
@@ -74,8 +94,8 @@ export default function WebsiteTemplatesPage() {
         <button onClick={() => navigate('/settings-website')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: LIGHT, color: MUTED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <ArrowLeft size={14} /> Back to Website Settings
         </button>
-        <button onClick={newTemplate} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          <Plus size={14} /> New Template
+        <button onClick={newTemplate} disabled={creating} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: 'none', background: creating ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: creating ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: creating ? 'default' : 'pointer', fontFamily: FONT }}>
+          {creating ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} New Template
         </button>
       </div>
 
@@ -95,7 +115,7 @@ export default function WebsiteTemplatesPage() {
             </p>
           </div>
         </div>
-        <button onClick={() => setMode((m) => (m === 'template' ? 'theme' : 'template'))} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: WHITE, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+        <button onClick={switchMode} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: WHITE, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
           <Palette size={13} /> Switch to {mode === 'template' ? 'Theme' : 'Template'} Mode
         </button>
       </div>
@@ -106,6 +126,11 @@ export default function WebsiteTemplatesPage() {
           <Layers size={15} color={MUTED} />
           <span style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>Saved Templates ({templates.length})</span>
         </div>
+        {loading ? (
+          <div style={{ padding: '30px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        ) : templates.length === 0 ? (
+          <div style={{ padding: '30px 18px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No templates yet — click "New Template" to create one.</div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 560 }}>
             <thead>
@@ -129,8 +154,8 @@ export default function WebsiteTemplatesPage() {
                     <p style={{ fontSize: 13, fontWeight: 800, color: INK, margin: 0 }}>{t.name}</p>
                     <p style={{ fontSize: 11, color: MUTED2, margin: '2px 0 0' }}>{t.name}</p>
                   </td>
-                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: MUTED }}>{t.desc || '—'}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: MUTED }}>{t.updated}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: MUTED }}>{t.description || '—'}</td>
+                  <td style={{ padding: '12px 16px', fontSize: 12.5, color: MUTED }}>{timeAgo(t.updatedAt)}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <button onClick={() => navigate(`/settings-website/templates/${t.id}`, { state: { template: t } })} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', background: BLUE, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
@@ -141,8 +166,8 @@ export default function WebsiteTemplatesPage() {
                           <CheckCircle2 size={11} /> Active
                         </span>
                       ) : (
-                        <button onClick={() => activate(t.id)} style={{ padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                          Set Active
+                        <button onClick={() => activate(t.id)} disabled={busyId === t.id} style={{ padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                          {busyId === t.id ? <Loader2 size={11} style={{ animation: 'spin .8s linear infinite' }} /> : 'Set Active'}
                         </button>
                       )}
                     </div>
@@ -152,7 +177,12 @@ export default function WebsiteTemplatesPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
+      )}
     </PageLayout>
   );
 }
