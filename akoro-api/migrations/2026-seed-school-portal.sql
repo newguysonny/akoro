@@ -33,9 +33,16 @@ BEGIN
       security = '{"maintenanceMode":false}'::jsonb,
       personalisation = '{"language":"English","darkMode":false,"accentColour":"#E8884A"}'::jsonb,
       notification_prefs = '{"newStudent":true,"sessionReminder":true,"battleChallenge":true,"taskDeadline":true,"platformUpdates":false,"inAppSound":true,"desktopPush":false}'::jsonb,
-      modules = '{"hostel":false,"transport":false}'::jsonb
+      modules = '{}'::jsonb  -- all modules enabled by default (nothing hidden from the sidebar)
   WHERE school_id = v_school
     AND system_formats = '{}'::jsonb;  -- only seed if untouched
+
+  -- Re-enable Transport & Hostel for schools where an earlier seed run disabled
+  -- them (they were hidden from the sidebar by module gating).
+  UPDATE edu.school_portal_settings
+  SET modules = modules - 'hostel' - 'transport'
+  WHERE school_id = v_school
+    AND (modules ? 'hostel' OR modules ? 'transport');
 
   -- ── Telegram config row (inactive — needs a real bot token to enable) ────
   INSERT INTO edu.school_telegram_config (school_id, active) VALUES (v_school, false)
