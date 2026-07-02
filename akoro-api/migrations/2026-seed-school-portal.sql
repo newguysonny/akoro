@@ -158,5 +158,19 @@ BEGIN
   SELECT v_school, 'Father Photo', 'file', false, 0
   WHERE NOT EXISTS (SELECT 1 FROM edu.school_admission_fields WHERE school_id = v_school);
 
+  -- ── Subscription (Enterprise plan, active for 1 year) ────────────────────
+  INSERT INTO edu.school_subscriptions (school_id, plan_key, status, billing_cycle, starts_at, ends_at)
+  SELECT v_school, 'enterprise', 'active', 'yearly', now() - interval '30 days', now() + interval '335 days'
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_subscriptions WHERE school_id = v_school);
+
+  -- ── Payment History (one paid, one pending — matches demo screenshots) ───
+  INSERT INTO edu.school_subscription_payments (school_id, order_id, plan_key, billing_cycle, amount_kobo, method, transaction_id, status, created_at, paid_at)
+  SELECT v_school, 'order_' || substr(md5(random()::text), 1, 16), 'enterprise', 'yearly', 5000000, 'Paystack', 'TXN' || substr(md5(random()::text), 1, 10), 'paid', now() - interval '30 days', now() - interval '30 days'
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_subscription_payments WHERE school_id = v_school);
+
+  INSERT INTO edu.school_subscription_payments (school_id, order_id, plan_key, billing_cycle, amount_kobo, method, status, created_at)
+  SELECT v_school, 'order_' || substr(md5(random()::text), 1, 16), 'growth', 'monthly', 100000, 'Razorpay', 'pending', now() - interval '2 days'
+  WHERE (SELECT count(*) FROM edu.school_subscription_payments WHERE school_id = v_school) = 1;
+
   RAISE NOTICE 'Seeded school portal data for school_id=%', v_school;
 END $$;

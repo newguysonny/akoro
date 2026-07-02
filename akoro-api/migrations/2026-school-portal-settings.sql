@@ -114,6 +114,55 @@ CREATE TABLE IF NOT EXISTS edu.school_admission_fields (
 );
 CREATE INDEX IF NOT EXISTS idx_school_admission_fields_school ON edu.school_admission_fields (school_id, sort_order);
 
+-- ── Subscription plans (platform-owned catalog — prices set by us) ──────────
+CREATE TABLE IF NOT EXISTS edu.subscription_plans (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  key                text NOT NULL UNIQUE,
+  name               text NOT NULL,
+  description        text NOT NULL DEFAULT '',
+  max_students       integer NOT NULL,
+  price_monthly_kobo integer NOT NULL DEFAULT 0,
+  price_yearly_kobo  integer NOT NULL DEFAULT 0,
+  sort_order         integer NOT NULL DEFAULT 0,
+  is_active          boolean NOT NULL DEFAULT true
+);
+
+INSERT INTO edu.subscription_plans (key, name, description, max_students, price_monthly_kobo, price_yearly_kobo, sort_order) VALUES
+  ('trial',      'Trial Plan',      'Perfect for new and Testing Demo getting started.', 300,       0,       0, 1),
+  ('growth',     'Growth Plan',     'Our most popular plan for established and growing schools.', 500,  100000, 1000000, 2),
+  ('enterprise', 'Enterprise Plan', 'This solution is designed for higher strength usage by both students and teachers. It can be installed individually, and for further assistance, please contact our sales team.', 1000, 500000, 5000000, 3)
+ON CONFLICT (key) DO UPDATE
+  SET name = EXCLUDED.name, description = EXCLUDED.description, max_students = EXCLUDED.max_students, sort_order = EXCLUDED.sort_order;
+
+-- ── Each school's active subscription ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS edu.school_subscriptions (
+  school_id      uuid PRIMARY KEY REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  plan_key       text NOT NULL DEFAULT 'trial' REFERENCES edu.subscription_plans(key),
+  status         text NOT NULL DEFAULT 'trial' CHECK (status IN ('trial','active','expired','cancelled')),
+  billing_cycle  text NOT NULL DEFAULT 'yearly' CHECK (billing_cycle IN ('monthly','yearly')),
+  starts_at      timestamptz NOT NULL DEFAULT now(),
+  ends_at        timestamptz,
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── Subscription payment history ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS edu.school_subscription_payments (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id      uuid NOT NULL REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  order_id       text NOT NULL UNIQUE,
+  plan_key       text NOT NULL,
+  billing_cycle  text NOT NULL DEFAULT 'yearly',
+  amount_kobo    integer NOT NULL DEFAULT 0,
+  method         text NOT NULL DEFAULT 'Paystack',
+  transaction_id text,
+  proof_url      text,
+  paystack_ref   text UNIQUE,
+  status         text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','failed')),
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  paid_at        timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_school_subscription_payments_school ON edu.school_subscription_payments (school_id, created_at DESC);
+
 -- ── Social media connections (Facebook/Instagram autopost) ──────────────────
 CREATE TABLE IF NOT EXISTS edu.school_social_accounts (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

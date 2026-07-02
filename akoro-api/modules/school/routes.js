@@ -21,6 +21,11 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import {
+  initializeTransaction,
+  verifyTransaction,
+  generateReference,
+} from "../adaptive-learning/marketplace/paystackService.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -1091,6 +1096,158 @@ router.delete("/admission/fields/:id", authenticateToken, requireRole(SCHOOL_ROL
     const { error } = await db.schema("edu").from("school_admission_fields").delete().eq("id", req.params.id).eq("school_id", school.id);
     if (error) throw new Error(error.message);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =============================================================
+// SUBSCRIPTION — Manage Subscription + Payment History.
+// Plans are a platform-owned catalog (edu.subscription_plans, prices in
+// kobo). Checkout mirrors the instructor tools Paystack flow.
+// =============================================================
+
+const SCHOOL_FRONTEND_URL = process.env.SCHOOL_FRONTEND_URL || "https://school.akoro.app";
+const toNaira = (kobo) => Math.round((kobo || 0) / 100);
+
+async function getMySubscription(schoolId) {
+  const { data } = await db.schema("edu").from("school_subscriptions").select("*").eq("school_id", schoolId).maybeSingle();
+  if (data) return data;
+  const { data: created } = await db.schema("edu").from("school_subscriptions").insert({ school_id: schoolId }).select("*").single();
+  return created;
+}
+
+// ── GET /api/school/subscription ──────────────────────────────────────────────
+router.get("/subscription", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const [{ data: plans }, sub] = await Promise.all([
+      db.schema("edu").from("subscription_plans").select("key, name, description, max_students, price_monthly_kobo, price_yearly_kobo").eq("is_active", true).order("sort_order", { ascending: true }),
+      getMySubscription(school.id),
+    ]);
+    const plan = (plans || []).find((p) => p.key === sub.plan_key);
+    res.json({
+      success: true,
+      data: {
+        plans: (plans || []).map((p) => ({
+          key: p.key, name: p.name, description: p.description, maxStudents: p.max_students,
+          priceMonthly: toNaira(p.price_monthly_kobo), priceYearly: toNaira(p.price_yearly_kobo),
+        })),
+        current: {
+          planKey: sub.plan_key, name: plan?.name || sub.plan_key, description: plan?.description || "",
+          maxStudents: plan?.max_students || 0, status: sub.status, billingCycle: sub.billing_cycle,
+          startsAt: sub.starts_at, endsAt: sub.ends_at,
+        },
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/subscription/checkout ─────────────────────────────────────
+// Body: { planKey, cycle: 'monthly' | 'yearly' }
+router.post("/subscription/checkout", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { planKey, cycle = "yearly" } = req.body;
+    if (!["monthly", "yearly"].includes(cycle)) return res.status(400).json({ error: "cycle must be 'monthly' or 'yearly'" });
+
+    const { data: plan } = await db.schema("edu").from("subscription_plans").select("*").eq("key", planKey).eq("is_active", true).maybeSingle();
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+
+    const amountKobo = cycle === "monthly" ? plan.price_monthly_kobo : plan.price_yearly_kobo;
+    const orderId = `order_${crypto.randomBytes(8).toString("hex")}`;
+
+    // Free plan (e.g. Trial) — activate immediately, no payment needed.
+    if (!amountKobo) {
+      await db.schema("edu").from("school_subscriptions").upsert({
+        school_id: school.id, plan_key: plan.key, status: "active", billing_cycle: cycle,
+        starts_at: new Date(), ends_at: new Date(Date.now() + (cycle === "monthly" ? 30 : 365) * 86400000),
+        updated_at: new Date(),
+      }, { onConflict: "school_id" });
+      await db.schema("edu").from("school_subscription_payments").insert({
+        school_id: school.id, order_id: orderId, plan_key: plan.key, billing_cycle: cycle,
+        amount_kobo: 0, method: "Free", status: "paid", paid_at: new Date(),
+      });
+      return res.json({ success: true, free: true, message: `${plan.name} activated.` });
+    }
+
+    const email = req.body.email || (await getUserEmail(req.user.id));
+    if (!email) return res.status(400).json({ error: "email required for payment" });
+
+    const reference = generateReference("SUB");
+    await db.schema("edu").from("school_subscription_payments").insert({
+      school_id: school.id, order_id: orderId, plan_key: plan.key, billing_cycle: cycle,
+      amount_kobo: amountKobo, method: "Paystack", paystack_ref: reference, status: "pending",
+    });
+
+    const paystack = await initializeTransaction({
+      email,
+      amount_kobo: amountKobo,
+      reference,
+      callback_url: `${SCHOOL_FRONTEND_URL}/settings-subscription?sub_ref=${reference}`,
+      metadata: { school_id: school.id, plan_key: plan.key, billing_cycle: cycle, kind: "school_subscription" },
+    });
+
+    res.json({ success: true, authorization_url: paystack.authorization_url, reference, orderId });
+  } catch (e) {
+    console.error("[subscription/checkout]", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+async function getUserEmail(userId) {
+  try {
+    const { data } = await db.auth.admin.getUserById(userId);
+    return data?.user?.email || null;
+  } catch { return null; }
+}
+
+// ── GET /api/school/subscription/verify/:reference ─────────────────────────────
+router.get("/subscription/verify/:reference", authenticateToken, async (req, res) => {
+  try {
+    const { data: payment } = await db.schema("edu").from("school_subscription_payments").select("*").eq("paystack_ref", req.params.reference).maybeSingle();
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
+    if (payment.status === "paid") return res.json({ success: true, activated: true, alreadyProcessed: true });
+
+    const tx = await verifyTransaction(req.params.reference);
+    if (tx.status === "success") {
+      await db.schema("edu").from("school_subscription_payments")
+        .update({ status: "paid", paid_at: new Date(), transaction_id: String(tx.id || "") }).eq("id", payment.id);
+      const days = payment.billing_cycle === "monthly" ? 30 : 365;
+      await db.schema("edu").from("school_subscriptions").upsert({
+        school_id: payment.school_id, plan_key: payment.plan_key, status: "active",
+        billing_cycle: payment.billing_cycle, starts_at: new Date(),
+        ends_at: new Date(Date.now() + days * 86400000), updated_at: new Date(),
+      }, { onConflict: "school_id" });
+      return res.json({ success: true, activated: true, message: "Payment verified — subscription activated!" });
+    }
+
+    await db.schema("edu").from("school_subscription_payments").update({ status: "failed" }).eq("id", payment.id);
+    res.json({ success: false, activated: false, status: tx.status, message: "Payment not successful" });
+  } catch (e) {
+    console.error("[subscription/verify]", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/school/subscription/payments ───────────────────────────────────────
+router.get("/subscription/payments", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: plans } = await db.schema("edu").from("subscription_plans").select("key, name");
+    const planName = Object.fromEntries((plans || []).map((p) => [p.key, p.name]));
+
+    const { data } = await db.schema("edu").from("school_subscription_payments")
+      .select("id, order_id, plan_key, amount_kobo, method, transaction_id, proof_url, status, created_at, paid_at")
+      .eq("school_id", school.id)
+      .order("created_at", { ascending: false });
+
+    res.json({ success: true, data: (data || []).map((p) => ({
+      id: p.id, orderId: p.order_id, plan: planName[p.plan_key] || p.plan_key,
+      amount: toNaira(p.amount_kobo), method: p.method, transactionId: p.transaction_id,
+      proofUrl: p.proof_url, status: p.status, createdAt: p.created_at, paidAt: p.paid_at,
+    })) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

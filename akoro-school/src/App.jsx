@@ -29,6 +29,8 @@ import BackupManagementPage from './pages/BackupManagementPage.jsx';
 import RolesPermissionsPage from './pages/RolesPermissionsPage.jsx';
 import PaymentGatewayPage from './pages/PaymentGatewayPage.jsx';
 import AdmissionSettingsPage from './pages/AdmissionSettingsPage.jsx';
+import ManageSubscriptionPage from './pages/ManageSubscriptionPage.jsx';
+import SubscriptionHistoryPage from './pages/SubscriptionHistoryPage.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
@@ -124,6 +126,8 @@ function AppRoutes() {
       <Route path="/settings-roles" element={<ProtectedRoute><RolesPermissionsPage /></ProtectedRoute>} />
       <Route path="/settings-payment-gateway" element={<ProtectedRoute><PaymentGatewayPage /></ProtectedRoute>} />
       <Route path="/settings-admission" element={<ProtectedRoute><AdmissionSettingsPage /></ProtectedRoute>} />
+      <Route path="/settings-subscription" element={<ProtectedRoute><ManageSubscriptionPage /></ProtectedRoute>} />
+      <Route path="/settings-subscription-history" element={<ProtectedRoute><SubscriptionHistoryPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
