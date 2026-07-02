@@ -24,6 +24,9 @@ import SettingsBillingPage from './pages/SettingsBillingPage.jsx';
 import SocialMediaPage     from './pages/SocialMediaPage.jsx';
 import TelegramBotPage     from './pages/TelegramBotPage.jsx';
 import DomainPage          from './pages/DomainPage.jsx';
+import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
+import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
+import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
 import NotificationCenterPage from './pages/NotificationCenterPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
@@ -111,6 +114,9 @@ function AppRoutes() {
       <Route path="/settings-social-media" element={<ProtectedRoute><SocialMediaPage /></ProtectedRoute>} />
       <Route path="/settings-telegram" element={<ProtectedRoute><TelegramBotPage /></ProtectedRoute>} />
       <Route path="/settings-domain" element={<ProtectedRoute><DomainPage /></ProtectedRoute>} />
+      <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
+      <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
+      <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
       <Route path="/settings-notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 

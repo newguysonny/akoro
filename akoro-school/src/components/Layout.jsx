@@ -75,7 +75,7 @@ const NAV_SECTIONS = [
       'Subscription History',
       'Module Settings',
       'Biometric Devices',
-      'School Website',
+      { label: 'School Website', to: '/settings-website' },
     ] },
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
   ]},
