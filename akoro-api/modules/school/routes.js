@@ -27,6 +27,7 @@ import {
   generateReference,
 } from "../adaptive-learning/marketplace/paystackService.js";
 import { renderMiniTemplate, renderThemePage, buildContext } from "./siteRenderer.js";
+import mgmtRouter from "./mgmt.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -71,6 +72,10 @@ router.use((req, res, next) => {
   });
   next();
 });
+
+// Management + Facilities & Services (mgmt schema). Mounted after the audit
+// middleware above so every mgmt write is audit-logged too.
+router.use("/mgmt", mgmtRouter);
 
 // Resolve the caller's school (first one they administer). 404s if none.
 async function getMySchool(req, res) {

@@ -24,7 +24,17 @@ const NAV_SECTIONS = [
   { section: 'MANAGEMENT', items: [
     { label: 'Finance & Fees', icon: Banknote, children: ['Fees Dashboard','Collect Fees','Search Due Fees','All Transactions','Online Transactions','Fee Challans','Assign Fees','Fees Carry Forward','Fee Groups','Fees Discount','Fee Types','Generate Due Slip','Due Slip History'] },
     { label: 'Accounts', icon: Landmark, moduleKey: 'accounts_finance', children: ['Accounts Dashboard','Income','Expense','Income Heads','Expense Heads','Bank Accounts'] },
-    { label: 'Student Information', icon: Users, children: ['Student Dashboard','Student Admission','Student List','Student Attendance','Behavior Records','Student Houses','Student Categories','Disabled Students','Health Records'] },
+    { label: 'Student Information', icon: Users, children: [
+      { label: 'Student Dashboard', to: '/mgmt/student-dashboard' },
+      { label: 'Student Admission', to: '/mgmt/student-admission' },
+      { label: 'Student List', to: '/mgmt/students' },
+      { label: 'Student Attendance', to: '/mgmt/student-attendance' },
+      { label: 'Behavior Records', to: '/mgmt/behavior-records' },
+      { label: 'Student Houses', to: '/mgmt/student-houses' },
+      { label: 'Student Categories', to: '/mgmt/student-categories' },
+      { label: 'Disabled Students', to: '/mgmt/disabled-students' },
+      { label: 'Health Records', to: '/mgmt/health-records' },
+    ] },
     { label: 'Academics', icon: GraduationCap, children: ['Academic Dashboard','Academic Sessions','Classes','Sections','Subjects','Assign Subjects','Assign Electives','Assign Class Teacher','Manage Periods','Class Timetable','Promote Students'] },
     { label: 'Front Office', icon: DoorOpen, moduleKey: 'front_office', children: ['Front Office Dashboard','Admission Enquiries','Visitor Book','Complaints','Postal Records'] },
     { label: 'Offline Examinations', icon: ClipboardList, children: ['Exam Dashboard','Manage Offline Exams','Exam Types','Schedule & Marks Setup','Enter Marks','Cocurricular Areas','Cocurricular Grades','Manage Grades','Report Card Setups','Generate Marksheet','Upload Marksheet','Manage Uploads','Teacher Remarks'] },

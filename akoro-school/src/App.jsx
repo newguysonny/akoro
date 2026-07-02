@@ -32,6 +32,10 @@ import AdmissionSettingsPage from './pages/AdmissionSettingsPage.jsx';
 import ManageSubscriptionPage from './pages/ManageSubscriptionPage.jsx';
 import SubscriptionHistoryPage from './pages/SubscriptionHistoryPage.jsx';
 import AuditTrailPage from './pages/AuditTrailPage.jsx';
+import {
+  StudentDashboardPage, StudentAdmissionPage, StudentListPage, StudentAttendancePage,
+  BehaviorRecordsPage, StudentHousesPage, StudentCategoriesPage, DisabledStudentsPage, HealthRecordsPage,
+} from './pages/mgmt/studentPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
@@ -130,6 +134,16 @@ function AppRoutes() {
       <Route path="/settings-subscription" element={<ProtectedRoute><ManageSubscriptionPage /></ProtectedRoute>} />
       <Route path="/settings-subscription-history" element={<ProtectedRoute><SubscriptionHistoryPage /></ProtectedRoute>} />
       <Route path="/settings-audit-trail" element={<ProtectedRoute><AuditTrailPage /></ProtectedRoute>} />
+      {/* Management — Student Information */}
+      <Route path="/mgmt/student-dashboard"  element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/student-admission"  element={<ProtectedRoute><StudentAdmissionPage /></ProtectedRoute>} />
+      <Route path="/mgmt/students"           element={<ProtectedRoute><StudentListPage /></ProtectedRoute>} />
+      <Route path="/mgmt/student-attendance" element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
+      <Route path="/mgmt/behavior-records"   element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/student-houses"     element={<ProtectedRoute><StudentHousesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/student-categories" element={<ProtectedRoute><StudentCategoriesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/disabled-students"  element={<ProtectedRoute><DisabledStudentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/health-records"     element={<ProtectedRoute><HealthRecordsPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
