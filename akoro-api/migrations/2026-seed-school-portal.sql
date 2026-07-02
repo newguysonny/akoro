@@ -172,5 +172,18 @@ BEGIN
   SELECT v_school, 'order_' || substr(md5(random()::text), 1, 16), 'growth', 'monthly', 100000, 'Razorpay', 'pending', now() - interval '2 days'
   WHERE (SELECT count(*) FROM edu.school_subscription_payments WHERE school_id = v_school) = 1;
 
+  -- ── Audit Trail (a few sample entries so the page isn't empty) ───────────
+  INSERT INTO edu.school_audit_logs (school_id, actor_name, method, entity_type, entity_label, path, status_code, details, created_at)
+  SELECT v_school, 'Dr. Amara Osei', 'PUT', 'settings', 'School Profile', '/api/school/settings/profile', 200, '{"acronym":"ADA"}'::jsonb, now() - interval '5 days'
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_audit_logs WHERE school_id = v_school);
+
+  INSERT INTO edu.school_audit_logs (school_id, actor_name, method, entity_type, entity_label, path, status_code, details, created_at)
+  SELECT v_school, 'Dr. Amara Osei', 'POST', 'roles', 'Teacher', '/api/school/roles', 201, '{"name":"Teacher"}'::jsonb, now() - interval '4 days'
+  WHERE (SELECT count(*) FROM edu.school_audit_logs WHERE school_id = v_school) = 1;
+
+  INSERT INTO edu.school_audit_logs (school_id, actor_name, method, entity_type, entity_label, path, status_code, details, created_at)
+  SELECT v_school, 'Dr. Amara Osei', 'POST', 'backups', 'Pre-term Manual Backup', '/api/school/backups', 201, '{"label":"Pre-term Manual Backup"}'::jsonb, now() - interval '3 days'
+  WHERE (SELECT count(*) FROM edu.school_audit_logs WHERE school_id = v_school) = 2;
+
   RAISE NOTICE 'Seeded school portal data for school_id=%', v_school;
 END $$;

@@ -163,6 +163,24 @@ CREATE TABLE IF NOT EXISTS edu.school_subscription_payments (
 );
 CREATE INDEX IF NOT EXISTS idx_school_subscription_payments_school ON edu.school_subscription_payments (school_id, created_at DESC);
 
+-- ── Audit Trail — auto-logged by middleware for every write under /api/school ─
+CREATE TABLE IF NOT EXISTS edu.school_audit_logs (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id      uuid NOT NULL REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  actor_user_id  uuid,
+  actor_name     text,
+  method         text NOT NULL,               -- POST | PUT | PATCH | DELETE
+  entity_type    text NOT NULL,                -- e.g. 'roles', 'domains', 'settings'
+  entity_label   text,                         -- best-effort human label (name/label/title from body)
+  path           text NOT NULL,
+  status_code    integer NOT NULL,
+  details        jsonb NOT NULL DEFAULT '{}'::jsonb, -- sanitized request body (secrets stripped)
+  ip_address     text,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_school_audit_logs_school ON edu.school_audit_logs (school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_school_audit_logs_entity ON edu.school_audit_logs (school_id, entity_type);
+
 -- ── Social media connections (Facebook/Instagram autopost) ──────────────────
 CREATE TABLE IF NOT EXISTS edu.school_social_accounts (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -70,7 +70,7 @@ const NAV_SECTIONS = [
       { label: 'Payment Gateway', to: '/settings-payment-gateway' },
       'Notification Settings',
       { label: 'Admission Settings', to: '/settings-admission' },
-      'Audit Trail',
+      { label: 'Audit Trail', to: '/settings-audit-trail' },
       { label: 'Subscription', to: '/settings-subscription' },
       { label: 'Subscription History', to: '/settings-subscription-history' },
       { label: 'Module Settings', to: '/settings-modules' },

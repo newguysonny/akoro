@@ -30,6 +30,47 @@ import {
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
 
+// =============================================================
+// AUDIT TRAIL — automatically logs every write (POST/PUT/PATCH/DELETE) made
+// under /api/school/*, so new mutation routes are covered without extra
+// wiring. Registered first so res.on('finish') fires after the route
+// handler (and authenticateToken) has already set req.user.
+// =============================================================
+const SECRET_KEY_PATTERN = /token|secret|password|key$/i;
+function sanitizeAuditBody(body) {
+  if (!body || typeof body !== "object") return {};
+  const out = {};
+  for (const [k, v] of Object.entries(body)) {
+    out[k] = SECRET_KEY_PATTERN.test(k) ? "[redacted]" : v;
+  }
+  return out;
+}
+function pickEntityLabel(body) {
+  if (!body || typeof body !== "object") return null;
+  return body.name || body.label || body.title || body.domain || null;
+}
+router.use((req, res, next) => {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+  res.on("finish", async () => {
+    try {
+      if (res.statusCode >= 400 || !req.user) return;
+      const { data: school } = await db.from("school_profiles")
+        .select("id").eq("admin_user_id", req.user.id)
+        .order("created_at", { ascending: true }).limit(1).maybeSingle();
+      if (!school) return;
+      const entityType = req.path.split("/").filter(Boolean)[0] || "root";
+      await db.schema("edu").from("school_audit_logs").insert({
+        school_id: school.id, actor_user_id: req.user.id,
+        actor_name: req.user.full_name || req.user.email || null,
+        method: req.method, entity_type: entityType, entity_label: pickEntityLabel(req.body),
+        path: req.originalUrl, status_code: res.statusCode,
+        details: sanitizeAuditBody(req.body), ip_address: req.ip,
+      });
+    } catch { /* never let audit logging break the request */ }
+  });
+  next();
+});
+
 // Resolve the caller's school (first one they administer). 404s if none.
 async function getMySchool(req, res) {
   const { data } = await db
@@ -1248,6 +1289,46 @@ router.get("/subscription/payments", authenticateToken, async (req, res) => {
       amount: toNaira(p.amount_kobo), method: p.method, transactionId: p.transaction_id,
       proofUrl: p.proof_url, status: p.status, createdAt: p.created_at, paidAt: p.paid_at,
     })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =============================================================
+// AUDIT TRAIL — read the log written by the middleware above.
+// =============================================================
+
+// ── GET /api/school/audit-logs?entityType=&method=&limit=&offset= ────────────
+router.get("/audit-logs", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const limit = Math.min(200, Number(req.query.limit) || 50);
+    const offset = Number(req.query.offset) || 0;
+
+    let q = db.schema("edu").from("school_audit_logs")
+      .select("id, actor_name, method, entity_type, entity_label, path, status_code, details, created_at", { count: "exact" })
+      .eq("school_id", school.id)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (req.query.entityType) q = q.eq("entity_type", req.query.entityType);
+    if (req.query.method) q = q.eq("method", req.query.method.toUpperCase());
+
+    const { data, count, error } = await q;
+    if (error) throw new Error(error.message);
+
+    const { data: entityRows } = await db.schema("edu").from("school_audit_logs")
+      .select("entity_type").eq("school_id", school.id);
+    const entityTypes = [...new Set((entityRows || []).map((r) => r.entity_type))].sort();
+
+    res.json({
+      success: true,
+      data: (data || []).map((r) => ({
+        id: r.id, actorName: r.actor_name, method: r.method, entityType: r.entity_type,
+        entityLabel: r.entity_label, path: r.path, statusCode: r.status_code,
+        details: r.details, createdAt: r.created_at,
+      })),
+      total: count || 0,
+      entityTypes,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
