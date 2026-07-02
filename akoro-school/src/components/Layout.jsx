@@ -7,7 +7,7 @@ import {
   ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone,
   Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
   LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
-  User, Settings, ShieldQuestion,
+  User, ShieldQuestion,
   BookOpen, Presentation, Swords, ListTodo, FileCheck, Store,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
@@ -84,8 +84,7 @@ const NAV_SECTIONS = [
   ]},
   { section: 'ACCOUNT', items: [
     { label: 'My Profile', icon: User, to: '/profile' },
-    { label: 'Account Settings', icon: Settings, to: '/settings-billing' },
-    { label: 'Help & Support', icon: ShieldQuestion, to: '/settings-billing' },
+    { label: 'Help & Support', icon: ShieldQuestion, to: '/settings-billing?tab=help' },
   ]},
 ];
 

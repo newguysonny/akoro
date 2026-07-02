@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, SlidersHorizontal, Clock, ShieldCheck, Plug, Facebook, Send,
   Bell, BookOpen, Info, Sparkles, Save, ExternalLink, Upload,
@@ -512,9 +512,13 @@ function QuickGuide({ tab }) {
 }
 
 /* ── Page ────────────────────────────────────────────────────────── */
+const VALID_TABS = ['profile', 'formats', 'attendance', 'security', 'integrations', 'help', 'about'];
+
 export default function SettingsBillingPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('profile');
+  const [params] = useSearchParams();
+  const initialTab = VALID_TABS.includes(params.get('tab')) ? params.get('tab') : 'profile';
+  const [tab, setTab] = useState(initialTab);
 
   const TabButton = ({ t }) => {
     const on = tab === t.key;
