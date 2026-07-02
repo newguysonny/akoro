@@ -74,6 +74,29 @@ import {
   LessonPlanApprovalsPage, LessonPlanCoveragePage, LessonPlanReportsPage, LessonPlannerSettingsPage,
   OSMDashboardPage, OSMSessionsPage, OSMEvaluatePage, OSMModerationPage, OSMReportsPage, OSMGuidePage,
 } from './pages/mgmt/lessonOsmPages.jsx';
+import {
+  StudyCenterDashboardPage, ManageSyllabusPage, ClassworkLogbookPage, ManageResourcesPage,
+  HomeworkAssignmentsPage, LiveClassesPage,
+} from './pages/mgmt/studyCenterPages.jsx';
+import {
+  CertificateTemplatesPage, GenerateDocumentPage, NoticeBoardPage, EventsHolidaysPage,
+  ComposeBroadcastPage, BroadcastHistoryPage, ImageGalleryPage,
+} from './pages/mgmt/certsCommsPages.jsx';
+import {
+  LibraryDashboardPage, IssueReturnBookPage, ManageBooksPage, BookCategoriesPage,
+  InventoryDashboardPage, AddStockPage, IssueItemPage, PointOfSalePage, ItemListPage,
+  ItemCategoriesPage, SuppliersPage, SalesHistoryPage, PurchaseOrdersPage, GoodsReceiptsPage, SupplierPaymentsPage,
+} from './pages/mgmt/libraryInventoryPages.jsx';
+import {
+  TransportDashboardPage, ManageVehiclesPage, ManageRoutesPage, VehicleTrackingPage,
+  HostelDashboardPage, StudentAllocationPage, ManageRoomsPage, RoomTypesPage, ManageHostelsPage,
+} from './pages/mgmt/transportHostelPages.jsx';
+import {
+  HelpCategoriesPage, BrowseArticlesPage, AIChatbotHelpPage,
+  AssetDashboardPage, AssetRegisterPage, AssetCategoriesPage, AssetAssignmentsPage,
+  AssetDepreciationPage, AssetMaintenancePage, AssetDisposalsPage, AssetAuditsPage, AssetReportsPage,
+  ReportsAnalyticsPage,
+} from './pages/mgmt/helpAssetsPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
@@ -289,6 +312,62 @@ function AppRoutes() {
       <Route path="/mgmt/osm-reports"    element={<ProtectedRoute><OSMReportsPage /></ProtectedRoute>} />
       <Route path="/mgmt/osm-guide"      element={<ProtectedRoute><OSMGuidePage /></ProtectedRoute>} />
       <Route path="/mgmt/osm-moderation" element={<ProtectedRoute><OSMModerationPage /></ProtectedRoute>} />
+      {/* Facilities — Study Center */}
+      <Route path="/mgmt/study-center-dashboard" element={<ProtectedRoute><StudyCenterDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-syllabus"        element={<ProtectedRoute><ManageSyllabusPage /></ProtectedRoute>} />
+      <Route path="/mgmt/classwork-logbook"      element={<ProtectedRoute><ClassworkLogbookPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-resources"       element={<ProtectedRoute><ManageResourcesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/homework-assignments"   element={<ProtectedRoute><HomeworkAssignmentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/live-classes"           element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>} />
+      {/* Facilities — Certificates + Communicate */}
+      <Route path="/mgmt/certificate-templates" element={<ProtectedRoute><CertificateTemplatesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/generate-document"     element={<ProtectedRoute><GenerateDocumentPage /></ProtectedRoute>} />
+      <Route path="/mgmt/notice-board"          element={<ProtectedRoute><NoticeBoardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/events-holidays"       element={<ProtectedRoute><EventsHolidaysPage /></ProtectedRoute>} />
+      <Route path="/mgmt/compose-broadcast"     element={<ProtectedRoute><ComposeBroadcastPage /></ProtectedRoute>} />
+      <Route path="/mgmt/broadcast-history"     element={<ProtectedRoute><BroadcastHistoryPage /></ProtectedRoute>} />
+      <Route path="/mgmt/image-gallery"         element={<ProtectedRoute><ImageGalleryPage /></ProtectedRoute>} />
+      {/* Facilities — Library */}
+      <Route path="/mgmt/library-dashboard" element={<ProtectedRoute><LibraryDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/issue-return-book" element={<ProtectedRoute><IssueReturnBookPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-books"      element={<ProtectedRoute><ManageBooksPage /></ProtectedRoute>} />
+      <Route path="/mgmt/book-categories"   element={<ProtectedRoute><BookCategoriesPage /></ProtectedRoute>} />
+      {/* Facilities — Inventory */}
+      <Route path="/mgmt/inventory-dashboard" element={<ProtectedRoute><InventoryDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/issue-item"          element={<ProtectedRoute><IssueItemPage /></ProtectedRoute>} />
+      <Route path="/mgmt/add-stock"           element={<ProtectedRoute><AddStockPage /></ProtectedRoute>} />
+      <Route path="/mgmt/item-list"           element={<ProtectedRoute><ItemListPage /></ProtectedRoute>} />
+      <Route path="/mgmt/item-categories"     element={<ProtectedRoute><ItemCategoriesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/suppliers"           element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
+      <Route path="/mgmt/point-of-sale"       element={<ProtectedRoute><PointOfSalePage /></ProtectedRoute>} />
+      <Route path="/mgmt/sales-history"       element={<ProtectedRoute><SalesHistoryPage /></ProtectedRoute>} />
+      <Route path="/mgmt/purchase-orders"     element={<ProtectedRoute><PurchaseOrdersPage /></ProtectedRoute>} />
+      <Route path="/mgmt/goods-receipts"      element={<ProtectedRoute><GoodsReceiptsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/supplier-payments"   element={<ProtectedRoute><SupplierPaymentsPage /></ProtectedRoute>} />
+      {/* Facilities — Transport + Hostel */}
+      <Route path="/mgmt/transport-dashboard" element={<ProtectedRoute><TransportDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-vehicles"     element={<ProtectedRoute><ManageVehiclesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-routes"       element={<ProtectedRoute><ManageRoutesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/vehicle-tracking"    element={<ProtectedRoute><VehicleTrackingPage /></ProtectedRoute>} />
+      <Route path="/mgmt/hostel-dashboard"    element={<ProtectedRoute><HostelDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/student-allocation"  element={<ProtectedRoute><StudentAllocationPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-rooms"        element={<ProtectedRoute><ManageRoomsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/room-types"          element={<ProtectedRoute><RoomTypesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-hostels"      element={<ProtectedRoute><ManageHostelsPage /></ProtectedRoute>} />
+      {/* Facilities — Help Center + Assets + Reports */}
+      <Route path="/mgmt/help-categories"    element={<ProtectedRoute><HelpCategoriesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/browse-articles"    element={<ProtectedRoute><BrowseArticlesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/ai-chatbot-help"    element={<ProtectedRoute><AIChatbotHelpPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-dashboard"    element={<ProtectedRoute><AssetDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-register"     element={<ProtectedRoute><AssetRegisterPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-categories"   element={<ProtectedRoute><AssetCategoriesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-assignments"  element={<ProtectedRoute><AssetAssignmentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-depreciation" element={<ProtectedRoute><AssetDepreciationPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-maintenance"  element={<ProtectedRoute><AssetMaintenancePage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-disposals"    element={<ProtectedRoute><AssetDisposalsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-audits"       element={<ProtectedRoute><AssetAuditsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/asset-reports"      element={<ProtectedRoute><AssetReportsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/reports-analytics"  element={<ProtectedRoute><ReportsAnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />

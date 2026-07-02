@@ -130,6 +130,62 @@ const RESOURCES = {
   "osm-sessions": { table: "osm_sessions", fields: ["teacher_id","observer_name","session_date","focus_area","status"], required: [], refs: { teacher_id: ["users","full_name","public"] }, filters: ["status"] },
   "osm-evaluations": { table: "osm_evaluations", fields: ["session_id","score","strengths","improvements","status"], required: ["session_id"], refs: { session_id: ["osm_sessions","focus_area"] }, filters: ["status"] },
 
+  // Study Center
+  "syllabus-items": { table: "syllabus_items", fields: ["class_id","subject_id","term","topic","description","status"], required: ["topic"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","subject_id","status"] },
+  "classwork-logs": { table: "classwork_logs", fields: ["class_id","subject_id","teacher_id","log_date","topic","notes"], required: ["topic"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"], teacher_id: ["users","full_name","public"] }, filters: ["class_id","subject_id"], orderBy: "log_date", asc: false },
+  "learning-resources": { table: "learning_resources", fields: ["title","class_id","subject_id","resource_type","url","note"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","resource_type"] },
+  "homework-assignments": { table: "homework_assignments", fields: ["class_id","subject_id","title","description","due_on","status"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","status"] },
+  "live-classes": { table: "live_classes", fields: ["title","class_id","subject_id","platform","meeting_url","starts_at","status"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["status"] },
+
+  // Certificates
+  "certificate-templates": { table: "certificate_templates", fields: ["name","description","body"], required: ["name"], orderBy: "name", asc: true },
+  "generated-documents": { table: "generated_documents", fields: [], refs: { template_id: ["certificate_templates","name"], student_id: ["students", studentLabel] }, readOnly: true, orderBy: "issued_on", asc: false },
+
+  // Communicate
+  "notices": { table: "notices", fields: ["title","body","audience","publish_on","expires_on","pinned"], required: ["title"], filters: ["audience"] },
+  "school-events": { table: "school_events", fields: ["title","description","event_type","starts_on","ends_on"], required: ["title"], filters: ["event_type"], orderBy: "starts_on", asc: false },
+  "broadcasts": { table: "broadcasts", fields: ["title","message","channel","audience","status","sent_at"], required: ["title","message"], filters: ["status","channel"] },
+  "gallery-images": { table: "gallery_images", fields: ["title","image_url","album","taken_on"], required: ["title"], filters: ["album"] },
+
+  // Library
+  "book-categories": { table: "book_categories", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "books": { table: "books", fields: ["title","author","isbn","shelf","category_id","copies_total","copies_available"], required: ["title"], refs: { category_id: ["book_categories","name"] }, filters: ["category_id"], orderBy: "title", asc: true },
+  "book-loans": { table: "book_loans", fields: ["book_id","student_id","borrower_name","issued_on","due_on","returned_on","status"], required: ["book_id"], refs: { book_id: ["books","title"], student_id: ["students", studentLabel] }, filters: ["status","book_id"] },
+
+  // Inventory
+  "item-categories": { table: "item_categories", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "inventory-items": { table: "inventory_items", fields: ["name","unit","category_id","quantity","reorder_level","unit_price"], required: ["name"], refs: { category_id: ["item_categories","name"] }, filters: ["category_id"], orderBy: "name", asc: true },
+  "inventory-suppliers": { table: "inventory_suppliers", fields: ["name","phone","email","address"], required: ["name"], orderBy: "name", asc: true },
+  "stock-entries": { table: "stock_entries", fields: [], refs: { item_id: ["inventory_items","name"], supplier_id: ["inventory_suppliers","name"] }, readOnly: true, orderBy: "received_on", asc: false },
+  "item-issues": { table: "item_issues", fields: [], refs: { item_id: ["inventory_items","name"] }, readOnly: true, orderBy: "issued_on", asc: false },
+  "pos-sales": { table: "pos_sales", fields: [], refs: { item_id: ["inventory_items","name"] }, readOnly: true, orderBy: "sold_on", asc: false },
+  "purchase-orders": { table: "purchase_orders", fields: ["order_no","supplier_id","total_amount","status","ordered_on"], required: ["order_no"], refs: { supplier_id: ["inventory_suppliers","name"] }, filters: ["status"] },
+  "goods-receipts": { table: "goods_receipts", fields: ["purchase_order_id","received_on","note"], required: [], refs: { purchase_order_id: ["purchase_orders","order_no"] } },
+  "supplier-payments": { table: "supplier_payments", fields: ["supplier_id","amount","method","reference","paid_on"], required: ["amount"], refs: { supplier_id: ["inventory_suppliers","name"] } },
+
+  // Transport
+  "vehicles": { table: "vehicles", fields: ["plate_no","model","capacity","driver_name","driver_phone","status"], required: ["plate_no"], filters: ["status"], orderBy: "plate_no", asc: true },
+  "transport-routes": { table: "transport_routes", fields: ["name","start_point","end_point","fare","vehicle_id"], required: ["name"], refs: { vehicle_id: ["vehicles","plate_no"] }, orderBy: "name", asc: true },
+  "vehicle-locations": { table: "vehicle_locations", fields: ["vehicle_id","location","note"], required: ["vehicle_id","location"], refs: { vehicle_id: ["vehicles","plate_no"] }, filters: ["vehicle_id"], orderBy: "reported_at", asc: false },
+
+  // Hostel
+  "hostels": { table: "hostels", fields: ["name","hostel_type","warden_name","warden_phone"], required: ["name"], orderBy: "name", asc: true },
+  "room-types": { table: "room_types", fields: ["name","capacity","cost_per_term"], required: ["name"], orderBy: "name", asc: true },
+  "hostel-rooms": { table: "hostel_rooms", fields: ["hostel_id","room_type_id","room_no","capacity"], required: ["room_no"], refs: { hostel_id: ["hostels","name"], room_type_id: ["room_types","name"] }, filters: ["hostel_id"], orderBy: "room_no", asc: true },
+  "hostel-allocations": { table: "hostel_allocations", fields: ["room_id","student_id","allocated_on","vacated_on","status"], required: ["room_id","student_id"], refs: { room_id: ["hostel_rooms","room_no"], student_id: ["students", studentLabel] }, filters: ["status","room_id"] },
+
+  // Help Center
+  "help-categories": { table: "help_categories", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "help-articles": { table: "help_articles", fields: ["category_id","title","body","published"], required: ["title"], refs: { category_id: ["help_categories","name"] }, filters: ["category_id","published"] },
+
+  // Asset Management
+  "asset-categories": { table: "asset_categories", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "assets": { table: "assets", fields: ["name","asset_tag","category_id","purchase_cost","purchase_date","depreciation_rate","location","status"], required: ["name","asset_tag"], refs: { category_id: ["asset_categories","name"] }, filters: ["category_id","status"], orderBy: "asset_tag", asc: true },
+  "asset-assignments": { table: "asset_assignments", fields: ["asset_id","assigned_to","assigned_on","returned_on","note"], required: ["asset_id","assigned_to"], refs: { asset_id: ["assets","name"] } },
+  "asset-maintenance": { table: "asset_maintenance", fields: ["asset_id","maintenance_type","cost","performed_on","note"], required: ["asset_id"], refs: { asset_id: ["assets","name"] } },
+  "asset-disposals": { table: "asset_disposals", fields: ["asset_id","disposal_type","amount","disposed_on","note"], required: ["asset_id"], refs: { asset_id: ["assets","name"] } },
+  "asset-audits": { table: "asset_audits", fields: ["audit_date","auditor","findings","status"], required: [], filters: ["status"], orderBy: "audit_date", asc: false },
+
   // Front Office
   "enquiries": { table: "enquiries", fields: ["name","phone","email","class_interest","source","status","note","follow_up_on"], required: ["name"], filters: ["status"] },
   "visitors": { table: "visitors", fields: ["name","phone","purpose","to_meet","id_proof","check_in","check_out"], required: ["name"], orderBy: "check_in", asc: false },
@@ -283,6 +339,61 @@ router.get("/dashboard/:area", authenticateToken, async (req, res) => {
         evaluations: await count("osm_evaluations"),
         pendingModeration: await count("osm_evaluations", (q) => q.eq("status", "pending")),
         averageScore: avg,
+      };
+    } else if (req.params.area === "study-center") {
+      data = {
+        syllabusItems: await count("syllabus_items"),
+        syllabusCovered: await count("syllabus_items", (q) => q.eq("status", "covered")),
+        classworkLogs: await count("classwork_logs"),
+        resources: await count("learning_resources"),
+        openHomework: await count("homework_assignments", (q) => q.eq("status", "open")),
+        liveClasses: await count("live_classes", (q) => q.neq("status", "ended")),
+      };
+    } else if (req.params.area === "library") {
+      const { data: books } = await M().from("books").select("copies_total, copies_available").eq("school_id", school.id);
+      data = {
+        titles: (books || []).length,
+        totalCopies: (books || []).reduce((s, b) => s + (b.copies_total || 0), 0),
+        availableCopies: (books || []).reduce((s, b) => s + (b.copies_available || 0), 0),
+        activeLoans: await count("book_loans", (q) => q.eq("status", "issued")),
+        categories: await count("book_categories"),
+      };
+    } else if (req.params.area === "inventory") {
+      const { data: items } = await M().from("inventory_items").select("quantity, reorder_level, unit_price").eq("school_id", school.id);
+      const { data: sales } = await M().from("pos_sales").select("total").eq("school_id", school.id);
+      data = {
+        items: (items || []).length,
+        lowStock: (items || []).filter((i) => Number(i.quantity) <= Number(i.reorder_level)).length,
+        stockValue: (items || []).reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unit_price || 0), 0),
+        salesTotal: (sales || []).reduce((s, r) => s + Number(r.total || 0), 0),
+        suppliers: await count("inventory_suppliers"),
+        openOrders: await count("purchase_orders", (q) => q.in("status", ["draft", "ordered"])),
+      };
+    } else if (req.params.area === "transport") {
+      data = {
+        vehicles: await count("vehicles"),
+        activeVehicles: await count("vehicles", (q) => q.eq("status", "active")),
+        routes: await count("transport_routes"),
+        locationReports: await count("vehicle_locations"),
+      };
+    } else if (req.params.area === "hostel") {
+      const { data: rooms } = await M().from("hostel_rooms").select("capacity").eq("school_id", school.id);
+      data = {
+        hostels: await count("hostels"),
+        rooms: (rooms || []).length,
+        capacity: (rooms || []).reduce((s, r) => s + (r.capacity || 0), 0),
+        allocated: await count("hostel_allocations", (q) => q.eq("status", "active")),
+        roomTypes: await count("room_types"),
+      };
+    } else if (req.params.area === "assets") {
+      const { data: assets } = await M().from("assets").select("purchase_cost, status").eq("school_id", school.id);
+      data = {
+        assets: (assets || []).length,
+        inUse: (assets || []).filter((a) => a.status === "in_use").length,
+        underMaintenance: (assets || []).filter((a) => a.status === "maintenance").length,
+        disposed: (assets || []).filter((a) => a.status === "disposed").length,
+        totalCost: (assets || []).reduce((s, a) => s + Number(a.purchase_cost || 0), 0),
+        openAudits: await count("asset_audits", (q) => q.eq("status", "open")),
       };
     } else return res.status(404).json({ error: "Unknown dashboard area" });
     res.json({ success: true, data });
@@ -589,6 +700,148 @@ router.post("/qr/checkin", authenticateToken, requireRole(SCHOOL_ROLES), async (
     }).select("*").single();
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Library: issue & return (keeps copies_available consistent) ──────────
+router.post("/library/issue", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { book_id, student_id, borrower_name, due_on } = req.body;
+    if (!book_id) return res.status(400).json({ error: "book_id is required" });
+    const { data: book } = await M().from("books").select("id, copies_available").eq("id", book_id).eq("school_id", school.id).maybeSingle();
+    if (!book) return res.status(404).json({ error: "Book not found" });
+    if (book.copies_available < 1) return res.status(400).json({ error: "No copies available" });
+    const { data, error } = await M().from("book_loans").insert({
+      school_id: school.id, book_id, student_id: student_id || null,
+      borrower_name: borrower_name || null, due_on: due_on || null, status: "issued",
+    }).select("*").single();
+    if (error) throw new Error(error.message);
+    await M().from("books").update({ copies_available: book.copies_available - 1 }).eq("id", book_id);
+    res.status(201).json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/library/return/:loanId", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: loan } = await M().from("book_loans").select("id, book_id, status").eq("id", req.params.loanId).eq("school_id", school.id).maybeSingle();
+    if (!loan) return res.status(404).json({ error: "Loan not found" });
+    if (loan.status === "returned") return res.status(400).json({ error: "Already returned" });
+    await M().from("book_loans").update({ status: "returned", returned_on: new Date().toISOString().slice(0, 10) }).eq("id", loan.id);
+    const { data: book } = await M().from("books").select("copies_available").eq("id", loan.book_id).maybeSingle();
+    if (book) await M().from("books").update({ copies_available: book.copies_available + 1 }).eq("id", loan.book_id);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Inventory: stock in, issue out, POS sale (quantity stays consistent) ──
+async function adjustItemQty(schoolId, itemId, delta) {
+  const { data: item } = await M().from("inventory_items").select("quantity").eq("id", itemId).eq("school_id", schoolId).maybeSingle();
+  if (!item) return { error: "Item not found" };
+  const next = Number(item.quantity || 0) + delta;
+  if (next < 0) return { error: "Not enough stock" };
+  await M().from("inventory_items").update({ quantity: next }).eq("id", itemId);
+  return { quantity: next };
+}
+
+router.post("/inventory/stock", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { item_id, quantity, unit_cost = 0, supplier_id, note } = req.body;
+    if (!item_id || !Number(quantity)) return res.status(400).json({ error: "item_id and quantity are required" });
+    const adj = await adjustItemQty(school.id, item_id, Number(quantity));
+    if (adj.error) return res.status(400).json({ error: adj.error });
+    const { data, error } = await M().from("stock_entries").insert({
+      school_id: school.id, item_id, quantity: Number(quantity), unit_cost, supplier_id: supplier_id || null, note: note || null,
+    }).select("*").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data, newQuantity: adj.quantity });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/inventory/issue", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { item_id, quantity, issued_to, purpose } = req.body;
+    if (!item_id || !Number(quantity)) return res.status(400).json({ error: "item_id and quantity are required" });
+    const adj = await adjustItemQty(school.id, item_id, -Number(quantity));
+    if (adj.error) return res.status(400).json({ error: adj.error });
+    const { data, error } = await M().from("item_issues").insert({
+      school_id: school.id, item_id, quantity: Number(quantity), issued_to: issued_to || null, purpose: purpose || null,
+    }).select("*").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data, newQuantity: adj.quantity });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/inventory/sale", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { item_id, quantity, unit_price, buyer } = req.body;
+    if (!item_id || !Number(quantity)) return res.status(400).json({ error: "item_id and quantity are required" });
+    const adj = await adjustItemQty(school.id, item_id, -Number(quantity));
+    if (adj.error) return res.status(400).json({ error: adj.error });
+    const price = Number(unit_price || 0);
+    const { data, error } = await M().from("pos_sales").insert({
+      school_id: school.id, item_id, quantity: Number(quantity), unit_price: price,
+      total: price * Number(quantity), buyer: buyer || null,
+    }).select("*").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data, newQuantity: adj.quantity });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Transport: latest position per vehicle ────────────────────────────────
+router.get("/transport/latest-locations", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: vehicles } = await M().from("vehicles").select("id, plate_no, model, driver_name, status").eq("school_id", school.id);
+    const { data: locs } = await M().from("vehicle_locations").select("vehicle_id, location, note, reported_at")
+      .eq("school_id", school.id).order("reported_at", { ascending: false }).limit(200);
+    const latest = {};
+    for (const l of locs || []) if (!latest[l.vehicle_id]) latest[l.vehicle_id] = l;
+    res.json({ success: true, data: (vehicles || []).map((v) => ({ ...v, last: latest[v.id] || null })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Certificates: fill a template and record the issued document ─────────
+router.post("/certificates/generate", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { template_id, student_id, recipient_name } = req.body;
+    if (!template_id) return res.status(400).json({ error: "template_id is required" });
+    const { data: tpl } = await M().from("certificate_templates").select("*").eq("id", template_id).eq("school_id", school.id).maybeSingle();
+    if (!tpl) return res.status(404).json({ error: "Template not found" });
+
+    let name = recipient_name;
+    if (!name && student_id) {
+      const { data: st } = await M().from("students").select("first_name, last_name").eq("id", student_id).eq("school_id", school.id).maybeSingle();
+      if (st) name = studentLabel(st);
+    }
+    if (!name) return res.status(400).json({ error: "recipient_name or student_id is required" });
+
+    const serial = `CERT-${Date.now().toString(36).toUpperCase()}`;
+    const issuedOn = new Date().toISOString().slice(0, 10);
+    const { data, error } = await M().from("generated_documents").insert({
+      school_id: school.id, template_id, student_id: student_id || null,
+      recipient_name: name, serial_no: serial, issued_on: issuedOn,
+    }).select("*").single();
+    if (error) throw new Error(error.message);
+
+    const body = (tpl.body || "")
+      .replaceAll("{{recipient_name}}", name)
+      .replaceAll("{{school_name}}", school.name)
+      .replaceAll("{{date}}", issuedOn)
+      .replaceAll("{{serial_no}}", serial);
+    res.status(201).json({ success: true, data: { ...data, body, template_name: tpl.name } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
