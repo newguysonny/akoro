@@ -69,11 +69,11 @@ let failed = 0;
 
 try {
   await client.connect();
-  console.log(`→ Connected. Applying ${files.length} migration(s) [${groups.join(", ")}]…\n`);
+  console.log(`Connected. Applying ${files.length} migration(s) [${groups.join(", ")}]...\n`);
 
   for (const file of files) {
     const sql = readFileSync(join(migrationsDir, file), "utf8");
-    process.stdout.write(`  • ${file} … `);
+    process.stdout.write(`  - ${file} ... `);
     try {
       await client.query(sql);
       applied++;
@@ -81,7 +81,7 @@ try {
     } catch (err) {
       failed++;
       console.log("FAILED");
-      console.error(`      ↳ ${err.message}`);
+      console.error(`        ${err.message}`);
       if (!continueOnError) {
         throw new Error(`Migration halted at ${file}. Fix it and re-run (migrations are idempotent).`);
       }
@@ -102,15 +102,15 @@ try {
        VALUES ($1, $2, $3, $4::jsonb, $5)`,
       [groups.join(","), applied, failed, JSON.stringify(files), gitSha]
     );
-    console.log("📝 Logged to edu.migration_log.");
+    console.log("[LOG] Written to edu.migration_log.");
   } catch (logErr) {
-    console.warn(`⚠️  Could not write edu.migration_log: ${logErr.message}`);
+    console.warn(`[WARN] Could not write edu.migration_log: ${logErr.message}`);
   }
 
-  console.log(`\n✅ Done. ${applied} applied${failed ? `, ${failed} failed` : ""}.`);
+  console.log(`\n[DONE] ${applied} applied${failed ? `, ${failed} failed` : ""}.`);
   if (failed) process.exitCode = 1;
 } catch (err) {
-  console.error(`\n❌ ${err.message}`);
+  console.error(`\n[ERROR] ${err.message}`);
   process.exitCode = 1;
 } finally {
   await client.end();

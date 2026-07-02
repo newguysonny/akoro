@@ -167,7 +167,7 @@ app.use((_req, res) => res.status(404).json({ success: false, message: "Route no
 app.use((err, _req, res, _next) => {
   if (err instanceof MulterError)
     return res.status(400).json({ success: false, message: `Upload error: ${err.message}`, code: err.code });
-  console.error(`[${config.instanceId.slice(0, 8)}] ❌`, err.message);
+  console.error(`[${config.instanceId.slice(0, 8)}] [ERROR]`, err.message);
   res.status(500).json({
     success: false, message: "Internal server error", instance: config.instanceId,
     ...(config.isDev && { stack: err.stack }),
@@ -191,9 +191,9 @@ process.on("SIGINT",  () => shutdown("SIGINT"));
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
   console.log(`
-🚀  Akoro API  [${config.instanceId.slice(0, 8)}]  —  http://localhost:${config.server.port}
+[API]  Akoro API  [${config.instanceId.slice(0, 8)}]  --  http://localhost:${config.server.port}
 
-📦  Modules
+[MODULES]
     /api/auth/*           Auth
     /api/courses/*        Courses + Cart + Payments + Live Sessions
     /api/ranking/*        XP Leaderboards
@@ -202,7 +202,7 @@ httpServer.listen(config.server.port, config.server.host, () => {
     /api/battle/*         1v1 / Open / Classroom / Session Battles
     /api/tasks/*          Teacher AI Task Agent
 
-📝  New endpoints
+[ENDPOINTS]
     /api/profiles/instructor/students    global student list
     /api/profiles/teacher/invite         magic invite link
     /api/profiles/teacher/students/import CSV bulk import
@@ -213,10 +213,10 @@ httpServer.listen(config.server.port, config.server.host, () => {
     /api/live-sessions/:id/replay        recording playback
     /api/adaptive/training/stream/*      live device training
 
-🔌  Socket.io (Redis adapter)
+[SOCKET.IO]  (Redis adapter)
     session:<id>  chat:<id>  classroom:<id>  battle:<id>  user:<id>
 
-📊  /health  /ready
+[HEALTH]  /health  /ready
   `);
 
   // Best-effort: show the last DB migration run so deploys are verifiable
@@ -228,9 +228,9 @@ httpServer.listen(config.server.port, config.server.host, () => {
     .limit(1)
     .maybeSingle()
     .then(({ data }) => {
-      if (!data) return console.log("🗃️  Migrations: no runs recorded yet (run `npm run db:deploy`).");
+      if (!data) return console.log("[MIGRATIONS]  no runs recorded yet (run `npm run db:deploy`).");
       const sha = data.git_sha ? ` @ ${String(data.git_sha).slice(0, 7)}` : "";
-      console.log(`🗃️  Migrations: last run ${data.ran_at} — ${data.run_group}, ${data.applied} applied${data.failed ? `, ${data.failed} failed` : ""}${sha}`);
+      console.log(`[MIGRATIONS]  last run ${data.ran_at} -- ${data.run_group}, ${data.applied} applied${data.failed ? `, ${data.failed} failed` : ""}${sha}`);
     })
     .catch(() => { /* table may not exist yet — ignore */ });
 });
