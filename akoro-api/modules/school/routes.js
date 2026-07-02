@@ -790,9 +790,11 @@ const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, princi
 // Public portal — /apply, /pay, /results served on each tenant's own domain.
 router.use("/public", publicPortalRouter);
 
-async function renderSchoolSiteHtml(school) {
+async function renderSchoolSiteHtml(school, { preview = false } = {}) {
   const website = await getWebsiteConfig(school.id);
-  if (!website.enabled) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
+  // Public visitors only see a published site; preview mode (admin "Preview
+  // Website" button) renders it even while unpublished, with a notice banner.
+  if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
 
   // Gather the real data available for {{variables}} and {{#each}} loops.
   const { data: teacherLinks } = await db.from("school_teachers")
@@ -838,6 +840,12 @@ async function renderSchoolSiteHtml(school) {
   } else {
     html = renderThemePage(website, ctx);
   }
+
+  // Preview banner when viewing an as-yet-unpublished site.
+  if (preview && !website.enabled) {
+    const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;
+    html = html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
+  }
   return { status: 200, html };
 }
 
@@ -849,7 +857,8 @@ router.get("/site/by-host", async (req, res) => {
     const host = req.query.host || req.headers["x-forwarded-host"] || req.hostname;
     const school = await resolveSchoolByHost(host);
     if (!school) return res.status(404).type("html").send("<h1>404 — no school is connected to this domain</h1>");
-    const { status, html } = await renderSchoolSiteHtml(school);
+    const preview = req.query.preview === "1" || req.query.preview === "true";
+    const { status, html } = await renderSchoolSiteHtml(school, { preview });
     res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render by-host]", e);
@@ -865,7 +874,8 @@ router.get("/site/:slug", async (req, res) => {
     const { data: school } = await db.from("school_profiles")
       .select(SCHOOL_SELECT).eq("slug", slug).maybeSingle();
     if (!school) return res.status(404).type("html").send("<h1>404 — school not found</h1>");
-    const { status, html } = await renderSchoolSiteHtml(school);
+    const preview = req.query.preview === "1" || req.query.preview === "true";
+    const { status, html } = await renderSchoolSiteHtml(school, { preview });
     res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render]", e);

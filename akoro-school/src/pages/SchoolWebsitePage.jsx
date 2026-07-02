@@ -168,7 +168,7 @@ export default function SchoolWebsitePage() {
         <button onClick={() => navigate('/settings-website/templates')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <Code2 size={14} /> Full HTML Templates
         </button>
-        <button onClick={() => slug && window.open(`${API}/api/school/site/${slug}`, '_blank', 'noopener')} disabled={!slug} title={enabled ? '' : 'Enable the website below to publish it'} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${GREEN}55`, background: `${GREEN}0C`, color: GREEN, fontSize: 12.5, fontWeight: 800, cursor: slug ? 'pointer' : 'not-allowed', fontFamily: FONT, opacity: slug ? 1 : 0.6 }}>
+        <button onClick={() => slug && window.open(`${API}/api/school/site/${slug}?preview=1`, '_blank', 'noopener')} disabled={!slug} title={enabled ? 'Opens your live website' : 'Preview even before publishing'} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${GREEN}55`, background: `${GREEN}0C`, color: GREEN, fontSize: 12.5, fontWeight: 800, cursor: slug ? 'pointer' : 'not-allowed', fontFamily: FONT, opacity: slug ? 1 : 0.6 }}>
           <ExternalLink size={14} /> Preview Website
         </button>
       </div>
