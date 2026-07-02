@@ -51,6 +51,7 @@ const NAV_SECTIONS = [
       { label: 'Student Admission', to: '/mgmt/student-admission' },
       { label: 'Online Admissions', to: '/mgmt/online-admissions' },
       { label: 'Student List', to: '/mgmt/students' },
+      { label: 'Assign to Class', to: '/mgmt/assign-class' },
       { label: 'Student Attendance', to: '/mgmt/student-attendance' },
       { label: 'Behavior Records', to: '/mgmt/behavior-records' },
       { label: 'Student Houses', to: '/mgmt/student-houses' },

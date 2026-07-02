@@ -463,6 +463,24 @@ router.post("/students/promote", authenticateToken, requireRole(SCHOOL_ROLES), a
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Assign students to a class (bulk, no from-class needed) ───────────────
+// Body: { to_class_id, student_ids[], section_id? } — unlike promote, this
+// also covers students who have no class yet.
+router.post("/students/assign-class", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { to_class_id, section_id, student_ids } = req.body;
+    if (!to_class_id) return res.status(400).json({ error: "to_class_id is required" });
+    if (!Array.isArray(student_ids) || !student_ids.length) return res.status(400).json({ error: "student_ids[] is required" });
+    const { data, error } = await M().from("students")
+      .update({ class_id: to_class_id, section_id: section_id || null })
+      .eq("school_id", school.id).in("id", student_ids).select("id");
+    if (error) throw new Error(error.message);
+    res.json({ success: true, assigned: (data || []).length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Fee dues: assigned − paid per student ─────────────────────────────────
 async function computeDues(schoolId, { student_id, class_id } = {}) {
   let sq = M().from("students").select("id, admission_no, first_name, last_name, class_id").eq("school_id", schoolId).eq("status", "active");
@@ -927,7 +945,9 @@ router.get("/:resource", authenticateToken, async (req, res) => {
     let q = M().from(cfg.table).select("*").eq("school_id", school.id)
       .order(cfg.orderBy || "created_at", { ascending: cfg.asc ?? false }).limit(500);
     for (const f of cfg.filters || []) {
-      if (req.query[f] !== undefined && req.query[f] !== "") q = q.eq(f, req.query[f]);
+      if (req.query[f] === undefined || req.query[f] === "") continue;
+      // "__null__" filters for rows with no value (e.g. students without a class)
+      q = req.query[f] === "__null__" ? q.is(f, null) : q.eq(f, req.query[f]);
     }
     const { data, error } = await q;
     if (error) throw new Error(error.message);

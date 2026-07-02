@@ -35,6 +35,7 @@ import AuditTrailPage from './pages/AuditTrailPage.jsx';
 import {
   StudentDashboardPage, StudentAdmissionPage, StudentListPage, StudentAttendancePage,
   BehaviorRecordsPage, StudentHousesPage, StudentCategoriesPage, DisabledStudentsPage, HealthRecordsPage,
+  AssignClassPage,
 } from './pages/mgmt/studentPages.jsx';
 import {
   AcademicDashboardPage, AcademicSessionsPage, ClassesPage, SectionsPage, SubjectsPage,
@@ -202,6 +203,7 @@ function AppRoutes() {
       <Route path="/mgmt/student-dashboard"  element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
       <Route path="/mgmt/student-admission"  element={<ProtectedRoute><StudentAdmissionPage /></ProtectedRoute>} />
       <Route path="/mgmt/students"           element={<ProtectedRoute><StudentListPage /></ProtectedRoute>} />
+      <Route path="/mgmt/assign-class"       element={<ProtectedRoute><AssignClassPage /></ProtectedRoute>} />
       <Route path="/mgmt/student-attendance" element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
       <Route path="/mgmt/behavior-records"   element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />
       <Route path="/mgmt/student-houses"     element={<ProtectedRoute><StudentHousesPage /></ProtectedRoute>} />
