@@ -8,10 +8,18 @@ import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
 
-const VARIABLES = ['{{school_name}}', '{{school_logo}}', '{{principal_name}}', '{{school_address}}', '{{contact_email}}', '{{contact_phone}}'];
-const SHORTCUTS = ['{{about_section}}', '{{notices_list}}', '{{events_list}}', '{{gallery_grid}}', '{{contact_form}}'];
+// These are the tokens the backend renderer (siteRenderer.js) actually substitutes.
+const VARIABLES = ['{{school_name}}', '{{school_acronym}}', '{{school_logo}}', '{{principal_name}}', '{{school_address}}', '{{contact_email}}', '{{contact_phone}}', '{{hero_title}}', '{{hero_subtitle}}', '{{about_text}}', '{{year}}'];
+// Section loops + conditionals. Inside {{#each courses}} use {{title}}, {{subject}}, {{level}}, {{price}}; teachers/classes expose {{name}}.
+const SHORTCUTS = [
+  '{{#each courses}} … {{/each}}',
+  '{{#each teachers}} … {{/each}}',
+  '{{#each classes}} … {{/each}}',
+  '{{#if about_text}} … {{/if}}',
+  '{{stats.courses}}', '{{stats.teachers}}', '{{stats.classes}}',
+];
 
-function Collapsible({ title, items, open, onToggle }) {
+function Collapsible({ title, items, open, onToggle, onInsert }) {
   return (
     <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
       <button onClick={onToggle} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: FONT }}>
@@ -21,7 +29,7 @@ function Collapsible({ title, items, open, onToggle }) {
       {open && (
         <div style={{ padding: '0 16px 14px', display: 'flex', flexWrap: 'wrap', gap: 7 }}>
           {items.map((v) => (
-            <code key={v} style={{ fontSize: 11.5, background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 9px', color: '#D4651E', cursor: 'pointer', fontFamily: 'ui-monospace, Menlo, monospace' }}>{v}</code>
+            <code key={v} onClick={() => onInsert?.(v)} title="Click to copy" style={{ fontSize: 11.5, background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 9px', color: '#D4651E', cursor: 'pointer', fontFamily: 'ui-monospace, Menlo, monospace' }}>{v}</code>
           ))}
         </div>
       )}
@@ -110,8 +118,8 @@ export default function WebsiteTemplateEditorPage() {
         </button>
       </div>
 
-      <Collapsible title="School Variables" items={VARIABLES} open={openVars} onToggle={() => setOpenVars((o) => !o)} />
-      <Collapsible title="Shortcuts" items={SHORTCUTS} open={openShortcuts} onToggle={() => setOpenShortcuts((o) => !o)} />
+      <Collapsible title="School Variables" items={VARIABLES} open={openVars} onToggle={() => setOpenVars((o) => !o)} onInsert={(v) => { navigator.clipboard?.writeText(v); showToast(`Copied ${v}`); }} />
+      <Collapsible title="Section Loops & Conditionals" items={SHORTCUTS} open={openShortcuts} onToggle={() => setOpenShortcuts((o) => !o)} onInsert={(v) => { navigator.clipboard?.writeText(v); showToast(`Copied ${v}`); }} />
 
       {/* Editor / Preview */}
       <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', marginTop: 6 }}>

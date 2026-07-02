@@ -26,6 +26,7 @@ import {
   verifyTransaction,
   generateReference,
 } from "../adaptive-learning/marketplace/paystackService.js";
+import { renderMiniTemplate, renderThemePage, buildContext } from "./siteRenderer.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -705,13 +706,62 @@ const shapeWebsite = (w) => ({
   bgMode: w.bg_mode, socialLinks: w.social_links || {}, sections: w.sections || [], customCss: w.custom_css,
 });
 
+// ── GET /api/school/site/:slug  (PUBLIC — the rendered landing page) ─────────
+// No auth: this is the school's public website. Serves theme OR template mode.
+router.get("/site/:slug", async (req, res) => {
+  try {
+    const slug = (req.params.slug || "").toLowerCase();
+    const { data: school } = await db.from("school_profiles")
+      .select("id, name, slug, logo_url, address, phone, acronym, principal_name")
+      .eq("slug", slug).maybeSingle();
+    if (!school) return res.status(404).type("html").send("<h1>404 — school not found</h1>");
+
+    const website = await getWebsiteConfig(school.id);
+    if (!website.enabled) {
+      return res.status(404).type("html").send("<h1>This school website is not published yet.</h1>");
+    }
+
+    // Gather the real data available for {{variables}} and {{#each}} loops.
+    const { data: teacherLinks } = await db.from("school_teachers")
+      .select("users:users!school_teachers_teacher_id_fkey(id, full_name)").eq("school_id", school.id);
+    const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
+    const { data: courseRows } = teacherIds.length
+      ? await db.from("courses").select("title, subject, level, price, is_free").in("instructor_id", teacherIds).eq("is_published", true).limit(24)
+      : { data: [] };
+    const { data: classRows } = await db.from("classrooms").select("name").eq("school_id", school.id);
+
+    const ctx = buildContext(school, website, {
+      email: null,
+      year: new Date().getFullYear(),
+      teachers: (teacherLinks || []).map((t) => ({ name: t.users?.full_name })).filter((t) => t.name),
+      courses: (courseRows || []).map((c) => ({ title: c.title, subject: c.subject, level: c.level, price: c.is_free ? "Free" : `₦${Number(c.price || 0).toLocaleString("en-NG")}` })),
+      classes: (classRows || []).map((c) => ({ name: c.name })),
+    });
+
+    let html;
+    if (website.mode === "template") {
+      const { data: tpl } = await db.schema("edu").from("school_website_templates")
+        .select("html").eq("school_id", school.id).eq("is_active", true).maybeSingle();
+      html = tpl?.html
+        ? renderMiniTemplate(tpl.html, ctx)
+        : renderThemePage(website, ctx); // fall back to theme if no active template
+    } else {
+      html = renderThemePage(website, ctx);
+    }
+    res.type("html").send(html);
+  } catch (e) {
+    console.error("[site render]", e);
+    res.status(500).type("html").send("<h1>Something went wrong rendering this page.</h1>");
+  }
+});
+
 // ── GET /api/school/website ────────────────────────────────────────────────────
 router.get("/website", authenticateToken, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
     const website = await getWebsiteConfig(school.id);
-    res.json({ success: true, data: shapeWebsite(website) });
+    res.json({ success: true, data: { ...shapeWebsite(website), slug: school.slug || slugify(school.name) } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
