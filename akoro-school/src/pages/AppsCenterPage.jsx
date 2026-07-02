@@ -16,25 +16,25 @@ const CATEGORIES = [
   { key: 'assets', label: 'Assets',           icon: BookOpen },
 ];
 
-/* Built-in school-management apps (mock — not part of the paid catalog) */
+/* Built-in school-management apps (mock — priced & lockable like the agent catalog) */
 const SCHOOL_APPS = [
-  { id: 'qpg',  name: 'Question Paper Generator', desc: 'Generate offline exam papers with Excel import, multi-section support, and print-ready PDFs.', icon: FileText,      iconBg: BLUE,   badge: 'New',  status: 'active' },
-  { id: 's360', name: 'Student 360 View',         desc: 'Unified student profile — attendance, fees, marks, and notes in one page.',                    icon: UserCircle,    iconBg: GREEN,  badge: 'New',  status: 'active' },
-  { id: 'seat', name: 'Seating Arrangement Generator', desc: 'Auto-generate exam hall seating with class interleaving and hall tickets.',                icon: Grid3x3,       iconBg: AMBER,  badge: 'New',  status: 'active' },
-  { id: 'fin',  name: 'Financial Analytics & Reports', desc: 'Advanced P&L, Cash Flow summaries, and Tally exports.',                                    icon: PieChart,      iconBg: INK,    badge: 'New',  status: 'active' },
-  { id: 'wb',   name: 'Digital Whiteboard',       desc: 'Create, save, and share digital whiteboards for teaching and planning using Excalidraw.',      icon: PenTool,       iconBg: INK,    badge: 'New',  status: 'active' },
-  { id: 'risk', name: 'At-Risk Student Detector', desc: 'Flag students at academic risk using attendance and marks trends.',                           icon: AlertTriangle, iconBg: GREEN,  badge: null,   status: 'soon' },
-  { id: 'imp',  name: 'Data Import/Export Utility', desc: 'Bulk import students via Excel and export class data for any module.',                       icon: ArrowLeftRight, iconBg: INK,   badge: null,   status: 'soon' },
-  { id: 'res',  name: 'Result Analysis Tool',     desc: 'Subject-wise averages, pass/fail counts, mark distribution, and rank lists.',                  icon: TrendingUp,    iconBg: BLUE,   badge: null,   status: 'soon' },
+  { id: 'qpg',  name: 'Question Paper Generator', desc: 'Generate offline exam papers with Excel import, multi-section support, and print-ready PDFs.', icon: FileText,      iconBg: BLUE,   badge: 'New',  status: 'active', price: 15000 },
+  { id: 's360', name: 'Student 360 View',         desc: 'Unified student profile — attendance, fees, marks, and notes in one page.',                    icon: UserCircle,    iconBg: GREEN,  badge: 'New',  status: 'active', price: 0 },
+  { id: 'seat', name: 'Seating Arrangement Generator', desc: 'Auto-generate exam hall seating with class interleaving and hall tickets.',                icon: Grid3x3,       iconBg: AMBER,  badge: 'New',  status: 'active', price: 10000 },
+  { id: 'fin',  name: 'Financial Analytics & Reports', desc: 'Advanced P&L, Cash Flow summaries, and Tally exports.',                                    icon: PieChart,      iconBg: INK,    badge: 'New',  status: 'active', price: 25000 },
+  { id: 'wb',   name: 'Digital Whiteboard',       desc: 'Create, save, and share digital whiteboards for teaching and planning using Excalidraw.',      icon: PenTool,       iconBg: INK,    badge: 'New',  status: 'active', price: 8000 },
+  { id: 'risk', name: 'At-Risk Student Detector', desc: 'Flag students at academic risk using attendance and marks trends.',                           icon: AlertTriangle, iconBg: GREEN,  badge: null,   status: 'soon',   price: 20000 },
+  { id: 'imp',  name: 'Data Import/Export Utility', desc: 'Bulk import students via Excel and export class data for any module.',                       icon: ArrowLeftRight, iconBg: INK,   badge: null,   status: 'soon',   price: 5000 },
+  { id: 'res',  name: 'Result Analysis Tool',     desc: 'Subject-wise averages, pass/fail counts, mark distribution, and rank lists.',                  icon: TrendingUp,    iconBg: BLUE,   badge: null,   status: 'soon',   price: 12000 },
 ];
 
-/* ── School-management app card ──────────────────────────────────── */
-function SchoolAppCard({ app }) {
+/* ── School-management app card (locked/unlocked, priced, same language as agent tools) ── */
+function SchoolAppCard({ app, owned, busy, onBuy }) {
   const soon = app.status === 'soon';
   const [hover, setHover] = useState(false);
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{
-      background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '24px 22px 20px',
+      background: WHITE, border: `1px solid ${owned ? `${GREEN}40` : BORDER}`, borderRadius: 16, padding: '24px 22px 20px',
       display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', fontFamily: FONT,
       boxShadow: hover ? '0 10px 30px rgba(26,26,46,.10)' : '0 1px 3px rgba(26,26,46,.04)',
       transform: hover ? 'translateY(-3px)' : 'none', transition: 'all .18s',
@@ -44,14 +44,39 @@ function SchoolAppCard({ app }) {
       </div>
       <h3 style={{ fontSize: 15.5, fontWeight: 800, color: INK, margin: '0 0 7px' }}>{app.name}</h3>
       <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, margin: '0 0 14px', minHeight: 38 }}>{app.desc}</p>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginBottom: 14, minHeight: 22 }}>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 14, gap: 8 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, background: `${BLUE}12`, color: BLUE, fontSize: 11, fontWeight: 700 }}>
+          <Grid3x3 size={11} /> Management
+        </span>
         {app.badge && <span style={{ padding: '4px 10px', borderRadius: 999, background: '#FEE2E2', color: '#DC2626', fontSize: 11, fontWeight: 800 }}>{app.badge}</span>}
         {soon && !app.badge && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 999, background: '#F1F0EE', color: MUTED2, fontSize: 11, fontWeight: 700 }}><Clock size={11} /> Coming Soon</span>}
       </div>
+
+      <div style={{ width: '100%', marginBottom: 14 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 900, color: app.price === 0 ? GREEN : INK }}>
+          {app.price === 0 ? 'Free' : naira(app.price)}
+        </span>
+      </div>
+
       {soon ? (
-        <button disabled style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#F1F0EE', color: MUTED2, fontSize: 13, fontWeight: 800, fontFamily: FONT, cursor: 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Clock size={15} /> Coming Soon</button>
+        <button disabled style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#F1F0EE', color: MUTED2, fontSize: 13, fontWeight: 800, fontFamily: FONT, cursor: 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          <Clock size={15} /> Coming Soon
+        </button>
+      ) : owned ? (
+        <button style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: BLUE, color: WHITE, fontSize: 13, fontWeight: 800, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          <ArrowRight size={15} /> Open Tool
+        </button>
       ) : (
-        <button style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: BLUE, color: WHITE, fontSize: 13, fontWeight: 800, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><ArrowRight size={15} /> Open Tool</button>
+        <button onClick={() => onBuy(app)} disabled={busy} style={{
+          width: '100%', padding: '11px', borderRadius: 10, border: 'none',
+          background: busy ? '#E5E7EB' : `linear-gradient(135deg,${AMBER},#D4651E)`,
+          color: busy ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800,
+          fontFamily: FONT, cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+        }}>
+          {busy ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Lock size={14} />}
+          {app.price === 0 ? 'Get' : 'Unlock'}
+        </button>
       )}
     </div>
   );
@@ -121,6 +146,8 @@ export default function AppsCenterPage() {
   const [toast, setToast]   = useState('');
   const [cat, setCat]       = useState('all');
   const [query, setQuery]   = useState('');
+  const [mgmtOwned, setMgmtOwned] = useState(() => new Set(SCHOOL_APPS.filter((a) => a.price === 0).map((a) => a.id)));
+  const [mgmtBusy, setMgmtBusy]   = useState(null);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
@@ -157,7 +184,16 @@ export default function AppsCenterPage() {
     finally { setBusyId(null); }
   };
 
-  const mgmt = useMemo(() => SCHOOL_APPS.map((a) => ({ ...a, _kind: 'mgmt' })), []);
+  const buyMgmt = (app) => {
+    setMgmtBusy(app.id);
+    setTimeout(() => {
+      setMgmtOwned((prev) => new Set(prev).add(app.id));
+      setMgmtBusy(null);
+      showToast('Unlocked ✓');
+    }, 700);
+  };
+
+  const mgmt = useMemo(() => SCHOOL_APPS.map((a) => ({ ...a, _kind: 'mgmt', owned: mgmtOwned.has(a.id) })), [mgmtOwned]);
 
   const q = query.trim().toLowerCase();
   const catalog = useMemo(() => {
@@ -169,7 +205,7 @@ export default function AppsCenterPage() {
     return list;
   }, [cat, q, mgmt, tools, assets]);
 
-  const unlocked = [...tools, ...assets].filter((i) => i.owned).length;
+  const unlocked = [...tools, ...assets].filter((i) => i.owned).length + mgmtOwned.size;
 
   return (
     <PageLayout title="Apps Center" subtitle="Browse and unlock tools & assets for your agent">
@@ -240,7 +276,7 @@ export default function AppsCenterPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
           {catalog.map((item) => item._kind === 'mgmt'
-            ? <SchoolAppCard key={`mgmt-${item.id}`} app={item} />
+            ? <SchoolAppCard key={`mgmt-${item.id}`} app={item} owned={item.owned} busy={mgmtBusy === item.id} onBuy={buyMgmt} />
             : <AppCard key={`${item._kind}-${item.id}`} item={item} busy={busyId === item.id} onBuy={buy} />)}
         </div>
       )}
