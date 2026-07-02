@@ -23,19 +23,19 @@ const NAV_SECTIONS = [
   ]},
   { section: 'MANAGEMENT', items: [
     { label: 'Finance & Fees', icon: Banknote, children: ['Fees Dashboard','Collect Fees','Search Due Fees','All Transactions','Online Transactions','Fee Challans','Assign Fees','Fees Carry Forward','Fee Groups','Fees Discount','Fee Types','Generate Due Slip','Due Slip History'] },
-    { label: 'Accounts', icon: Landmark, children: ['Accounts Dashboard','Income','Expense','Income Heads','Expense Heads','Bank Accounts'] },
+    { label: 'Accounts', icon: Landmark, moduleKey: 'accounts_finance', children: ['Accounts Dashboard','Income','Expense','Income Heads','Expense Heads','Bank Accounts'] },
     { label: 'Student Information', icon: Users, children: ['Student Dashboard','Student Admission','Student List','Student Attendance','Behavior Records','Student Houses','Student Categories','Disabled Students','Health Records'] },
     { label: 'Academics', icon: GraduationCap, children: ['Academic Dashboard','Academic Sessions','Classes','Sections','Subjects','Assign Subjects','Assign Electives','Assign Class Teacher','Manage Periods','Class Timetable','Promote Students'] },
-    { label: 'Front Office', icon: DoorOpen, children: ['Front Office Dashboard','Admission Enquiries','Visitor Book','Complaints','Postal Records'] },
+    { label: 'Front Office', icon: DoorOpen, moduleKey: 'front_office', children: ['Front Office Dashboard','Admission Enquiries','Visitor Book','Complaints','Postal Records'] },
     { label: 'Offline Examinations', icon: ClipboardList, children: ['Exam Dashboard','Manage Offline Exams','Exam Types','Schedule & Marks Setup','Enter Marks','Cocurricular Areas','Cocurricular Grades','Manage Grades','Report Card Setups','Generate Marksheet','Upload Marksheet','Manage Uploads','Teacher Remarks'] },
-    { label: 'CBC Academics', icon: Layers, children: ['CBC Dashboard','Strands & Outcomes','CBC Assessments','Core Competencies','Pathways & Tracks','CBC Reports'] },
-    { label: 'Online Examinations', icon: Laptop, children: ['Manage Online Exams','Question Bank'] },
+    { label: 'CBC Academics', icon: Layers, moduleKey: 'cbc_academics', children: ['CBC Dashboard','Strands & Outcomes','CBC Assessments','Core Competencies','Pathways & Tracks','CBC Reports'] },
+    { label: 'Online Examinations', icon: Laptop, moduleKey: 'online_examinations', children: ['Manage Online Exams','Question Bank'] },
     { label: 'Human Resource', icon: UserCog, children: ['HR Dashboard','Staff Directory','Staff Attendance','Payroll','Set Salary','Approve Leave','Leave Types','Departments','Designations','Leave Management','Staff ID Card','HR Settings','Manage Staff Loans','Salary Templates','Appraisal Cycles','Appraisal Criteria','Appraisals'] },
-    { label: 'PTM Meetings', icon: CalendarClock, children: ['PTM Dashboard','PTM Schedule Meetings','PTM Guide','PTM Attendance & Remarks','PTM Follow-ups','PTM Reports'] },
-    { label: 'Lesson Planner', icon: NotebookPen, children: ['Lesson Planner Dashboard','Lesson Plans','Lesson Planner Guide','Lesson Plan Review','Lesson Plan Approvals','Lesson Plan Coverage','Lesson Plan Reports','Lesson Planner Settings'] },
-    { label: 'OSM Module', icon: ClipboardCheck, children: ['OSM Dashboard','OSM Sessions','OSM Evaluate','OSM Reports','OSM Guide','OSM Moderation'] },
-    { label: 'QR Code Attendance', icon: QrCode, children: ['QR Attendance','QR Attendance Setting','QR Attendance Report'] },
-    { label: 'Assessment', icon: ShieldCheck, children: ['Assessment Dashboard','Assessments','Assessment Guide','Assessment Reports'] },
+    { label: 'PTM Meetings', icon: CalendarClock, moduleKey: 'ptm', children: ['PTM Dashboard','PTM Schedule Meetings','PTM Guide','PTM Attendance & Remarks','PTM Follow-ups','PTM Reports'] },
+    { label: 'Lesson Planner', icon: NotebookPen, moduleKey: 'lesson_planner', children: ['Lesson Planner Dashboard','Lesson Plans','Lesson Planner Guide','Lesson Plan Review','Lesson Plan Approvals','Lesson Plan Coverage','Lesson Plan Reports','Lesson Planner Settings'] },
+    { label: 'OSM Module', icon: ClipboardCheck, moduleKey: 'digital_evaluation', children: ['OSM Dashboard','OSM Sessions','OSM Evaluate','OSM Reports','OSM Guide','OSM Moderation'] },
+    { label: 'QR Code Attendance', icon: QrCode, moduleKey: 'qr_attendance', children: ['QR Attendance','QR Attendance Setting','QR Attendance Report'] },
+    { label: 'Assessment', icon: ShieldCheck, moduleKey: 'assessment', children: ['Assessment Dashboard','Assessments','Assessment Guide','Assessment Reports'] },
   ]},
   { section: 'MODULES', items: [
     // Live pages already built in the dashboard
@@ -50,15 +50,15 @@ const NAV_SECTIONS = [
     { label: 'Tools & Assets', icon: Store, to: '/marketplace' },
     { label: 'Content Library', icon: Library, to: '/library' },
     // Placeholder module groups (pages not built yet)
-    { label: 'Study Center', icon: BookOpenCheck, children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },
+    { label: 'Study Center', icon: BookOpenCheck, moduleKey: 'study_center', children: ['Dashboard','Manage Syllabus','Classwork & Logbook','Manage Resources','Homework & Assignments','Live Classes'] },
     { label: 'Certificates', icon: Award, children: ['Certificate Templates','Generate Document'] },
-    { label: 'Communicate', icon: Megaphone, children: ['Notice Board','Events & Holidays','Compose Broadcast','Broadcast History','Image Gallery'] },
-    { label: 'Library', icon: Library, children: ['Library Dashboard','Issue/Return Book','Manage Books','Book Categories'] },
-    { label: 'Inventory', icon: Package, children: ['Inventory Dashboard','Issue Item','Add Stock','Item List','Item Categories','Suppliers','Point of Sale','Sales History','Purchase Orders','Goods Receipts','Supplier Payments'] },
-    { label: 'Transport', icon: Bus, children: ['Transport Dashboard','Manage Vehicles','Manage Routes','Live Vehicle Tracking'] },
-    { label: 'Hostel', icon: BedDouble, children: ['Hostel Dashboard','Student Allocation','Manage Rooms','Room Types','Manage Hostels'] },
+    { label: 'Communicate', icon: Megaphone, moduleKey: 'communications', children: ['Notice Board','Events & Holidays','Compose Broadcast','Broadcast History','Image Gallery'] },
+    { label: 'Library', icon: Library, moduleKey: 'library', children: ['Library Dashboard','Issue/Return Book','Manage Books','Book Categories'] },
+    { label: 'Inventory', icon: Package, moduleKey: 'inventory', children: ['Inventory Dashboard','Issue Item','Add Stock','Item List','Item Categories','Suppliers','Point of Sale','Sales History','Purchase Orders','Goods Receipts','Supplier Payments'] },
+    { label: 'Transport', icon: Bus, moduleKey: 'transport', children: ['Transport Dashboard','Manage Vehicles','Manage Routes','Live Vehicle Tracking'] },
+    { label: 'Hostel', icon: BedDouble, moduleKey: 'hostel', children: ['Hostel Dashboard','Student Allocation','Manage Rooms','Room Types','Manage Hostels'] },
     { label: 'Help Center', icon: LifeBuoy, children: ['Manage Categories','Browse Articles','AI Chatbot'] },
-    { label: 'Asset Management', icon: Boxes, children: ['Asset Dashboard','Asset Register','Asset Categories','Asset Assignments','Asset Depreciation','Asset Maintenance','Asset Disposals','Asset Audits','Asset Reports'] },
+    { label: 'Asset Management', icon: Boxes, moduleKey: 'asset_management', children: ['Asset Dashboard','Asset Register','Asset Categories','Asset Assignments','Asset Depreciation','Asset Maintenance','Asset Disposals','Asset Audits','Asset Reports'] },
     { label: 'Reports & Analytics', icon: BarChart3, to: '#' },
   ]},
   { section: 'SYSTEM', items: [
@@ -77,7 +77,7 @@ const NAV_SECTIONS = [
       'Biometric Devices',
       { label: 'School Website', to: '/settings-website' },
     ] },
-    { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
+    { label: 'Apps Center', icon: LayoutGrid, to: '/apps', moduleKey: 'apps_center' },
   ]},
   { section: 'COMMUNICATION', items: [
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
@@ -152,11 +152,39 @@ export function Sidebar({ collapsed }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState({});
   const [query, setQuery] = useState('');
+  const [modules, setModules] = useState(null);
   const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
+
+  // Load the school's enabled/disabled modules once, then keep it fresh:
+  // re-check whenever the tab regains focus (e.g. after saving on the
+  // Module Management page) so a disable/enable shows up without a reload.
+  useEffect(() => {
+    let cancelled = false;
+    const loadModules = () => {
+      apiGet('/api/school/settings')
+        .then((res) => { if (!cancelled) setModules(res.data?.modules || {}); })
+        .catch(() => {});
+    };
+    loadModules();
+    window.addEventListener('focus', loadModules);
+    window.addEventListener('akoro:modules-updated', loadModules);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', loadModules);
+      window.removeEventListener('akoro:modules-updated', loadModules);
+    };
+  }, []);
+
+  const isModuleOn = (key) => !key || !modules || modules[key] !== false; // default on until loaded/explicitly off
+
+  const moduleFiltered = NAV_SECTIONS.map((sec) => ({
+    ...sec,
+    items: sec.items.filter((item) => isModuleOn(item.moduleKey)),
+  })).filter((sec) => sec.items.length);
 
   const q = query.trim().toLowerCase();
   const sections = q
-    ? NAV_SECTIONS.map((sec) => ({
+    ? moduleFiltered.map((sec) => ({
         ...sec,
         items: sec.items
           .map((item) => {
@@ -169,7 +197,7 @@ export function Sidebar({ collapsed }) {
           })
           .filter(Boolean),
       })).filter((sec) => sec.items.length)
-    : NAV_SECTIONS;
+    : moduleFiltered;
 
   return (
     <aside style={{ width: collapsed ? 72 : 256, flexShrink: 0, background: INK, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'width .15s' }}>

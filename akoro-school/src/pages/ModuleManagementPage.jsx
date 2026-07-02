@@ -116,6 +116,7 @@ export default function ModuleManagementPage() {
     setSaving(true);
     try {
       await apiPut('/api/school/settings/modules', modules);
+      window.dispatchEvent(new Event('akoro:modules-updated')); // refresh the sidebar immediately
       showToast('Configuration saved ✓');
     } catch (e) { showToast(e.message || 'Could not save'); }
     finally { setSaving(false); }
