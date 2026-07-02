@@ -29,7 +29,7 @@ import {
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
-import { checkDb }                from "./db.js";
+import db, { checkDb }           from "./db.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
 import authModule                 from "./modules/auth/routes.js";
@@ -218,6 +218,21 @@ httpServer.listen(config.server.port, config.server.host, () => {
 
 📊  /health  /ready
   `);
+
+  // Best-effort: show the last DB migration run so deploys are verifiable
+  // from the API's own boot log (never blocks startup).
+  db.schema("edu")
+    .from("migration_log")
+    .select("run_group, applied, failed, git_sha, ran_at")
+    .order("ran_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .then(({ data }) => {
+      if (!data) return console.log("🗃️  Migrations: no runs recorded yet (run `npm run db:deploy`).");
+      const sha = data.git_sha ? ` @ ${String(data.git_sha).slice(0, 7)}` : "";
+      console.log(`🗃️  Migrations: last run ${data.ran_at} — ${data.run_group}, ${data.applied} applied${data.failed ? `, ${data.failed} failed` : ""}${sha}`);
+    })
+    .catch(() => { /* table may not exist yet — ignore */ });
 });
 
 // Start the background task worker (Anthropic agent loop) if enabled

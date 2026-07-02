@@ -85,6 +85,25 @@ try {
     }
   }
 
+  // Durable record in edu.migration_log (best-effort — a logging failure must
+  // never fail the deploy). Reads git SHA from Railway/Render/Vercel env vars.
+  try {
+    const gitSha =
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RENDER_GIT_COMMIT ||
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+      process.env.GIT_SHA ||
+      null;
+    await client.query(
+      `INSERT INTO edu.migration_log (run_group, applied, failed, files, git_sha)
+       VALUES ($1, $2, $3, $4::jsonb, $5)`,
+      [groups.join(","), applied, failed, JSON.stringify(files), gitSha]
+    );
+    console.log("📝 Logged to edu.migration_log.");
+  } catch (logErr) {
+    console.warn(`⚠️  Could not write edu.migration_log: ${logErr.message}`);
+  }
+
   console.log(`\n✅ Done. ${applied} applied${failed ? `, ${failed} failed` : ""}.`);
   if (failed) process.exitCode = 1;
 } catch (err) {
