@@ -74,6 +74,46 @@ CREATE TABLE IF NOT EXISTS edu.school_roles (
 );
 CREATE INDEX IF NOT EXISTS idx_school_roles_school ON edu.school_roles (school_id);
 
+-- ── Payment Gateway Settings (online fee collection) ─────────────────────────
+-- Secrets are stored here and masked on read by the API — never returned raw.
+CREATE TABLE IF NOT EXISTS edu.school_payment_gateway (
+  school_id          uuid PRIMARY KEY REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  enabled            boolean NOT NULL DEFAULT false,
+  provider           text,                                    -- e.g. 'paystack', 'flutterwave', 'stripe'
+  mode               text NOT NULL DEFAULT 'sandbox' CHECK (mode IN ('sandbox','live')),
+  live_key_id        text,
+  live_key_secret    text,
+  sandbox_key_id     text,
+  sandbox_key_secret text,
+  webhook_secret     text,
+  surcharge_type     text NOT NULL DEFAULT 'percentage' CHECK (surcharge_type IN ('percentage','flat')),
+  surcharge_amount   numeric NOT NULL DEFAULT 0,
+  updated_at         timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── Admission Form Configuration ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS edu.school_admission_settings (
+  school_id     uuid PRIMARY KEY REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  enabled       boolean NOT NULL DEFAULT false,   -- online admission fee collection
+  slug          text,                              -- public admission-form URL slug
+  fee_amount    numeric NOT NULL DEFAULT 0,
+  qr_code_url   text,                              -- uploaded GPay/PhonePe/Paytm QR image
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_school_admission_settings_slug ON edu.school_admission_settings (slug) WHERE slug IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS edu.school_admission_fields (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id   uuid NOT NULL REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  label       text NOT NULL,
+  field_type  text NOT NULL DEFAULT 'text' CHECK (field_type IN ('text','number','date','dropdown','file','textarea','checkbox')),
+  options     text[],                              -- for dropdown fields
+  required    boolean NOT NULL DEFAULT false,
+  sort_order  integer NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_school_admission_fields_school ON edu.school_admission_fields (school_id, sort_order);
+
 -- ── Social media connections (Facebook/Instagram autopost) ──────────────────
 CREATE TABLE IF NOT EXISTS edu.school_social_accounts (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

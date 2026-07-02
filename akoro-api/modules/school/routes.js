@@ -925,4 +925,173 @@ router.delete("/roles/:id", authenticateToken, requireRole(SCHOOL_ROLES), async 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// =============================================================
+// PAYMENT GATEWAY SETTINGS — online fee collection. Secrets are stored but
+// never returned raw; GET responses mask them and only report whether a
+// value is set (hasLiveKeySecret, etc).
+// =============================================================
+
+const mask = (v) => (v ? "•".repeat(Math.min(20, Math.max(8, v.length))) : "");
+
+function shapePaymentGateway(row) {
+  if (!row) return {
+    enabled: false, provider: "", mode: "sandbox",
+    liveKeyId: "", liveKeySecret: "", hasLiveKeySecret: false,
+    sandboxKeyId: "", sandboxKeySecret: "", hasSandboxKeySecret: false,
+    webhookSecret: "", hasWebhookSecret: false,
+    surchargeType: "percentage", surchargeAmount: 0,
+  };
+  return {
+    enabled: row.enabled, provider: row.provider || "", mode: row.mode,
+    liveKeyId: row.live_key_id || "", liveKeySecret: mask(row.live_key_secret), hasLiveKeySecret: !!row.live_key_secret,
+    sandboxKeyId: row.sandbox_key_id || "", sandboxKeySecret: mask(row.sandbox_key_secret), hasSandboxKeySecret: !!row.sandbox_key_secret,
+    webhookSecret: mask(row.webhook_secret), hasWebhookSecret: !!row.webhook_secret,
+    surchargeType: row.surcharge_type, surchargeAmount: row.surcharge_amount,
+  };
+}
+
+// ── GET /api/school/payment-gateway ───────────────────────────────────────────
+router.get("/payment-gateway", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data } = await db.schema("edu").from("school_payment_gateway").select("*").eq("school_id", school.id).maybeSingle();
+    res.json({ success: true, data: shapePaymentGateway(data) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PUT /api/school/payment-gateway ───────────────────────────────────────────
+// Secret fields (liveKeySecret, sandboxKeySecret, webhookSecret) are only
+// overwritten when a non-empty value is sent — leave blank to keep saved.
+router.put("/payment-gateway", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const b = req.body || {};
+    const patch = { school_id: school.id, updated_at: new Date() };
+    if (b.enabled !== undefined) patch.enabled = !!b.enabled;
+    if (b.provider !== undefined) patch.provider = b.provider;
+    if (b.mode !== undefined) patch.mode = b.mode;
+    if (b.liveKeyId !== undefined) patch.live_key_id = b.liveKeyId;
+    if (b.sandboxKeyId !== undefined) patch.sandbox_key_id = b.sandboxKeyId;
+    if (b.liveKeySecret)    patch.live_key_secret = b.liveKeySecret;
+    if (b.sandboxKeySecret) patch.sandbox_key_secret = b.sandboxKeySecret;
+    if (b.webhookSecret)    patch.webhook_secret = b.webhookSecret;
+    if (b.surchargeType !== undefined) patch.surcharge_type = b.surchargeType;
+    if (b.surchargeAmount !== undefined) patch.surcharge_amount = b.surchargeAmount;
+
+    const { data, error } = await db.schema("edu").from("school_payment_gateway")
+      .upsert(patch, { onConflict: "school_id" }).select("*").single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: shapePaymentGateway(data) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =============================================================
+// ADMISSION FORM CONFIGURATION
+// =============================================================
+
+async function getAdmissionSettings(schoolId) {
+  const { data } = await db.schema("edu").from("school_admission_settings").select("*").eq("school_id", schoolId).maybeSingle();
+  if (data) return data;
+  const { data: created } = await db.schema("edu").from("school_admission_settings").insert({ school_id: schoolId }).select("*").single();
+  return created;
+}
+
+// ── GET /api/school/admission ─────────────────────────────────────────────────
+router.get("/admission", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const settings = await getAdmissionSettings(school.id);
+    const { data: fields } = await db.schema("edu").from("school_admission_fields")
+      .select("id, label, field_type, options, required, sort_order")
+      .eq("school_id", school.id)
+      .order("sort_order", { ascending: true });
+    res.json({
+      success: true,
+      data: {
+        settings: {
+          enabled: settings.enabled, slug: settings.slug || school.slug || "",
+          feeAmount: settings.fee_amount, qrCodeUrl: settings.qr_code_url,
+        },
+        fields: (fields || []).map((f) => ({
+          id: f.id, label: f.label, type: f.field_type, options: f.options || [],
+          required: f.required, sortOrder: f.sort_order,
+        })),
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PUT /api/school/admission/settings ────────────────────────────────────────
+// Body: { enabled?, slug?, feeAmount?, qrCodeUrl? }
+router.put("/admission/settings", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    await getAdmissionSettings(school.id); // ensure row exists
+    const b = req.body || {};
+    const patch = { updated_at: new Date() };
+    if (b.enabled !== undefined) patch.enabled = !!b.enabled;
+    if (b.slug !== undefined) patch.slug = b.slug?.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-") || null;
+    if (b.feeAmount !== undefined) patch.fee_amount = b.feeAmount;
+    if (b.qrCodeUrl !== undefined) patch.qr_code_url = b.qrCodeUrl;
+
+    const { data, error } = await db.schema("edu").from("school_admission_settings")
+      .update(patch).eq("school_id", school.id).select("*").single();
+    if (error) {
+      if (error.code === "23505") return res.status(409).json({ error: "That URL slug is already taken" });
+      throw new Error(error.message);
+    }
+    res.json({ success: true, data: { enabled: data.enabled, slug: data.slug, feeAmount: data.fee_amount, qrCodeUrl: data.qr_code_url } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/admission/fields ─────────────────────────────────────────
+// Body: { label, type?, options?, required?, sortOrder? }
+router.post("/admission/fields", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { label, type = "text", options = [], required = false, sortOrder = 0 } = req.body;
+    if (!label?.trim()) return res.status(400).json({ error: "label is required" });
+    const { data, error } = await db.schema("edu").from("school_admission_fields").insert({
+      school_id: school.id, label: label.trim(), field_type: type, options, required, sort_order: sortOrder,
+    }).select("id, label, field_type, options, required, sort_order").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data: { id: data.id, label: data.label, type: data.field_type, options: data.options || [], required: data.required, sortOrder: data.sort_order } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PUT /api/school/admission/fields/:id ──────────────────────────────────────
+router.put("/admission/fields/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const patch = {};
+    if (req.body.label !== undefined) patch.label = req.body.label;
+    if (req.body.type !== undefined) patch.field_type = req.body.type;
+    if (req.body.options !== undefined) patch.options = req.body.options;
+    if (req.body.required !== undefined) patch.required = req.body.required;
+    if (req.body.sortOrder !== undefined) patch.sort_order = req.body.sortOrder;
+    const { data, error } = await db.schema("edu").from("school_admission_fields")
+      .update(patch).eq("id", req.params.id).eq("school_id", school.id)
+      .select("id, label, field_type, options, required, sort_order").single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: { id: data.id, label: data.label, type: data.field_type, options: data.options || [], required: data.required, sortOrder: data.sort_order } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/school/admission/fields/:id ───────────────────────────────────
+router.delete("/admission/fields/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { error } = await db.schema("edu").from("school_admission_fields").delete().eq("id", req.params.id).eq("school_id", school.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;

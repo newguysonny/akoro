@@ -144,5 +144,19 @@ BEGIN
     '{"front_office":{"view":true,"create":true,"edit":true,"delete":false},"student_information":{"view":true,"create":false,"edit":false,"delete":false}}'::jsonb, 2
   WHERE NOT EXISTS (SELECT 1 FROM edu.school_roles WHERE school_id = v_school AND name = 'Front Desk');
 
+  -- ── Payment Gateway (sandbox mode, off by default) ───────────────────────
+  INSERT INTO edu.school_payment_gateway (school_id, enabled, provider, mode)
+  SELECT v_school, false, 'Paystack', 'sandbox'
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_payment_gateway WHERE school_id = v_school);
+
+  -- ── Admission Form (enabled, sample fee + custom field) ──────────────────
+  INSERT INTO edu.school_admission_settings (school_id, enabled, slug, fee_amount)
+  SELECT v_school, true, 'akoro-demo-academy', 1000
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_admission_settings WHERE school_id = v_school);
+
+  INSERT INTO edu.school_admission_fields (school_id, label, field_type, required, sort_order)
+  SELECT v_school, 'Father Photo', 'file', false, 0
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_admission_fields WHERE school_id = v_school);
+
   RAISE NOTICE 'Seeded school portal data for school_id=%', v_school;
 END $$;
