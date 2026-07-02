@@ -8,6 +8,9 @@
     "dev": "node --watch app.js",
     "worker": "node worker.js",
     "worker:dev": "node --watch worker.js",
+    "db:migrate": "node scripts/apply-migrations.mjs --group=schema",
+    "db:seed:demo": "node scripts/apply-migrations.mjs --group=demo",
+    "db:deploy": "node scripts/apply-migrations.mjs --group=schema",
     "smoke:instructor": "node scripts/smoke-instructor.mjs"
   },
   "dependencies": {

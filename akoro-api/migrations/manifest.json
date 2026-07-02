@@ -1,0 +1,37 @@
+{
+  "//": "Ordered migration manifest for scripts/apply-migrations.mjs. 'schema' runs on every deploy (structural + platform-catalog seeds, all idempotent). 'demo' is opt-in sample data and must never run against production. 2026-run-all.sql is intentionally excluded — it is a manual copy-paste bundle that duplicates the files below.",
+  "schema": [
+    "2026-missing-columns.sql",
+    "2026-user-settings.sql",
+    "2026-2fa.sql",
+    "2026-force-logout.sql",
+    "2026-instructor-profile.sql",
+    "2026-content-schema.sql",
+    "2026-live-modules.sql",
+    "2026-dynamic-tools.sql",
+    "2026-platform-tools.sql",
+    "2026-platform-tools-agent.sql",
+    "2026-tool-outputs.sql",
+    "2026-instructor-templates.sql",
+    "2026-instructor-templates-body.sql",
+    "2026-template-defaults.sql",
+    "2026-assessment-gateway.sql",
+    "2026-expose-edu-schema.sql",
+    "2026-school-portal-settings.sql",
+    "2026-mgmt-schema.sql",
+    "2026-mgmt-schema-2.sql",
+    "2026-mgmt-schema-3.sql",
+    "2026-school-domains-vercel.sql",
+    "2026-public-portal.sql"
+  ],
+  "demo": [
+    "2026-seed-school.sql",
+    "2026-seed-demo-course.sql",
+    "2026-seed-community.sql",
+    "2026-enroll-test-students.sql",
+    "2026-seed-school-portal.sql",
+    "2026-seed-mgmt.sql",
+    "2026-seed-mgmt-2.sql",
+    "2026-seed-mgmt-3.sql"
+  ]
+}
