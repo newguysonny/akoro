@@ -68,6 +68,68 @@ const RESOURCES = {
   "due-slips": { table: "due_slips", fields: [], refs: { student_id: ["students", studentLabel] }, filters: ["student_id"], orderBy: "generated_at", asc: false, readOnly: true },
   "fee-carry-forwards": { table: "fee_carry_forwards", fields: [], refs: { student_id: ["students", studentLabel], from_session_id: ["academic_sessions","name"], to_session_id: ["academic_sessions","name"] }, readOnly: true },
 
+  // Accounts
+  "income-heads":  { table: "income_heads",  fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "expense-heads": { table: "expense_heads", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "incomes":  { table: "incomes",  fields: ["head_id","amount","source","reference","note","received_on"], required: ["amount"], refs: { head_id: ["income_heads","name"] }, filters: ["head_id"], orderBy: "received_on", asc: false },
+  "expenses": { table: "expenses", fields: ["head_id","amount","paid_to","reference","note","spent_on"], required: ["amount"], refs: { head_id: ["expense_heads","name"] }, filters: ["head_id"], orderBy: "spent_on", asc: false },
+  "bank-accounts": { table: "bank_accounts", fields: ["name","bank_name","account_no","balance"], required: ["name"], orderBy: "name", asc: true },
+
+  // Human Resource
+  "departments":  { table: "departments",  fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "designations": { table: "designations", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "staff": { table: "staff",
+    fields: ["staff_no","first_name","last_name","gender","phone","email","photo_url","department_id","designation_id","employment_type","monthly_salary","joined_on","status"],
+    required: ["staff_no","first_name","last_name"],
+    refs: { department_id: ["departments","name"], designation_id: ["designations","name"] },
+    filters: ["department_id","designation_id","status"] },
+  "staff-attendance": { table: "staff_attendance", fields: ["staff_id","date","status","note"], required: ["staff_id","date"], refs: { staff_id: ["staff", studentLabel] }, filters: ["date","staff_id","status"], orderBy: "date", asc: false },
+  "leave-types": { table: "leave_types", fields: ["name","days_allowed"], required: ["name"], orderBy: "name", asc: true },
+  "leave-requests": { table: "leave_requests", fields: ["staff_id","leave_type_id","from_date","to_date","reason","status","decided_by"], required: ["staff_id","from_date","to_date"], refs: { staff_id: ["staff", studentLabel], leave_type_id: ["leave_types","name"] }, filters: ["status","staff_id"] },
+  "payroll-records": { table: "payroll_records", fields: ["staff_id","month","gross","deductions","net","status","paid_on"], required: ["staff_id","month"], refs: { staff_id: ["staff", studentLabel] }, filters: ["month","status","staff_id"] },
+  "staff-loans": { table: "staff_loans", fields: ["staff_id","amount","monthly_deduction","balance","status","issued_on"], required: ["staff_id","amount"], refs: { staff_id: ["staff", studentLabel] }, filters: ["status"] },
+  "salary-templates": { table: "salary_templates", fields: ["name","basic","housing","transport","other"], required: ["name"], orderBy: "name", asc: true },
+  "appraisal-cycles": { table: "appraisal_cycles", fields: ["name","starts_on","ends_on","status"], required: ["name"] },
+  "appraisal-criteria": { table: "appraisal_criteria", fields: ["title","weight"], required: ["title"] },
+  "appraisals": { table: "appraisals", fields: ["staff_id","cycle_id","score","strengths","improvements","status"], required: ["staff_id"], refs: { staff_id: ["staff", studentLabel], cycle_id: ["appraisal_cycles","name"] }, filters: ["cycle_id","status"] },
+
+  // QR Attendance
+  "qr-events": { table: "qr_attendance_events", fields: ["person_type","staff_id","student_id","person_name","direction","method"], required: ["person_name"], refs: { staff_id: ["staff", studentLabel], student_id: ["students", studentLabel] }, filters: ["person_type","direction"], orderBy: "happened_at", asc: false },
+
+  // Offline Examinations
+  "exam-types": { table: "exam_types", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "exams": { table: "exams", fields: ["name","exam_type_id","session_id","starts_on","ends_on","status"], required: ["name"], refs: { exam_type_id: ["exam_types","name"], session_id: ["academic_sessions","name"] }, filters: ["status","session_id"] },
+  "exam-schedules": { table: "exam_schedules", fields: ["exam_id","class_id","subject_id","exam_date","max_marks","pass_marks"], required: ["exam_id","class_id","subject_id"], refs: { exam_id: ["exams","name"], class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["exam_id","class_id"], orderBy: "exam_date", asc: true },
+  "exam-marks": { table: "exam_marks", fields: ["schedule_id","student_id","marks"], required: ["schedule_id","student_id"], refs: { student_id: ["students", studentLabel] }, filters: ["schedule_id","student_id"] },
+  "cocurricular-areas": { table: "cocurricular_areas", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
+  "cocurricular-grades": { table: "cocurricular_grades", fields: ["grade","min_score","max_score","remark"], required: ["grade"] },
+  "grade-scales": { table: "grade_scales", fields: ["grade","min_percent","max_percent","remark"], required: ["grade"] },
+  "report-card-setups": { table: "report_card_setups", fields: ["name","description"], required: ["name"] },
+  "marksheet-uploads": { table: "marksheet_uploads", fields: ["title","exam_id","class_id","file_url","note"], required: ["title"], refs: { exam_id: ["exams","name"], class_id: ["classes","name"] } },
+  "teacher-remarks": { table: "teacher_remarks", fields: ["student_id","exam_id","remark"], required: ["student_id","remark"], refs: { student_id: ["students", studentLabel], exam_id: ["exams","name"] }, filters: ["exam_id","student_id"] },
+
+  // CBC Academics
+  "cbc-strands": { table: "cbc_strands", fields: ["subject_id","strand","sub_strand","outcome"], required: ["strand"], refs: { subject_id: ["subjects","name"] }, filters: ["subject_id"] },
+  "core-competencies": { table: "core_competencies", fields: ["name","description"], required: ["name"], orderBy: "name", asc: true },
+  "cbc-pathways": { table: "cbc_pathways", fields: ["name","track","description"], required: ["name"], orderBy: "name", asc: true },
+  "cbc-assessments": { table: "cbc_assessments", fields: ["student_id","strand_id","level","note","assessed_on"], required: ["student_id","level"], refs: { student_id: ["students", studentLabel], strand_id: ["cbc_strands","strand"] }, filters: ["level","student_id"] },
+
+  // Online Examinations
+  "online-exams": { table: "online_exams", fields: ["title","class_id","subject_id","exam_date","duration_minutes","status"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["status","class_id"] },
+  "question-bank": { table: "question_bank", fields: ["subject_id","question","option_a","option_b","option_c","option_d","correct_option","marks"], required: ["question"], refs: { subject_id: ["subjects","name"] }, filters: ["subject_id"] },
+
+  // PTM Meetings
+  "ptm-meetings": { table: "ptm_meetings", fields: ["title","meeting_date","venue","agenda","class_id","status"], required: ["title"], refs: { class_id: ["classes","name"] }, filters: ["status"] },
+  "ptm-attendance": { table: "ptm_attendance", fields: ["meeting_id","student_id","guardian_name","attended","remarks"], required: ["meeting_id"], refs: { meeting_id: ["ptm_meetings","title"], student_id: ["students", studentLabel] }, filters: ["meeting_id"] },
+  "ptm-followups": { table: "ptm_followups", fields: ["meeting_id","student_id","note","due_on","status"], required: ["note"], refs: { meeting_id: ["ptm_meetings","title"], student_id: ["students", studentLabel] }, filters: ["status"] },
+
+  // Lesson Planner
+  "lesson-plans": { table: "lesson_plans", fields: ["teacher_id","class_id","subject_id","week_label","topic","objectives","activities","resources","feedback","status"], required: ["topic"], refs: { teacher_id: ["users","full_name","public"], class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["status","class_id","teacher_id"] },
+
+  // OSM
+  "osm-sessions": { table: "osm_sessions", fields: ["teacher_id","observer_name","session_date","focus_area","status"], required: [], refs: { teacher_id: ["users","full_name","public"] }, filters: ["status"] },
+  "osm-evaluations": { table: "osm_evaluations", fields: ["session_id","score","strengths","improvements","status"], required: ["session_id"], refs: { session_id: ["osm_sessions","focus_area"] }, filters: ["status"] },
+
   // Front Office
   "enquiries": { table: "enquiries", fields: ["name","phone","email","class_interest","source","status","note","follow_up_on"], required: ["name"], filters: ["status"] },
   "visitors": { table: "visitors", fields: ["name","phone","purpose","to_meet","id_proof","check_in","check_out"], required: ["name"], orderBy: "check_in", asc: false },
@@ -88,11 +150,13 @@ function cleanBody(cfg, body) {
 async function attachRefs(cfg, rows, schoolId) {
   if (!cfg.refs || !rows.length) return rows;
   for (const [key, ref] of Object.entries(cfg.refs)) {
-    const [table, label] = ref;
+    const [table, label, schema] = ref;              // schema 'public' → unscoped lookup (e.g. users)
     const ids = [...new Set(rows.map((r) => r[key]).filter(Boolean))];
     if (!ids.length) continue;
     const cols = typeof label === "function" ? "*" : `id, ${label}`;
-    const { data } = await M().from(table).select(cols).eq("school_id", schoolId).in("id", ids);
+    let q = (schema === "public" ? db.from(table) : M().from(table)).select(cols).in("id", ids);
+    if (schema !== "public") q = q.eq("school_id", schoolId);
+    const { data } = await q;
     const nameOf = Object.fromEntries((data || []).map((r) => [r.id, typeof label === "function" ? label(r) : r[label]]));
     const outKey = key.replace(/_id$/, "") + "_name";
     for (const row of rows) row[outKey] = row[key] ? (nameOf[row[key]] ?? null) : null;
@@ -154,6 +218,71 @@ router.get("/dashboard/:area", authenticateToken, async (req, res) => {
         visitorsToday: await count("visitors", (q) => q.gte("check_in", `${today}T00:00:00Z`)),
         openComplaints: await count("complaints", (q) => q.neq("status", "resolved")),
         postalRecords: await count("postal_records"),
+      };
+    } else if (req.params.area === "accounts") {
+      const { data: inc } = await M().from("incomes").select("amount").eq("school_id", school.id);
+      const { data: exp } = await M().from("expenses").select("amount").eq("school_id", school.id);
+      const totalIncome = (inc || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+      const totalExpense = (exp || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+      data = {
+        totalIncome, totalExpense, netBalance: totalIncome - totalExpense,
+        incomeEntries: (inc || []).length, expenseEntries: (exp || []).length,
+        bankAccounts: await count("bank_accounts"),
+      };
+    } else if (req.params.area === "hr") {
+      data = {
+        staff: await count("staff"),
+        activeStaff: await count("staff", (q) => q.eq("status", "active")),
+        departments: await count("departments"),
+        pendingLeaves: await count("leave_requests", (q) => q.eq("status", "pending")),
+        presentToday: await count("staff_attendance", (q) => q.eq("date", today).eq("status", "present")),
+        activeLoans: await count("staff_loans", (q) => q.eq("status", "active")),
+        pendingPayroll: await count("payroll_records", (q) => q.eq("status", "pending")),
+      };
+    } else if (req.params.area === "exams") {
+      data = {
+        exams: await count("exams"),
+        upcoming: await count("exams", (q) => q.eq("status", "upcoming")),
+        schedules: await count("exam_schedules"),
+        marksEntered: await count("exam_marks"),
+        examTypes: await count("exam_types"),
+        uploads: await count("marksheet_uploads"),
+      };
+    } else if (req.params.area === "cbc") {
+      const levels = {};
+      for (const l of ["exceeding", "meeting", "approaching", "below"]) {
+        levels[l] = await count("cbc_assessments", (q) => q.eq("level", l));
+      }
+      data = {
+        strands: await count("cbc_strands"),
+        assessments: await count("cbc_assessments"),
+        competencies: await count("core_competencies"),
+        pathways: await count("cbc_pathways"),
+        ...levels,
+      };
+    } else if (req.params.area === "ptm") {
+      data = {
+        meetings: await count("ptm_meetings"),
+        scheduled: await count("ptm_meetings", (q) => q.eq("status", "scheduled")),
+        attendanceRecords: await count("ptm_attendance"),
+        attended: await count("ptm_attendance", (q) => q.eq("attended", true)),
+        openFollowups: await count("ptm_followups", (q) => q.eq("status", "open")),
+      };
+    } else if (req.params.area === "lesson-planner") {
+      const byStatus = {};
+      for (const s of ["draft", "submitted", "approved", "rejected"]) {
+        byStatus[s] = await count("lesson_plans", (q) => q.eq("status", s));
+      }
+      data = { plans: await count("lesson_plans"), ...byStatus };
+    } else if (req.params.area === "osm") {
+      const { data: evals } = await M().from("osm_evaluations").select("score").eq("school_id", school.id).not("score", "is", null);
+      const avg = evals?.length ? Math.round(evals.reduce((s, e) => s + Number(e.score), 0) / evals.length) : 0;
+      data = {
+        sessions: await count("osm_sessions"),
+        completed: await count("osm_sessions", (q) => q.eq("status", "completed")),
+        evaluations: await count("osm_evaluations"),
+        pendingModeration: await count("osm_evaluations", (q) => q.eq("status", "pending")),
+        averageScore: avg,
       };
     } else return res.status(404).json({ error: "Unknown dashboard area" });
     res.json({ success: true, data });
@@ -299,6 +428,167 @@ router.post("/fees/carry-forward", authenticateToken, requireRole(SCHOOL_ROLES),
     })));
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, carried: dues.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Staff attendance register (mirrors the student one) ──────────────────
+router.get("/hr/attendance/register", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ error: "date is required" });
+    const { data: staff } = await M().from("staff").select("id, staff_no, first_name, last_name")
+      .eq("school_id", school.id).eq("status", "active").order("staff_no", { ascending: true });
+    const ids = (staff || []).map((s) => s.id);
+    const { data: marks } = ids.length
+      ? await M().from("staff_attendance").select("staff_id, status").eq("date", date).in("staff_id", ids)
+      : { data: [] };
+    const markOf = Object.fromEntries((marks || []).map((m) => [m.staff_id, m.status]));
+    res.json({ success: true, data: (staff || []).map((s) => ({ ...s, name: studentLabel(s), status: markOf[s.id] || null })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/hr/attendance/mark", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { date, entries } = req.body;
+    if (!date || !Array.isArray(entries) || !entries.length) return res.status(400).json({ error: "date and entries[] are required" });
+    const rows = entries.filter((e) => e.staff_id && e.status).map((e) => ({ school_id: school.id, staff_id: e.staff_id, date, status: e.status }));
+    const { error } = await M().from("staff_attendance").upsert(rows, { onConflict: "staff_id,date" });
+    if (error) throw new Error(error.message);
+    res.json({ success: true, marked: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Payroll: generate a month's records from staff salaries ──────────────
+router.post("/hr/payroll/generate", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { month } = req.body;                      // 'YYYY-MM'
+    if (!/^\d{4}-\d{2}$/.test(month || "")) return res.status(400).json({ error: "month must be YYYY-MM" });
+    const { data: staff } = await M().from("staff").select("id, monthly_salary")
+      .eq("school_id", school.id).eq("status", "active").gt("monthly_salary", 0);
+    if (!staff?.length) return res.json({ success: true, generated: 0, message: "No active salaried staff." });
+    const { data: existing } = await M().from("payroll_records").select("staff_id").eq("school_id", school.id).eq("month", month);
+    const done = new Set((existing || []).map((r) => r.staff_id));
+    const rows = staff.filter((s) => !done.has(s.id)).map((s) => ({
+      school_id: school.id, staff_id: s.id, month,
+      gross: s.monthly_salary, deductions: 0, net: s.monthly_salary, status: "pending",
+    }));
+    if (rows.length) {
+      const { error } = await M().from("payroll_records").insert(rows);
+      if (error) throw new Error(error.message);
+    }
+    res.json({ success: true, generated: rows.length, skipped: done.size });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Per-module settings (HR / QR / Lesson Planner …) ─────────────────────
+router.get("/module-settings/:module", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data } = await M().from("module_settings").select("settings").eq("school_id", school.id).eq("module", req.params.module).maybeSingle();
+    res.json({ success: true, data: data?.settings || {} });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put("/module-settings/:module", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { error } = await M().from("module_settings").upsert({
+      school_id: school.id, module: req.params.module, settings: req.body || {}, updated_at: new Date(),
+    }, { onConflict: "school_id,module" });
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: req.body || {} });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Exam marks: register + bulk entry ─────────────────────────────────────
+router.get("/exams/marks/register", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { schedule_id } = req.query;
+    if (!schedule_id) return res.status(400).json({ error: "schedule_id is required" });
+    const { data: sched } = await M().from("exam_schedules").select("id, class_id, max_marks, pass_marks").eq("id", schedule_id).eq("school_id", school.id).maybeSingle();
+    if (!sched) return res.status(404).json({ error: "Schedule not found" });
+    const { data: students } = await M().from("students").select("id, admission_no, roll_no, first_name, last_name")
+      .eq("school_id", school.id).eq("class_id", sched.class_id).eq("status", "active").order("roll_no", { ascending: true });
+    const ids = (students || []).map((s) => s.id);
+    const { data: marks } = ids.length
+      ? await M().from("exam_marks").select("student_id, marks").eq("schedule_id", schedule_id).in("student_id", ids)
+      : { data: [] };
+    const markOf = Object.fromEntries((marks || []).map((m) => [m.student_id, m.marks]));
+    res.json({ success: true, maxMarks: sched.max_marks, passMarks: sched.pass_marks,
+      data: (students || []).map((s) => ({ ...s, name: studentLabel(s), marks: markOf[s.id] ?? null })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/exams/marks", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { schedule_id, entries } = req.body;
+    if (!schedule_id || !Array.isArray(entries) || !entries.length) return res.status(400).json({ error: "schedule_id and entries[] are required" });
+    const rows = entries.filter((e) => e.student_id && e.marks !== "" && e.marks !== null && e.marks !== undefined)
+      .map((e) => ({ school_id: school.id, schedule_id, student_id: e.student_id, marks: Number(e.marks) }));
+    const { error } = await M().from("exam_marks").upsert(rows, { onConflict: "schedule_id,student_id" });
+    if (error) throw new Error(error.message);
+    res.json({ success: true, saved: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Marksheet matrix: students × subjects for an exam/class ───────────────
+router.get("/exams/marksheet", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { exam_id, class_id } = req.query;
+    if (!exam_id || !class_id) return res.status(400).json({ error: "exam_id and class_id are required" });
+    const { data: scheds } = await M().from("exam_schedules").select("id, subject_id, max_marks")
+      .eq("school_id", school.id).eq("exam_id", exam_id).eq("class_id", class_id);
+    if (!scheds?.length) return res.json({ success: true, subjects: [], data: [] });
+    const subjIds = scheds.map((s) => s.subject_id);
+    const { data: subjects } = await M().from("subjects").select("id, name").eq("school_id", school.id).in("id", subjIds);
+    const subjName = Object.fromEntries((subjects || []).map((s) => [s.id, s.name]));
+    const { data: students } = await M().from("students").select("id, admission_no, first_name, last_name")
+      .eq("school_id", school.id).eq("class_id", class_id).eq("status", "active").order("admission_no", { ascending: true });
+    const { data: marks } = await M().from("exam_marks").select("schedule_id, student_id, marks")
+      .eq("school_id", school.id).in("schedule_id", scheds.map((s) => s.id));
+    const schedSubj = Object.fromEntries(scheds.map((s) => [s.id, s.subject_id]));
+    const cell = {};
+    for (const m of marks || []) cell[`${m.student_id}:${schedSubj[m.schedule_id]}`] = Number(m.marks);
+    const maxTotal = scheds.reduce((s, x) => s + (x.max_marks || 100), 0);
+    res.json({
+      success: true,
+      subjects: scheds.map((s) => ({ id: s.subject_id, name: subjName[s.subject_id] || "?", maxMarks: s.max_marks })),
+      data: (students || []).map((st) => {
+        const scores = scheds.map((s) => cell[`${st.id}:${s.subject_id}`] ?? null);
+        const total = scores.reduce((a, b) => a + (b || 0), 0);
+        return { student_id: st.id, admission_no: st.admission_no, name: studentLabel(st), scores, total,
+          percent: maxTotal ? Math.round((total / maxTotal) * 100) : 0 };
+      }),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── QR check-in (manual entry / scanned) ─────────────────────────────────
+router.post("/qr/checkin", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { person_type = "staff", staff_id, student_id, person_name, direction = "in", method = "manual" } = req.body;
+    if (!person_name && !staff_id && !student_id) return res.status(400).json({ error: "person_name (or a staff/student id) is required" });
+    const { data, error } = await M().from("qr_attendance_events").insert({
+      school_id: school.id, person_type, staff_id: staff_id || null, student_id: student_id || null,
+      person_name: person_name || null, direction, method,
+    }).select("*").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

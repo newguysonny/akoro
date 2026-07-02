@@ -49,6 +49,31 @@ import {
 import {
   FrontOfficeDashboardPage, AdmissionEnquiriesPage, VisitorBookPage, ComplaintsPage, PostalRecordsPage,
 } from './pages/mgmt/frontOfficePages.jsx';
+import {
+  AccountsDashboardPage, IncomePage, ExpensePage, IncomeHeadsPage, ExpenseHeadsPage, BankAccountsPage,
+} from './pages/mgmt/accountsPages.jsx';
+import {
+  HRDashboardPage, StaffDirectoryPage, StaffAttendancePage, PayrollPage, SetSalaryPage,
+  ApproveLeavePage, LeaveTypesPage, DepartmentsPage, DesignationsPage, LeaveManagementPage,
+  StaffIDCardPage, HRSettingsPage, StaffLoansPage, SalaryTemplatesPage,
+  AppraisalCyclesPage, AppraisalCriteriaPage, AppraisalsPage,
+} from './pages/mgmt/hrPages.jsx';
+import { QRAttendancePage, QRSettingsPage, QRReportPage } from './pages/mgmt/qrPages.jsx';
+import {
+  ExamDashboardPage, ManageOfflineExamsPage, ExamTypesPage, ScheduleMarksSetupPage, EnterMarksPage,
+  CocurricularAreasPage, CocurricularGradesPage, ManageGradesPage, ReportCardSetupsPage,
+  GenerateMarksheetPage, UploadMarksheetPage, ManageUploadsPage, TeacherRemarksPage,
+  ManageOnlineExamsPage, QuestionBankPage,
+} from './pages/mgmt/examsPages.jsx';
+import {
+  CBCDashboardPage, CBCStrandsPage, CBCAssessmentsPage, CoreCompetenciesPage, CBCPathwaysPage, CBCReportsPage,
+  PTMDashboardPage, PTMScheduleMeetingsPage, PTMGuidePage, PTMAttendancePage, PTMFollowupsPage, PTMReportsPage,
+} from './pages/mgmt/cbcPtmPages.jsx';
+import {
+  LessonPlannerDashboardPage, LessonPlansPage, LessonPlannerGuidePage, LessonPlanReviewPage,
+  LessonPlanApprovalsPage, LessonPlanCoveragePage, LessonPlanReportsPage, LessonPlannerSettingsPage,
+  OSMDashboardPage, OSMSessionsPage, OSMEvaluatePage, OSMModerationPage, OSMReportsPage, OSMGuidePage,
+} from './pages/mgmt/lessonOsmPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
@@ -189,6 +214,81 @@ function AppRoutes() {
       <Route path="/mgmt/visitor-book"         element={<ProtectedRoute><VisitorBookPage /></ProtectedRoute>} />
       <Route path="/mgmt/complaints"           element={<ProtectedRoute><ComplaintsPage /></ProtectedRoute>} />
       <Route path="/mgmt/postal-records"       element={<ProtectedRoute><PostalRecordsPage /></ProtectedRoute>} />
+      {/* Management — Accounts */}
+      <Route path="/mgmt/accounts-dashboard" element={<ProtectedRoute><AccountsDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/income"             element={<ProtectedRoute><IncomePage /></ProtectedRoute>} />
+      <Route path="/mgmt/expense"            element={<ProtectedRoute><ExpensePage /></ProtectedRoute>} />
+      <Route path="/mgmt/income-heads"       element={<ProtectedRoute><IncomeHeadsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/expense-heads"      element={<ProtectedRoute><ExpenseHeadsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/bank-accounts"      element={<ProtectedRoute><BankAccountsPage /></ProtectedRoute>} />
+      {/* Management — Human Resource */}
+      <Route path="/mgmt/hr-dashboard"        element={<ProtectedRoute><HRDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/staff-directory"     element={<ProtectedRoute><StaffDirectoryPage /></ProtectedRoute>} />
+      <Route path="/mgmt/staff-attendance-hr" element={<ProtectedRoute><StaffAttendancePage /></ProtectedRoute>} />
+      <Route path="/mgmt/payroll"             element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
+      <Route path="/mgmt/set-salary"          element={<ProtectedRoute><SetSalaryPage /></ProtectedRoute>} />
+      <Route path="/mgmt/approve-leave"       element={<ProtectedRoute><ApproveLeavePage /></ProtectedRoute>} />
+      <Route path="/mgmt/leave-types"         element={<ProtectedRoute><LeaveTypesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/departments"         element={<ProtectedRoute><DepartmentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/designations"        element={<ProtectedRoute><DesignationsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/leave-management"    element={<ProtectedRoute><LeaveManagementPage /></ProtectedRoute>} />
+      <Route path="/mgmt/staff-id-card"       element={<ProtectedRoute><StaffIDCardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/hr-settings"         element={<ProtectedRoute><HRSettingsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/staff-loans"         element={<ProtectedRoute><StaffLoansPage /></ProtectedRoute>} />
+      <Route path="/mgmt/salary-templates"    element={<ProtectedRoute><SalaryTemplatesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/appraisal-cycles"    element={<ProtectedRoute><AppraisalCyclesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/appraisal-criteria"  element={<ProtectedRoute><AppraisalCriteriaPage /></ProtectedRoute>} />
+      <Route path="/mgmt/appraisals"          element={<ProtectedRoute><AppraisalsPage /></ProtectedRoute>} />
+      {/* Management — QR Attendance */}
+      <Route path="/mgmt/qr-attendance" element={<ProtectedRoute><QRAttendancePage /></ProtectedRoute>} />
+      <Route path="/mgmt/qr-settings"   element={<ProtectedRoute><QRSettingsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/qr-report"     element={<ProtectedRoute><QRReportPage /></ProtectedRoute>} />
+      {/* Management — Examinations (offline + online) */}
+      <Route path="/mgmt/exam-dashboard"      element={<ProtectedRoute><ExamDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/offline-exams"       element={<ProtectedRoute><ManageOfflineExamsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/exam-types"          element={<ProtectedRoute><ExamTypesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/exam-schedules"      element={<ProtectedRoute><ScheduleMarksSetupPage /></ProtectedRoute>} />
+      <Route path="/mgmt/enter-marks"         element={<ProtectedRoute><EnterMarksPage /></ProtectedRoute>} />
+      <Route path="/mgmt/cocurricular-areas"  element={<ProtectedRoute><CocurricularAreasPage /></ProtectedRoute>} />
+      <Route path="/mgmt/cocurricular-grades" element={<ProtectedRoute><CocurricularGradesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-grades"       element={<ProtectedRoute><ManageGradesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/report-card-setups"  element={<ProtectedRoute><ReportCardSetupsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/generate-marksheet"  element={<ProtectedRoute><GenerateMarksheetPage /></ProtectedRoute>} />
+      <Route path="/mgmt/upload-marksheet"    element={<ProtectedRoute><UploadMarksheetPage /></ProtectedRoute>} />
+      <Route path="/mgmt/manage-uploads"      element={<ProtectedRoute><ManageUploadsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/teacher-remarks"     element={<ProtectedRoute><TeacherRemarksPage /></ProtectedRoute>} />
+      <Route path="/mgmt/online-exams"        element={<ProtectedRoute><ManageOnlineExamsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/question-bank"       element={<ProtectedRoute><QuestionBankPage /></ProtectedRoute>} />
+      {/* Management — CBC Academics */}
+      <Route path="/mgmt/cbc-dashboard"     element={<ProtectedRoute><CBCDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/cbc-strands"       element={<ProtectedRoute><CBCStrandsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/cbc-assessments"   element={<ProtectedRoute><CBCAssessmentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/core-competencies" element={<ProtectedRoute><CoreCompetenciesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/cbc-pathways"      element={<ProtectedRoute><CBCPathwaysPage /></ProtectedRoute>} />
+      <Route path="/mgmt/cbc-reports"       element={<ProtectedRoute><CBCReportsPage /></ProtectedRoute>} />
+      {/* Management — PTM Meetings */}
+      <Route path="/mgmt/ptm-dashboard"  element={<ProtectedRoute><PTMDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/ptm-meetings"   element={<ProtectedRoute><PTMScheduleMeetingsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/ptm-guide"      element={<ProtectedRoute><PTMGuidePage /></ProtectedRoute>} />
+      <Route path="/mgmt/ptm-attendance" element={<ProtectedRoute><PTMAttendancePage /></ProtectedRoute>} />
+      <Route path="/mgmt/ptm-followups"  element={<ProtectedRoute><PTMFollowupsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/ptm-reports"    element={<ProtectedRoute><PTMReportsPage /></ProtectedRoute>} />
+      {/* Management — Lesson Planner */}
+      <Route path="/mgmt/lesson-planner-dashboard" element={<ProtectedRoute><LessonPlannerDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-plans"             element={<ProtectedRoute><LessonPlansPage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-planner-guide"     element={<ProtectedRoute><LessonPlannerGuidePage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-plan-review"       element={<ProtectedRoute><LessonPlanReviewPage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-plan-approvals"    element={<ProtectedRoute><LessonPlanApprovalsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-plan-coverage"     element={<ProtectedRoute><LessonPlanCoveragePage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-plan-reports"      element={<ProtectedRoute><LessonPlanReportsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/lesson-planner-settings"  element={<ProtectedRoute><LessonPlannerSettingsPage /></ProtectedRoute>} />
+      {/* Management — OSM */}
+      <Route path="/mgmt/osm-dashboard"  element={<ProtectedRoute><OSMDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/osm-sessions"   element={<ProtectedRoute><OSMSessionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/osm-evaluate"   element={<ProtectedRoute><OSMEvaluatePage /></ProtectedRoute>} />
+      <Route path="/mgmt/osm-reports"    element={<ProtectedRoute><OSMReportsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/osm-guide"      element={<ProtectedRoute><OSMGuidePage /></ProtectedRoute>} />
+      <Route path="/mgmt/osm-moderation" element={<ProtectedRoute><OSMModerationPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
