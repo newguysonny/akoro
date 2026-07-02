@@ -82,10 +82,12 @@ export default function ResourcePage({
   useEffect(() => { load(); }, [load]);
 
   // Load select options declared via optionsFrom (fields + toolbar filters).
+  // optionsFrom: { resource } for mgmt resources, or { url } for any endpoint.
   useEffect(() => {
     const sources = [...fields, ...listFilters].filter((f) => f.optionsFrom);
     sources.forEach((f) => {
-      apiGet(`${BASE}/${f.optionsFrom.resource}`).then((res) => {
+      const url = f.optionsFrom.url || `${BASE}/${f.optionsFrom.resource}`;
+      apiGet(url).then((res) => {
         const opts = (res.data || []).map((r) => ({
           value: r.id,
           label: f.optionsFrom.labelFn ? f.optionsFrom.labelFn(r) : r[f.optionsFrom.labelKey || 'name'],
@@ -96,8 +98,13 @@ export default function ResourcePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resource]);
 
+  const editValue = (f, v) => {
+    if (v === null || v === undefined) return f.type === 'toggle' ? false : '';
+    if (f.type === 'datetime-local') return String(v).slice(0, 16); // ISO → input format
+    return v;
+  };
   const openNew = () => { setForm(Object.fromEntries(fields.map((f) => [f.key, f.default ?? (f.type === 'toggle' ? false : '')]))); setModal({}); };
-  const openEdit = (row) => { setForm(Object.fromEntries(fields.map((f) => [f.key, row[f.key] ?? (f.type === 'toggle' ? false : '')]))); setModal({ row }); };
+  const openEdit = (row) => { setForm(Object.fromEntries(fields.map((f) => [f.key, editValue(f, row[f.key])]))); setModal({ row }); };
 
   useEffect(() => { if (startOpen) openNew(); /* eslint-disable-next-line */ }, []);
 

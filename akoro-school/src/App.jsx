@@ -36,6 +36,19 @@ import {
   StudentDashboardPage, StudentAdmissionPage, StudentListPage, StudentAttendancePage,
   BehaviorRecordsPage, StudentHousesPage, StudentCategoriesPage, DisabledStudentsPage, HealthRecordsPage,
 } from './pages/mgmt/studentPages.jsx';
+import {
+  AcademicDashboardPage, AcademicSessionsPage, ClassesPage, SectionsPage, SubjectsPage,
+  AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, ManagePeriodsPage,
+  ClassTimetablePage, PromoteStudentsPage,
+} from './pages/mgmt/academicsPages.jsx';
+import {
+  FeesDashboardPage, CollectFeesPage, SearchDueFeesPage, AllTransactionsPage, OnlineTransactionsPage,
+  FeeChallansPage, AssignFeesPage, FeesCarryForwardPage, FeeGroupsPage, FeeDiscountsPage,
+  FeeTypesPage, GenerateDueSlipPage, DueSlipHistoryPage,
+} from './pages/mgmt/financePages.jsx';
+import {
+  FrontOfficeDashboardPage, AdmissionEnquiriesPage, VisitorBookPage, ComplaintsPage, PostalRecordsPage,
+} from './pages/mgmt/frontOfficePages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
@@ -144,6 +157,38 @@ function AppRoutes() {
       <Route path="/mgmt/student-categories" element={<ProtectedRoute><StudentCategoriesPage /></ProtectedRoute>} />
       <Route path="/mgmt/disabled-students"  element={<ProtectedRoute><DisabledStudentsPage /></ProtectedRoute>} />
       <Route path="/mgmt/health-records"     element={<ProtectedRoute><HealthRecordsPage /></ProtectedRoute>} />
+      {/* Management — Academics */}
+      <Route path="/mgmt/academic-dashboard"   element={<ProtectedRoute><AcademicDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/academic-sessions"    element={<ProtectedRoute><AcademicSessionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/classes"              element={<ProtectedRoute><ClassesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/sections"             element={<ProtectedRoute><SectionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/subjects"             element={<ProtectedRoute><SubjectsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/assign-subjects"      element={<ProtectedRoute><AssignSubjectsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/assign-electives"     element={<ProtectedRoute><AssignElectivesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/assign-class-teacher" element={<ProtectedRoute><AssignClassTeacherPage /></ProtectedRoute>} />
+      <Route path="/mgmt/periods"              element={<ProtectedRoute><ManagePeriodsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/class-timetable"      element={<ProtectedRoute><ClassTimetablePage /></ProtectedRoute>} />
+      <Route path="/mgmt/promote-students"     element={<ProtectedRoute><PromoteStudentsPage /></ProtectedRoute>} />
+      {/* Management — Finance & Fees */}
+      <Route path="/mgmt/fees-dashboard"       element={<ProtectedRoute><FeesDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/collect-fees"         element={<ProtectedRoute><CollectFeesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/search-due-fees"      element={<ProtectedRoute><SearchDueFeesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/all-transactions"     element={<ProtectedRoute><AllTransactionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/online-transactions"  element={<ProtectedRoute><OnlineTransactionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/fee-challans"         element={<ProtectedRoute><FeeChallansPage /></ProtectedRoute>} />
+      <Route path="/mgmt/assign-fees"          element={<ProtectedRoute><AssignFeesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/fees-carry-forward"   element={<ProtectedRoute><FeesCarryForwardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/fee-groups"           element={<ProtectedRoute><FeeGroupsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/fee-discounts"        element={<ProtectedRoute><FeeDiscountsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/fee-types"            element={<ProtectedRoute><FeeTypesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/generate-due-slip"    element={<ProtectedRoute><GenerateDueSlipPage /></ProtectedRoute>} />
+      <Route path="/mgmt/due-slip-history"     element={<ProtectedRoute><DueSlipHistoryPage /></ProtectedRoute>} />
+      {/* Management — Front Office */}
+      <Route path="/mgmt/front-office-dashboard" element={<ProtectedRoute><FrontOfficeDashboardPage /></ProtectedRoute>} />
+      <Route path="/mgmt/enquiries"            element={<ProtectedRoute><AdmissionEnquiriesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/visitor-book"         element={<ProtectedRoute><VisitorBookPage /></ProtectedRoute>} />
+      <Route path="/mgmt/complaints"           element={<ProtectedRoute><ComplaintsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/postal-records"       element={<ProtectedRoute><PostalRecordsPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
