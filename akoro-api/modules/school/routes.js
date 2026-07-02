@@ -61,7 +61,7 @@ router.use((req, res, next) => {
       const entityType = req.path.split("/").filter(Boolean)[0] || "root";
       await db.schema("edu").from("school_audit_logs").insert({
         school_id: school.id, actor_user_id: req.user.id,
-        actor_name: req.user.full_name || req.user.email || null,
+        actor_name: req.user.fullName || req.user.email || null,
         method: req.method, entity_type: entityType, entity_label: pickEntityLabel(req.body),
         path: req.originalUrl, status_code: res.statusCode,
         details: sanitizeAuditBody(req.body), ip_address: req.ip,
@@ -942,10 +942,17 @@ router.put("/roles/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (re
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
+    const { data: existing } = await db.schema("edu").from("school_roles")
+      .select("is_system").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!existing) return res.status(404).json({ error: "Role not found" });
+
     const patch = { updated_at: new Date() };
-    if (req.body.name !== undefined) patch.name = req.body.name;
     if (req.body.description !== undefined) patch.description = req.body.description;
-    if (req.body.permissions !== undefined) patch.permissions = req.body.permissions;
+    // The system Administrator role keeps its name and full-access permissions.
+    if (!existing.is_system) {
+      if (req.body.name !== undefined) patch.name = req.body.name;
+      if (req.body.permissions !== undefined) patch.permissions = req.body.permissions;
+    }
     const { data, error } = await db.schema("edu").from("school_roles")
       .update(patch).eq("id", req.params.id).eq("school_id", school.id)
       .select("id, name, description, is_system, permissions, member_count, updated_at").single();
@@ -1212,7 +1219,7 @@ router.post("/subscription/checkout", authenticateToken, requireRole(SCHOOL_ROLE
       return res.json({ success: true, free: true, message: `${plan.name} activated.` });
     }
 
-    const email = req.body.email || (await getUserEmail(req.user.id));
+    const email = req.body.email || req.user.email || (await getUserEmail(req.user.id));
     if (!email) return res.status(400).json({ error: "email required for payment" });
 
     const reference = generateReference("SUB");
