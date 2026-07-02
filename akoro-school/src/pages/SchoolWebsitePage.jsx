@@ -142,6 +142,23 @@ export default function SchoolWebsitePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [enabledSaving, setEnabledSaving] = useState(false);
+
+  // Publish toggle saves instantly (no need to press Save). Optimistic with
+  // revert on failure; the PUT is a partial update so only `enabled` changes.
+  const toggleEnabled = async (val) => {
+    setEnabled(val);
+    setEnabledSaving(true);
+    try {
+      await apiPut('/api/school/website', { enabled: val });
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setEnabled(!val); // revert
+    } finally {
+      setEnabledSaving(false);
+    }
+  };
+
   const toggleSection = (key) => setSections((prev) => prev.map((s) => (s.key === key ? { ...s, on: !s.on } : s)));
   const setSoc = (key) => (e) => setSocial((s) => ({ ...s, [key]: e.target.value }));
   const cycleTheme = () => setThemeId((prev) => THEMES[(THEMES.findIndex((t) => t.id === prev) + 1) % THEMES.length].id);
@@ -184,8 +201,12 @@ export default function SchoolWebsitePage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
           <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.6, maxWidth: 480 }}>
             When enabled, visitors to your custom domain will see a public landing page instead of the login page.
+            <span style={{ display: 'block', marginTop: 4, color: MUTED2, fontSize: 11.5 }}>This switch saves instantly — no need to press Save.</span>
           </p>
-          <Toggle on={enabled} onChange={setEnabled} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {enabledSaving && <Loader2 size={15} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} />}
+            <Toggle on={enabled} onChange={toggleEnabled} />
+          </div>
         </div>
       </Card>
 
