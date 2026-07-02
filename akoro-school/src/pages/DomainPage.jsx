@@ -77,7 +77,9 @@ export default function DomainPage() {
     setBusyId(id);
     try {
       const res = await apiPost(`/api/school/domains/${id}/verify`, {});
-      if (res.verified) setCustomDomains((prev) => prev.map((d) => (d.id === id ? { ...d, verified: true } : d)));
+      setCustomDomains((prev) => prev.map((d) => (d.id === id
+        ? { ...d, verified: res.verified || d.verified, dnsRecords: res.dnsRecords?.length ? res.dnsRecords : d.dnsRecords }
+        : d)));
       showToast(res.message);
     } catch (e) { showToast(e.message || 'Could not verify domain'); }
     finally { setBusyId(null); }
@@ -124,13 +126,18 @@ export default function DomainPage() {
                           onDelete={() => remove(d.id)} />
                         {!d.verified && (
                           <div style={{ marginTop: 8, background: `${AMBER}0C`, border: `1px solid ${AMBER}33`, borderRadius: 10, padding: '10px 13px' }}>
-                            <p style={{ fontSize: 11.5, color: INK, margin: '0 0 8px', fontFamily: FONT, fontWeight: 700 }}>Add this DNS record to verify ownership:</p>
-                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11.5, fontFamily: 'ui-monospace, Menlo, monospace', color: MUTED, marginBottom: 10 }}>
-                              <span><b style={{ color: INK }}>Type:</b> CNAME</span>
-                              <span><b style={{ color: INK }}>Name:</b> {d.domain.split('.')[0]}</span>
-                              <span><b style={{ color: INK }}>Value:</b> {d.cnameTarget || 'cname.akoro.app'}</span>
-                            </div>
-                            <button onClick={() => verify(d.id)} disabled={busyId === d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: 'none', background: AMBER, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                            <p style={{ fontSize: 11.5, color: INK, margin: '0 0 8px', fontFamily: FONT, fontWeight: 700 }}>
+                              Add {(d.dnsRecords?.length || 0) > 1 ? 'these DNS records' : 'this DNS record'} at your registrar:
+                            </p>
+                            {(d.dnsRecords?.length ? d.dnsRecords : [{ type: 'CNAME', name: d.domain.split('.')[0], value: d.cnameTarget || 'cname.vercel-dns.com', purpose: 'routing' }]).map((rec, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 11.5, fontFamily: 'ui-monospace, Menlo, monospace', color: MUTED, marginBottom: 7 }}>
+                                <span><b style={{ color: INK }}>Type:</b> {rec.type}</span>
+                                <span><b style={{ color: INK }}>Name:</b> {rec.name}</span>
+                                <span style={{ wordBreak: 'break-all' }}><b style={{ color: INK }}>Value:</b> {rec.value}</span>
+                                {rec.purpose && <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: rec.purpose === 'ownership' ? `${BLUE}15` : `${GREEN}15`, color: rec.purpose === 'ownership' ? BLUE : GREEN, textTransform: 'uppercase' }}>{rec.purpose}</span>}
+                              </div>
+                            ))}
+                            <button onClick={() => verify(d.id)} disabled={busyId === d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 8, border: 'none', background: AMBER, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, marginTop: 3 }}>
                               {busyId === d.id ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : <RefreshCw size={12} />} Verify DNS
                             </button>
                           </div>

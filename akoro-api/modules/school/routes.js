@@ -27,6 +27,10 @@ import {
   generateReference,
 } from "../adaptive-learning/marketplace/paystackService.js";
 import { renderMiniTemplate, renderThemePage, buildContext } from "./siteRenderer.js";
+import {
+  vercelConfigured, addDomainToProject, getProjectDomain,
+  verifyProjectDomain, getDomainConfig, removeDomainFromProject, buildDnsRecords,
+} from "./vercelDomains.js";
 import mgmtRouter from "./mgmt.js";
 
 const router = Router();
@@ -606,32 +610,60 @@ router.get("/domains", authenticateToken, async (req, res) => {
     res.json({
       success: true,
       data: {
-        defaultDomain: `${school.slug || slugify(school.name)}.akoro.app`,
-        customDomains: (data || []).map((d) => ({ id: d.id, domain: d.domain, verified: d.verified, cnameTarget: d.cname_target })),
+        defaultDomain: `${school.slug || slugify(school.name)}.${SITE_BASE_DOMAIN}`,
+        vercelManaged: vercelConfigured(),
+        customDomains: (data || []).map((d) => ({
+          id: d.id, domain: d.domain, verified: d.verified,
+          cnameTarget: d.cname_target, vercelAdded: d.vercel_added, dnsRecords: d.dns_records || [],
+        })),
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── POST /api/school/domains ───────────────────────────────────────────────────
+// Registers the domain and, when Vercel credentials are configured, attaches
+// it to the Vercel project so verification + SSL are handled by Vercel.
 router.post("/domains", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
     const domain = (req.body.domain || "").toLowerCase().trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (!domain || !domain.includes(".")) return res.status(400).json({ error: "Enter a valid domain, e.g. www.yourschool.com" });
+    if (domain.endsWith(`.${SITE_BASE_DOMAIN}`) || domain === SITE_BASE_DOMAIN) {
+      return res.status(400).json({ error: `${SITE_BASE_DOMAIN} subdomains are assigned automatically — add your own domain here.` });
+    }
     const { data, error } = await db.schema("edu").from("school_domains")
-      .insert({ school_id: school.id, domain }).select("*").single();
+      .insert({ school_id: school.id, domain, cname_target: "cname.vercel-dns.com" }).select("*").single();
     if (error) {
       if (error.code === "23505") return res.status(409).json({ error: "That domain is already registered" });
       throw new Error(error.message);
     }
-    res.status(201).json({ success: true, data: { id: data.id, domain: data.domain, verified: data.verified, cnameTarget: data.cname_target } });
+
+    // Programmatic Vercel attach → returns the exact DNS records to configure.
+    let dnsRecords = data.dns_records || [];
+    let vercelAdded = false;
+    if (vercelConfigured()) {
+      try {
+        await addDomainToProject(domain);
+        const pd = await getProjectDomain(domain);
+        dnsRecords = buildDnsRecords(domain, pd);
+        vercelAdded = true;
+        await db.schema("edu").from("school_domains")
+          .update({ vercel_added: true, dns_records: dnsRecords }).eq("id", data.id);
+      } catch (e) { console.error("[vercel add domain]", e.message); }
+    }
+
+    res.status(201).json({ success: true, data: {
+      id: data.id, domain: data.domain, verified: data.verified,
+      cnameTarget: data.cname_target, vercelAdded, dnsRecords,
+    } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── POST /api/school/domains/:id/verify ────────────────────────────────────────
-// Real DNS check — resolves the domain's CNAME and confirms it points at us.
+// Vercel-managed: verifies TXT ownership + DNS routing through Vercel (SSL is
+// issued automatically once both pass). Fallback: local CNAME resolution.
 router.post("/domains/:id/verify", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
     const school = await getMySchool(req, res);
@@ -640,16 +672,46 @@ router.post("/domains/:id/verify", authenticateToken, requireRole(SCHOOL_ROLES),
     if (!row) return res.status(404).json({ error: "Domain not found" });
 
     let verified = false;
-    try {
-      const { resolveCname } = await import("node:dns/promises");
-      const records = await resolveCname(row.domain);
-      verified = records.some((r) => r.toLowerCase().includes(row.cname_target.toLowerCase()));
-    } catch { verified = false; }
+    let message;
+    let dnsRecords = row.dns_records || [];
 
-    if (verified) {
-      await db.schema("edu").from("school_domains").update({ verified: true, verified_at: new Date() }).eq("id", row.id);
+    if (vercelConfigured()) {
+      // (Re)attach in case the earlier add failed, then run Vercel's checks.
+      if (!row.vercel_added) {
+        try { await addDomainToProject(row.domain); } catch (e) { console.error("[vercel re-add]", e.message); }
+      }
+      try { await verifyProjectDomain(row.domain); } catch { /* pending challenges just stay pending */ }
+      const [pd, cfg] = await Promise.all([
+        getProjectDomain(row.domain).catch(() => null),
+        getDomainConfig(row.domain).catch(() => null),
+      ]);
+      const ownershipOk = !!pd?.verified;
+      const routingOk = cfg ? !cfg.misconfigured : false;
+      verified = ownershipOk && routingOk;
+      dnsRecords = pd ? buildDnsRecords(row.domain, pd) : dnsRecords;
+      message = verified
+        ? "Domain verified — Vercel is issuing the SSL certificate."
+        : !ownershipOk
+          ? "Ownership not confirmed yet — add the TXT record shown, then verify again."
+          : "Ownership confirmed, but DNS isn't pointing at Vercel yet — add the CNAME/A record shown.";
+      await db.schema("edu").from("school_domains").update({
+        vercel_added: true, dns_records: dnsRecords,
+        ...(verified ? { verified: true, verified_at: new Date() } : {}),
+      }).eq("id", row.id);
+    } else {
+      // Fallback: plain CNAME resolution (no automatic SSL).
+      try {
+        const { resolveCname } = await import("node:dns/promises");
+        const records = await resolveCname(row.domain);
+        verified = records.some((r) => r.toLowerCase().includes(row.cname_target.toLowerCase()));
+      } catch { verified = false; }
+      message = verified ? "Domain verified!" : "CNAME record not found yet — DNS can take a few hours to propagate.";
+      if (verified) {
+        await db.schema("edu").from("school_domains").update({ verified: true, verified_at: new Date() }).eq("id", row.id);
+      }
     }
-    res.json({ success: true, verified, message: verified ? "Domain verified!" : "CNAME record not found yet — DNS can take a few hours to propagate." });
+
+    res.json({ success: true, verified, message, dnsRecords });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -658,6 +720,10 @@ router.delete("/domains/:id", authenticateToken, requireRole(SCHOOL_ROLES), asyn
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
+    const { data: row } = await db.schema("edu").from("school_domains").select("domain, vercel_added").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (row?.vercel_added && vercelConfigured()) {
+      try { await removeDomainFromProject(row.domain); } catch (e) { console.error("[vercel remove domain]", e.message); }
+    }
     const { error } = await db.schema("edu").from("school_domains").delete().eq("id", req.params.id).eq("school_id", school.id);
     if (error) throw new Error(error.message);
     res.json({ success: true });
@@ -711,49 +777,102 @@ const shapeWebsite = (w) => ({
   bgMode: w.bg_mode, socialLinks: w.social_links || {}, sections: w.sections || [], customCss: w.custom_css,
 });
 
+// =============================================================
+// PUBLIC SITE — multi-tenant rendering. One codebase serves every school:
+// tenants are resolved either by slug (/site/:slug) or by hostname
+// (<slug>.akoro.app wildcard subdomains and verified custom domains).
+// =============================================================
+const SITE_BASE_DOMAIN = (process.env.SITE_BASE_DOMAIN || "akoro.app").toLowerCase();
+const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, principal_name";
+
+// host → school row (or null). Handles ports, www., wildcard subdomains and
+// verified custom domains in edu.school_domains.
+async function resolveSchoolByHost(rawHost) {
+  let host = String(rawHost || "").toLowerCase().split(":")[0].trim();
+  if (!host) return null;
+  const bare = host.startsWith("www.") ? host.slice(4) : host;
+
+  // <slug>.akoro.app wildcard subdomain
+  if (bare.endsWith(`.${SITE_BASE_DOMAIN}`)) {
+    const sub = bare.slice(0, -(SITE_BASE_DOMAIN.length + 1));
+    if (sub && !sub.includes(".")) {
+      const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("slug", sub).maybeSingle();
+      if (data) return data;
+    }
+  }
+
+  // Verified custom domain (exact, then www-stripped)
+  for (const candidate of [host, bare]) {
+    const { data: dom } = await db.schema("edu").from("school_domains")
+      .select("school_id").eq("domain", candidate).eq("verified", true).maybeSingle();
+    if (dom) {
+      const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("id", dom.school_id).maybeSingle();
+      if (data) return data;
+    }
+  }
+  return null;
+}
+
+async function renderSchoolSiteHtml(school) {
+  const website = await getWebsiteConfig(school.id);
+  if (!website.enabled) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
+
+  // Gather the real data available for {{variables}} and {{#each}} loops.
+  const { data: teacherLinks } = await db.from("school_teachers")
+    .select("users:users!school_teachers_teacher_id_fkey(id, full_name)").eq("school_id", school.id);
+  const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
+  const { data: courseRows } = teacherIds.length
+    ? await db.from("courses").select("title, subject, level, price, is_free").in("instructor_id", teacherIds).eq("is_published", true).limit(24)
+    : { data: [] };
+  const { data: classRows } = await db.from("classrooms").select("name").eq("school_id", school.id);
+
+  const ctx = buildContext(school, website, {
+    email: null,
+    year: new Date().getFullYear(),
+    teachers: (teacherLinks || []).map((t) => ({ name: t.users?.full_name })).filter((t) => t.name),
+    courses: (courseRows || []).map((c) => ({ title: c.title, subject: c.subject, level: c.level, price: c.is_free ? "Free" : `₦${Number(c.price || 0).toLocaleString("en-NG")}` })),
+    classes: (classRows || []).map((c) => ({ name: c.name })),
+  });
+
+  let html;
+  if (website.mode === "template") {
+    const { data: tpl } = await db.schema("edu").from("school_website_templates")
+      .select("html").eq("school_id", school.id).eq("is_active", true).maybeSingle();
+    html = tpl?.html
+      ? renderMiniTemplate(tpl.html, ctx)
+      : renderThemePage(website, ctx); // fall back to theme if no active template
+  } else {
+    html = renderThemePage(website, ctx);
+  }
+  return { status: 200, html };
+}
+
+// ── GET /api/school/site/by-host  (PUBLIC — tenant from hostname) ────────────
+// The frontend forwards its hostname (?host=…); direct hits fall back to the
+// request's own forwarded host. Must be registered BEFORE /site/:slug.
+router.get("/site/by-host", async (req, res) => {
+  try {
+    const host = req.query.host || req.headers["x-forwarded-host"] || req.hostname;
+    const school = await resolveSchoolByHost(host);
+    if (!school) return res.status(404).type("html").send("<h1>404 — no school is connected to this domain</h1>");
+    const { status, html } = await renderSchoolSiteHtml(school);
+    res.status(status).type("html").send(html);
+  } catch (e) {
+    console.error("[site render by-host]", e);
+    res.status(500).type("html").send("<h1>Something went wrong rendering this page.</h1>");
+  }
+});
+
 // ── GET /api/school/site/:slug  (PUBLIC — the rendered landing page) ─────────
 // No auth: this is the school's public website. Serves theme OR template mode.
 router.get("/site/:slug", async (req, res) => {
   try {
     const slug = (req.params.slug || "").toLowerCase();
     const { data: school } = await db.from("school_profiles")
-      .select("id, name, slug, logo_url, address, phone, acronym, principal_name")
-      .eq("slug", slug).maybeSingle();
+      .select(SCHOOL_SELECT).eq("slug", slug).maybeSingle();
     if (!school) return res.status(404).type("html").send("<h1>404 — school not found</h1>");
-
-    const website = await getWebsiteConfig(school.id);
-    if (!website.enabled) {
-      return res.status(404).type("html").send("<h1>This school website is not published yet.</h1>");
-    }
-
-    // Gather the real data available for {{variables}} and {{#each}} loops.
-    const { data: teacherLinks } = await db.from("school_teachers")
-      .select("users:users!school_teachers_teacher_id_fkey(id, full_name)").eq("school_id", school.id);
-    const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
-    const { data: courseRows } = teacherIds.length
-      ? await db.from("courses").select("title, subject, level, price, is_free").in("instructor_id", teacherIds).eq("is_published", true).limit(24)
-      : { data: [] };
-    const { data: classRows } = await db.from("classrooms").select("name").eq("school_id", school.id);
-
-    const ctx = buildContext(school, website, {
-      email: null,
-      year: new Date().getFullYear(),
-      teachers: (teacherLinks || []).map((t) => ({ name: t.users?.full_name })).filter((t) => t.name),
-      courses: (courseRows || []).map((c) => ({ title: c.title, subject: c.subject, level: c.level, price: c.is_free ? "Free" : `₦${Number(c.price || 0).toLocaleString("en-NG")}` })),
-      classes: (classRows || []).map((c) => ({ name: c.name })),
-    });
-
-    let html;
-    if (website.mode === "template") {
-      const { data: tpl } = await db.schema("edu").from("school_website_templates")
-        .select("html").eq("school_id", school.id).eq("is_active", true).maybeSingle();
-      html = tpl?.html
-        ? renderMiniTemplate(tpl.html, ctx)
-        : renderThemePage(website, ctx); // fall back to theme if no active template
-    } else {
-      html = renderThemePage(website, ctx);
-    }
-    res.type("html").send(html);
+    const { status, html } = await renderSchoolSiteHtml(school);
+    res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render]", e);
     res.status(500).type("html").send("<h1>Something went wrong rendering this page.</h1>");
