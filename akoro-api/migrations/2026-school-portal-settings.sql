@@ -44,6 +44,35 @@ CREATE TABLE IF NOT EXISTS edu.school_portal_settings (
 
 -- Column may already exist from an earlier run of this file.
 ALTER TABLE edu.school_portal_settings ADD COLUMN IF NOT EXISTS modules jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE edu.school_portal_settings ADD COLUMN IF NOT EXISTS backup_schedule jsonb NOT NULL DEFAULT '{"autoBackup": true, "frequency": "daily", "retentionDays": 30}'::jsonb;
+
+-- ── Backup Management: metadata for each backup snapshot ────────────────────
+CREATE TABLE IF NOT EXISTS edu.school_backups (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id    uuid NOT NULL REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  label        text NOT NULL DEFAULT 'Manual Backup',
+  type         text NOT NULL DEFAULT 'manual' CHECK (type IN ('manual','auto')),
+  status       text NOT NULL DEFAULT 'completed' CHECK (status IN ('completed','failed','in_progress')),
+  size_bytes   bigint NOT NULL DEFAULT 0,
+  record_count integer NOT NULL DEFAULT 0,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_school_backups_school ON edu.school_backups (school_id, created_at DESC);
+
+-- ── Roles & Permissions ───────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS edu.school_roles (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id   uuid NOT NULL REFERENCES public.school_profiles(id) ON DELETE CASCADE,
+  name        text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  is_system   boolean NOT NULL DEFAULT false,   -- system roles (e.g. Administrator) can't be deleted
+  permissions jsonb NOT NULL DEFAULT '{}'::jsonb, -- module_key -> {view,create,edit,delete}
+  member_count integer NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (school_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_school_roles_school ON edu.school_roles (school_id);
 
 -- ── Social media connections (Facebook/Instagram autopost) ──────────────────
 CREATE TABLE IF NOT EXISTS edu.school_social_accounts (

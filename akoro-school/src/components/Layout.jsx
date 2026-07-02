@@ -64,9 +64,9 @@ const NAV_SECTIONS = [
   { section: 'SYSTEM', items: [
     { label: 'Settings & Billing', icon: CreditCard, children: [
       { label: 'School Settings', to: '/settings-billing' },
-      'Backup Management',
+      { label: 'Backup Management', to: '/settings-backup' },
       'Custom Fields',
-      'Roles & Permissions',
+      { label: 'Roles & Permissions', to: '/settings-roles' },
       'Payment Gateway',
       'Notification Settings',
       'Admission Settings',

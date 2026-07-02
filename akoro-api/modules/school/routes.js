@@ -369,6 +369,7 @@ router.get("/settings", authenticateToken, async (req, res) => {
         personalisation:   settings?.personalisation ?? {},
         notificationPrefs: settings?.notification_prefs ?? {},
         modules:           settings?.modules ?? {},
+        backupSchedule:    settings?.backup_schedule ?? { autoBackup: true, frequency: 'daily', retentionDays: 30 },
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -406,6 +407,7 @@ const SETTINGS_CATEGORY_COLUMN = {
   "personalisation":      "personalisation",
   "notification-prefs":   "notification_prefs",
   "modules":              "modules",
+  "backup":               "backup_schedule",
 };
 router.put("/settings/:category", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
@@ -764,6 +766,160 @@ router.delete("/website/templates/:id", authenticateToken, requireRole(SCHOOL_RO
     const school = await getMySchool(req, res);
     if (!school) return;
     const { error } = await db.schema("edu").from("school_website_templates").delete().eq("id", req.params.id).eq("school_id", school.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =============================================================
+// BACKUP MANAGEMENT — snapshot metadata (label/type/status/size) + schedule.
+// The backup_schedule itself is read/written via the generic
+// GET/PUT /api/school/settings(/backup) routes above.
+// =============================================================
+
+// ── GET /api/school/backups ───────────────────────────────────────────────────
+router.get("/backups", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data } = await db.schema("edu").from("school_backups")
+      .select("id, label, type, status, size_bytes, record_count, created_at")
+      .eq("school_id", school.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    res.json({ success: true, data: (data || []).map((b) => ({
+      id: b.id, label: b.label, type: b.type, status: b.status,
+      sizeBytes: b.size_bytes, recordCount: b.record_count, createdAt: b.created_at,
+    })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/backups ──────────────────────────────────────────────────
+// Body: { label? }. Snapshots the school's current record counts as a stand-in
+// for a real DB export (wire to actual storage/export tooling later).
+router.post("/backups", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const cids = await classroomIds(school.id);
+    const [{ count: students }, { count: teachers }, { count: classrooms }] = await Promise.all([
+      cids.length ? db.from("classroom_students").select("id", { count: "exact", head: true }).in("classroom_id", cids) : Promise.resolve({ count: 0 }),
+      db.from("school_teachers").select("teacher_id", { count: "exact", head: true }).eq("school_id", school.id),
+      Promise.resolve({ count: cids.length }),
+    ]);
+    const recordCount = (students || 0) + (teachers || 0) + (classrooms || 0);
+    // Rough size estimate — ~2KB/record — until a real export pipeline exists.
+    const sizeBytes = Math.max(recordCount, 1) * 2048;
+
+    const { data, error } = await db.schema("edu").from("school_backups").insert({
+      school_id: school.id,
+      label: req.body.label?.trim() || `Manual Backup — ${new Date().toISOString().slice(0, 10)}`,
+      type: "manual", status: "completed", size_bytes: sizeBytes, record_count: recordCount,
+    }).select("id, label, type, status, size_bytes, record_count, created_at").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data: {
+      id: data.id, label: data.label, type: data.type, status: data.status,
+      sizeBytes: data.size_bytes, recordCount: data.record_count, createdAt: data.created_at,
+    } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/school/backups/:id ────────────────────────────────────────────
+router.delete("/backups/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { error } = await db.schema("edu").from("school_backups").delete().eq("id", req.params.id).eq("school_id", school.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// =============================================================
+// ROLES & PERMISSIONS
+// =============================================================
+
+const DEFAULT_ADMIN_PERMISSIONS = { "*": { view: true, create: true, edit: true, delete: true } };
+
+async function ensureAdminRole(schoolId) {
+  const { data: existing } = await db.schema("edu").from("school_roles").select("id").eq("school_id", schoolId).eq("is_system", true).maybeSingle();
+  if (existing) return;
+  await db.schema("edu").from("school_roles").insert({
+    school_id: schoolId, name: "Administrator", description: "Full access to every module.",
+    is_system: true, permissions: DEFAULT_ADMIN_PERMISSIONS, member_count: 1,
+  });
+}
+
+// ── GET /api/school/roles ─────────────────────────────────────────────────────
+router.get("/roles", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    await ensureAdminRole(school.id);
+    const { data } = await db.schema("edu").from("school_roles")
+      .select("id, name, description, is_system, permissions, member_count, updated_at")
+      .eq("school_id", school.id)
+      .order("is_system", { ascending: false })
+      .order("created_at", { ascending: true });
+    res.json({ success: true, data: (data || []).map((r) => ({
+      id: r.id, name: r.name, description: r.description, isSystem: r.is_system,
+      permissions: r.permissions || {}, memberCount: r.member_count, updatedAt: r.updated_at,
+    })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/roles ────────────────────────────────────────────────────
+// Body: { name, description?, permissions? }
+router.post("/roles", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { name, description = "", permissions = {} } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "name is required" });
+    const { data, error } = await db.schema("edu").from("school_roles").insert({
+      school_id: school.id, name: name.trim(), description, permissions,
+    }).select("id, name, description, is_system, permissions, member_count, updated_at").single();
+    if (error) {
+      if (error.code === "23505") return res.status(409).json({ error: "A role with that name already exists" });
+      throw new Error(error.message);
+    }
+    res.status(201).json({ success: true, data: {
+      id: data.id, name: data.name, description: data.description, isSystem: data.is_system,
+      permissions: data.permissions || {}, memberCount: data.member_count, updatedAt: data.updated_at,
+    } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── PUT /api/school/roles/:id ──────────────────────────────────────────────────
+// Body: { name?, description?, permissions? }
+router.put("/roles/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const patch = { updated_at: new Date() };
+    if (req.body.name !== undefined) patch.name = req.body.name;
+    if (req.body.description !== undefined) patch.description = req.body.description;
+    if (req.body.permissions !== undefined) patch.permissions = req.body.permissions;
+    const { data, error } = await db.schema("edu").from("school_roles")
+      .update(patch).eq("id", req.params.id).eq("school_id", school.id)
+      .select("id, name, description, is_system, permissions, member_count, updated_at").single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: {
+      id: data.id, name: data.name, description: data.description, isSystem: data.is_system,
+      permissions: data.permissions || {}, memberCount: data.member_count, updatedAt: data.updated_at,
+    } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/school/roles/:id ──────────────────────────────────────────────
+router.delete("/roles/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: role } = await db.schema("edu").from("school_roles").select("is_system").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!role) return res.status(404).json({ error: "Role not found" });
+    if (role.is_system) return res.status(400).json({ error: "The Administrator role can't be deleted" });
+    const { error } = await db.schema("edu").from("school_roles").delete().eq("id", req.params.id).eq("school_id", school.id);
     if (error) throw new Error(error.message);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }

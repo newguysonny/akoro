@@ -115,5 +115,34 @@ BEGIN
 </html>$html$, true
   WHERE NOT EXISTS (SELECT 1 FROM edu.school_website_templates WHERE school_id = v_school);
 
+  -- ── Backups (sample history) ─────────────────────────────────────────────
+  INSERT INTO edu.school_backups (school_id, label, type, status, size_bytes, record_count, created_at)
+  SELECT v_school, 'Nightly Auto Backup', 'auto', 'completed', 4718592, 812, now() - interval '1 day'
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_backups WHERE school_id = v_school);
+
+  INSERT INTO edu.school_backups (school_id, label, type, status, size_bytes, record_count, created_at)
+  SELECT v_school, 'Pre-term Manual Backup', 'manual', 'completed', 4587520, 799, now() - interval '8 days'
+  WHERE (SELECT count(*) FROM edu.school_backups WHERE school_id = v_school) = 1;
+
+  -- ── Roles & Permissions (Administrator + sample staff roles) ─────────────
+  INSERT INTO edu.school_roles (school_id, name, description, is_system, permissions, member_count)
+  SELECT v_school, 'Administrator', 'Full access to every module.', true, '{"*":{"view":true,"create":true,"edit":true,"delete":true}}'::jsonb, 1
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_roles WHERE school_id = v_school AND is_system);
+
+  INSERT INTO edu.school_roles (school_id, name, description, permissions, member_count)
+  SELECT v_school, 'Teacher', 'Classroom, homework and gradebook access only.',
+    '{"academics":{"view":true,"create":true,"edit":true,"delete":false},"homework":{"view":true,"create":true,"edit":true,"delete":false},"offline_examinations":{"view":true,"create":true,"edit":true,"delete":false},"lesson_planner":{"view":true,"create":true,"edit":true,"delete":false}}'::jsonb, 6
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_roles WHERE school_id = v_school AND name = 'Teacher');
+
+  INSERT INTO edu.school_roles (school_id, name, description, permissions, member_count)
+  SELECT v_school, 'Accountant', 'Fees, accounts and finance modules only.',
+    '{"fees_collection":{"view":true,"create":true,"edit":true,"delete":true},"accounts_finance":{"view":true,"create":true,"edit":true,"delete":false}}'::jsonb, 1
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_roles WHERE school_id = v_school AND name = 'Accountant');
+
+  INSERT INTO edu.school_roles (school_id, name, description, permissions, member_count)
+  SELECT v_school, 'Front Desk', 'Front office and student information, read-only elsewhere.',
+    '{"front_office":{"view":true,"create":true,"edit":true,"delete":false},"student_information":{"view":true,"create":false,"edit":false,"delete":false}}'::jsonb, 2
+  WHERE NOT EXISTS (SELECT 1 FROM edu.school_roles WHERE school_id = v_school AND name = 'Front Desk');
+
   RAISE NOTICE 'Seeded school portal data for school_id=%', v_school;
 END $$;
