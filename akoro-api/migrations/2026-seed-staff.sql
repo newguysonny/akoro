@@ -50,15 +50,24 @@ BEGIN
        'School Bursar','B.Sc Accounting 2004, ICAN 2010',19,2004,DATE '2012-05-02'),
     ('STF-206','Halima','Ibrahim','female','non_academic','Medical & Nursing',
        'School Nurse','RN/RM 2009, B.NSc 2016',14,2009,DATE '2017-09-01'),
-    ('STF-207','Kelechi','Onyeka','female','non_academic','Administration',
+    ('STF-207','Kelechi','Onyeka','female','non_academic','Marketing & Communications',
        'Digital Marketing Officer','B.Sc Mass Communication 2017',6,2017,DATE '2020-10-05'),
-    ('STF-208','Comfort','Ekanem','female','non_academic','Administration',
+    ('STF-208','Comfort','Ekanem','female','non_academic','Boarding & Welfare',
        'Matron / Asst. House Parent','NCE Home Economics 2000',20,2000,DATE '2011-09-01'),
-    ('STF-209','Samuel','Oyelaran','male','non_academic','Administration',
+    ('STF-209','Samuel','Oyelaran','male','non_academic','Library',
        'Librarian','BLIS Library & Information Science 2010',13,2010,DATE '2015-09-01')
   ) AS s(staff_no, first_name, last_name, gender, staff_class, staff_group,
          duty, qualification, experience_years, year_of_graduation, joined_on)
   WHERE NOT EXISTS (
     SELECT 1 FROM mgmt.staff x WHERE x.school_id = v_school AND x.staff_no = s.staff_no
   );
+
+  -- Re-file the three roles that now have their own group cards (safe if the
+  -- rows were seeded earlier under 'Administration').
+  UPDATE mgmt.staff SET staff_group = 'Marketing & Communications'
+    WHERE school_id = v_school AND staff_no = 'STF-207';
+  UPDATE mgmt.staff SET staff_group = 'Boarding & Welfare'
+    WHERE school_id = v_school AND staff_no = 'STF-208';
+  UPDATE mgmt.staff SET staff_group = 'Library'
+    WHERE school_id = v_school AND staff_no = 'STF-209';
 END $$;

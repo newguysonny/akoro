@@ -15,6 +15,7 @@ import {
   Crown, GraduationCap, ClipboardList, HeartHandshake, Users, ArrowLeft,
   LogOut, ChevronRight, Briefcase, Calculator, Headphones, Shield, Sparkles,
   Bus, UtensilsCrossed, Wrench, Stethoscope, Monitor, BookOpen,
+  Library, Megaphone, BedDouble,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import ResourcePage from '../components/mgmt/ResourcePage.jsx';
@@ -48,6 +49,9 @@ const NON_ACADEMIC = {
     { name: 'Maintenance', icon: Wrench, desc: 'Facilities and repairs' },
     { name: 'Medical & Nursing', icon: Stethoscope, desc: 'School nurse and clinic' },
     { name: 'ICT Support', icon: Monitor, desc: 'IT and technical support' },
+    { name: 'Library', icon: Library, desc: 'Librarians and library assistants' },
+    { name: 'Marketing & Communications', icon: Megaphone, desc: 'Marketing, PR and comms' },
+    { name: 'Boarding & Welfare', icon: BedDouble, desc: 'Matrons and house parents' },
   ],
 };
 const SECTIONS = { academic: ACADEMIC, 'non-academic': NON_ACADEMIC };
