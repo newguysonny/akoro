@@ -38,8 +38,12 @@ CREATE TABLE IF NOT EXISTS edu.school_portal_settings (
   personalisation     jsonb NOT NULL DEFAULT '{}'::jsonb,
   notification_prefs  jsonb NOT NULL DEFAULT '{}'::jsonb,
   notification_alerts jsonb NOT NULL DEFAULT '{}'::jsonb,  -- alert_key -> {active,email,sms,whatsapp,push}
+  modules              jsonb NOT NULL DEFAULT '{}'::jsonb,  -- module_key -> boolean (enabled/disabled)
   updated_at          timestamptz NOT NULL DEFAULT now()
 );
+
+-- Column may already exist from an earlier run of this file.
+ALTER TABLE edu.school_portal_settings ADD COLUMN IF NOT EXISTS modules jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 -- ── Social media connections (Facebook/Instagram autopost) ──────────────────
 CREATE TABLE IF NOT EXISTS edu.school_social_accounts (

@@ -368,6 +368,7 @@ router.get("/settings", authenticateToken, async (req, res) => {
         integrations:      settings?.integrations ?? {},
         personalisation:   settings?.personalisation ?? {},
         notificationPrefs: settings?.notification_prefs ?? {},
+        modules:           settings?.modules ?? {},
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -404,6 +405,7 @@ const SETTINGS_CATEGORY_COLUMN = {
   "integrations":         "integrations",
   "personalisation":      "personalisation",
   "notification-prefs":   "notification_prefs",
+  "modules":              "modules",
 };
 router.put("/settings/:category", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {

@@ -24,6 +24,7 @@ import SettingsBillingPage from './pages/SettingsBillingPage.jsx';
 import SocialMediaPage     from './pages/SocialMediaPage.jsx';
 import TelegramBotPage     from './pages/TelegramBotPage.jsx';
 import DomainPage          from './pages/DomainPage.jsx';
+import ModuleManagementPage from './pages/ModuleManagementPage.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
@@ -114,6 +115,7 @@ function AppRoutes() {
       <Route path="/settings-social-media" element={<ProtectedRoute><SocialMediaPage /></ProtectedRoute>} />
       <Route path="/settings-telegram" element={<ProtectedRoute><TelegramBotPage /></ProtectedRoute>} />
       <Route path="/settings-domain" element={<ProtectedRoute><DomainPage /></ProtectedRoute>} />
+      <Route path="/settings-modules" element={<ProtectedRoute><ModuleManagementPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />

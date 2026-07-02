@@ -32,7 +32,8 @@ BEGIN
       attendance = '{"geoRestriction":false,"latitude":"6.5244","longitude":"3.3792","radiusMeters":"1000","punchInStart":"07:00","punchInEnd":"08:00","punchOutStart":"14:00","punchOutEnd":"15:00","schoolStartTime":"08:00","gracePeriodMinutes":"15"}'::jsonb,
       security = '{"maintenanceMode":false}'::jsonb,
       personalisation = '{"language":"English","darkMode":false,"accentColour":"#E8884A"}'::jsonb,
-      notification_prefs = '{"newStudent":true,"sessionReminder":true,"battleChallenge":true,"taskDeadline":true,"platformUpdates":false,"inAppSound":true,"desktopPush":false}'::jsonb
+      notification_prefs = '{"newStudent":true,"sessionReminder":true,"battleChallenge":true,"taskDeadline":true,"platformUpdates":false,"inAppSound":true,"desktopPush":false}'::jsonb,
+      modules = '{"hostel":false,"transport":false}'::jsonb
   WHERE school_id = v_school
     AND system_formats = '{}'::jsonb;  -- only seed if untouched
 

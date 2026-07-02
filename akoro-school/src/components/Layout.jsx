@@ -73,7 +73,7 @@ const NAV_SECTIONS = [
       'Audit Trail',
       'Subscription',
       'Subscription History',
-      'Module Settings',
+      { label: 'Module Settings', to: '/settings-modules' },
       'Biometric Devices',
       { label: 'School Website', to: '/settings-website' },
     ] },
