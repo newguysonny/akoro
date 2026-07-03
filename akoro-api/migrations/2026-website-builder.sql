@@ -12,8 +12,10 @@ CREATE TABLE IF NOT EXISTS mgmt.site_media (
   media_type text NOT NULL DEFAULT 'image' CHECK (media_type IN ('image','video','document','other')),
   url text NOT NULL,
   alt_text text,
+  deleted_at timestamptz,                       -- set = in Trash
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE mgmt.site_media ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 CREATE INDEX IF NOT EXISTS idx_site_media_school ON mgmt.site_media (school_id, media_type);
 
 CREATE TABLE IF NOT EXISTS mgmt.site_pages (

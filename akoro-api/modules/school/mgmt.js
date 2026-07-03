@@ -1014,6 +1014,57 @@ router.post("/site-pages/:id/restore", authenticateToken, requireRole(SCHOOL_ROL
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+/* ── Website Builder: Media (list + trash, mirrors Pages) ─────────────────- */
+router.get("/site-media", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const view = req.query.view || "active";           // active | trash | all
+    let q = M().from("site_media").select("*").eq("school_id", school.id);
+    if (view === "active") q = q.is("deleted_at", null);
+    else if (view === "trash") q = q.not("deleted_at", "is", null);
+    if (req.query.media_type) q = q.eq("media_type", req.query.media_type);
+    q = q.order("created_at", { ascending: false });
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get("/site-media/:id", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data, error } = await M().from("site_media").select("*")
+      .eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.status(404).json({ error: "Media not found" });
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/site-media/:id/trash", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { error } = await M().from("site_media").update({ deleted_at: new Date() })
+      .eq("id", req.params.id).eq("school_id", school.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/site-media/:id/restore", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { error } = await M().from("site_media").update({ deleted_at: null })
+      .eq("id", req.params.id).eq("school_id", school.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 
 router.get("/:resource", authenticateToken, async (req, res) => {
