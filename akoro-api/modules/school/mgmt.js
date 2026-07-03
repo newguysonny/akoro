@@ -187,6 +187,11 @@ const RESOURCES = {
   "asset-disposals": { table: "asset_disposals", fields: ["asset_id","disposal_type","amount","disposed_on","note"], required: ["asset_id"], refs: { asset_id: ["assets","name"] } },
   "asset-audits": { table: "asset_audits", fields: ["audit_date","auditor","findings","status"], required: [], filters: ["status"], orderBy: "audit_date", asc: false },
 
+  // Website Builder (public-site media / pages / menus)
+  "site-media": { table: "site_media", fields: ["title","media_type","url","alt_text"], required: ["title","url"], filters: ["media_type"], orderBy: "created_at", asc: false },
+  "site-pages": { table: "site_pages", fields: ["title","slug","content","status","sort_order"], required: ["title"], filters: ["status"], orderBy: "sort_order", asc: true },
+  "site-menus": { table: "site_menu_items", fields: ["label","url","page_id","parent_label","target","sort_order"], required: ["label"], refs: { page_id: ["site_pages","title"] }, filters: ["parent_label"], orderBy: "sort_order", asc: true },
+
   // Public portal (online admissions / payments / result PINs)
   "admission-applications": { table: "admission_applications", fields: ["status","note"], required: [], filters: ["status","fee_status"], orderBy: "created_at", asc: false, readOnlyCreate: true },
   "result-pins": { table: "result_pins", fields: [], refs: { student_id: ["students", studentLabel], exam_id: ["exams","name"] }, filters: ["exam_id","student_id"], readOnly: true },

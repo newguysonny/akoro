@@ -104,6 +104,7 @@ import {
 } from './pages/mgmt/helpAssetsPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
+import { MediaPage, SitePagesPage, MenusPage } from './pages/WebsiteBuilderPages.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
 import NotificationCenterPage from './pages/NotificationCenterPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
@@ -381,6 +382,9 @@ function AppRoutes() {
       <Route path="/mgmt/asset-reports"      element={<ProtectedRoute><AssetReportsPage /></ProtectedRoute>} />
       <Route path="/mgmt/reports-analytics"  element={<ProtectedRoute><ReportsAnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
+      <Route path="/website-builder/media" element={<ProtectedRoute><MediaPage /></ProtectedRoute>} />
+      <Route path="/website-builder/pages" element={<ProtectedRoute><SitePagesPage /></ProtectedRoute>} />
+      <Route path="/website-builder/menus" element={<ProtectedRoute><MenusPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
       <Route path="/settings-notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />

@@ -9,6 +9,7 @@ import {
   LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
   User, ShieldQuestion,
   BookOpen, Presentation, Swords, ListTodo, FileCheck, Store,
+  PanelsTopLeft,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
@@ -261,6 +262,12 @@ const NAV_SECTIONS = [
       { label: 'Module Settings', to: '/settings-modules' },
       'Biometric Devices',
       { label: 'School Website', to: '/settings-website' },
+    ] },
+    { label: 'Website Builder', icon: PanelsTopLeft, children: [
+      { label: 'Media', to: '/website-builder/media' },
+      { label: 'Pages', to: '/website-builder/pages' },
+      { label: 'Menus', to: '/website-builder/menus' },
+      { label: 'Template', to: '/settings-website/templates' },
     ] },
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps', moduleKey: 'apps_center' },
   ]},

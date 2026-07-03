@@ -24,6 +24,7 @@
     "2026-mgmt-schema-3.sql",
     "2026-staff-team.sql",
     "2026-staff-columns.sql",
+    "2026-website-builder.sql",
     "2026-school-domains-vercel.sql",
     "2026-public-portal.sql"
   ],
