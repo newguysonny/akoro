@@ -917,6 +917,30 @@ router.post("/website/preview-page", authenticateToken, requireRole(SCHOOL_ROLES
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/school/website/preview-site  (AUTH — pixel-perfect appearance) ──
+// Renders the LANDING page with DRAFT appearance settings (colours, hero,
+// sections, SEO, scripts, social, custom CSS) merged over the saved config —
+// so the Appearance editor previews changes live before saving. Body: the same
+// camelCase fields as PUT /website.
+router.post("/website/preview-site", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const draft = { ...(await getWebsiteConfig(school.id)) };
+    for (const [k, col] of Object.entries(WEBSITE_FIELD_MAP)) if (req.body[k] !== undefined) draft[col] = req.body[k];
+    const ctx = await buildSiteCtx(school, draft);
+    let html;
+    if (draft.mode === "template") {
+      const { data: tpl } = await db.schema("edu").from("school_website_templates")
+        .select("html").eq("school_id", school.id).eq("is_active", true).maybeSingle();
+      html = tpl?.html ? renderMiniTemplate(tpl.html, ctx) : renderThemePage(draft, ctx);
+    } else {
+      html = renderThemePage(draft, ctx);
+    }
+    res.json({ success: true, html });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── GET /api/school/site/by-host  (PUBLIC — tenant from hostname) ────────────
 // The frontend forwards its hostname (?host=…); direct hits fall back to the
 // request's own forwarded host. Must be registered BEFORE /site/:slug.
@@ -961,6 +985,17 @@ router.get("/website", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// camelCase (API) → snake_case (DB column) map for the website config.
+const WEBSITE_FIELD_MAP = {
+  enabled: "enabled", mode: "mode", themeId: "theme_id",
+  heroTitle: "hero_title", heroSubtitle: "hero_subtitle", heroImageUrl: "hero_image_url",
+  aboutText: "about_text", metaTitle: "meta_title", metaKeywords: "meta_keywords",
+  metaDescription: "meta_description", ogImageUrl: "og_image_url",
+  headerScripts: "header_scripts", footerScripts: "footer_scripts",
+  primaryColor: "primary_color", secondaryColor: "secondary_color", accentColor: "accent_color",
+  bgMode: "bg_mode", socialLinks: "social_links", sections: "sections", customCss: "custom_css",
+};
+
 // ── PUT /api/school/website ─────────────────────────────────────────────────────
 router.put("/website", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
@@ -969,16 +1004,7 @@ router.put("/website", authenticateToken, requireRole(SCHOOL_ROLES), async (req,
     await getWebsiteConfig(school.id); // ensure row exists
     const b = req.body || {};
     const patch = { updated_at: new Date() };
-    const map = {
-      enabled: "enabled", mode: "mode", themeId: "theme_id",
-      heroTitle: "hero_title", heroSubtitle: "hero_subtitle", heroImageUrl: "hero_image_url",
-      aboutText: "about_text", metaTitle: "meta_title", metaKeywords: "meta_keywords",
-      metaDescription: "meta_description", ogImageUrl: "og_image_url",
-      headerScripts: "header_scripts", footerScripts: "footer_scripts",
-      primaryColor: "primary_color", secondaryColor: "secondary_color", accentColor: "accent_color",
-      bgMode: "bg_mode", socialLinks: "social_links", sections: "sections", customCss: "custom_css",
-    };
-    for (const [k, col] of Object.entries(map)) if (b[k] !== undefined) patch[col] = b[k];
+    for (const [k, col] of Object.entries(WEBSITE_FIELD_MAP)) if (b[k] !== undefined) patch[col] = b[k];
     const { data, error } = await db.schema("edu").from("school_website").update(patch).eq("school_id", school.id).select("*").single();
     if (error) throw new Error(error.message);
     res.json({ success: true, data: shapeWebsite(data) });
