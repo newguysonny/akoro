@@ -29,6 +29,7 @@ import {
 import multerLib from "multer";
 import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext } from "./siteRenderer.js";
 import { assembleTemplateFromZip } from "./templateZip.js";
+import { ensureBucket, uploadZipToStorage, removeTemplateAssets } from "./templateStorage.js";
 import {
   vercelConfigured, addDomainToProject, getProjectDomain,
   verifyProjectDomain, getDomainConfig, removeDomainFromProject, buildDnsRecords,
@@ -1014,21 +1015,39 @@ router.post("/website/templates/upload", authenticateToken, requireRole(SCHOOL_R
 
       const original = req.file.originalname || "template";
       const isZip = /\.zip$/i.test(original) || req.file.mimetype === "application/zip";
-      let html;
-      try {
-        html = isZip
-          ? assembleTemplateFromZip(req.file.buffer).html
-          : req.file.buffer.toString("utf-8");
-      } catch (e) {
-        return res.status(400).json({ error: `Could not read the template: ${e.message}` });
-      }
-      if (!html || !/<[a-z!]/i.test(html)) return res.status(400).json({ error: "No HTML content found in the upload." });
-
       const name = (req.body.name?.trim()) || original.replace(/\.(zip|html?|txt)$/i, "") || "Uploaded template";
-      const { data, error } = await db.schema("edu").from("school_website_templates")
-        .insert({ school_id: school.id, name, description: req.body.description || "Uploaded template", html }).select("*").single();
-      if (error) throw new Error(error.message);
-      res.status(201).json({ success: true, data: { id: data.id, name: data.name, description: data.description, active: data.is_active } });
+      const description = req.body.description || "Uploaded template";
+
+      // Plain HTML — store as-is.
+      if (!isZip) {
+        const html = req.file.buffer.toString("utf-8");
+        if (!/<[a-z!]/i.test(html)) return res.status(400).json({ error: "No HTML content found in the upload." });
+        const { data, error } = await db.schema("edu").from("school_website_templates")
+          .insert({ school_id: school.id, name, description, html }).select("*").single();
+        if (error) throw new Error(error.message);
+        return res.status(201).json({ success: true, data: { id: data.id, name: data.name, active: data.is_active } });
+      }
+
+      // Zip — host assets in Storage (real files), fall back to inlining if
+      // Storage is unavailable. Insert first so we have an id for the folder.
+      const { data: created, error: insErr } = await db.schema("edu").from("school_website_templates")
+        .insert({ school_id: school.id, name, description, html: "" }).select("id").single();
+      if (insErr) throw new Error(insErr.message);
+
+      let html, hosting = "storage";
+      try {
+        await ensureBucket();
+        ({ html } = await uploadZipToStorage(req.file.buffer, { schoolId: school.id, templateId: created.id }));
+      } catch (storageErr) {
+        console.warn("[template upload] storage failed, inlining:", storageErr.message);
+        try { ({ html } = assembleTemplateFromZip(req.file.buffer)); hosting = "inline"; }
+        catch (zipErr) {
+          await db.schema("edu").from("school_website_templates").delete().eq("id", created.id);
+          return res.status(400).json({ error: `Could not read the zip: ${zipErr.message}` });
+        }
+      }
+      await db.schema("edu").from("school_website_templates").update({ html }).eq("id", created.id);
+      res.status(201).json({ success: true, data: { id: created.id, name, active: false }, hosting });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 });
@@ -1071,6 +1090,7 @@ router.delete("/website/templates/:id", authenticateToken, requireRole(SCHOOL_RO
     if (!school) return;
     const { error } = await db.schema("edu").from("school_website_templates").delete().eq("id", req.params.id).eq("school_id", school.id);
     if (error) throw new Error(error.message);
+    await removeTemplateAssets(school.id, req.params.id); // best-effort storage cleanup
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
