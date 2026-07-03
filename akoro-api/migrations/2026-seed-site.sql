@@ -1,28 +1,40 @@
 -- =============================================================
 -- 2026-seed-site.sql
--- Sample Website Builder content for the demo school: a multi-page site
--- (Home + About Us + Admissions + Academics + Contact) plus Primary, Footer
--- and Social menus wired to those pages.
+-- Seeds a sample multi-page website as an INSTALLED TEMPLATE ("Classic School
+-- Site") for the demo school — it appears in Website Builder → Template, and
+-- the school activates it from the UI:
+--   • "Activate & import into builder" → creates the Home / About Us /
+--     Admissions / Academics / Contact pages + a Primary menu (editable).
+--   • "Activate as-is" → serves the bundled landing HTML untouched.
+-- Nothing is added to Pages/Menus until the school clicks Activate.
 --
--- The 'home' page renders as the landing (builder mode); the others serve at
--- /about-us, /admissions, /academics, /contact wrapped in the site chrome.
+-- An earlier version of this seed inserted the pages/menus directly; the
+-- cleanup block below removes those — it runs ONLY on the first run of this
+-- version (guarded by the template row), so pages the school later imports
+-- or edits are never touched by redeploys.
 --
--- Idempotent: pages are keyed by slug, menus by name; menu locations are only
--- claimed if free. Demo data — not for prod. Run after 2026-site-menus.sql.
+-- Idempotent. Demo data. Run after 2026-template-import.sql.
 -- =============================================================
 
 DO $$
 DECLARE
   v_school uuid;
-  v_menu uuid; v_foot uuid; v_soc uuid;
-  v_home uuid; v_about uuid; v_adm uuid; v_acad uuid; v_contact uuid;
+  v_home text; v_about text; v_adm text; v_acad text; v_contact text;
 BEGIN
   SELECT id INTO v_school FROM public.school_profiles WHERE name = 'Akoro Demo Academy' LIMIT 1;
-  IF v_school IS NULL THEN RAISE NOTICE 'Demo school not found — skipping site seed.'; RETURN; END IF;
+  IF v_school IS NULL THEN RAISE NOTICE 'Demo school not found — skipping site template seed.'; RETURN; END IF;
 
-  -- ── Pages ────────────────────────────────────────────────────────────────
-  INSERT INTO mgmt.site_pages (school_id, title, slug, status, sort_order, content)
-  SELECT v_school, 'Home', 'home', 'published', 0, $HTML$
+  -- Already seeded this version? Then do nothing (protects imported pages).
+  IF EXISTS (SELECT 1 FROM edu.school_website_templates WHERE school_id = v_school AND name = 'Classic School Site') THEN
+    RETURN;
+  END IF;
+
+  -- ── One-time cleanup of the earlier direct-seeded pages/menus ────────────
+  DELETE FROM mgmt.site_menus WHERE school_id = v_school AND name IN ('Main Menu', 'Footer Menu', 'Social Menu');
+  DELETE FROM mgmt.site_pages WHERE school_id = v_school AND slug IN ('home', 'about-us', 'admissions', 'academics', 'contact');
+
+  -- ── Page contents (imported into the builder on activation) ──────────────
+  v_home := $HTML$
 <section style="text-align:center;padding:72px 24px;background:linear-gradient(160deg,#eef2ff,#fff)">
   <h1 style="font-size:42px;font-weight:900;margin-bottom:14px">Welcome to Akoro Demo Academy</h1>
   <p style="font-size:18px;color:#6b7280;max-width:640px;margin:0 auto 26px">Nurturing curious minds and confident leaders — excellence in learning, character and service since 1998.</p>
@@ -34,22 +46,18 @@ BEGIN
     <div style="border:1px solid #e7e7ef;border-radius:12px;padding:22px"><h3 style="margin:0 0 8px">🔬 Modern Facilities</h3><p style="color:#555;line-height:1.7;margin:0">Science and ICT laboratories, a 12,000-volume library, and sports grounds.</p></div>
     <div style="border:1px solid #e7e7ef;border-radius:12px;padding:22px"><h3 style="margin:0 0 8px">❤️ Caring Community</h3><p style="color:#555;line-height:1.7;margin:0">Small class sizes, dedicated counsellors and a vibrant parent partnership.</p></div>
   </div>
-</section>$HTML$
-  WHERE NOT EXISTS (SELECT 1 FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'home');
+</section>$HTML$;
 
-  INSERT INTO mgmt.site_pages (school_id, title, slug, status, sort_order, content)
-  SELECT v_school, 'About Us', 'about-us', 'published', 1, $HTML$
+  v_about := $HTML$
 <p>Founded in 1998, <b>Akoro Demo Academy</b> is a co-educational secondary school committed to raising learners who excel academically and lead with integrity.</p>
 <h2>Our Mission</h2>
 <p>To provide a world-class, values-driven education that equips every child with the knowledge, skills and character to thrive.</p>
 <h2>Our Vision</h2>
 <p>A generation of confident, compassionate problem-solvers shaping their communities and the world.</p>
 <h2>Core Values</h2>
-<ul><li>Excellence in all things</li><li>Integrity and discipline</li><li>Curiosity and creativity</li><li>Service to community</li></ul>$HTML$
-  WHERE NOT EXISTS (SELECT 1 FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'about-us');
+<ul><li>Excellence in all things</li><li>Integrity and discipline</li><li>Curiosity and creativity</li><li>Service to community</li></ul>$HTML$;
 
-  INSERT INTO mgmt.site_pages (school_id, title, slug, status, sort_order, content)
-  SELECT v_school, 'Admissions', 'admissions', 'published', 2, $HTML$
+  v_adm := $HTML$
 <p>We welcome applications into <b>JSS 1 – SSS 2</b> for the coming academic session.</p>
 <h2>How to Apply</h2>
 <ol>
@@ -60,75 +68,69 @@ BEGIN
 </ol>
 <h2>Requirements</h2>
 <ul><li>Birth certificate</li><li>Last academic report card</li><li>Two passport photographs</li></ul>
-<p>Questions? Visit our <a href="/contact">Contact page</a> — the admissions office replies within one business day.</p>$HTML$
-  WHERE NOT EXISTS (SELECT 1 FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'admissions');
+<p>Questions? Visit our <a href="/contact">Contact page</a> — the admissions office replies within one business day.</p>$HTML$;
 
-  INSERT INTO mgmt.site_pages (school_id, title, slug, status, sort_order, content)
-  SELECT v_school, 'Academics', 'academics', 'published', 3, $HTML$
+  v_acad := $HTML$
 <p>Our curriculum blends the Nigerian national curriculum with enrichment in technology, arts and leadership.</p>
 <h2>Junior Secondary (JSS 1–3)</h2>
 <p>Mathematics, English, Basic Science &amp; Technology, Social Studies, Creative Arts, French, and Computer Studies.</p>
 <h2>Senior Secondary (SSS 1–3)</h2>
 <p>Science, Commercial and Arts tracks with electives including Further Mathematics, Accounting, Literature and Government.</p>
 <h2>Beyond the Classroom</h2>
-<ul><li>STEM &amp; Robotics club</li><li>Debate and press club</li><li>Inter-house sports and music</li></ul>$HTML$
-  WHERE NOT EXISTS (SELECT 1 FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'academics');
+<ul><li>STEM &amp; Robotics club</li><li>Debate and press club</li><li>Inter-house sports and music</li></ul>$HTML$;
 
-  INSERT INTO mgmt.site_pages (school_id, title, slug, status, sort_order, content)
-  SELECT v_school, 'Contact', 'contact', 'published', 4, $HTML$
+  v_contact := $HTML$
 <h2>Get in Touch</h2>
 <p><b>Address:</b> 12 Education Crescent, Ikeja, Lagos</p>
 <p><b>Phone:</b> +234 805 000 0000</p>
 <p><b>Email:</b> hello@demo.akoro.app</p>
 <p><b>Office hours:</b> Monday – Friday, 8:00am – 4:00pm</p>
 <h2>Visit Us</h2>
-<p>Prospective families are welcome for campus tours every Wednesday — book via the admissions office.</p>$HTML$
-  WHERE NOT EXISTS (SELECT 1 FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'contact');
+<p>Prospective families are welcome for campus tours every Wednesday — book via the admissions office.</p>$HTML$;
 
-  SELECT id INTO v_home    FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'home';
-  SELECT id INTO v_about   FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'about-us';
-  SELECT id INTO v_adm     FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'admissions';
-  SELECT id INTO v_acad    FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'academics';
-  SELECT id INTO v_contact FROM mgmt.site_pages WHERE school_id = v_school AND slug = 'contact';
-
-  -- ── Primary menu ─────────────────────────────────────────────────────────
-  SELECT id INTO v_menu FROM mgmt.site_menus WHERE school_id = v_school AND name = 'Main Menu';
-  IF v_menu IS NULL THEN
-    INSERT INTO mgmt.site_menus (school_id, name, location)
-    VALUES (v_school, 'Main Menu',
-      CASE WHEN EXISTS (SELECT 1 FROM mgmt.site_menus WHERE school_id = v_school AND location = 'primary') THEN NULL ELSE 'primary' END)
-    RETURNING id INTO v_menu;
-    INSERT INTO mgmt.site_menu_items (school_id, menu_id, label, url, page_id, target, sort_order) VALUES
-      (v_school, v_menu, 'Home',       '/',  NULL,      '_self', 0),
-      (v_school, v_menu, 'About Us',   NULL, v_about,   '_self', 1),
-      (v_school, v_menu, 'Admissions', NULL, v_adm,     '_self', 2),
-      (v_school, v_menu, 'Academics',  NULL, v_acad,    '_self', 3),
-      (v_school, v_menu, 'Contact',    NULL, v_contact, '_self', 4);
-  END IF;
-
-  -- ── Footer menu ──────────────────────────────────────────────────────────
-  SELECT id INTO v_foot FROM mgmt.site_menus WHERE school_id = v_school AND name = 'Footer Menu';
-  IF v_foot IS NULL THEN
-    INSERT INTO mgmt.site_menus (school_id, name, location)
-    VALUES (v_school, 'Footer Menu',
-      CASE WHEN EXISTS (SELECT 1 FROM mgmt.site_menus WHERE school_id = v_school AND location = 'footer') THEN NULL ELSE 'footer' END)
-    RETURNING id INTO v_foot;
-    INSERT INTO mgmt.site_menu_items (school_id, menu_id, label, url, page_id, target, sort_order) VALUES
-      (v_school, v_foot, 'About Us',   NULL, v_about,   '_self', 0),
-      (v_school, v_foot, 'Admissions', NULL, v_adm,     '_self', 1),
-      (v_school, v_foot, 'Contact',    NULL, v_contact, '_self', 2);
-  END IF;
-
-  -- ── Social menu ──────────────────────────────────────────────────────────
-  SELECT id INTO v_soc FROM mgmt.site_menus WHERE school_id = v_school AND name = 'Social Menu';
-  IF v_soc IS NULL THEN
-    INSERT INTO mgmt.site_menus (school_id, name, location)
-    VALUES (v_school, 'Social Menu',
-      CASE WHEN EXISTS (SELECT 1 FROM mgmt.site_menus WHERE school_id = v_school AND location = 'social') THEN NULL ELSE 'social' END)
-    RETURNING id INTO v_soc;
-    INSERT INTO mgmt.site_menu_items (school_id, menu_id, label, url, target, sort_order) VALUES
-      (v_school, v_soc, 'Facebook',  'https://facebook.com/akorodemo',  '_blank', 0),
-      (v_school, v_soc, 'Instagram', 'https://instagram.com/akorodemo', '_blank', 1),
-      (v_school, v_soc, 'YouTube',   'https://youtube.com/@akorodemo',  '_blank', 2);
-  END IF;
+  -- ── Install the template (import payload = pages + primary menu) ─────────
+  INSERT INTO edu.school_website_templates (school_id, name, description, html, is_active, import_payload)
+  VALUES (
+    v_school,
+    'Classic School Site',
+    'Sample 5-page school website — activate & import to add the pages and menu',
+    -- "Activate as-is" landing (standalone document; {{school_name}} supported)
+    $HTML$<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{school_name}}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,-apple-system,sans-serif;color:#1a1a2e}</style>
+</head>
+<body>
+<nav style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #eee">
+  <b style="font-size:20px;color:#1a56db">{{school_name}}</b>
+  <span><a href="/apply" style="margin-right:16px;color:#1a1a2e;text-decoration:none;font-weight:600">Admissions</a><a href="/login" style="color:#1a56db;text-decoration:none;font-weight:700">Login</a></span>
+</nav>
+<section style="text-align:center;padding:80px 24px;background:linear-gradient(160deg,#eef2ff,#fff)">
+  <h1 style="font-size:42px;font-weight:900;margin-bottom:14px">Welcome to {{school_name}}</h1>
+  <p style="font-size:18px;color:#6b7280;max-width:640px;margin:0 auto 26px">Nurturing curious minds and confident leaders — excellence in learning, character and service.</p>
+  <a href="/apply" style="display:inline-block;padding:14px 30px;border-radius:50px;font-weight:700;text-decoration:none;background:#1a56db;color:#fff">Apply for Admission</a>
+</section>
+<footer style="background:#1a202c;color:#cbd5e1;padding:28px 24px;text-align:center;font-size:14px">&copy; {{year}} {{school_name}}. All Rights Reserved.</footer>
+</body>
+</html>$HTML$,
+    false,
+    jsonb_build_object(
+      'pages', jsonb_build_array(
+        jsonb_build_object('slug', 'home',       'title', 'Home',       'content', v_home),
+        jsonb_build_object('slug', 'about-us',   'title', 'About Us',   'content', v_about),
+        jsonb_build_object('slug', 'admissions', 'title', 'Admissions', 'content', v_adm),
+        jsonb_build_object('slug', 'academics',  'title', 'Academics',  'content', v_acad),
+        jsonb_build_object('slug', 'contact',    'title', 'Contact',    'content', v_contact)
+      ),
+      'menu', jsonb_build_array(
+        jsonb_build_object('label', 'Home',       'url', '/'),
+        jsonb_build_object('label', 'About Us',   'slug', 'about-us'),
+        jsonb_build_object('label', 'Admissions', 'slug', 'admissions'),
+        jsonb_build_object('label', 'Academics',  'slug', 'academics'),
+        jsonb_build_object('label', 'Contact',    'slug', 'contact')
+      )
+    )
+  );
 END $$;
