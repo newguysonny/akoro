@@ -24,9 +24,12 @@ CREATE TABLE IF NOT EXISTS mgmt.site_pages (
   content text,
   status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','published')),
   sort_order int NOT NULL DEFAULT 0,
+  deleted_at timestamptz,                       -- set = in Trash (WordPress-style)
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (school_id, slug)
 );
+-- For installs where the table already existed before soft-delete:
+ALTER TABLE mgmt.site_pages ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 CREATE INDEX IF NOT EXISTS idx_site_pages_school ON mgmt.site_pages (school_id, status);
 
 CREATE TABLE IF NOT EXISTS mgmt.site_menu_items (
