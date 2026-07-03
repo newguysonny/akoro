@@ -261,8 +261,11 @@ export function renderThemePage(website, ctx) {
 }
 
 // A single published page's content, wrapped in the shared chrome.
-export function renderSitePage(website, ctx, page) {
-  const body = `
+// hideTitle: used for the "home" page, whose content is a full landing layout.
+export function renderSitePage(website, ctx, page, { hideTitle = false } = {}) {
+  const body = hideTitle
+    ? `<div class="page-content">${page.content || ""}</div>`
+    : `
     <section class="page"><div class="wrap" style="max-width:820px">
       <h1 style="font-size:34px;font-weight:900;margin-bottom:18px;color:var(--primary)">${escapeHtml(page.title)}</h1>
       <div class="page-content" style="font-size:16px;line-height:1.75;color:#333">${page.content || ""}</div>

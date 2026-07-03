@@ -87,7 +87,7 @@ export default function WebsiteTemplatesPage() {
     setBusyId(id); setChooser(null);
     try {
       const r = await apiPost(`/api/school/website/templates/${id}/import`, {});
-      setMode('template');
+      setMode('theme'); // builder mode: home page + menus + appearance drive the site
       setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
       showToast(`Activated ✓ Imported ${r.pagesCreated} page${r.pagesCreated === 1 ? '' : 's'} + ${r.menuItems} menu link${r.menuItems === 1 ? '' : 's'} into the builder${r.skipped ? ` (${r.skipped} already existed)` : ''}`);
     } catch (e) { showToast(e.message || 'Could not import'); }
@@ -158,7 +158,7 @@ export default function WebsiteTemplatesPage() {
               <div style={{ width: 38, height: 38, borderRadius: 10, background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LayoutList size={18} /></div>
               <div>
                 <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>Activate & import into builder <span style={{ fontSize: 10.5, fontWeight: 800, color: AMBER, marginLeft: 4 }}>RECOMMENDED</span></div>
-                <div style={{ fontSize: 12, color: MUTED, marginTop: 3, lineHeight: 1.55 }}>Auto-creates the template's pages in <b>Pages</b> and its nav as your <b>Primary menu</b> — each page becomes individually editable. The template becomes your home page.</div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 3, lineHeight: 1.55 }}>Auto-creates every page — including an editable <b>Home</b> — in <b>Pages</b>, and the template's nav as your <b>Primary menu</b>. Content, links and appearance are then all edited in the builder, with one nav everywhere.</div>
               </div>
             </button>
 

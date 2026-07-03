@@ -94,19 +94,31 @@ export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
     strip(doc.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]) || fallback;
   const slugOfFile = (relPath) => relPath.replace(/\.html?$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-  const pages = htmls.filter((e) => e !== main).map((e) => {
-    const relPath = rel(e.entryName);
-    const doc = e.getData().toString("utf-8");
+  // The builder chrome supplies nav + footer, so strip the template's own
+  // baked-in ones from imported page content (no double navigation).
+  const stripChrome = (body) => body
+    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+    .replace(/<header[\s\S]*?<\/header>/gi, "")
+    .replace(/<footer[\s\S]*?<\/footer>/gi, "");
+  const pageContent = (doc) => {
     // Keep the page's own <style>/<link> styling so it renders faithfully.
     const headBits = [...doc.matchAll(/<style[\s\S]*?<\/style>/gi)].map((m) => m[0])
       .concat([...doc.matchAll(/<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>/gi)].map((m) => m[0]));
     const body = doc.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] || doc;
+    return rewrite(`${headBits.join("\n")}\n${stripChrome(body)}`).trim();
+  };
+
+  const pages = htmls.filter((e) => e !== main).map((e) => {
+    const relPath = rel(e.entryName);
+    const doc = e.getData().toString("utf-8");
     return {
       slug: slugOfFile(relPath),
       title: titleOf(doc, slugOfFile(relPath).replace(/-/g, " ")),
-      content: rewrite(`${headBits.join("\n")}\n${body}`).trim(),
+      content: pageContent(doc),
     };
   });
+  // The main page becomes an editable "home" page (rendered as the landing).
+  pages.unshift({ slug: "home", title: titleOf(rawMain, "Home"), content: pageContent(rawMain) });
 
   // Nav from the RAW main HTML (hrefs still point at *.html files).
   const slugSet = new Set(pages.map((p) => p.slug));

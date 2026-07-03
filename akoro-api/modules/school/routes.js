@@ -883,7 +883,7 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
     const { data: page } = await db.schema("mgmt").from("site_pages")
       .select("title, content, status, deleted_at, slug").eq("school_id", school.id).eq("slug", slug).maybeSingle();
     if (page && page.status === "published" && !page.deleted_at) {
-      return { status: 200, html: addBanner(renderSitePage(website, ctx, page)) };
+      return { status: 200, html: addBanner(renderSitePage(website, ctx, page, { hideTitle: slug === "home" })) };
     }
     return { status: 404, html: renderThemeDocument(website, ctx, `<section class="page"><div class="wrap" style="text-align:center"><h1 style="font-size:34px;color:var(--primary)">Page not found</h1><p style="margin-top:10px"><a href="/" style="color:var(--primary);font-weight:700">← Back to home</a></p></div></section>`) };
   }
@@ -897,7 +897,13 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
       ? renderMiniTemplate(tpl.html, ctx)
       : renderThemePage(website, ctx); // fall back to theme if no active template
   } else {
-    html = renderThemePage(website, ctx);
+    // Builder mode: a published "home" page (e.g. imported from a template)
+    // overrides the theme sections as the landing — fully editable in Pages.
+    const { data: home } = await db.schema("mgmt").from("site_pages")
+      .select("title, content, status, deleted_at").eq("school_id", school.id).eq("slug", "home").maybeSingle();
+    html = (home && home.status === "published" && !home.deleted_at)
+      ? renderSitePage(website, ctx, home, { hideTitle: true })
+      : renderThemePage(website, ctx);
   }
   return { status: 200, html: addBanner(html) };
 }
@@ -913,7 +919,7 @@ router.post("/website/preview-page", authenticateToken, requireRole(SCHOOL_ROLES
     const website = await getWebsiteConfig(school.id);
     const ctx = await buildSiteCtx(school, website);
     const page = { title: req.body.title || "Untitled", content: req.body.content || "", slug: req.body.slug || "" };
-    res.json({ success: true, html: renderSitePage(website, ctx, page) });
+    res.json({ success: true, html: renderSitePage(website, ctx, page, { hideTitle: page.slug === "home" }) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1131,12 +1137,13 @@ router.post("/website/templates/:id/activate", authenticateToken, requireRole(SC
 
 // ── POST /api/school/website/templates/:id/import  (template → builder) ─────────
 // Creates real builder content from the template's stashed import payload:
-//   • one published site_page per extra .html in the zip (existing slugs kept)
+//   • a published "home" page from the zip's index.html (rendered as landing)
+//   • one published site_page per extra .html (existing slugs kept)
 //   • a Primary menu built from the template's nav (any current primary menu
 //     is unassigned, not deleted)
-// Also activates the template as the site's home page (mode 'template'), so
-// the imported pages/menu are editable in the builder while the template look
-// stays live. Idempotent: re-importing skips pages that already exist.
+// The site switches to builder ('theme') mode: home + pages render through
+// the builder chrome, so EVERYTHING — content, links, appearance — is edited
+// in Pages / Menus / Appearance. Idempotent: existing slugs are skipped.
 router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
     const school = await getMySchool(req, res);
@@ -1185,10 +1192,11 @@ router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHO
       }
     }
 
-    // 3) Activate the template as the home page.
+    // 3) Mark this template as the source and switch to builder mode — the
+    // imported "home" page renders as the landing via the builder chrome.
     await db.schema("edu").from("school_website_templates").update({ is_active: false }).eq("school_id", school.id);
     await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", tpl.id);
-    await db.schema("edu").from("school_website").update({ mode: "template", updated_at: new Date() }).eq("school_id", school.id);
+    await db.schema("edu").from("school_website").update({ mode: "theme", updated_at: new Date() }).eq("school_id", school.id);
 
     res.json({ success: true, pagesCreated, menuItems, skipped: (payload.pages?.length || 0) - pagesCreated });
   } catch (e) { res.status(500).json({ error: e.message }); }
