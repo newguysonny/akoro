@@ -4,7 +4,7 @@ import {
   ArrowLeft, Plus, CheckCircle2, Pencil, Trash2, UploadCloud, Loader2, FileCode2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
+import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
 const DEFAULT_HTML = `<!DOCTYPE html>
@@ -203,7 +203,7 @@ export function UploadTemplatePage() {
 
   const pick = (f) => {
     if (!f) return;
-    if (!/\.(html?|txt)$/i.test(f.name)) return showToast('Please choose an .html file');
+    if (!/\.(zip|html?|txt)$/i.test(f.name)) return showToast('Please choose a .zip or .html file');
     setFile(f);
   };
   const onDrop = (e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files?.[0]); };
@@ -212,9 +212,12 @@ export function UploadTemplatePage() {
     if (!file) return showToast('Choose a template file first');
     setBusy(true);
     try {
-      const html = await file.text();
-      const name = file.name.replace(/\.(html?|txt)$/i, '');
-      await apiPost('/api/school/website/templates', { name, description: 'Uploaded template', html });
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('name', file.name.replace(/\.(zip|html?|txt)$/i, ''));
+      const r = await fetch(`${API}/api/school/website/templates/upload`, { method: 'POST', credentials: 'include', body: fd });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Upload failed');
       showToast('Template installed ✓');
       setTimeout(() => navigate('/settings-website/templates'), 700);
     } catch (e) { showToast(e.message || 'Could not install'); setBusy(false); }
@@ -227,7 +230,8 @@ export function UploadTemplatePage() {
       </div>
 
       <p style={{ textAlign: 'center', color: MUTED, fontSize: 13.5, fontFamily: FONT, marginBottom: 18 }}>
-        If you have a template in <b>.html</b> format, you may install it by uploading it here.
+        If you have a template in <b>.zip</b> or <b>.html</b> format, you may install it by uploading it here.
+        A zip is unpacked into one self-contained template (CSS, JS and images inlined).
       </p>
 
       <div
@@ -237,7 +241,7 @@ export function UploadTemplatePage() {
         onClick={() => inputRef.current?.click()}
         style={{ maxWidth: 620, margin: '0 auto', border: `2px dashed ${drag ? AMBER : BORDER}`, background: drag ? `${AMBER}0C` : WHITE, borderRadius: 16, padding: '44px 24px', textAlign: 'center', cursor: 'pointer', fontFamily: FONT }}
       >
-        <input ref={inputRef} type="file" accept=".html,.htm,.txt" onChange={(e) => pick(e.target.files?.[0])} style={{ display: 'none' }} />
+        <input ref={inputRef} type="file" accept=".zip,.html,.htm,.txt" onChange={(e) => pick(e.target.files?.[0])} style={{ display: 'none' }} />
         <div style={{ width: 60, height: 60, borderRadius: '50%', background: LIGHT, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
           <UploadCloud size={26} color={drag ? AMBER : MUTED2} />
         </div>
