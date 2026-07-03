@@ -4,11 +4,11 @@
  * Pages is a custom table (edit / trash / restore / delete) whose Edit opens a
  * dedicated editor route with a Back button, like the Domain page.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, Pencil, Trash2, RotateCcw, ArrowLeft, Save, Loader2, FileText, X,
-  ChevronUp, ChevronDown, Link2, Menu as MenuIcon,
+  ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../components/mgmt/ResourcePage.jsx';
@@ -40,6 +40,48 @@ const Tabs = ({ tabs, tab, setTab }) => (
 const addBtn = { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
 const backBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
 const toastEl = (toast) => toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>;
+
+/* ── Media picker modal (insert media into content) ──────────────────────── */
+export function MediaPicker({ open, onClose, onPick }) {
+  const [media, setMedia] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    setMedia(null);
+    apiGet(`${BASE}/site-media?view=active`).then((r) => setMedia(r.data || [])).catch(() => setMedia([]));
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 720, maxHeight: '85vh', overflowY: 'auto', background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>Media Library</span>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+        </div>
+        {media === null ? <div style={{ textAlign: 'center', padding: 40, color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+          : media.length === 0 ? <p style={{ color: MUTED2, fontSize: 13, textAlign: 'center', padding: 30 }}>No media yet. Add some in the Media Library first.</p>
+          : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 }}>
+              {media.map((m) => (
+                <button key={m.id} onClick={() => onPick(m)} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE, padding: 8, cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
+                  <div style={{ height: 84, borderRadius: 6, overflow: 'hidden', background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                    {m.media_type === 'image' && m.url ? <img src={m.url} alt={m.alt_text || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 11, fontWeight: 800, color: MUTED2, textTransform: 'uppercase' }}>{m.media_type}</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title}</div>
+                </button>
+              ))}
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
+
+// Build an HTML snippet for a media item to insert into page content.
+const mediaSnippet = (m) => m.media_type === 'image'
+  ? `\n<img src="${m.url}" alt="${(m.alt_text || m.title || '').replace(/"/g, '&quot;')}" style="max-width:100%" />\n`
+  : m.media_type === 'video'
+    ? `\n<video src="${m.url}" controls style="max-width:100%"></video>\n`
+    : `\n<a href="${m.url}">${m.title || 'Download'}</a>\n`;
 
 /* ── Media library — WordPress-style table ───────────────────────────────── */
 const MEDIA_TYPES = [
@@ -332,9 +374,24 @@ export function SitePageEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [slugEdited, setSlugEdited] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const contentRef = useRef(null);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Insert a media snippet at the cursor position in the content textarea.
+  const insertMedia = (m) => {
+    const snippet = mediaSnippet(m);
+    const el = contentRef.current;
+    setForm((f) => {
+      const val = f.content || '';
+      const start = el ? el.selectionStart : val.length;
+      const end = el ? el.selectionEnd : val.length;
+      return { ...f, content: val.slice(0, start) + snippet + val.slice(end) };
+    });
+    setPicker(false);
+  };
 
   useEffect(() => {
     if (isNew) return;
@@ -382,8 +439,13 @@ export function SitePageEditorPage() {
               <input value={form.slug} onChange={(e) => { setSlugEdited(true); set('slug')(e); }} placeholder="about-us" style={inputStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Content</label>
-              <textarea value={form.content} onChange={set('content')} placeholder="Write your page content here (HTML or plain text)…" style={{ ...inputStyle, minHeight: 320, resize: 'vertical', lineHeight: 1.6, fontFamily: 'ui-monospace, Menlo, monospace' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label style={{ ...labelStyle, margin: 0 }}>Content</label>
+                <button type="button" onClick={() => setPicker(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                  <ImageIcon size={13} /> Insert from Media Library
+                </button>
+              </div>
+              <textarea ref={contentRef} value={form.content} onChange={set('content')} placeholder="Write your page content here (HTML or plain text)…" style={{ ...inputStyle, minHeight: 320, resize: 'vertical', lineHeight: 1.6, fontFamily: 'ui-monospace, Menlo, monospace' }} />
             </div>
           </div>
 
@@ -405,6 +467,7 @@ export function SitePageEditorPage() {
         </div>
       )}
 
+      <MediaPicker open={picker} onClose={() => setPicker(false)} onPick={insertMedia} />
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );

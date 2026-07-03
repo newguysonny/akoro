@@ -103,7 +103,7 @@ import {
   ReportsAnalyticsPage,
 } from './pages/mgmt/helpAssetsPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
-import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
+import WebsiteTemplatesPage, { AddTemplatePage, UploadTemplatePage } from './pages/WebsiteTemplatesPage.jsx';
 import { MediaPage, MediaEditorPage, SitePagesPage, SitePageEditorPage, MenusPage } from './pages/WebsiteBuilderPages.jsx';
 import WebsiteTemplateEditorPage from './pages/WebsiteTemplateEditorPage.jsx';
 import NotificationCenterPage from './pages/NotificationCenterPage.jsx';
@@ -390,6 +390,8 @@ function AppRoutes() {
       <Route path="/website-builder/pages/:id" element={<ProtectedRoute><SitePageEditorPage /></ProtectedRoute>} />
       <Route path="/website-builder/menus" element={<ProtectedRoute><MenusPage /></ProtectedRoute>} />
       <Route path="/settings-website/templates" element={<ProtectedRoute><WebsiteTemplatesPage /></ProtectedRoute>} />
+      <Route path="/settings-website/templates/add" element={<ProtectedRoute><AddTemplatePage /></ProtectedRoute>} />
+      <Route path="/settings-website/templates/upload" element={<ProtectedRoute><UploadTemplatePage /></ProtectedRoute>} />
       <Route path="/settings-website/templates/:id" element={<ProtectedRoute><WebsiteTemplateEditorPage /></ProtectedRoute>} />
       <Route path="/settings-notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
