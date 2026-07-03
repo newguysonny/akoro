@@ -17,7 +17,6 @@ import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, R
 
 const BASE = '/api/school/mgmt';
 const slugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-const escapeAttr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const pill = (v, map) => {
   const c = map[v] || MUTED2;
   return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v || '—').replace('_', ' ')}</span>;
@@ -415,42 +414,26 @@ export function SitePageEditorPage() {
   const [saving, setSaving] = useState(false);
   const [slugEdited, setSlugEdited] = useState(false);
   const [picker, setPicker] = useState(false);
-  const [site, setSite] = useState({ name: 'My School', primary: '#1a56db', logo: '' });
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewing, setPreviewing] = useState(false);
   const contentRef = useRef(null);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // School branding for an accurate live preview.
+  // Pixel-perfect live preview: render the DRAFT through the real site renderer
+  // (same theme/menus/colours as production), debounced as you type.
   useEffect(() => {
-    apiGet('/api/school/website').then((r) => {
-      const d = r.data || {};
-      setSite({ name: d.metaTitle || d.heroTitle || 'My School', primary: d.primaryColor || '#1a56db', logo: '' });
-    }).catch(() => {});
-    apiGet('/api/school').then((r) => setSite((s) => ({ ...s, name: r.data?.name || s.name, logo: r.data?.logoUrl || r.data?.logo_url || '' }))).catch(() => {});
-  }, []);
-
-  const previewDoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,sans-serif;color:#1a1a2e;background:#fff}
-  nav{display:flex;align-items:center;gap:10px;padding:16px 28px;border-bottom:1px solid #eee}
-  nav b{font-size:19px;font-weight:900;color:${site.primary}}
-  nav img{height:30px}
-  .wrap{max-width:820px;margin:0 auto;padding:40px 28px}
-  h1.page-title{font-size:34px;font-weight:900;color:${site.primary};margin-bottom:18px}
-  .content{font-size:16px;line-height:1.75;color:#333}
-  .content img{max-width:100%}
-  .content h2{font-size:24px;margin:20px 0 10px}
-  .content p{margin:0 0 14px}
-</style></head>
-<body>
-  <nav>${site.logo ? `<img src="${site.logo}" alt="">` : ''}<b>${escapeAttr(site.name)}</b></nav>
-  <div class="wrap">
-    <h1 class="page-title">${escapeAttr(form.title) || 'Page title'}</h1>
-    <div class="content">${form.content || '<p style="color:#9ca3af">Start typing your page content on the left…</p>'}</div>
-  </div>
-</body></html>`;
+    if (loading) return;
+    setPreviewing(true);
+    const t = setTimeout(() => {
+      apiPost('/api/school/website/preview-page', { title: form.title, content: form.content, slug: form.slug })
+        .then((r) => setPreviewHtml(r.html || ''))
+        .catch(() => {})
+        .finally(() => setPreviewing(false));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [form.title, form.content, form.slug, loading]);
 
   // Insert a media snippet at the cursor position in the content textarea.
   const insertMedia = (m) => {
@@ -539,8 +522,9 @@ export function SitePageEditorPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
               <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, AMBER, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>Live Preview{form.slug ? ` · /${form.slug}` : ''}</span>
+              {previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
-            <iframe title="Page preview" srcDoc={previewDoc} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+            <iframe title="Page preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
           </div>
         </div>
       )}

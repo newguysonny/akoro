@@ -825,19 +825,10 @@ async function buildSiteMenus(schoolId) {
   };
 }
 
-async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}) {
-  const website = await getWebsiteConfig(school.id);
-  // Public visitors only see a published site; preview mode (admin "Preview
-  // Website" button) renders it even while unpublished, with a notice banner.
-  if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
-
-  const addBanner = (html) => {
-    if (!(preview && !website.enabled)) return html;
-    const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;
-    return html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
-  };
-
-  // Gather the real data available for {{variables}} and {{#each}} loops.
+// Assemble the full render context (variables, section data, menus, portal
+// links) exactly as the live site uses — shared by the public renderer and the
+// authenticated live-preview endpoint so previews are pixel-identical.
+async function buildSiteCtx(school, website) {
   const { data: teacherLinks } = await db.from("school_teachers")
     .select("users:users!school_teachers_teacher_id_fkey(id, full_name)").eq("school_id", school.id);
   const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
@@ -846,7 +837,6 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
     : { data: [] };
   const { data: classRows } = await db.from("classrooms").select("name").eq("school_id", school.id);
 
-  // Public portal availability — drives the Apply / Pay Fees / Results links.
   const today = new Date().toISOString().slice(0, 10);
   const [{ data: adm }, gateway, { data: noticeRows }, { data: eventRows }] = await Promise.all([
     db.schema("edu").from("school_admission_settings").select("enabled").eq("school_id", school.id).maybeSingle(),
@@ -859,7 +849,7 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
   ]);
 
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "";
-  const ctx = buildContext(school, website, {
+  return buildContext(school, website, {
     email: null,
     year: new Date().getFullYear(),
     teachers: (teacherLinks || []).map((t) => ({ name: t.users?.full_name })).filter((t) => t.name),
@@ -871,6 +861,21 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
     menus: await buildSiteMenus(school.id),
     portal: { apply: !!adm?.enabled, pay: !!gateway.ok, results: true },
   });
+}
+
+async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}) {
+  const website = await getWebsiteConfig(school.id);
+  // Public visitors only see a published site; preview mode (admin "Preview
+  // Website" button) renders it even while unpublished, with a notice banner.
+  if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
+
+  const addBanner = (html) => {
+    if (!(preview && !website.enabled)) return html;
+    const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;
+    return html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
+  };
+
+  const ctx = await buildSiteCtx(school, website);
 
   // Page routing: a non-root path is a published-page slug (e.g. /about-us).
   const slug = String(path || "/").split("?")[0].replace(/^\/+|\/+$/g, "");
@@ -896,6 +901,21 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
   }
   return { status: 200, html: addBanner(html) };
 }
+
+// ── POST /api/school/website/preview-page  (AUTH — pixel-perfect draft preview) ─
+// Renders draft page content through the REAL site renderer (same chrome,
+// menus, theme, colours, custom CSS as production) so the editor's live
+// preview matches the published page exactly. Body: { title, content, slug }.
+router.post("/website/preview-page", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const website = await getWebsiteConfig(school.id);
+    const ctx = await buildSiteCtx(school, website);
+    const page = { title: req.body.title || "Untitled", content: req.body.content || "", slug: req.body.slug || "" };
+    res.json({ success: true, html: renderSitePage(website, ctx, page) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── GET /api/school/site/by-host  (PUBLIC — tenant from hostname) ────────────
 // The frontend forwards its hostname (?host=…); direct hits fall back to the
