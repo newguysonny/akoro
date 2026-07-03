@@ -39,6 +39,7 @@
     "2026-seed-mgmt.sql",
     "2026-seed-mgmt-2.sql",
     "2026-seed-mgmt-3.sql",
-    "2026-seed-staff.sql"
+    "2026-seed-staff.sql",
+    "2026-seed-site.sql"
   ]
 }
