@@ -8,15 +8,16 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Plus, Pencil, Trash2, RotateCcw, ArrowLeft, Save, Loader2, FileText, X,
-  ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon,
+  ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon, UploadCloud,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../components/mgmt/ResourcePage.jsx';
-import { apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
+import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, RED, FONT } from '../constants.js';
 
 const BASE = '/api/school/mgmt';
 const slugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+const escapeAttr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const pill = (v, map) => {
   const c = map[v] || MUTED2;
   return <span style={{ padding: '3px 10px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 11, fontWeight: 800, textTransform: 'capitalize' }}>{String(v || '—').replace('_', ' ')}</span>;
@@ -106,8 +107,27 @@ export function MediaPage() {
   const [tab, setTab] = useState('all');
   const [rows, setRows] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [drag, setDrag] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadRef = useRef(null);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const upload = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append('files', f));
+      const r = await fetch(`${API}/api/school/mgmt/site-media/upload`, { method: 'POST', credentials: 'include', body: fd });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Upload failed');
+      showToast(`Uploaded ${data.data?.length || files.length} file(s) ✓`);
+      if (tab !== 'all') setTab('all'); else load();
+    } catch (e) { showToast(e.message || 'Upload failed'); }
+    finally { setUploading(false); }
+  };
 
   const load = useCallback(() => {
     const t = MEDIA_TABS.find((x) => x.key === tab);
@@ -133,8 +153,28 @@ export function MediaPage() {
     <PageLayout title="Media Library" subtitle="Images, videos and files to use on your website">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <Tabs tabs={MEDIA_TABS} tab={tab} setTab={setTab} />
-        <button onClick={() => navigate('/website-builder/media/new')} style={addBtn}><Plus size={15} /> Add New Media</button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => uploadRef.current?.click()} style={{ ...addBtn, background: WHITE, color: BLUE, border: `1.5px solid ${BLUE}55` }}>
+            {uploading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <UploadCloud size={15} />} Upload Files
+          </button>
+          <button onClick={() => navigate('/website-builder/media/new')} style={addBtn}><Plus size={15} /> Add by URL</button>
+        </div>
       </div>
+
+      <input ref={uploadRef} type="file" multiple onChange={(e) => { upload(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
+
+      {!isTrash && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
+          onClick={() => uploadRef.current?.click()}
+          style={{ border: `2px dashed ${drag ? AMBER : BORDER}`, background: drag ? `${AMBER}0C` : LIGHT, borderRadius: 12, padding: '18px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer', fontFamily: FONT, color: MUTED }}
+        >
+          {uploading ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : <UploadCloud size={18} color={drag ? AMBER : MUTED2} />}
+          <span style={{ fontSize: 13, fontWeight: 700 }}>{uploading ? 'Uploading…' : 'Drag & drop files here to upload, or click to choose'}</span>
+        </div>
+      )}
 
       <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
@@ -375,10 +415,42 @@ export function SitePageEditorPage() {
   const [saving, setSaving] = useState(false);
   const [slugEdited, setSlugEdited] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [site, setSite] = useState({ name: 'My School', primary: '#1a56db', logo: '' });
   const contentRef = useRef(null);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // School branding for an accurate live preview.
+  useEffect(() => {
+    apiGet('/api/school/website').then((r) => {
+      const d = r.data || {};
+      setSite({ name: d.metaTitle || d.heroTitle || 'My School', primary: d.primaryColor || '#1a56db', logo: '' });
+    }).catch(() => {});
+    apiGet('/api/school').then((r) => setSite((s) => ({ ...s, name: r.data?.name || s.name, logo: r.data?.logoUrl || r.data?.logo_url || '' }))).catch(() => {});
+  }, []);
+
+  const previewDoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,sans-serif;color:#1a1a2e;background:#fff}
+  nav{display:flex;align-items:center;gap:10px;padding:16px 28px;border-bottom:1px solid #eee}
+  nav b{font-size:19px;font-weight:900;color:${site.primary}}
+  nav img{height:30px}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 28px}
+  h1.page-title{font-size:34px;font-weight:900;color:${site.primary};margin-bottom:18px}
+  .content{font-size:16px;line-height:1.75;color:#333}
+  .content img{max-width:100%}
+  .content h2{font-size:24px;margin:20px 0 10px}
+  .content p{margin:0 0 14px}
+</style></head>
+<body>
+  <nav>${site.logo ? `<img src="${site.logo}" alt="">` : ''}<b>${escapeAttr(site.name)}</b></nav>
+  <div class="wrap">
+    <h1 class="page-title">${escapeAttr(form.title) || 'Page title'}</h1>
+    <div class="content">${form.content || '<p style="color:#9ca3af">Start typing your page content on the left…</p>'}</div>
+  </div>
+</body></html>`;
 
   // Insert a media snippet at the cursor position in the content textarea.
   const insertMedia = (m) => {
@@ -428,8 +500,9 @@ export function SitePageEditorPage() {
       {loading ? (
         <div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2, fontFamily: FONT }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
       ) : (
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ flex: '2 1 460px', minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px' }}>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', flexWrap: 'wrap' }}>
+          {/* Left: editing controls */}
+          <div style={{ flex: '1 1 380px', minWidth: 320, maxWidth: 460, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px', maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Page Title <span style={{ color: RED }}>*</span></label>
               <input value={form.title} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, title: v, slug: slugEdited ? f.slug : slugify(v) })); }} placeholder="e.g. About Us" style={{ ...inputStyle, fontSize: 15 }} />
@@ -438,32 +511,37 @@ export function SitePageEditorPage() {
               <label style={labelStyle}>URL Slug</label>
               <input value={form.slug} onChange={(e) => { setSlugEdited(true); set('slug')(e); }} placeholder="about-us" style={inputStyle} />
             </div>
-            <div>
+            <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <label style={{ ...labelStyle, margin: 0 }}>Content</label>
                 <button type="button" onClick={() => setPicker(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                  <ImageIcon size={13} /> Insert from Media Library
+                  <ImageIcon size={13} /> Insert Media
                 </button>
               </div>
-              <textarea ref={contentRef} value={form.content} onChange={set('content')} placeholder="Write your page content here (HTML or plain text)…" style={{ ...inputStyle, minHeight: 320, resize: 'vertical', lineHeight: 1.6, fontFamily: 'ui-monospace, Menlo, monospace' }} />
+              <textarea ref={contentRef} value={form.content} onChange={set('content')} placeholder="Write your page content here (HTML or plain text)…" style={{ ...inputStyle, minHeight: 260, resize: 'vertical', lineHeight: 1.6, fontFamily: 'ui-monospace, Menlo, monospace' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Status</label>
+                <select value={form.status} onChange={set('status')} style={{ ...inputStyle, cursor: 'pointer' }}>
+                  {PAGE_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+              <div style={{ width: 110 }}>
+                <label style={labelStyle}>Order</label>
+                <input type="number" value={form.sort_order} onChange={set('sort_order')} style={inputStyle} />
+              </div>
             </div>
           </div>
 
-          <aside style={{ flex: '1 1 240px', minWidth: 220, maxWidth: 320, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <FileText size={15} color={BLUE} /><span style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>Page Settings</span>
+          {/* Right: live preview */}
+          <div style={{ flex: '2 1 480px', minWidth: 320, display: 'flex', flexDirection: 'column', border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE, minHeight: 480 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
+              <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, AMBER, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>Live Preview{form.slug ? ` · /${form.slug}` : ''}</span>
             </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Status</label>
-              <select value={form.status} onChange={set('status')} style={{ ...inputStyle, cursor: 'pointer' }}>
-                {PAGE_STATUS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Sort Order</label>
-              <input type="number" value={form.sort_order} onChange={set('sort_order')} style={inputStyle} />
-            </div>
-          </aside>
+            <iframe title="Page preview" srcDoc={previewDoc} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+          </div>
         </div>
       )}
 

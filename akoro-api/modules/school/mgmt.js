@@ -16,8 +16,10 @@
 
 import { Router } from "express";
 import crypto from "crypto";
+import multerLib from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -1013,6 +1015,42 @@ router.post("/site-pages/:id/restore", authenticateToken, requireRole(SCHOOL_ROL
     if (error) throw new Error(error.message);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── Website Builder: Media upload (real files → Supabase Storage) ────────- */
+const mediaUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } }).array("files", 20);
+const mediaTypeOf = (mime = "") =>
+  mime.startsWith("image/") ? "image"
+    : mime.startsWith("video/") ? "video"
+      : /pdf|word|document|sheet|excel|powerpoint|presentation|text|csv|zip/.test(mime) ? "document" : "other";
+
+router.post("/site-media/upload", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  mediaUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const files = req.files || [];
+      if (!files.length) return res.status(400).json({ error: "No files uploaded" });
+
+      await ensureBucket();
+      const created = [];
+      for (const f of files) {
+        const safe = (f.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const dest = `media/${school.id}/${Date.now()}-${crypto.randomBytes(3).toString("hex")}-${safe}`;
+        const url = await uploadPublicFile(dest, f.buffer, f.mimetype || "application/octet-stream");
+        const { data, error } = await M().from("site_media").insert({
+          school_id: school.id,
+          title: (f.originalname || "Untitled").replace(/\.[^.]+$/, ""),
+          media_type: mediaTypeOf(f.mimetype),
+          url,
+        }).select("*").single();
+        if (error) throw new Error(error.message);
+        created.push(data);
+      }
+      res.status(201).json({ success: true, data: created });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 });
 
 /* ── Website Builder: Media (list + trash, mirrors Pages) ─────────────────- */

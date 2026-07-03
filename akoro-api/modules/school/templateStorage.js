@@ -34,6 +34,13 @@ export async function ensureBucket() {
   if (error && !/exist/i.test(error.message || "")) throw new Error(error.message);
 }
 
+// Upload a single buffer to the public bucket and return its public URL.
+export async function uploadPublicFile(path, buffer, contentType) {
+  const { error } = await db.storage.from(BUCKET).upload(path, buffer, { contentType, upsert: true });
+  if (error) throw new Error(error.message);
+  return db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
 // Upload every asset in the zip; return the rewritten main HTML.
 export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
   const zip = new AdmZip(buffer);
