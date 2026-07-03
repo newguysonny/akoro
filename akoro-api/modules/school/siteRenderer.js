@@ -166,18 +166,31 @@ const SECTION_RENDERERS = {
     </div></section>`,
 };
 
-export function renderThemePage(website, ctx) {
-  const w = website;
-  const sections = Array.isArray(w.sections) ? w.sections : [];
-  const body = sections
-    .filter((s) => s.on)
-    .map((s) => (SECTION_RENDERERS[s.key] ? SECTION_RENDERERS[s.key](w, ctx) : ""))
-    .join("\n");
+const menuLink = (i) => `<a href="${escapeHtml(i.href || "#")}"${i.target === "_blank" ? ' target="_blank" rel="noopener"' : ""}>${escapeHtml(i.label)}</a>`;
 
-  const social = Object.entries(ctx.social_links || {})
-    .filter(([, url]) => url)
-    .map(([k, url]) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(k)}</a>`)
-    .join(" · ");
+// Full themed document (head + nav + body + footer). Shared by the landing
+// page and by individual published pages so the whole site shares chrome.
+export function renderThemeDocument(website, ctx, body) {
+  const w = website;
+  const menus = ctx.menus || {};
+
+  // Header nav: the Primary menu if one is assigned, else the portal links.
+  const navLinks = (menus.primary && menus.primary.length)
+    ? menus.primary.map(menuLink).join("\n    ")
+    : `${ctx.portal?.apply ? `<a href="/apply">Admissions</a>` : ""}
+    ${ctx.portal?.pay ? `<a href="/pay">Pay Fees</a>` : ""}
+    ${ctx.portal?.results ? `<a href="/results">Check Result</a>` : ""}`;
+
+  const footerLinks = (menus.footer && menus.footer.length)
+    ? `<p style="margin-top:8px;">${menus.footer.map(menuLink).join(" · ")}</p>` : "";
+
+  // Social: the Social menu if assigned, else the structured social_links.
+  const social = (menus.social && menus.social.length)
+    ? menus.social.map(menuLink).join(" · ")
+    : Object.entries(ctx.social_links || {})
+        .filter(([, url]) => url)
+        .map(([k, url]) => `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(k)}</a>`)
+        .join(" · ");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -220,22 +233,41 @@ ${w.header_scripts || ""}
 </head>
 <body>
 <nav>
-  <div class="logo">${ctx.school_logo ? `<img src="${escapeHtml(ctx.school_logo)}" alt="">` : ""}${escapeHtml(ctx.school_name)}</div>
+  <div class="logo"><a href="/" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:10px;">${ctx.school_logo ? `<img src="${escapeHtml(ctx.school_logo)}" alt="">` : ""}${escapeHtml(ctx.school_name)}</a></div>
   <div class="links">
-    ${ctx.portal?.apply ? `<a href="/apply">Admissions</a>` : ""}
-    ${ctx.portal?.pay ? `<a href="/pay">Pay Fees</a>` : ""}
-    ${ctx.portal?.results ? `<a href="/results">Check Result</a>` : ""}
+    ${navLinks}
     <a href="/login" style="color:var(--primary);font-weight:700;">Login</a>
   </div>
 </nav>
 ${body}
 <footer>
   <p>&copy; ${ctx.year} ${escapeHtml(ctx.school_name)}. All Rights Reserved.</p>
+  ${footerLinks}
   ${social ? `<p style="margin-top:8px;">${social}</p>` : ""}
 </footer>
 ${w.footer_scripts || ""}
 </body>
 </html>`;
+}
+
+// Landing page = the enabled theme sections, wrapped in the shared chrome.
+export function renderThemePage(website, ctx) {
+  const sections = Array.isArray(website.sections) ? website.sections : [];
+  const body = sections
+    .filter((s) => s.on)
+    .map((s) => (SECTION_RENDERERS[s.key] ? SECTION_RENDERERS[s.key](website, ctx) : ""))
+    .join("\n");
+  return renderThemeDocument(website, ctx, body);
+}
+
+// A single published page's content, wrapped in the shared chrome.
+export function renderSitePage(website, ctx, page) {
+  const body = `
+    <section class="page"><div class="wrap" style="max-width:820px">
+      <h1 style="font-size:34px;font-weight:900;margin-bottom:18px;color:var(--primary)">${escapeHtml(page.title)}</h1>
+      <div class="page-content" style="font-size:16px;line-height:1.75;color:#333">${page.content || ""}</div>
+    </div></section>`;
+  return renderThemeDocument(website, ctx, body);
 }
 
 /* ── Variable context assembled from the school's real data ──────────────── */
@@ -264,6 +296,8 @@ export function buildContext(school, website, data) {
     classes: data.classes || [],
     notices: data.notices || [],
     events: data.events || [],
+    // Website Builder menus by location: { primary:[], footer:[], social:[] }
+    menus: data.menus || { primary: [], footer: [], social: [] },
     // Public-portal links ({{#if portal.apply}}<a href="{{apply_url}}">…)
     portal: data.portal || { apply: false, pay: false, results: false },
     apply_url: "/apply", pay_url: "/pay", results_url: "/results",

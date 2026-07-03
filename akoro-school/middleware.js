@@ -47,5 +47,7 @@ export default function middleware(request) {
     return rewrite(`${api}/api/school/public${url.pathname}?${qs.toString()}`);
   }
 
-  return rewrite(`${api}/api/school/site/by-host?host=${encodeURIComponent(host)}`);
+  // Everything else on a tenant host renders through the site: "/" is the
+  // landing page, "/<slug>" resolves to a published Website Builder page.
+  return rewrite(`${api}/api/school/site/by-host?host=${encodeURIComponent(host)}&path=${encodeURIComponent(url.pathname)}`);
 }

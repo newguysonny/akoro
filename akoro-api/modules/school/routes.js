@@ -26,7 +26,7 @@ import {
   verifyTransaction,
   generateReference,
 } from "../adaptive-learning/marketplace/paystackService.js";
-import { renderMiniTemplate, renderThemePage, buildContext } from "./siteRenderer.js";
+import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext } from "./siteRenderer.js";
 import {
   vercelConfigured, addDomainToProject, getProjectDomain,
   verifyProjectDomain, getDomainConfig, removeDomainFromProject, buildDnsRecords,
@@ -790,11 +790,49 @@ const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, princi
 // Public portal — /apply, /pay, /results served on each tenant's own domain.
 router.use("/public", publicPortalRouter);
 
-async function renderSchoolSiteHtml(school, { preview = false } = {}) {
+// Resolve the school's Website Builder menus into { primary, footer, social },
+// each an ordered list of { label, href, target }. Page items resolve to the
+// published page's /slug; unresolved links fall back to "#".
+async function buildSiteMenus(schoolId) {
+  const empty = { primary: [], footer: [], social: [] };
+  const { data: menuRows } = await db.schema("mgmt").from("site_menus")
+    .select("id, location").eq("school_id", schoolId).not("location", "is", null);
+  if (!menuRows?.length) return empty;
+  const byLoc = {};
+  for (const m of menuRows) byLoc[m.location] = m.id;
+  const { data: items } = await db.schema("mgmt").from("site_menu_items")
+    .select("menu_id, label, url, page_id, target, sort_order")
+    .in("menu_id", menuRows.map((m) => m.id)).order("sort_order", { ascending: true });
+  const pageIds = [...new Set((items || []).map((i) => i.page_id).filter(Boolean))];
+  const slugOf = {};
+  if (pageIds.length) {
+    const { data: pgs } = await db.schema("mgmt").from("site_pages")
+      .select("id, slug, status, deleted_at").in("id", pageIds);
+    for (const p of pgs || []) slugOf[p.id] = (p.status === "published" && !p.deleted_at && p.slug) ? `/${p.slug}` : null;
+  }
+  const byMenu = {};
+  for (const it of items || []) {
+    const href = it.page_id ? (slugOf[it.page_id] || "#") : (it.url || "#");
+    (byMenu[it.menu_id] ||= []).push({ label: it.label, href, target: it.target });
+  }
+  return {
+    primary: byMenu[byLoc.primary] || [],
+    footer: byMenu[byLoc.footer] || [],
+    social: byMenu[byLoc.social] || [],
+  };
+}
+
+async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}) {
   const website = await getWebsiteConfig(school.id);
   // Public visitors only see a published site; preview mode (admin "Preview
   // Website" button) renders it even while unpublished, with a notice banner.
   if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
+
+  const addBanner = (html) => {
+    if (!(preview && !website.enabled)) return html;
+    const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;
+    return html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
+  };
 
   // Gather the real data available for {{variables}} and {{#each}} loops.
   const { data: teacherLinks } = await db.from("school_teachers")
@@ -827,9 +865,22 @@ async function renderSchoolSiteHtml(school, { preview = false } = {}) {
     notices: (noticeRows || []).filter((n) => !n.publish_on || n.publish_on <= today)
       .map((n) => ({ title: n.title, body: n.body || "", date: fmtDate(n.publish_on), pinned: !!n.pinned })),
     events: (eventRows || []).map((e) => ({ title: e.title, description: e.description || "", type: e.event_type || "", date: fmtDate(e.starts_on) })),
+    menus: await buildSiteMenus(school.id),
     portal: { apply: !!adm?.enabled, pay: !!gateway.ok, results: true },
   });
 
+  // Page routing: a non-root path is a published-page slug (e.g. /about-us).
+  const slug = String(path || "/").split("?")[0].replace(/^\/+|\/+$/g, "");
+  if (slug) {
+    const { data: page } = await db.schema("mgmt").from("site_pages")
+      .select("title, content, status, deleted_at, slug").eq("school_id", school.id).eq("slug", slug).maybeSingle();
+    if (page && page.status === "published" && !page.deleted_at) {
+      return { status: 200, html: addBanner(renderSitePage(website, ctx, page)) };
+    }
+    return { status: 404, html: renderThemeDocument(website, ctx, `<section class="page"><div class="wrap" style="text-align:center"><h1 style="font-size:34px;color:var(--primary)">Page not found</h1><p style="margin-top:10px"><a href="/" style="color:var(--primary);font-weight:700">← Back to home</a></p></div></section>`) };
+  }
+
+  // Landing page.
   let html;
   if (website.mode === "template") {
     const { data: tpl } = await db.schema("edu").from("school_website_templates")
@@ -840,13 +891,7 @@ async function renderSchoolSiteHtml(school, { preview = false } = {}) {
   } else {
     html = renderThemePage(website, ctx);
   }
-
-  // Preview banner when viewing an as-yet-unpublished site.
-  if (preview && !website.enabled) {
-    const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;
-    html = html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
-  }
-  return { status: 200, html };
+  return { status: 200, html: addBanner(html) };
 }
 
 // ── GET /api/school/site/by-host  (PUBLIC — tenant from hostname) ────────────
@@ -858,7 +903,7 @@ router.get("/site/by-host", async (req, res) => {
     const school = await resolveSchoolByHost(host);
     if (!school) return res.status(404).type("html").send("<h1>404 — no school is connected to this domain</h1>");
     const preview = req.query.preview === "1" || req.query.preview === "true";
-    const { status, html } = await renderSchoolSiteHtml(school, { preview });
+    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/" });
     res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render by-host]", e);
@@ -875,7 +920,7 @@ router.get("/site/:slug", async (req, res) => {
       .select(SCHOOL_SELECT).eq("slug", slug).maybeSingle();
     if (!school) return res.status(404).type("html").send("<h1>404 — school not found</h1>");
     const preview = req.query.preview === "1" || req.query.preview === "true";
-    const { status, html } = await renderSchoolSiteHtml(school, { preview });
+    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/" });
     res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render]", e);

@@ -38,7 +38,7 @@ if (isPortalHost) {
 } else {
   // Tenant public site: fetch the server-rendered page for this hostname and
   // replace the document with it (styles/scripts in the payload included).
-  fetch(`${API}/api/school/site/by-host?host=${encodeURIComponent(host)}`)
+  fetch(`${API}/api/school/site/by-host?host=${encodeURIComponent(host)}&path=${encodeURIComponent(window.location.pathname)}`)
     .then(async (r) => {
       const html = await r.text();
       document.open();
