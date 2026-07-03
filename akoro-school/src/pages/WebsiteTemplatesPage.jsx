@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, CheckCircle2, Pencil, Trash2, UploadCloud, Loader2, FileCode2,
+  X, Globe, LayoutList,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
@@ -57,8 +58,9 @@ export default function WebsiteTemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('theme');
   const [busyId, setBusyId] = useState(null);
+  const [chooser, setChooser] = useState(null);   // template being activated
   const [toast, setToast] = useState('');
-  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3200); };
 
   const load = useCallback(() => {
     Promise.all([apiGet('/api/school/website/templates'), apiGet('/api/school/website')])
@@ -69,7 +71,7 @@ export default function WebsiteTemplatesPage() {
   useEffect(() => { load(); }, [load]);
 
   const activate = async (id) => {
-    setBusyId(id);
+    setBusyId(id); setChooser(null);
     try {
       await apiPost(`/api/school/website/templates/${id}/activate`, {});
       await apiPut('/api/school/website', { mode: 'template' }); // make the template actually render
@@ -77,6 +79,18 @@ export default function WebsiteTemplatesPage() {
       setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
       showToast('Template activated ✓');
     } catch (e) { showToast(e.message || 'Could not activate'); }
+    finally { setBusyId(null); }
+  };
+
+  // Activate + auto-create Pages & a Primary menu from the template's zip.
+  const activateImport = async (id) => {
+    setBusyId(id); setChooser(null);
+    try {
+      const r = await apiPost(`/api/school/website/templates/${id}/import`, {});
+      setMode('template');
+      setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
+      showToast(`Activated ✓ Imported ${r.pagesCreated} page${r.pagesCreated === 1 ? '' : 's'} + ${r.menuItems} menu link${r.menuItems === 1 ? '' : 's'} into the builder${r.skipped ? ` (${r.skipped} already existed)` : ''}`);
+    } catch (e) { showToast(e.message || 'Could not import'); }
     finally { setBusyId(null); }
   };
   const remove = async (id) => {
@@ -114,7 +128,7 @@ export default function WebsiteTemplatesPage() {
                 {busyId === t.id ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : (
                   <div style={{ display: 'inline-flex', gap: 6 }}>
                     <button onClick={() => navigate(`/settings-website/templates/${t.id}`, { state: { template: t } })} title="Customize" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', background: BLUE, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Pencil size={12} /> Customize</button>
-                    {!t.active && <button onClick={() => activate(t.id)} style={{ padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Activate</button>}
+                    {!t.active && <button onClick={() => (t.importable ? setChooser(t) : activate(t.id))} style={{ padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Activate</button>}
                     <button onClick={() => remove(t.id)} title="Delete" style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: `${RED}12`, color: RED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={13} /></button>
                   </div>
                 )}
@@ -127,6 +141,35 @@ export default function WebsiteTemplatesPage() {
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: WHITE, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={22} color={MUTED2} /></div>
             <span style={{ fontSize: 13, fontWeight: 800 }}>Add New Template</span>
           </button>
+        </div>
+      )}
+
+      {/* Activation chooser — as-is vs import into builder */}
+      {chooser && (
+        <div onClick={() => setChooser(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, background: WHITE, borderRadius: 18, padding: '22px 24px', fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>Activate “{chooser.name}”</span>
+              <button onClick={() => setChooser(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+            </div>
+            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px', lineHeight: 1.6 }}>This template came from a zip with extra pages and a navigation menu. How would you like to use it?</p>
+
+            <button onClick={() => activateImport(chooser.id)} style={{ display: 'flex', gap: 12, width: '100%', textAlign: 'left', alignItems: 'flex-start', padding: '14px 14px', borderRadius: 12, border: `2px solid ${AMBER}66`, background: `${AMBER}08`, cursor: 'pointer', fontFamily: FONT, marginBottom: 10 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${AMBER}18`, color: AMBER, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LayoutList size={18} /></div>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>Activate & import into builder <span style={{ fontSize: 10.5, fontWeight: 800, color: AMBER, marginLeft: 4 }}>RECOMMENDED</span></div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 3, lineHeight: 1.55 }}>Auto-creates the template's pages in <b>Pages</b> and its nav as your <b>Primary menu</b> — each page becomes individually editable. The template becomes your home page.</div>
+              </div>
+            </button>
+
+            <button onClick={() => activate(chooser.id)} style={{ display: 'flex', gap: 12, width: '100%', textAlign: 'left', alignItems: 'flex-start', padding: '14px 14px', borderRadius: 12, border: `1.5px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: `${BLUE}15`, color: BLUE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Globe size={18} /></div>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>Activate as-is</div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 3, lineHeight: 1.55 }}>Serve the template exactly as uploaded, without adding anything to Pages or Menus. Edit it as raw HTML via Customize.</div>
+              </div>
+            </button>
+          </div>
         </div>
       )}
       {toastEl(toast)}

@@ -66,23 +66,65 @@ export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
     urlByRel[relPath] = db.storage.from(BUCKET).getPublicUrl(dest).data.publicUrl;
   }
 
-  // Rewrite the main HTML's references (relative to the HTML) to public URLs.
+  // Rewrite an HTML string's references (relative to the main HTML) to
+  // public Storage URLs. Used for the main page AND each sub-page's content.
   const resolve = (ref) => {
     const clean = ref.split(/[?#]/)[0].replace(/^\.\//, "").replace(/^\//, "");
     return urlByRel[clean] || null;
   };
-  let html = main.getData().toString("utf-8");
-  html = html.replace(/\b(src|href|poster)\s*=\s*["']([^"']+)["']/gi, (m, attr, ref) => {
-    if (isExternal(ref)) return m;
-    const u = resolve(ref);
-    return u ? `${attr}="${u}"` : m;
+  const rewrite = (src) => src
+    .replace(/\b(src|href|poster)\s*=\s*["']([^"']+)["']/gi, (m, attr, ref) => {
+      if (isExternal(ref)) return m;
+      const u = resolve(ref);
+      return u ? `${attr}="${u}"` : m;
+    })
+    .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, ref) => {
+      if (isExternal(ref)) return m;
+      const u = resolve(ref);
+      return u ? `url(${u})` : m;
+    });
+
+  const rawMain = main.getData().toString("utf-8");
+  const html = rewrite(rawMain);
+
+  // ── Builder import payload: one Page per extra .html + the main nav ──────
+  const strip = (s) => String(s || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  const titleOf = (doc, fallback) =>
+    strip(doc.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]) ||
+    strip(doc.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]) || fallback;
+  const slugOfFile = (relPath) => relPath.replace(/\.html?$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+  const pages = htmls.filter((e) => e !== main).map((e) => {
+    const relPath = rel(e.entryName);
+    const doc = e.getData().toString("utf-8");
+    // Keep the page's own <style>/<link> styling so it renders faithfully.
+    const headBits = [...doc.matchAll(/<style[\s\S]*?<\/style>/gi)].map((m) => m[0])
+      .concat([...doc.matchAll(/<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>/gi)].map((m) => m[0]));
+    const body = doc.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] || doc;
+    return {
+      slug: slugOfFile(relPath),
+      title: titleOf(doc, slugOfFile(relPath).replace(/-/g, " ")),
+      content: rewrite(`${headBits.join("\n")}\n${body}`).trim(),
+    };
   });
-  html = html.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, ref) => {
-    if (isExternal(ref)) return m;
-    const u = resolve(ref);
-    return u ? `url(${u})` : m;
-  });
-  return { html };
+
+  // Nav from the RAW main HTML (hrefs still point at *.html files).
+  const slugSet = new Set(pages.map((p) => p.slug));
+  const navHtml = rawMain.match(/<nav[\s\S]*?<\/nav>/i)?.[0] || rawMain.match(/<header[\s\S]*?<\/header>/i)?.[0] || "";
+  const menu = [];
+  for (const m of navHtml.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const [, href, inner] = m;
+    const label = strip(inner);
+    if (!label) continue;
+    if (/^(https?:)?\/\//i.test(href)) { menu.push({ label, url: href }); continue; }
+    if (/^(#|mailto|tel)/i.test(href)) continue;
+    const clean = href.split(/[?#]/)[0].replace(/^\.\//, "").replace(/^\//, "");
+    if (/(^|\/)index\.html?$/i.test(clean) || clean === "") { menu.push({ label, url: "/" }); continue; }
+    const slug = slugOfFile(clean);
+    if (slugSet.has(slug)) menu.push({ label, slug });
+  }
+
+  return { html, importPayload: (pages.length || menu.length) ? { pages, menu } : null };
 }
 
 // Best-effort recursive delete of a template's asset folder.

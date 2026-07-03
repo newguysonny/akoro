@@ -1016,8 +1016,8 @@ router.get("/website/templates", authenticateToken, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { data } = await db.schema("edu").from("school_website_templates").select("id, name, description, is_active, updated_at").eq("school_id", school.id).order("updated_at", { ascending: false });
-    res.json({ success: true, data: (data || []).map((t) => ({ id: t.id, name: t.name, description: t.description, active: t.is_active, updatedAt: t.updated_at })) });
+    const { data } = await db.schema("edu").from("school_website_templates").select("id, name, description, is_active, updated_at, import_payload").eq("school_id", school.id).order("updated_at", { ascending: false });
+    res.json({ success: true, data: (data || []).map((t) => ({ id: t.id, name: t.name, description: t.description, active: t.is_active, updatedAt: t.updated_at, importable: !!t.import_payload })) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1080,10 +1080,10 @@ router.post("/website/templates/upload", authenticateToken, requireRole(SCHOOL_R
         .insert({ school_id: school.id, name, description, html: "" }).select("id").single();
       if (insErr) throw new Error(insErr.message);
 
-      let html, hosting = "storage";
+      let html, importPayload = null, hosting = "storage";
       try {
         await ensureBucket();
-        ({ html } = await uploadZipToStorage(req.file.buffer, { schoolId: school.id, templateId: created.id }));
+        ({ html, importPayload } = await uploadZipToStorage(req.file.buffer, { schoolId: school.id, templateId: created.id }));
       } catch (storageErr) {
         console.warn("[template upload] storage failed, inlining:", storageErr.message);
         try { ({ html } = assembleTemplateFromZip(req.file.buffer)); hosting = "inline"; }
@@ -1092,8 +1092,8 @@ router.post("/website/templates/upload", authenticateToken, requireRole(SCHOOL_R
           return res.status(400).json({ error: `Could not read the zip: ${zipErr.message}` });
         }
       }
-      await db.schema("edu").from("school_website_templates").update({ html }).eq("id", created.id);
-      res.status(201).json({ success: true, data: { id: created.id, name, active: false }, hosting });
+      await db.schema("edu").from("school_website_templates").update({ html, import_payload: importPayload }).eq("id", created.id);
+      res.status(201).json({ success: true, data: { id: created.id, name, active: false, importable: !!importPayload }, hosting });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 });
@@ -1126,6 +1126,71 @@ router.post("/website/templates/:id/activate", authenticateToken, requireRole(SC
     await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", req.params.id);
     await db.schema("edu").from("school_website").update({ mode: "template", updated_at: new Date() }).eq("school_id", school.id);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/website/templates/:id/import  (template → builder) ─────────
+// Creates real builder content from the template's stashed import payload:
+//   • one published site_page per extra .html in the zip (existing slugs kept)
+//   • a Primary menu built from the template's nav (any current primary menu
+//     is unassigned, not deleted)
+// Also activates the template as the site's home page (mode 'template'), so
+// the imported pages/menu are editable in the builder while the template look
+// stays live. Idempotent: re-importing skips pages that already exist.
+router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: tpl } = await db.schema("edu").from("school_website_templates")
+      .select("id, name, import_payload").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!tpl) return res.status(404).json({ error: "Template not found" });
+    const payload = tpl.import_payload;
+    if (!payload || (!payload.pages?.length && !payload.menu?.length)) {
+      return res.status(400).json({ error: "This template has no importable pages or menu (single-page upload)." });
+    }
+
+    // 1) Pages — skip slugs that already exist (don't clobber edited pages).
+    const M = db.schema("mgmt");
+    const { data: existing } = await M.from("site_pages").select("id, slug").eq("school_id", school.id);
+    const idBySlug = Object.fromEntries((existing || []).map((p) => [p.slug, p.id]));
+    let pagesCreated = 0;
+    for (const [i, p] of (payload.pages || []).entries()) {
+      if (!p.slug || idBySlug[p.slug]) continue;
+      const { data: row, error } = await M.from("site_pages").insert({
+        school_id: school.id, title: p.title || p.slug, slug: p.slug,
+        content: p.content || "", status: "published", sort_order: i,
+      }).select("id, slug").single();
+      if (error) throw new Error(error.message);
+      idBySlug[row.slug] = row.id;
+      pagesCreated++;
+    }
+
+    // 2) Primary menu from the template nav.
+    let menuItems = 0;
+    if (payload.menu?.length) {
+      await M.from("site_menus").update({ location: null }).eq("school_id", school.id).eq("location", "primary");
+      const { data: menu, error: menuErr } = await M.from("site_menus")
+        .insert({ school_id: school.id, name: `${tpl.name} Menu`, location: "primary" }).select("id").single();
+      if (menuErr) throw new Error(menuErr.message);
+      const rows = payload.menu.map((it, i) => ({
+        school_id: school.id, menu_id: menu.id, label: it.label,
+        page_id: it.slug ? (idBySlug[it.slug] || null) : null,
+        url: it.url || (it.slug && !idBySlug[it.slug] ? "#" : null),
+        target: "_self", sort_order: i,
+      })).filter((r) => r.page_id || r.url);
+      if (rows.length) {
+        const { error } = await M.from("site_menu_items").insert(rows);
+        if (error) throw new Error(error.message);
+        menuItems = rows.length;
+      }
+    }
+
+    // 3) Activate the template as the home page.
+    await db.schema("edu").from("school_website_templates").update({ is_active: false }).eq("school_id", school.id);
+    await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", tpl.id);
+    await db.schema("edu").from("school_website").update({ mode: "template", updated_at: new Date() }).eq("school_id", school.id);
+
+    res.json({ success: true, pagesCreated, menuItems, skipped: (payload.pages?.length || 0) - pagesCreated });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
