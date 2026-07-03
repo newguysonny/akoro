@@ -7,7 +7,9 @@ defines the order and splits them into two groups:
 - **`schema`** — structural migrations + platform-catalog seeds. Prod-safe,
   runs on **every deploy**.
 - **`demo`** — sample data (a demo school, demo courses, mgmt sample records).
-  **Never run against production.**
+  Also idempotent, and included in `db:deploy` by default. Set
+  `DB_DEPLOY_GROUPS=schema` on any environment that must NOT receive demo
+  data (the env var overrides the script's `--group` flag).
 
 `2026-run-all.sql` is a manual copy-paste bundle for the Supabase SQL Editor and
 is deliberately **excluded** from the manifest (it duplicates the other files).
@@ -15,10 +17,10 @@ is deliberately **excluded** from the manifest (it duplicates the other files).
 ## Commands (run from `akoro-api/`)
 
 ```bash
-npm run db:deploy       # apply the schema group (idempotent; every deploy)
-npm run db:migrate      # alias of db:deploy
-npm run db:seed:demo    # apply demo/sample data — staging/local only
-node scripts/apply-migrations.mjs --group=all
+npm run db:deploy       # schema + demo seeds (all idempotent; every deploy)
+npm run db:migrate      # schema group only
+npm run db:seed:demo    # demo/sample data only
+node scripts/apply-migrations.mjs --group=schema
 node scripts/apply-migrations.mjs --continue-on-error   # log & skip failures
 ```
 

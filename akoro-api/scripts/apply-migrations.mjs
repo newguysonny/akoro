@@ -35,7 +35,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(here, "..", "migrations");
 
 const args = process.argv.slice(2);
-const groupArg = (args.find((a) => a.startsWith("--group=")) || "--group=schema").split("=")[1];
+// Group precedence: --group=… flag → DB_DEPLOY_GROUPS env → 'schema'.
+// (DB_DEPLOY_GROUPS=schema on a service opts it out of demo seeds even when
+// the npm script asks for 'all'.)
+const flagGroup = args.find((a) => a.startsWith("--group="))?.split("=")[1];
+const groupArg = process.env.DB_DEPLOY_GROUPS || flagGroup || "schema";
 const continueOnError = args.includes("--continue-on-error");
 
 // Prefer a migration-specific URL if set — lets you point migrations at the
