@@ -30,6 +30,7 @@ export default function OnboardingPage() {
   const [state, setState]           = useState('');
   const [lga, setLga]               = useState('');
   const [city, setCity]             = useState('');
+  const [street, setStreet]         = useState('');
   // Academic
   const [levels, setLevels]         = useState([]);
   const [ownership, setOwnership]   = useState('');
@@ -52,6 +53,7 @@ export default function OnboardingPage() {
   const validateStep = () => {
     setErr('');
     if (step === 0 && !schoolName.trim()) { setErr('Please enter your school name'); return false; }
+    if (step === 0 && !phone.trim()) { setErr('Please enter a phone number'); return false; }
     if (step === 0 && !country) { setErr('Please choose a country'); return false; }
     if (step === 0 && !state.trim()) { setErr('Please enter your state'); return false; }
     if (step === 1 && levels.length === 0) { setErr('Select at least one education level you offer'); return false; }
@@ -64,7 +66,7 @@ export default function OnboardingPage() {
     if (!validateStep()) return;
     setSaving(true); setErr('');
     try {
-      const addressLine = [city.trim(), lga.trim(), state.trim(), country].filter(Boolean).join(', ');
+      const addressLine = [street.trim(), city.trim(), lga.trim(), state.trim(), country].filter(Boolean).join(', ');
       const res = await fetch(`${API}/api/profiles/me`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -133,7 +135,7 @@ export default function OnboardingPage() {
               <input value={schoolName} onChange={(e) => setSchoolName(e.target.value)} placeholder="Akoro International School" style={inp} />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Phone <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
+              <label style={lbl}>Phone number</label>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234 800 000 0000" style={inp} />
             </div>
             <div style={{ marginBottom: 14 }}>
@@ -164,9 +166,13 @@ export default function OnboardingPage() {
                 )}
               </div>
             </div>
-            <div style={{ marginBottom: 4 }}>
+            <div style={{ marginBottom: 14 }}>
               <label style={lbl}>Town / City</label>
               <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ikeja GRA" style={inp} />
+            </div>
+            <div style={{ marginBottom: 4 }}>
+              <label style={lbl}>Street address</label>
+              <input value={street} onChange={(e) => setStreet(e.target.value)} placeholder="12 Education Crescent" style={inp} />
             </div>
           </>
         )}
