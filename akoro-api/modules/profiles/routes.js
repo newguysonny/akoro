@@ -399,11 +399,21 @@ const schoolHandlers = {
     const { name, description, logo_url, website, address, phone, country, state, lga, city,
             educationLevels, ownershipType, curriculum, yearEstablished, genderType, boardingType, studentBand } = req.body;
 
+    // Unique URL slug (used by /site/:slug previews and <slug>.akoro.app).
+    const slugBase = (name || "school").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "school";
+    let slug = `${slugBase}-${crypto.randomBytes(3).toString("hex")}`;
+    for (let i = 0; i < 5; i++) {
+      const { data: clash } = await db.from("school_profiles").select("id").eq("slug", slug).maybeSingle();
+      if (!clash) break;
+      slug = `${slugBase}-${crypto.randomBytes(3).toString("hex")}`;
+    }
+
     const { data, error } = await db
       .from("school_profiles")
       .insert({
         admin_user_id: req.user.id,
         name,
+        slug,
         description:   description ?? null,
         logo_url:      logo_url    ?? null,
         website:       website     ?? null,

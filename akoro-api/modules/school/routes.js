@@ -101,6 +101,22 @@ async function getMySchool(req, res) {
 
 const slugify = (s) => (s || "school").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+// Ensure the school has a persisted, unique slug (used by /site/:slug previews
+// and <slug>.akoro.app). Backfills schools created before slugs were saved.
+async function ensureSchoolSlug(school) {
+  if (school.slug) return school.slug;
+  const base = slugify(school.name) || "school";
+  let slug = `${base}-${crypto.randomBytes(3).toString("hex")}`;
+  for (let i = 0; i < 5; i++) {
+    const { data: clash } = await db.from("school_profiles").select("id").eq("slug", slug).maybeSingle();
+    if (!clash || clash.id === school.id) break;
+    slug = `${base}-${crypto.randomBytes(3).toString("hex")}`;
+  }
+  await db.from("school_profiles").update({ slug }).eq("id", school.id);
+  school.slug = slug;
+  return slug;
+}
+
 // jsonb-per-category settings row (created lazily on first access).
 async function getPortalSettings(schoolId) {
   const { data } = await db.schema("edu").from("school_portal_settings").select("*").eq("school_id", schoolId).maybeSingle();
@@ -1001,7 +1017,8 @@ router.get("/website", authenticateToken, async (req, res) => {
     const school = await getMySchool(req, res);
     if (!school) return;
     const website = await getWebsiteConfig(school.id);
-    res.json({ success: true, data: { ...shapeWebsite(website), slug: school.slug || slugify(school.name) } });
+    const slug = await ensureSchoolSlug(school); // persist a real slug so previews resolve
+    res.json({ success: true, data: { ...shapeWebsite(website), slug } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
