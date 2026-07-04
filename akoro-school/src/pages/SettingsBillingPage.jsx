@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, SlidersHorizontal, Clock, ShieldCheck, Plug, Facebook, Send,
   Bell, BookOpen, Info, Sparkles, Save, ExternalLink, Upload,
-  Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog,
+  Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog, GraduationCap,
   AlertTriangle, Eye, EyeOff, RefreshCw, Check, Languages, Moon, Palette,
   Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, MessageCircle, FileText,
   ChevronRight, Globe, Loader2,
@@ -11,6 +11,11 @@ import {
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../constants.js';
+import { COUNTRIES as GEO_COUNTRIES, NG_STATES } from '../data/locations.js';
+
+const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
+const OWNERSHIP_TYPES  = ['Private', 'Public / Government', 'Faith-based / Mission', 'Community'];
+const CURRICULA        = ['Nigerian (WAEC/NECO)', 'British / Cambridge', 'Montessori', 'American', 'International Baccalaureate', 'Mixed / Other'];
 
 /* ── Tab config ──────────────────────────────────────────────────── */
 const TABS = [
@@ -138,6 +143,10 @@ function Row({ icon: Icon, label, sublabel, right, onClick, danger, last }) {
 /* ── School Profile panel (controlled) ───────────────────────────── */
 function SchoolProfilePanel({ value, onChange }) {
   const set = (k) => (e) => onChange({ ...value, [k]: e.target.value });
+  const ngStates = value.country === 'Nigeria' ? Object.keys(NG_STATES) : [];
+  const lgaOptions = value.country === 'Nigeria' ? (NG_STATES[value.state] || []) : [];
+  const levels = Array.isArray(value.educationLevels) ? value.educationLevels : [];
+  const toggleLevel = (l) => onChange({ ...value, educationLevels: levels.includes(l) ? levels.filter((x) => x !== l) : [...levels, l] });
   return (
     <div>
       <SectionHeader color={BLUE} icon={Info} title="General Information" />
@@ -147,14 +156,47 @@ function SchoolProfilePanel({ value, onChange }) {
         <Field label="School Email" required><input style={{ ...inputStyle, background: LIGHT, color: MUTED }} value={value.email || ''} disabled title="Change your login email from Privacy & Security" /></Field>
         <Field label="Phone Number"><input style={inputStyle} value={value.phone || ''} onChange={set('phone')} /></Field>
         <Field label="Principal Name"><input style={inputStyle} value={value.principal || ''} onChange={set('principal')} /></Field>
+      </div>
+
+      <SectionHeader color={BLUE} icon={MapPin} title="Location" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
         <Field label="Country">
-          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.country || COUNTRIES[0]} onChange={set('country')}>
-            {COUNTRIES.map((c) => <option key={c}>{c}</option>)}
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.country || 'Nigeria'} onChange={(e) => onChange({ ...value, country: e.target.value, state: '', lga: '' })}>
+            {GEO_COUNTRIES.map((c) => <option key={c}>{c}</option>)}
           </select>
         </Field>
+        <Field label="State / Region">
+          {ngStates.length
+            ? <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.state || ''} onChange={(e) => onChange({ ...value, state: e.target.value, lga: '' })}><option value="">Select…</option>{ngStates.map((s) => <option key={s}>{s}</option>)}</select>
+            : <input style={inputStyle} value={value.state || ''} onChange={set('state')} />}
+        </Field>
+        <Field label="LGA / District">
+          {lgaOptions.length
+            ? <select style={{ ...inputStyle, cursor: value.state ? 'pointer' : 'not-allowed', opacity: value.state ? 1 : 0.6 }} value={value.lga || ''} disabled={!value.state} onChange={set('lga')}><option value="">{value.state ? 'Select…' : 'Pick a state'}</option>{lgaOptions.map((l) => <option key={l}>{l}</option>)}</select>
+            : <input style={inputStyle} value={value.lga || ''} onChange={set('lga')} />}
+        </Field>
+        <Field label="Town / City"><input style={inputStyle} value={value.city || ''} onChange={set('city')} /></Field>
         <div style={{ gridColumn: '1 / -1' }}>
-          <Field label="Address"><textarea rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} value={value.address || ''} onChange={set('address')} /></Field>
+          <Field label="Street Address"><textarea rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} value={value.address || ''} onChange={set('address')} /></Field>
         </div>
+      </div>
+
+      <SectionHeader color={GREEN} icon={GraduationCap} title="Academics" />
+      <Field label="Education Levels Offered">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {EDUCATION_LEVELS.map((l) => {
+            const on = levels.includes(l);
+            return <button key={l} type="button" onClick={() => toggleLevel(l)} style={{ padding: '8px 14px', borderRadius: 99, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${on ? AMBER : BORDER}`, background: on ? AMBER : WHITE, color: on ? WHITE : MUTED, fontFamily: FONT }}>{l}</button>;
+          })}
+        </div>
+      </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 6, marginBottom: 24 }}>
+        <Field label="School Type">
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.ownershipType || ''} onChange={set('ownershipType')}><option value="">Select…</option>{OWNERSHIP_TYPES.map((o) => <option key={o}>{o}</option>)}</select>
+        </Field>
+        <Field label="Curriculum">
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.curriculum || ''} onChange={set('curriculum')}><option value="">Select…</option>{CURRICULA.map((c) => <option key={c}>{c}</option>)}</select>
+        </Field>
       </div>
 
       <SectionHeader color={AMBER} icon={Sparkles} title="Branding & Appearance" />

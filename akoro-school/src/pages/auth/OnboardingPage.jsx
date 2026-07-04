@@ -7,6 +7,9 @@ import { COUNTRIES, NG_STATES } from '../../data/locations.js';
 
 const AMBER = '#E8884A';
 const RED   = '#EF4444';
+const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
+const OWNERSHIP_TYPES  = ['Private', 'Public / Government', 'Faith-based / Mission', 'Community'];
+const CURRICULA        = ['Nigerian (WAEC/NECO)', 'British / Cambridge', 'Montessori', 'American', 'International Baccalaureate', 'Mixed / Other'];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -22,18 +25,24 @@ export default function OnboardingPage() {
   const [state, setState]           = useState('');
   const [lga, setLga]               = useState('');
   const [city, setCity]             = useState('');
+  const [levels, setLevels]         = useState([]);
+  const [ownership, setOwnership]   = useState('');
+  const [curriculum, setCurriculum] = useState('');
+
+  const toggleLevel = (l) => setLevels((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l]);
 
   // Dependent dropdowns where we have data (Nigeria); text inputs otherwise.
   const ngStates = country === 'Nigeria' ? Object.keys(NG_STATES) : [];
   const lgaOptions = country === 'Nigeria' ? (NG_STATES[state] || []) : [];
 
-  const STEPS = ['School', 'Address'];
+  const STEPS = ['School', 'Address', 'Academics'];
 
   const validateStep = () => {
     setErr('');
     if (step === 0 && !schoolName.trim()) { setErr('Please enter your school name'); return false; }
     if (step === 1 && !country) { setErr('Please choose a country'); return false; }
     if (step === 1 && !state.trim()) { setErr('Please enter your state'); return false; }
+    if (step === 2 && levels.length === 0) { setErr('Select at least one education level you offer'); return false; }
     return true;
   };
   const next = () => { if (validateStep()) setStep(s => s + 1); };
@@ -61,6 +70,7 @@ export default function OnboardingPage() {
             name: schoolName.trim(), phone: phone.trim() || undefined,
             country, state: state.trim() || undefined, lga: lga.trim() || undefined, city: city.trim() || undefined,
             address: addressLine || undefined,
+            educationLevels: levels, ownershipType: ownership || undefined, curriculum: curriculum || undefined,
           }),
         });
       }
@@ -75,6 +85,7 @@ export default function OnboardingPage() {
 
   const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14, fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box', background: '#fff' };
   const lbl = { display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 };
+  const chip = (active) => ({ padding: '8px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${active ? AMBER : '#EDE8E1'}`, background: active ? AMBER : '#fff', color: active ? '#fff' : '#6B6B80', fontFamily: "'DM Sans', sans-serif", transition: 'all .15s' });
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#FAF8F5', padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
@@ -148,6 +159,35 @@ export default function OnboardingPage() {
             <div style={{ marginBottom: 4 }}>
               <label style={lbl}>Town / City</label>
               <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ikeja GRA" style={inp} />
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Academics</h1>
+            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 20px' }}>What does your school offer?</p>
+
+            <label style={lbl}>Education levels <span style={{ fontWeight: 500, color: '#9490A0' }}>(select all that apply)</span></label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '2px 0 18px' }}>
+              {EDUCATION_LEVELS.map((l) => (
+                <button key={l} type="button" onClick={() => toggleLevel(l)} style={chip(levels.includes(l))}>{l}</button>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={lbl}>School type</label>
+              <select value={ownership} onChange={(e) => setOwnership(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                <option value="">Select…</option>
+                {OWNERSHIP_TYPES.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom: 4 }}>
+              <label style={lbl}>Curriculum</label>
+              <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                <option value="">Select…</option>
+                {CURRICULA.map((c) => <option key={c}>{c}</option>)}
+              </select>
             </div>
           </>
         )}

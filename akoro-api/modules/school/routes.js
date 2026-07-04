@@ -90,7 +90,7 @@ router.use("/mgmt", mgmtRouter);
 async function getMySchool(req, res) {
   const { data } = await db
     .from("school_profiles")
-    .select("id, name, description, logo_url, website, address, phone, is_active, created_at, slug, acronym, principal_name, country, favicon_url, principal_signature_url")
+    .select("id, name, description, logo_url, website, address, phone, is_active, created_at, slug, acronym, principal_name, country, state, lga, city, education_levels, ownership_type, curriculum, favicon_url, principal_signature_url")
     .eq("admin_user_id", req.user.id)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -420,6 +420,8 @@ router.get("/settings", authenticateToken, async (req, res) => {
         profile: {
           name: school.name, acronym: school.acronym, email: req.user.email,
           phone: school.phone, principal: school.principal_name, country: school.country,
+          state: school.state, lga: school.lga, city: school.city,
+          educationLevels: school.education_levels || [], ownershipType: school.ownership_type, curriculum: school.curriculum,
           address: school.address, logoUrl: school.logo_url, faviconUrl: school.favicon_url,
           signatureUrl: school.principal_signature_url,
         },
@@ -441,13 +443,19 @@ router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), as
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { name, acronym, phone, principal, country, address, logoUrl, faviconUrl, signatureUrl } = req.body;
+    const { name, acronym, phone, principal, country, state, lga, city, educationLevels, ownershipType, curriculum, address, logoUrl, faviconUrl, signatureUrl } = req.body;
     const patch = {};
     if (name !== undefined)       patch.name = name;
     if (acronym !== undefined)    patch.acronym = acronym;
     if (phone !== undefined)      patch.phone = phone;
     if (principal !== undefined)  patch.principal_name = principal;
     if (country !== undefined)    patch.country = country;
+    if (state !== undefined)      patch.state = state;
+    if (lga !== undefined)        patch.lga = lga;
+    if (city !== undefined)       patch.city = city;
+    if (educationLevels !== undefined) patch.education_levels = educationLevels;
+    if (ownershipType !== undefined)   patch.ownership_type = ownershipType;
+    if (curriculum !== undefined)      patch.curriculum = curriculum;
     if (address !== undefined)    patch.address = address;
     if (logoUrl !== undefined)    patch.logo_url = logoUrl;
     if (faviconUrl !== undefined) patch.favicon_url = faviconUrl;
