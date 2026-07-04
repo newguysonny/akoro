@@ -33,7 +33,7 @@ const outlineBtn = { display: 'inline-flex', alignItems: 'center', gap: 7, paddi
 const toastEl = (t) => t && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{t}</div>;
 
 // A stylised "screenshot" card preview (no live render needed).
-function Screenshot({ name, active }) {
+function Screenshot({ name, active, badge }) {
   return (
     <div style={{ position: 'relative', height: 158, borderBottom: `1px solid ${BORDER}`, background: `linear-gradient(135deg, ${AMBER}14, ${BLUE}14)`, display: 'flex', flexDirection: 'column' }}>
       <div style={{ height: 22, background: WHITE, borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 5, padding: '0 9px' }}>
@@ -46,6 +46,9 @@ function Screenshot({ name, active }) {
         <span style={{ position: 'absolute', top: 30, left: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: GREEN, color: WHITE, fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 20 }}>
           <CheckCircle2 size={11} /> Active
         </span>
+      )}
+      {badge && !active && (
+        <span style={{ position: 'absolute', top: 30, left: 10, background: BLUE, color: WHITE, fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: .4 }}>{badge}</span>
       )}
     </div>
   );
@@ -76,8 +79,8 @@ export default function WebsiteTemplatesPage() {
       await apiPost(`/api/school/website/templates/${id}/activate`, {});
       await apiPut('/api/school/website', { mode: 'template' }); // make the template actually render
       setMode('template');
-      setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
       showToast('Template activated ✓');
+      load(); // reflect a cloned default becoming an owned, active template
     } catch (e) { showToast(e.message || 'Could not activate'); }
     finally { setBusyId(null); }
   };
@@ -88,8 +91,8 @@ export default function WebsiteTemplatesPage() {
     try {
       const r = await apiPost(`/api/school/website/templates/${id}/import`, {});
       setMode('theme'); // builder mode: home page + menus + appearance drive the site
-      setTemplates((prev) => prev.map((t) => ({ ...t, active: t.id === id })));
       showToast(`Activated ✓ Imported ${r.pagesCreated} page${r.pagesCreated === 1 ? '' : 's'} + ${r.menuItems} menu link${r.menuItems === 1 ? '' : 's'} into the builder${r.skipped ? ` (${r.skipped} already existed)` : ''}`);
+      load();
     } catch (e) { showToast(e.message || 'Could not import'); }
     finally { setBusyId(null); }
   };
@@ -119,13 +122,15 @@ export default function WebsiteTemplatesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18 }}>
           {templates.map((t) => (
             <div key={t.id} style={{ border: `1px solid ${t.active ? GREEN : BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE }}>
-              <Screenshot name={t.name || 'Untitled'} active={t.active} />
+              <Screenshot name={t.name || 'Untitled'} active={t.active} badge={t.isDefault ? 'Starter' : null} />
               <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{t.name || 'Untitled'}</div>
                   {t.description && <div style={{ fontSize: 11.5, color: MUTED2, fontFamily: FONT }}>{t.description}</div>}
                 </div>
-                {busyId === t.id ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : (
+                {busyId === t.id ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : t.isDefault ? (
+                  <button onClick={() => (t.importable ? setChooser(t) : activate(t.id))} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Use this template</button>
+                ) : (
                   <div style={{ display: 'inline-flex', gap: 6 }}>
                     <button onClick={() => navigate(`/settings-website/templates/${t.id}`, { state: { template: t } })} title="Customize" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: 'none', background: BLUE, color: WHITE, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Pencil size={12} /> Customize</button>
                     {!t.active && <button onClick={() => (t.importable ? setChooser(t) : activate(t.id))} style={{ padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Activate</button>}

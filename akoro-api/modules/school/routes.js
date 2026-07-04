@@ -30,6 +30,7 @@ import multerLib from "multer";
 import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext } from "./siteRenderer.js";
 import { assembleTemplateFromZip } from "./templateZip.js";
 import { ensureBucket, uploadZipToStorage, removeTemplateAssets } from "./templateStorage.js";
+import { DEFAULT_TEMPLATES, getDefaultTemplate } from "./defaultTemplates/index.js";
 import {
   vercelConfigured, addDomainToProject, getProjectDomain,
   verifyProjectDomain, getDomainConfig, removeDomainFromProject, buildDnsRecords,
@@ -855,6 +856,10 @@ async function buildSiteMenus(schoolId) {
   };
 }
 
+// A page whose content is a whole HTML document is served as-is (its own
+// header/footer/styles) rather than wrapped in the builder chrome.
+const isFullDocument = (c) => /^\s*(<!doctype html|<html[\s>])/i.test(c || "");
+
 // Assemble the full render context (variables, section data, menus, portal
 // links) exactly as the live site uses — shared by the public renderer and the
 // authenticated live-preview endpoint so previews are pixel-identical.
@@ -913,7 +918,10 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
     const { data: page } = await db.schema("mgmt").from("site_pages")
       .select("title, content, status, deleted_at, slug").eq("school_id", school.id).eq("slug", slug).maybeSingle();
     if (page && page.status === "published" && !page.deleted_at) {
-      return { status: 200, html: addBanner(renderSitePage(website, ctx, page, { hideTitle: slug === "home" })) };
+      // Full self-contained documents (e.g. gallery templates) render raw;
+      // block/fragment pages get wrapped in the builder chrome.
+      const html = isFullDocument(page.content) ? page.content : renderSitePage(website, ctx, page, { hideTitle: slug === "home" });
+      return { status: 200, html: addBanner(html) };
     }
     return { status: 404, html: renderThemeDocument(website, ctx, `<section class="page"><div class="wrap" style="text-align:center"><h1 style="font-size:34px;color:var(--primary)">Page not found</h1><p style="margin-top:10px"><a href="/" style="color:var(--primary);font-weight:700">← Back to home</a></p></div></section>`) };
   }
@@ -932,7 +940,7 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}
     const { data: home } = await db.schema("mgmt").from("site_pages")
       .select("title, content, status, deleted_at").eq("school_id", school.id).eq("slug", "home").maybeSingle();
     html = (home && home.status === "published" && !home.deleted_at)
-      ? renderSitePage(website, ctx, home, { hideTitle: true })
+      ? (isFullDocument(home.content) ? home.content : renderSitePage(website, ctx, home, { hideTitle: true }))
       : renderThemePage(website, ctx);
   }
   return { status: 200, html: addBanner(html) };
@@ -1054,15 +1062,42 @@ router.get("/website/templates", authenticateToken, async (req, res) => {
     const school = await getMySchool(req, res);
     if (!school) return;
     const { data } = await db.schema("edu").from("school_website_templates").select("id, name, description, is_active, updated_at, import_payload").eq("school_id", school.id).order("updated_at", { ascending: false });
-    res.json({ success: true, data: (data || []).map((t) => ({ id: t.id, name: t.name, description: t.description, active: t.is_active, updatedAt: t.updated_at, importable: !!t.import_payload })) });
+    const own = (data || []).map((t) => ({ id: t.id, name: t.name, description: t.description, active: t.is_active, updatedAt: t.updated_at, importable: !!t.import_payload }));
+    // Shared gallery: append the default templates every school can use.
+    const ownNames = new Set(own.map((t) => t.name));
+    const defaults = DEFAULT_TEMPLATES
+      .filter((t) => !ownNames.has(t.name)) // hide a default once the school has installed it
+      .map((t) => ({ id: `default:${t.id}`, name: t.name, description: t.description, active: false, updatedAt: null, importable: !!(t.importPayload && (t.importPayload.pages?.length || t.importPayload.menu?.length)), isDefault: true }));
+    res.json({ success: true, data: [...own, ...defaults] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// Clone a default template into the school's own templates (idempotent by name)
+// and return the school-owned id. Non-default ids pass through unchanged.
+async function ensureSchoolTemplate(school, id) {
+  if (!String(id).startsWith("default:")) return id;
+  const def = getDefaultTemplate(String(id).slice("default:".length));
+  if (!def) return null;
+  const { data: existing } = await db.schema("edu").from("school_website_templates")
+    .select("id").eq("school_id", school.id).eq("name", def.name).maybeSingle();
+  if (existing) return existing.id;
+  const { data: row, error } = await db.schema("edu").from("school_website_templates")
+    .insert({ school_id: school.id, name: def.name, description: def.description, html: def.html, import_payload: def.importPayload || null, is_active: false })
+    .select("id").single();
+  if (error) throw new Error(error.message);
+  return row.id;
+}
 
 // ── GET /api/school/website/templates/:id ───────────────────────────────────────
 router.get("/website/templates/:id", authenticateToken, async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
+    if (String(req.params.id).startsWith("default:")) {
+      const def = getDefaultTemplate(String(req.params.id).slice("default:".length));
+      if (!def) return res.status(404).json({ error: "Template not found" });
+      return res.json({ success: true, data: { id: req.params.id, name: def.name, description: def.description, html: def.html, active: false, isDefault: true } });
+    }
     const { data } = await db.schema("edu").from("school_website_templates").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
     if (!data) return res.status(404).json({ error: "Template not found" });
     res.json({ success: true, data: { id: data.id, name: data.name, description: data.description, html: data.html, active: data.is_active, updatedAt: data.updated_at } });
@@ -1157,10 +1192,12 @@ router.post("/website/templates/:id/activate", authenticateToken, requireRole(SC
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { data: tpl } = await db.schema("edu").from("school_website_templates").select("id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    const templateId = await ensureSchoolTemplate(school, req.params.id); // clone if it's a default
+    if (!templateId) return res.status(404).json({ error: "Template not found" });
+    const { data: tpl } = await db.schema("edu").from("school_website_templates").select("id").eq("id", templateId).eq("school_id", school.id).maybeSingle();
     if (!tpl) return res.status(404).json({ error: "Template not found" });
     await db.schema("edu").from("school_website_templates").update({ is_active: false }).eq("school_id", school.id);
-    await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", req.params.id);
+    await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", templateId);
     await db.schema("edu").from("school_website").update({ mode: "template", updated_at: new Date() }).eq("school_id", school.id);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1179,8 +1216,10 @@ router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHO
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
+    const templateId = await ensureSchoolTemplate(school, req.params.id); // clone if it's a default
+    if (!templateId) return res.status(404).json({ error: "Template not found" });
     const { data: tpl } = await db.schema("edu").from("school_website_templates")
-      .select("id, name, import_payload").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+      .select("id, name, import_payload").eq("id", templateId).eq("school_id", school.id).maybeSingle();
     if (!tpl) return res.status(404).json({ error: "Template not found" });
     const payload = tpl.import_payload;
     if (!payload || (!payload.pages?.length && !payload.menu?.length)) {
