@@ -87,6 +87,7 @@ import {
   CertificateTemplatesPage, GenerateDocumentPage, NoticeBoardPage, EventsHolidaysPage,
   ComposeBroadcastPage, BroadcastHistoryPage, ImageGalleryPage,
 } from './pages/mgmt/certsCommsPages.jsx';
+import { DocumentTemplatesPage, DocumentTemplateEditorPage } from './pages/mgmt/docTemplatesPages.jsx';
 import {
   LibraryDashboardPage, IssueReturnBookPage, ManageBooksPage, BookCategoriesPage,
   InventoryDashboardPage, AddStockPage, IssueItemPage, PointOfSalePage, ItemListPage,
@@ -334,6 +335,9 @@ function AppRoutes() {
       <Route path="/mgmt/homework-assignments"   element={<ProtectedRoute><HomeworkAssignmentsPage /></ProtectedRoute>} />
       <Route path="/mgmt/live-classes"           element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>} />
       {/* Facilities — Certificates + Communicate */}
+      <Route path="/mgmt/document-templates"      element={<ProtectedRoute><DocumentTemplatesPage /></ProtectedRoute>} />
+      <Route path="/mgmt/document-templates/new"  element={<ProtectedRoute><DocumentTemplateEditorPage /></ProtectedRoute>} />
+      <Route path="/mgmt/document-templates/:id"  element={<ProtectedRoute><DocumentTemplateEditorPage /></ProtectedRoute>} />
       <Route path="/mgmt/certificate-templates" element={<ProtectedRoute><CertificateTemplatesPage /></ProtectedRoute>} />
       <Route path="/mgmt/generate-document"     element={<ProtectedRoute><GenerateDocumentPage /></ProtectedRoute>} />
       <Route path="/mgmt/notice-board"          element={<ProtectedRoute><NoticeBoardPage /></ProtectedRoute>} />

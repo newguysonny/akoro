@@ -186,9 +186,9 @@ const NAV_SECTIONS = [
       { label: 'Homework & Assignments', to: '/mgmt/homework-assignments' },
       { label: 'Live Classes', to: '/mgmt/live-classes' },
     ] },
-    { label: 'Certificates', icon: Award, children: [
-      { label: 'Certificate Templates', to: '/mgmt/certificate-templates' },
-      { label: 'Generate Document', to: '/mgmt/generate-document' },
+    { label: 'Document Templates', icon: Award, children: [
+      { label: 'All Templates', to: '/mgmt/document-templates' },
+      { label: 'New Template', to: '/mgmt/document-templates/new' },
     ] },
     { label: 'Communicate', icon: Megaphone, moduleKey: 'communications', children: [
       { label: 'Notice Board', to: '/mgmt/notice-board' },
