@@ -20,7 +20,7 @@ function GoogleIcon() {
 export default function SignupPage() {
   const navigate = useNavigate();
   const { register, loginWithGoogle, loading, clearError } = useAuth();
-  const [form, setForm]   = useState({ fullName: '', username: '', email: '', password: '' });
+  const [form, setForm]   = useState({ fullName: '', email: '', password: '' });
   const [formErr, setFormErr] = useState('');
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -29,16 +29,13 @@ export default function SignupPage() {
     e.preventDefault();
     setFormErr('');
     clearError();
-    const { fullName, username, email, password } = form;
-    if (!fullName || !username || !email || !password) { setFormErr('Please fill in all fields'); return; }
-    if (username.length < 3 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-      setFormErr('Username must be 3+ characters, letters/numbers/underscore only'); return;
-    }
+    const { fullName, email, password } = form;
+    if (!fullName || !email || !password) { setFormErr('Please fill in all fields'); return; }
     if (password.length < 8) { setFormErr('Password must be at least 8 characters'); return; }
     try {
-      // School accounts register directly as school_admin; onboarding then
-      // creates the school profile.
-      await register({ fullName, username, email, password, role: 'school_admin' });
+      // School accounts register directly as school_admin (no username — the
+      // full name IS the school name); onboarding then creates the profile.
+      await register({ fullName, email, password, role: 'school_admin' });
       navigate('/', { replace: true });
     } catch (err) {
       setFormErr(err.message);
@@ -113,15 +110,9 @@ export default function SignupPage() {
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <div>
-              <label style={lbl}>Full name</label>
-              <input value={form.fullName} onChange={set('fullName')} placeholder="Dr. Amara Osei" style={inp} />
-            </div>
-            <div>
-              <label style={lbl}>Username</label>
-              <input value={form.username} onChange={set('username')} placeholder="dr_amara" style={inp} />
-            </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>School name</label>
+            <input value={form.fullName} onChange={set('fullName')} placeholder="Akoro International School" style={inp} />
           </div>
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Email</label>

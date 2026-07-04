@@ -6,39 +6,32 @@ import { API } from '../../services/api.js';
 
 const AMBER = '#E8884A';
 const RED   = '#EF4444';
-const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemistry', 'Biology',
-  'Computer Science', 'English Language', 'English Literature', 'Economics', 'Geography', 'History'];
-const GUIDE_EMOJIS = ['🧠', '👩‍🏫', '👨‍🏫', '🎓', '📚', '💡', '🦉', '⚡', '🌟', '🔮', '🚀', '🎯'];
+const COUNTRIES = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'United States', 'United Kingdom', 'Canada', 'Other'];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { user, markOnboarded } = useAuth();
 
-  const [step, setStep]   = useState(0);
+  const [step, setStep]     = useState(0);
   const [saving, setSaving] = useState(false);
-  const [err, setErr]     = useState('');
+  const [err, setErr]       = useState('');
 
-  const [fullName, setFullName]         = useState(user?.fullName || '');
-  const [schoolName, setSchoolName]     = useState('');
-  const [subjects, setSubjects]         = useState([]);
-  const [headline, setHeadline]         = useState('');
-  // Teaching guide — the instructor's AI persona for their students
-  const [guideName, setGuideName]       = useState('');
-  const [guideEmoji, setGuideEmoji]     = useState('🧠');
+  const [schoolName, setSchoolName] = useState(user?.fullName || '');
+  const [phone, setPhone]           = useState('');
+  const [country, setCountry]       = useState('Nigeria');
+  const [state, setState]           = useState('');
+  const [lga, setLga]               = useState('');
+  const [city, setCity]             = useState('');
 
-  const toggleSubject = (s) =>
-    setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
-
-  const STEPS = ['Profile', 'Teaching focus', 'Teaching guide'];
+  const STEPS = ['School', 'Address'];
 
   const validateStep = () => {
     setErr('');
-    if (step === 0 && !fullName.trim()) { setErr('Please enter your name'); return false; }
     if (step === 0 && !schoolName.trim()) { setErr('Please enter your school name'); return false; }
-    if (step === 1 && subjects.length === 0) { setErr('Pick at least one subject you teach'); return false; }
+    if (step === 1 && !country) { setErr('Please choose a country'); return false; }
+    if (step === 1 && !state.trim()) { setErr('Please enter your state'); return false; }
     return true;
   };
-
   const next = () => { if (validateStep()) setStep(s => s + 1); };
   const back = () => { setErr(''); setStep(s => s - 1); };
 
@@ -46,36 +39,27 @@ export default function OnboardingPage() {
     if (!validateStep()) return;
     setSaving(true); setErr('');
     try {
+      const addressLine = [city.trim(), lga.trim(), state.trim(), country].filter(Boolean).join(', ');
       const res = await fetch(`${API}/api/profiles/me`, {
-        method: 'PATCH',
-        credentials: 'include',
+        method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName:      fullName.trim(),
-          schoolName:    schoolName.trim() || undefined,
-          subjects,
-          // Teaching guide persona — instructor's AI guide for their students
-          teachingGuide: guideName.trim() || undefined,
-          guideEmoji:    guideEmoji,
-          onboardingCompleted: true,
-        }),
+        body: JSON.stringify({ fullName: schoolName.trim(), schoolName: schoolName.trim(), country, onboardingCompleted: true }),
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || 'Could not save your setup');
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Could not save your setup'); }
+
+      // Create the school profile (sets role → school_admin) if none yet.
+      const existing = await fetch(`${API}/api/school`, { credentials: 'include' });
+      if (!existing.ok) {
+        await fetch(`${API}/api/profiles/schools`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: schoolName.trim(), phone: phone.trim() || undefined,
+            country, state: state.trim() || undefined, lga: lga.trim() || undefined, city: city.trim() || undefined,
+            address: addressLine || undefined,
+          }),
+        });
       }
-      // Create the school profile (sets role → school_admin). Skip if one
-      // already exists for this account.
-      try {
-        const existing = await fetch(`${API}/api/school`, { credentials: 'include' });
-        if (!existing.ok && schoolName.trim()) {
-          await fetch(`${API}/api/profiles/schools`, {
-            method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: schoolName.trim() }),
-          });
-        }
-      } catch { /* non-fatal — school can be created later */ }
       markOnboarded();
       navigate('/', { replace: true });
     } catch (e) {
@@ -85,126 +69,85 @@ export default function OnboardingPage() {
     }
   };
 
-  const inp = {
-    width: '100%', padding: '11px 14px', borderRadius: 12,
-    border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14,
-    fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box', background: '#fff',
-  };
+  const inp = { width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid #EDE8E1', outline: 'none', fontSize: 14, fontFamily: "'DM Sans', sans-serif", color: '#1A1A2E', boxSizing: 'border-box', background: '#fff' };
   const lbl = { display: 'block', fontSize: 12, fontWeight: 700, color: '#1A1A2E', marginBottom: 6 };
-  const chip = (active) => ({
-    padding: '8px 14px', borderRadius: 99, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-    border: `1.5px solid ${active ? AMBER : '#EDE8E1'}`,
-    background: active ? AMBER : '#fff', color: active ? '#fff' : '#6B6B80',
-    fontFamily: "'DM Sans', sans-serif", transition: 'all .15s',
-  });
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', background: '#FAF8F5', padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
-
-      {/* Brand */}
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#FAF8F5', padding: '24px 20px', fontFamily: "'DM Sans', sans-serif" }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         <AkoroLogo size={40} radius={12} />
         <div>
           <span style={{ fontSize: 20, fontWeight: 800, color: '#1A1A2E', display: 'block' }}>Akoro</span>
-          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>Instructor Portal</span>
+          <span style={{ fontSize: 11, color: '#9490A0', display: 'block', marginTop: -2 }}>School Portal</span>
         </div>
       </div>
 
-      {/* Progress */}
       <div style={{ width: '100%', maxWidth: 460, marginBottom: 16, display: 'flex', gap: 8 }}>
         {STEPS.map((s, i) => (
           <div key={s} style={{ flex: 1 }}>
-            <div style={{ height: 5, borderRadius: 99, background: i <= step ? AMBER : '#EDE8E1', transition: 'background .2s' }}/>
+            <div style={{ height: 5, borderRadius: 99, background: i <= step ? AMBER : '#EDE8E1', transition: 'background .2s' }} />
             <div style={{ fontSize: 11, fontWeight: 700, marginTop: 6, color: i === step ? '#1A1A2E' : '#9490A0' }}>{s}</div>
           </div>
         ))}
       </div>
 
-      {/* Card */}
-      <div style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 24, padding: '28px 26px',
-        boxShadow: '0 4px 32px rgba(0,0,0,.07)', border: '1px solid #EDE8E1' }}>
-
+      <div style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 24, padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.07)', border: '1px solid #EDE8E1' }}>
         {step === 0 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome, tutor 👋</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Tell students a little about you.</p>
-
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome 👋</h1>
+            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Let's set up your school.</p>
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Full name</label>
-              <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Dr. Amara Osei" style={inp}/>
+              <label style={lbl}>School name</label>
+              <input value={schoolName} onChange={(e) => setSchoolName(e.target.value)} placeholder="Akoro International School" style={inp} />
             </div>
-            <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>School / institution <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder="Westwood Academy" style={inp}/>
-            </div>
-            <div>
-              <label style={lbl}>Short headline <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={headline} onChange={e => setHeadline(e.target.value)} placeholder="A-Level Maths examiner, 12 yrs" style={inp}/>
+            <div style={{ marginBottom: 4 }}>
+              <label style={lbl}>Phone <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234 800 000 0000" style={inp} />
             </div>
           </>
         )}
 
         {step === 1 && (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>What do you teach?</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Pick the subjects you'll build courses and agents for.</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {SUBJECT_OPTIONS.map(s => <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>)}
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>School address</h1>
+            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Where is your school located?</p>
+            <div style={{ marginBottom: 14 }}>
+              <label style={lbl}>Country</label>
+              <select value={country} onChange={(e) => setCountry(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                {COUNTRIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
             </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your teaching guide 🧠</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Name the AI guide that will help your students learn. You can always change this later.</p>
-
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, boxShadow: `0 6px 20px ${AMBER}55` }}>
-                {guideEmoji}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={lbl}>State / Region</label>
+                <input value={state} onChange={(e) => setState(e.target.value)} placeholder="Lagos" style={inp} />
+              </div>
+              <div>
+                <label style={lbl}>LGA / District</label>
+                <input value={lga} onChange={(e) => setLga(e.target.value)} placeholder="Ikeja" style={inp} />
               </div>
             </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Guide name <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={guideName} onChange={e => setGuideName(e.target.value)}
-                placeholder="e.g. NaNa, Akobi, Sade…" style={inp}/>
-            </div>
-            <div>
-              <label style={lbl}>Guide avatar</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {GUIDE_EMOJIS.map(em => (
-                  <button key={em} onClick={() => setGuideEmoji(em)} style={{
-                    width: 44, height: 44, borderRadius: 12, fontSize: 22, cursor: 'pointer',
-                    border: `2px solid ${guideEmoji === em ? AMBER : '#EDE8E1'}`,
-                    background: guideEmoji === em ? `${AMBER}18` : '#FAF8F5',
-                    fontFamily: "'DM Sans', sans-serif",
-                  }}>{em}</button>
-                ))}
-              </div>
+            <div style={{ marginBottom: 4 }}>
+              <label style={lbl}>Town / City</label>
+              <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Ikeja GRA" style={inp} />
             </div>
           </>
         )}
 
         {err && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
-            padding: '10px 14px', marginTop: 18, fontSize: 13, fontWeight: 700, color: RED }}>{err}</div>
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', margin: '18px 0 0', fontSize: 13, fontWeight: 600, color: RED }}>{err}</div>
         )}
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
           {step > 0 && (
-            <button onClick={back} disabled={saving} style={{ flex: '0 0 auto', padding: '13px 20px', borderRadius: 14,
-              border: '1.5px solid #EDE8E1', background: '#fff', color: '#6B6B80', fontSize: 14, fontWeight: 700,
-              cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>← Back</button>
+            <button onClick={back} style={{ padding: '13px 20px', borderRadius: 14, border: '1.5px solid #EDE8E1', background: '#fff', color: '#6B6B80', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>Back</button>
           )}
-          <button onClick={step === STEPS.length - 1 ? finish : next} disabled={saving} style={{ flex: 1, padding: '13px',
-            borderRadius: 14, border: 'none', background: saving ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`,
-            color: saving ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700,
-            cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif",
-            boxShadow: saving ? 'none' : `0 4px 14px ${AMBER}44` }}>
-            {step === STEPS.length - 1 ? (saving ? 'Setting up…' : 'Finish & go to dashboard') : 'Continue'}
+          <button
+            onClick={step === STEPS.length - 1 ? finish : next}
+            disabled={saving}
+            style={{ flex: 1, padding: '13px', borderRadius: 14, border: 'none', background: saving ? '#EDE8E1' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9490A0' : '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif", boxShadow: saving ? 'none' : `0 4px 14px ${AMBER}44` }}
+          >
+            {saving ? 'Setting up…' : step === STEPS.length - 1 ? 'Finish setup' : 'Continue'}
           </button>
         </div>
       </div>

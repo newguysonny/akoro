@@ -396,7 +396,7 @@ const schoolHandlers = {
    * Create a school profile.
    */
   create: asyncHandler(async (req, res) => {
-    const { name, description, logo_url, website, address, phone } = req.body;
+    const { name, description, logo_url, website, address, phone, country, state, lga, city } = req.body;
 
     const { data, error } = await db
       .from("school_profiles")
@@ -408,6 +408,10 @@ const schoolHandlers = {
         website:       website     ?? null,
         address:       address     ?? null,
         phone:         phone       ?? null,
+        country:       country     ?? null,
+        state:         state       ?? null,
+        lga:           lga         ?? null,
+        city:          city        ?? null,
         is_active:     true,
       })
       .select()

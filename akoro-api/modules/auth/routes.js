@@ -331,7 +331,8 @@ export const requireRole = (roles) => (req, res, next) => {
 const rules = {
   register: [
     body("email").trim().isEmail().normalizeEmail(),
-    body("username").trim().notEmpty().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
+    // Username is optional — schools sign up without one (auto-generated below).
+    body("username").optional({ checkFalsy: true }).trim().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
     body("password").isLength({ min: 8 }),
     body("fullName").optional().trim().isLength({ max: 120 }),
     body("role").optional().isIn(["student", "instructor", "school_admin"]),
@@ -391,13 +392,22 @@ const authHandlers = {
 
   // POST /api/auth/register
   register: asyncHandler(async (req, res) => {
-    const { email, username, password, fullName, role = "student" } = req.body;
+    const { email, password, fullName, role = "student" } = req.body;
+    let { username } = req.body;
 
     const { data: existing } = await db.from("users").select("id").eq("email", email).maybeSingle();
     if (existing) return res400(res, "Email already registered");
 
+    // Auto-generate a unique username when none is supplied (e.g. schools).
+    if (!username) {
+      const base = (email.split("@")[0] || "user").toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 30) || "user";
+      username = `${base}_${Date.now().toString(36).slice(-4)}`;
+    }
     const { data: existingUser } = await db.from("users").select("id").eq("username", username).maybeSingle();
-    if (existingUser) return res400(res, "Username already taken");
+    if (existingUser) {
+      if (req.body.username) return res400(res, "Username already taken");
+      username = `${username}_${Math.random().toString(36).slice(2, 6)}`; // collision → nudge
+    }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const { data: user, error } = await db.from("users").insert({
