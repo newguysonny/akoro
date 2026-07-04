@@ -21,6 +21,7 @@ import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
 import { renderDocument } from "./documentRenderer.js";
+import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -1111,6 +1112,57 @@ router.post("/site-media/:id/restore", authenticateToken, requireRole(SCHOOL_ROL
 
 /* ── Document / form templates: render like a real printed file ───────────- */
 
+// List the school's templates + the shared default gallery (lesson plan,
+// report card, worksheet, certificate). Overrides generic GET for the resource.
+router.get("/document-templates", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    let q = M().from("document_templates").select("*").eq("school_id", school.id).order("created_at", { ascending: false });
+    if (req.query.category) q = q.eq("category", req.query.category);
+    const { data } = await q;
+    const own = (data || []).map((t) => ({ ...t, isDefault: false }));
+    const ownNames = new Set(own.map((t) => t.name));
+    const defaults = DEFAULT_DOC_TEMPLATES
+      .filter((t) => !ownNames.has(t.name) && (!req.query.category || t.category === req.query.category))
+      .map((t) => ({ id: `default:${t.id}`, name: t.name, description: t.description, category: t.category, page_size: t.page_size, orientation: t.orientation, variables: t.variables, isDefault: true }));
+    res.json({ success: true, data: [...own, ...defaults] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// View a template rendered as a real file. ?sample=1 fills the demo data.
+router.get("/document-templates/:id/html", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    let tpl;
+    if (String(req.params.id).startsWith("default:")) {
+      tpl = getDefaultDoc(String(req.params.id).slice("default:".length));
+    } else {
+      const { data } = await M().from("document_templates").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+      tpl = data;
+    }
+    if (!tpl) return res.status(404).type("html").send("<h1>Template not found</h1>");
+    const data = req.query.sample === "1" ? (tpl.sample || {}) : {};
+    res.type("html").send(renderDocument({ body: tpl.body, css: tpl.css, pageSize: tpl.page_size, orientation: tpl.orientation, data }));
+  } catch (e) { res.status(500).type("html").send("<h1>Something went wrong</h1>"); }
+});
+
+// Clone a default doc template into the school's own (idempotent by name).
+async function ensureSchoolDocTemplate(school, id) {
+  if (!String(id).startsWith("default:")) return id;
+  const def = getDefaultDoc(String(id).slice("default:".length));
+  if (!def) return null;
+  const { data: existing } = await M().from("document_templates").select("id").eq("school_id", school.id).eq("name", def.name).maybeSingle();
+  if (existing) return existing.id;
+  const { data: row, error } = await M().from("document_templates").insert({
+    school_id: school.id, name: def.name, description: def.description, category: def.category,
+    page_size: def.page_size, orientation: def.orientation, body: def.body, css: def.css || null, variables: def.variables || [],
+  }).select("id").single();
+  if (error) throw new Error(error.message);
+  return row.id;
+}
+
 // Live preview while editing (unsaved) — body/css/page settings → print HTML.
 router.post("/documents/preview", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
@@ -1127,16 +1179,20 @@ router.post("/document-templates/:id/render", authenticateToken, requireRole(SCH
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { data: tpl } = await M().from("document_templates").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    // Load from the school's template or the shared default gallery.
+    let tpl;
+    if (String(req.params.id).startsWith("default:")) tpl = getDefaultDoc(String(req.params.id).slice("default:".length));
+    else ({ data: tpl } = await M().from("document_templates").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle());
     if (!tpl) return res.status(404).json({ error: "Template not found" });
     const values = req.body.data || {};
     const html = renderDocument({ body: tpl.body, css: tpl.css, pageSize: tpl.page_size, orientation: tpl.orientation, data: values });
 
     let record = null;
     if (req.body.save) {
+      const templateId = await ensureSchoolDocTemplate(school, req.params.id); // clone default if needed
       const serial = `DOC-${Date.now().toString(36).toUpperCase()}`;
       const { data: rec, error } = await M().from("document_records").insert({
-        school_id: school.id, template_id: tpl.id, title: req.body.title || tpl.name,
+        school_id: school.id, template_id: templateId || null, title: req.body.title || tpl.name,
         serial_no: serial, data: values, student_id: req.body.student_id || null, staff_id: req.body.staff_id || null,
       }).select("*").single();
       if (error) throw new Error(error.message);

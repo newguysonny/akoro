@@ -25,6 +25,8 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { generateSchedule }               from "./schedule.js";
+import { renderDocument }                  from "../school/documentRenderer.js";
+import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "../school/defaultDocs/index.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -1573,5 +1575,25 @@ router.delete("/battles/:id", deleteBattle);
 router.get   ("/streaming",              getStreaming);
 router.post  ("/streaming/connect",      connectStreaming);
 router.delete("/streaming/:platform",    disconnectStreaming);
+
+// Document templates — the shared gallery (lesson plan, report card, worksheet,
+// certificate). Instructors can view them as real files and render them filled.
+router.get("/documents/templates", (_req, res) => {
+  res.json({ success: true, data: DEFAULT_DOC_TEMPLATES.map((t) => ({
+    id: t.id, name: t.name, description: t.description, category: t.category,
+    page_size: t.page_size, orientation: t.orientation, variables: t.variables,
+  })) });
+});
+router.get("/documents/templates/:id/html", (req, res) => {
+  const def = getDefaultDoc(req.params.id);
+  if (!def) return res.status(404).type("html").send("<h1>Template not found</h1>");
+  const data = req.query.sample === "1" ? (def.sample || {}) : {};
+  res.type("html").send(renderDocument({ body: def.body, css: def.css, pageSize: def.page_size, orientation: def.orientation, data }));
+});
+router.post("/documents/templates/:id/render", (req, res) => {
+  const def = getDefaultDoc(req.params.id);
+  if (!def) return res.status(404).json({ error: "Template not found" });
+  res.json({ success: true, html: renderDocument({ body: def.body, css: def.css, pageSize: def.page_size, orientation: def.orientation, data: req.body.data || {} }) });
+});
 
 export default router;
