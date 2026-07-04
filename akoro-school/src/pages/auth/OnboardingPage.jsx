@@ -13,6 +13,7 @@ const CURRICULA        = ['Nigerian (WAEC/NECO)', 'British / Cambridge', 'Montes
 const GENDER_TYPES     = ['Mixed', 'Boys only', 'Girls only'];
 const BOARDING_TYPES   = ['Day only', 'Boarding only', 'Day & Boarding'];
 const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,000', '1,000+'];
+const GUIDE_EMOJIS     = ['🧠', '🎓', '📚', '🤖', '💡', '🦉', '⚡', '🌟', '🔮', '🚀', '🎯', '📘'];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -22,12 +23,14 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr]       = useState('');
 
+  // School Info
   const [schoolName, setSchoolName] = useState(user?.fullName || '');
   const [phone, setPhone]           = useState('');
   const [country, setCountry]       = useState('Nigeria');
   const [state, setState]           = useState('');
   const [lga, setLga]               = useState('');
   const [city, setCity]             = useState('');
+  // Academic
   const [levels, setLevels]         = useState([]);
   const [ownership, setOwnership]   = useState('');
   const [curriculum, setCurriculum] = useState('');
@@ -35,21 +38,23 @@ export default function OnboardingPage() {
   const [gender, setGender]         = useState('');
   const [boarding, setBoarding]     = useState('');
   const [studentBand, setStudentBand] = useState('');
+  // Agent Setup
+  const [agentName, setAgentName]   = useState('');
+  const [agentEmoji, setAgentEmoji] = useState('🧠');
 
   const toggleLevel = (l) => setLevels((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l]);
 
-  // Dependent dropdowns where we have data (Nigeria); text inputs otherwise.
   const ngStates = country === 'Nigeria' ? Object.keys(NG_STATES) : [];
   const lgaOptions = country === 'Nigeria' ? (NG_STATES[state] || []) : [];
 
-  const STEPS = ['School', 'Address', 'Academics'];
+  const STEPS = ['School Info', 'Academic', 'Agent Setup'];
 
   const validateStep = () => {
     setErr('');
     if (step === 0 && !schoolName.trim()) { setErr('Please enter your school name'); return false; }
-    if (step === 1 && !country) { setErr('Please choose a country'); return false; }
-    if (step === 1 && !state.trim()) { setErr('Please enter your state'); return false; }
-    if (step === 2 && levels.length === 0) { setErr('Select at least one education level you offer'); return false; }
+    if (step === 0 && !country) { setErr('Please choose a country'); return false; }
+    if (step === 0 && !state.trim()) { setErr('Please enter your state'); return false; }
+    if (step === 1 && levels.length === 0) { setErr('Select at least one education level you offer'); return false; }
     return true;
   };
   const next = () => { if (validateStep()) setStep(s => s + 1); };
@@ -63,11 +68,14 @@ export default function OnboardingPage() {
       const res = await fetch(`${API}/api/profiles/me`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName: schoolName.trim(), schoolName: schoolName.trim(), country, onboardingCompleted: true }),
+        body: JSON.stringify({
+          fullName: schoolName.trim(), schoolName: schoolName.trim(), country,
+          teachingGuide: agentName.trim() || undefined, guideEmoji: agentEmoji,
+          onboardingCompleted: true,
+        }),
       });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Could not save your setup'); }
 
-      // Create the school profile (sets role → school_admin) if none yet.
       const existing = await fetch(`${API}/api/school`, { credentials: 'include' });
       if (!existing.ok) {
         await fetch(`${API}/api/profiles/schools`, {
@@ -119,22 +127,15 @@ export default function OnboardingPage() {
         {step === 0 && (
           <>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Welcome 👋</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Let's set up your school.</p>
+            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Tell us about your school.</p>
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>School name</label>
               <input value={schoolName} onChange={(e) => setSchoolName(e.target.value)} placeholder="Akoro International School" style={inp} />
             </div>
-            <div style={{ marginBottom: 4 }}>
+            <div style={{ marginBottom: 14 }}>
               <label style={lbl}>Phone <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+234 800 000 0000" style={inp} />
             </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>School address</h1>
-            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Where is your school located?</p>
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>Country</label>
               <select value={country} onChange={(e) => { setCountry(e.target.value); setState(''); setLga(''); }} style={{ ...inp, cursor: 'pointer' }}>
@@ -146,8 +147,7 @@ export default function OnboardingPage() {
                 <label style={lbl}>State / Region</label>
                 {ngStates.length ? (
                   <select value={state} onChange={(e) => { setState(e.target.value); setLga(''); }} style={{ ...inp, cursor: 'pointer' }}>
-                    <option value="">Select state…</option>
-                    {ngStates.map((s) => <option key={s}>{s}</option>)}
+                    <option value="">Select state…</option>{ngStates.map((s) => <option key={s}>{s}</option>)}
                   </select>
                 ) : (
                   <input value={state} onChange={(e) => setState(e.target.value)} placeholder="Lagos" style={inp} />
@@ -157,8 +157,7 @@ export default function OnboardingPage() {
                 <label style={lbl}>LGA / District</label>
                 {lgaOptions.length ? (
                   <select value={lga} onChange={(e) => setLga(e.target.value)} disabled={!state} style={{ ...inp, cursor: state ? 'pointer' : 'not-allowed', opacity: state ? 1 : 0.6 }}>
-                    <option value="">{state ? 'Select LGA…' : 'Pick a state first'}</option>
-                    {lgaOptions.map((l) => <option key={l}>{l}</option>)}
+                    <option value="">{state ? 'Select LGA…' : 'Pick a state first'}</option>{lgaOptions.map((l) => <option key={l}>{l}</option>)}
                   </select>
                 ) : (
                   <input value={lga} onChange={(e) => setLga(e.target.value)} placeholder="Ikeja" style={inp} />
@@ -172,7 +171,7 @@ export default function OnboardingPage() {
           </>
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Academics</h1>
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 20px' }}>What does your school offer?</p>
@@ -187,16 +186,14 @@ export default function OnboardingPage() {
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>School type</label>
               <select value={ownership} onChange={(e) => setOwnership(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
-                <option value="">Select…</option>
-                {OWNERSHIP_TYPES.map((o) => <option key={o}>{o}</option>)}
+                <option value="">Select…</option>{OWNERSHIP_TYPES.map((o) => <option key={o}>{o}</option>)}
               </select>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={lbl}>Curriculum</label>
                 <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
-                  <option value="">Select…</option>
-                  {CURRICULA.map((c) => <option key={c}>{c}</option>)}
+                  <option value="">Select…</option>{CURRICULA.map((c) => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div>
@@ -223,6 +220,29 @@ export default function OnboardingPage() {
               <select value={studentBand} onChange={(e) => setStudentBand(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
                 <option value="">Select…</option>{STUDENT_BANDS.map((s) => <option key={s}>{s}</option>)}
               </select>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1A1A2E', margin: '0 0 4px', fontFamily: "'Instrument Serif', serif" }}>Your school assistant 🤖</h1>
+            <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 20px' }}>Give your school's AI assistant a name and face. It helps students learn and answers their questions.</p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: '#FAF8F5', border: '1.5px solid #EDE8E1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>{agentEmoji}</div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={lbl}>Assistant name <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
+              <input value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="e.g. Ako, Tutor, MySchool AI" style={inp} />
+            </div>
+
+            <label style={lbl}>Pick an avatar</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+              {GUIDE_EMOJIS.map((em) => (
+                <button key={em} type="button" onClick={() => setAgentEmoji(em)} style={{ width: 46, height: 46, borderRadius: 12, fontSize: 22, cursor: 'pointer', background: agentEmoji === em ? '#FFF3EA' : '#fff', border: `1.5px solid ${agentEmoji === em ? AMBER : '#EDE8E1'}` }}>{em}</button>
+              ))}
             </div>
           </>
         )}
