@@ -20,6 +20,7 @@ import multerLib from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
+import { renderDocument } from "./documentRenderer.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -143,6 +144,10 @@ const RESOURCES = {
   // Certificates
   "certificate-templates": { table: "certificate_templates", fields: ["name","description","body"], required: ["name"], orderBy: "name", asc: true },
   "generated-documents": { table: "generated_documents", fields: [], refs: { template_id: ["certificate_templates","name"], student_id: ["students", studentLabel] }, readOnly: true, orderBy: "issued_on", asc: false },
+
+  // Document / form template engine (renders like a real printed file)
+  "document-templates": { table: "document_templates", fields: ["name","description","category","page_size","orientation","body","css","variables"], required: ["name"], filters: ["category"], orderBy: "created_at", asc: false },
+  "document-records": { table: "document_records", fields: [], refs: { template_id: ["document_templates","name"], student_id: ["students", studentLabel], staff_id: ["staff", studentLabel] }, filters: ["template_id"], orderBy: "issued_on", asc: false, readOnly: true },
 
   // Communicate
   "notices": { table: "notices", fields: ["title","body","audience","publish_on","expires_on","pinned"], required: ["title"], filters: ["audience"] },
@@ -1102,6 +1107,58 @@ router.post("/site-media/:id/restore", authenticateToken, requireRole(SCHOOL_ROL
     if (error) throw new Error(error.message);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ── Document / form templates: render like a real printed file ───────────- */
+
+// Live preview while editing (unsaved) — body/css/page settings → print HTML.
+router.post("/documents/preview", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { body = "", css = "", page_size = "A4", orientation = "portrait", data = {} } = req.body || {};
+    res.json({ success: true, html: renderDocument({ body, css, pageSize: page_size, orientation, data }) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Render a saved template filled with values; optionally save a record.
+// Body: { data, title?, student_id?, staff_id?, save? }
+router.post("/document-templates/:id/render", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: tpl } = await M().from("document_templates").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!tpl) return res.status(404).json({ error: "Template not found" });
+    const values = req.body.data || {};
+    const html = renderDocument({ body: tpl.body, css: tpl.css, pageSize: tpl.page_size, orientation: tpl.orientation, data: values });
+
+    let record = null;
+    if (req.body.save) {
+      const serial = `DOC-${Date.now().toString(36).toUpperCase()}`;
+      const { data: rec, error } = await M().from("document_records").insert({
+        school_id: school.id, template_id: tpl.id, title: req.body.title || tpl.name,
+        serial_no: serial, data: values, student_id: req.body.student_id || null, staff_id: req.body.staff_id || null,
+      }).select("*").single();
+      if (error) throw new Error(error.message);
+      record = rec;
+    }
+    res.json({ success: true, html, record });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// A saved record rendered as a standalone print-ready page (open/print).
+router.get("/document-records/:id/html", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: rec } = await M().from("document_records").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!rec) return res.status(404).type("html").send("<h1>Document not found</h1>");
+    const { data: tpl } = rec.template_id
+      ? await M().from("document_templates").select("*").eq("id", rec.template_id).maybeSingle()
+      : { data: null };
+    const html = renderDocument({ body: tpl?.body || "", css: tpl?.css, pageSize: tpl?.page_size, orientation: tpl?.orientation, data: rec.data || {} });
+    res.type("html").send(html);
+  } catch (e) { res.status(500).type("html").send("<h1>Something went wrong</h1>"); }
 });
 
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */

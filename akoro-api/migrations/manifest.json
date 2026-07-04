@@ -26,6 +26,7 @@
     "2026-staff-columns.sql",
     "2026-website-builder.sql",
     "2026-page-blocks.sql",
+    "2026-document-templates.sql",
     "2026-site-menus.sql",
     "2026-template-import.sql",
     "2026-school-address.sql",
@@ -44,6 +45,7 @@
     "2026-seed-mgmt-2.sql",
     "2026-seed-mgmt-3.sql",
     "2026-seed-staff.sql",
+    "2026-seed-doc-templates.sql",
     "2026-seed-site.sql"
   ]
 }
