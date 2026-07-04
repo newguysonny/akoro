@@ -25,6 +25,28 @@ const catPill = (v) => { const c = catColor[v] || MUTED2; return <span style={{ 
 
 // Open rendered HTML in a new printable window.
 const openHtml = (html) => { const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); } };
+const fetchText = (path) => fetch(`${API}${path}`, { credentials: 'include' }).then((r) => r.ok ? r.text() : '').catch(() => '');
+
+// A live snapshot of a template — its rendered HTML scaled into the card.
+function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {
+  const ref = useRef(null);
+  const [html, setHtml] = useState(null);
+  const [scale, setScale] = useState(0.28);
+  useEffect(() => { let on = true; Promise.resolve(getHtml()).then((h) => on && setHtml(h || '')).catch(() => on && setHtml('')); return () => { on = false; }; }, []); // eslint-disable-line
+  useEffect(() => { const w = ref.current?.offsetWidth; if (w) setScale(w / baseW); }, [html, baseW]);
+  return (
+    <div ref={ref} style={{ height, overflow: 'hidden', position: 'relative', background: '#f1f1f4', borderBottom: `1px solid ${BORDER}` }}>
+      {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={16} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        : html === '' ? (fallback || null)
+        : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 1.3, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
+    </div>
+  );
+}
+const IconBlock = ({ cat, height = 122 }) => (
+  <div style={{ height, background: `linear-gradient(135deg, ${(catColor[cat] || AMBER)}14, ${BLUE}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${BORDER}` }}>
+    {cat === 'certificate' ? <Award size={30} color={catColor.certificate} /> : <FileText size={28} color={catColor[cat] || BLUE} />}
+  </div>
+);
 
 /* ═══════════════ Hub ═══════════════ */
 export function DocumentTemplatesPage() {
@@ -79,9 +101,9 @@ export function DocumentTemplatesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {all.map((t) => (
             <div key={`${t.kind}-${t.id}`} style={card}>
-              <div style={{ height: 96, background: `linear-gradient(135deg, ${(catColor[t.category] || AMBER)}14, ${BLUE}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${BORDER}` }}>
-                {t.category === 'certificate' ? <Award size={30} color={catColor.certificate} /> : <FileText size={28} color={catColor[t.category] || BLUE} />}
-              </div>
+              {t.kind === 'doc'
+                ? <Thumb getHtml={() => fetchText(`${BASE}/document-templates/${encodeURIComponent(t.id)}/html?sample=1`)} baseW={t.orientation === 'landscape' ? 1150 : 830} fallback={<IconBlock cat={t.category} />} />
+                : <IconBlock cat={t.category} />}
               <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{t.name}</span>

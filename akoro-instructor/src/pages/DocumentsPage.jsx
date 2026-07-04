@@ -3,7 +3,7 @@
  * default gallery (lesson plan, report card, worksheet, certificate). Create,
  * view as a real file, and generate filled documents.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   FileText, Plus, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award,
@@ -22,6 +22,27 @@ const CATEGORIES = [
 const catColor = { form: BLUE, certificate: AMBER, report: PURPLE, result: GREEN, letter: MUTED2, other: MUTED2 };
 const catPill = (v) => { const c = catColor[v] || MUTED2; return <span style={{ padding: '2px 9px', borderRadius: 999, background: `${c}15`, color: c, fontSize: 10.5, fontWeight: 800, textTransform: 'capitalize' }}>{String(v || 'form').replace('_', ' ')}</span>; };
 const openHtml = (html) => { const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); } };
+const fetchText = (path) => fetch(`${API}${path}`, { credentials: 'include' }).then((r) => r.ok ? r.text() : '').catch(() => '');
+
+function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {
+  const ref = useRef(null);
+  const [html, setHtml] = useState(null);
+  const [scale, setScale] = useState(0.28);
+  useEffect(() => { let on = true; Promise.resolve(getHtml()).then((h) => on && setHtml(h || '')).catch(() => on && setHtml('')); return () => { on = false; }; }, []); // eslint-disable-line
+  useEffect(() => { const w = ref.current?.offsetWidth; if (w) setScale(w / baseW); }, [html, baseW]);
+  return (
+    <div ref={ref} style={{ height, overflow: 'hidden', position: 'relative', background: '#f1f1f4', borderBottom: `1px solid ${BORDER}` }}>
+      {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={16} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        : html === '' ? (fallback || null)
+        : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 1.3, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
+    </div>
+  );
+}
+const IconBlock = ({ cat, height = 122 }) => (
+  <div style={{ height, background: `linear-gradient(135deg, ${(catColor[cat] || AMBER)}14, ${BLUE}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${BORDER}` }}>
+    {cat === 'certificate' ? <Award size={30} color={catColor.certificate} /> : <FileText size={28} color={catColor[cat] || BLUE} />}
+  </div>
+);
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
@@ -61,9 +82,7 @@ export default function DocumentsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {all.map((t) => (
             <div key={t.id} style={card}>
-              <div style={{ height: 96, background: `linear-gradient(135deg, ${(catColor[t.category] || AMBER)}14, ${BLUE}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: `1px solid ${BORDER}` }}>
-                {t.category === 'certificate' ? <Award size={30} color={catColor.certificate} /> : <FileText size={28} color={catColor[t.category] || BLUE} />}
-              </div>
+              <Thumb getHtml={() => fetchText(`${BASE}/documents/templates/${encodeURIComponent(t.id)}/html?sample=1`)} baseW={t.orientation === 'landscape' ? 1150 : 830} fallback={<IconBlock cat={t.category} />} />
               <div style={{ padding: '12px 14px', flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{t.name}</span>

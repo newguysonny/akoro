@@ -195,7 +195,8 @@ export default function MarketplacePage() {
 
   const loadTemplates = useCallback(() => {
     apiGet('/api/instructor/tools/templates')
-      .then((res) => setTemplates(res.templates || []))
+      // Sample templates now live in the Documents page — hide them here.
+      .then((res) => setTemplates((res.templates || []).filter((t) => !t.is_sample)))
       .catch(() => {});
   }, []);
 

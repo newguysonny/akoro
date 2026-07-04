@@ -32,23 +32,27 @@ const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 7, paddi
 const outlineBtn = { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
 const toastEl = (t) => t && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{t}</div>;
 
-// A stylised "screenshot" card preview (no live render needed).
-function Screenshot({ name, active, badge }) {
+// Live snapshot of a website template — its rendered HTML scaled into the card.
+const fetchTplHtml = (id) => apiGet(`/api/school/website/templates/${encodeURIComponent(id)}`).then((r) => r.data?.html || '').catch(() => '');
+function Screenshot({ id, name, active, badge }) {
+  const ref = useRef(null);
+  const [html, setHtml] = useState(null);
+  const [scale, setScale] = useState(0.22);
+  const baseW = 1200;
+  useEffect(() => { let on = true; fetchTplHtml(id).then((h) => on && setHtml(h || '')).catch(() => on && setHtml('')); return () => { on = false; }; }, [id]);
+  useEffect(() => { const w = ref.current?.offsetWidth; if (w) setScale(w / baseW); }, [html]);
   return (
-    <div style={{ position: 'relative', height: 158, borderBottom: `1px solid ${BORDER}`, background: `linear-gradient(135deg, ${AMBER}14, ${BLUE}14)`, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ height: 22, background: WHITE, borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 5, padding: '0 9px' }}>
-        {[RED, AMBER, GREEN].map((c) => <span key={c} style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />)}
-      </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14, textAlign: 'center' }}>
-        <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>{name}</div>
-      </div>
+    <div ref={ref} style={{ position: 'relative', height: 158, borderBottom: `1px solid ${BORDER}`, overflow: 'hidden', background: '#f1f1f4' }}>
+      {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={18} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /></div>
+        : html === '' ? <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${AMBER}14, ${BLUE}14)`, fontSize: 15, fontWeight: 900, color: INK }}>{name}</div>
+        : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 0.85, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
       {active && (
-        <span style={{ position: 'absolute', top: 30, left: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: GREEN, color: WHITE, fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 20 }}>
+        <span style={{ position: 'absolute', top: 10, left: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: GREEN, color: WHITE, fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 20, boxShadow: '0 1px 4px rgba(0,0,0,.2)' }}>
           <CheckCircle2 size={11} /> Active
         </span>
       )}
       {badge && !active && (
-        <span style={{ position: 'absolute', top: 30, left: 10, background: BLUE, color: WHITE, fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: .4 }}>{badge}</span>
+        <span style={{ position: 'absolute', top: 10, left: 10, background: BLUE, color: WHITE, fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 20, textTransform: 'uppercase', letterSpacing: .4, boxShadow: '0 1px 4px rgba(0,0,0,.2)' }}>{badge}</span>
       )}
     </div>
   );
@@ -122,7 +126,7 @@ export default function WebsiteTemplatesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18 }}>
           {templates.map((t) => (
             <div key={t.id} style={{ border: `1px solid ${t.active ? GREEN : BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE }}>
-              <Screenshot name={t.name || 'Untitled'} active={t.active} badge={t.isDefault ? 'Starter' : null} />
+              <Screenshot id={t.id} name={t.name || 'Untitled'} active={t.active} badge={t.isDefault ? 'Starter' : null} />
               <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{t.name || 'Untitled'}</div>
@@ -226,7 +230,7 @@ export function AddTemplatePage() {
         {/* Installed templates */}
         {!loading && templates.map((t) => (
           <div key={t.id} style={{ border: `1px solid ${t.active ? GREEN : BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE }}>
-            <Screenshot name={t.name || 'Untitled'} active={t.active} />
+            <Screenshot id={t.id} name={t.name || 'Untitled'} active={t.active} />
             <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{t.name || 'Untitled'}</div>
               <span style={{ fontSize: 11, fontWeight: 800, color: t.active ? GREEN : MUTED2, fontFamily: FONT }}>{t.active ? 'Active' : 'Installed'}</span>
