@@ -16,6 +16,9 @@ import { COUNTRIES as GEO_COUNTRIES, NG_STATES } from '../data/locations.js';
 const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
 const OWNERSHIP_TYPES  = ['Private', 'Public / Government', 'Faith-based / Mission', 'Community'];
 const CURRICULA        = ['Nigerian (WAEC/NECO)', 'British / Cambridge', 'Montessori', 'American', 'International Baccalaureate', 'Mixed / Other'];
+const GENDER_TYPES     = ['Mixed', 'Boys only', 'Girls only'];
+const BOARDING_TYPES   = ['Day only', 'Boarding only', 'Day & Boarding'];
+const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,000', '1,000+'];
 
 /* ── Tab config ──────────────────────────────────────────────────── */
 const TABS = [
@@ -190,12 +193,22 @@ function SchoolProfilePanel({ value, onChange }) {
           })}
         </div>
       </Field>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 6, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginTop: 6, marginBottom: 24 }}>
         <Field label="School Type">
           <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.ownershipType || ''} onChange={set('ownershipType')}><option value="">Select…</option>{OWNERSHIP_TYPES.map((o) => <option key={o}>{o}</option>)}</select>
         </Field>
         <Field label="Curriculum">
           <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.curriculum || ''} onChange={set('curriculum')}><option value="">Select…</option>{CURRICULA.map((c) => <option key={c}>{c}</option>)}</select>
+        </Field>
+        <Field label="Year Established"><input type="number" style={inputStyle} value={value.yearEstablished || ''} onChange={set('yearEstablished')} placeholder="1998" /></Field>
+        <Field label="Students Are">
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.genderType || ''} onChange={set('genderType')}><option value="">Select…</option>{GENDER_TYPES.map((g) => <option key={g}>{g}</option>)}</select>
+        </Field>
+        <Field label="Boarding">
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.boardingType || ''} onChange={set('boardingType')}><option value="">Select…</option>{BOARDING_TYPES.map((b) => <option key={b}>{b}</option>)}</select>
+        </Field>
+        <Field label="No. of Students">
+          <select style={{ ...inputStyle, cursor: 'pointer' }} value={value.studentBand || ''} onChange={set('studentBand')}><option value="">Select…</option>{STUDENT_BANDS.map((s) => <option key={s}>{s}</option>)}</select>
         </Field>
       </div>
 

@@ -90,7 +90,7 @@ router.use("/mgmt", mgmtRouter);
 async function getMySchool(req, res) {
   const { data } = await db
     .from("school_profiles")
-    .select("id, name, description, logo_url, website, address, phone, is_active, created_at, slug, acronym, principal_name, country, state, lga, city, education_levels, ownership_type, curriculum, favicon_url, principal_signature_url")
+    .select("id, name, description, logo_url, website, address, phone, is_active, created_at, slug, acronym, principal_name, country, state, lga, city, education_levels, ownership_type, curriculum, year_established, gender_type, boarding_type, student_band, favicon_url, principal_signature_url")
     .eq("admin_user_id", req.user.id)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -422,6 +422,7 @@ router.get("/settings", authenticateToken, async (req, res) => {
           phone: school.phone, principal: school.principal_name, country: school.country,
           state: school.state, lga: school.lga, city: school.city,
           educationLevels: school.education_levels || [], ownershipType: school.ownership_type, curriculum: school.curriculum,
+          yearEstablished: school.year_established, genderType: school.gender_type, boardingType: school.boarding_type, studentBand: school.student_band,
           address: school.address, logoUrl: school.logo_url, faviconUrl: school.favicon_url,
           signatureUrl: school.principal_signature_url,
         },
@@ -443,7 +444,8 @@ router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), as
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { name, acronym, phone, principal, country, state, lga, city, educationLevels, ownershipType, curriculum, address, logoUrl, faviconUrl, signatureUrl } = req.body;
+    const { name, acronym, phone, principal, country, state, lga, city, educationLevels, ownershipType, curriculum,
+            yearEstablished, genderType, boardingType, studentBand, address, logoUrl, faviconUrl, signatureUrl } = req.body;
     const patch = {};
     if (name !== undefined)       patch.name = name;
     if (acronym !== undefined)    patch.acronym = acronym;
@@ -456,6 +458,10 @@ router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), as
     if (educationLevels !== undefined) patch.education_levels = educationLevels;
     if (ownershipType !== undefined)   patch.ownership_type = ownershipType;
     if (curriculum !== undefined)      patch.curriculum = curriculum;
+    if (yearEstablished !== undefined) patch.year_established = yearEstablished === '' ? null : yearEstablished;
+    if (genderType !== undefined)      patch.gender_type = genderType;
+    if (boardingType !== undefined)    patch.boarding_type = boardingType;
+    if (studentBand !== undefined)     patch.student_band = studentBand;
     if (address !== undefined)    patch.address = address;
     if (logoUrl !== undefined)    patch.logo_url = logoUrl;
     if (faviconUrl !== undefined) patch.favicon_url = faviconUrl;

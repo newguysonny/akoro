@@ -29,6 +29,7 @@
     "2026-template-import.sql",
     "2026-school-address.sql",
     "2026-school-academics.sql",
+    "2026-school-details.sql",
     "2026-school-domains-vercel.sql",
     "2026-public-portal.sql"
   ],

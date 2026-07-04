@@ -10,6 +10,9 @@ const RED   = '#EF4444';
 const EDUCATION_LEVELS = ['Nursery / Pre-school', 'Primary', 'Junior Secondary', 'Senior Secondary'];
 const OWNERSHIP_TYPES  = ['Private', 'Public / Government', 'Faith-based / Mission', 'Community'];
 const CURRICULA        = ['Nigerian (WAEC/NECO)', 'British / Cambridge', 'Montessori', 'American', 'International Baccalaureate', 'Mixed / Other'];
+const GENDER_TYPES     = ['Mixed', 'Boys only', 'Girls only'];
+const BOARDING_TYPES   = ['Day only', 'Boarding only', 'Day & Boarding'];
+const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,000', '1,000+'];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -28,6 +31,10 @@ export default function OnboardingPage() {
   const [levels, setLevels]         = useState([]);
   const [ownership, setOwnership]   = useState('');
   const [curriculum, setCurriculum] = useState('');
+  const [yearEst, setYearEst]       = useState('');
+  const [gender, setGender]         = useState('');
+  const [boarding, setBoarding]     = useState('');
+  const [studentBand, setStudentBand] = useState('');
 
   const toggleLevel = (l) => setLevels((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l]);
 
@@ -71,6 +78,8 @@ export default function OnboardingPage() {
             country, state: state.trim() || undefined, lga: lga.trim() || undefined, city: city.trim() || undefined,
             address: addressLine || undefined,
             educationLevels: levels, ownershipType: ownership || undefined, curriculum: curriculum || undefined,
+            yearEstablished: yearEst ? Number(yearEst) : undefined, genderType: gender || undefined,
+            boardingType: boarding || undefined, studentBand: studentBand || undefined,
           }),
         });
       }
@@ -182,11 +191,37 @@ export default function OnboardingPage() {
                 {OWNERSHIP_TYPES.map((o) => <option key={o}>{o}</option>)}
               </select>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={lbl}>Curriculum</label>
+                <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                  <option value="">Select…</option>
+                  {CURRICULA.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Year established</label>
+                <input type="number" value={yearEst} onChange={(e) => setYearEst(e.target.value)} placeholder="1998" style={inp} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div>
+                <label style={lbl}>Students are</label>
+                <select value={gender} onChange={(e) => setGender(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                  <option value="">Select…</option>{GENDER_TYPES.map((g) => <option key={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Boarding</label>
+                <select value={boarding} onChange={(e) => setBoarding(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                  <option value="">Select…</option>{BOARDING_TYPES.map((b) => <option key={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
             <div style={{ marginBottom: 4 }}>
-              <label style={lbl}>Curriculum</label>
-              <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
-                <option value="">Select…</option>
-                {CURRICULA.map((c) => <option key={c}>{c}</option>)}
+              <label style={lbl}>Approximate number of students</label>
+              <select value={studentBand} onChange={(e) => setStudentBand(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                <option value="">Select…</option>{STUDENT_BANDS.map((s) => <option key={s}>{s}</option>)}
               </select>
             </div>
           </>

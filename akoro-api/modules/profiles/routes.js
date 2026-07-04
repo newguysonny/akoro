@@ -397,7 +397,7 @@ const schoolHandlers = {
    */
   create: asyncHandler(async (req, res) => {
     const { name, description, logo_url, website, address, phone, country, state, lga, city,
-            educationLevels, ownershipType, curriculum } = req.body;
+            educationLevels, ownershipType, curriculum, yearEstablished, genderType, boardingType, studentBand } = req.body;
 
     const { data, error } = await db
       .from("school_profiles")
@@ -416,6 +416,10 @@ const schoolHandlers = {
         education_levels: Array.isArray(educationLevels) ? educationLevels : [],
         ownership_type:   ownershipType ?? null,
         curriculum:       curriculum    ?? null,
+        year_established: yearEstablished || null,
+        gender_type:      genderType   ?? null,
+        boarding_type:    boardingType ?? null,
+        student_band:     studentBand  ?? null,
         is_active:     true,
       })
       .select()
