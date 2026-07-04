@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { API } from '../../services/api.js';
+import { COUNTRIES, NG_STATES } from '../../data/locations.js';
 
 const AMBER = '#E8884A';
 const RED   = '#EF4444';
-const COUNTRIES = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'United States', 'United Kingdom', 'Canada', 'Other'];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -22,6 +22,10 @@ export default function OnboardingPage() {
   const [state, setState]           = useState('');
   const [lga, setLga]               = useState('');
   const [city, setCity]             = useState('');
+
+  // Dependent dropdowns where we have data (Nigeria); text inputs otherwise.
+  const ngStates = country === 'Nigeria' ? Object.keys(NG_STATES) : [];
+  const lgaOptions = country === 'Nigeria' ? (NG_STATES[state] || []) : [];
 
   const STEPS = ['School', 'Address'];
 
@@ -113,18 +117,32 @@ export default function OnboardingPage() {
             <p style={{ fontSize: 13, color: '#6B6B80', margin: '0 0 22px' }}>Where is your school located?</p>
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>Country</label>
-              <select value={country} onChange={(e) => setCountry(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+              <select value={country} onChange={(e) => { setCountry(e.target.value); setState(''); setLga(''); }} style={{ ...inp, cursor: 'pointer' }}>
                 {COUNTRIES.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={lbl}>State / Region</label>
-                <input value={state} onChange={(e) => setState(e.target.value)} placeholder="Lagos" style={inp} />
+                {ngStates.length ? (
+                  <select value={state} onChange={(e) => { setState(e.target.value); setLga(''); }} style={{ ...inp, cursor: 'pointer' }}>
+                    <option value="">Select state…</option>
+                    {ngStates.map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                ) : (
+                  <input value={state} onChange={(e) => setState(e.target.value)} placeholder="Lagos" style={inp} />
+                )}
               </div>
               <div>
                 <label style={lbl}>LGA / District</label>
-                <input value={lga} onChange={(e) => setLga(e.target.value)} placeholder="Ikeja" style={inp} />
+                {lgaOptions.length ? (
+                  <select value={lga} onChange={(e) => setLga(e.target.value)} disabled={!state} style={{ ...inp, cursor: state ? 'pointer' : 'not-allowed', opacity: state ? 1 : 0.6 }}>
+                    <option value="">{state ? 'Select LGA…' : 'Pick a state first'}</option>
+                    {lgaOptions.map((l) => <option key={l}>{l}</option>)}
+                  </select>
+                ) : (
+                  <input value={lga} onChange={(e) => setLga(e.target.value)} placeholder="Ikeja" style={inp} />
+                )}
               </div>
             </div>
             <div style={{ marginBottom: 4 }}>
