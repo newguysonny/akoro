@@ -12,6 +12,7 @@ import CoursesPage  from './pages/CoursesPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
+import DocumentsPage, { DocumentEditorPage } from './pages/DocumentsPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
 import SettingsPage       from './pages/SettingsPage.jsx';
@@ -92,6 +93,9 @@ function AppRoutes() {
       <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
+      <Route path="/documents"     element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
+      <Route path="/documents/new" element={<ProtectedRoute><DocumentEditorPage /></ProtectedRoute>} />
+      <Route path="/documents/:id" element={<ProtectedRoute><DocumentEditorPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

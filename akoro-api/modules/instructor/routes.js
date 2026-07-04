@@ -1576,24 +1576,106 @@ router.get   ("/streaming",              getStreaming);
 router.post  ("/streaming/connect",      connectStreaming);
 router.delete("/streaming/:platform",    disconnectStreaming);
 
-// Document templates — the shared gallery (lesson plan, report card, worksheet,
-// certificate). Instructors can view them as real files and render them filled.
-router.get("/documents/templates", (_req, res) => {
-  res.json({ success: true, data: DEFAULT_DOC_TEMPLATES.map((t) => ({
-    id: t.id, name: t.name, description: t.description, category: t.category,
-    page_size: t.page_size, orientation: t.orientation, variables: t.variables,
-  })) });
+// ── Document templates ──────────────────────────────────────────────────────
+// Instructors' own document/form templates + the shared default gallery
+// (lesson plan, report card, worksheet, certificate). Create, view as a real
+// file, and generate filled documents.
+const DOC = () => db.from("instructor_document_templates");
+const DOC_FIELDS = ["name", "description", "category", "page_size", "orientation", "body", "css", "variables"];
+
+async function ensureInstrDocTemplate(userId, id) {
+  if (!String(id).startsWith("default:")) return id;
+  const def = getDefaultDoc(String(id).slice("default:".length));
+  if (!def) return null;
+  const { data: existing } = await DOC().select("id").eq("user_id", userId).eq("name", def.name).maybeSingle();
+  if (existing) return existing.id;
+  const { data: row, error } = await DOC().insert({
+    user_id: userId, name: def.name, description: def.description, category: def.category,
+    page_size: def.page_size, orientation: def.orientation, body: def.body, css: def.css || null, variables: def.variables || [],
+  }).select("id").single();
+  if (error) throw new Error(error.message);
+  return row.id;
+}
+const loadDoc = async (userId, id) => {
+  if (String(id).startsWith("default:")) return getDefaultDoc(String(id).slice("default:".length));
+  const { data } = await DOC().select("*").eq("id", id).eq("user_id", userId).maybeSingle();
+  return data;
+};
+
+router.get("/documents/templates", async (req, res) => {
+  try {
+    let q = DOC().select("*").eq("user_id", req.user.id).order("created_at", { ascending: false });
+    if (req.query.category) q = q.eq("category", req.query.category);
+    const { data } = await q;
+    const own = (data || []).map((t) => ({ ...t, isDefault: false }));
+    const names = new Set(own.map((t) => t.name));
+    const defaults = DEFAULT_DOC_TEMPLATES
+      .filter((t) => !names.has(t.name) && (!req.query.category || t.category === req.query.category))
+      .map((t) => ({ id: `default:${t.id}`, name: t.name, description: t.description, category: t.category, page_size: t.page_size, orientation: t.orientation, variables: t.variables, isDefault: true }));
+    res.json({ success: true, data: [...own, ...defaults] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.get("/documents/templates/:id/html", (req, res) => {
-  const def = getDefaultDoc(req.params.id);
-  if (!def) return res.status(404).type("html").send("<h1>Template not found</h1>");
-  const data = req.query.sample === "1" ? (def.sample || {}) : {};
-  res.type("html").send(renderDocument({ body: def.body, css: def.css, pageSize: def.page_size, orientation: def.orientation, data }));
+
+router.post("/documents/templates", async (req, res) => {
+  try {
+    if (!req.body.name?.trim()) return res.status(400).json({ error: "name is required" });
+    const row = { user_id: req.user.id };
+    for (const f of DOC_FIELDS) if (req.body[f] !== undefined) row[f] = req.body[f];
+    const { data, error } = await DOC().insert(row).select("*").single();
+    if (error) return res.status(error.code === "23505" ? 409 : 500).json({ error: error.code === "23505" ? "You already have a template with that name" : error.message });
+    res.status(201).json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.post("/documents/templates/:id/render", (req, res) => {
-  const def = getDefaultDoc(req.params.id);
-  if (!def) return res.status(404).json({ error: "Template not found" });
-  res.json({ success: true, html: renderDocument({ body: def.body, css: def.css, pageSize: def.page_size, orientation: def.orientation, data: req.body.data || {} }) });
+
+router.put("/documents/templates/:id", async (req, res) => {
+  try {
+    const patch = { updated_at: new Date() };
+    for (const f of DOC_FIELDS) if (req.body[f] !== undefined) patch[f] = req.body[f];
+    const { data, error } = await DOC().update(patch).eq("id", req.params.id).eq("user_id", req.user.id).select("*").single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete("/documents/templates/:id", async (req, res) => {
+  try {
+    const { error } = await DOC().delete().eq("id", req.params.id).eq("user_id", req.user.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get("/documents/templates/:id/html", async (req, res) => {
+  try {
+    const tpl = await loadDoc(req.user.id, req.params.id);
+    if (!tpl) return res.status(404).type("html").send("<h1>Template not found</h1>");
+    const data = req.query.sample === "1" ? (tpl.sample || {}) : {};
+    res.type("html").send(renderDocument({ body: tpl.body, css: tpl.css, pageSize: tpl.page_size, orientation: tpl.orientation, data }));
+  } catch (e) { res.status(500).type("html").send("<h1>Something went wrong</h1>"); }
+});
+
+router.post("/documents/templates/:id/render", async (req, res) => {
+  try {
+    const tpl = await loadDoc(req.user.id, req.params.id);
+    if (!tpl) return res.status(404).json({ error: "Template not found" });
+    const values = req.body.data || {};
+    const html = renderDocument({ body: tpl.body, css: tpl.css, pageSize: tpl.page_size, orientation: tpl.orientation, data: values });
+    let record = null;
+    if (req.body.save) {
+      const templateId = await ensureInstrDocTemplate(req.user.id, req.params.id);
+      const serial = `DOC-${Date.now().toString(36).toUpperCase()}`;
+      const { data: rec } = await db.from("instructor_document_records").insert({
+        user_id: req.user.id, template_id: templateId || null, title: req.body.title || tpl.name, serial_no: serial, data: values,
+      }).select("*").single();
+      record = rec;
+    }
+    res.json({ success: true, html, record });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post("/documents/preview", (req, res) => {
+  const { body = "", css = "", page_size = "A4", orientation = "portrait", data = {} } = req.body || {};
+  res.json({ success: true, html: renderDocument({ body, css, pageSize: page_size, orientation, data }) });
 });
 
 export default router;

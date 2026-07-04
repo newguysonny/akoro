@@ -27,6 +27,7 @@
     "2026-website-builder.sql",
     "2026-page-blocks.sql",
     "2026-document-templates.sql",
+    "2026-instructor-doc-templates.sql",
     "2026-site-menus.sql",
     "2026-template-import.sql",
     "2026-school-address.sql",
