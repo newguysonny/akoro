@@ -191,7 +191,7 @@ const RESOURCES = {
 
   // Website Builder (public-site media / pages / menus)
   "site-media": { table: "site_media", fields: ["title","media_type","url","alt_text"], required: ["title","url"], filters: ["media_type"], orderBy: "created_at", asc: false },
-  "site-pages": { table: "site_pages", fields: ["title","slug","content","status","sort_order"], required: ["title"], filters: ["status"], orderBy: "sort_order", asc: true },
+  "site-pages": { table: "site_pages", fields: ["title","slug","content","blocks","status","sort_order"], required: ["title"], filters: ["status"], orderBy: "sort_order", asc: true },
   "menus": { table: "site_menus", fields: ["name","location"], required: ["name"], filters: ["location"], orderBy: "created_at", asc: true },
   "menu-items": { table: "site_menu_items", fields: ["menu_id","label","url","page_id","parent_label","target","sort_order"], required: ["menu_id","label"], refs: { page_id: ["site_pages","title"] }, filters: ["menu_id","parent_label"], orderBy: "sort_order", asc: true },
 
