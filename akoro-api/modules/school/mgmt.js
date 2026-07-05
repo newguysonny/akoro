@@ -62,6 +62,7 @@ const RESOURCES = {
   "student-attendance": { table: "student_attendance", fields: ["student_id","date","status","note"], required: ["student_id","date"], refs: { student_id: ["students", studentLabel] }, filters: ["date","student_id","status"], orderBy: "date", asc: false },
   "behavior-records": { table: "behavior_records", fields: ["student_id","incident_type","severity","description","action_taken","recorded_on"], required: ["student_id","incident_type"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","severity"] },
   "health-records": { table: "health_records", fields: ["student_id","record_type","title","details","recorded_on"], required: ["student_id","title"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","record_type"] },
+  "student-documents": { table: "student_documents", fields: ["student_id","title","url"], required: ["student_id","title","url"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id"], orderBy: "uploaded_at", asc: false },
 
   // Finance & Fees
   "fee-groups": { table: "fee_groups", fields: ["name","description"], required: ["name"], orderBy: "name", asc: true },
@@ -581,6 +582,122 @@ router.get("/students/:id/profile", authenticateToken, async (req, res) => {
         attendance: { present, absent, late, total: (attRows || []).length },
       },
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Bulk upload students (CSV parsed client-side → rows of objects) ───────
+// Upserts by (school_id, admission_no): existing students are updated,
+// new admission numbers are inserted. Body: { rows: [{ admission_no, first_name, last_name, ... }] }
+router.post("/students/bulk-upload", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+    if (!rows.length) return res.status(400).json({ error: "rows[] is required" });
+    const allowed = ["admission_no", "roll_no", "first_name", "last_name", "gender", "dob", "guardian_name", "guardian_phone", "guardian_email", "address", "blood_group", "status"];
+    let inserted = 0, updated = 0, skipped = 0;
+    const errors = [];
+    for (const [i, raw] of rows.entries()) {
+      const row = {};
+      for (const k of allowed) if (raw[k] !== undefined && raw[k] !== "") row[k] = raw[k];
+      if (!row.admission_no || !row.first_name || !row.last_name) { skipped++; errors.push(`Row ${i + 1}: admission_no, first_name and last_name are required`); continue; }
+      const { data: existing } = await M().from("students").select("id").eq("school_id", school.id).eq("admission_no", row.admission_no).maybeSingle();
+      if (existing) {
+        const { error } = await M().from("students").update(row).eq("id", existing.id);
+        if (error) { skipped++; errors.push(`Row ${i + 1}: ${error.message}`); } else updated++;
+      } else {
+        const { error } = await M().from("students").insert({ ...row, school_id: school.id });
+        if (error) { skipped++; errors.push(`Row ${i + 1}: ${error.message}`); } else inserted++;
+      }
+    }
+    res.json({ success: true, inserted, updated, skipped, errors: errors.slice(0, 20) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Bulk photo upload — files matched to students by filename = admission_no
+const bulkUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } }).array("files", 200);
+router.post("/students/bulk-photos", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  bulkUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const files = req.files || [];
+      if (!files.length) return res.status(400).json({ error: "No files uploaded" });
+      const { data: students } = await M().from("students").select("id, admission_no").eq("school_id", school.id);
+      const byAdm = Object.fromEntries((students || []).map((s) => [String(s.admission_no).toLowerCase(), s.id]));
+
+      await ensureBucket();
+      let matched = 0; const unmatched = [];
+      for (const f of files) {
+        const base = (f.originalname || "").replace(/\.[^.]+$/, "").trim().toLowerCase();
+        const studentId = byAdm[base];
+        if (!studentId) { unmatched.push(f.originalname); continue; }
+        const safe = (f.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const dest = `students/${school.id}/photos/${studentId}-${Date.now()}-${safe}`;
+        const url = await uploadPublicFile(dest, f.buffer, f.mimetype || "image/jpeg");
+        await M().from("students").update({ photo_url: url }).eq("id", studentId);
+        matched++;
+      }
+      res.json({ success: true, matched, unmatched: unmatched.slice(0, 30), totalFiles: files.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// ── Bulk document upload — files matched to students by filename = admission_no
+router.post("/students/bulk-docs", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  bulkUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const files = req.files || [];
+      if (!files.length) return res.status(400).json({ error: "No files uploaded" });
+      const { data: students } = await M().from("students").select("id, admission_no").eq("school_id", school.id);
+      const byAdm = Object.fromEntries((students || []).map((s) => [String(s.admission_no).toLowerCase(), s.id]));
+
+      await ensureBucket();
+      let matched = 0; const unmatched = [];
+      for (const f of files) {
+        const base = (f.originalname || "").replace(/\.[^.]+$/, "").trim();
+        const studentId = byAdm[base.toLowerCase()];
+        if (!studentId) { unmatched.push(f.originalname); continue; }
+        const safe = (f.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const dest = `students/${school.id}/documents/${studentId}-${Date.now()}-${safe}`;
+        const url = await uploadPublicFile(dest, f.buffer, f.mimetype || "application/octet-stream");
+        await M().from("student_documents").insert({ school_id: school.id, student_id: studentId, title: f.originalname || "Document", url });
+        matched++;
+      }
+      res.json({ success: true, matched, unmatched: unmatched.slice(0, 30), totalFiles: files.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// ── Bulk delete / bulk status update — Bulk Edit + Bulk Delete on the list
+router.post("/students/bulk-delete", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    if (!ids.length) return res.status(400).json({ error: "ids[] is required" });
+    const { error } = await M().from("students").delete().eq("school_id", school.id).in("id", ids);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, deleted: ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post("/students/bulk-update", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    if (!ids.length) return res.status(400).json({ error: "ids[] is required" });
+    const allowed = ["class_id", "section_id", "status", "category_id", "house_id"];
+    const patch = {};
+    for (const k of allowed) if (req.body[k] !== undefined && req.body[k] !== "") patch[k] = req.body[k];
+    if (!Object.keys(patch).length) return res.status(400).json({ error: "No fields to update" });
+    const { error } = await M().from("students").update(patch).eq("school_id", school.id).in("id", ids);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, updated: ids.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
