@@ -68,7 +68,7 @@ const RESOURCES = {
     filters: ["class_id","section_id","status","is_disabled","category_id","house_id"] },
   "student-transport": { table: "student_transport", fields: ["student_id","route_id","vehicle_id","pickup_point","fee","status"], required: ["student_id"], refs: { student_id: ["students", studentLabel], route_id: ["transport_routes","name"], vehicle_id: ["vehicles","plate_no"] }, filters: ["student_id","status"] },
   "student-attendance": { table: "student_attendance", fields: ["student_id","date","status","note"], required: ["student_id","date"], refs: { student_id: ["students", studentLabel] }, filters: ["date","student_id","status"], orderBy: "date", asc: false },
-  "behavior-records": { table: "behavior_records", fields: ["student_id","incident_type","severity","description","action_taken","recorded_on"], required: ["student_id","incident_type"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","severity"] },
+  "behavior-records": { table: "behavior_records", fields: ["student_id","incident_type","severity","polarity","points","description","action_taken","recorded_on"], required: ["student_id","incident_type"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","severity","polarity"], orderBy: "recorded_on", asc: false },
   "health-records": { table: "health_records", fields: ["student_id","record_type","title","details","recorded_on"], required: ["student_id","title"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","record_type"] },
   "student-documents": { table: "student_documents", fields: ["student_id","title","url"], required: ["student_id","title","url"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id"], orderBy: "uploaded_at", asc: false },
 
@@ -624,6 +624,80 @@ router.post("/students/:id/credentials/regenerate", authenticateToken, requireRo
 });
 
 // ── Transport & Hostel summary for a student ──────────────────────────────
+// ── Fees: assigned/collected/concession/balance + grouped, itemised rows ──
+router.get("/students/:id/fees", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: student } = await M().from("students").select("id, class_id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    const [{ data: assigns }, { data: types }, { data: groups }, { data: discounts }, { data: sessions }, { data: pays }] = await Promise.all([
+      M().from("fee_assignments").select("id, session_id, fee_type_id, class_id, student_id, amount, due_date, discount_id").eq("school_id", school.id),
+      M().from("fee_types").select("id, name, group_id").eq("school_id", school.id),
+      M().from("fee_groups").select("id, name").eq("school_id", school.id),
+      M().from("fee_discounts").select("id, discount_type, amount").eq("school_id", school.id),
+      M().from("academic_sessions").select("id, name").eq("school_id", school.id),
+      M().from("fee_payments").select("id, assignment_id, amount").eq("school_id", school.id).eq("student_id", student.id),
+    ]);
+    const typeOf = Object.fromEntries((types || []).map((t) => [t.id, t]));
+    const groupName = Object.fromEntries((groups || []).map((g) => [g.id, g.name]));
+    const discountOf = Object.fromEntries((discounts || []).map((d) => [d.id, d]));
+    const sessionName = Object.fromEntries((sessions || []).map((s) => [s.id, s.name]));
+    const paidByAssignment = {};
+    let collected = 0;
+    for (const p of pays || []) { collected += Number(p.amount || 0); if (p.assignment_id) paidByAssignment[p.assignment_id] = (paidByAssignment[p.assignment_id] || 0) + Number(p.amount || 0); }
+
+    const mine = (assigns || []).filter((a) => a.student_id === student.id || (a.class_id && a.class_id === student.class_id && !a.student_id));
+    const groupsMap = {};
+    let assigned = 0, concessionTotal = 0;
+    for (const a of mine) {
+      const amount = Number(a.amount || 0);
+      const disc = a.discount_id ? discountOf[a.discount_id] : null;
+      const concession = disc ? (disc.discount_type === "percentage" ? amount * Number(disc.amount || 0) / 100 : Math.min(amount, Number(disc.amount || 0))) : 0;
+      const paid = paidByAssignment[a.id] || 0;
+      const due = Math.max(0, amount - concession - paid);
+      const status = due <= 0 ? "paid" : paid > 0 ? "partial" : "unpaid";
+      assigned += amount; concessionTotal += concession;
+
+      const type = typeOf[a.fee_type_id];
+      const gName = type?.group_id ? (groupName[type.group_id] || "General Fees") : "General Fees";
+      const sName = a.session_id ? (sessionName[a.session_id] || "") : "";
+      const key = `${gName}::${sName}`;
+      if (!groupsMap[key]) groupsMap[key] = { title: [gName, sName].filter(Boolean).join(" "), total: 0, due: 0, unpaidCount: 0, rows: [] };
+      groupsMap[key].total += amount; groupsMap[key].due += due;
+      if (status !== "paid") groupsMap[key].unpaidCount++;
+      groupsMap[key].rows.push({ id: a.id, fee_type_name: type?.name || "Fee", due_date: a.due_date, amount, concession, paid, due, status });
+    }
+    const balance = Math.max(0, assigned - concessionTotal - collected);
+    res.json({
+      success: true,
+      data: {
+        assigned, collected, concession: concessionTotal, fine: 0, balance,
+        percentCollected: assigned > 0 ? Math.round((collected / assigned) * 100) : 0,
+        groups: Object.values(groupsMap),
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Behavior summary: +/- score, positive/negative counts, current-session log
+router.get("/students/:id/behavior-summary", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: session } = await M().from("academic_sessions").select("starts_on, ends_on").eq("school_id", school.id).eq("is_active", true).maybeSingle();
+    let q = M().from("behavior_records").select("*").eq("school_id", school.id).eq("student_id", req.params.id).order("recorded_on", { ascending: false });
+    const { data: all } = await q;
+    let current = all || [];
+    if (session?.starts_on) current = current.filter((r) => r.recorded_on >= session.starts_on && (!session.ends_on || r.recorded_on <= session.ends_on));
+    const score = current.reduce((s, r) => s + (r.polarity === "positive" ? Number(r.points || 1) : -Number(r.points || 1)), 0);
+    const positive = current.filter((r) => r.polarity === "positive").length;
+    const negative = current.filter((r) => r.polarity === "negative").length;
+    res.json({ success: true, data: { score, positive, negative, records: current, hasActiveSession: !!session } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get("/students/:id/transport", authenticateToken, async (req, res) => {
   try {
     const school = await getMySchool(req, res);

@@ -9,8 +9,8 @@ import {
   Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
   Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
   FileUp, Upload, Sheet, Download, CheckSquare, FileText,
-  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, RefreshCw,
-  ClipboardList,
+  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
+  ClipboardList, ThumbsUp, ThumbsDown, Plus,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
@@ -788,10 +788,13 @@ function GridInfo({ icon: Icon, label, value }) {
 function InfoGrid({ children }) {
   return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px 18px' }}>{children}</div>;
 }
-function SectionCard({ title, color = BLUE, children }) {
+function SectionCard({ title, color = BLUE, action, children }) {
   return (
     <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 6, textTransform: 'uppercase', letterSpacing: .4 }}>{title}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .4 }}>{title}</div>
+        {action}
+      </div>
       {children}
     </div>
   );
@@ -815,7 +818,7 @@ export function StudentProfilePage() {
   const [params] = [new URLSearchParams(window.location.search)];
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('profile');
+  const [tab, setTab] = useState(PROFILE_TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'profile');
   const [editing, setEditing] = useState(params.get('edit') === '1');
   const [form, setForm] = useState({});
   const [classes, setClasses] = useState([]);
@@ -926,7 +929,7 @@ export function StudentProfilePage() {
           </div>
 
           {tab === 'profile' && <ProfileTab data={data} editing={editing} form={form} set={set} classes={classes} sections={sections} categories={categories} houses={houses} />}
-          {tab === 'fees' && <FeesTab studentId={id} fees={data.fees} showToast={showToast} />}
+          {tab === 'fees' && <FeesTab studentId={id} showToast={showToast} />}
           {tab === 'documents' && <DocumentsTab studentId={id} showToast={showToast} />}
           {tab === 'credentials' && <CredentialsTab studentId={id} data={data} onChanged={load} showToast={showToast} />}
           {tab === 'health' && <HealthTab studentId={id} showToast={showToast} />}
@@ -1135,39 +1138,88 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
 }
 
 /* ── Fees tab ─────────────────────────────────────────────────────────────── */
-function FeesTab({ studentId, fees, showToast }) {
-  const [assignments, setAssignments] = useState(null);
-  const [payments, setPayments] = useState(null);
-  useEffect(() => {
-    apiGet(`${BASE}/fee-assignments?student_id=${studentId}`).then((r) => setAssignments(r.data || [])).catch(() => setAssignments([]));
-    apiGet(`${BASE}/fee-payments?student_id=${studentId}`).then((r) => setPayments(r.data || [])).catch(() => setPayments([]));
-  }, [studentId]);
+// A small ring/donut stat, built with conic-gradient (no chart library).
+function Ring({ percent, label, color = GREEN, size = 96 }) {
+  const p = Math.max(0, Math.min(100, percent || 0));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div style={{
+        width: size, height: size, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: `conic-gradient(${color} ${p * 3.6}deg, ${BORDER} 0deg)`,
+      }}>
+        <div style={{ width: size - 18, height: size - 18, borderRadius: '50%', background: WHITE, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 18, fontWeight: 800, color: INK, fontFamily: FONT }}>{p}%</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: MUTED2, fontFamily: FONT, textTransform: 'uppercase' }}>{label}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+const statPill = (label, value, color) => (
+  <div style={{ flex: '1 1 110px', background: `${color}12`, border: `1px solid ${color}33`, borderRadius: 10, padding: '10px 12px' }}>
+    <div style={{ fontSize: 15, fontWeight: 800, color, fontFamily: FONT }}>{value}</div>
+    <div style={{ fontSize: 10, color: MUTED, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .3, marginTop: 2 }}>{label}</div>
+  </div>
+);
+const FEE_STATUS_COLOR = { paid: GREEN, partial: AMBER, unpaid: RED };
+
+function FeesTab({ studentId, showToast }) {
+  const [data, setData] = useState(null);
+  const [openGroups, setOpenGroups] = useState({});
+  useEffect(() => { apiGet(`${BASE}/students/${studentId}/fees`).then((r) => { setData(r.data); setOpenGroups(Object.fromEntries((r.data.groups || []).map((g, i) => [i, true]))); }).catch(() => showToast('Could not load fees')); }, [studentId]);
+  if (!data) return <SectionCard title="Fees" color={BLUE}><Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /></SectionCard>;
+
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 800, color: MUTED2 };
   const td = { padding: '8px 10px', fontSize: 12.5, color: INK, borderTop: `1px solid ${BORDER}` };
+  const toggle = (i) => setOpenGroups((p) => ({ ...p, [i]: !p[i] }));
+
   return (
-    <>
-      <SectionCard title="Fee Summary" color={BLUE}>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <InfoRow label="Assigned" value={naira(fees?.assigned)} />
-          <InfoRow label="Paid" value={naira(fees?.paid)} />
-          <InfoRow label="Balance Due" value={naira(fees?.due)} />
+    <SectionCard title="Fees" color={BLUE}>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <Ring percent={data.percentCollected} label="Collected" color={GREEN} />
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 260 }}>
+          {statPill('Assigned', naira(data.assigned), BLUE)}
+          {statPill('Collected', naira(data.collected), GREEN)}
+          {statPill('Concession', naira(data.concession), AMBER)}
+          {statPill('Fine', naira(data.fine), PURPLE)}
+          {statPill('Balance', naira(data.balance), RED)}
         </div>
-      </SectionCard>
-      <SectionCard title="Fee Assignments" color={AMBER}>
-        {assignments === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : assignments.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No fees assigned yet.</p> : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Fee Type</th><th style={th}>Due Date</th><th style={th}>Amount</th></tr></thead>
-            <tbody>{assignments.map((a) => <tr key={a.id}><td style={td}>{a.fee_type_name || '—'}</td><td style={td}>{a.due_date || '—'}</td><td style={td}>{naira(a.amount)}</td></tr>)}</tbody>
-          </table>
-        )}
-      </SectionCard>
-      <SectionCard title="Payment History" color={GREEN}>
-        {payments === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : payments.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No payments recorded yet.</p> : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Date</th><th style={th}>Amount</th><th style={th}>Method</th><th style={th}>Reference</th></tr></thead>
-            <tbody>{payments.map((p) => <tr key={p.id}><td style={td}>{p.paid_on}</td><td style={td}>{naira(p.amount)}</td><td style={{ ...td, textTransform: 'capitalize' }}>{p.method}</td><td style={td}>{p.reference || '—'}</td></tr>)}</tbody>
-          </table>
-        )}
-      </SectionCard>
-    </>
+      </div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED, fontFamily: FONT, marginBottom: 5 }}>
+          <span>Payment Progress</span><span>{data.percentCollected}% Complete</span>
+        </div>
+        <div style={{ height: 8, borderRadius: 999, background: BORDER, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${data.percentCollected}%`, background: GREEN, borderRadius: 999 }} />
+        </div>
+      </div>
+
+      {data.groups.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No fees assigned yet.</p> : data.groups.map((g, i) => (
+        <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+          <button onClick={() => toggle(i)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: LIGHT, border: 'none', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}>
+            {openGroups[i] ? <ChevronUp size={14} color={MUTED2} /> : <ChevronDown size={14} color={MUTED2} />}
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: INK, flex: 1 }}>{g.title}</span>
+            {g.unpaidCount > 0 && <span style={{ padding: '2px 9px', borderRadius: 999, background: `${RED}15`, color: RED, fontSize: 10.5, fontWeight: 800 }}>{g.unpaidCount} Unpaid</span>}
+            <span style={{ fontSize: 11.5, color: MUTED2 }}>Total: {naira(g.total)} · Due: {naira(g.due)}</span>
+          </button>
+          {openGroups[i] && (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr><th style={th}>Fee Type</th><th style={th}>Due Date</th><th style={th}>Amount</th><th style={th}>Paid</th><th style={th}>Due</th><th style={th}>Status</th></tr></thead>
+              <tbody>
+                {g.rows.map((r) => (
+                  <tr key={r.id}>
+                    <td style={td}>{r.fee_type_name}</td><td style={td}>{r.due_date || '—'}</td><td style={td}>{naira(r.amount)}</td>
+                    <td style={{ ...td, color: GREEN }}>{naira(r.paid)}</td><td style={{ ...td, color: r.due > 0 ? RED : GREEN }}>{naira(r.due)}</td>
+                    <td style={td}><span style={{ padding: '2px 9px', borderRadius: 999, background: `${FEE_STATUS_COLOR[r.status]}15`, color: FEE_STATUS_COLOR[r.status], fontSize: 10.5, fontWeight: 800, textTransform: 'capitalize' }}>{r.status}</span></td>
+                  </tr>
+                ))}
+                <tr><td style={{ ...td, fontWeight: 800 }}>Sub-Total ({g.rows.length} items)</td><td style={td} /><td style={{ ...td, fontWeight: 800 }}>{naira(g.total)}</td><td style={td} /><td style={{ ...td, fontWeight: 800 }}>{naira(g.due)}</td><td style={td} /></tr>
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+    </SectionCard>
   );
 }
 
@@ -1261,29 +1313,26 @@ function CredentialsTab({ studentId, data, onChanged, showToast }) {
 
 /* ── Health tab ───────────────────────────────────────────────────────────── */
 function HealthTab({ studentId, showToast }) {
+  const navigate = useNavigate();
   const [rows, setRows] = useState(null);
-  const [form, setForm] = useState({ record_type: '', title: '', details: '', recorded_on: '' });
   const load = useCallback(() => apiGet(`${BASE}/health-records?student_id=${studentId}`).then((r) => setRows(r.data || [])).catch(() => setRows([])), [studentId]);
   useEffect(() => { load(); }, [load]);
-  const add = async () => {
-    if (!form.title.trim()) return showToast('Title is required');
-    try { await apiPost(`${BASE}/health-records`, { ...form, student_id: studentId }); setForm({ record_type: '', title: '', details: '', recorded_on: '' }); load(); }
-    catch (e) { showToast(e.message || 'Could not add'); }
-  };
-  const remove = async (r) => { try { await apiDelete(`${BASE}/health-records/${r.id}`); load(); } catch (e) { showToast(e.message); } };
+  const remove = async (r) => { if (!window.confirm(`Delete "${r.title}"?`)) return; try { await apiDelete(`${BASE}/health-records/${r.id}`); load(); } catch (e) { showToast(e.message); } };
   return (
-    <SectionCard title="Health Records" color={RED}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input value={form.record_type} onChange={(e) => setForm((f) => ({ ...f, record_type: e.target.value }))} placeholder="Type (e.g. Allergy)" style={{ ...inputStyle, flex: '1 1 140px' }} />
-        <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" style={{ ...inputStyle, flex: '1 1 160px' }} />
-        <input type="date" value={form.recorded_on} onChange={(e) => setForm((f) => ({ ...f, recorded_on: e.target.value }))} style={{ ...inputStyle, flex: '1 1 140px' }} />
-        <button onClick={add} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Add</button>
-      </div>
+    <SectionCard title="Health Records" color={RED} action={
+      <button onClick={() => navigate(`/mgmt/students/${studentId}/health/new`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+        <Plus size={13} /> Add Record
+      </button>
+    }>
       {rows === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : rows.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No health records yet.</p> : (
         rows.map((r) => (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: `1px solid ${BORDER}` }}>
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${BORDER}` }}>
             <HeartPulse size={14} color={RED} />
-            <div style={{ flex: 1 }}><b style={{ fontSize: 12.5 }}>{r.title}</b><div style={{ fontSize: 11, color: MUTED2 }}>{r.record_type} · {r.recorded_on}</div></div>
+            <div style={{ flex: 1 }}>
+              <b style={{ fontSize: 12.5 }}>{r.title}</b>
+              <div style={{ fontSize: 11, color: MUTED2 }}>{r.record_type} · {r.recorded_on}</div>
+              {r.details && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>{r.details}</div>}
+            </div>
             <button onClick={() => remove(r)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 26, height: 26, cursor: 'pointer' }}><Trash2 size={12} /></button>
           </div>
         ))
@@ -1350,17 +1399,24 @@ function AttendanceTab({ studentId, showToast }) {
 
   const shiftMonth = (delta) => { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + delta, 1); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); };
   const STATUS_COLOR = { present: GREEN, absent: RED, late: AMBER, excused: BLUE };
+  const STATUS_LABEL = { present: 'Present', absent: 'Absent', late: 'Late', excused: 'Half Day' };
   const [y, m] = month.split('-').map(Number);
   const firstDay = new Date(y, m - 1, 1).getDay();
   const daysInMonth = new Date(y, m, 0).getDate();
   const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  const presentPct = data?.stats?.total ? Math.round((data.stats.present / (data.stats.present + data.stats.absent + data.stats.late + data.stats.excused || 1)) * 100) : 0;
 
   return (
     <SectionCard title="Attendance" color={BLUE}>
       {data && (
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
-          <InfoRow label="Present" value={data.stats.present} /><InfoRow label="Absent" value={data.stats.absent} />
-          <InfoRow label="Late" value={data.stats.late} /><InfoRow label="Excused" value={data.stats.excused} />
+        <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+          <Ring percent={presentPct} label="Present" color={GREEN} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 220 }}>
+            {statPill('Present', data.stats.present, GREEN)}
+            {statPill('Absent', data.stats.absent, RED)}
+            {statPill('Late', data.stats.late, AMBER)}
+            {statPill('Half Day', data.stats.excused, BLUE)}
+          </div>
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1383,10 +1439,13 @@ function AttendanceTab({ studentId, showToast }) {
       </div>
       <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
         {Object.entries(STATUS_COLOR).map(([k, c]) => (
-          <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: MUTED, fontFamily: FONT, textTransform: 'capitalize' }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: c }} /> {k}
+          <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: MUTED, fontFamily: FONT }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: c }} /> {STATUS_LABEL[k]}
           </span>
         ))}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: MUTED, fontFamily: FONT }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: LIGHT, border: `1px solid ${BORDER}` }} /> No Record
+        </span>
       </div>
     </SectionCard>
   );
@@ -1394,38 +1453,61 @@ function AttendanceTab({ studentId, showToast }) {
 
 /* ── Behavior tab ─────────────────────────────────────────────────────────── */
 function BehaviorTab({ studentId, showToast }) {
-  const [rows, setRows] = useState(null);
-  const [form, setForm] = useState({ incident_type: '', severity: 'low', description: '', action_taken: '', recorded_on: '' });
-  const load = useCallback(() => apiGet(`${BASE}/behavior-records?student_id=${studentId}`).then((r) => setRows(r.data || [])).catch(() => setRows([])), [studentId]);
-  useEffect(() => { load(); }, [load]);
-  const add = async () => {
-    if (!form.incident_type.trim()) return showToast('Incident type is required');
-    try { await apiPost(`${BASE}/behavior-records`, { ...form, student_id: studentId }); setForm({ incident_type: '', severity: 'low', description: '', action_taken: '', recorded_on: '' }); load(); }
-    catch (e) { showToast(e.message || 'Could not add'); }
-  };
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  useEffect(() => { apiGet(`${BASE}/students/${studentId}/behavior-summary`).then((r) => setData(r.data)).catch(() => showToast('Could not load behavior summary')); }, [studentId]);
   const SEVERITY_COLOR = { low: GREEN, medium: AMBER, high: RED };
+
+  if (!data) return <SectionCard title="Behavior" color={AMBER}><Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /></SectionCard>;
+  const scoreColor = data.score > 0 ? GREEN : data.score < 0 ? RED : MUTED2;
+
   return (
-    <SectionCard title="Behavior & Incident Log" color={AMBER}>
-      {rows && (
-        <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
-          <InfoRow label="Total Incidents" value={rows.length} />
-          <InfoRow label="High Severity" value={rows.filter((r) => r.severity === 'high').length} />
+    <SectionCard title="Behavior" color={AMBER} action={
+      <button onClick={() => navigate(`/mgmt/students/${studentId}/behavior/new`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+        <Plus size={13} /> Add Record
+      </button>
+    }>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 96, height: 96, borderRadius: '50%', border: `3px solid ${scoreColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: scoreColor, fontFamily: FONT }}>{data.score > 0 ? `+${data.score}` : data.score}</span>
+          </div>
+          <span style={{ fontSize: 9, fontWeight: 700, color: MUTED2, fontFamily: FONT, textTransform: 'uppercase' }}>Score</span>
         </div>
-      )}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <input value={form.incident_type} onChange={(e) => setForm((f) => ({ ...f, incident_type: e.target.value }))} placeholder="Incident type" style={{ ...inputStyle, flex: '1 1 140px' }} />
-        <select value={form.severity} onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value }))} style={{ ...inputStyle, flex: '0 1 110px', cursor: 'pointer' }}>
-          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-        </select>
-        <input type="date" value={form.recorded_on} onChange={(e) => setForm((f) => ({ ...f, recorded_on: e.target.value }))} style={{ ...inputStyle, flex: '1 1 140px' }} />
-        <button onClick={add} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Add</button>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 220 }}>
+          <div style={{ flex: '1 1 110px', background: `${GREEN}12`, border: `1px solid ${GREEN}33`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ThumbsUp size={16} color={GREEN} />
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: GREEN, fontFamily: FONT }}>{data.positive}</div>
+              <div style={{ fontSize: 10, color: MUTED, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .3 }}>Positive</div>
+            </div>
+          </div>
+          <div style={{ flex: '1 1 110px', background: `${RED}12`, border: `1px solid ${RED}33`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ThumbsDown size={16} color={RED} />
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: RED, fontFamily: FONT }}>{data.negative}</div>
+              <div style={{ fontSize: 10, color: MUTED, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .3 }}>Negative</div>
+            </div>
+          </div>
+        </div>
       </div>
-      {rows === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : rows.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No behavior incidents recorded.</p> : (
-        rows.map((r) => (
+
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 8 }}>
+        Incident Log — {data.hasActiveSession ? 'Current Session' : 'All Records'}
+      </div>
+      {data.records.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '24px 0', color: MUTED2 }}>
+          <div style={{ fontSize: 26, marginBottom: 6 }}>😊</div>
+          <p style={{ fontSize: 12.5, margin: 0 }}>No behavior incidents recorded this session.</p>
+        </div>
+      ) : (
+        data.records.map((r) => (
           <div key={r.id} style={{ padding: '8px 0', borderTop: `1px solid ${BORDER}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {r.polarity === 'positive' ? <ThumbsUp size={13} color={GREEN} /> : <ThumbsDown size={13} color={RED} />}
               <span style={{ padding: '2px 9px', borderRadius: 999, background: `${SEVERITY_COLOR[r.severity]}15`, color: SEVERITY_COLOR[r.severity], fontSize: 10.5, fontWeight: 800, textTransform: 'capitalize' }}>{r.severity}</span>
               <b style={{ fontSize: 12.5 }}>{r.incident_type}</b>
+              <span style={{ fontSize: 11, fontWeight: 800, color: r.polarity === 'positive' ? GREEN : RED }}>{r.polarity === 'positive' ? `+${r.points}` : `-${r.points}`}</span>
               <span style={{ fontSize: 11, color: MUTED2, marginLeft: 'auto' }}>{r.recorded_on}</span>
             </div>
             {r.description && <p style={{ fontSize: 12, color: MUTED, margin: '4px 0 0' }}>{r.description}</p>}
@@ -1517,5 +1599,130 @@ function TransportTab({ studentId, showToast }) {
         )}
       </SectionCard>
     </>
+  );
+}
+
+/* ── Dedicated "Add Record" pages (Health / Behavior) ────────────────────── */
+function RecordFormShell({ title, color, icon: Icon, backTo, onSave, busy, children }) {
+  const navigate = useNavigate();
+  return (
+    <PageLayout title={title}>
+      <div style={{ maxWidth: 640 }}>
+        <button onClick={() => navigate(backTo)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', color: MUTED, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer', marginBottom: 14, padding: 0 }}>
+          <ArrowLeft size={14} /> Back to Profile
+        </button>
+        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '20px 22px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            {Icon && <Icon size={18} color={color} />}
+            <b style={{ fontSize: 15, fontFamily: FONT, color: INK }}>{title}</b>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+          <button onClick={onSave} disabled={busy} style={{ marginTop: 18, padding: '10px 20px', borderRadius: 9, border: 'none', background: color, color: WHITE, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Record
+          </button>
+        </div>
+      </div>
+    </PageLayout>
+  );
+}
+
+const fieldLabel = { fontSize: 11.5, fontWeight: 800, color: MUTED2, fontFamily: FONT, textTransform: 'uppercase', letterSpacing: .3, marginBottom: 5, display: 'block' };
+
+export function HealthRecordFormPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ record_type: 'condition', title: '', recorded_on: '', details: '' });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!form.title.trim()) return alert('Title is required');
+    setBusy(true);
+    try {
+      await apiPost(`${BASE}/health-records`, { ...form, student_id: id });
+      navigate(`/mgmt/students/${id}?tab=health`);
+    } catch (e) { alert(e.message || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <RecordFormShell title="Add Health Record" color={RED} icon={HeartPulse} backTo={`/mgmt/students/${id}?tab=health`} onSave={save} busy={busy}>
+      <div>
+        <label style={fieldLabel}>Type</label>
+        <select value={form.record_type} onChange={set('record_type')} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
+          <option value="allergy">Allergy</option><option value="condition">Condition</option>
+          <option value="vaccination">Vaccination</option><option value="checkup">Checkup</option>
+        </select>
+      </div>
+      <div>
+        <label style={fieldLabel}>Title</label>
+        <input value={form.title} onChange={set('title')} placeholder="e.g. Peanut Allergy" style={{ ...inputStyle, width: '100%' }} />
+      </div>
+      <div>
+        <label style={fieldLabel}>Date</label>
+        <input type="date" value={form.recorded_on} onChange={set('recorded_on')} style={{ ...inputStyle, width: '100%' }} />
+      </div>
+      <div>
+        <label style={fieldLabel}>Details</label>
+        <textarea value={form.details} onChange={set('details')} rows={4} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
+      </div>
+    </RecordFormShell>
+  );
+}
+
+export function BehaviorRecordFormPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ incident_type: '', polarity: 'negative', severity: 'low', points: 1, description: '', action_taken: '', recorded_on: '' });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!form.incident_type.trim()) return alert('Incident type is required');
+    setBusy(true);
+    try {
+      await apiPost(`${BASE}/behavior-records`, { ...form, points: Number(form.points) || 1, student_id: id });
+      navigate(`/mgmt/students/${id}?tab=behavior`);
+    } catch (e) { alert(e.message || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <RecordFormShell title="Add Behavior Record" color={AMBER} icon={ShieldAlert} backTo={`/mgmt/students/${id}?tab=behavior`} onSave={save} busy={busy}>
+      <div>
+        <label style={fieldLabel}>Incident Type</label>
+        <input value={form.incident_type} onChange={set('incident_type')} placeholder="e.g. Helped a classmate" style={{ ...inputStyle, width: '100%' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <label style={fieldLabel}>Polarity</label>
+          <select value={form.polarity} onChange={set('polarity')} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
+            <option value="positive">Positive</option><option value="negative">Negative</option>
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={fieldLabel}>Severity</label>
+          <select value={form.severity} onChange={set('severity')} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
+            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={fieldLabel}>Points</label>
+          <input type="number" min={1} value={form.points} onChange={set('points')} style={{ ...inputStyle, width: '100%' }} />
+        </div>
+      </div>
+      <div>
+        <label style={fieldLabel}>Date</label>
+        <input type="date" value={form.recorded_on} onChange={set('recorded_on')} style={{ ...inputStyle, width: '100%' }} />
+      </div>
+      <div>
+        <label style={fieldLabel}>Description</label>
+        <textarea value={form.description} onChange={set('description')} rows={3} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
+      </div>
+      <div>
+        <label style={fieldLabel}>Action Taken</label>
+        <textarea value={form.action_taken} onChange={set('action_taken')} rows={3} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
+      </div>
+    </RecordFormShell>
   );
 }

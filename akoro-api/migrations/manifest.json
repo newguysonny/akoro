@@ -30,6 +30,7 @@
     "2026-instructor-doc-templates.sql",
     "2026-student-documents.sql",
     "2026-student-profile-extended.sql",
+    "2026-behavior-score.sql",
     "2026-site-menus.sql",
     "2026-template-import.sql",
     "2026-school-address.sql",
