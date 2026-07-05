@@ -2,12 +2,16 @@
  * Student Information module pages (mgmt schema).
  * Most pages are ResourcePage configs; Dashboard + Attendance are custom.
  */
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
+  Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
+  Cake, CreditCard, ShieldCheck, CircleDot, X,
+} from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
-import { apiGet, apiPost } from '../../services/api.js';
+import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
 
 const BASE = '/api/school/mgmt';
@@ -97,10 +101,117 @@ export function StudentAdmissionPage() {
     createLabel="Admit Student" startOpen listFilters={[CLASS_FILTER]} />;
 }
 
+const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
+const STATUS_OPTS = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'alumni', label: 'Alumni' }];
+
+/* ── Student List — table with fee dues, view/edit/delete actions ───────── */
 export function StudentListPage() {
-  return <ResourcePage title="Student List" subtitle="All students in your school" resource="students"
-    columns={STUDENT_COLUMNS} fields={STUDENT_FIELDS} searchKeys={STUDENT_SEARCH}
-    createLabel="Admit Student" listFilters={[CLASS_FILTER, { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'alumni', label: 'Alumni' }] }]} />;
+  const navigate = useNavigate();
+  const [rows, setRows] = useState(null);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [classId, setClassId] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [status, setStatus] = useState('active');
+  const [query, setQuery] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  const [toast, setToast] = useState('');
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const load = useCallback(() => {
+    setRows(null);
+    const params = new URLSearchParams();
+    if (classId) params.set('class_id', classId);
+    if (sectionId) params.set('section_id', sectionId);
+    if (status) params.set('status', status);
+    apiGet(`${BASE}/students/list?${params}`)
+      .then((r) => setRows(r.data || []))
+      .catch((e) => { showToast(e.message || 'Could not load students'); setRows([]); });
+  }, [classId, sectionId, status]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    apiGet(`${BASE}/classes`).then((r) => setClasses(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/sections`).then((r) => setSections(r.data || [])).catch(() => {});
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  const visible = (rows || []).filter((r) => !q ||
+    [r.admission_no, r.first_name, r.last_name, r.guardian_phone].some((v) => String(v || '').toLowerCase().includes(q)));
+
+  const remove = async (r) => {
+    if (!window.confirm(`Remove ${fullName(r)} (${r.admission_no})? This cannot be undone.`)) return;
+    setBusyId(r.id);
+    try { await apiDelete(`${BASE}/students/${r.id}`); setRows((p) => p.filter((x) => x.id !== r.id)); showToast('Removed'); }
+    catch (e) { showToast(e.message || 'Could not remove'); }
+    finally { setBusyId(null); }
+  };
+
+  const th = { textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2, letterSpacing: .4, whiteSpace: 'nowrap' };
+  const td = { padding: '11px 14px', fontSize: 13, color: INK, borderTop: `1px solid ${BORDER}`, whiteSpace: 'nowrap' };
+  const iconBtn = (color) => ({ width: 30, height: 30, borderRadius: 7, border: 'none', background: `${color}15`, color, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
+  const selStyle = { ...inputStyle, width: 'auto', minWidth: 150, cursor: 'pointer' };
+
+  return (
+    <PageLayout title="Student List" subtitle="All students in your school">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 180, maxWidth: 280 }}>
+          <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, adm no, phone…" style={{ ...inputStyle, paddingLeft: 34 }} />
+        </div>
+        <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(''); }} style={selStyle}>
+          <option value="">All Classes</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={selStyle}>
+          <option value="">All Sections</option>{sections.filter((s) => !classId || s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} style={selStyle}>
+          <option value="">All Statuses</option>{STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <button onClick={() => navigate('/mgmt/student-admission')} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+          <UserPlus size={15} /> Admit Student
+        </button>
+      </div>
+
+      <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
+          <thead><tr>
+            <th style={th}>ADM NO.</th><th style={th}>ROLL NO.</th><th style={th}>NAME</th>
+            <th style={th}>CLASS</th><th style={th}>SECTION</th>
+            <th style={th}>TOTAL ASSIGNED</th><th style={th}>TOTAL DUE</th>
+            <th style={th}>STATUS</th><th style={{ ...th, textAlign: 'right' }}>ACTIONS</th>
+          </tr></thead>
+          <tbody>
+            {rows === null && <tr><td style={{ ...td, textAlign: 'center', color: MUTED2 }} colSpan={9}><Loader2 size={18} style={{ animation: 'spin .8s linear infinite' }} /></td></tr>}
+            {rows && visible.length === 0 && <tr><td style={{ ...td, textAlign: 'center', color: MUTED2 }} colSpan={9}>No students found.</td></tr>}
+            {visible.map((r) => (
+              <tr key={r.id}>
+                <td style={{ ...td, fontWeight: 700 }}>{r.admission_no}</td>
+                <td style={td}>{r.roll_no || '—'}</td>
+                <td style={{ ...td, whiteSpace: 'normal' }}>
+                  <button onClick={() => navigate(`/mgmt/students/${r.id}`)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT, fontWeight: 700, color: BLUE, textAlign: 'left' }}>{fullName(r)}</button>
+                </td>
+                <td style={td}>{r.class_name || '—'}</td>
+                <td style={td}>{r.section_name || '—'}</td>
+                <td style={td}>{naira(r.fee_assigned)}</td>
+                <td style={td}>{r.fee_due > 0 ? <span style={{ padding: '3px 10px', borderRadius: 999, background: `${RED}15`, color: RED, fontSize: 11.5, fontWeight: 800 }}>{naira(r.fee_due)}</span> : <span style={{ padding: '3px 10px', borderRadius: 999, background: `${GREEN}15`, color: GREEN, fontSize: 11.5, fontWeight: 800 }}>Paid</span>}</td>
+                <td style={td}>{STATUS_PILL(r.status, { active: { c: GREEN }, inactive: { c: RED }, alumni: { c: BLUE } })}</td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {busyId === r.id ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : (
+                    <div style={{ display: 'inline-flex', gap: 6 }}>
+                      <button onClick={() => navigate(`/mgmt/students/${r.id}`)} title="View Profile" style={iconBtn(GREEN)}><Eye size={14} /></button>
+                      <button onClick={() => navigate(`/mgmt/students/${r.id}?edit=1`)} title="Edit" style={iconBtn(BLUE)}><Pencil size={14} /></button>
+                      <button onClick={() => remove(r)} title="Delete" style={iconBtn(RED)}><Trash2 size={14} /></button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+    </PageLayout>
+  );
 }
 
 export function DisabledStudentsPage() {
@@ -348,6 +459,203 @@ export function AssignClassPage() {
         </div>
       )}
 
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+    </PageLayout>
+  );
+}
+
+/* ── Student Profile — dedicated page (view + inline edit) ──────────────── */
+function InfoRow({ icon: Icon, label, value }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0' }}>
+      {Icon && <Icon size={14} color={MUTED2} style={{ marginTop: 2, flexShrink: 0 }} />}
+      <div style={{ minWidth: 130, fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>{label}</div>
+      <div style={{ flex: 1, fontSize: 13, color: INK, fontFamily: FONT }}>{value ?? <span style={{ color: MUTED2 }}>—</span>}</div>
+    </div>
+  );
+}
+function SectionCard({ title, color = BLUE, children }) {
+  return (
+    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 6, textTransform: 'uppercase', letterSpacing: .4 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+export function StudentProfilePage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [params] = [new URLSearchParams(window.location.search)];
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(params.get('edit') === '1');
+  const [form, setForm] = useState({});
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [houses, setHouses] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const load = useCallback(() => {
+    apiGet(`${BASE}/students/${id}/profile`)
+      .then((r) => { setData(r.data); setForm(r.data); })
+      .catch((e) => showToast(e.message || 'Could not load student'))
+      .finally(() => setLoading(false));
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    apiGet(`${BASE}/classes`).then((r) => setClasses(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/sections`).then((r) => setSections(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/student-categories`).then((r) => setCategories(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/student-houses`).then((r) => setHouses(r.data || [])).catch(() => {});
+  }, []);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const save = async () => {
+    setSaving(true);
+    try {
+      const patch = {};
+      for (const f of STUDENT_FIELDS) if (form[f.key] !== undefined) patch[f.key] = form[f.key] === '' ? null : form[f.key];
+      await apiPut(`${BASE}/students/${id}`, patch);
+      showToast('Saved ✓'); setEditing(false); load();
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '60px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
+  if (!data) return <PageLayout title="Student Profile" subtitle=""><div style={{ padding: '40px', textAlign: 'center', color: MUTED2, fontFamily: FONT }}>Student not found.</div></PageLayout>;
+
+  const statCard = (label, value, color) => (
+    <div style={{ flex: '1 1 140px', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px' }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color, fontFamily: FONT }}>{value}</div>
+      <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+
+  const editSel = (key, options, labelKey = 'name') => (
+    <select value={form[key] || ''} onChange={set(key)} style={{ ...inputStyle, marginBottom: 8 }}>
+      <option value="">— none —</option>
+      {options.map((o) => <option key={o.id} value={o.id}>{o[labelKey]}</option>)}
+    </select>
+  );
+
+  return (
+    <PageLayout title={fullName(data)} subtitle={`Admission No: ${data.admission_no}`}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
+        <button onClick={() => navigate('/mgmt/students')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+          <ArrowLeft size={14} /> Back to Student List
+        </button>
+        {editing ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { setEditing(false); setForm(data); }} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+            <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
+              {saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Changes
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setEditing(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+            <Pencil size={14} /> Edit Profile
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+        {statCard('Total Fees', naira(data.fees?.assigned), INK)}
+        {statCard('Amount Paid', naira(data.fees?.paid), GREEN)}
+        {statCard('Balance Due', naira(data.fees?.due), data.fees?.due > 0 ? RED : GREEN)}
+        {statCard('Attendance (Present)', data.attendance?.total ? `${Math.round((data.attendance.present / data.attendance.total) * 100)}%` : '—', BLUE)}
+      </div>
+
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        {/* Left: photo + quick facts */}
+        <div style={{ flex: '1 1 240px', maxWidth: 280 }}>
+          <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center' }}>
+            <div style={{ width: 88, height: 88, borderRadius: '50%', margin: '0 auto 12px', overflow: 'hidden', background: LIGHT, border: `3px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {data.photo_url ? <img src={data.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Users size={34} color={MUTED2} />}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: FONT }}>{fullName(data)}</div>
+            <div style={{ display: 'inline-block', marginTop: 6, padding: '3px 12px', borderRadius: 999, background: `${AMBER}15`, color: AMBER, fontSize: 11.5, fontWeight: 800, fontFamily: FONT }}>{data.class_name || 'No class'}{data.section_name ? ` — ${data.section_name}` : ''}</div>
+            <div style={{ marginTop: 14, textAlign: 'left' }}>
+              <InfoRow icon={CreditCard} label="Admission No" value={data.admission_no} />
+              <InfoRow icon={CircleDot} label="Roll No" value={data.roll_no} />
+              <InfoRow icon={Droplet} label="Blood Group" value={data.blood_group} />
+              <InfoRow icon={ShieldCheck} label="Status" value={STATUS_PILL(data.status, { active: { c: GREEN }, inactive: { c: RED }, alumni: { c: BLUE } })} />
+            </div>
+          </div>
+        </div>
+
+        {/* Right: details */}
+        <div style={{ flex: '2 1 420px', minWidth: 320 }}>
+          {!editing ? (
+            <>
+              <SectionCard title="Academic Information" color={BLUE}>
+                <InfoRow label="Class" value={data.class_name} />
+                <InfoRow label="Section" value={data.section_name} />
+                <InfoRow label="Category" value={data.category_name} />
+                <InfoRow label="House" value={data.house_name} />
+                <InfoRow label="Admitted On" value={data.admitted_on} />
+              </SectionCard>
+              <SectionCard title="Personal Details" color={PURPLE}>
+                <InfoRow icon={Cake} label="Date of Birth" value={data.dob} />
+                <InfoRow label="Gender" value={data.gender} />
+                <InfoRow label="Blood Group" value={data.blood_group} />
+                <InfoRow icon={ShieldAlert} label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
+              </SectionCard>
+              <SectionCard title="Guardian & Contact" color={GREEN}>
+                <InfoRow label="Guardian Name" value={data.guardian_name} />
+                <InfoRow icon={Phone} label="Guardian Phone" value={data.guardian_phone} />
+                <InfoRow icon={Mail} label="Guardian Email" value={data.guardian_email} />
+              </SectionCard>
+              <SectionCard title="Address" color={AMBER}>
+                <InfoRow icon={MapPin} label="Address" value={data.address} />
+              </SectionCard>
+            </>
+          ) : (
+            <>
+              <SectionCard title="Academic Information" color={BLUE}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Class</label>
+                {editSel('class_id', classes)}
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Section</label>
+                {editSel('section_id', sections.filter((s) => !form.class_id || s.class_id === form.class_id))}
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Category</label>
+                {editSel('category_id', categories)}
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>House</label>
+                {editSel('house_id', houses)}
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Admitted On</label>
+                <input type="date" value={form.admitted_on || ''} onChange={set('admitted_on')} style={inputStyle} />
+              </SectionCard>
+              <SectionCard title="Personal Details" color={PURPLE}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>First Name</label>
+                <input value={form.first_name || ''} onChange={set('first_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Last Name</label>
+                <input value={form.last_name || ''} onChange={set('last_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Date of Birth</label>
+                <input type="date" value={form.dob || ''} onChange={set('dob')} style={{ ...inputStyle, marginBottom: 8 }} />
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Gender</label>
+                <select value={form.gender || ''} onChange={set('gender')} style={{ ...inputStyle, marginBottom: 8 }}>
+                  <option value="">— select —</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                </select>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Blood Group</label>
+                <input value={form.blood_group || ''} onChange={set('blood_group')} style={inputStyle} />
+              </SectionCard>
+              <SectionCard title="Guardian & Contact" color={GREEN}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Guardian Name</label>
+                <input value={form.guardian_name || ''} onChange={set('guardian_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Guardian Phone</label>
+                <input value={form.guardian_phone || ''} onChange={set('guardian_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Guardian Email</label>
+                <input value={form.guardian_email || ''} onChange={set('guardian_email')} style={inputStyle} />
+              </SectionCard>
+              <SectionCard title="Address" color={AMBER}>
+                <textarea value={form.address || ''} onChange={set('address')} style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} />
+              </SectionCard>
+            </>
+          )}
+        </div>
+      </div>
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );

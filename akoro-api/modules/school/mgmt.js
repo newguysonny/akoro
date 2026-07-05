@@ -526,6 +526,64 @@ router.get("/fees/dues", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Student List — students joined with class/section names + fee dues ────
+router.get("/students/list", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    let q = M().from("students").select("*").eq("school_id", school.id).order("created_at", { ascending: false });
+    if (req.query.class_id) q = q.eq("class_id", req.query.class_id);
+    if (req.query.section_id) q = q.eq("section_id", req.query.section_id);
+    if (req.query.status) q = q.eq("status", req.query.status);
+    else q = q.eq("status", "active");
+    const { data: students, error } = await q;
+    if (error) throw new Error(error.message);
+    const rows = await attachRefs(RESOURCES.students, students || [], school.id);
+
+    const { data: assigns } = await M().from("fee_assignments").select("class_id, student_id, amount").eq("school_id", school.id);
+    const { data: pays } = await M().from("fee_payments").select("student_id, amount").eq("school_id", school.id);
+    const paidOf = {};
+    for (const p of pays || []) paidOf[p.student_id] = (paidOf[p.student_id] || 0) + Number(p.amount || 0);
+
+    const data = rows.map((s) => {
+      const assigned = (assigns || [])
+        .filter((a) => a.student_id === s.id || (a.class_id && a.class_id === s.class_id && !a.student_id))
+        .reduce((sum, a) => sum + Number(a.amount || 0), 0);
+      const paid = paidOf[s.id] || 0;
+      return { ...s, name: studentLabel(s), fee_assigned: assigned, fee_paid: paid, fee_due: Math.max(0, assigned - paid) };
+    });
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Single student profile: record + fees + attendance summary ────────────
+router.get("/students/:id/profile", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: student } = await M().from("students").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!student) return res.status(404).json({ error: "Student not found" });
+    const [row] = await attachRefs(RESOURCES.students, [student], school.id);
+
+    const [dues, { data: attRows }] = await Promise.all([
+      computeDues(school.id, { student_id: student.id }),
+      M().from("student_attendance").select("status").eq("school_id", school.id).eq("student_id", student.id),
+    ]);
+    const present = (attRows || []).filter((a) => a.status === "present").length;
+    const absent = (attRows || []).filter((a) => a.status === "absent").length;
+    const late = (attRows || []).filter((a) => a.status === "late").length;
+
+    res.json({
+      success: true,
+      data: {
+        ...row, name: studentLabel(student),
+        fees: dues[0] || { assigned: 0, paid: 0, due: 0 },
+        attendance: { present, absent, late, total: (attRows || []).length },
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Collect a fee payment ─────────────────────────────────────────────────
 router.post("/fees/collect", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
