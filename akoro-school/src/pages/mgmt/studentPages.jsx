@@ -772,6 +772,22 @@ function InfoRow({ icon: Icon, label, value }) {
     </div>
   );
 }
+// Grid cell: small uppercase label above the value — used for the Profile
+// tab's read-only sections, which lay out as a 2-column grid (not a stacked
+// list), matching the reference design.
+function GridInfo({ icon: Icon, label, value }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 800, color: MUTED2, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4, fontFamily: FONT }}>
+        {Icon && <Icon size={11} />} {label}
+      </div>
+      <div style={{ fontSize: 13, color: INK, fontFamily: FONT, fontWeight: 600 }}>{value ?? <span style={{ color: MUTED2, fontWeight: 400 }}>N/A</span>}</div>
+    </div>
+  );
+}
+function InfoGrid({ children }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px 18px' }}>{children}</div>;
+}
 function SectionCard({ title, color = BLUE, children }) {
   return (
     <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
@@ -940,73 +956,94 @@ function ProfileTab({ data, editing, form, set, classes, sections, categories, h
   const addExtra = () => set('extra_fields')({ target: { value: [...formExtra, { label: '', value: '' }] } });
   const delExtra = (i) => set('extra_fields')({ target: { value: formExtra.filter((_, j) => j !== i) } });
 
+  const initial = (name) => (name || '?').trim().charAt(0).toUpperCase();
+  const parentCard = (title, color, initialSrc, fields) => (
+    <div style={{ flex: '1 1 240px', minWidth: 220, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 26, height: 26, borderRadius: '50%', background: `${color}18`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, fontFamily: FONT }}>{initial(initialSrc)}</div>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT }}>{title}</span>
+      </div>
+      <InfoGrid>{fields.map(([label, value]) => <GridInfo key={label} label={label} value={value} />)}</InfoGrid>
+    </div>
+  );
+
   if (!editing) return (
     <>
       <SectionCard title="Academic Information" color={BLUE}>
-        <InfoRow label="Admission No" value={data.admission_no} />
-        <InfoRow label="Admission Date" value={data.admitted_on} />
-        <InfoRow label="Biometric ID" value={data.biometric_id} />
-        <InfoRow label="Roll Number" value={data.roll_no} />
-        <InfoRow label="House" value={data.house_name} />
-        <InfoRow label="Category" value={data.category_name} />
+        <InfoGrid>
+          <GridInfo label="Admission No" value={data.admission_no} />
+          <GridInfo label="Admission Date" value={data.admitted_on} />
+          <GridInfo label="Biometric ID" value={data.biometric_id} />
+          <GridInfo label="Roll Number" value={data.roll_no} />
+          <GridInfo label="House" value={data.house_name} />
+          <GridInfo label="Category" value={data.category_name} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Personal Details" color={PURPLE}>
-        <InfoRow icon={Cake} label="Date of Birth" value={data.dob} />
-        <InfoRow label="Place of Birth" value={data.place_of_birth} />
-        <InfoRow label="Gender" value={data.gender} />
-        <InfoRow label="Nationality" value={data.nationality} />
-        <InfoRow label="Religion" value={data.religion} />
-        <InfoRow label="Caste" value={data.caste} />
-        <InfoRow label="Sub-Caste" value={data.sub_caste} />
-        <InfoRow label="Mother Tongue" value={data.mother_tongue} />
-        <InfoRow icon={Droplet} label="Blood Group" value={data.blood_group} />
-        <InfoRow label="Quota" value={data.quota} />
-        <InfoRow icon={ShieldAlert} label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
+        <InfoGrid>
+          <GridInfo icon={Cake} label="Date of Birth" value={data.dob} />
+          <GridInfo label="Place of Birth" value={data.place_of_birth} />
+          <GridInfo label="Gender" value={data.gender} />
+          <GridInfo label="Nationality" value={data.nationality} />
+          <GridInfo label="Religion" value={data.religion} />
+          <GridInfo label="Caste" value={data.caste} />
+          <GridInfo label="Sub-Caste" value={data.sub_caste} />
+          <GridInfo label="Mother Tongue" value={data.mother_tongue} />
+          <GridInfo icon={Droplet} label="Blood Group" value={data.blood_group} />
+          <GridInfo label="Quotas" value={data.quota} />
+          <GridInfo icon={ShieldAlert} label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Contact & Identity" color={GREEN}>
-        <InfoRow icon={Mail} label="Student Email" value={data.student_email} />
-        <InfoRow icon={Phone} label="Student Phone" value={data.student_phone} />
-        <InfoRow label="Aadhaar / NID" value={data.aadhaar_no} />
-        <InfoRow label="PEN / SSSM ID" value={data.pen_no} />
+        <InfoGrid>
+          <GridInfo icon={Mail} label="Student Email" value={data.student_email} />
+          <GridInfo icon={Phone} label="Student Phone" value={data.student_phone} />
+          <GridInfo label="Aadhaar / NID" value={data.aadhaar_no} />
+          <GridInfo label="PEN / SSSM ID" value={data.pen_no} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Parent & Guardian Details" color={AMBER}>
-        <div style={{ fontSize: 12, fontWeight: 800, color: INK, marginBottom: 4 }}>Father Details</div>
-        <InfoRow label="Name" value={data.father_name} />
-        <InfoRow label="Phone" value={data.father_phone} />
-        <InfoRow label="Occupation" value={data.father_occupation} />
-        <InfoRow label="Qualification" value={data.father_qualification} />
-        <InfoRow label="Income" value={data.father_income} />
-        <InfoRow label="Aadhaar" value={data.father_aadhaar} />
-        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 4px' }}>Mother Details</div>
-        <InfoRow label="Name" value={data.mother_name} />
-        <InfoRow label="Phone" value={data.mother_phone} />
-        <InfoRow label="Occupation" value={data.mother_occupation} />
-        <InfoRow label="Qualification" value={data.mother_qualification} />
-        <InfoRow label="Aadhaar" value={data.mother_aadhaar} />
-        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 4px' }}>Guardian &amp; Emergency</div>
-        <InfoRow label="Guardian" value={data.guardian_name ? `${data.guardian_name} (${data.guardian_phone || ''})` : null} />
-        <InfoRow label="Emergency" value={data.emergency_name ? `${data.emergency_name} (${data.emergency_phone || ''})` : null} />
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+          {parentCard('Father Details', BLUE, data.father_name, [
+            ['Name', data.father_name], ['Phone', data.father_phone], ['Occupation', data.father_occupation],
+            ['Qualification', data.father_qualification], ['Income', data.father_income], ['Aadhaar', data.father_aadhaar],
+          ])}
+          {parentCard('Mother Details', PURPLE, data.mother_name, [
+            ['Name', data.mother_name], ['Phone', data.mother_phone], ['Occupation', data.mother_occupation],
+            ['Qualification', data.mother_qualification], ['Aadhaar', data.mother_aadhaar],
+          ])}
+        </div>
+        <InfoGrid>
+          <GridInfo label="Guardian" value={data.guardian_name ? `${data.guardian_name} (${data.guardian_phone || ''})` : null} />
+          <GridInfo label="Emergency" value={data.emergency_name ? `${data.emergency_name} (${data.emergency_phone || ''})` : null} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Health & Medical" color={RED}>
-        <InfoRow label="Height" value={data.height_cm ? `${data.height_cm} cm` : null} />
-        <InfoRow label="Weight" value={data.weight_kg ? `${data.weight_kg} kg` : null} />
-        <InfoRow label="Medical History" value={data.medical_history} />
+        <InfoGrid>
+          <GridInfo label="Height" value={data.height_cm ? `${data.height_cm} cm` : null} />
+          <GridInfo label="Weight" value={data.weight_kg ? `${data.weight_kg} kg` : null} />
+          <GridInfo label="Medical History" value={data.medical_history} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Bank Details" color={BLUE}>
-        <InfoRow label="Bank Name" value={data.bank_name} />
-        <InfoRow label="Account No" value={data.bank_account_no} />
-        <InfoRow label="IFSC Code" value={data.bank_ifsc} />
+        <InfoGrid>
+          <GridInfo label="Bank Name" value={data.bank_name} />
+          <GridInfo label="Account No" value={data.bank_account_no} />
+          <GridInfo label="IFSC Code" value={data.bank_ifsc} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Address" color={PURPLE}>
-        <InfoRow label="Current" value={data.address} />
-        <InfoRow label="Permanent" value={data.permanent_address} />
+        <InfoGrid>
+          <GridInfo label="Current" value={data.address} />
+          <GridInfo label="Permanent" value={data.permanent_address} />
+        </InfoGrid>
       </SectionCard>
       <SectionCard title="Previous School" color={AMBER}>
-        <InfoRow label="Details" value={data.previous_school} />
+        <GridInfo label="Details" value={data.previous_school || 'NO DATA'} />
       </SectionCard>
       {extra.length > 0 && (
         <SectionCard title="Additional Information" color={GREEN}>
-          {extra.map((f, i) => <InfoRow key={i} label={f.label} value={f.value} />)}
+          <InfoGrid>{extra.map((f, i) => <GridInfo key={i} label={f.label} value={f.value} />)}</InfoGrid>
         </SectionCard>
       )}
     </>
