@@ -9,6 +9,8 @@ import {
   Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
   Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
   FileUp, Upload, Sheet, Download, CheckSquare, FileText,
+  FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, RefreshCw,
+  ClipboardList,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
@@ -779,12 +781,25 @@ function SectionCard({ title, color = BLUE, children }) {
   );
 }
 
+const PROFILE_TABS = [
+  { key: 'profile', label: 'Profile', icon: Users },
+  { key: 'fees', label: 'Fees', icon: CreditCard },
+  { key: 'documents', label: 'Documents', icon: FolderOpen },
+  { key: 'credentials', label: 'Credentials', icon: Key },
+  { key: 'health', label: 'Health', icon: HeartPulse },
+  { key: 'exams', label: 'Exams', icon: ClipboardList },
+  { key: 'attendance', label: 'Attendance', icon: ClipboardCheck },
+  { key: 'behavior', label: 'Behavior', icon: ShieldAlert },
+  { key: 'transport', label: 'Transport', icon: Bus },
+];
+
 export function StudentProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [params] = [new URLSearchParams(window.location.search)];
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('profile');
   const [editing, setEditing] = useState(params.get('edit') === '1');
   const [form, setForm] = useState({});
   const [classes, setClasses] = useState([]);
@@ -793,7 +808,7 @@ export function StudentProfilePage() {
   const [houses, setHouses] = useState([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
-  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
   const load = useCallback(() => {
     apiGet(`${BASE}/students/${id}/profile`)
@@ -815,6 +830,11 @@ export function StudentProfilePage() {
     try {
       const patch = {};
       for (const f of STUDENT_FIELDS) if (form[f.key] !== undefined) patch[f.key] = form[f.key] === '' ? null : form[f.key];
+      const EXTRA_KEYS = ['biometric_id','place_of_birth','nationality','religion','caste','sub_caste','mother_tongue','quota',
+        'student_email','student_phone','aadhaar_no','pen_no','father_name','father_phone','father_occupation','father_qualification','father_income','father_aadhaar',
+        'mother_name','mother_phone','mother_occupation','mother_qualification','mother_aadhaar','emergency_name','emergency_phone',
+        'height_cm','weight_kg','medical_history','bank_name','bank_account_no','bank_ifsc','permanent_address','previous_school','extra_fields'];
+      for (const k of EXTRA_KEYS) if (form[k] !== undefined) patch[k] = form[k] === '' ? null : form[k];
       await apiPut(`${BASE}/students/${id}`, patch);
       showToast('Saved ✓'); setEditing(false); load();
     } catch (e) { showToast(e.message || 'Could not save'); }
@@ -831,20 +851,13 @@ export function StudentProfilePage() {
     </div>
   );
 
-  const editSel = (key, options, labelKey = 'name') => (
-    <select value={form[key] || ''} onChange={set(key)} style={{ ...inputStyle, marginBottom: 8 }}>
-      <option value="">— none —</option>
-      {options.map((o) => <option key={o.id} value={o.id}>{o[labelKey]}</option>)}
-    </select>
-  );
-
   return (
     <PageLayout title={fullName(data)} subtitle={`Admission No: ${data.admission_no}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/mgmt/students')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
           <ArrowLeft size={14} /> Back to Student List
         </button>
-        {editing ? (
+        {tab === 'profile' && (editing ? (
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { setEditing(false); setForm(data); }} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
             <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>
@@ -855,7 +868,7 @@ export function StudentProfilePage() {
           <button onClick={() => setEditing(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
             <Pencil size={14} /> Edit Profile
           </button>
-        )}
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -866,7 +879,7 @@ export function StudentProfilePage() {
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        {/* Left: photo + quick facts */}
+        {/* Left: photo + quick facts (constant across tabs) */}
         <div style={{ flex: '1 1 240px', maxWidth: 280 }}>
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center' }}>
             <div style={{ width: 88, height: 88, borderRadius: '50%', margin: '0 auto 12px', overflow: 'hidden', background: LIGHT, border: `3px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -883,76 +896,589 @@ export function StudentProfilePage() {
           </div>
         </div>
 
-        {/* Right: details */}
+        {/* Right: tab bar + tab content */}
         <div style={{ flex: '2 1 420px', minWidth: 320 }}>
-          {!editing ? (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', borderBottom: `1px solid ${BORDER}`, marginBottom: 16 }}>
+            {PROFILE_TABS.map((t) => (
+              <button key={t.key} onClick={() => setTab(t.key)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 13px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT,
+                fontSize: 12.5, fontWeight: 700, color: tab === t.key ? AMBER : MUTED2, borderBottom: `2px solid ${tab === t.key ? AMBER : 'transparent'}`, marginBottom: -1,
+              }}>
+                <t.icon size={13} /> {t.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'profile' && <ProfileTab data={data} editing={editing} form={form} set={set} classes={classes} sections={sections} categories={categories} houses={houses} />}
+          {tab === 'fees' && <FeesTab studentId={id} fees={data.fees} showToast={showToast} />}
+          {tab === 'documents' && <DocumentsTab studentId={id} showToast={showToast} />}
+          {tab === 'credentials' && <CredentialsTab studentId={id} data={data} onChanged={load} showToast={showToast} />}
+          {tab === 'health' && <HealthTab studentId={id} showToast={showToast} />}
+          {tab === 'exams' && <ExamsTab studentId={id} showToast={showToast} />}
+          {tab === 'attendance' && <AttendanceTab studentId={id} showToast={showToast} />}
+          {tab === 'behavior' && <BehaviorTab studentId={id} showToast={showToast} />}
+          {tab === 'transport' && <TransportTab studentId={id} showToast={showToast} />}
+        </div>
+      </div>
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
+    </PageLayout>
+  );
+}
+
+/* ── Profile tab (view + inline edit) ────────────────────────────────────── */
+function ProfileTab({ data, editing, form, set, classes, sections, categories, houses }) {
+  const lbl = { fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT, display: 'block', marginBottom: 5 };
+  const editSel = (key, options, labelKey = 'name') => (
+    <select value={form[key] || ''} onChange={set(key)} style={{ ...inputStyle, marginBottom: 8 }}>
+      <option value="">— none —</option>
+      {options.map((o) => <option key={o.id} value={o.id}>{o[labelKey]}</option>)}
+    </select>
+  );
+  const extra = Array.isArray(data.extra_fields) ? data.extra_fields : [];
+  const formExtra = Array.isArray(form.extra_fields) ? form.extra_fields : extra;
+  const setExtra = (i, patch) => set('extra_fields')({ target: { value: formExtra.map((f, j) => j === i ? { ...f, ...patch } : f) } });
+  const addExtra = () => set('extra_fields')({ target: { value: [...formExtra, { label: '', value: '' }] } });
+  const delExtra = (i) => set('extra_fields')({ target: { value: formExtra.filter((_, j) => j !== i) } });
+
+  if (!editing) return (
+    <>
+      <SectionCard title="Academic Information" color={BLUE}>
+        <InfoRow label="Admission No" value={data.admission_no} />
+        <InfoRow label="Admission Date" value={data.admitted_on} />
+        <InfoRow label="Biometric ID" value={data.biometric_id} />
+        <InfoRow label="Roll Number" value={data.roll_no} />
+        <InfoRow label="House" value={data.house_name} />
+        <InfoRow label="Category" value={data.category_name} />
+      </SectionCard>
+      <SectionCard title="Personal Details" color={PURPLE}>
+        <InfoRow icon={Cake} label="Date of Birth" value={data.dob} />
+        <InfoRow label="Place of Birth" value={data.place_of_birth} />
+        <InfoRow label="Gender" value={data.gender} />
+        <InfoRow label="Nationality" value={data.nationality} />
+        <InfoRow label="Religion" value={data.religion} />
+        <InfoRow label="Caste" value={data.caste} />
+        <InfoRow label="Sub-Caste" value={data.sub_caste} />
+        <InfoRow label="Mother Tongue" value={data.mother_tongue} />
+        <InfoRow icon={Droplet} label="Blood Group" value={data.blood_group} />
+        <InfoRow label="Quota" value={data.quota} />
+        <InfoRow icon={ShieldAlert} label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
+      </SectionCard>
+      <SectionCard title="Contact & Identity" color={GREEN}>
+        <InfoRow icon={Mail} label="Student Email" value={data.student_email} />
+        <InfoRow icon={Phone} label="Student Phone" value={data.student_phone} />
+        <InfoRow label="Aadhaar / NID" value={data.aadhaar_no} />
+        <InfoRow label="PEN / SSSM ID" value={data.pen_no} />
+      </SectionCard>
+      <SectionCard title="Parent & Guardian Details" color={AMBER}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: INK, marginBottom: 4 }}>Father Details</div>
+        <InfoRow label="Name" value={data.father_name} />
+        <InfoRow label="Phone" value={data.father_phone} />
+        <InfoRow label="Occupation" value={data.father_occupation} />
+        <InfoRow label="Qualification" value={data.father_qualification} />
+        <InfoRow label="Income" value={data.father_income} />
+        <InfoRow label="Aadhaar" value={data.father_aadhaar} />
+        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 4px' }}>Mother Details</div>
+        <InfoRow label="Name" value={data.mother_name} />
+        <InfoRow label="Phone" value={data.mother_phone} />
+        <InfoRow label="Occupation" value={data.mother_occupation} />
+        <InfoRow label="Qualification" value={data.mother_qualification} />
+        <InfoRow label="Aadhaar" value={data.mother_aadhaar} />
+        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 4px' }}>Guardian &amp; Emergency</div>
+        <InfoRow label="Guardian" value={data.guardian_name ? `${data.guardian_name} (${data.guardian_phone || ''})` : null} />
+        <InfoRow label="Emergency" value={data.emergency_name ? `${data.emergency_name} (${data.emergency_phone || ''})` : null} />
+      </SectionCard>
+      <SectionCard title="Health & Medical" color={RED}>
+        <InfoRow label="Height" value={data.height_cm ? `${data.height_cm} cm` : null} />
+        <InfoRow label="Weight" value={data.weight_kg ? `${data.weight_kg} kg` : null} />
+        <InfoRow label="Medical History" value={data.medical_history} />
+      </SectionCard>
+      <SectionCard title="Bank Details" color={BLUE}>
+        <InfoRow label="Bank Name" value={data.bank_name} />
+        <InfoRow label="Account No" value={data.bank_account_no} />
+        <InfoRow label="IFSC Code" value={data.bank_ifsc} />
+      </SectionCard>
+      <SectionCard title="Address" color={PURPLE}>
+        <InfoRow label="Current" value={data.address} />
+        <InfoRow label="Permanent" value={data.permanent_address} />
+      </SectionCard>
+      <SectionCard title="Previous School" color={AMBER}>
+        <InfoRow label="Details" value={data.previous_school} />
+      </SectionCard>
+      {extra.length > 0 && (
+        <SectionCard title="Additional Information" color={GREEN}>
+          {extra.map((f, i) => <InfoRow key={i} label={f.label} value={f.value} />)}
+        </SectionCard>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <SectionCard title="Academic Information" color={BLUE}>
+        <label style={lbl}>Class</label>{editSel('class_id', classes)}
+        <label style={lbl}>Section</label>{editSel('section_id', sections.filter((s) => !form.class_id || s.class_id === form.class_id))}
+        <label style={lbl}>Category</label>{editSel('category_id', categories)}
+        <label style={lbl}>House</label>{editSel('house_id', houses)}
+        <label style={lbl}>Admitted On</label><input type="date" value={form.admitted_on || ''} onChange={set('admitted_on')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Biometric ID</label><input value={form.biometric_id || ''} onChange={set('biometric_id')} style={inputStyle} />
+      </SectionCard>
+      <SectionCard title="Personal Details" color={PURPLE}>
+        <label style={lbl}>First Name</label><input value={form.first_name || ''} onChange={set('first_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Last Name</label><input value={form.last_name || ''} onChange={set('last_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Date of Birth</label><input type="date" value={form.dob || ''} onChange={set('dob')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Place of Birth</label><input value={form.place_of_birth || ''} onChange={set('place_of_birth')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Gender</label>
+        <select value={form.gender || ''} onChange={set('gender')} style={{ ...inputStyle, marginBottom: 8 }}>
+          <option value="">— select —</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+        </select>
+        <label style={lbl}>Nationality</label><input value={form.nationality || ''} onChange={set('nationality')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Religion</label><input value={form.religion || ''} onChange={set('religion')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Caste</label><input value={form.caste || ''} onChange={set('caste')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Sub-Caste</label><input value={form.sub_caste || ''} onChange={set('sub_caste')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Mother Tongue</label><input value={form.mother_tongue || ''} onChange={set('mother_tongue')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Blood Group</label><input value={form.blood_group || ''} onChange={set('blood_group')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Quota</label><input value={form.quota || ''} onChange={set('quota')} style={inputStyle} />
+      </SectionCard>
+      <SectionCard title="Contact & Identity" color={GREEN}>
+        <label style={lbl}>Student Email</label><input value={form.student_email || ''} onChange={set('student_email')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Student Phone</label><input value={form.student_phone || ''} onChange={set('student_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Aadhaar / NID</label><input value={form.aadhaar_no || ''} onChange={set('aadhaar_no')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>PEN / SSSM ID</label><input value={form.pen_no || ''} onChange={set('pen_no')} style={inputStyle} />
+      </SectionCard>
+      <SectionCard title="Parent & Guardian Details" color={AMBER}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: INK, marginBottom: 6 }}>Father Details</div>
+        <label style={lbl}>Name</label><input value={form.father_name || ''} onChange={set('father_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Phone</label><input value={form.father_phone || ''} onChange={set('father_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Occupation</label><input value={form.father_occupation || ''} onChange={set('father_occupation')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Qualification</label><input value={form.father_qualification || ''} onChange={set('father_qualification')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Income</label><input value={form.father_income || ''} onChange={set('father_income')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Aadhaar</label><input value={form.father_aadhaar || ''} onChange={set('father_aadhaar')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 6px' }}>Mother Details</div>
+        <label style={lbl}>Name</label><input value={form.mother_name || ''} onChange={set('mother_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Phone</label><input value={form.mother_phone || ''} onChange={set('mother_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Occupation</label><input value={form.mother_occupation || ''} onChange={set('mother_occupation')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Qualification</label><input value={form.mother_qualification || ''} onChange={set('mother_qualification')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Aadhaar</label><input value={form.mother_aadhaar || ''} onChange={set('mother_aadhaar')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <div style={{ fontSize: 12, fontWeight: 800, color: INK, margin: '10px 0 6px' }}>Guardian &amp; Emergency</div>
+        <label style={lbl}>Guardian Name</label><input value={form.guardian_name || ''} onChange={set('guardian_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Guardian Phone</label><input value={form.guardian_phone || ''} onChange={set('guardian_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Guardian Email</label><input value={form.guardian_email || ''} onChange={set('guardian_email')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Emergency Contact Name</label><input value={form.emergency_name || ''} onChange={set('emergency_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Emergency Contact Phone</label><input value={form.emergency_phone || ''} onChange={set('emergency_phone')} style={inputStyle} />
+      </SectionCard>
+      <SectionCard title="Health & Medical" color={RED}>
+        <label style={lbl}>Height (cm)</label><input type="number" value={form.height_cm || ''} onChange={set('height_cm')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Weight (kg)</label><input type="number" value={form.weight_kg || ''} onChange={set('weight_kg')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Medical History</label><textarea value={form.medical_history || ''} onChange={set('medical_history')} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} />
+      </SectionCard>
+      <SectionCard title="Bank Details" color={BLUE}>
+        <label style={lbl}>Bank Name</label><input value={form.bank_name || ''} onChange={set('bank_name')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>Account No</label><input value={form.bank_account_no || ''} onChange={set('bank_account_no')} style={{ ...inputStyle, marginBottom: 8 }} />
+        <label style={lbl}>IFSC Code</label><input value={form.bank_ifsc || ''} onChange={set('bank_ifsc')} style={inputStyle} />
+      </SectionCard>
+      <SectionCard title="Address" color={PURPLE}>
+        <label style={lbl}>Current Address</label><textarea value={form.address || ''} onChange={set('address')} style={{ ...inputStyle, minHeight: 60, resize: 'vertical', marginBottom: 8 }} />
+        <label style={lbl}>Permanent Address</label><textarea value={form.permanent_address || ''} onChange={set('permanent_address')} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} />
+      </SectionCard>
+      <SectionCard title="Previous School" color={AMBER}>
+        <textarea value={form.previous_school || ''} onChange={set('previous_school')} style={{ ...inputStyle, minHeight: 50, resize: 'vertical' }} />
+      </SectionCard>
+      <SectionCard title="Additional Information" color={GREEN}>
+        {formExtra.map((f, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input value={f.label} onChange={(e) => setExtra(i, { label: e.target.value })} placeholder="Field name" style={{ ...inputStyle, flex: 1 }} />
+            <input value={f.value} onChange={(e) => setExtra(i, { value: e.target.value })} placeholder="Value" style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={() => delExtra(i)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 32, cursor: 'pointer' }}><Trash2 size={12} /></button>
+          </div>
+        ))}
+        <button onClick={addExtra} style={{ border: `1px dashed ${BORDER}`, background: WHITE, color: MUTED, borderRadius: 8, padding: '6px 12px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>+ Add Field</button>
+      </SectionCard>
+    </>
+  );
+}
+
+/* ── Fees tab ─────────────────────────────────────────────────────────────── */
+function FeesTab({ studentId, fees, showToast }) {
+  const [assignments, setAssignments] = useState(null);
+  const [payments, setPayments] = useState(null);
+  useEffect(() => {
+    apiGet(`${BASE}/fee-assignments?student_id=${studentId}`).then((r) => setAssignments(r.data || [])).catch(() => setAssignments([]));
+    apiGet(`${BASE}/fee-payments?student_id=${studentId}`).then((r) => setPayments(r.data || [])).catch(() => setPayments([]));
+  }, [studentId]);
+  const th = { textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 800, color: MUTED2 };
+  const td = { padding: '8px 10px', fontSize: 12.5, color: INK, borderTop: `1px solid ${BORDER}` };
+  return (
+    <>
+      <SectionCard title="Fee Summary" color={BLUE}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <InfoRow label="Assigned" value={naira(fees?.assigned)} />
+          <InfoRow label="Paid" value={naira(fees?.paid)} />
+          <InfoRow label="Balance Due" value={naira(fees?.due)} />
+        </div>
+      </SectionCard>
+      <SectionCard title="Fee Assignments" color={AMBER}>
+        {assignments === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : assignments.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No fees assigned yet.</p> : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Fee Type</th><th style={th}>Due Date</th><th style={th}>Amount</th></tr></thead>
+            <tbody>{assignments.map((a) => <tr key={a.id}><td style={td}>{a.fee_type_name || '—'}</td><td style={td}>{a.due_date || '—'}</td><td style={td}>{naira(a.amount)}</td></tr>)}</tbody>
+          </table>
+        )}
+      </SectionCard>
+      <SectionCard title="Payment History" color={GREEN}>
+        {payments === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : payments.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No payments recorded yet.</p> : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th style={th}>Date</th><th style={th}>Amount</th><th style={th}>Method</th><th style={th}>Reference</th></tr></thead>
+            <tbody>{payments.map((p) => <tr key={p.id}><td style={td}>{p.paid_on}</td><td style={td}>{naira(p.amount)}</td><td style={{ ...td, textTransform: 'capitalize' }}>{p.method}</td><td style={td}>{p.reference || '—'}</td></tr>)}</tbody>
+          </table>
+        )}
+      </SectionCard>
+    </>
+  );
+}
+
+/* ── Documents tab ────────────────────────────────────────────────────────── */
+function DocumentsTab({ studentId, showToast }) {
+  const [docs, setDocs] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => apiGet(`${BASE}/student-documents?student_id=${studentId}`).then((r) => setDocs(r.data || [])).catch(() => setDocs([])), [studentId]);
+  useEffect(() => { load(); }, [load]);
+
+  const upload = async (files) => {
+    if (!files?.length) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      Array.from(files).forEach((f) => fd.append('files', f));
+      const r = await fetch(`${API}${BASE}/students/${studentId}/documents/upload`, { method: 'POST', credentials: 'include', body: fd });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Upload failed');
+      showToast('Uploaded ✓'); load();
+    } catch (e) { showToast(e.message || 'Upload failed'); }
+    finally { setBusy(false); }
+  };
+  const remove = async (d) => { if (!window.confirm(`Delete "${d.title}"?`)) return; try { await apiDelete(`${BASE}/student-documents/${d.id}`); load(); } catch (e) { showToast(e.message); } };
+
+  return (
+    <SectionCard title="Documents" color={GREEN}>
+      <div style={{ marginBottom: 12 }}>
+        <input type="file" multiple onChange={(e) => upload(e.target.files)} disabled={busy} />
+      </div>
+      {docs === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : docs.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No documents uploaded yet.</p> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {docs.map((d) => (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+              <FolderOpen size={14} color={MUTED2} />
+              <a href={d.url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 12.5, color: BLUE, fontFamily: FONT, textDecoration: 'none', fontWeight: 700 }}>{d.title}</a>
+              <span style={{ fontSize: 11, color: MUTED2 }}>{d.uploaded_at?.slice(0, 10)}</span>
+              <button onClick={() => remove(d)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 26, height: 26, cursor: 'pointer' }}><Trash2 size={12} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+/* ── Credentials tab ─────────────────────────────────────────────────────── */
+function CredentialsTab({ studentId, data, onChanged, showToast }) {
+  const [busy, setBusy] = useState(null);
+  const [revealed, setRevealed] = useState({});
+
+  const regenerate = async (target) => {
+    setBusy(target);
+    try {
+      const r = await apiPost(`${BASE}/students/${studentId}/credentials/regenerate`, { target });
+      setRevealed((p) => ({ ...p, [target]: { username: r.username, password: r.password } }));
+      onChanged();
+    } catch (e) { showToast(e.message || 'Could not regenerate'); }
+    finally { setBusy(null); }
+  };
+
+  const block = (target, title, username, has) => (
+    <SectionCard title={title} color={target === 'student' ? BLUE : PURPLE}>
+      <InfoRow icon={Key} label="Username" value={revealed[target]?.username || username || '—'} />
+      {revealed[target] ? (
+        <div style={{ background: `${GREEN}10`, border: `1px solid ${GREEN}44`, borderRadius: 8, padding: '10px 12px', marginTop: 8, fontFamily: FONT }}>
+          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 4 }}>New password (shown once — copy it now):</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: INK, letterSpacing: 1 }}>{revealed[target].password}</div>
+        </div>
+      ) : (
+        <p style={{ fontSize: 11.5, color: MUTED2, fontStyle: 'italic', margin: '6px 0 0' }}>
+          {has ? 'Password is not stored for security.' : 'No password set yet.'} Click Regenerate to set a new one.
+        </p>
+      )}
+      <button onClick={() => regenerate(target)} disabled={busy === target} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 9, border: 'none', background: busy === target ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy === target ? '#9CA3AF' : WHITE, fontSize: 12, fontWeight: 800, cursor: busy === target ? 'default' : 'pointer', fontFamily: FONT }}>
+        {busy === target ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <RefreshCw size={13} />} Regenerate
+      </button>
+    </SectionCard>
+  );
+
+  return (
+    <>
+      <p style={{ fontSize: 12.5, color: MUTED, marginBottom: 14, fontFamily: FONT }}>
+        Portal login credentials. Admins can share these with the student/parent and regenerate them if lost.
+      </p>
+      {block('student', 'Student Login', data.student_username, data.hasStudentPassword)}
+      {block('parent', 'Parent Login', data.parent_username, data.hasParentPassword)}
+    </>
+  );
+}
+
+/* ── Health tab ───────────────────────────────────────────────────────────── */
+function HealthTab({ studentId, showToast }) {
+  const [rows, setRows] = useState(null);
+  const [form, setForm] = useState({ record_type: '', title: '', details: '', recorded_on: '' });
+  const load = useCallback(() => apiGet(`${BASE}/health-records?student_id=${studentId}`).then((r) => setRows(r.data || [])).catch(() => setRows([])), [studentId]);
+  useEffect(() => { load(); }, [load]);
+  const add = async () => {
+    if (!form.title.trim()) return showToast('Title is required');
+    try { await apiPost(`${BASE}/health-records`, { ...form, student_id: studentId }); setForm({ record_type: '', title: '', details: '', recorded_on: '' }); load(); }
+    catch (e) { showToast(e.message || 'Could not add'); }
+  };
+  const remove = async (r) => { try { await apiDelete(`${BASE}/health-records/${r.id}`); load(); } catch (e) { showToast(e.message); } };
+  return (
+    <SectionCard title="Health Records" color={RED}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input value={form.record_type} onChange={(e) => setForm((f) => ({ ...f, record_type: e.target.value }))} placeholder="Type (e.g. Allergy)" style={{ ...inputStyle, flex: '1 1 140px' }} />
+        <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" style={{ ...inputStyle, flex: '1 1 160px' }} />
+        <input type="date" value={form.recorded_on} onChange={(e) => setForm((f) => ({ ...f, recorded_on: e.target.value }))} style={{ ...inputStyle, flex: '1 1 140px' }} />
+        <button onClick={add} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Add</button>
+      </div>
+      {rows === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : rows.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No health records yet.</p> : (
+        rows.map((r) => (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: `1px solid ${BORDER}` }}>
+            <HeartPulse size={14} color={RED} />
+            <div style={{ flex: 1 }}><b style={{ fontSize: 12.5 }}>{r.title}</b><div style={{ fontSize: 11, color: MUTED2 }}>{r.record_type} · {r.recorded_on}</div></div>
+            <button onClick={() => remove(r)} style={{ border: 'none', background: `${RED}12`, color: RED, borderRadius: 7, width: 26, height: 26, cursor: 'pointer' }}><Trash2 size={12} /></button>
+          </div>
+        ))
+      )}
+    </SectionCard>
+  );
+}
+
+/* ── Exams tab ────────────────────────────────────────────────────────────── */
+function ExamsTab({ studentId, showToast }) {
+  const [data, setData] = useState(null);
+  const [openExam, setOpenExam] = useState(null);
+  const [marksheet, setMarksheet] = useState(null);
+  useEffect(() => { apiGet(`${BASE}/students/${studentId}/exams`).then((r) => setData(r.data)).catch(() => setData({ exams: [], uploads: [] })); }, [studentId]);
+
+  const view = async (exam) => {
+    setOpenExam(exam.id); setMarksheet(null);
+    try { const r = await apiGet(`${BASE}/students/${studentId}/exams/${exam.id}`); setMarksheet(r.data); } catch (e) { showToast(e.message); }
+  };
+
+  if (!data) return <SectionCard title="Report Cards & Marksheets" color={PURPLE}><Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /></SectionCard>;
+  const th = { textAlign: 'left', padding: '8px 10px', fontSize: 10.5, fontWeight: 800, color: MUTED2 };
+  const td = { padding: '8px 10px', fontSize: 12.5, color: INK, borderTop: `1px solid ${BORDER}` };
+  return (
+    <SectionCard title="Report Cards & Marksheets" color={PURPLE}>
+      {data.exams.length === 0 && data.uploads.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No exam results yet.</p> : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
+          <thead><tr><th style={th}>Title</th><th style={th}>Type</th><th style={th}>Action</th></tr></thead>
+          <tbody>
+            {data.exams.map((e) => (
+              <tr key={e.id}><td style={td}>{e.name}</td><td style={td}>System</td>
+                <td style={td}><button onClick={() => view(e)} style={{ border: 'none', background: `${BLUE}12`, color: BLUE, borderRadius: 7, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>View</button></td></tr>
+            ))}
+            {data.uploads.map((u) => (
+              <tr key={u.id}><td style={td}>{u.title}</td><td style={td}>Upload</td>
+                <td style={td}>{u.file_url ? <a href={u.file_url} target="_blank" rel="noreferrer" style={{ color: BLUE, fontSize: 11.5, fontWeight: 700 }}>Open</a> : '—'}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {openExam && (
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14 }}>
+          {!marksheet ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : (
             <>
-              <SectionCard title="Academic Information" color={BLUE}>
-                <InfoRow label="Class" value={data.class_name} />
-                <InfoRow label="Section" value={data.section_name} />
-                <InfoRow label="Category" value={data.category_name} />
-                <InfoRow label="House" value={data.house_name} />
-                <InfoRow label="Admitted On" value={data.admitted_on} />
-              </SectionCard>
-              <SectionCard title="Personal Details" color={PURPLE}>
-                <InfoRow icon={Cake} label="Date of Birth" value={data.dob} />
-                <InfoRow label="Gender" value={data.gender} />
-                <InfoRow label="Blood Group" value={data.blood_group} />
-                <InfoRow icon={ShieldAlert} label="Disability" value={data.is_disabled ? (data.disability_note || 'Yes') : 'None'} />
-              </SectionCard>
-              <SectionCard title="Guardian & Contact" color={GREEN}>
-                <InfoRow label="Guardian Name" value={data.guardian_name} />
-                <InfoRow icon={Phone} label="Guardian Phone" value={data.guardian_phone} />
-                <InfoRow icon={Mail} label="Guardian Email" value={data.guardian_email} />
-              </SectionCard>
-              <SectionCard title="Address" color={AMBER}>
-                <InfoRow icon={MapPin} label="Address" value={data.address} />
-              </SectionCard>
-            </>
-          ) : (
-            <>
-              <SectionCard title="Academic Information" color={BLUE}>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Class</label>
-                {editSel('class_id', classes)}
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Section</label>
-                {editSel('section_id', sections.filter((s) => !form.class_id || s.class_id === form.class_id))}
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Category</label>
-                {editSel('category_id', categories)}
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>House</label>
-                {editSel('house_id', houses)}
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Admitted On</label>
-                <input type="date" value={form.admitted_on || ''} onChange={set('admitted_on')} style={inputStyle} />
-              </SectionCard>
-              <SectionCard title="Personal Details" color={PURPLE}>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>First Name</label>
-                <input value={form.first_name || ''} onChange={set('first_name')} style={{ ...inputStyle, marginBottom: 8 }} />
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Last Name</label>
-                <input value={form.last_name || ''} onChange={set('last_name')} style={{ ...inputStyle, marginBottom: 8 }} />
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Date of Birth</label>
-                <input type="date" value={form.dob || ''} onChange={set('dob')} style={{ ...inputStyle, marginBottom: 8 }} />
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Gender</label>
-                <select value={form.gender || ''} onChange={set('gender')} style={{ ...inputStyle, marginBottom: 8 }}>
-                  <option value="">— select —</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
-                </select>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Blood Group</label>
-                <input value={form.blood_group || ''} onChange={set('blood_group')} style={inputStyle} />
-              </SectionCard>
-              <SectionCard title="Guardian & Contact" color={GREEN}>
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Guardian Name</label>
-                <input value={form.guardian_name || ''} onChange={set('guardian_name')} style={{ ...inputStyle, marginBottom: 8 }} />
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Guardian Phone</label>
-                <input value={form.guardian_phone || ''} onChange={set('guardian_phone')} style={{ ...inputStyle, marginBottom: 8 }} />
-                <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT }}>Guardian Email</label>
-                <input value={form.guardian_email || ''} onChange={set('guardian_email')} style={inputStyle} />
-              </SectionCard>
-              <SectionCard title="Address" color={AMBER}>
-                <textarea value={form.address || ''} onChange={set('address')} style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} />
-              </SectionCard>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={th}>Subject</th><th style={th}>Score</th><th style={th}>Max</th><th style={th}>Result</th></tr></thead>
+                <tbody>{marksheet.subjects.map((s, i) => <tr key={i}><td style={td}>{s.subject}</td><td style={td}>{s.score ?? '—'}</td><td style={td}>{s.max}</td><td style={td}>{s.pass === null ? '—' : s.pass ? <span style={{ color: GREEN, fontWeight: 800 }}>Pass</span> : <span style={{ color: RED, fontWeight: 800 }}>Fail</span>}</td></tr>)}</tbody>
+              </table>
+              <div style={{ marginTop: 8, fontSize: 12.5, fontFamily: FONT }}><b>Total:</b> {marksheet.total}/{marksheet.maxTotal} ({marksheet.percent}%)</div>
+              {marksheet.remark && <div style={{ marginTop: 6, fontSize: 12, color: MUTED, fontFamily: FONT }}><b>Remark:</b> {marksheet.remark}</div>}
             </>
           )}
         </div>
+      )}
+    </SectionCard>
+  );
+}
+
+/* ── Attendance tab (month calendar) ─────────────────────────────────────── */
+function AttendanceTab({ studentId, showToast }) {
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [data, setData] = useState(null);
+  useEffect(() => { apiGet(`${BASE}/students/${studentId}/attendance?month=${month}`).then((r) => setData(r.data)).catch(() => showToast('Could not load attendance')); }, [studentId, month]);
+
+  const shiftMonth = (delta) => { const [y, m] = month.split('-').map(Number); const d = new Date(y, m - 1 + delta, 1); setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); };
+  const STATUS_COLOR = { present: GREEN, absent: RED, late: AMBER, excused: BLUE };
+  const [y, m] = month.split('-').map(Number);
+  const firstDay = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const cells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  return (
+    <SectionCard title="Attendance" color={BLUE}>
+      {data && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+          <InfoRow label="Present" value={data.stats.present} /><InfoRow label="Absent" value={data.stats.absent} />
+          <InfoRow label="Late" value={data.stats.late} /><InfoRow label="Excused" value={data.stats.excused} />
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <button onClick={() => shiftMonth(-1)} style={{ border: 'none', background: LIGHT, borderRadius: 7, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronLeft size={15} /></button>
+        <b style={{ fontFamily: FONT, fontSize: 13 }}>{new Date(y, m - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</b>
+        <button onClick={() => shiftMonth(1)} style={{ border: 'none', background: LIGHT, borderRadius: 7, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronRight size={15} /></button>
       </div>
-      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
-    </PageLayout>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, fontFamily: FONT }}>
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} style={{ fontSize: 10.5, fontWeight: 800, color: MUTED2, textAlign: 'center', padding: 4 }}>{d}</div>)}
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const date = `${month}-${String(day).padStart(2, '0')}`;
+          const status = data?.records?.[date]?.status;
+          return (
+            <div key={i} style={{ aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, fontSize: 12, fontWeight: 700, background: status ? `${STATUS_COLOR[status]}18` : LIGHT, color: status ? STATUS_COLOR[status] : MUTED2 }}>
+              {day}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+        {Object.entries(STATUS_COLOR).map(([k, c]) => (
+          <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: MUTED, fontFamily: FONT, textTransform: 'capitalize' }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: c }} /> {k}
+          </span>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+/* ── Behavior tab ─────────────────────────────────────────────────────────── */
+function BehaviorTab({ studentId, showToast }) {
+  const [rows, setRows] = useState(null);
+  const [form, setForm] = useState({ incident_type: '', severity: 'low', description: '', action_taken: '', recorded_on: '' });
+  const load = useCallback(() => apiGet(`${BASE}/behavior-records?student_id=${studentId}`).then((r) => setRows(r.data || [])).catch(() => setRows([])), [studentId]);
+  useEffect(() => { load(); }, [load]);
+  const add = async () => {
+    if (!form.incident_type.trim()) return showToast('Incident type is required');
+    try { await apiPost(`${BASE}/behavior-records`, { ...form, student_id: studentId }); setForm({ incident_type: '', severity: 'low', description: '', action_taken: '', recorded_on: '' }); load(); }
+    catch (e) { showToast(e.message || 'Could not add'); }
+  };
+  const SEVERITY_COLOR = { low: GREEN, medium: AMBER, high: RED };
+  return (
+    <SectionCard title="Behavior & Incident Log" color={AMBER}>
+      {rows && (
+        <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
+          <InfoRow label="Total Incidents" value={rows.length} />
+          <InfoRow label="High Severity" value={rows.filter((r) => r.severity === 'high').length} />
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input value={form.incident_type} onChange={(e) => setForm((f) => ({ ...f, incident_type: e.target.value }))} placeholder="Incident type" style={{ ...inputStyle, flex: '1 1 140px' }} />
+        <select value={form.severity} onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value }))} style={{ ...inputStyle, flex: '0 1 110px', cursor: 'pointer' }}>
+          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+        </select>
+        <input type="date" value={form.recorded_on} onChange={(e) => setForm((f) => ({ ...f, recorded_on: e.target.value }))} style={{ ...inputStyle, flex: '1 1 140px' }} />
+        <button onClick={add} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Add</button>
+      </div>
+      {rows === null ? <Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /> : rows.length === 0 ? <p style={{ fontSize: 12.5, color: MUTED2 }}>No behavior incidents recorded.</p> : (
+        rows.map((r) => (
+          <div key={r.id} style={{ padding: '8px 0', borderTop: `1px solid ${BORDER}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ padding: '2px 9px', borderRadius: 999, background: `${SEVERITY_COLOR[r.severity]}15`, color: SEVERITY_COLOR[r.severity], fontSize: 10.5, fontWeight: 800, textTransform: 'capitalize' }}>{r.severity}</span>
+              <b style={{ fontSize: 12.5 }}>{r.incident_type}</b>
+              <span style={{ fontSize: 11, color: MUTED2, marginLeft: 'auto' }}>{r.recorded_on}</span>
+            </div>
+            {r.description && <p style={{ fontSize: 12, color: MUTED, margin: '4px 0 0' }}>{r.description}</p>}
+          </div>
+        ))
+      )}
+    </SectionCard>
+  );
+}
+
+/* ── Transport tab (Transport + Hostel) ──────────────────────────────────── */
+function TransportTab({ studentId, showToast }) {
+  const [data, setData] = useState(null);
+  const [routes, setRoutes] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [form, setForm] = useState({ route_id: '', vehicle_id: '', pickup_point: '', fee: '' });
+  const [roomId, setRoomId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => apiGet(`${BASE}/students/${studentId}/transport`).then((r) => setData(r.data)).catch(() => setData({ transport: null, hostel: null })), [studentId]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    apiGet(`${BASE}/transport-routes`).then((r) => setRoutes(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/vehicles`).then((r) => setVehicles(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/hostel-rooms`).then((r) => setRooms(r.data || [])).catch(() => {});
+  }, []);
+
+  const assignTransport = async () => {
+    setBusy(true);
+    try { await apiPost(`${BASE}/student-transport`, { ...form, student_id: studentId }); showToast('Transport assigned ✓'); load(); }
+    catch (e) { showToast(e.message || 'Could not assign'); }
+    finally { setBusy(false); }
+  };
+  const assignHostel = async () => {
+    if (!roomId) return showToast('Choose a room');
+    setBusy(true);
+    try { await apiPost(`${BASE}/hostel-allocations`, { room_id: roomId, student_id: studentId }); showToast('Hostel room allocated ✓'); load(); }
+    catch (e) { showToast(e.message || 'Could not allocate'); }
+    finally { setBusy(false); }
+  };
+
+  if (!data) return <SectionCard title="Transport & Hostel" color={BLUE}><Loader2 size={16} style={{ animation: 'spin .8s linear infinite' }} /></SectionCard>;
+  return (
+    <>
+      <SectionCard title="Transport Details" color={BLUE}>
+        {data.transport ? (
+          <>
+            <InfoRow icon={Bus} label="Route" value={data.transport.route_name} />
+            <InfoRow label="Vehicle" value={data.transport.vehicle_plate} />
+            <InfoRow label="Driver" value={data.transport.driver_name ? `${data.transport.driver_name} (${data.transport.driver_phone || ''})` : null} />
+            <InfoRow label="Pickup Point" value={data.transport.pickup_point} />
+            <InfoRow label="Fee" value={naira(data.transport.fee)} />
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 12.5, color: MUTED2, marginBottom: 10 }}>No transport assigned.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={form.route_id} onChange={(e) => setForm((f) => ({ ...f, route_id: e.target.value }))} style={{ ...inputStyle, flex: '1 1 140px', cursor: 'pointer' }}>
+                <option value="">— route —</option>{routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+              <select value={form.vehicle_id} onChange={(e) => setForm((f) => ({ ...f, vehicle_id: e.target.value }))} style={{ ...inputStyle, flex: '1 1 140px', cursor: 'pointer' }}>
+                <option value="">— vehicle —</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{v.plate_no}</option>)}
+              </select>
+              <input value={form.pickup_point} onChange={(e) => setForm((f) => ({ ...f, pickup_point: e.target.value }))} placeholder="Pickup point" style={{ ...inputStyle, flex: '1 1 140px' }} />
+              <input type="number" value={form.fee} onChange={(e) => setForm((f) => ({ ...f, fee: e.target.value }))} placeholder="Fee" style={{ ...inputStyle, flex: '1 1 100px' }} />
+              <button onClick={assignTransport} disabled={busy} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Assign</button>
+            </div>
+          </>
+        )}
+      </SectionCard>
+      <SectionCard title="Hostel Details" color={PURPLE}>
+        {data.hostel ? (
+          <>
+            <InfoRow icon={Bed} label="Hostel" value={data.hostel.hostel_name} />
+            <InfoRow label="Room No" value={data.hostel.room_no} />
+            <InfoRow label="Allocated On" value={data.hostel.allocated_on} />
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 12.5, color: MUTED2, marginBottom: 10 }}>No hostel room allocated.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ ...inputStyle, flex: '1 1 200px', cursor: 'pointer' }}>
+                <option value="">— select room —</option>{rooms.map((r) => <option key={r.id} value={r.id}>{r.room_no}</option>)}
+              </select>
+              <button onClick={assignHostel} disabled={busy} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: AMBER, color: WHITE, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Allocate</button>
+            </div>
+          </>
+        )}
+      </SectionCard>
+    </>
   );
 }

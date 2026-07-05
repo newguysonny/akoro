@@ -16,6 +16,7 @@
 
 import { Router } from "express";
 import crypto from "crypto";
+import bcrypt from "bcrypt";
 import multerLib from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -55,10 +56,17 @@ const RESOURCES = {
   "student-categories": { table: "student_categories", fields: ["name"], required: ["name"], orderBy: "name", asc: true },
   "student-houses": { table: "student_houses", fields: ["name","color"], required: ["name"], orderBy: "name", asc: true },
   "students": { table: "students",
-    fields: ["admission_no","roll_no","first_name","last_name","gender","dob","class_id","section_id","category_id","house_id","guardian_name","guardian_phone","guardian_email","address","photo_url","blood_group","is_disabled","disability_note","status","admitted_on"],
+    fields: ["admission_no","roll_no","first_name","last_name","gender","dob","class_id","section_id","category_id","house_id","guardian_name","guardian_phone","guardian_email","address","photo_url","blood_group","is_disabled","disability_note","status","admitted_on",
+      "biometric_id","place_of_birth","nationality","religion","caste","sub_caste","mother_tongue","quota",
+      "student_email","student_phone","aadhaar_no","pen_no",
+      "father_name","father_phone","father_occupation","father_qualification","father_income","father_aadhaar",
+      "mother_name","mother_phone","mother_occupation","mother_qualification","mother_aadhaar",
+      "emergency_name","emergency_phone","height_cm","weight_kg","medical_history",
+      "bank_name","bank_account_no","bank_ifsc","permanent_address","previous_school","extra_fields"],
     required: ["admission_no","first_name","last_name"],
     refs: { class_id: ["classes","name"], section_id: ["sections","name"], category_id: ["student_categories","name"], house_id: ["student_houses","name"] },
     filters: ["class_id","section_id","status","is_disabled","category_id","house_id"] },
+  "student-transport": { table: "student_transport", fields: ["student_id","route_id","vehicle_id","pickup_point","fee","status"], required: ["student_id"], refs: { student_id: ["students", studentLabel], route_id: ["transport_routes","name"], vehicle_id: ["vehicles","plate_no"] }, filters: ["student_id","status"] },
   "student-attendance": { table: "student_attendance", fields: ["student_id","date","status","note"], required: ["student_id","date"], refs: { student_id: ["students", studentLabel] }, filters: ["date","student_id","status"], orderBy: "date", asc: false },
   "behavior-records": { table: "behavior_records", fields: ["student_id","incident_type","severity","description","action_taken","recorded_on"], required: ["student_id","incident_type"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","severity"] },
   "health-records": { table: "health_records", fields: ["student_id","record_type","title","details","recorded_on"], required: ["student_id","title"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","record_type"] },
@@ -574,15 +582,181 @@ router.get("/students/:id/profile", authenticateToken, async (req, res) => {
     const absent = (attRows || []).filter((a) => a.status === "absent").length;
     const late = (attRows || []).filter((a) => a.status === "late").length;
 
+    // Never expose password hashes — only whether one has been set.
+    const { student_password_hash, parent_password_hash, ...safeRow } = row;
     res.json({
       success: true,
       data: {
-        ...row, name: studentLabel(student),
+        ...safeRow, name: studentLabel(student),
+        hasStudentPassword: !!student_password_hash, hasParentPassword: !!parent_password_hash,
         fees: dues[0] || { assigned: 0, paid: 0, due: 0 },
         attendance: { present, absent, late, total: (attRows || []).length },
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Credentials — regenerate the student/parent portal password ──────────
+// Body: { target: 'student' | 'parent' }. Returns the plaintext password ONCE;
+// only its bcrypt hash is stored. Username is auto-set on first regenerate.
+router.post("/students/:id/credentials/regenerate", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const target = req.body.target === "parent" ? "parent" : "student";
+    const { data: student } = await M().from("students").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    const password = crypto.randomBytes(6).toString("base64").replace(/[+/=]/g, "").slice(0, 8);
+    const hash = await bcrypt.hash(password, 10);
+    const patch = {};
+    if (target === "student") {
+      patch.student_username = student.student_username || `S${student.admission_no}`.replace(/\s+/g, "");
+      patch.student_password_hash = hash;
+    } else {
+      patch.parent_username = student.parent_username || `P${(student.guardian_phone || student.admission_no || "").replace(/\D/g, "")}`;
+      patch.parent_password_hash = hash;
+    }
+    const { error } = await M().from("students").update(patch).eq("id", student.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, username: patch.student_username || patch.parent_username, password });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Transport & Hostel summary for a student ──────────────────────────────
+router.get("/students/:id/transport", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: transport } = await M().from("student_transport")
+      .select("id, pickup_point, fee, status, route_id, vehicle_id").eq("school_id", school.id).eq("student_id", req.params.id).eq("status", "active").maybeSingle();
+    const { data: hostel } = await M().from("hostel_allocations")
+      .select("id, allocated_on, room_id").eq("school_id", school.id).eq("student_id", req.params.id).eq("status", "active").maybeSingle();
+
+    let route = null, vehicle = null, room = null;
+    if (transport?.route_id) { const { data } = await M().from("transport_routes").select("name, start_point, end_point").eq("id", transport.route_id).maybeSingle(); route = data; }
+    if (transport?.vehicle_id) { const { data } = await M().from("vehicles").select("plate_no, driver_name, driver_phone").eq("id", transport.vehicle_id).maybeSingle(); vehicle = data; }
+    if (hostel?.room_id) {
+      const { data: r } = await M().from("hostel_rooms").select("room_no, hostel_id").eq("id", hostel.room_id).maybeSingle();
+      room = r;
+      if (r?.hostel_id) { const { data: h } = await M().from("hostels").select("name").eq("id", r.hostel_id).maybeSingle(); if (h) room = { ...room, hostel_name: h.name }; }
+    }
+    res.json({
+      success: true,
+      data: {
+        transport: transport ? { ...transport, route_name: route?.name || null, vehicle_plate: vehicle?.plate_no || null, driver_name: vehicle?.driver_name || null, driver_phone: vehicle?.driver_phone || null } : null,
+        hostel: hostel ? { ...hostel, room_no: room?.room_no || null, hostel_name: room?.hostel_name || null } : null,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Attendance for one month (calendar view) ──────────────────────────────
+router.get("/students/:id/attendance", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : new Date().toISOString().slice(0, 7);
+    const from = `${month}-01`;
+    const to = new Date(new Date(`${from}T00:00:00Z`).getFullYear(), new Date(`${from}T00:00:00Z`).getMonth() + 1, 0).toISOString().slice(0, 10);
+    const { data } = await M().from("student_attendance").select("date, status, note")
+      .eq("school_id", school.id).eq("student_id", req.params.id).gte("date", from).lte("date", to).order("date", { ascending: true });
+    const byDate = Object.fromEntries((data || []).map((d) => [d.date, d]));
+    res.json({
+      success: true,
+      data: {
+        month,
+        records: byDate,
+        stats: {
+          present: (data || []).filter((d) => d.status === "present").length,
+          absent: (data || []).filter((d) => d.status === "absent").length,
+          late: (data || []).filter((d) => d.status === "late").length,
+          excused: (data || []).filter((d) => d.status === "excused").length,
+        },
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Exams: list exams with marks for this student, and one exam's scores ──
+router.get("/students/:id/exams", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: student } = await M().from("students").select("id, class_id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    const { data: scheds } = student.class_id
+      ? await M().from("exam_schedules").select("id, exam_id").eq("school_id", school.id).eq("class_id", student.class_id)
+      : { data: [] };
+    const schedIds = (scheds || []).map((s) => s.id);
+    const { data: marks } = schedIds.length
+      ? await M().from("exam_marks").select("schedule_id").eq("student_id", student.id).in("schedule_id", schedIds)
+      : { data: [] };
+    const markedSchedIds = new Set((marks || []).map((m) => m.schedule_id));
+    const examIds = [...new Set((scheds || []).filter((s) => markedSchedIds.has(s.id)).map((s) => s.exam_id))];
+    const { data: exams } = examIds.length ? await M().from("exams").select("id, name").in("id", examIds) : { data: [] };
+
+    const { data: uploads } = student.class_id
+      ? await M().from("marksheet_uploads").select("id, title, file_url, note, created_at").eq("school_id", school.id).eq("class_id", student.class_id).order("created_at", { ascending: false })
+      : { data: [] };
+
+    res.json({ success: true, data: { exams: exams || [], uploads: uploads || [] } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get("/students/:id/exams/:examId", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: student } = await M().from("students").select("id, class_id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!student) return res.status(404).json({ error: "Student not found" });
+    const { data: scheds } = await M().from("exam_schedules").select("id, subject_id, max_marks, pass_marks")
+      .eq("school_id", school.id).eq("exam_id", req.params.examId).eq("class_id", student.class_id);
+    if (!scheds?.length) return res.json({ success: true, data: { subjects: [], total: 0, maxTotal: 0, percent: 0 } });
+    const subjIds = scheds.map((s) => s.subject_id);
+    const { data: subjects } = await M().from("subjects").select("id, name").eq("school_id", school.id).in("id", subjIds);
+    const subjName = Object.fromEntries((subjects || []).map((s) => [s.id, s.name]));
+    const { data: marks } = await M().from("exam_marks").select("schedule_id, marks").eq("student_id", student.id).in("schedule_id", scheds.map((s) => s.id));
+    const markOf = Object.fromEntries((marks || []).map((m) => [m.schedule_id, Number(m.marks)]));
+    const { data: remark } = await M().from("teacher_remarks").select("remark").eq("school_id", school.id).eq("student_id", student.id).eq("exam_id", req.params.examId).maybeSingle();
+
+    let total = 0, maxTotal = 0;
+    const subjectRows = scheds.map((s) => {
+      const score = markOf[s.id]; const max = Number(s.max_marks || 100);
+      if (score !== undefined) total += score;
+      maxTotal += max;
+      return { subject: subjName[s.subject_id] || "?", score: score ?? null, max, pass: s.pass_marks != null && score !== undefined ? score >= Number(s.pass_marks) : null };
+    });
+    res.json({ success: true, data: { subjects: subjectRows, total, maxTotal, percent: maxTotal ? Math.round((total / maxTotal) * 100) : 0, remark: remark?.remark || null } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Documents: upload one or more files directly against this student ─────
+const studentDocUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } }).array("files", 20);
+router.post("/students/:id/documents/upload", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  studentDocUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const { data: student } = await M().from("students").select("id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const files = req.files || [];
+      if (!files.length) return res.status(400).json({ error: "No files uploaded" });
+      await ensureBucket();
+      const created = [];
+      for (const f of files) {
+        const safe = (f.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const dest = `students/${school.id}/documents/${student.id}-${Date.now()}-${safe}`;
+        const url = await uploadPublicFile(dest, f.buffer, f.mimetype || "application/octet-stream");
+        const { data, error } = await M().from("student_documents").insert({ school_id: school.id, student_id: student.id, title: req.body.title || f.originalname || "Document", url }).select("*").single();
+        if (error) throw new Error(error.message);
+        created.push(data);
+      }
+      res.status(201).json({ success: true, data: created });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 });
 
 // ── Bulk upload students (CSV parsed client-side → rows of objects) ───────
