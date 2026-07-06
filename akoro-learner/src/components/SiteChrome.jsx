@@ -157,7 +157,7 @@ export function SiteNav() {
   );
 }
 
-
+/* ── Second Header and Nav Type ── */
 
 export function SFSHeader() {
   return (
