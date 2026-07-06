@@ -72,13 +72,13 @@ export default function SFSHeader() {
           </div>
           <div className="text-center leading-[1.25]">
             <div className="text-[9px] font-bold text-[#2D2D2D] tracking-wide">
-              AI
+              THE
             </div>
             <div className="text-[11px] font-extrabold text-[#2D2D2D] tracking-wide">
-              ADAPTIVE LEARNING
+              SAN FRANCISCO
             </div>
             <div className="text-[9px] font-bold text-[#2D2D2D] tracking-wide">
-              PLATFORM
+              SCHOOL
             </div>
           </div>
         </div>
