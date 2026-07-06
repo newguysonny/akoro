@@ -1,4 +1,6 @@
 import React from "react";
+import AkoroLogo from './common/AkoroLogo.jsx';
+
 
 export default function SFSHeader() {
   return (
@@ -64,12 +66,17 @@ export default function SFSHeader() {
             boxShadow: "2px 2px 10px rgba(0,0,0,0.06)",
           }}
         >
+          <AkoroLogo size={34} radius={10}/>
+          
+          {/*
           <div className="grid grid-cols-2 grid-rows-2 gap-0.5 w-11 h-11 mb-1.5">
             <div className="bg-[#F5A623]" style={{ borderRadius: "100% 0 0 0" }} />
             <div className="bg-[#C4164A]" style={{ borderRadius: "0 100% 0 0" }} />
             <div className="bg-[#0D9488]" style={{ borderRadius: "0 0 0 100%" }} />
             <div className="bg-[#F5A623]" style={{ borderRadius: "0 0 100% 0" }} />
           </div>
+          */}
+          
           <div className="text-center leading-[1.25]">
             <div className="text-[9px] font-bold text-[#2D2D2D] tracking-wide">
               AI POWERED
