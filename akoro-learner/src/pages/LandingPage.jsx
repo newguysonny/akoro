@@ -1164,6 +1164,10 @@ export default function LandingPage() {
       <FontStyle/>
       <SFSHeader/>
       <main>
+        <div className="sfs-wrapper">
+  <SFSHeader />
+  <SFSHero />
+</div>
         <SFSHero /> 
         <Hero onSignup={goSignup}/>
         <TrustBar/>
