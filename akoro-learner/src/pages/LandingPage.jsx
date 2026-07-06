@@ -1161,13 +1161,9 @@ export default function LandingPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fff', color: '#1A1A2E', overflowX: 'hidden' }}>
+     <SFSHeader/>
       <FontStyle/>
-      <SFSHeader/>
       <main>
-        <div className="sfs-wrapper">
-  <SFSHeader />
-  <SFSHero />
-</div>
         <SFSHero /> 
         <Hero onSignup={goSignup}/>
         <TrustBar/>
