@@ -198,7 +198,7 @@ function Drawer({ open, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <AkoroLogo size={32} radius={9}/>
-            <span className="fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
+            <span className="fs" style={ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
           </div>
           <button onClick={onClose} style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#F5F3EE', border: 'none', cursor: 'pointer', color: '#6B6B80' }}><X size={16}/></button>
         </div>
@@ -221,7 +221,6 @@ function Drawer({ open, onClose }) {
 }
 
 /* ══════════════ HERO ══════════════ */
-
 
 const SLIDES = [
   {
@@ -258,7 +257,7 @@ function SFSHero() {
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // clear the "prev" slide once its exit animation is done, so it unmounts
+  // clear the "prev" slide after its exit animation
   useEffect(() => {
     if (prev === null) return;
     const t = setTimeout(() => setPrev(null), 700);
@@ -266,53 +265,54 @@ function SFSHero() {
   }, [prev]);
 
   return (
-    <div className="flex justify-start bg-white pt-1 pb-8">
-      <div
-        className="relative w-full max-w-[640px] overflow-hidden"
-        style={{
-          aspectRatio: "16 / 14",
-          borderRadius: "0 0 0 clamp(120px, 40vw, 260px)",
-        }}
-      >
-        {SLIDES.map((slide, i) => {
-          const isCurrent = i === current;
-          const isPrev = i === prev;
-          if (!isCurrent && !isPrev) return null;
+    <div className="font-sans text-[#333]">
+      <div className="flex justify-start bg-white pt-1 pb-8">
+        <div
+          className="relative w-full max-w-[640px] overflow-hidden"
+          style={{
+            aspectRatio: "16 / 14",
+            borderRadius: "0 0 0 clamp(120px, 40vw, 260px)",
+          }}
+        >
+          {SLIDES.map((slide, i) => {
+            const isCurrent = i === current;
+            const isPrev = i === prev;
+            if (!isCurrent && !isPrev) return null;
 
-          return (
-            <div
-              key={i}
-              className="absolute inset-0 transition-all duration-700 ease-in-out"
-              style={{
-                transform: isCurrent ? "translateX(0)" : "translateX(-100%)",
-                opacity: isCurrent ? 1 : 0,
-                zIndex: isCurrent ? 2 : 1,
-              }}
-            >
-              <img
-                src={slide.image}
-                alt=""
-                className="w-full h-full object-cover block"
-              />
-              <div className="absolute inset-0 flex items-center justify-center px-8">
-                <h1
-                  className="text-white font-extrabold uppercase text-center leading-[1.1] tracking-tight"
-                  style={{
-                    fontSize: "clamp(1.35rem, 6vw, 3rem)",
-                    textShadow: "0 2px 10px rgba(0,0,0,0.45)",
-                  }}
-                >
-                  {slide.text}
-                </h1>
+            return (
+              <div
+                key={i}
+                className="absolute inset-0 transition-all duration-700 ease-in-out"
+                style={{
+                  transform: isCurrent ? "translateX(0)" : "translateX(-100%)",
+                  opacity: isCurrent ? 1 : 0,
+                  zIndex: isCurrent ? 2 : 1,
+                }}
+              >
+                <img
+                  src={slide.image}
+                  alt=""
+                  className="w-full h-full object-cover block"
+                />
+                <div className="absolute inset-0 flex items-center justify-center px-8">
+                  <h1
+                    className="text-white font-extrabold uppercase text-center leading-[1.1] tracking-tight"
+                    style={{
+                      fontSize: "clamp(1.35rem, 6vw, 3rem)",
+                      textShadow: "0 2px 10px rgba(0,0,0,0.45)",
+                    }}
+                  >
+                    {slide.text}
+                  </h1>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
-
 
 /* ══════════════ Components ══════════════ */
 function Hero({ onSignup }) {
