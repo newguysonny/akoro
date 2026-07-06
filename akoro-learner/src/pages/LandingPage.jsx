@@ -10,9 +10,8 @@ import {
   Layers, Settings, LayoutDashboard,
 } from 'lucide-react';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
-import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
+import { SiteNav, SFSHeader, SiteFooter } from '../components/SiteChrome.jsx';
 import SFSHero from '../components/SFSHero.jsx';
-import SFSHeader from '../components/SFSHeader.jsx';
 
 import { API } from '../services/api.js';
 import {
