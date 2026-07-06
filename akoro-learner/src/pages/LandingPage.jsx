@@ -198,7 +198,7 @@ function Drawer({ open, onClose }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <AkoroLogo size={32} radius={9}/>
-            <span className="fs" style={ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
+            <span className="fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
           </div>
           <button onClick={onClose} style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#F5F3EE', border: 'none', cursor: 'pointer', color: '#6B6B80' }}><X size={16}/></button>
         </div>
