@@ -223,11 +223,9 @@ function Drawer({ open, onClose }) {
   );
 }
 
-/* ══════════════ HERO ══════════════ */
 
-
-/* ══════════════ Components ══════════════ */
-function Hero({ onSignup }) {
+/* ══════════════ QUICK INFO ══════════════ */
+function QuickInfo({ onSignup }) {
   const stats = [
     { icon: <Cpu size={20} color="#C4B5FD"/>, label: 'Active Agents',   val: '12,400+', sub: 'students worldwide' },
     { icon: <Brain size={20} color="#C4B5FD"/>, label: 'Avg Retention', val: '89%',     sub: 'vs 17% passive video' },
@@ -237,12 +235,7 @@ function Hero({ onSignup }) {
   return (
     <section style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', background: `linear-gradient(180deg,${B2} 0%,#3A12A8 100%)`, overflow: 'hidden' }}>
       <div className="ak-hero-inner" style={{ position: 'relative', zIndex: 1, maxWidth: 880, width: '100%', padding: '140px 24px 96px' }}>
-        <div className="fu1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 99, padding: '7px 16px', marginBottom: 28 }}>
-          <span className="glass" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 99, padding: '7px 16px' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#C4B5FD' }} className="ldot"/>
-            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 600, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Adaptive Learning Platform</span>
-          </span>
-        </div>
+        
         
         <div className="fu5 ak-stats-grid">
           {stats.map(({ icon, label, val, sub }, i) => (
@@ -1165,7 +1158,7 @@ export default function LandingPage() {
       <FontStyle/>
       <main>
         <SFSHero /> 
-        <Hero onSignup={goSignup}/>
+        <QuickInfo onSignup={goSignup}/>
         <TrustBar/>
         <ProblemSolution/>
         <HowItWorks/>
