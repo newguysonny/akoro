@@ -221,6 +221,9 @@ function Drawer({ open, onClose }) {
 }
 
 /* ══════════════ HERO ══════════════ */
+
+
+/* ══════════════ Components ══════════════ */
 function Hero({ onSignup }) {
   const stats = [
     { icon: <Cpu size={20} color="#C4B5FD"/>, label: 'Active Agents',   val: '12,400+', sub: 'students worldwide' },
@@ -237,16 +240,7 @@ function Hero({ onSignup }) {
             <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 600, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Adaptive Learning Platform</span>
           </span>
         </div>
-        <h1 className="fu2 fs" style={{ fontSize: 'clamp(40px,7vw,76px)', lineHeight: 1.05, color: '#fff', letterSpacing: '-0.03em', marginBottom: 22, fontWeight: 800 }}>
-          Teach your agent.<br/>It teaches you back.
-        </h1>
-        <p className="fu3" style={{ fontSize: 'clamp(16px,2vw,20px)', color: 'rgba(255,255,255,.82)', maxWidth: 580, margin: '0 auto 36px', lineHeight: 1.65 }}>
-          For students and teachers who want to actually remember what they learn. NaNa Esumai guides every session, battles for you, and grows alongside you.
-        </p>
-        <div className="fu5 ak-hero-btns" style={{ alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 56 }}>
-          <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}>Get your first lesson free <ArrowRight size={16}/></Btn>
-          <Btn v="outline" sz="lg" style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}><Play size={14} fill="#fff" color="#fff" style={{ flexShrink: 0 }}/> See how it works</Btn>
-        </div>
+        
         <div className="fu5 ak-stats-grid">
           {stats.map(({ icon, label, val, sub }, i) => (
             <div key={i} className="glass" style={{ borderRadius: 18, padding: '18px 20px', textAlign: 'left', transition: 'transform .2s', cursor: 'default' }}
