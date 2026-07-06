@@ -12,6 +12,7 @@ import {
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
 import { SiteNav, SFSHeader, SiteFooter } from '../components/SiteChrome.jsx';
 import SFSHero from '../components/SFSHero.jsx';
+import TrustRatings from '../components/TrustRatings.jsx';
 
 import { API } from '../services/api.js';
 import {
@@ -253,40 +254,7 @@ function QuickInfo({ onSignup }) {
   );
 }
 
-/* ══════════════ TRUST BAR ══════════════ */
-function TrustBar() {
-  const logos = ['UNILAG', 'Covenant Uni', 'KNUST Ghana', 'UCT Cape Town', 'British Council', 'TechCabal'];
-  const ratings = [{ score: '4.9', p: 'G2' }, { score: '4.8', p: 'Trustpilot' }, { score: '4.9', p: 'Google' }];
-  const badges = [{ icon: <Shield size={12}/>, label: 'FERPA' }, { icon: <Lock size={12}/>, label: 'NDPR' }, { icon: <Award size={12}/>, label: 'ISO 27001' }];
-  const sep = <div style={{ width: 1, height: 28, background: '#DDD8CF', flexShrink: 0 }}/>;
-  return (
-    <div style={{ borderTop: '1px solid #EDE8E1', borderBottom: '1px solid #EDE8E1', background: '#FAF8F5', padding: '24px', fontFamily: "'DM Sans',sans-serif" }}>
-      <div style={{ maxWidth: 1120, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <span className="fsyne" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9490A0' }}>Trusted by</span>
-        {sep}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {logos.map(l => <span key={l} className="fsyne" style={{ fontSize: 13, fontWeight: 700, color: '#ACACB8', cursor: 'default' }}>{l}</span>)}
-        </div>
-        {sep}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {ratings.map(({ score, p }) => (
-            <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ display: 'flex' }}>{[...Array(5)].map((_, i) => <Star key={i} size={11} fill={GL} strokeWidth={0}/>)}</div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#1A1A2E' }}>{score}</span>
-              <span style={{ fontSize: 12, color: '#9490A0' }}>· {p}</span>
-            </div>
-          ))}
-        </div>
-        {sep}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {badges.map(({ icon, label }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: '#fff', border: '1px solid #DDD8CF', fontSize: 11, fontWeight: 600, color: '#6B6B80' }}>{icon}{label}</div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
+
 
 /* ══════════════ PROBLEM / SOLUTION ══════════════ */
 function ProblemSolution() {
@@ -1158,7 +1126,7 @@ export default function LandingPage() {
       <main>
         <SFSHero /> 
         <QuickInfo onSignup={goSignup}/>
-        <TrustBar/>
+        <TrustRatings />
         <ProblemSolution/>
         <HowItWorks/>
         <AgentSpotlight/>
