@@ -159,7 +159,8 @@ export function SiteNav() {
 
 /* ── Second Header and Nav Type ── */
 
-export function SFSHeader() {
+
+export default function SFSHeader() {
   return (
     <div className="font-sans text-[#333]">
       {/* ---------- UTILITY BAR ---------- */}
@@ -223,21 +224,16 @@ export function SFSHeader() {
             boxShadow: "2px 2px 10px rgba(0,0,0,0.06)",
           }}
         >
-          <div className="grid grid-cols-2 grid-rows-2 gap-0.5 w-11 h-11 mb-1.5">
-            <div className="bg-[#F5A623]" style={{ borderRadius: "100% 0 0 0" }} />
-            <div className="bg-[#C4164A]" style={{ borderRadius: "0 100% 0 0" }} />
-            <div className="bg-[#0D9488]" style={{ borderRadius: "0 0 0 100%" }} />
-            <div className="bg-[#F5A623]" style={{ borderRadius: "0 0 100% 0" }} />
-          </div>
+          <AkoroLogo size={34} radius={10}/>
           <div className="text-center leading-[1.25]">
             <div className="text-[9px] font-bold text-[#2D2D2D] tracking-wide">
-              THE
+              AI POWERED
             </div>
             <div className="text-[11px] font-extrabold text-[#2D2D2D] tracking-wide">
-              SAN FRANCISCO
+              ADAPTIVE LEARNING
             </div>
             <div className="text-[9px] font-bold text-[#2D2D2D] tracking-wide">
-              SCHOOL
+              PLATFORM
             </div>
           </div>
         </div>
@@ -245,9 +241,6 @@ export function SFSHeader() {
     </div>
   );
 }
-
-
-
 
 /* ── Footer ── */
 export function SiteFooter() {
