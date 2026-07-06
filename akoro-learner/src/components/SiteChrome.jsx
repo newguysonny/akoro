@@ -160,7 +160,7 @@ export function SiteNav() {
 /* ── Second Header and Nav Type ── */
 
 
-export default function SFSHeader() {
+export function SFSHeader() {
   return (
     <div className="font-sans text-[#333]">
       {/* ---------- UTILITY BAR ---------- */}
