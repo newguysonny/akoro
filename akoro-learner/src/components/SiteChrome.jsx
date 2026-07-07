@@ -1,5 +1,5 @@
 /**
- * SiteChrome.jsx â€” Shared marketing navbar + footer
+ * SiteChrome.jsx — Shared marketing navbar + footer
  *
  * Reusable across the public pages (landing, about, contact, careers,
  * privacy, terms) so they all share one consistent header and footer.
@@ -12,13 +12,13 @@ import { Menu, X, ArrowRight, BookOpen, Zap, Map, TrendingUp, DollarSign, Users,
 import { FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter } from 'react-icons/fa6';
 import AkoroLogo from './common/AkoroLogo.jsx';
 
-/* â”€â”€ Brand tokens (match landing page) â”€â”€ */
+/* ── Brand tokens (match landing page) ── */
 const B  = '#6C3BFF';
 const B2 = '#4C1DCC';
 const G  = '#10B981';
 export const SITE_B = B;
 
-/* â”€â”€ Shared button â”€â”€ */
+/* ── Shared button ── */
 export const Btn = ({ children, v = 'primary', sz = 'md', onClick, style: s = {} }) => {
   const base = { display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: "'DM Sans',sans-serif", fontWeight: 600, borderRadius: 99, cursor: 'pointer', border: 'none', transition: 'all .2s', whiteSpace: 'nowrap' };
   const sizes = { sm: { padding: '9px 20px', fontSize: 13 }, md: { padding: '11px 22px', fontSize: 14 }, lg: { padding: '14px 30px', fontSize: 15 } };
@@ -30,7 +30,7 @@ export const Btn = ({ children, v = 'primary', sz = 'md', onClick, style: s = {}
   return <button onClick={onClick} style={{ ...base, ...sizes[sz], ...variants[v], ...s }}>{children}</button>;
 };
 
-/* â”€â”€ Styles injected by the chrome (fonts + responsive helpers) â”€â”€ */
+/* ── Styles injected by the chrome (fonts + responsive helpers) ── */
 const ChromeStyles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
@@ -50,7 +50,7 @@ const ChromeStyles = () => (
   `}</style>
 );
 
-/* â”€â”€ Mobile drawer â”€â”€ */
+/* ── Mobile drawer ── */
 function Drawer({ open, onClose, onNavLink }) {
   const navigate = useNavigate();
   const nav = [
@@ -91,7 +91,7 @@ function Drawer({ open, onClose, onNavLink }) {
   );
 }
 
-/* â”€â”€ Navbar â”€â”€ */
+/* ── Navbar ── */
 export function SiteNav() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -156,7 +156,7 @@ export function SiteNav() {
   );
 }
 
-/* â”€â”€ Second Header and Nav Type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* ── Second Header and Nav Type ──────────────────────────────
  * SFSHeader: utility bar + main nav + logo panel that overlaps
  * down into a page-provided hero. Fixed to the top of the
  * viewport (like SiteNav), with the same scroll-triggered
@@ -166,9 +166,9 @@ export function SiteNav() {
  * NOTE: because this is now `position: fixed`, pages using
  * SFSHeader need top padding equal to its total height
  * (utility bar + main nav) so page content doesn't render
- * underneath it â€” roughly 116px on mobile (40 + 76), 128px
+ * underneath it — roughly 116px on mobile (40 + 76), 128px
  * on desktop (40 + 88).
- * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+ * ────────────────────────────────────────────────────────────── */
 export function SFSHeader() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -200,9 +200,9 @@ export function SFSHeader() {
             Translate
           </span>
           <div className="flex gap-1.5 text-base leading-none">
-            <span>ðŸ‡ºðŸ‡¸</span>
-            <span>ðŸ‡²ðŸ‡½</span>
-            <span>ðŸ‡¨ðŸ‡³</span>
+            <span>{"\u{1F1FA}\u{1F1F8}"}</span>
+            <span>{"\u{1F1F2}\u{1F1FD}"}</span>
+            <span>{"\u{1F1E8}\u{1F1F3}"}</span>
           </div>
         </div>
         <div className="flex-1" />
@@ -254,7 +254,7 @@ export function SFSHeader() {
           </button>
         </nav>
 
-        {/* Logo panel â€“ positioned absolutely within this relative container */}
+        {/* Logo panel – positioned absolutely within this relative container */}
         <div
           className="absolute top-0 left-0 z-20 flex flex-col items-center justify-center bg-white px-1.5 py-2.5"
           style={{
@@ -284,7 +284,7 @@ export function SFSHeader() {
   );
 }
 
-/* â”€â”€ Footer â”€â”€ */
+/* ── Footer ── */
 export function SiteFooter() {
   const navigate = useNavigate();
   const go = (href) => { if (href.startsWith('/')) navigate(href); };
@@ -316,7 +316,7 @@ export function SiteFooter() {
               <AkoroLogo size={32} radius={9}/>
               <span className="sc-fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
             </div>
-            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents â€” teach your agent, NaNa Esumai guides every session and teaches you back.</p>
+            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents — teach your agent, NaNa Esumai guides every session and teaches you back.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {socials.map(({ icon, label }) => (
                 <button key={label} aria-label={label} style={{ width: 34, height: 34, borderRadius: 8, background: '#fff', border: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7A7880', transition: 'all .18s' }}
@@ -349,7 +349,7 @@ export function SiteFooter() {
           ))}
         </div>
         <div style={{ paddingTop: 24, borderTop: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <span style={{ fontSize: 12, color: '#9490A0' }}>Â© 2025 Akoro Technologies Ltd. All rights reserved.</span>
+          <span style={{ fontSize: 12, color: '#9490A0' }}>© 2025 Akoro Technologies Ltd. All rights reserved.</span>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             {legal.map(({ label, href }) => (
               href.startsWith('/') ? (
