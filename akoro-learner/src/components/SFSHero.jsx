@@ -48,7 +48,7 @@ export default function SFSHero() {
         <div
           className="relative w-full max-w-[640px] overflow-hidden"
           style={{
-            aspectRatio: "16 / 14",
+            aspectRatio: "18 / 16",
             borderRadius: "0 0 0 clamp(120px, 40vw, 260px)",
           }}
         >
