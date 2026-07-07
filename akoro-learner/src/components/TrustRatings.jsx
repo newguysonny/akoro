@@ -67,12 +67,12 @@ function PartnerCarousel() {
       onMouseLeave={resumeSoon}
       onTouchStart={pause}
       onTouchEnd={resumeSoon}
-      className="flex gap-10 overflow-x-auto scroll-smooth snap-x snap-mandatory px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+      className="flex gap-10 overflow-x-auto px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
     >
       {loopLogos.map((name, i) => (
         <div
           key={`${name}-${i}`}
-          className="shrink-0 snap-start flex items-center justify-center min-w-[140px] h-14"
+          className="shrink-0 flex items-center justify-center min-w-[140px] h-14"
         >
           <span className="text-xl sm:text-2xl font-bold text-[#B3B3B3] whitespace-nowrap select-none">
             {name}
