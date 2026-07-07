@@ -1126,10 +1126,10 @@ export default function LandingPage() {
      <SFSHeader/>
       <FontStyle/>
       <main>
-        <div className="mt-20 ">
+        <div className="mt-30 ">
   <SFSHero />
 </div>
-        <SFSHero /> 
+        
         <NewsCarousel />
         <AILearningBanner />
         <QuickInfo onSignup={goSignup}/>
