@@ -13,6 +13,7 @@ import AkoroLogo from '../components/common/AkoroLogo.jsx';
 import { SiteNav, SFSHeader, SiteFooter } from '../components/SiteChrome.jsx';
 import SFSHero from '../components/SFSHero.jsx';
 import TrustRatings from '../components/TrustRatings.jsx';
+import AILearningBanner from '../components/AILearningBanner.jsx';
 
 import { API } from '../services/api.js';
 import {
@@ -1125,6 +1126,7 @@ export default function LandingPage() {
       <FontStyle/>
       <main>
         <SFSHero /> 
+        <AILearningBanner />
         <QuickInfo onSignup={goSignup}/>
         <TrustRatings />
         <ProblemSolution/>
