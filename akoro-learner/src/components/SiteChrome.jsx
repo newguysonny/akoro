@@ -193,7 +193,7 @@ export function SFSHeader() {
 
   return (
     <div className="font-sans text-[#333]" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 900 }}>
-      {/* ---------- UTILITY BAR ---------- */}
+      {/* ---------- UTILITY BAR (unchanged) ---------- */}
       <div className="flex items-center h-10 bg-[#2D2D2D] px-4">
         <div className="flex items-center gap-2">
           <span className="hidden sm:inline text-xs text-gray-300 font-medium">
@@ -226,35 +226,54 @@ export function SFSHeader() {
             transition: 'all .3s',
           }}
         >
+          {/* Search icon – stroke now uses B */}
           <button aria-label="Search" className="p-1">
             <svg
               viewBox="0 0 24 24"
               fill="none"
               strokeWidth={2.2}
               strokeLinecap="round"
-              className="w-[22px] h-[22px] stroke-[#C4164A]"
+              className="w-[22px] h-[22px]"
+              style={{ stroke: B }}   // <-- changed to B
             >
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </button>
 
-          <button className="bg-[#C4164A] text-white rounded-full px-6 py-[11px] text-[13px] font-bold tracking-wide uppercase whitespace-nowrap">
+          {/* Apply button – uses the same gradient as primary buttons */}
+          <button
+            style={{
+              background: `linear-gradient(135deg, ${B}, ${B2})`,
+              color: '#fff',
+              borderRadius: 9999,
+              padding: '11px 24px',
+              fontSize: '13px',
+              fontWeight: 'bold',
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: `0 4px 18px ${B}40`,
+              whiteSpace: 'nowrap',
+            }}
+          >
             Apply Now
           </button>
 
+          {/* Hamburger menu – spans now use B as background */}
           <button
             aria-label="Menu"
             onClick={() => setDrawer(true)}
             className="flex flex-col gap-[5px] p-1.5"
           >
-            <span className="block w-[26px] h-[3px] rounded bg-[#C4164A]" />
-            <span className="block w-[26px] h-[3px] rounded bg-[#C4164A]" />
-            <span className="block w-[26px] h-[3px] rounded bg-[#C4164A]" />
+            <span className="block w-[26px] h-[3px] rounded" style={{ background: B }} />
+            <span className="block w-[26px] h-[3px] rounded" style={{ background: B }} />
+            <span className="block w-[26px] h-[3px] rounded" style={{ background: B }} />
           </button>
         </nav>
 
-        {/* Logo panel – positioned absolutely within this relative container */}
+        {/* Logo panel (unchanged) */}
         <div
           className="absolute top-0 left-0 z-20 flex flex-col items-center justify-center bg-white px-1.5 py-2.5"
           style={{
