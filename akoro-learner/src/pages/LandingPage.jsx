@@ -14,7 +14,7 @@ import { SiteNav, SFSHeader, SiteFooter } from '../components/SiteChrome.jsx';
 import SFSHero from '../components/SFSHero.jsx';
 import NewsCarousel from '../components/NewsCarousel.jsx';
 import TrustRatings from '../components/TrustRatings.jsx';
-import AILearningBanner from '../components/AILearningBanner.jsx';
+import QuickActions from '../components/QuickActions.jsx';
 
 import { API } from '../services/api.js';
 import {
@@ -1131,7 +1131,7 @@ export default function LandingPage() {
 </div>
         
         <NewsCarousel />
-        <AILearningBanner />
+        <QuickActions />
         <QuickInfo onSignup={goSignup}/>
         <TrustRatings />
         <ProblemSolution/>
