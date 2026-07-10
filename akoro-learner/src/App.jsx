@@ -5,6 +5,7 @@ import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import LandingPage      from './pages/LandingPage.jsx';
+import InstructorInfoPage      from './pages/InstructorInfoPage.jsx';
 import OnboardingPage   from './pages/OnboardingPage.jsx';
 import LearnerDashboard from './pages/LearnerDashboard.jsx';
 import SettingsPage     from './pages/SettingsPage.jsx';
@@ -81,6 +82,8 @@ function AppRoutes() {
       <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
+      <Route path="/instructor-info"    element={<InstructorInfoPage />}/>
+        
       <Route path="/about"    element={<AboutPage />}/>
       <Route path="/contact"  element={<ContactPage />}/>
       <Route path="/careers"  element={<CareersPage />}/>
