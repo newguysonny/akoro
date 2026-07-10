@@ -778,7 +778,9 @@ export default function StudentInfoPage() {
       <FontImport />
       {showBanner && <AnnouncementBar onDismiss={() => setShowBanner(false)} />}
       <SFSHeader />
+    <div className="mt-24 ">
      <Hero onCreateAccount={() => {}} onHowItWorks={() => {}} />
+    </div>
      <FeatureAccordion />
       <TestimonialQuote />
       <MoreFeatures />
