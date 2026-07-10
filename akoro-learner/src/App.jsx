@@ -6,6 +6,8 @@ import { LanguageProvider }        from './contexts/LanguageContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import LandingPage      from './pages/LandingPage.jsx';
 import InstructorInfoPage      from './pages/InstructorInfoPage.jsx';
+import SchoolInfoPage      from './pages/SchoolInfoPage.jsx';
+import StudentInfoPage      from './pages/StudentInfoPage.jsx';
 import OnboardingPage   from './pages/OnboardingPage.jsx';
 import LearnerDashboard from './pages/LearnerDashboard.jsx';
 import SettingsPage     from './pages/SettingsPage.jsx';
@@ -83,6 +85,9 @@ function AppRoutes() {
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
       <Route path="/instructor-info"    element={<InstructorInfoPage />}/>
+      <Route path="/student-info"    element={<StudentInfoPage />}/>
+      <Route path="/school-info"    element={<SchoolInfoPage />}/>
+        
         
       <Route path="/about"    element={<AboutPage />}/>
       <Route path="/contact"  element={<ContactPage />}/>
