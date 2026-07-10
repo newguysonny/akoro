@@ -10,7 +10,7 @@ const SEGMENTS = [
       "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=700&h=500&fit=crop",
     title: "For Learners",
     features: ["AI Assessment", "AI Quizzes"],
-    href: "learner-info",
+    href: "student-info",
   },
   {
     image:
