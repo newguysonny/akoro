@@ -755,7 +755,9 @@ export default function InstructorInfoPage() {
       <FontImport />
       {showBanner && <AnnouncementBar onDismiss={() => setShowBanner(false)} />}
       <SFSHeader />
+      <div className="mt-24 ">
       <Hero onBookDemo={() => {}} onHowItWorks={() => {}} />
+      </div>
       <FeatureAccordion />
       <TestimonialQuote />
       <FeatureRow
