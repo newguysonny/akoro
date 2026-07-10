@@ -16,6 +16,7 @@ import {
   Target,
   Brain,
 } from "lucide-react";
+import { SiteNav, SFSHeader, SiteFooter } from '../components/SiteChrome.jsx';
 
 /* ── Brand tokens (match Akoro landing page) ── */
 const B = "#6C3BFF";
@@ -50,22 +51,6 @@ function AnnouncementBar({ onDismiss }) {
         <X size={16} />
       </button>
     </div>
-  );
-}
-
-function Header() {
-  return (
-    <header className="flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
-      <span
-        className="text-2xl font-extrabold tracking-tight"
-        style={{ color: B, fontFamily: "'Poppins', sans-serif" }}
-      >
-        akoro
-      </span>
-      <button aria-label="Menu" className="p-2 text-[#1A1A2E]">
-        <Menu size={24} />
-      </button>
-    </header>
   );
 }
 
@@ -792,12 +777,9 @@ export default function StudentInfoPage() {
     <div className="min-h-screen bg-white overflow-hidden">
       <FontImport />
       {showBanner && <AnnouncementBar onDismiss={() => setShowBanner(false)} />}
-      <Header />
-<div className="mt-24 ">
-  <Hero onCreateAccount={() => {}} onHowItWorks={() => {}} />
-</div>
-      
-      <FeatureAccordion />
+      <SFSHeader />
+     <Hero onCreateAccount={() => {}} onHowItWorks={() => {}} />
+     <FeatureAccordion />
       <TestimonialQuote />
       <MoreFeatures />
       <HowItWorks />
