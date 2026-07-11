@@ -6,45 +6,46 @@ import {
   Edit3, Library, Bus, Building2, Package, Boxes, Bot, MessageSquare,
   Monitor, Wallet, DoorOpen, Megaphone, Laptop, Fingerprint, Layers,
   HeartPulse, LayoutGrid, Video, ClipboardCheck, PenTool, QrCode, ShieldCheck,
+  GraduationCap, BarChart3, LifeBuoy,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
-/* Core modules are essential system components — always active, never disableable. */
+/* Core areas are essential system components — always active, never disableable.
+   These have NO moduleKey in the sidebar, so they can never be hidden. */
 const CORE_MODULES = [
-  { key: 'student_information', label: 'Student Information', icon: Users },
-  { key: 'academics',           label: 'Academics',            icon: BookOpen },
-  { key: 'fees_collection',     label: 'Fees Collection',       icon: Banknote },
-  { key: 'human_resource',      label: 'Human Resource',        icon: UserCog },
-  { key: 'offline_examinations', label: 'Offline Examinations', icon: ClipboardList },
-  { key: 'certificates_documents', label: 'Certificates & Documents', icon: Award },
+  { key: 'staff_team',          label: 'Staff & Teams',            icon: UserCog },
+  { key: 'student_information', label: 'Student Information',       icon: Users },
+  { key: 'academics',           label: 'Academic Management',       icon: GraduationCap },
+  { key: 'modules_area',        label: 'Modules (Courses, Classes, Students, Assessments…)', icon: LayoutGrid },
+  { key: 'document_templates',  label: 'Document Templates',        icon: Award },
 ];
 
-/* Optional modules — can be toggled off to declutter the sidebar. */
+/* Optional modules — can be toggled off to hide them from the sidebar.
+   Each key matches a `moduleKey` on the corresponding sidebar item. */
 const TOGGLE_MODULES = [
-  { key: 'homework',          label: 'Homework',                  icon: Edit3 },
-  { key: 'library',           label: 'Library Management',        icon: Library },
-  { key: 'transport',         label: 'Transport',                 icon: Bus },
-  { key: 'hostel',            label: 'Hostel',                    icon: Building2 },
-  { key: 'inventory',         label: 'Inventory',                 icon: Package },
-  { key: 'asset_management',  label: 'Asset Management',          icon: Boxes },
-  { key: 'ai_assistant',      label: 'AI Assistant & Analytics',   icon: Bot },
-  { key: 'knowledge_base',    label: 'Knowledge Base & Chatbot',   icon: MessageSquare },
-  { key: 'study_center',      label: 'Study Center',               icon: Monitor },
-  { key: 'accounts_finance',  label: 'Accounts & Finance',        icon: Wallet },
-  { key: 'front_office',      label: 'Front Office',              icon: DoorOpen },
-  { key: 'communications',    label: 'Communications',            icon: Megaphone },
-  { key: 'online_examinations', label: 'Online Examinations',     icon: Laptop },
-  { key: 'biometric_attendance', label: 'Biometric Attendance',   icon: Fingerprint },
-  { key: 'cbc_academics',     label: 'CBC / Competency Academics', icon: Layers },
-  { key: 'student_health',    label: 'Student Health Records',    icon: HeartPulse },
-  { key: 'apps_center',       label: 'Apps Center',                icon: LayoutGrid },
-  { key: 'ptm',               label: 'Parent–Teacher Meetings',   icon: Video },
-  { key: 'lesson_planner',    label: 'Lesson Planner',            icon: ClipboardList },
-  { key: 'digital_evaluation', label: 'Digital Evaluation (OSM)', icon: PenTool },
-  { key: 'qr_attendance',     label: 'QR Code Attendance',        icon: QrCode },
-  { key: 'assessment',        label: 'Assessment',                icon: ShieldCheck },
+  { key: 'fees_collection',     label: 'Finance & Fees',            icon: Banknote },
+  { key: 'accounts_finance',    label: 'Accounts',                  icon: Wallet },
+  { key: 'front_office',        label: 'Front Office',              icon: DoorOpen },
+  { key: 'offline_examinations', label: 'Offline Examinations',     icon: ClipboardList },
+  { key: 'cbc_academics',       label: 'CBC / Competency Academics', icon: Layers },
+  { key: 'online_examinations', label: 'Online Examinations',       icon: Laptop },
+  { key: 'human_resource',      label: 'Human Resource',            icon: UserCog },
+  { key: 'ptm',                 label: 'Parent–Teacher Meetings',   icon: Video },
+  { key: 'lesson_planner',      label: 'Lesson Planner',            icon: ClipboardList },
+  { key: 'digital_evaluation',  label: 'OSM / Digital Evaluation',  icon: PenTool },
+  { key: 'qr_attendance',       label: 'QR Code Attendance',        icon: QrCode },
+  { key: 'study_center',        label: 'Study Center',              icon: Monitor },
+  { key: 'communications',      label: 'Communicate',               icon: Megaphone },
+  { key: 'library',             label: 'Library',                   icon: Library },
+  { key: 'inventory',           label: 'Inventory',                 icon: Package },
+  { key: 'transport',           label: 'Transport',                 icon: Bus },
+  { key: 'hostel',              label: 'Hostel',                    icon: Building2 },
+  { key: 'help_center',         label: 'Help Center',               icon: LifeBuoy },
+  { key: 'asset_management',    label: 'Asset Management',          icon: Boxes },
+  { key: 'reports_analytics',   label: 'Reports & Analytics',       icon: BarChart3 },
+  { key: 'apps_center',         label: 'Apps Center',               icon: LayoutGrid },
 ];
 
 function Toggle({ on, onChange }) {

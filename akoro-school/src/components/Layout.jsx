@@ -27,7 +27,7 @@ const NAV_SECTIONS = [
     { label: 'Non-Academic Staff', icon: UserCog, to: '/staff/non-academic' },
   ]},
   { section: 'MANAGEMENT', items: [
-    { label: 'Finance & Fees', icon: Banknote, children: [
+    { label: 'Finance & Fees', icon: Banknote, moduleKey: 'fees_collection', children: [
       { label: 'Fees Dashboard', to: '/mgmt/fees-dashboard' },
       { label: 'Collect Fees', to: '/mgmt/collect-fees' },
       { label: 'Search Due Fees', to: '/mgmt/search-due-fees' },
@@ -84,7 +84,7 @@ const NAV_SECTIONS = [
       { label: 'Complaints', to: '/mgmt/complaints' },
       { label: 'Postal Records', to: '/mgmt/postal-records' },
     ] },
-    { label: 'Offline Examinations', icon: ClipboardList, children: [
+    { label: 'Offline Examinations', icon: ClipboardList, moduleKey: 'offline_examinations', children: [
       { label: 'Exam Dashboard', to: '/mgmt/exam-dashboard' },
       { label: 'Manage Offline Exams', to: '/mgmt/offline-exams' },
       { label: 'Exam Types', to: '/mgmt/exam-types' },
@@ -112,7 +112,7 @@ const NAV_SECTIONS = [
       { label: 'Manage Online Exams', to: '/mgmt/online-exams' },
       { label: 'Question Bank', to: '/mgmt/question-bank' },
     ] },
-    { label: 'Human Resource', icon: UserCog, children: [
+    { label: 'Human Resource', icon: UserCog, moduleKey: 'human_resource', children: [
       { label: 'HR Dashboard', to: '/mgmt/hr-dashboard' },
       { label: 'Staff Directory', to: '/mgmt/staff-directory' },
       { label: 'Staff Attendance', to: '/mgmt/staff-attendance-hr' },
@@ -171,7 +171,7 @@ const NAV_SECTIONS = [
     { label: 'Students', icon: Users, to: '/students' },
     { label: 'Battles', icon: Swords, to: '/battles' },
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
-    { label: 'Assessments', icon: FileCheck, moduleKey: 'assessment', to: '/assessments' },
+    { label: 'Assessments', icon: FileCheck, to: '/assessments' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
     { label: 'Tools & Assets', icon: Store, to: '/marketplace' },
     { label: 'Content Library', icon: Library, to: '/library' },
@@ -229,7 +229,7 @@ const NAV_SECTIONS = [
       { label: 'Room Types', to: '/mgmt/room-types' },
       { label: 'Manage Hostels', to: '/mgmt/manage-hostels' },
     ] },
-    { label: 'Help Center', icon: LifeBuoy, children: [
+    { label: 'Help Center', icon: LifeBuoy, moduleKey: 'help_center', children: [
       { label: 'Manage Categories', to: '/mgmt/help-categories' },
       { label: 'Browse Articles', to: '/mgmt/browse-articles' },
       { label: 'AI Chatbot', to: '/mgmt/ai-chatbot-help' },
@@ -245,7 +245,7 @@ const NAV_SECTIONS = [
       { label: 'Asset Audits', to: '/mgmt/asset-audits' },
       { label: 'Asset Reports', to: '/mgmt/asset-reports' },
     ] },
-    { label: 'Reports & Analytics', icon: BarChart3, to: '/mgmt/reports-analytics' },
+    { label: 'Reports & Analytics', icon: BarChart3, moduleKey: 'reports_analytics', to: '/mgmt/reports-analytics' },
   ]},
   { section: 'SYSTEM', items: [
     { label: 'Settings & Billing', icon: CreditCard, children: [
