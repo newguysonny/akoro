@@ -229,7 +229,7 @@ const NAV_SECTIONS = [
       { label: 'Room Types', to: '/mgmt/room-types' },
       { label: 'Manage Hostels', to: '/mgmt/manage-hostels' },
     ] },
-    { label: 'Help Center', icon: LifeBuoy, moduleKey: 'help_center', children: [
+    { label: 'Help Center', icon: LifeBuoy, children: [
       { label: 'Manage Categories', to: '/mgmt/help-categories' },
       { label: 'Browse Articles', to: '/mgmt/browse-articles' },
       { label: 'AI Chatbot', to: '/mgmt/ai-chatbot-help' },
@@ -245,7 +245,7 @@ const NAV_SECTIONS = [
       { label: 'Asset Audits', to: '/mgmt/asset-audits' },
       { label: 'Asset Reports', to: '/mgmt/asset-reports' },
     ] },
-    { label: 'Reports & Analytics', icon: BarChart3, moduleKey: 'reports_analytics', to: '/mgmt/reports-analytics' },
+    { label: 'Reports & Analytics', icon: BarChart3, to: '/mgmt/reports-analytics' },
   ]},
   { section: 'SYSTEM', items: [
     { label: 'Settings & Billing', icon: CreditCard, children: [
@@ -270,7 +270,7 @@ const NAV_SECTIONS = [
       { label: 'School Website', to: '/settings-website' },
       { label: 'Appearance', to: '/website-builder/appearance' },
     ] },
-    { label: 'Apps Center', icon: LayoutGrid, to: '/apps', moduleKey: 'apps_center' },
+    { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
   ]},
   { section: 'COMMUNICATION', items: [
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },

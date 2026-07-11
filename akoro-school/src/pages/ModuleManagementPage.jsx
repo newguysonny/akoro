@@ -6,7 +6,7 @@ import {
   Edit3, Library, Bus, Building2, Package, Boxes, Bot, MessageSquare,
   Monitor, Wallet, DoorOpen, Megaphone, Laptop, Fingerprint, Layers,
   HeartPulse, LayoutGrid, Video, ClipboardCheck, PenTool, QrCode, ShieldCheck,
-  GraduationCap, BarChart3, LifeBuoy,
+  GraduationCap, BarChart3, LifeBuoy, Search,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut } from '../services/api.js';
@@ -20,6 +20,9 @@ const CORE_MODULES = [
   { key: 'academics',           label: 'Academic Management',       icon: GraduationCap },
   { key: 'modules_area',        label: 'Modules (Courses, Classes, Students, Assessments…)', icon: LayoutGrid },
   { key: 'document_templates',  label: 'Document Templates',        icon: Award },
+  { key: 'help_center',         label: 'Help Center',               icon: LifeBuoy },
+  { key: 'reports_analytics',   label: 'Reports & Analytics',       icon: BarChart3 },
+  { key: 'apps_center',         label: 'Apps Center',               icon: LayoutGrid },
 ];
 
 /* Optional modules — can be toggled off to hide them from the sidebar.
@@ -42,10 +45,7 @@ const TOGGLE_MODULES = [
   { key: 'inventory',           label: 'Inventory',                 icon: Package },
   { key: 'transport',           label: 'Transport',                 icon: Bus },
   { key: 'hostel',              label: 'Hostel',                    icon: Building2 },
-  { key: 'help_center',         label: 'Help Center',               icon: LifeBuoy },
   { key: 'asset_management',    label: 'Asset Management',          icon: Boxes },
-  { key: 'reports_analytics',   label: 'Reports & Analytics',       icon: BarChart3 },
-  { key: 'apps_center',         label: 'Apps Center',               icon: LayoutGrid },
 ];
 
 function Toggle({ on, onChange }) {
@@ -100,6 +100,7 @@ export default function ModuleManagementPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [search, setSearch] = useState('');
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
@@ -112,6 +113,11 @@ export default function ModuleManagementPage() {
 
   const isOn = (key) => modules[key] !== false; // default active unless explicitly disabled
   const toggle = (key) => setModules((prev) => ({ ...prev, [key]: !isOn(key) }));
+
+  const q = search.trim().toLowerCase();
+  const matches = (m) => !q || m.label.toLowerCase().includes(q);
+  const coreShown = CORE_MODULES.filter(matches);
+  const toggleShown = TOGGLE_MODULES.filter(matches);
 
   const save = async () => {
     setSaving(true);
@@ -140,19 +146,32 @@ export default function ModuleManagementPage() {
               <span style={{ fontSize: 15, fontWeight: 800, color: INK, fontFamily: FONT }}>Enable/Disable Features</span>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: `${BLUE}0A`, border: `1px solid ${BLUE}22`, borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: `${BLUE}0A`, border: `1px solid ${BLUE}22`, borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
               <Info size={15} color={BLUE} style={{ flexShrink: 0, marginTop: 1 }} />
               <p style={{ fontSize: 12.5, color: INK, margin: 0, lineHeight: 1.55, fontFamily: FONT }}>
                 Disable modules that your school doesn't use to keep the side menu clean.
               </p>
             </div>
 
+            {/* Search */}
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search modules…"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 36px', borderRadius: 10, border: `1px solid ${BORDER}`, background: LIGHT, fontSize: 13, color: INK, fontFamily: FONT, outline: 'none' }}
+              />
+            </div>
+
             {loading ? (
               <div style={{ padding: '50px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
+            ) : (coreShown.length + toggleShown.length === 0) ? (
+              <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No modules match “{search}”.</div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
-                {CORE_MODULES.map((m) => <CoreCard key={m.key} mod={m} />)}
-                {TOGGLE_MODULES.map((m) => (
+                {coreShown.map((m) => <CoreCard key={m.key} mod={m} />)}
+                {toggleShown.map((m) => (
                   <ToggleCard key={m.key} mod={m} on={isOn(m.key)} onChange={() => toggle(m.key)} />
                 ))}
               </div>
