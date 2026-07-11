@@ -66,47 +66,72 @@ export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
     urlByRel[relPath] = db.storage.from(BUCKET).getPublicUrl(dest).data.publicUrl;
   }
 
-  // Rewrite an HTML string's references (relative to the main HTML) to
-  // public Storage URLs. Used for the main page AND each sub-page's content.
-  const resolve = (ref) => {
+  // Resolve a relative reference to a hosted asset URL. `fromDir` is the
+  // referencing file's own directory so sub-page-relative refs (../css/x.css,
+  // img/hero.jpg from pages/about.html) resolve correctly too.
+  const resolveRef = (ref, fromDir = "") => {
     const clean = ref.split(/[?#]/)[0].replace(/^\.\//, "").replace(/^\//, "");
-    return urlByRel[clean] || null;
+    const stack = [];
+    for (const seg of `${fromDir ? `${fromDir}/` : ""}${clean}`.split("/")) {
+      if (seg === "..") stack.pop();
+      else if (seg && seg !== ".") stack.push(seg);
+    }
+    return urlByRel[stack.join("/")] || urlByRel[clean] || null;
   };
-  const rewrite = (src) => src
+  const rewrite = (src, fromDir = "") => src
     .replace(/\b(src|href|poster)\s*=\s*["']([^"']+)["']/gi, (m, attr, ref) => {
       if (isExternal(ref)) return m;
-      const u = resolve(ref);
+      const u = resolveRef(ref, fromDir);
       return u ? `${attr}="${u}"` : m;
     })
     .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, ref) => {
       if (isExternal(ref)) return m;
-      const u = resolve(ref);
+      const u = resolveRef(ref, fromDir);
       return u ? `url(${u})` : m;
     });
 
   const rawMain = main.getData().toString("utf-8");
+  // Template-mode landing: assets → storage URLs (links to sibling .html files
+  // resolve to their storage-hosted copies, which keep working relatively).
   const html = rewrite(rawMain);
 
-  // ── Builder import payload: one Page per extra .html + the main nav ──────
+  // ── Builder import payload ────────────────────────────────────────────────
+  // Each .html becomes a Page saved as the FULL original document — scripts,
+  // header/nav/footer, styles, everything — so imported pages render and
+  // behave (mobile menu & all JS) exactly like the original template. The
+  // site renderer serves full documents raw (isFullDocument), so no chrome
+  // is layered on top. Only two rewrites are applied:
+  //   1. internal .html links → the imported page's /slug (index → /)
+  //   2. relative asset refs → hosted storage URLs
   const strip = (s) => String(s || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
   const titleOf = (doc, fallback) =>
     strip(doc.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]) ||
     strip(doc.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]) || fallback;
   const slugOfFile = (relPath) => relPath.replace(/\.html?$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-  // The builder chrome supplies nav + footer, so strip the template's own
-  // baked-in ones from imported page content (no double navigation).
-  const stripChrome = (body) => body
-    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-    .replace(/<header[\s\S]*?<\/header>/gi, "")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, "");
-  const pageContent = (doc) => {
-    // Keep the page's own <style>/<link> styling so it renders faithfully.
-    const headBits = [...doc.matchAll(/<style[\s\S]*?<\/style>/gi)].map((m) => m[0])
-      .concat([...doc.matchAll(/<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>/gi)].map((m) => m[0]));
-    const body = doc.match(/<body[^>]*>([\s\S]*?)<\/body>/i)?.[1] || doc;
-    return rewrite(`${headBits.join("\n")}\n${stripChrome(body)}`).trim();
-  };
+  const slugSet = new Set(htmls.filter((e) => e !== main).map((e) => slugOfFile(rel(e.entryName))));
+  slugSet.add("home");
+
+  // Internal page links → builder slugs. Runs BEFORE the asset rewrite so
+  // .html hrefs aren't first swallowed by the storage-URL pass. Keeps
+  // ?query/#hash suffixes (e.g. contact.html#map → /contact#map).
+  const rewritePageLinks = (doc, fromDir = "") => doc.replace(/\bhref\s*=\s*["']([^"']+)["']/gi, (m, ref) => {
+    if (isExternal(ref)) return m;
+    const suffixAt = ref.search(/[?#]/);
+    const pathPart = suffixAt === -1 ? ref : ref.slice(0, suffixAt);
+    const suffix = suffixAt === -1 ? "" : ref.slice(suffixAt);
+    if (!/\.html?$/i.test(pathPart)) return m;
+    const stack = [];
+    for (const seg of `${fromDir ? `${fromDir}/` : ""}${pathPart.replace(/^\.\//, "").replace(/^\//, "")}`.split("/")) {
+      if (seg === "..") stack.pop();
+      else if (seg && seg !== ".") stack.push(seg);
+    }
+    const clean = stack.join("/");
+    if (/(^|\/)index\.html?$/i.test(clean)) return `href="/${suffix}"`;
+    const slug = slugOfFile(clean);
+    return slugSet.has(slug) ? `href="/${slug}${suffix}"` : m;
+  });
+  const fullPageDoc = (doc, fromDir = "") => rewrite(rewritePageLinks(doc, fromDir), fromDir).trim();
 
   const pages = htmls.filter((e) => e !== main).map((e) => {
     const relPath = rel(e.entryName);
@@ -114,14 +139,14 @@ export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
     return {
       slug: slugOfFile(relPath),
       title: titleOf(doc, slugOfFile(relPath).replace(/-/g, " ")),
-      content: pageContent(doc),
+      content: fullPageDoc(doc, dirname(relPath)),
     };
   });
   // The main page becomes an editable "home" page (rendered as the landing).
-  pages.unshift({ slug: "home", title: titleOf(rawMain, "Home"), content: pageContent(rawMain) });
+  pages.unshift({ slug: "home", title: titleOf(rawMain, "Home"), content: fullPageDoc(rawMain) });
 
-  // Nav from the RAW main HTML (hrefs still point at *.html files).
-  const slugSet = new Set(pages.map((p) => p.slug));
+  // Nav from the RAW main HTML (hrefs still point at *.html files) — imported
+  // into the Menus builder so theme-mode pages/footer can reuse it.
   const navHtml = rawMain.match(/<nav[\s\S]*?<\/nav>/i)?.[0] || rawMain.match(/<header[\s\S]*?<\/header>/i)?.[0] || "";
   const menu = [];
   for (const m of navHtml.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {

@@ -572,6 +572,95 @@ function BlockEditor({ blocks, onChange, onPickImage }) {
 }
 const miniBtn = { width: 26, height: 24, borderRadius: 6, border: 'none', background: 'transparent', color: MUTED2, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
 
+/* ═══════════════ Visual (WordPress-style) HTML editor ════════════════════
+   Renders the REAL page in an iframe and makes its text directly editable —
+   click anything and type. No code shown. Original <script>s are disabled
+   while editing (so menus/sliders don't fight the cursor) and restored
+   byte-for-byte on save. Double-click an image to swap it from the library. */
+const isFullDoc = (c) => /^\s*(<!doctype html|<html[\s>])/i.test(c || '');
+
+// Injected into the iframe. Kept as a plain string (ES5) so it survives any
+// document; communicates with the parent via postMessage({ __editor: true }).
+const EDITOR_BOOT_JS = `(function(){
+  var REGION = window.__EDIT_REGION__ || null;
+  var root = (REGION && document.querySelector(REGION)) || document.body;
+  root.setAttribute('contenteditable', 'true');
+  root.setAttribute('spellcheck', 'false');
+  var st = document.createElement('style');
+  st.setAttribute('data-editor-ui', '1');
+  st.textContent = '[contenteditable=true]{outline:none;cursor:text}' +
+    '[contenteditable=true] *:hover{outline:1px dashed rgba(245,158,11,.8);outline-offset:2px}' +
+    '[contenteditable=true] img{cursor:pointer}';
+  document.head.appendChild(st);
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest && e.target.closest('a');
+    if (a) e.preventDefault();
+  }, true);
+  var seq = 0;
+  document.addEventListener('dblclick', function(e){
+    if (e.target && e.target.tagName === 'IMG') {
+      var id = e.target.getAttribute('data-edit-img') || ('img-' + (++seq) + '-' + Math.floor(Math.random()*1e6));
+      e.target.setAttribute('data-edit-img', id);
+      parent.postMessage({ __editor: true, type: 'pick-image', id: id }, '*');
+    }
+  }, true);
+  function serialize(){
+    var clone = document.documentElement.cloneNode(true);
+    var kill = clone.querySelectorAll('[data-editor-ui],script[data-editor-script]');
+    for (var i = 0; i < kill.length; i++) kill[i].parentNode.removeChild(kill[i]);
+    var ce = clone.querySelectorAll('[contenteditable]');
+    for (var j = 0; j < ce.length; j++) { ce[j].removeAttribute('contenteditable'); ce[j].removeAttribute('spellcheck'); }
+    var imgs = clone.querySelectorAll('[data-edit-img]');
+    for (var k = 0; k < imgs.length; k++) imgs[k].removeAttribute('data-edit-img');
+    var scripts = clone.querySelectorAll('script[data-orig-script]');
+    for (var l = 0; l < scripts.length; l++) {
+      var s = scripts[l], t = s.getAttribute('data-orig-type');
+      s.removeAttribute('data-orig-script'); s.removeAttribute('data-orig-type');
+      if (t) s.setAttribute('type', t); else s.removeAttribute('type');
+    }
+    if (REGION) { var r = clone.querySelector(REGION); return r ? r.innerHTML : ''; }
+    return '<!doctype html>\\n' + clone.outerHTML;
+  }
+  var timer;
+  function changed(){ clearTimeout(timer); timer = setTimeout(function(){ parent.postMessage({ __editor: true, type: 'html', html: serialize() }, '*'); }, 300); }
+  document.addEventListener('input', changed, true);
+  document.addEventListener('blur', changed, true);
+  window.addEventListener('message', function(e){
+    var d = e.data || {};
+    if (!d.__editor) return;
+    if (d.type === 'set-image') {
+      var img = document.querySelector('img[data-edit-img="' + d.id + '"]');
+      if (img) { img.src = d.url; changed(); }
+    }
+    if (d.type === 'cmd') { try { document.execCommand(d.cmd); changed(); } catch(_){} }
+    if (d.type === 'scroll-to') {
+      var scope = (REGION && document.querySelector(REGION)) || document;
+      var els = scope.querySelectorAll('h1,h2,h3');
+      var el = els[d.index];
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.outline = '2px solid #f59e0b'; setTimeout(function(){ el.style.outline = ''; }, 1200); }
+    }
+    if (d.type === 'get-html') parent.postMessage({ __editor: true, type: 'html', html: serialize() }, '*');
+  });
+})();`;
+
+// Disable every <script> in the doc (restored at serialize time) and append
+// the editor bootstrap. regionSelector limits editing to that element
+// (fragments edited inside the theme chrome); null = whole body editable.
+function prepareEditableDoc(docHtml, regionSelector) {
+  const doc = new DOMParser().parseFromString(docHtml || '', 'text/html');
+  doc.querySelectorAll('script').forEach((s) => {
+    s.setAttribute('data-orig-script', '1');
+    const t = s.getAttribute('type');
+    if (t) s.setAttribute('data-orig-type', t);
+    s.setAttribute('type', 'text/x-disabled');
+  });
+  const boot = doc.createElement('script');
+  boot.setAttribute('data-editor-script', '1');
+  boot.textContent = `window.__EDIT_REGION__=${JSON.stringify(regionSelector || null)};\n${EDITOR_BOOT_JS}`;
+  doc.body.appendChild(boot);
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
 /* ── Page editor (dedicated route, Back button) ──────────────────────────── */
 const PAGE_STATUS = [{ value: 'draft', label: 'Draft' }, { value: 'published', label: 'Published' }];
 const labelStyle = { display: 'block', fontSize: 12.5, fontWeight: 700, color: INK, margin: '0 0 6px', fontFamily: FONT };
@@ -589,15 +678,26 @@ export function SitePageEditorPage() {
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewing, setPreviewing] = useState(false);
   const [toast, setToast] = useState('');
+  // Visual (WordPress-style) mode — for pages whose content is HTML (imported
+  // templates / legacy pages). The page renders for real and text is edited
+  // inline; blocks-based pages keep the block editor.
+  const [mode, setMode] = useState('blocks');            // 'blocks' | 'visual'
+  const [htmlContent, setHtmlContent] = useState('');     // authoritative page HTML (visual mode)
+  const [editorDoc, setEditorDoc] = useState('');         // iframe srcDoc (scripts disabled + boot)
+  const [isRegionEdit, setIsRegionEdit] = useState(false);// fragment page edited inside theme chrome
+  const [showCode, setShowCode] = useState(false);        // advanced: raw HTML view
+  const [visualImgId, setVisualImgId] = useState(null);   // image awaiting a library pick
+  const editorFrameRef = useRef(null);
+  const htmlRef = useRef('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const contentHtml = useMemo(() => renderBlocks(blocks), [blocks]);
 
-  // Pixel-perfect live preview: render the blocks → HTML through the real site
-  // renderer (same theme/menus/colours as production), debounced.
+  // Pixel-perfect live preview for BLOCK pages: render blocks → HTML through
+  // the real site renderer (same theme/menus/colours), debounced.
   useEffect(() => {
-    if (loading) return;
+    if (loading || mode !== 'blocks') return;
     setPreviewing(true);
     const t = setTimeout(() => {
       apiPost('/api/school/website/preview-page', { title: form.title, content: contentHtml, slug: form.slug })
@@ -606,32 +706,111 @@ export function SitePageEditorPage() {
         .finally(() => setPreviewing(false));
     }, 450);
     return () => clearTimeout(t);
-  }, [form.title, contentHtml, form.slug, loading]);
+  }, [form.title, contentHtml, form.slug, loading, mode]);
 
-  // Media picker → set the awaiting image block's url.
+  // Media picker → block image OR visual-mode image swap.
   const onPickedImage = (m) => {
+    if (visualImgId) {
+      editorFrameRef.current?.contentWindow?.postMessage({ __editor: true, type: 'set-image', id: visualImgId, url: m.url }, '*');
+      setVisualImgId(null);
+      return;
+    }
     if (pickerFor) setBlocks((bs) => bs.map((b) => b.id === pickerFor ? { ...b, url: m.url, alt: b.alt || m.alt_text || m.title || '' } : b));
     setPickerFor(null);
   };
 
+  // Boot the visual editor for a given page HTML: full documents render
+  // standalone; fragments render through the real site renderer and only the
+  // page's own content region is editable (the chrome stays hands-off).
+  const openVisual = useCallback(async (content, meta) => {
+    setHtmlContent(content);
+    htmlRef.current = content;
+    if (isFullDoc(content)) {
+      setIsRegionEdit(false);
+      setEditorDoc(prepareEditableDoc(content, null));
+    } else {
+      setIsRegionEdit(true);
+      try {
+        const r = await apiPost('/api/school/website/preview-page', { title: meta.title, content, slug: meta.slug });
+        setEditorDoc(prepareEditableDoc(r.html || '', '.page-content'));
+      } catch {
+        // Renderer unavailable — edit the bare fragment instead.
+        setIsRegionEdit(false);
+        setEditorDoc(prepareEditableDoc(`<!doctype html><html><head></head><body>${content}</body></html>`, null));
+      }
+    }
+    setMode('visual');
+  }, []);
+
   useEffect(() => {
     if (isNew) return;
-    apiGet(`${BASE}/site-pages/${id}`).then((r) => {
+    apiGet(`${BASE}/site-pages/${id}`).then(async (r) => {
       const d = r.data || {};
       setForm({ title: d.title || '', slug: d.slug || '', status: d.status || 'draft', sort_order: d.sort_order ?? 0 });
       setSlugEdited(!!d.slug);
-      // Load structured blocks; fall back to wrapping legacy HTML content.
-      if (Array.isArray(d.blocks) && d.blocks.length) setBlocks(d.blocks.map((b) => b.id ? b : { ...b, id: uid() }));
-      else if (d.content) setBlocks([{ id: uid(), type: 'html', html: d.content }]);
-      else setBlocks([]);
+      const structured = Array.isArray(d.blocks) && d.blocks.length && !(d.blocks.length === 1 && d.blocks[0].type === 'html');
+      if (structured) {
+        setBlocks(d.blocks.map((b) => b.id ? b : { ...b, id: uid() }));
+      } else {
+        const content = (d.blocks?.[0]?.type === 'html' ? d.blocks[0].html : '') || d.content || '';
+        if (content) await openVisual(content, { title: d.title || '', slug: d.slug || '' });
+        else setBlocks([]);
+      }
     }).catch((e) => showToast(e.message || 'Could not load page'))
       .finally(() => setLoading(false));
-  }, [id, isNew]);
+  }, [id, isNew, openVisual]);
+
+  // Visual-editor messages from the iframe.
+  useEffect(() => {
+    const onMsg = (e) => {
+      const d = e.data || {};
+      if (!d.__editor) return;
+      if (d.type === 'html') { setHtmlContent(d.html); htmlRef.current = d.html; }
+      if (d.type === 'pick-image') setVisualImgId(d.id);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  // Ask the iframe for its very latest HTML (beats the debounce) before saving.
+  const requestLatestHtml = () => new Promise((resolve) => {
+    const win = editorFrameRef.current?.contentWindow;
+    if (!win) return resolve(null);
+    let done = false;
+    const onMsg = (e) => {
+      const d = e.data || {};
+      if (d.__editor && d.type === 'html') { done = true; window.removeEventListener('message', onMsg); resolve(d.html); }
+    };
+    window.addEventListener('message', onMsg);
+    win.postMessage({ __editor: true, type: 'get-html' }, '*');
+    setTimeout(() => { if (!done) { window.removeEventListener('message', onMsg); resolve(null); } }, 700);
+  });
+
+  // Section outline (visual mode): every heading on the page, click to jump.
+  const outline = useMemo(() => {
+    if (mode !== 'visual' || !htmlContent) return [];
+    try {
+      const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
+      return [...doc.querySelectorAll('h1,h2,h3')].map((h, i) => ({
+        i, tag: h.tagName.toLowerCase(),
+        text: (h.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 64) || '(empty heading)',
+      }));
+    } catch { return []; }
+  }, [htmlContent, mode]);
+
+  const execCmd = (cmd) => editorFrameRef.current?.contentWindow?.postMessage({ __editor: true, type: 'cmd', cmd }, '*');
+  const scrollToHeading = (i) => editorFrameRef.current?.contentWindow?.postMessage({ __editor: true, type: 'scroll-to', index: i }, '*');
 
   const save = async () => {
     if (!form.title.trim()) return showToast('Title is required');
     setSaving(true);
-    const body = { ...form, slug: (form.slug || slugify(form.title)) || null, sort_order: Number(form.sort_order) || 0, content: contentHtml, blocks };
+    let content = contentHtml, bodyBlocks = blocks;
+    if (mode === 'visual') {
+      const latest = showCode ? htmlRef.current : await requestLatestHtml();
+      content = latest ?? htmlRef.current;
+      bodyBlocks = []; // authoritative content lives in `content`
+    }
+    const body = { ...form, slug: (form.slug || slugify(form.title)) || null, sort_order: Number(form.sort_order) || 0, content, blocks: bodyBlocks };
     try {
       if (isNew) await apiPost(`${BASE}/site-pages`, body);
       else await apiPut(`${BASE}/site-pages/${id}`, body);
@@ -655,7 +834,7 @@ export function SitePageEditorPage() {
       ) : (
         <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', flexWrap: 'wrap' }}>
           {/* Left: editing controls */}
-          <div style={{ flex: '1 1 380px', minWidth: 320, maxWidth: 460, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px', maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
+          <div style={{ flex: mode === 'visual' ? '0 1 300px' : '1 1 380px', minWidth: 280, maxWidth: mode === 'visual' ? 320 : 460, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '20px 22px', maxHeight: 'calc(100vh - 190px)', overflowY: 'auto' }}>
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Page Title <span style={{ color: RED }}>*</span></label>
               <input value={form.title} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, title: v, slug: slugEdited ? f.slug : slugify(v) })); }} placeholder="e.g. About Us" style={{ ...inputStyle, fontSize: 15 }} />
@@ -664,10 +843,36 @@ export function SitePageEditorPage() {
               <label style={labelStyle}>URL Slug</label>
               <input value={form.slug} onChange={(e) => { setSlugEdited(true); set('slug')(e); }} placeholder="about-us" style={inputStyle} />
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ ...labelStyle }}>Sections</label>
-              <BlockEditor blocks={blocks} onChange={setBlocks} onPickImage={setPickerFor} />
-            </div>
+
+            {mode === 'blocks' ? (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ ...labelStyle }}>Sections</label>
+                <BlockEditor blocks={blocks} onChange={setBlocks} onPickImage={setPickerFor} />
+              </div>
+            ) : (
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>Sections on this page</label>
+                {outline.length === 0 ? (
+                  <p style={{ fontSize: 12, color: MUTED2, fontFamily: FONT, margin: '4px 0 10px' }}>No headings found yet.</p>
+                ) : (
+                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
+                    {outline.map((h) => (
+                      <button key={h.i} onClick={() => scrollToHeading(h.i)} title="Click to jump to this section" style={{ display: 'block', width: '100%', textAlign: 'left', padding: `7px 12px 7px ${12 + (h.tag === 'h1' ? 0 : h.tag === 'h2' ? 12 : 24)}px`, border: 'none', borderTop: h.i ? `1px solid ${BORDER}` : 'none', background: WHITE, color: h.tag === 'h1' ? INK : MUTED, fontSize: 12, fontWeight: h.tag === 'h1' ? 800 : 600, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {h.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p style={{ fontSize: 11.5, color: MUTED2, fontFamily: FONT, lineHeight: 1.55, margin: '0 0 12px' }}>
+                  ✏️ Click any text on the page and type to change it.<br />
+                  🖼️ Double-click an image to replace it from the library.
+                </p>
+                <button onClick={() => setShowCode((v) => !v)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: showCode ? LIGHT : WHITE, color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                  <Code size={12} /> {showCode ? 'Back to visual editing' : 'Edit HTML (advanced)'}
+                </button>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 12, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Status</label>
@@ -682,19 +887,46 @@ export function SitePageEditorPage() {
             </div>
           </div>
 
-          {/* Right: live preview */}
+          {/* Right: live preview (blocks) or visual editor (WordPress-style) */}
           <div style={{ flex: '2 1 480px', minWidth: 320, display: 'flex', flexDirection: 'column', border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', background: WHITE, minHeight: 480 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
               <span style={{ display: 'inline-flex', gap: 5 }}>{[RED, AMBER, GREEN].map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />)}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>Live Preview{form.slug ? ` · /${form.slug}` : ''}</span>
-              {previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
+              <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>
+                {mode === 'visual' ? (showCode ? 'HTML source' : 'Visual Editor — click text to edit') : 'Live Preview'}{form.slug ? ` · /${form.slug}` : ''}
+              </span>
+              {mode === 'visual' && !showCode && (
+                <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto' }}>
+                  <button onClick={() => execCmd('bold')} title="Bold selection" style={{ ...miniBtn, fontWeight: 900, fontFamily: FONT, fontSize: 12 }}>B</button>
+                  <button onClick={() => execCmd('italic')} title="Italic selection" style={{ ...miniBtn, fontStyle: 'italic', fontFamily: FONT, fontSize: 12 }}>I</button>
+                  <button onClick={() => execCmd('underline')} title="Underline selection" style={{ ...miniBtn, textDecoration: 'underline', fontFamily: FONT, fontSize: 12 }}>U</button>
+                </span>
+              )}
+              {mode === 'blocks' && previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
-            <iframe title="Page preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+            {mode === 'visual' ? (
+              showCode ? (
+                <textarea
+                  value={htmlContent}
+                  onChange={(e) => { setHtmlContent(e.target.value); htmlRef.current = e.target.value; }}
+                  onBlur={() => {
+                    // Rebuild the visual editor with the edited source.
+                    if (isFullDoc(htmlRef.current)) { setIsRegionEdit(false); setEditorDoc(prepareEditableDoc(htmlRef.current, null)); }
+                    else if (!isRegionEdit) setEditorDoc(prepareEditableDoc(`<!doctype html><html><head></head><body>${htmlRef.current}</body></html>`, null));
+                  }}
+                  spellCheck={false}
+                  style={{ flex: 1, width: '100%', border: 'none', outline: 'none', resize: 'none', padding: 16, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12, lineHeight: 1.6, color: INK, background: WHITE, minHeight: 440 }}
+                />
+              ) : (
+                <iframe ref={editorFrameRef} title="Visual editor" srcDoc={editorDoc} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+              )
+            ) : (
+              <iframe title="Page preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+            )}
           </div>
         </div>
       )}
 
-      <MediaPicker open={!!pickerFor} onClose={() => setPickerFor(null)} onPick={onPickedImage} />
+      <MediaPicker open={!!pickerFor || !!visualImgId} onClose={() => { setPickerFor(null); setVisualImgId(null); }} onPick={onPickedImage} />
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
