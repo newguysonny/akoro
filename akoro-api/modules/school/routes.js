@@ -804,7 +804,7 @@ async function getWebsiteConfig(schoolId) {
   return created;
 }
 const shapeWebsite = (w) => ({
-  enabled: w.enabled, mode: w.mode, themeId: w.theme_id,
+  enabled: w.enabled, mode: w.mode, themeId: w.theme_id, syncSchoolInfo: !!w.sync_school_info,
   heroTitle: w.hero_title, heroSubtitle: w.hero_subtitle, heroImageUrl: w.hero_image_url,
   aboutText: w.about_text, metaTitle: w.meta_title, metaKeywords: w.meta_keywords,
   metaDescription: w.meta_description, ogImageUrl: w.og_image_url,
@@ -864,6 +864,28 @@ const isFullDocument = (c) => /^\s*(<!doctype html|<html[\s>])/i.test(c || "");
 // links) exactly as the live site uses — shared by the public renderer and the
 // authenticated live-preview endpoint so previews are pixel-identical.
 async function buildSiteCtx(school, website) {
+  // Sync toggle (Website Settings): when on, the website's identity always
+  // follows School Settings — freshest profile fields win over the copies
+  // stored in the website config, so School Settings edits show up on the
+  // site immediately. Mutates `school`/`website` in place because the same
+  // objects flow on into the theme renderer (w.hero_title / w.meta_title).
+  let contactEmail = null;
+  if (website.sync_school_info) {
+    const { data: full } = await db.from("school_profiles")
+      .select("name, acronym, logo_url, address, phone, principal_name, city, state, lga, country, admin_user_id")
+      .eq("id", school.id).maybeSingle();
+    if (full) {
+      const { admin_user_id, ...profile } = full;
+      Object.assign(school, profile);
+      website.hero_title = full.name;
+      website.meta_title = full.name;
+      if (admin_user_id) {
+        const { data: admin } = await db.from("users").select("email").eq("id", admin_user_id).maybeSingle();
+        contactEmail = admin?.email || null;
+      }
+    }
+  }
+
   const { data: teacherLinks } = await db.from("school_teachers")
     .select("users:users!school_teachers_teacher_id_fkey(id, full_name)").eq("school_id", school.id);
   const teacherIds = (teacherLinks || []).map((t) => t.users?.id).filter(Boolean);
@@ -885,7 +907,7 @@ async function buildSiteCtx(school, website) {
 
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "";
   return buildContext(school, website, {
-    email: null,
+    email: contactEmail,
     year: new Date().getFullYear(),
     teachers: (teacherLinks || []).map((t) => ({ name: t.users?.full_name })).filter((t) => t.name),
     courses: (courseRows || []).map((c) => ({ title: c.title, subject: c.subject, level: c.level, price: c.is_free ? "Free" : `₦${Number(c.price || 0).toLocaleString("en-NG")}` })),
@@ -1032,7 +1054,7 @@ router.get("/website", authenticateToken, async (req, res) => {
 
 // camelCase (API) → snake_case (DB column) map for the website config.
 const WEBSITE_FIELD_MAP = {
-  enabled: "enabled", mode: "mode", themeId: "theme_id",
+  enabled: "enabled", mode: "mode", themeId: "theme_id", syncSchoolInfo: "sync_school_info",
   heroTitle: "hero_title", heroSubtitle: "hero_subtitle", heroImageUrl: "hero_image_url",
   aboutText: "about_text", metaTitle: "meta_title", metaKeywords: "meta_keywords",
   metaDescription: "meta_description", ogImageUrl: "og_image_url",

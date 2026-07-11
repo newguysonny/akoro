@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Code2, ExternalLink, Power, Paintbrush, Loader2 } from 'lucide-react';
+import { Globe, Code2, ExternalLink, Power, Paintbrush, Loader2, RefreshCw } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, API } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
@@ -33,6 +33,8 @@ export default function SchoolWebsitePage() {
   const [loading, setLoading] = useState(true);
   const [enabled, setEnabled] = useState(false);
   const [enabledSaving, setEnabledSaving] = useState(false);
+  const [sync, setSync] = useState(false);
+  const [syncSaving, setSyncSaving] = useState(false);
   const [slug, setSlug] = useState('');
 
   useEffect(() => {
@@ -40,6 +42,7 @@ export default function SchoolWebsitePage() {
       const d = r.data || {};
       setSlug(d.slug || '');
       setEnabled(!!d.enabled);
+      setSync(!!d.syncSchoolInfo);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -50,6 +53,15 @@ export default function SchoolWebsitePage() {
     try { await apiPut('/api/school/website', { enabled: val }); }
     catch { setEnabled(!val); }
     finally { setEnabledSaving(false); }
+  };
+
+  // Sync toggle saves instantly too (partial update — only `syncSchoolInfo`).
+  const toggleSync = async (val) => {
+    setSync(val);
+    setSyncSaving(true);
+    try { await apiPut('/api/school/website', { syncSchoolInfo: val }); }
+    catch { setSync(!val); }
+    finally { setSyncSaving(false); }
   };
 
   return (
@@ -77,6 +89,22 @@ export default function SchoolWebsitePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                 {enabledSaving && <Loader2 size={15} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} />}
                 <Toggle on={enabled} onChange={toggleEnabled} />
+              </div>
+            </div>
+          </Card>
+
+          <Card icon={RefreshCw} iconColor={BLUE} title="Sync with School Settings">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+              <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.6, maxWidth: 480 }}>
+                When enabled, your website's identity — school name, logo, address, phone, principal and contact email —
+                always follows <b>Settings → School Profile</b>. Change it there and the website updates automatically.
+                <span style={{ display: 'block', marginTop: 4, color: MUTED2, fontSize: 11.5 }}>
+                  While on, the hero and browser titles use your school name (custom titles set in Appearance are ignored). Saves instantly.
+                </span>
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                {syncSaving && <Loader2 size={15} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} />}
+                <Toggle on={sync} onChange={toggleSync} />
               </div>
             </div>
           </Card>
