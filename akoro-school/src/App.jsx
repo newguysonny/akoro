@@ -38,6 +38,7 @@ import {
   BehaviorRecordsPage, StudentHousesPage, StudentCategoriesPage, DisabledStudentsPage, HealthRecordsPage,
   AssignClassPage, StudentProfilePage, HealthRecordFormPage, BehaviorRecordFormPage,
 } from './pages/mgmt/studentPages.jsx';
+import { BulkStudentUploadPage, BulkPhotoUploadPage, BulkDocumentUploadPage } from './pages/mgmt/bulkUploadPages.jsx';
 import {
   AcademicDashboardPage, AcademicSessionsPage, ClassesPage, SectionsPage, SubjectsPage,
   AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, ManagePeriodsPage,
@@ -210,6 +211,9 @@ function AppRoutes() {
       <Route path="/mgmt/student-dashboard"  element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
       <Route path="/mgmt/student-admission"  element={<ProtectedRoute><StudentAdmissionPage /></ProtectedRoute>} />
       <Route path="/mgmt/students"           element={<ProtectedRoute><StudentListPage /></ProtectedRoute>} />
+      <Route path="/mgmt/students/bulk-upload" element={<ProtectedRoute><BulkStudentUploadPage /></ProtectedRoute>} />
+      <Route path="/mgmt/students/bulk-photos" element={<ProtectedRoute><BulkPhotoUploadPage /></ProtectedRoute>} />
+      <Route path="/mgmt/students/bulk-docs"   element={<ProtectedRoute><BulkDocumentUploadPage /></ProtectedRoute>} />
       <Route path="/mgmt/students/:id"       element={<ProtectedRoute><StudentProfilePage /></ProtectedRoute>} />
       <Route path="/mgmt/students/:id/health/new"   element={<ProtectedRoute><HealthRecordFormPage /></ProtectedRoute>} />
       <Route path="/mgmt/students/:id/behavior/new" element={<ProtectedRoute><BehaviorRecordFormPage /></ProtectedRoute>} />

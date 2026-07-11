@@ -18,6 +18,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import multerLib from "multer";
+import AdmZip from "adm-zip";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
@@ -36,6 +37,47 @@ async function getMySchool(req, res) {
 }
 
 const studentLabel = (s) => [s.first_name, s.last_name].filter(Boolean).join(" ");
+
+/* ── Bulk import helpers (CSV parsing, ZIP mapping, history log) ─────────── */
+async function logBulkImport(schoolId, kind, fileName, { total = 0, success = 0, failed = 0, errors = [] } = {}) {
+  const status = failed === 0 ? "completed" : success === 0 ? "failed" : "partial";
+  await M().from("bulk_import_logs").insert({
+    school_id: schoolId, kind, file_name: fileName || null, status,
+    total_rows: total, success_count: success, failed_count: failed, errors: errors.slice(0, 30),
+  });
+}
+function parseCsvText(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && next === "\n") i++;
+      row.push(field); field = "";
+      if (row.some((f) => f !== "")) rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  return rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, (r[i] || "").trim()])));
+}
+function mimeForFile(name) {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  return {
+    pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+    gif: "image/gif", webp: "image/webp", doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  }[ext] || "application/octet-stream";
+}
+const TINY_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 /* ── Resource registry ──────────────────────────────────────────────
    fields: writable columns. refs: fk → {table, label} used to attach
@@ -858,6 +900,7 @@ router.post("/students/bulk-upload", authenticateToken, requireRole(SCHOOL_ROLES
         if (error) { skipped++; errors.push(`Row ${i + 1}: ${error.message}`); } else inserted++;
       }
     }
+    await logBulkImport(school.id, "students", req.body.file_name, { total: rows.length, success: inserted + updated, failed: skipped, errors });
     res.json({ success: true, inserted, updated, skipped, errors: errors.slice(0, 20) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -887,6 +930,7 @@ router.post("/students/bulk-photos", authenticateToken, requireRole(SCHOOL_ROLES
         await M().from("students").update({ photo_url: url }).eq("id", studentId);
         matched++;
       }
+      await logBulkImport(school.id, "photos", null, { total: files.length, success: matched, failed: unmatched.length, errors: unmatched.map((f) => `Unmatched: ${f}`) });
       res.json({ success: true, matched, unmatched: unmatched.slice(0, 30), totalFiles: files.length });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -916,9 +960,138 @@ router.post("/students/bulk-docs", authenticateToken, requireRole(SCHOOL_ROLES),
         await M().from("student_documents").insert({ school_id: school.id, student_id: studentId, title: f.originalname || "Document", url });
         matched++;
       }
+      await logBulkImport(school.id, "documents", null, { total: files.length, success: matched, failed: unmatched.length, errors: unmatched.map((f) => `Unmatched: ${f}`) });
       res.json({ success: true, matched, unmatched: unmatched.slice(0, 30), totalFiles: files.length });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+});
+
+// ── Bulk photo upload via ZIP + photo_mapping.csv (admission_no, file_name) ─
+const zipUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }).single("file");
+router.post("/students/bulk-photos-zip", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  zipUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "ZIP file is required" });
+      let zip;
+      try { zip = new AdmZip(file.buffer); } catch { return res.status(400).json({ error: "Invalid ZIP file" }); }
+      const entries = zip.getEntries();
+      const csvEntry = entries.find((e) => /photo_mapping\.csv$/i.test(e.entryName));
+      if (!csvEntry) return res.status(400).json({ error: "ZIP must contain photo_mapping.csv" });
+      const mapping = parseCsvText(csvEntry.getData().toString("utf8"));
+      if (!mapping.length) return res.status(400).json({ error: "photo_mapping.csv has no rows" });
+      const { data: students } = await M().from("students").select("id, admission_no").eq("school_id", school.id);
+      const byAdm = Object.fromEntries((students || []).map((s) => [String(s.admission_no).toLowerCase(), s.id]));
+      const fileByName = Object.fromEntries(entries.filter((e) => !e.isDirectory).map((e) => [e.entryName.split("/").pop().toLowerCase(), e]));
+
+      await ensureBucket();
+      let success = 0; const errors = [];
+      for (const [i, row] of mapping.entries()) {
+        const adm = (row.admission_no || "").trim();
+        const fname = (row.file_name || "").trim();
+        if (!adm || !fname) { errors.push(`Row ${i + 1}: admission_no and file_name are required`); continue; }
+        const studentId = byAdm[adm.toLowerCase()];
+        if (!studentId) { errors.push(`Row ${i + 1}: no student with admission_no ${adm}`); continue; }
+        const entry = fileByName[fname.toLowerCase()];
+        if (!entry) { errors.push(`Row ${i + 1}: file ${fname} not found in ZIP`); continue; }
+        const safe = fname.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const dest = `students/${school.id}/photos/${studentId}-${Date.now()}-${safe}`;
+        const url = await uploadPublicFile(dest, entry.getData(), mimeForFile(fname));
+        await M().from("students").update({ photo_url: url }).eq("id", studentId);
+        success++;
+      }
+      await logBulkImport(school.id, "photos", file.originalname, { total: mapping.length, success, failed: mapping.length - success, errors });
+      res.json({ success: true, total: mapping.length, matched: success, failed: mapping.length - success, errors: errors.slice(0, 30) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// ── Bulk document upload via ZIP + document_mapping.csv (admission_no, document_name, file_name) ─
+router.post("/students/bulk-docs-zip", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  zipUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: "ZIP file is required" });
+      let zip;
+      try { zip = new AdmZip(file.buffer); } catch { return res.status(400).json({ error: "Invalid ZIP file" }); }
+      const entries = zip.getEntries();
+      const csvEntry = entries.find((e) => /document_mapping\.csv$/i.test(e.entryName));
+      if (!csvEntry) return res.status(400).json({ error: "ZIP must contain document_mapping.csv" });
+      const mapping = parseCsvText(csvEntry.getData().toString("utf8"));
+      if (!mapping.length) return res.status(400).json({ error: "document_mapping.csv has no rows" });
+      const { data: students } = await M().from("students").select("id, admission_no").eq("school_id", school.id);
+      const byAdm = Object.fromEntries((students || []).map((s) => [String(s.admission_no).toLowerCase(), s.id]));
+      const fileByName = Object.fromEntries(entries.filter((e) => !e.isDirectory).map((e) => [e.entryName.split("/").pop().toLowerCase(), e]));
+
+      await ensureBucket();
+      let success = 0; const errors = [];
+      for (const [i, row] of mapping.entries()) {
+        const adm = (row.admission_no || "").trim();
+        const fname = (row.file_name || "").trim();
+        const label = (row.document_name || fname || "Document").trim();
+        if (!adm || !fname) { errors.push(`Row ${i + 1}: admission_no and file_name are required`); continue; }
+        const studentId = byAdm[adm.toLowerCase()];
+        if (!studentId) { errors.push(`Row ${i + 1}: no student with admission_no ${adm}`); continue; }
+        const entry = fileByName[fname.toLowerCase()];
+        if (!entry) { errors.push(`Row ${i + 1}: file ${fname} not found in ZIP`); continue; }
+        const safe = fname.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const dest = `students/${school.id}/documents/${studentId}-${Date.now()}-${safe}`;
+        const url = await uploadPublicFile(dest, entry.getData(), mimeForFile(fname));
+        const { error } = await M().from("student_documents").insert({ school_id: school.id, student_id: studentId, title: label, url });
+        if (error) { errors.push(`Row ${i + 1}: ${error.message}`); continue; }
+        success++;
+      }
+      await logBulkImport(school.id, "documents", file.originalname, { total: mapping.length, success, failed: mapping.length - success, errors });
+      res.json({ success: true, total: mapping.length, matched: success, failed: mapping.length - success, errors: errors.slice(0, 30) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// ── Bulk import history (Recent Import History table) ───────────────────
+router.get("/bulk-import-logs", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    let q = M().from("bulk_import_logs").select("*").eq("school_id", school.id).order("created_at", { ascending: false }).limit(20);
+    if (req.query.kind) q = q.eq("kind", req.query.kind);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── CSV template / sample ZIP downloads for the bulk-upload pages ───────
+router.get("/bulk/students/template.csv", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  const csv = "admission_no,roll_no,first_name,last_name,gender,dob,guardian_name,guardian_phone,guardian_email,address,blood_group,status\nADM-1001,1,Jane,Doe,female,2015-04-12,John Doe,+2348000000000,,,,active\n";
+  res.type("text/csv").attachment("students_template.csv").send(csv);
+});
+router.get("/bulk/photos/template.csv", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  const csv = "admission_no,file_name\nADM-1001,ADM-1001_photo.jpg\nADM-1002,ADM-1002_photo.jpg\n";
+  res.type("text/csv").attachment("photo_mapping_template.csv").send(csv);
+});
+router.get("/bulk/photos/sample.zip", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  const zip = new AdmZip();
+  zip.addFile("photo_mapping.csv", Buffer.from("admission_no,file_name\nADM-1001,ADM-1001_photo.jpg\nADM-1002,ADM-1002_photo.jpg\n"));
+  zip.addFile("ADM-1001_photo.jpg", TINY_PNG);
+  zip.addFile("ADM-1002_photo.jpg", TINY_PNG);
+  res.type("application/zip").attachment("photos_sample.zip").send(zip.toBuffer());
+});
+router.get("/bulk/docs/template.csv", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  const csv = "admission_no,document_name,file_name\nADM-1001,Birth Certificate,ADM-1001_birth_cert.pdf\nADM-1001,Transfer Certificate,ADM-1001_tc.pdf\n";
+  res.type("text/csv").attachment("document_mapping_template.csv").send(csv);
+});
+router.get("/bulk/docs/sample.zip", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  const zip = new AdmZip();
+  zip.addFile("document_mapping.csv", Buffer.from("admission_no,document_name,file_name\nADM-1001,Birth Certificate,ADM-1001_birth_cert.pdf\nADM-1001,Transfer Certificate,ADM-1001_tc.pdf\n"));
+  zip.addFile("ADM-1001_birth_cert.pdf", Buffer.from("Sample placeholder document -- replace with a real file."));
+  zip.addFile("ADM-1001_tc.pdf", Buffer.from("Sample placeholder document -- replace with a real file."));
+  res.type("application/zip").attachment("documents_sample.zip").send(zip.toBuffer());
 });
 
 // ── Bulk delete / bulk status update — Bulk Edit + Bulk Delete on the list

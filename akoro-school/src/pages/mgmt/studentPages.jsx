@@ -108,29 +108,6 @@ const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 const STATUS_OPTS = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'alumni', label: 'Alumni' }];
 
 /* ── CSV / export / print helpers (no external deps) ─────────────────────── */
-function parseCSV(text) {
-  const rows = [];
-  let row = [], field = '', inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i], next = text[i + 1];
-    if (inQuotes) {
-      if (c === '"' && next === '"') { field += '"'; i++; }
-      else if (c === '"') inQuotes = false;
-      else field += c;
-    } else if (c === '"') inQuotes = true;
-    else if (c === ',') { row.push(field); field = ''; }
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && next === '\n') i++;
-      row.push(field); field = '';
-      if (row.some((f) => f !== '')) rows.push(row);
-      row = [];
-    } else field += c;
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row); }
-  if (!rows.length) return [];
-  const headers = rows[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'));
-  return rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, (r[i] || '').trim()])));
-}
 const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 function downloadBlob(content, filename, mime) {
   const blob = new Blob([content], { type: mime });
@@ -175,7 +152,7 @@ export function StudentListPage() {
   const [pageSize, setPageSize] = useState(10);
   const [visibleCols, setVisibleCols] = useState(Object.fromEntries(ALL_COLUMNS.map((c) => [c.key, true])));
   const [colMenu, setColMenu] = useState(false);
-  const [modal, setModal] = useState(null); // 'upload' | 'photos' | 'docs' | 'bulk-edit'
+  const [modal, setModal] = useState(null); // 'bulk-edit'
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
@@ -249,9 +226,9 @@ export function StudentListPage() {
         <button onClick={() => navigate('/mgmt/student-admission')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <UserPlus size={15} /> Admit Student
         </button>
-        <button onClick={() => setModal('upload')} style={{ ...toolBtn(BLUE), background: `${BLUE}12` }}><Upload size={14} /> Bulk Upload</button>
-        <button onClick={() => setModal('photos')} style={{ ...toolBtn(PURPLE), background: `${PURPLE}12` }}><Image size={14} /> Bulk Photos</button>
-        <button onClick={() => setModal('docs')} style={{ ...toolBtn(GREEN), background: `${GREEN}12` }}><FileUp size={14} /> Bulk Docs</button>
+        <button onClick={() => navigate('/mgmt/students/bulk-upload')} style={{ ...toolBtn(BLUE), background: `${BLUE}12` }}><Upload size={14} /> Bulk Upload</button>
+        <button onClick={() => navigate('/mgmt/students/bulk-photos')} style={{ ...toolBtn(PURPLE), background: `${PURPLE}12` }}><Image size={14} /> Bulk Photos</button>
+        <button onClick={() => navigate('/mgmt/students/bulk-docs')} style={{ ...toolBtn(GREEN), background: `${GREEN}12` }}><FileUp size={14} /> Bulk Docs</button>
       </div>
 
       {/* Filters */}
@@ -364,9 +341,6 @@ export function StudentListPage() {
         </div>
       )}
 
-      {modal === 'upload' && <BulkUploadModal onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} showToast={showToast} />}
-      {modal === 'photos' && <BulkFilesModal kind="photos" title="Bulk Photo Upload" accept="image/*" hint="Name each photo exactly as the student's Admission Number (e.g. ADM-0042.jpg)." endpoint={`${BASE}/students/bulk-photos`} onClose={() => setModal(null)} onDone={() => { setModal(null); load(); }} showToast={showToast} />}
-      {modal === 'docs' && <BulkFilesModal kind="docs" title="Bulk Document Upload" accept="*" hint="Name each file exactly as the student's Admission Number (e.g. ADM-0042.pdf)." endpoint={`${BASE}/students/bulk-docs`} onClose={() => setModal(null)} onDone={() => { setModal(null); showToast('Documents uploaded'); }} showToast={showToast} />}
       {modal === 'bulk-edit' && <BulkEditModal count={selectedIds.length} classes={classes} sections={sections} onClose={() => setModal(null)} onSave={async (patch) => { try { await apiPost(`${BASE}/students/bulk-update`, { ids: selectedIds, ...patch }); showToast(`Updated ${selectedIds.length} student(s)`); setModal(null); load(); } catch (e) { showToast(e.message || 'Bulk update failed'); } }} />}
 
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
@@ -386,100 +360,6 @@ function ModalShell({ title, onClose, width = 460, children }) {
         {children}
       </div>
     </div>
-  );
-}
-
-/* ── Bulk Upload (CSV → students) ─────────────────────────────────────────── */
-function BulkUploadModal({ onClose, onDone, showToast }) {
-  const [rows, setRows] = useState([]);
-  const [fileName, setFileName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
-
-  const onFile = (file) => {
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => { const parsed = parseCSV(String(reader.result || '')); setRows(parsed); setResult(null); };
-    reader.readAsText(file);
-  };
-  const sample = () => downloadBlob('admission_no,roll_no,first_name,last_name,gender,dob,guardian_name,guardian_phone,guardian_email,address,blood_group,status\nADM-1001,1,Jane,Doe,female,2015-04-12,John Doe,+2348000000000,,,, active\n', 'students_sample.csv', 'text/csv');
-
-  const submit = async () => {
-    if (!rows.length) return showToast('Choose a CSV file first');
-    setBusy(true);
-    try {
-      const res = await apiPost(`${BASE}/students/bulk-upload`, { rows });
-      setResult(res);
-      if (res.inserted || res.updated) onDone();
-    } catch (e) { showToast(e.message || 'Upload failed'); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <ModalShell title="Bulk Upload Students" onClose={onClose} width={520}>
-      <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 12px', lineHeight: 1.5 }}>
-        Upload a CSV with columns: admission_no, roll_no, first_name, last_name, gender, dob, guardian_name, guardian_phone, guardian_email, address, blood_group, status.
-        Existing students (matched by Admission No) are updated; new ones are added.
-      </p>
-      <button onClick={sample} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12, padding: '6px 12px', borderRadius: 8, border: `1px solid ${BLUE}44`, background: `${BLUE}0C`, color: BLUE, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-        <Download size={12} /> Download sample CSV
-      </button>
-      <div style={{ border: `1.5px dashed ${BORDER}`, borderRadius: 10, padding: '16px', textAlign: 'center', marginBottom: 12 }}>
-        <input type="file" accept=".csv,text/csv" onChange={(e) => onFile(e.target.files?.[0])} />
-        {fileName && <p style={{ fontSize: 12, color: MUTED2, marginTop: 8 }}>{fileName} — {rows.length} row(s) found</p>}
-      </div>
-      {result && (
-        <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, fontFamily: FONT }}>
-          <div>✅ Inserted: <b>{result.inserted}</b> &nbsp; ✏️ Updated: <b>{result.updated}</b> &nbsp; ⚠️ Skipped: <b>{result.skipped}</b></div>
-          {result.errors?.length > 0 && <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: RED }}>{result.errors.map((e, i) => <li key={i}>{e}</li>)}</ul>}
-        </div>
-      )}
-      <button onClick={submit} disabled={busy || !rows.length} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !rows.length) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (busy || !rows.length) ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: (busy || !rows.length) ? 'default' : 'pointer', fontFamily: FONT }}>
-        {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Upload size={14} />} Upload {rows.length ? `(${rows.length})` : ''}
-      </button>
-    </ModalShell>
-  );
-}
-
-/* ── Bulk Photos / Bulk Docs (files matched by admission no) ─────────────── */
-function BulkFilesModal({ title, accept, hint, endpoint, onClose, onDone, showToast }) {
-  const [files, setFiles] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
-
-  const submit = async () => {
-    if (!files.length) return showToast('Choose files first');
-    setBusy(true);
-    try {
-      const fd = new FormData();
-      files.forEach((f) => fd.append('files', f));
-      const r = await fetch(`${API}${endpoint}`, { method: 'POST', credentials: 'include', body: fd });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || 'Upload failed');
-      setResult(data);
-      if (data.matched) onDone();
-    } catch (e) { showToast(e.message || 'Upload failed'); }
-    finally { setBusy(false); }
-  };
-
-  return (
-    <ModalShell title={title} onClose={onClose} width={480}>
-      <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 12px', lineHeight: 1.5 }}>{hint}</p>
-      <div style={{ border: `1.5px dashed ${BORDER}`, borderRadius: 10, padding: '16px', textAlign: 'center', marginBottom: 12 }}>
-        <input type="file" multiple accept={accept === '*' ? undefined : accept} onChange={(e) => setFiles(Array.from(e.target.files || []))} />
-        {files.length > 0 && <p style={{ fontSize: 12, color: MUTED2, marginTop: 8 }}>{files.length} file(s) selected</p>}
-      </div>
-      {result && (
-        <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12.5, fontFamily: FONT }}>
-          <div>✅ Matched &amp; uploaded: <b>{result.matched}</b> / {result.totalFiles}</div>
-          {result.unmatched?.length > 0 && <div style={{ marginTop: 6, color: AMBER }}>Unmatched (no student found): {result.unmatched.join(', ')}</div>}
-        </div>
-      )}
-      <button onClick={submit} disabled={busy || !files.length} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (busy || !files.length) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (busy || !files.length) ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: (busy || !files.length) ? 'default' : 'pointer', fontFamily: FONT }}>
-        {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Upload size={14} />} Upload {files.length ? `(${files.length})` : ''}
-      </button>
-    </ModalShell>
   );
 }
 
