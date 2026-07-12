@@ -39,7 +39,8 @@
     "2026-school-domains-vercel.sql",
     "2026-public-portal.sql",
     "2026-bulk-import-logs.sql",
-    "2026-website-sync-school.sql"
+    "2026-website-sync-school.sql",
+    "2026-academic-levels.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

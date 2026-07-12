@@ -67,6 +67,7 @@ const NAV_SECTIONS = [
     { label: 'Academics', icon: GraduationCap, children: [
       { label: 'Academic Dashboard', to: '/mgmt/academic-dashboard' },
       { label: 'Academic Sessions', to: '/mgmt/academic-sessions' },
+      { label: 'Academic Levels', to: '/mgmt/academic-levels' },
       { label: 'Classes', to: '/mgmt/classes' },
       { label: 'Sections', to: '/mgmt/sections' },
       { label: 'Subjects', to: '/mgmt/subjects' },

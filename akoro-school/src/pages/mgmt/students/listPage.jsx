@@ -49,12 +49,14 @@ const ALL_COLUMNS = [
 /* ── Student List — table with fee dues, filters, bulk tools ─────────────── */
 export function StudentListPage() {
   const navigate = useNavigate();
+  // Drill-down from Classes/Sections passes the class/section via query params.
+  const initParams = new URLSearchParams(window.location.search);
   const [rows, setRows] = useState(null);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
-  const [classId, setClassId] = useState('');
-  const [sectionId, setSectionId] = useState('');
-  const [status, setStatus] = useState('active');
+  const [classId, setClassId] = useState(initParams.get('class_id') || '');
+  const [sectionId, setSectionId] = useState(initParams.get('section_id') || '');
+  const [status, setStatus] = useState(initParams.get('class_id') ? '' : 'active');
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [selected, setSelected] = useState({});

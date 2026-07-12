@@ -46,21 +46,9 @@ export function AcademicSessionsPage() {
     ]} createLabel="New Session" />;
 }
 
-export function ClassesPage() {
-  return <ResourcePage title="Classes" subtitle="Class levels (e.g. JSS1–SS3)" resource="classes"
-    columns={[{ key: 'name', label: 'Class' }, { key: 'sort_order', label: 'Order' }]}
-    fields={[{ key: 'name', label: 'Class Name', required: true, placeholder: 'JSS1' }, { key: 'sort_order', label: 'Sort Order', type: 'number' }]}
-    createLabel="New Class" />;
-}
-
-export function SectionsPage() {
-  return <ResourcePage title="Sections" subtitle="Arms within each class (A, B, …)" resource="sections"
-    columns={[{ key: 'class_name', label: 'Class' }, { key: 'name', label: 'Section' }]}
-    fields={[
-      { key: 'class_id', label: 'Class', type: 'select', required: true, optionsFrom: { resource: 'classes' } },
-      { key: 'name', label: 'Section Name', required: true, placeholder: 'A' },
-    ]} listFilters={[{ key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } }]} createLabel="New Section" />;
-}
+// Academic Levels → Classes → Sections now live in ./academics/* as a rich
+// drill-down hierarchy (level filter, counts, routing to sections/students).
+export { AcademicLevelsPage, ClassesPage, SectionsPage } from './academics/index.js';
 
 export function SubjectsPage() {
   return <ResourcePage title="Subjects" subtitle="Core and elective subjects" resource="subjects"
