@@ -48,7 +48,7 @@ export function AcademicSessionsPage() {
 
 // Academic Levels → Classes → Sections now live in ./academics/* as a rich
 // drill-down hierarchy (level filter, counts, routing to sections/students).
-export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage, AssignClassTeacherPage, AssignSubjectsPage, ManagePeriodsPage } from './academics/index.js';
+export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage, AssignClassTeacherPage, AssignSubjectsPage, AssignTeacherSubjectsPage, ManagePeriodsPage } from './academics/index.js';
 
 // SubjectsPage now lives in ./academics/SubjectsPage.jsx (rich toolbar).
 

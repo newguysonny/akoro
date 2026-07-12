@@ -73,6 +73,7 @@ const NAV_SECTIONS = [
       { label: 'Sections', to: '/mgmt/sections' },
       { label: 'Subjects', to: '/mgmt/subjects' },
       { label: 'Assign Subjects', to: '/mgmt/assign-subjects' },
+      { label: 'Assign Teacher to Subjects', to: '/mgmt/assign-teacher-subjects' },
       { label: 'Assign Electives', to: '/mgmt/assign-electives' },
       { label: 'Assign Class Teacher', to: '/mgmt/assign-class-teacher' },
       { label: 'Manage Periods', to: '/mgmt/periods' },

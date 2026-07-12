@@ -41,7 +41,7 @@ import {
 import { BulkStudentUploadPage, BulkPhotoUploadPage, BulkDocumentUploadPage } from './pages/mgmt/bulkUploadPages.jsx';
 import {
   AcademicDashboardPage, AcademicSessionsPage, AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage,
-  AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, ManagePeriodsPage,
+  AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, AssignTeacherSubjectsPage, ManagePeriodsPage,
   ClassTimetablePage, PromoteStudentsPage,
 } from './pages/mgmt/academicsPages.jsx';
 import {
@@ -235,6 +235,7 @@ function AppRoutes() {
       <Route path="/mgmt/assign-subjects"      element={<ProtectedRoute><AssignSubjectsPage /></ProtectedRoute>} />
       <Route path="/mgmt/assign-electives"     element={<ProtectedRoute><AssignElectivesPage /></ProtectedRoute>} />
       <Route path="/mgmt/assign-class-teacher" element={<ProtectedRoute><AssignClassTeacherPage /></ProtectedRoute>} />
+      <Route path="/mgmt/assign-teacher-subjects" element={<ProtectedRoute><AssignTeacherSubjectsPage /></ProtectedRoute>} />
       <Route path="/mgmt/periods"              element={<ProtectedRoute><ManagePeriodsPage /></ProtectedRoute>} />
       <Route path="/mgmt/class-timetable"      element={<ProtectedRoute><ClassTimetablePage /></ProtectedRoute>} />
       <Route path="/mgmt/promote-students"     element={<ProtectedRoute><PromoteStudentsPage /></ProtectedRoute>} />

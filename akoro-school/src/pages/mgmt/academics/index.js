@@ -8,4 +8,5 @@ export { SectionTypesPage } from './SectionTypesPage.jsx';
 export { SubjectsPage } from './SubjectsPage.jsx';
 export { AssignClassTeacherPage } from './AssignTeacherPage.jsx';
 export { AssignSubjectsPage } from './AssignSubjectsPage.jsx';
+export { AssignTeacherSubjectsPage } from './AssignTeacherSubjectsPage.jsx';
 export { ManagePeriodsPage } from './PeriodsPage.jsx';
