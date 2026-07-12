@@ -92,7 +92,7 @@ const RESOURCES = {
   "section-types": { table: "section_types", fields: ["name","description","sort_order","status"], required: ["name"], filters: ["status"], orderBy: "sort_order", asc: true },
   "class-subjects": { table: "class_subjects", fields: ["class_id","subject_id","teacher_id","is_elective"], required: ["class_id","subject_id"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","is_elective"] },
   "class-teachers": { table: "class_teachers", fields: ["class_id","section_id","teacher_id"], required: ["class_id","teacher_id"], refs: { class_id: ["classes","name"], section_id: ["sections","name"] }, filters: ["class_id"] },
-  "periods": { table: "periods", fields: ["name","starts_at","ends_at","sort_order"], required: ["name"], orderBy: "sort_order", asc: true },
+  "periods": { table: "periods", fields: ["name","starts_at","ends_at","sort_order","class_id","type"], required: ["name"], refs: { class_id: ["classes","name"] }, filters: ["class_id","type"], orderBy: "sort_order", asc: true },
   "timetable-slots": { table: "timetable_slots", fields: ["class_id","section_id","day_of_week","period_id","subject_id","teacher_id"], required: ["class_id","day_of_week","period_id"], refs: { class_id: ["classes","name"], section_id: ["sections","name"], period_id: ["periods","name"], subject_id: ["subjects","name"] }, filters: ["class_id","section_id","day_of_week"], orderBy: "day_of_week", asc: true },
   "promotion-logs": { table: "promotion_logs", fields: [], refs: { from_class_id: ["classes","name"], to_class_id: ["classes","name"] }, readOnly: true },
 

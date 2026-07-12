@@ -48,7 +48,7 @@ export function AcademicSessionsPage() {
 
 // Academic Levels → Classes → Sections now live in ./academics/* as a rich
 // drill-down hierarchy (level filter, counts, routing to sections/students).
-export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage, AssignClassTeacherPage, AssignSubjectsPage } from './academics/index.js';
+export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage, AssignClassTeacherPage, AssignSubjectsPage, ManagePeriodsPage } from './academics/index.js';
 
 // SubjectsPage now lives in ./academics/SubjectsPage.jsx (rich toolbar).
 
@@ -73,16 +73,7 @@ export function AssignElectivesPage() {
 
 // AssignClassTeacherPage now lives in ./academics/AssignTeacherPage.jsx (dedicated page).
 
-export function ManagePeriodsPage() {
-  return <ResourcePage title="Manage Periods" subtitle="Daily lesson periods" resource="periods"
-    columns={[{ key: 'name', label: 'Period' }, { key: 'starts_at', label: 'Starts' }, { key: 'ends_at', label: 'Ends' }, { key: 'sort_order', label: 'Order' }]}
-    fields={[
-      { key: 'name', label: 'Period Name', required: true, placeholder: '1st Period' },
-      { key: 'sort_order', label: 'Sort Order', type: 'number' },
-      { key: 'starts_at', label: 'Starts At', type: 'time' },
-      { key: 'ends_at', label: 'Ends At', type: 'time' },
-    ]} createLabel="New Period" />;
-}
+// ManagePeriodsPage now lives in ./academics/PeriodsPage.jsx (class-first + type).
 
 /* ── Class Timetable (grid) ──────────────────────────────────────── */
 export function ClassTimetablePage() {
@@ -115,6 +106,9 @@ export function ClassTimetablePage() {
   useEffect(() => { loadSlots(); }, [loadSlots]);
 
   const slotAt = (day, periodId) => slots.find((s) => s.day_of_week === day && s.period_id === periodId);
+  // Periods are class-specific; fall back to any global (class-less) periods.
+  const classPeriods = periods.filter((p) => p.class_id === classId);
+  const gridPeriods = classPeriods.length ? classPeriods : periods.filter((p) => !p.class_id);
 
   const openCell = (day, period) => {
     const slot = slotAt(day, period.id);
@@ -165,7 +159,7 @@ export function ClassTimetablePage() {
               </tr>
             </thead>
             <tbody>
-              {periods.map((p) => (
+              {gridPeriods.map((p) => (
                 <tr key={p.id} style={{ borderTop: `1px solid ${BORDER}` }}>
                   <td style={{ padding: '10px 14px', fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap' }}>
                     {p.name}{p.starts_at && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: MUTED2 }}>{String(p.starts_at).slice(0, 5)}–{String(p.ends_at || '').slice(0, 5)}</span>}
