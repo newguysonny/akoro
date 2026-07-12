@@ -4,3 +4,5 @@
 export { AcademicLevelsPage } from './AcademicLevelsPage.jsx';
 export { ClassesPage } from './ClassesPage.jsx';
 export { SectionsPage } from './SectionsPage.jsx';
+export { SectionTypesPage } from './SectionTypesPage.jsx';
+export { SubjectsPage } from './SubjectsPage.jsx';

@@ -48,17 +48,9 @@ export function AcademicSessionsPage() {
 
 // Academic Levels → Classes → Sections now live in ./academics/* as a rich
 // drill-down hierarchy (level filter, counts, routing to sections/students).
-export { AcademicLevelsPage, ClassesPage, SectionsPage } from './academics/index.js';
+export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage } from './academics/index.js';
 
-export function SubjectsPage() {
-  return <ResourcePage title="Subjects" subtitle="Core and elective subjects" resource="subjects"
-    columns={[{ key: 'name', label: 'Subject' }, { key: 'code', label: 'Code' }, { key: 'subject_type', label: 'Type' }]}
-    fields={[
-      { key: 'name', label: 'Subject Name', required: true },
-      { key: 'code', label: 'Code', placeholder: 'MTH' },
-      { key: 'subject_type', label: 'Type', type: 'select', default: 'core', options: [{ value: 'core', label: 'Core' }, { value: 'elective', label: 'Elective' }] },
-    ]} createLabel="New Subject" />;
-}
+// SubjectsPage now lives in ./academics/SubjectsPage.jsx (rich toolbar).
 
 const ASSIGN_SUBJECT_FIELDS = (elective) => [
   { key: 'class_id', label: 'Class', type: 'select', required: true, optionsFrom: { resource: 'classes' } },

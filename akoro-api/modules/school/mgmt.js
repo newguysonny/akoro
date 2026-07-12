@@ -89,6 +89,7 @@ const RESOURCES = {
   "classes":  { table: "classes",  fields: ["name","sort_order","level_id","teacher","status"], required: ["name"], refs: { level_id: ["academic_levels","name"] }, filters: ["level_id","status"], orderBy: "sort_order", asc: true },
   "sections": { table: "sections", fields: ["class_id","name","teacher","capacity","status"], required: ["class_id","name"], refs: { class_id: ["classes","name"] }, filters: ["class_id","status"], orderBy: "name", asc: true },
   "subjects": { table: "subjects", fields: ["name","code","subject_type"], required: ["name"], orderBy: "name", asc: true },
+  "section-types": { table: "section_types", fields: ["name","description","sort_order","status"], required: ["name"], filters: ["status"], orderBy: "sort_order", asc: true },
   "class-subjects": { table: "class_subjects", fields: ["class_id","subject_id","teacher_id","is_elective"], required: ["class_id","subject_id"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","is_elective"] },
   "class-teachers": { table: "class_teachers", fields: ["class_id","section_id","teacher_id"], required: ["class_id","teacher_id"], refs: { class_id: ["classes","name"], section_id: ["sections","name"] }, filters: ["class_id"] },
   "periods": { table: "periods", fields: ["name","starts_at","ends_at","sort_order"], required: ["name"], orderBy: "sort_order", asc: true },

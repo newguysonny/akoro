@@ -69,6 +69,7 @@ const NAV_SECTIONS = [
       { label: 'Academic Sessions', to: '/mgmt/academic-sessions' },
       { label: 'Academic Levels', to: '/mgmt/academic-levels' },
       { label: 'Classes', to: '/mgmt/classes' },
+      { label: 'Section Types', to: '/mgmt/section-types' },
       { label: 'Sections', to: '/mgmt/sections' },
       { label: 'Subjects', to: '/mgmt/subjects' },
       { label: 'Assign Subjects', to: '/mgmt/assign-subjects' },
