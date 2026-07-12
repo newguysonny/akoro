@@ -1248,33 +1248,49 @@ router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHO
       return res.status(400).json({ error: "This template has no importable pages or menu (single-page upload)." });
     }
 
-    // 1) Pages — skip slugs that already exist (don't clobber edited pages).
+    // 1) Pages — upsert by slug. Existing pages are OVERWRITTEN with the
+    // template's full-fidelity documents (and un-trashed / re-published), so
+    // re-importing heals pages broken by older stripped imports. blocks is
+    // cleared so the page opens in the visual editor, not the block editor.
     const M = db.schema("mgmt");
     const { data: existing } = await M.from("site_pages").select("id, slug").eq("school_id", school.id);
     const idBySlug = Object.fromEntries((existing || []).map((p) => [p.slug, p.id]));
-    let pagesCreated = 0;
+    let pagesCreated = 0, pagesUpdated = 0;
     for (const [i, p] of (payload.pages || []).entries()) {
-      if (!p.slug || idBySlug[p.slug]) continue;
-      const { data: row, error } = await M.from("site_pages").insert({
-        school_id: school.id, title: p.title || p.slug, slug: p.slug,
-        content: p.content || "", status: "published", sort_order: i,
-      }).select("id, slug").single();
-      if (error) throw new Error(error.message);
-      idBySlug[row.slug] = row.id;
-      pagesCreated++;
+      if (!p.slug) continue;
+      const body = { title: p.title || p.slug, content: p.content || "", blocks: [], status: "published", sort_order: i, deleted_at: null };
+      if (idBySlug[p.slug]) {
+        const { error } = await M.from("site_pages").update(body).eq("id", idBySlug[p.slug]);
+        if (error) throw new Error(error.message);
+        pagesUpdated++;
+      } else {
+        const { data: row, error } = await M.from("site_pages").insert({ ...body, school_id: school.id, slug: p.slug }).select("id, slug").single();
+        if (error) throw new Error(error.message);
+        idBySlug[row.slug] = row.id;
+        pagesCreated++;
+      }
     }
 
-    // 2) Primary menu from the template nav.
+    // 2) Primary menu from the template nav. A previous import's menu (same
+    // name) is replaced rather than duplicated; other primary menus are
+    // unassigned, not deleted. Group headers import as parent_label.
     let menuItems = 0;
     if (payload.menu?.length) {
+      const menuName = `${tpl.name} Menu`;
+      const { data: oldMenus } = await M.from("site_menus").select("id").eq("school_id", school.id).eq("name", menuName);
+      for (const m of oldMenus || []) {
+        await M.from("site_menu_items").delete().eq("menu_id", m.id);
+        await M.from("site_menus").delete().eq("id", m.id);
+      }
       await M.from("site_menus").update({ location: null }).eq("school_id", school.id).eq("location", "primary");
       const { data: menu, error: menuErr } = await M.from("site_menus")
-        .insert({ school_id: school.id, name: `${tpl.name} Menu`, location: "primary" }).select("id").single();
+        .insert({ school_id: school.id, name: menuName, location: "primary" }).select("id").single();
       if (menuErr) throw new Error(menuErr.message);
       const rows = payload.menu.map((it, i) => ({
         school_id: school.id, menu_id: menu.id, label: it.label,
         page_id: it.slug ? (idBySlug[it.slug] || null) : null,
         url: it.url || (it.slug && !idBySlug[it.slug] ? "#" : null),
+        parent_label: it.parent || null,
         target: "_self", sort_order: i,
       })).filter((r) => r.page_id || r.url);
       if (rows.length) {
@@ -1285,12 +1301,12 @@ router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHO
     }
 
     // 3) Mark this template as the source and switch to builder mode — the
-    // imported "home" page renders as the landing via the builder chrome.
+    // imported "home" page is a full document, served raw as the landing.
     await db.schema("edu").from("school_website_templates").update({ is_active: false }).eq("school_id", school.id);
     await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", tpl.id);
     await db.schema("edu").from("school_website").update({ mode: "theme", updated_at: new Date() }).eq("school_id", school.id);
 
-    res.json({ success: true, pagesCreated, menuItems, skipped: (payload.pages?.length || 0) - pagesCreated });
+    res.json({ success: true, pagesCreated, pagesUpdated, menuItems });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

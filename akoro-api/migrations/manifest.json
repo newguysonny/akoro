@@ -42,7 +42,8 @@
     "2026-website-sync-school.sql",
     "2026-academic-levels.sql",
     "2026-section-types.sql",
-    "2026-periods-class-type.sql"
+    "2026-periods-class-type.sql",
+    "2026-reset-site-templates.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
