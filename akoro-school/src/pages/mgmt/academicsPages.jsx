@@ -48,7 +48,7 @@ export function AcademicSessionsPage() {
 
 // Academic Levels → Classes → Sections now live in ./academics/* as a rich
 // drill-down hierarchy (level filter, counts, routing to sections/students).
-export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage } from './academics/index.js';
+export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage, AssignClassTeacherPage, AssignSubjectsPage } from './academics/index.js';
 
 // SubjectsPage now lives in ./academics/SubjectsPage.jsx (rich toolbar).
 
@@ -62,11 +62,7 @@ const ASSIGN_SUBJECT_COLUMNS = [
   { key: 'class_name', label: 'Class' }, { key: 'subject_name', label: 'Subject' }, { key: 'is_elective', label: 'Elective' },
 ];
 
-export function AssignSubjectsPage() {
-  return <ResourcePage title="Assign Subjects" subtitle="Map subjects (and teachers) to classes" resource="class-subjects"
-    columns={ASSIGN_SUBJECT_COLUMNS} fields={ASSIGN_SUBJECT_FIELDS(false)}
-    listFilters={[{ key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } }]} createLabel="Assign Subject" />;
-}
+// AssignSubjectsPage now lives in ./academics/AssignSubjectsPage.jsx (dedicated page).
 
 export function AssignElectivesPage() {
   return <ResourcePage title="Assign Electives" subtitle="Elective subjects offered per class" resource="class-subjects"
@@ -75,15 +71,7 @@ export function AssignElectivesPage() {
     listFilters={[{ key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } }]} createLabel="Assign Elective" />;
 }
 
-export function AssignClassTeacherPage() {
-  return <ResourcePage title="Assign Class Teacher" subtitle="Form teacher per class/section" resource="class-teachers"
-    columns={[{ key: 'class_name', label: 'Class' }, { key: 'section_name', label: 'Section' }]}
-    fields={[
-      { key: 'class_id', label: 'Class', type: 'select', required: true, optionsFrom: { resource: 'classes' } },
-      { key: 'section_id', label: 'Section', type: 'select', optionsFrom: { resource: 'sections', labelFn: (r) => `${r.class_name || ''} — ${r.name}` } },
-      { key: 'teacher_id', label: 'Teacher', type: 'select', required: true, optionsFrom: TEACHER_OPTS },
-    ]} createLabel="Assign Teacher" />;
-}
+// AssignClassTeacherPage now lives in ./academics/AssignTeacherPage.jsx (dedicated page).
 
 export function ManagePeriodsPage() {
   return <ResourcePage title="Manage Periods" subtitle="Daily lesson periods" resource="periods"
