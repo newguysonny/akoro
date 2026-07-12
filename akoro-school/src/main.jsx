@@ -14,7 +14,7 @@ import { API } from './services/api.js';
  *     www.baptist-high-school.com — → that tenant's PUBLIC website,
  *     rendered by the API from the Host header mapping.
  */
-const PORTAL_HOSTS = (import.meta.env.VITE_PORTAL_HOSTS || 'school.akoro.app')
+const PORTAL_HOSTS = (import.meta.env.VITE_PORTAL_HOSTS || 'school.akoro.app,akoro-school.akoro.name.ng,school.akoro.name.ng')
   .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 
 const host = window.location.hostname.toLowerCase();

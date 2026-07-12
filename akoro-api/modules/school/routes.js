@@ -37,7 +37,7 @@ import {
 } from "./vercelDomains.js";
 import mgmtRouter from "./mgmt.js";
 import publicPortalRouter from "./publicPortal.js";
-import { resolveSchoolByHost, getSchoolGateway, SITE_BASE_DOMAIN } from "./tenant.js";
+import { resolveSchoolByHost, getSchoolGateway, SITE_BASE_DOMAIN, SITE_BASE_DOMAINS } from "./tenant.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -666,7 +666,7 @@ router.post("/domains", authenticateToken, requireRole(SCHOOL_ROLES), async (req
     if (!school) return;
     const domain = (req.body.domain || "").toLowerCase().trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (!domain || !domain.includes(".")) return res.status(400).json({ error: "Enter a valid domain, e.g. www.yourschool.com" });
-    if (domain.endsWith(`.${SITE_BASE_DOMAIN}`) || domain === SITE_BASE_DOMAIN) {
+    if (SITE_BASE_DOMAINS.some((b) => domain === b || domain.endsWith(`.${b}`))) {
       return res.status(400).json({ error: `${SITE_BASE_DOMAIN} subdomains are assigned automatically — add your own domain here.` });
     }
     const { data, error } = await db.schema("edu").from("school_domains")
@@ -1007,6 +1007,31 @@ router.post("/website/preview-site", authenticateToken, requireRole(SCHOOL_ROLES
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Branded 404 for hostnames that resolve to no school (unknown wildcard
+// subdomains, unverified custom domains). A real page, not a bare string,
+// so stray/typo'd subdomains never look broken or fall into the main app.
+const MAIN_SITE_URL = process.env.MAIN_SITE_URL || "https://akoro.app";
+const schoolNotFoundHtml = (host) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>School not found — Akoro</title><meta name="robots" content="noindex">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#F7F7F9;color:#1A1A2E;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{max-width:460px;text-align:center;background:#fff;border:1px solid #E5E5EA;border-radius:20px;padding:48px 36px;box-shadow:0 10px 40px rgba(0,0,0,.06)}
+  .code{font-size:52px;font-weight:900;color:#E07A2C;letter-spacing:-2px}
+  h1{font-size:20px;font-weight:800;margin:10px 0 8px}
+  p{font-size:14px;color:#6B6B80;line-height:1.65}
+  .host{display:inline-block;margin:14px 0 4px;padding:6px 14px;border-radius:999px;background:#F1F1F4;font-size:12.5px;font-weight:700;color:#44444F;word-break:break-all}
+  a.btn{display:inline-block;margin-top:22px;padding:12px 26px;border-radius:999px;background:linear-gradient(135deg,#E07A2C,#D4651E);color:#fff;font-size:13.5px;font-weight:800;text-decoration:none}
+</style></head><body>
+<div class="card">
+  <div class="code">404</div>
+  <h1>No school website here</h1>
+  <span class="host">${String(host || "").replace(/[<>&"]/g, "")}</span>
+  <p>This address isn't connected to any school on Akoro. The school may not have published its website yet, or the address may be misspelt.</p>
+  <a class="btn" href="${MAIN_SITE_URL}">Go to Akoro</a>
+</div></body></html>`;
+
 // ── GET /api/school/site/by-host  (PUBLIC — tenant from hostname) ────────────
 // The frontend forwards its hostname (?host=…); direct hits fall back to the
 // request's own forwarded host. Must be registered BEFORE /site/:slug.
@@ -1014,7 +1039,7 @@ router.get("/site/by-host", async (req, res) => {
   try {
     const host = req.query.host || req.headers["x-forwarded-host"] || req.hostname;
     const school = await resolveSchoolByHost(host);
-    if (!school) return res.status(404).type("html").send("<h1>404 — no school is connected to this domain</h1>");
+    if (!school) return res.status(404).type("html").send(schoolNotFoundHtml(host));
     const preview = req.query.preview === "1" || req.query.preview === "true";
     const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/" });
     res.status(status).type("html").send(html);
@@ -1031,7 +1056,7 @@ router.get("/site/:slug", async (req, res) => {
     const slug = (req.params.slug || "").toLowerCase();
     const { data: school } = await db.from("school_profiles")
       .select(SCHOOL_SELECT).eq("slug", slug).maybeSingle();
-    if (!school) return res.status(404).type("html").send("<h1>404 — school not found</h1>");
+    if (!school) return res.status(404).type("html").send(schoolNotFoundHtml(`${slug} (site link)`));
     const preview = req.query.preview === "1" || req.query.preview === "true";
     const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/" });
     res.status(status).type("html").send(html);

@@ -7,7 +7,12 @@
  */
 import db from "../../db.js";
 
-export const SITE_BASE_DOMAIN = (process.env.SITE_BASE_DOMAIN || "akoro.app").toLowerCase();
+// One or more wildcard base domains (comma-separated env). Both the
+// .name.ng and .app zones resolve out of the box; SITE_BASE_DOMAIN stays
+// the primary one (used for the school's advertised default subdomain).
+export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || "akoro.name.ng,akoro.app")
+  .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+export const SITE_BASE_DOMAIN = SITE_BASE_DOMAINS[0];
 export const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, principal_name";
 
 // host → school row (or null). Handles ports, www., wildcard subdomains and
@@ -17,9 +22,10 @@ export async function resolveSchoolByHost(rawHost) {
   if (!host) return null;
   const bare = host.startsWith("www.") ? host.slice(4) : host;
 
-  // <slug>.akoro.app wildcard subdomain
-  if (bare.endsWith(`.${SITE_BASE_DOMAIN}`)) {
-    const sub = bare.slice(0, -(SITE_BASE_DOMAIN.length + 1));
+  // <slug>.<base-domain> wildcard subdomain
+  for (const base of SITE_BASE_DOMAINS) {
+    if (!bare.endsWith(`.${base}`)) continue;
+    const sub = bare.slice(0, -(base.length + 1));
     if (sub && !sub.includes(".")) {
       const { data } = await db.from("school_profiles").select(SCHOOL_SELECT).eq("slug", sub).maybeSingle();
       if (data) return data;
