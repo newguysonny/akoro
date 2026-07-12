@@ -15,9 +15,22 @@ import './index.css';
  * The apex domain, www, and the dedicated app subdomains (admin,
  * instructors, akoro-school, …) boot the learner app as normal.
  */
-const BASE_DOMAIN = (import.meta.env.VITE_SITE_BASE_DOMAIN || 'akoro.name.ng').toLowerCase();
+// Registrable base domain — not hardcoded. Reuses the URLs we already
+// configure: the learner site URL, else the API URL (leading www./api.
+// stripped). Override with VITE_SITE_BASE_DOMAIN if ever needed.
+const hostOf = (url) => String(url || '').trim().toLowerCase()
+  .replace(/^[a-z]+:\/\//, '').split('/')[0].split(':')[0].replace(/^(www|api)\./, '');
+const BASE_DOMAIN = (
+  import.meta.env.VITE_SITE_BASE_DOMAIN ||
+  hostOf(import.meta.env.VITE_LEARNER_URL) ||
+  hostOf(import.meta.env.VITE_API_URL) ||
+  'akoro.name.ng'
+).toLowerCase();
+// App subdomains that must never be treated as tenant sites. The dedicated
+// apps (admin/instructor/school) live on their own deployments, so this only
+// guards infra hosts that could share the wildcard.
 const APP_SUBDOMAINS = new Set(
-  (import.meta.env.VITE_APP_SUBDOMAINS || 'www,app,api,admin,instructor,instructors,school,akoro-school,learn,learner')
+  (import.meta.env.VITE_APP_SUBDOMAINS || 'www,app,api')
     .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
 );
 

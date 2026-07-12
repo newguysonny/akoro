@@ -7,10 +7,20 @@
  */
 import db from "../../db.js";
 
-// One or more wildcard base domains (comma-separated env). Both the
-// .name.ng and .app zones resolve out of the box; SITE_BASE_DOMAIN stays
-// the primary one (used for the school's advertised default subdomain).
-export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || "akoro.name.ng,akoro.app")
+// Bare registrable host from a URL (or host string): drops scheme, path, port
+// and a leading www./api. label. e.g. "https://akoro.name.ng/x" → "akoro.name.ng".
+export function hostOf(url) {
+  if (!url) return "";
+  let h = String(url).trim().toLowerCase().replace(/^[a-z]+:\/\//, "").split("/")[0].split(":")[0];
+  return h.replace(/^(www|api)\./, "");
+}
+
+// Wildcard base domain(s). Not hardcoded — derived from the main learner/site
+// URL that Railway already defines (FRONTEND_URL / MAIN_SITE_URL). Change the
+// domain there and tenant subdomains follow. SITE_BASE_DOMAIN may still be set
+// explicitly (comma list) to add extra zones (e.g. keep the old akoro.app).
+const derivedBase = hostOf(process.env.FRONTEND_URL || process.env.MAIN_SITE_URL);
+export const SITE_BASE_DOMAINS = (process.env.SITE_BASE_DOMAIN || derivedBase || "akoro.name.ng")
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 export const SITE_BASE_DOMAIN = SITE_BASE_DOMAINS[0];
 export const SCHOOL_SELECT = "id, name, slug, logo_url, address, phone, acronym, principal_name";

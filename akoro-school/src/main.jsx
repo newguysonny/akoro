@@ -14,11 +14,19 @@ import { API } from './services/api.js';
  *     www.baptist-high-school.com — → that tenant's PUBLIC website,
  *     rendered by the API from the Host header mapping.
  */
-const PORTAL_HOSTS = (import.meta.env.VITE_PORTAL_HOSTS || 'school.akoro.app,akoro-school.akoro.name.ng,school.akoro.name.ng')
-  .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+// This deployment's own host(s) render the school portal. Derived from the
+// school app URL we already configure (VITE_SCHOOL_URL), plus any explicit
+// VITE_PORTAL_HOSTS — not hardcoded to a specific domain.
+const justHost = (url) => String(url || '').trim().toLowerCase()
+  .replace(/^[a-z]+:\/\//, '').split('/')[0].split(':')[0];
+const PORTAL_HOSTS = [
+  ...(import.meta.env.VITE_PORTAL_HOSTS || '').split(','),
+  justHost(import.meta.env.VITE_SCHOOL_URL),
+].map((h) => h.trim().toLowerCase()).filter(Boolean);
 
 const host = window.location.hostname.toLowerCase();
 const isPortalHost =
+  PORTAL_HOSTS.length === 0 ||          // no config → this deployment is the portal
   PORTAL_HOSTS.includes(host) ||
   host === 'localhost' || host === '127.0.0.1' ||
   host.endsWith('.vercel.app');

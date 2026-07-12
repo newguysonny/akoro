@@ -1010,7 +1010,8 @@ router.post("/website/preview-site", authenticateToken, requireRole(SCHOOL_ROLES
 // Branded 404 for hostnames that resolve to no school (unknown wildcard
 // subdomains, unverified custom domains). A real page, not a bare string,
 // so stray/typo'd subdomains never look broken or fall into the main app.
-const MAIN_SITE_URL = process.env.MAIN_SITE_URL || "https://akoro.app";
+// The "Go to Akoro" link reuses the main-site URL Railway already defines.
+const MAIN_SITE_URL = process.env.MAIN_SITE_URL || process.env.FRONTEND_URL || "https://akoro.name.ng";
 const schoolNotFoundHtml = (host) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>School not found — Akoro</title><meta name="robots" content="noindex">
