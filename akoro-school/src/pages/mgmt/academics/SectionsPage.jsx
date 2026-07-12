@@ -24,15 +24,27 @@ const SECTION_COLUMNS = [
 ];
 const lbl = { fontSize: 11.5, fontWeight: 700, color: MUTED, fontFamily: FONT, display: 'block', margin: '10px 0 5px' };
 
-function SectionFormModal({ initial, onClose, onSave }) {
+function SectionFormModal({ initial, types, onClose, onSave }) {
   const isEdit = !!initial;
   const [form, setForm] = useState(initial || { name: '', teacher: '', capacity: '', status: 'active' });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const canSave = form.name?.trim();
+  // Offer active section types (A, B, C, D …) as the section name. Keep the
+  // current value selectable when editing even if that type was since removed;
+  // fall back to a free-text input when no section types exist yet.
+  const typeNames = (types || []).map((t) => t.name);
+  const options = form.name && !typeNames.includes(form.name) ? [form.name, ...typeNames] : typeNames;
   return (
     <ModalShell title={isEdit ? 'Edit Section' : 'Add Class Section'} onClose={onClose} width={420}>
       <label style={lbl}>Section Name</label>
-      <input value={form.name} onChange={set('name')} placeholder="e.g. A, B, C" style={inputStyle} />
+      {options.length > 0 ? (
+        <select value={form.name} onChange={set('name')} style={inputStyle}>
+          <option value="">— select section type —</option>
+          {options.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      ) : (
+        <input value={form.name} onChange={set('name')} placeholder="e.g. A, B, C" style={inputStyle} />
+      )}
       <label style={lbl}>Section Teacher</label>
       <input value={form.teacher || ''} onChange={set('teacher')} placeholder="Teacher's name" style={inputStyle} />
       <label style={lbl}>Capacity</label>
@@ -54,6 +66,7 @@ export function SectionsPage() {
   const [classes, setClasses] = useState([]);
   const [levels, setLevels] = useState([]);
   const [students, setStudents] = useState([]);
+  const [sectionTypes, setSectionTypes] = useState([]);
   const [status, setStatus] = useState('');
   const [query, setQuery] = useState('');
   const [busyId, setBusyId] = useState(null);
@@ -75,7 +88,8 @@ export function SectionsPage() {
       apiGet(`${BASE}/classes`).then((r) => r.data || []).catch(() => []),
       apiGet(`${BASE}/academic-levels`).then((r) => r.data || []).catch(() => []),
       apiGet(`${BASE}/students/list`).then((r) => r.data || []).catch(() => []),
-    ]).then(([se, cl, lv, st]) => { setSections(se); setClasses(cl); setLevels(lv); setStudents(st); setSelected({}); setPage(1); })
+      apiGet(`${BASE}/section-types?status=active`).then((r) => r.data || []).catch(() => []),
+    ]).then(([se, cl, lv, st, ty]) => { setSections(se); setClasses(cl); setLevels(lv); setStudents(st); setSectionTypes(ty); setSelected({}); setPage(1); })
       .catch((e) => { showToast(e.message || 'Could not load sections'); setSections([]); });
   }, [classId]);
   useEffect(() => { load(); }, [load]);
@@ -227,7 +241,7 @@ export function SectionsPage() {
         </div>
       )}
 
-      {modal === 'form' && <SectionFormModal initial={editingRow} onClose={() => { setModal(null); setEditingRow(null); }} onSave={save} />}
+      {modal === 'form' && <SectionFormModal initial={editingRow} types={sectionTypes} onClose={() => { setModal(null); setEditingRow(null); }} onSave={save} />}
       {toastEl(toast)}
     </PageLayout>
   );
