@@ -44,6 +44,17 @@ import multerLib                           from "multer";
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
+// Optional Management/Facilities modules that new schools start with DISABLED
+// (only essential system areas are on by default). Keys mirror the school
+// app's sidebar moduleKeys / Module Settings TOGGLE_MODULES.
+const DEFAULT_OFF_MODULES = [
+  "fees_collection", "accounts_finance", "front_office", "offline_examinations",
+  "cbc_academics", "online_examinations", "human_resource", "ptm",
+  "lesson_planner", "digital_evaluation", "qr_attendance", "study_center",
+  "communications", "library", "inventory", "transport", "hostel",
+  "asset_management",
+];
+
 const res200 = (res, data, meta = {}) => res.status(200).json({ success: true,  data, ...meta });
 const res201 = (res, data)            => res.status(201).json({ success: true,  data });
 const res204 = (res)                  => res.status(204).send();
@@ -436,6 +447,15 @@ const schoolHandlers = {
       .single();
 
     if (error) throw new Error(error.message);
+
+    // New schools start with ONLY the essential system areas enabled; every
+    // optional Management/Facilities module is off until the school turns it
+    // on in Settings → Module Settings. Keys must match the sidebar moduleKeys
+    // and the frontend TOGGLE_MODULES list.
+    const disabledModules = Object.fromEntries(DEFAULT_OFF_MODULES.map((k) => [k, false]));
+    const { error: modErr } = await db.schema("edu").from("school_portal_settings")
+      .upsert({ school_id: data.id, modules: disabledModules }, { onConflict: "school_id" });
+    if (modErr) console.warn("[new school] could not seed default modules:", modErr.message);
 
     // Update user role to school_admin
     await db.from("users").update({ role: "school_admin" }).eq("id", req.user.id);
