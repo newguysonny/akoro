@@ -1813,6 +1813,73 @@ router.get("/document-records/:id/html", authenticateToken, async (req, res) => 
   } catch (e) { res.status(500).type("html").send("<h1>Something went wrong</h1>"); }
 });
 
+// ── Admission wizard: suggest the next admission number + roll number ──────
+// GET /students/next-codes?class_id=  → { admission_no, roll_no }
+// admission_no = (max integer found in any existing admission_no) + 1.
+// roll_no      = (max roll within the class, or overall) + 1.
+router.get("/students/next-codes", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: rows } = await M().from("students")
+      .select("admission_no, roll_no, class_id").eq("school_id", school.id);
+    const all = rows || [];
+    const maxAdm = all.reduce((max, r) => {
+      const n = parseInt(String(r.admission_no || "").replace(/\D/g, ""), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    const classId = req.query.class_id || null;
+    const rollPool = classId ? all.filter((r) => r.class_id === classId) : all;
+    const maxRoll = rollPool.reduce((max, r) => {
+      const n = parseInt(String(r.roll_no || "").replace(/\D/g, ""), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    res.json({ success: true, data: { admission_no: String(maxAdm + 1), roll_no: String(maxRoll + 1) } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admission wizard: assign fee groups (+ optional opening balance) ───────
+// POST /students/:id/assign-fee-groups  { group_ids: [], opening_balance }
+// Creates one fee_assignment per fee_type in each selected group (at the
+// type's default_amount), scoped to the active session. An opening balance
+// is recorded against a find-or-created "Opening Due Balance" fee type.
+router.post("/students/:id/assign-fee-groups", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: student } = await M().from("students").select("id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    const groupIds = Array.isArray(req.body.group_ids) ? req.body.group_ids : [];
+    const openingBalance = Number(req.body.opening_balance) || 0;
+    const { data: session } = await M().from("academic_sessions").select("id").eq("school_id", school.id).eq("is_active", true).maybeSingle();
+    const sessionId = session?.id || null;
+
+    const rows = [];
+    if (groupIds.length) {
+      const { data: types } = await M().from("fee_types").select("id, default_amount, group_id").eq("school_id", school.id).in("group_id", groupIds);
+      for (const t of types || []) rows.push({ school_id: school.id, student_id: student.id, fee_type_id: t.id, amount: Number(t.default_amount) || 0, session_id: sessionId });
+    }
+    if (openingBalance > 0) {
+      let { data: obType } = await M().from("fee_types").select("id").eq("school_id", school.id).eq("name", "Opening Due Balance").maybeSingle();
+      if (!obType) {
+        const { data: created, error: ctErr } = await M().from("fee_types").insert({ school_id: school.id, name: "Opening Due Balance" }).select("id").single();
+        if (ctErr) throw new Error(ctErr.message);
+        obType = created;
+      }
+      rows.push({ school_id: school.id, student_id: student.id, fee_type_id: obType.id, amount: openingBalance, session_id: sessionId });
+    }
+
+    let assigned = 0;
+    if (rows.length) {
+      const { error } = await M().from("fee_assignments").insert(rows);
+      if (error) throw new Error(error.message);
+      assigned = rows.length;
+    }
+    res.json({ success: true, assigned });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 
 router.get("/:resource", authenticateToken, async (req, res) => {

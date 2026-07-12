@@ -55,12 +55,7 @@ export function StudentDashboardPage() {
   );
 }
 
-/* ── Student Admission (create-first) ─────────────────────────────── */
-export function StudentAdmissionPage() {
-  return <ResourcePage title="Student Admission" subtitle="Admit a new student" resource="students"
-    columns={STUDENT_COLUMNS} fields={STUDENT_FIELDS} searchKeys={STUDENT_SEARCH}
-    createLabel="Admit Student" startOpen listFilters={[CLASS_FILTER]} />;
-}
+/* Student Admission now lives in ./admissionPage.jsx (multi-step wizard). */
 
 /* ── Disabled Students ────────────────────────────────────────────── */
 export function DisabledStudentsPage() {
