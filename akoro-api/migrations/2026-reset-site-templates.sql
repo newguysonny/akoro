@@ -16,4 +16,9 @@ WHERE name IN (
   'demo-templates'
 );
 
+-- Remove the old hardcoded sample custom domain the demo seed used to insert.
+-- Real domains are added by schools in Settings → Domain; the base domain is
+-- derived from FRONTEND_URL, never stored.
+DELETE FROM edu.school_domains WHERE domain = 'www.akorodemoacademy.com';
+
 NOTIFY pgrst, 'reload schema';

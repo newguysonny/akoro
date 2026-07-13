@@ -57,10 +57,10 @@ BEGIN
   SELECT v_school, 'instagram', '@akoro_demo_academy', '17841400123456789', true
   WHERE NOT EXISTS (SELECT 1 FROM edu.school_social_accounts WHERE school_id = v_school AND provider = 'instagram');
 
-  -- ── Domain (a sample verified custom domain) ─────────────────────────────
-  INSERT INTO edu.school_domains (school_id, domain, verified, verified_at)
-  SELECT v_school, 'www.akorodemoacademy.com', true, now()
-  WHERE NOT EXISTS (SELECT 1 FROM edu.school_domains WHERE school_id = v_school);
+  -- ── Domain ────────────────────────────────────────────────────────────
+  -- No hardcoded custom domain is seeded — the demo school reaches its site
+  -- via the computed <slug> wildcard subdomain of the configured base domain
+  -- (derived from FRONTEND_URL). Add real custom domains in Settings → Domain.
 
   -- ── Website config + a sample full-HTML template ─────────────────────────
   INSERT INTO edu.school_website (school_id) VALUES (v_school)
