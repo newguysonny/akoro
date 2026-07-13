@@ -1001,7 +1001,14 @@ router.post("/website/preview-site", authenticateToken, requireRole(SCHOOL_ROLES
         .select("html").eq("school_id", school.id).eq("is_active", true).maybeSingle();
       html = tpl?.html ? renderMiniTemplate(tpl.html, ctx) : renderThemePage(draft, ctx);
     } else {
-      html = renderThemePage(draft, ctx);
+      // Mirror the LIVE renderer: a published "home" page (e.g. an activated
+      // template's landing) overrides the theme sections — so the Appearance
+      // preview shows what visitors actually see, not the stale theme page.
+      const { data: home } = await db.schema("mgmt").from("site_pages")
+        .select("title, content, status, deleted_at").eq("school_id", school.id).eq("slug", "home").maybeSingle();
+      html = (home && home.status === "published" && !home.deleted_at)
+        ? (isFullDocument(home.content) ? home.content : renderSitePage(draft, ctx, home, { hideTitle: true }))
+        : renderThemePage(draft, ctx);
     }
     res.json({ success: true, html });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1305,18 +1312,32 @@ router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHO
       }
     }
 
-    // 2) Primary menu from the template nav. A previous import's menu (same
-    // name) is replaced rather than duplicated; other primary menus are
-    // unassigned, not deleted. Group headers import as parent_label.
+    // 1b) Activating a template REPLACES the site: every page that isn't part
+    // of the new template is moved to Trash (soft delete — recoverable from
+    // Pages → Trash), so stale pages from a previous template never linger in
+    // the Pages list or stay reachable on the live site.
+    let pagesRemoved = 0;
+    const keepSlugs = new Set((payload.pages || []).map((p) => p.slug).filter(Boolean));
+    const stale = (existing || []).filter((p) => !keepSlugs.has(p.slug));
+    if (stale.length) {
+      const { error: trashErr } = await M.from("site_pages")
+        .update({ deleted_at: new Date() })
+        .in("id", stale.map((p) => p.id));
+      if (trashErr) throw new Error(trashErr.message);
+      pagesRemoved = stale.length;
+    }
+
+    // 2) Menus — the new template's menu replaces ALL existing menus (old
+    // template menus, unassigned leftovers), so the Menus builder shows only
+    // the active template's navigation.
     let menuItems = 0;
     if (payload.menu?.length) {
       const menuName = `${tpl.name} Menu`;
-      const { data: oldMenus } = await M.from("site_menus").select("id").eq("school_id", school.id).eq("name", menuName);
+      const { data: oldMenus } = await M.from("site_menus").select("id").eq("school_id", school.id);
       for (const m of oldMenus || []) {
         await M.from("site_menu_items").delete().eq("menu_id", m.id);
         await M.from("site_menus").delete().eq("id", m.id);
       }
-      await M.from("site_menus").update({ location: null }).eq("school_id", school.id).eq("location", "primary");
       const { data: menu, error: menuErr } = await M.from("site_menus")
         .insert({ school_id: school.id, name: menuName, location: "primary" }).select("id").single();
       if (menuErr) throw new Error(menuErr.message);
@@ -1340,7 +1361,7 @@ router.post("/website/templates/:id/import", authenticateToken, requireRole(SCHO
     await db.schema("edu").from("school_website_templates").update({ is_active: true }).eq("id", tpl.id);
     await db.schema("edu").from("school_website").update({ mode: "theme", updated_at: new Date() }).eq("school_id", school.id);
 
-    res.json({ success: true, pagesCreated, pagesUpdated, menuItems });
+    res.json({ success: true, pagesCreated, pagesUpdated, pagesRemoved, menuItems });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

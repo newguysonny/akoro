@@ -96,7 +96,7 @@ export default function WebsiteTemplatesPage() {
       const r = await apiPost(`/api/school/website/templates/${id}/import`, {});
       setMode('theme'); // builder mode: home page + menus + appearance drive the site
       const total = (r.pagesCreated || 0) + (r.pagesUpdated || 0);
-      showToast(`Activated ✓ ${total} page${total === 1 ? '' : 's'} in the builder (${r.pagesCreated || 0} new, ${r.pagesUpdated || 0} refreshed) + ${r.menuItems} menu link${r.menuItems === 1 ? '' : 's'}`);
+      showToast(`Activated ✓ ${total} page${total === 1 ? '' : 's'} + ${r.menuItems} menu link${r.menuItems === 1 ? '' : 's'}${r.pagesRemoved ? ` · ${r.pagesRemoved} old page${r.pagesRemoved === 1 ? '' : 's'} moved to Trash` : ''}`);
       load();
     } catch (e) { showToast(e.message || 'Could not import'); }
     finally { setBusyId(null); }
