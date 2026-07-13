@@ -13,6 +13,7 @@ import {
   Layers, Settings, LayoutDashboard,
 } from 'lucide-react';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
+import ProTip from '../../components/ProTip.jsx';
 import { SiteNav, SFSHeader, SiteFooter } from '../../components/SiteChrome.jsx';
 import SFSHero from '../../components/SFSHero.jsx';
 import NewsCarousel from '../../components/NewsCarousel.jsx';
@@ -95,22 +96,7 @@ function HowItWorks() {
           ))}
         </div>
         <Reveal>
-          <div style={{ borderRadius: 24, padding: '32px 36px', border: `1px solid ${B}25`, background: `linear-gradient(140deg,${B}08,${B}03)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 8 }}>Pro tip</div>
-              <h3 className="fs" style={{ fontSize: 22, color: '#1A1A2E', marginBottom: 8 }}>Start with a free skill assessment</h3>
-              <p style={{ fontSize: 14, color: '#6B6B80', lineHeight: 1.65 }}>5 minutes. Personalises your journey and boosts completion by up to 50%.</p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
-              {[['50%', 'completion lift'], ['5 min', 'to personalise']].map(([v, l]) => (
-                <div key={l} style={{ textAlign: 'center' }}>
-                  <div className="fsyne" style={{ fontSize: 26, fontWeight: 800, color: B }}>{v}</div>
-                  <div style={{ fontSize: 12, color: '#9490A0', marginTop: 2 }}>{l}</div>
-                </div>
-              ))}
-              <Btn v="primary">Take free assessment <ArrowRight size={14}/></Btn>
-            </div>
-          </div>
+          <ProTip />
         </Reveal>
       </div>
     </section>

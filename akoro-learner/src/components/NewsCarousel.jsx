@@ -1,8 +1,17 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { listPosts } from "../services/contentApi.js";
 
 const NAVY = "#1B3E6F";
 
+const fmtDate = (d) => {
+  if (!d) return "";
+  try {
+    return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  } catch { return ""; }
+};
+
+// Shown until the backend blog posts load, and as a fallback if none exist yet.
 const NEWS_ITEMS = [
   {
     image:
@@ -34,12 +43,12 @@ const NEWS_ITEMS = [
   },
 ];
 
-function NewsCard({ image, category, date, title }) {
-  return (
-    <div
-      className="relative shrink-0 snap-center rounded-2xl overflow-hidden cursor-pointer group
-                 w-[83%] sm:w-[60%] md:w-[42%] lg:w-[32%] aspect-[4/3]"
-    >
+function NewsCard({ image, category, date, title, href }) {
+  const cls =
+    "relative shrink-0 snap-center rounded-2xl overflow-hidden cursor-pointer group block no-underline " +
+    "w-[83%] sm:w-[60%] md:w-[42%] lg:w-[32%] aspect-[4/3]";
+  const inner = (
+    <>
       <img
         src={image}
         alt={title}
@@ -58,13 +67,34 @@ function NewsCard({ image, category, date, title }) {
         </h3>
         <span className="text-white/70 text-xs">{date}</span>
       </div>
-    </div>
+    </>
   );
+  return href ? <a href={href} className={cls}>{inner}</a> : <div className={cls}>{inner}</div>;
 }
 
 export default function NewsCarousel() {
   const trackRef = useRef(null);
   const [active, setActive] = useState(0);
+  const [items, setItems] = useState(NEWS_ITEMS);
+
+  // Pull the latest blog posts from the backend; keep the static items as a
+  // fallback if the request fails or there are no posts yet.
+  useEffect(() => {
+    let cancelled = false;
+    listPosts({ limit: 8 })
+      .then((posts) => {
+        if (cancelled || !Array.isArray(posts) || posts.length === 0) return;
+        setItems(posts.map((p) => ({
+          image: p.image,
+          category: p.category || "News",
+          date: fmtDate(p.published_at),
+          title: p.title,
+          href: p.slug ? `/blog/${p.slug}` : undefined,
+        })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const scrollToIndex = useCallback((i) => {
     const el = trackRef.current;
@@ -78,7 +108,7 @@ export default function NewsCarousel() {
 
   const goPrev = () => scrollToIndex(Math.max(0, active - 1));
   const goNext = () =>
-    scrollToIndex(Math.min(NEWS_ITEMS.length - 1, active + 1));
+    scrollToIndex(Math.min(items.length - 1, active + 1));
 
   // Sync active dot to nearest centered card while the user scrolls/swipes
   useEffect(() => {
@@ -125,7 +155,7 @@ export default function NewsCarousel() {
         <button
           onClick={goNext}
           aria-label="Next"
-          disabled={active === NEWS_ITEMS.length - 1}
+          disabled={active === items.length - 1}
           className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-md disabled:opacity-30 transition-opacity"
           style={{ color: NAVY }}
         >
@@ -138,7 +168,7 @@ export default function NewsCarousel() {
           className="flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth px-[8.5%] sm:px-[6%] md:px-[8%] lg:px-[6%]
                      [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
         >
-          {NEWS_ITEMS.map((item, i) => (
+          {items.map((item, i) => (
             <NewsCard key={i} {...item} />
           ))}
         </div>
@@ -146,7 +176,7 @@ export default function NewsCarousel() {
 
       {/* Dot pagination */}
       <div className="flex items-center justify-center gap-2.5 mt-8">
-        {NEWS_ITEMS.map((_, i) => (
+        {items.map((_, i) => (
           <button
             key={i}
             onClick={() => scrollToIndex(i)}

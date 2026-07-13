@@ -20,6 +20,7 @@ import {
   Brain,
 } from "lucide-react";
 import { SiteNav, SFSHeader, SiteFooter } from '../../components/SiteChrome.jsx';
+import ProTip from '../../components/ProTip.jsx';
 
 
 /* ── Brand tokens (match Akoro landing page) ── */
@@ -451,63 +452,8 @@ function HowItWorks() {
         ))}
       </div>
 
-      {/* Pro Tip callout */}
-      <div
-        className="rounded-3xl p-8 sm:p-10 flex flex-col sm:flex-row items-center gap-8 justify-between"
-        style={{
-          border: `1px solid ${B}30`,
-          background: `linear-gradient(140deg, ${B}0D, ${B}03)`,
-        }}
-      >
-        <div className="text-center sm:text-left">
-          <div
-            className="text-xs font-extrabold tracking-widest mb-2"
-            style={{ color: B, fontFamily: "'Poppins', sans-serif" }}
-          >
-            PRO TIP
-          </div>
-          <h3
-            className="text-2xl font-black mb-2"
-            style={{
-              color: "#0F0F1E",
-              fontFamily: "'Lora', serif",
-            }}
-          >
-            Start with a free skill assessment
-          </h3>
-          <p className="text-base text-[#5A5A6E] leading-relaxed">
-            5 minutes. Personalises your journey and boosts completion by up
-            to 50%.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-8 shrink-0">
-          <div className="text-center">
-            <div
-              className="text-2xl font-extrabold"
-              style={{ color: B, fontFamily: "'Poppins', sans-serif" }}
-            >
-              50%
-            </div>
-            <div className="text-xs text-[#8A87A0] mt-1">completion lift</div>
-          </div>
-          <div className="text-center">
-            <div
-              className="text-2xl font-extrabold"
-              style={{ color: B, fontFamily: "'Poppins', sans-serif" }}
-            >
-              5 min
-            </div>
-            <div className="text-xs text-[#8A87A0] mt-1">to personalise</div>
-          </div>
-          <button
-            className="px-6 py-3 rounded-lg font-bold text-white text-sm shadow-md hover:opacity-90 transition-opacity whitespace-nowrap"
-            style={{ background: B }}
-          >
-            Take free assessment
-          </button>
-        </div>
-      </div>
+      {/* Pro Tip callout — shared component, identical to the landing page */}
+      <ProTip />
     </div>
   );
 }
