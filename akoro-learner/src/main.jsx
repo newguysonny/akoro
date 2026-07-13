@@ -27,10 +27,11 @@ const BASE_DOMAIN = (
   'akoro.name.ng'
 ).toLowerCase();
 // App subdomains that must never be treated as tenant sites. The dedicated
-// apps (admin/instructor/school) live on their own deployments, so this only
-// guards infra hosts that could share the wildcard.
+// apps (admin/instructor/school) should be routed to their own deployments by
+// the DNS/host provider, but if the wildcard ever catches one, list it here so
+// it doesn't 404 as an unknown school.
 const APP_SUBDOMAINS = new Set(
-  (import.meta.env.VITE_APP_SUBDOMAINS || 'www,app,api')
+  (import.meta.env.VITE_APP_SUBDOMAINS || 'www,app,api,admin,instructor,instructors,school,akoro-school,akoro-instructor,akoro-admin,learn,learner')
     .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
 );
 

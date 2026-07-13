@@ -1074,7 +1074,15 @@ router.get("/website", authenticateToken, async (req, res) => {
     if (!school) return;
     const website = await getWebsiteConfig(school.id);
     const slug = await ensureSchoolSlug(school); // persist a real slug so previews resolve
-    res.json({ success: true, data: { ...shapeWebsite(website), slug } });
+    // Public site URL is the wildcard subdomain of the base domain, e.g.
+    // https://<slug>.akoro.name.ng — not the API host. A verified custom
+    // domain, if any, takes precedence as the primary URL.
+    const { data: dom } = await db.schema("edu").from("school_domains")
+      .select("domain").eq("school_id", school.id).eq("verified", true)
+      .order("created_at", { ascending: true }).limit(1).maybeSingle();
+    const defaultDomain = `${slug}.${SITE_BASE_DOMAIN}`;
+    const siteUrl = `https://${dom?.domain || defaultDomain}`;
+    res.json({ success: true, data: { ...shapeWebsite(website), slug, defaultDomain, customDomain: dom?.domain || null, siteUrl } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

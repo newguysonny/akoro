@@ -36,11 +36,13 @@ export default function SchoolWebsitePage() {
   const [sync, setSync] = useState(false);
   const [syncSaving, setSyncSaving] = useState(false);
   const [slug, setSlug] = useState('');
+  const [siteUrl, setSiteUrl] = useState('');       // public wildcard/custom-domain URL
 
   useEffect(() => {
     apiGet('/api/school/website').then((r) => {
       const d = r.data || {};
       setSlug(d.slug || '');
+      setSiteUrl(d.siteUrl || '');
       setEnabled(!!d.enabled);
       setSync(!!d.syncSchoolInfo);
     }).catch(() => {}).finally(() => setLoading(false));
@@ -69,8 +71,10 @@ export default function SchoolWebsitePage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
         <button onClick={() => navigate('/website-builder/appearance')} style={linkBtn(AMBER)}><Paintbrush size={14} /> Appearance</button>
         <button onClick={() => navigate('/settings-website/templates')} style={linkBtn(BLUE)}><Code2 size={14} /> Templates</button>
-        <button onClick={() => slug && window.open(`${API}/api/school/site/${slug}?preview=1`, '_blank', 'noopener')} disabled={!slug} title={enabled ? 'Opens your live website' : 'Preview even before publishing'} style={{ ...linkBtn(GREEN), cursor: slug ? 'pointer' : 'not-allowed', opacity: slug ? 1 : 0.6 }}>
-          <ExternalLink size={14} /> Preview Website
+        {/* Published → open the real public URL (wildcard/custom domain).
+            Unpublished → API preview route so it renders before going live. */}
+        <button onClick={() => (enabled && siteUrl) ? window.open(siteUrl, '_blank', 'noopener') : slug && window.open(`${API}/api/school/site/${slug}?preview=1`, '_blank', 'noopener')} disabled={!slug} title={enabled ? 'Opens your live website' : 'Preview even before publishing'} style={{ ...linkBtn(GREEN), cursor: slug ? 'pointer' : 'not-allowed', opacity: slug ? 1 : 0.6 }}>
+          <ExternalLink size={14} /> {enabled ? 'Open Website' : 'Preview Website'}
         </button>
       </div>
 
@@ -111,9 +115,9 @@ export default function SchoolWebsitePage() {
 
           <Card icon={Globe} iconColor={BLUE} title="Your Website Address">
             <p style={{ fontSize: 13, color: INK, margin: 0, fontFamily: FONT }}>
-              {slug ? <a href={`${API}/api/school/site/${slug}`} target="_blank" rel="noreferrer" style={{ color: BLUE, fontWeight: 700 }}>{`/${slug}`}</a> : '—'}
+              {siteUrl ? <a href={siteUrl} target="_blank" rel="noreferrer" style={{ color: BLUE, fontWeight: 700 }}>{siteUrl.replace(/^https?:\/\//, '')}</a> : '—'}
             </p>
-            <p style={{ fontSize: 11.5, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>Manage custom domains in Settings → Domain.</p>
+            <p style={{ fontSize: 11.5, color: MUTED2, margin: '6px 0 0', fontFamily: FONT }}>Your free subdomain. Add a custom domain in Settings → Domain.</p>
           </Card>
 
           <Card icon={Paintbrush} iconColor={AMBER} title="Edit your website">

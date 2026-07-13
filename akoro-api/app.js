@@ -29,6 +29,7 @@ import {
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
+import { SITE_BASE_DOMAINS }       from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
@@ -61,6 +62,24 @@ const allowedOrigins = config.server.corsOrigin === '*'
   ? '*'
   : config.server.corsOrigin.split(',').map(s => s.trim()).filter(Boolean);
 
+// Beyond the explicit list, also allow the apex, www, and EVERY subdomain of
+// the wildcard base domain(s) — so www.<domain> and every tenant school site
+// (<slug>.<domain>) can call the API without being listed one by one.
+const originHost = (o) => { try { return new URL(o).hostname.toLowerCase(); } catch { return ''; } };
+const stripWww = (h) => h.replace(/^www\./, '');
+const listedHosts = new Set(allowedOrigins === '*' ? [] : allowedOrigins.map(originHost).filter(Boolean).map(stripWww));
+function isAllowedOrigin(origin) {
+  if (!origin) return true;                 // curl / mobile / same-origin
+  const bare = stripWww(originHost(origin));
+  if (!bare) return false;
+  if (listedHosts.has(bare)) return true;                                        // explicitly listed (± www)
+  if (SITE_BASE_DOMAINS.some((b) => bare === b || bare.endsWith(`.${b}`))) return true; // apex/any subdomain of base
+  return false;
+}
+const corsOriginFn = (origin, cb) => isAllowedOrigin(origin)
+  ? cb(null, true)
+  : cb(new Error(`CORS: origin ${origin} not allowed`));
+
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
@@ -68,7 +87,7 @@ redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
 redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
 const io = new SocketServer(httpServer, {
-  cors:       { origin: allowedOrigins, credentials: true, methods: ["GET", "POST"] },
+  cors:       { origin: allowedOrigins === '*' ? '*' : corsOriginFn, credentials: true, methods: ["GET", "POST"] },
   transports: ["websocket", "polling"],
 });
 io.adapter(createAdapter(redisPub, redisSub));
@@ -100,13 +119,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 app.use(cors({
-  origin: allowedOrigins === '*'
-    ? '*'
-    : (origin, cb) => {
-        // Allow requests with no origin (mobile apps, curl, Postman)
-        if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-        cb(new Error(`CORS: origin ${origin} not allowed`));
-      },
+  origin: allowedOrigins === '*' ? '*' : corsOriginFn,
   credentials: true,
   methods:     ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
