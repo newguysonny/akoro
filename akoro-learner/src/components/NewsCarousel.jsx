@@ -11,47 +11,17 @@ const fmtDate = (d) => {
   } catch { return ""; }
 };
 
-// Shown until the backend blog posts load, and as a fallback if none exist yet.
-const NEWS_ITEMS = [
-  {
-    image:
-      "https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=900&h=600&fit=crop",
-    category: "Campus Life",
-    date: "May 12, 2026",
-    title: "New STEM Lab Opens Doors to Hands-On Discovery",
-  },
-  {
-    image:
-      "https://images.unsplash.com/photo-1509062522246-3755977927d7?w=900&h=600&fit=crop",
-    category: "Academics",
-    date: "May 6, 2026",
-    title: "8th Graders Present Capstone Innovation Projects",
-  },
-  {
-    image:
-      "https://images.unsplash.com/photo-1588072432836-e10032774350?w=900&h=600&fit=crop",
-    category: "Community",
-    date: "April 28, 2026",
-    title: "Spring Art Walk Transforms Our Hallways",
-  },
-  {
-    image:
-      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=900&h=600&fit=crop",
-    category: "Athletics",
-    date: "April 19, 2026",
-    title: "Eagles Take the Regional Championship Title",
-  },
-];
+const CARD_W = "shrink-0 snap-center w-[83%] sm:w-[60%] md:w-[42%] lg:w-[32%] aspect-[4/3]";
 
 function NewsCard({ image, category, date, title, href }) {
-  const cls =
-    "relative shrink-0 snap-center rounded-2xl overflow-hidden cursor-pointer group block no-underline " +
-    "w-[83%] sm:w-[60%] md:w-[42%] lg:w-[32%] aspect-[4/3]";
+  const cls = `relative ${CARD_W} rounded-2xl overflow-hidden cursor-pointer group block no-underline`;
   const inner = (
     <>
       <img
         src={image}
         alt={title}
+        loading="lazy"
+        decoding="async"
         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
@@ -62,9 +32,7 @@ function NewsCard({ image, category, date, title, href }) {
         >
           {category}
         </span>
-        <h3 className="text-white text-lg font-bold leading-snug mb-1">
-          {title}
-        </h3>
+        <h3 className="text-white text-lg font-bold leading-snug mb-1">{title}</h3>
         <span className="text-white/70 text-xs">{date}</span>
       </div>
     </>
@@ -72,19 +40,37 @@ function NewsCard({ image, category, date, title, href }) {
   return href ? <a href={href} className={cls}>{inner}</a> : <div className={cls}>{inner}</div>;
 }
 
+const SkeletonCard = () => (
+  <div className={`${CARD_W} rounded-2xl bg-gray-100 animate-pulse`} />
+);
+
 export default function NewsCarousel() {
+  const sectionRef = useRef(null);
   const trackRef = useRef(null);
   const [active, setActive] = useState(0);
-  const [items, setItems] = useState(NEWS_ITEMS);
+  const [items, setItems] = useState(null);   // null = still loading
+  const [inView, setInView] = useState(false);
 
-  // Pull the latest blog posts from the backend; keep the static items as a
-  // fallback if the request fails or there are no posts yet.
+  // Lazy: only reach for the API once the carousel scrolls near the viewport.
   useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries.some((e) => e.isIntersecting)) { setInView(true); io.disconnect(); } },
+      { rootMargin: "300px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // Always the blog backend — no mock data.
+  useEffect(() => {
+    if (!inView) return;
     let cancelled = false;
     listPosts({ limit: 8 })
       .then((posts) => {
-        if (cancelled || !Array.isArray(posts) || posts.length === 0) return;
-        setItems(posts.map((p) => ({
+        if (cancelled) return;
+        setItems((Array.isArray(posts) ? posts : []).map((p) => ({
           image: p.image,
           category: p.category || "News",
           date: fmtDate(p.published_at),
@@ -92,103 +78,99 @@ export default function NewsCarousel() {
           href: p.slug ? `/blog/${p.slug}` : undefined,
         })));
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
-  }, []);
+  }, [inView]);
+
+  const count = items?.length ?? 0;
 
   const scrollToIndex = useCallback((i) => {
     const el = trackRef.current;
     if (!el) return;
     const card = el.children[i];
     if (!card) return;
-    const offset =
-      card.offsetLeft - (el.clientWidth - card.clientWidth) / 2;
-    el.scrollTo({ left: offset, behavior: "smooth" });
+    el.scrollTo({ left: card.offsetLeft - (el.clientWidth - card.clientWidth) / 2, behavior: "smooth" });
   }, []);
 
   const goPrev = () => scrollToIndex(Math.max(0, active - 1));
-  const goNext = () =>
-    scrollToIndex(Math.min(items.length - 1, active + 1));
+  const goNext = () => scrollToIndex(Math.min(count - 1, active + 1));
 
-  // Sync active dot to nearest centered card while the user scrolls/swipes
+  // Sync active dot to the nearest centered card while the user scrolls/swipes.
   useEffect(() => {
     const el = trackRef.current;
-    if (!el) return;
+    if (!el || !count) return;
     let raf;
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const center = el.scrollLeft + el.clientWidth / 2;
-        let closest = 0;
-        let closestDist = Infinity;
+        let closest = 0, closestDist = Infinity;
         Array.from(el.children).forEach((child, i) => {
-          const childCenter = child.offsetLeft + child.clientWidth / 2;
-          const dist = Math.abs(childCenter - center);
-          if (dist < closestDist) {
-            closestDist = dist;
-            closest = i;
-          }
+          const dist = Math.abs(child.offsetLeft + child.clientWidth / 2 - center);
+          if (dist < closestDist) { closestDist = dist; closest = i; }
         });
         setActive(closest);
       });
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
+    return () => { el.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+  }, [count]);
+
+  // Loaded and empty → render nothing (no empty carousel block).
+  if (items && count === 0) return null;
+
+  const loading = items === null;
 
   return (
-    <section className="bg-white py-16 font-serif">
+    <section ref={sectionRef} className="bg-white py-16 font-serif">
       <div className="relative">
-        {/* Prev / Next arrows */}
-        <button
-          onClick={goPrev}
-          aria-label="Previous"
-          disabled={active === 0}
-          className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-md disabled:opacity-30 transition-opacity"
-          style={{ color: NAVY }}
-        >
-          <ChevronLeft size={22} />
-        </button>
-        <button
-          onClick={goNext}
-          aria-label="Next"
-          disabled={active === items.length - 1}
-          className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-md disabled:opacity-30 transition-opacity"
-          style={{ color: NAVY }}
-        >
-          <ChevronRight size={22} />
-        </button>
+        {!loading && (
+          <>
+            <button
+              onClick={goPrev}
+              aria-label="Previous"
+              disabled={active === 0}
+              className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-md disabled:opacity-30 transition-opacity"
+              style={{ color: NAVY }}
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <button
+              onClick={goNext}
+              aria-label="Next"
+              disabled={active === count - 1}
+              className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-white shadow-md disabled:opacity-30 transition-opacity"
+              style={{ color: NAVY }}
+            >
+              <ChevronRight size={22} />
+            </button>
+          </>
+        )}
 
-        {/* Swipeable track */}
         <div
           ref={trackRef}
           className="flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth px-[8.5%] sm:px-[6%] md:px-[8%] lg:px-[6%]
                      [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
         >
-          {items.map((item, i) => (
-            <NewsCard key={i} {...item} />
-          ))}
+          {loading
+            ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
+            : items.map((item, i) => <NewsCard key={i} {...item} />)}
         </div>
       </div>
 
-      {/* Dot pagination */}
-      <div className="flex items-center justify-center gap-2.5 mt-8">
-        {items.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => scrollToIndex(i)}
-            aria-label={`Go to slide ${i + 1}`}
-            className="w-2.5 h-2.5 rounded-full border transition-colors"
-            style={{
-              background: active === i ? NAVY : "transparent",
-              borderColor: NAVY,
-            }}
-          />
-        ))}
-      </div>
+      {!loading && count > 1 && (
+        <div className="flex items-center justify-center gap-2.5 mt-8">
+          {items.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => scrollToIndex(i)}
+              aria-label={`Go to slide ${i + 1}`}
+              className="w-2.5 h-2.5 rounded-full border transition-colors"
+              style={{ background: active === i ? NAVY : "transparent", borderColor: NAVY }}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
