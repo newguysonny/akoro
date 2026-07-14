@@ -117,13 +117,18 @@ import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
 /* ── ProtectedRoute ─────────────────────────────────────────────────── */
 const INSTRUCTOR_ROLES = ['school', 'school_admin', 'instructor', 'admin'];
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, anyRole = false }) {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   if (!isAuthenticated) {
     localStorage.setItem('akoro_redirect', location.pathname + location.search);
     return <Navigate to="/signin" replace />;
   }
+  // anyRole routes (e.g. the AI Chat opened from the public website by a
+  // student/teacher/admin of the school) allow ANY authenticated member —
+  // membership is already enforced server-side by the gated login — and skip
+  // the instructor-only + onboarding gates that guard the admin dashboard.
+  if (anyRole) return children;
   // Role guard: a valid session that isn't an instructor (e.g. a student
   // cookie shared across apps, or a non-teacher Google sign-in) is bounced
   // to /signin with a message instead of seeing the dashboard.
@@ -186,7 +191,7 @@ function AppRoutes() {
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
-      <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+      <Route path="/chat" element={<ProtectedRoute anyRole><ChatPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<Navigate to="/settings-billing" replace />} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />

@@ -1189,9 +1189,8 @@ router.get("/site/by-host", async (req, res) => {
 // The website's floating AI bot signs a visitor in ONLY if they belong to the
 // school whose site they're on. Returns clear, role-aware messages so the
 // widget can tell the visitor exactly what went wrong. On success it issues
-// the shared session cookie and returns where to open the AI chat:
-//   student → the learner app;  teacher / admin → the school portal.
-const LEARNER_APP_URL = (process.env.FRONTEND_URL || process.env.MAIN_SITE_URL || "https://akoro.name.ng").replace(/\/$/, "");
+// the shared session cookie and every role opens the SAME school AI chat
+// (the school portal's /chat).
 const roleLabel = { admin: "an admin", teacher: "a teacher", student: "a student" };
 router.post("/site/ai-login", async (req, res) => {
   try {
@@ -1237,8 +1236,8 @@ router.post("/site/ai-login", async (req, res) => {
     }
 
     await issueTokenPair(res, user);
-    const redirect = actualRole === "student" ? `${LEARNER_APP_URL}/app` : `${SCHOOL_PORTAL_URL}/chat`;
-    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect });
+    // Everyone opens the same school AI chat.
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${SCHOOL_PORTAL_URL}/chat` });
   } catch (e) {
     console.error("[ai-login]", e);
     res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });
