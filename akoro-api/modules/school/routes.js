@@ -804,7 +804,7 @@ async function getWebsiteConfig(schoolId) {
   return created;
 }
 const shapeWebsite = (w) => ({
-  enabled: w.enabled, mode: w.mode, themeId: w.theme_id, syncSchoolInfo: !!w.sync_school_info,
+  enabled: w.enabled, mode: w.mode, themeId: w.theme_id, syncSchoolInfo: !!w.sync_school_info, aiChatEnabled: !!w.ai_chat_enabled,
   heroTitle: w.hero_title, heroSubtitle: w.hero_subtitle, heroImageUrl: w.hero_image_url,
   aboutText: w.about_text, metaTitle: w.meta_title, metaKeywords: w.meta_keywords,
   metaDescription: w.meta_description, ogImageUrl: w.og_image_url,
@@ -859,6 +859,75 @@ async function buildSiteMenus(schoolId) {
 // A page whose content is a whole HTML document is served as-is (its own
 // header/footer/styles) rather than wrapped in the builder chrome.
 const isFullDocument = (c) => /^\s*(<!doctype html|<html[\s>])/i.test(c || "");
+
+// ── AI chat widget (Sync AI Bot) ─────────────────────────────────────────────
+// Injected on every rendered site page when website.ai_chat_enabled: a
+// floating bubble (bottom-right) that opens a gated login modal
+// (student / teacher / admin). Successful login redirects to the school
+// portal's AI Chat. Self-contained ES5 — no dependencies, works inside any
+// template. Auto-opens on the /ai-chat page.
+const SCHOOL_PORTAL_URL = (process.env.SCHOOL_FRONTEND_URL || "https://akoro-school.akoro.name.ng").replace(/\/$/, "");
+function aiChatWidgetHtml(apiOrigin) {
+  const api = String(apiOrigin || "").replace(/\/$/, "");
+  return `
+<div id="ak-ai-root"></div>
+<script>(function(){
+  var API=${JSON.stringify(api)}, PORTAL=${JSON.stringify(SCHOOL_PORTAL_URL)};
+  var root=document.getElementById('ak-ai-root'); if(!root) return;
+  var css='#ak-ai-btn{position:fixed;right:22px;bottom:22px;z-index:2147483000;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#E07A2C,#D4651E);box-shadow:0 8px 24px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;transition:transform .15s}#ak-ai-btn:hover{transform:scale(1.06)}#ak-ai-ovl{position:fixed;inset:0;z-index:2147483001;background:rgba(10,10,14,.55);display:none;align-items:center;justify-content:center;padding:18px}#ak-ai-ovl.open{display:flex}#ak-ai-card{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:26px 24px;font-family:Inter,system-ui,sans-serif;box-shadow:0 24px 60px rgba(0,0,0,.35)}#ak-ai-card h3{margin:0 0 4px;font-size:18px;font-weight:800;color:#1A1A2E}#ak-ai-card p{margin:0 0 14px;font-size:12.5px;color:#6B6B80;line-height:1.55}.ak-ai-roles{display:flex;gap:6px;margin-bottom:14px}.ak-ai-roles button{flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid #E5E5EA;background:#fff;font-size:12px;font-weight:700;color:#6B6B80;cursor:pointer;font-family:inherit}.ak-ai-roles button.on{border-color:#E07A2C;background:#FDF3EB;color:#B45A16}.ak-ai-in{width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1.5px solid #E5E5EA;font-size:13.5px;margin-bottom:10px;font-family:inherit;outline:none}.ak-ai-in:focus{border-color:#E07A2C}#ak-ai-err{display:none;font-size:12px;color:#DC3545;margin:-2px 0 10px}#ak-ai-go{width:100%;padding:12px;border-radius:11px;border:none;background:linear-gradient(135deg,#E07A2C,#D4651E);color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}#ak-ai-x{float:right;border:none;background:none;font-size:18px;color:#9A9AA5;cursor:pointer;margin:-6px -6px 0 0}';
+  var st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
+  root.innerHTML='<button id="ak-ai-btn" aria-label="AI Chat" title="AI Chat"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg></button><div id="ak-ai-ovl"><div id="ak-ai-card"><button id="ak-ai-x" aria-label="Close">×</button><h3>AI Study Assistant</h3><p>Sign in to chat with your school’s AI assistant.</p><div class="ak-ai-roles"><button data-r="student" class="on">Student</button><button data-r="teacher">Teacher</button><button data-r="admin">Admin</button></div><input class="ak-ai-in" id="ak-ai-em" type="email" placeholder="Email" autocomplete="email"/><input class="ak-ai-in" id="ak-ai-pw" type="password" placeholder="Password" autocomplete="current-password"/><div id="ak-ai-err"></div><button id="ak-ai-go">Sign in → AI Chat</button></div></div>';
+  var ovl=document.getElementById('ak-ai-ovl');
+  function open(){ovl.classList.add('open');}
+  function close(){ovl.classList.remove('open');}
+  document.getElementById('ak-ai-btn').addEventListener('click',open);
+  document.getElementById('ak-ai-x').addEventListener('click',close);
+  ovl.addEventListener('click',function(e){if(e.target===ovl)close();});
+  var roleBtns=root.querySelectorAll('.ak-ai-roles button');
+  for(var i=0;i<roleBtns.length;i++){roleBtns[i].addEventListener('click',function(){for(var j=0;j<roleBtns.length;j++)roleBtns[j].classList.remove('on');this.classList.add('on');});}
+  document.getElementById('ak-ai-go').addEventListener('click',function(){
+    var em=document.getElementById('ak-ai-em').value.trim(), pw=document.getElementById('ak-ai-pw').value;
+    var err=document.getElementById('ak-ai-err'); err.style.display='none';
+    if(!em||!pw){err.textContent='Enter your email and password.';err.style.display='block';return;}
+    var btn=this; btn.disabled=true; btn.textContent='Signing in…';
+    fetch(API+'/api/auth/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})})
+      .then(function(r){return r.json().catch(function(){return {};}).then(function(d){return {ok:r.ok,d:d};});})
+      .then(function(res){
+        if(res.ok){window.location.href=PORTAL+'/chat';}
+        else{err.textContent=(res.d&&(res.d.message||res.d.error))||'Sign-in failed. Check your details.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';}
+      })
+      .catch(function(){err.textContent='Could not reach the server. Try again.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';});
+  });
+  if(/^\\/ai-chat\\/?$/.test(window.location.pathname)) open();
+})();</script>`;
+}
+
+// Content of the auto-created "AI Chat" site page (slug: ai-chat). The
+// floating widget is injected at render time like every page and auto-opens
+// here, so this page just provides the framing.
+const AI_CHAT_PAGE_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Chat</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Inter,system-ui,sans-serif;background:#0F0F1E;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}.wrap{max-width:560px;text-align:center}.badge{display:inline-block;padding:6px 16px;border-radius:999px;background:rgba(224,122,44,.16);color:#E8945A;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px}h1{font-size:34px;font-weight:900;margin-bottom:12px}p{font-size:15px;color:#B9B9C6;line-height:1.7}a.home{display:inline-block;margin-top:26px;color:#E8945A;font-weight:700;text-decoration:none;font-size:13.5px}</style>
+</head><body><div class="wrap">
+<span class="badge">AI Study Assistant</span>
+<h1>Chat with your school's AI</h1>
+<p>Students, teachers and admins can sign in to ask questions, get study help and explore lessons with the school's AI assistant. Use the chat bubble to sign in.</p>
+<a class="home" href="/">← Back to home</a>
+</div></body></html>`;
+
+// Create or trash the "AI Chat" site page when the Sync AI Bot toggle flips.
+async function syncAiChatPage(schoolId, enabled) {
+  const M = db.schema("mgmt");
+  const { data: pg } = await M.from("site_pages").select("id").eq("school_id", schoolId).eq("slug", "ai-chat").maybeSingle();
+  if (enabled) {
+    const body = { title: "AI Chat", content: AI_CHAT_PAGE_HTML, blocks: [], status: "published", sort_order: 999, deleted_at: null };
+    if (pg) await M.from("site_pages").update(body).eq("id", pg.id);
+    else await M.from("site_pages").insert({ ...body, school_id: schoolId, slug: "ai-chat" });
+  } else if (pg) {
+    await M.from("site_pages").update({ deleted_at: new Date() }).eq("id", pg.id);
+  }
+}
 
 // Assemble the full render context (variables, section data, menus, portal
 // links) exactly as the live site uses — shared by the public renderer and the
@@ -920,13 +989,34 @@ async function buildSiteCtx(school, website) {
   });
 }
 
-async function renderSchoolSiteHtml(school, { preview = false, path = "/" } = {}) {
+
+// Public origin of THIS API (scheme + host), for absolute URLs inside
+// injected widgets. Derived from the request, so it needs no extra env.
+const apiOriginOf = (req) => `${(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0]}://${req.get("host")}`;
+
+async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOrigin = "" } = {}) {
   const website = await getWebsiteConfig(school.id);
   // Public visitors only see a published site; preview mode (admin "Preview
   // Website" button) renders it even while unpublished, with a notice banner.
   if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
 
-  const addBanner = (html) => {
+  const addBanner = (raw) => {
+    // Full documents skip the theme chrome, so Appearance's tracking scripts
+    // and custom CSS are injected here — they apply to template pages too.
+    let html = raw;
+    if (isFullDocument(html)) {
+      const headBits = [
+        website.custom_css ? `<style>${website.custom_css}</style>` : "",
+        website.header_scripts || "",
+      ].filter(Boolean).join("\n");
+      if (headBits) html = html.includes("</head>") ? html.replace("</head>", `${headBits}\n</head>`) : `${headBits}\n${html}`;
+      if (website.footer_scripts) html = html.includes("</body>") ? html.replace("</body>", `${website.footer_scripts}\n</body>`) : html + website.footer_scripts;
+    }
+    // Sync AI Bot: floating gated-chat widget on every page.
+    if (website.ai_chat_enabled) {
+      const w = aiChatWidgetHtml(apiOrigin);
+      html = html.includes("</body>") ? html.replace("</body>", `${w}\n</body>`) : html + w;
+    }
     if (!(preview && !website.enabled)) return html;
     const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;
     return html.includes("</body>") ? html.replace("</body>", `${banner}</body>`) : html + banner;
@@ -1049,7 +1139,7 @@ router.get("/site/by-host", async (req, res) => {
     const school = await resolveSchoolByHost(host);
     if (!school) return res.status(404).type("html").send(schoolNotFoundHtml(host));
     const preview = req.query.preview === "1" || req.query.preview === "true";
-    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/" });
+    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/", apiOrigin: apiOriginOf(req) });
     res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render by-host]", e);
@@ -1066,7 +1156,7 @@ router.get("/site/:slug", async (req, res) => {
       .select(SCHOOL_SELECT).eq("slug", slug).maybeSingle();
     if (!school) return res.status(404).type("html").send(schoolNotFoundHtml(`${slug} (site link)`));
     const preview = req.query.preview === "1" || req.query.preview === "true";
-    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/" });
+    const { status, html } = await renderSchoolSiteHtml(school, { preview, path: req.query.path || "/", apiOrigin: apiOriginOf(req) });
     res.status(status).type("html").send(html);
   } catch (e) {
     console.error("[site render]", e);
@@ -1089,13 +1179,19 @@ router.get("/website", authenticateToken, async (req, res) => {
       .order("created_at", { ascending: true }).limit(1).maybeSingle();
     const defaultDomain = `${slug}.${SITE_BASE_DOMAIN}`;
     const siteUrl = `https://${dom?.domain || defaultDomain}`;
-    res.json({ success: true, data: { ...shapeWebsite(website), slug, defaultDomain, customDomain: dom?.domain || null, siteUrl } });
+    // Template detection for the Appearance page: when a published
+    // full-document "home" page drives the landing, the theme-only controls
+    // (hero, about, sections, colours) don't affect the site.
+    const { data: home } = await db.schema("mgmt").from("site_pages")
+      .select("content, status, deleted_at").eq("school_id", school.id).eq("slug", "home").maybeSingle();
+    const homeIsDocument = !!(home && home.status === "published" && !home.deleted_at && isFullDocument(home.content));
+    res.json({ success: true, data: { ...shapeWebsite(website), slug, defaultDomain, customDomain: dom?.domain || null, siteUrl, homeIsDocument } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // camelCase (API) → snake_case (DB column) map for the website config.
 const WEBSITE_FIELD_MAP = {
-  enabled: "enabled", mode: "mode", themeId: "theme_id", syncSchoolInfo: "sync_school_info",
+  enabled: "enabled", mode: "mode", themeId: "theme_id", syncSchoolInfo: "sync_school_info", aiChatEnabled: "ai_chat_enabled",
   heroTitle: "hero_title", heroSubtitle: "hero_subtitle", heroImageUrl: "hero_image_url",
   aboutText: "about_text", metaTitle: "meta_title", metaKeywords: "meta_keywords",
   metaDescription: "meta_description", ogImageUrl: "og_image_url",
@@ -1115,6 +1211,9 @@ router.put("/website", authenticateToken, requireRole(SCHOOL_ROLES), async (req,
     for (const [k, col] of Object.entries(WEBSITE_FIELD_MAP)) if (b[k] !== undefined) patch[col] = b[k];
     const { data, error } = await db.schema("edu").from("school_website").update(patch).eq("school_id", school.id).select("*").single();
     if (error) throw new Error(error.message);
+    // Sync AI Bot toggle: add the "AI Chat" page to the site when turned on,
+    // move it to Trash when turned off.
+    if (b.aiChatEnabled !== undefined) await syncAiChatPage(school.id, !!b.aiChatEnabled);
     res.json({ success: true, data: shapeWebsite(data) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

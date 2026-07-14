@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Code2, ExternalLink, Power, Paintbrush, Loader2, RefreshCw } from 'lucide-react';
+import { Globe, Code2, ExternalLink, Power, Paintbrush, Loader2, RefreshCw, Bot } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPut, API } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
@@ -35,6 +35,8 @@ export default function SchoolWebsitePage() {
   const [enabledSaving, setEnabledSaving] = useState(false);
   const [sync, setSync] = useState(false);
   const [syncSaving, setSyncSaving] = useState(false);
+  const [aiBot, setAiBot] = useState(false);
+  const [aiBotSaving, setAiBotSaving] = useState(false);
   const [slug, setSlug] = useState('');
   const [siteUrl, setSiteUrl] = useState('');       // public wildcard/custom-domain URL
 
@@ -45,6 +47,7 @@ export default function SchoolWebsitePage() {
       setSiteUrl(d.siteUrl || '');
       setEnabled(!!d.enabled);
       setSync(!!d.syncSchoolInfo);
+      setAiBot(!!d.aiChatEnabled);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -64,6 +67,16 @@ export default function SchoolWebsitePage() {
     try { await apiPut('/api/school/website', { syncSchoolInfo: val }); }
     catch { setSync(!val); }
     finally { setSyncSaving(false); }
+  };
+
+  // Sync AI Bot: adds the chat widget to every site page + an "AI Chat" page;
+  // turning it off removes the widget and trashes the page.
+  const toggleAiBot = async (val) => {
+    setAiBot(val);
+    setAiBotSaving(true);
+    try { await apiPut('/api/school/website', { aiChatEnabled: val }); }
+    catch { setAiBot(!val); }
+    finally { setAiBotSaving(false); }
   };
 
   return (
@@ -109,6 +122,21 @@ export default function SchoolWebsitePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                 {syncSaving && <Loader2 size={15} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} />}
                 <Toggle on={sync} onChange={toggleSync} />
+              </div>
+            </div>
+          </Card>
+
+          <Card icon={Bot} iconColor="#7C3AED" title="Sync AI Bot">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+              <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.6, maxWidth: 480 }}>
+                When enabled, an AI chat bubble appears on the bottom-right of <b>every page</b> of your public website,
+                and an <b>AI Chat</b> page is added to your site. Students, teachers and admins sign in through the
+                widget and are taken to the school's AI Chat.
+                <span style={{ display: 'block', marginTop: 4, color: MUTED2, fontSize: 11.5 }}>Turning it off removes the widget and moves the AI Chat page to Trash. Saves instantly.</span>
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                {aiBotSaving && <Loader2 size={15} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} />}
+                <Toggle on={aiBot} onChange={toggleAiBot} />
               </div>
             </div>
           </Card>

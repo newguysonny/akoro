@@ -61,6 +61,7 @@ export default function AppearancePage() {
   const [saved, setSaved] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewing, setPreviewing] = useState(false);
+  const [templateActive, setTemplateActive] = useState(false); // full-doc home page drives the site
   const [f, setF] = useState({
     heroTitle: '', heroSubtitle: '', aboutText: '',
     metaTitle: '', metaKeywords: '', metaDescription: '',
@@ -85,6 +86,7 @@ export default function AppearancePage() {
         socialLinks: d.socialLinks || {}, sections: (Array.isArray(d.sections) && d.sections.length) ? d.sections : DEFAULT_SECTIONS,
         customCss: d.customCss || '',
       }));
+      setTemplateActive(!!d.homeIsDocument);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -128,6 +130,17 @@ export default function AppearancePage() {
         <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {/* Left: panels */}
           <div style={{ flex: '1 1 380px', minWidth: 320, maxWidth: 480, maxHeight: 'calc(100vh - 170px)', overflowY: 'auto', paddingRight: 4 }}>
+            {templateActive && (
+              <div style={{ background: `${BLUE}0C`, border: `1px solid ${BLUE}33`, borderRadius: 12, padding: '13px 16px', marginBottom: 14, fontFamily: FONT }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 4 }}>🎨 A template is powering your site</div>
+                <p style={{ fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.6 }}>
+                  Your pages come from the active template, so the theme's Hero, About, Sections and Colors don't apply —
+                  edit your pages in <b>Website Builder → Pages</b> instead. Tracking scripts and Custom CSS below are
+                  injected into <b>every template page</b>.
+                </p>
+              </div>
+            )}
+            {!templateActive && (<>
             <Card icon={Star} iconColor="#F59E0B" title="Hero Section">
               <Field label="Hero Title" hint="Leave blank to use school name"><input value={f.heroTitle} onChange={set('heroTitle')} placeholder="Welcome to our school" style={inputStyle} /></Field>
               <Field label="Hero Subtitle"><textarea rows={2} value={f.heroSubtitle} onChange={set('heroSubtitle')} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} /></Field>
@@ -136,6 +149,7 @@ export default function AppearancePage() {
             <Card icon={Info} iconColor={BLUE} title="About Section">
               <Field label="About Your School"><textarea rows={4} value={f.aboutText} onChange={set('aboutText')} placeholder="Tell visitors about your school, mission, and values…" style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} /></Field>
             </Card>
+            </>)}
 
             <Card icon={Search} iconColor={GREEN} title="SEO Settings">
               <Field label="Meta Title"><input value={f.metaTitle} onChange={set('metaTitle')} style={inputStyle} /></Field>
@@ -148,12 +162,14 @@ export default function AppearancePage() {
               <Field label="Footer Scripts (before </body>)" hint="Chat widgets, custom JavaScript."><textarea rows={3} value={f.footerScripts} onChange={set('footerScripts')} placeholder="<!-- Tawk.to, Crisp, custom JS -->" style={{ ...inputStyle, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} /></Field>
             </Card>
 
+            {!templateActive && (
             <Card icon={Droplet} iconColor="#0EA5E9" title="Color Theme">
               <ColorField label="Primary Color" value={f.primaryColor} onChange={(v) => setF((p) => ({ ...p, primaryColor: v }))} />
               <ColorField label="Secondary Color" value={f.secondaryColor} onChange={(v) => setF((p) => ({ ...p, secondaryColor: v }))} />
               <ColorField label="Accent Color" value={f.accentColor} onChange={(v) => setF((p) => ({ ...p, accentColor: v }))} />
               <Field label="Background Mode"><select value={f.bgMode} onChange={set('bgMode')} style={{ ...inputStyle, maxWidth: 200, cursor: 'pointer' }}><option>Light</option><option>Dark</option><option>Auto</option></select></Field>
             </Card>
+            )}
 
             <Card icon={Share2} iconColor="#EC4899" title="Social Links">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -166,6 +182,7 @@ export default function AppearancePage() {
               </div>
             </Card>
 
+            {!templateActive && (
             <Card icon={Layers} iconColor="#F59E0B" title="Sections">
               <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 12px', fontFamily: FONT }}>Uncheck to hide a section from the home page.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -178,6 +195,7 @@ export default function AppearancePage() {
                 ))}
               </div>
             </Card>
+            )}
 
             <Card icon={Braces} iconColor={MUTED} title="Custom CSS">
               <textarea rows={5} value={f.customCss} onChange={set('customCss')} placeholder="/* Advanced: custom CSS overrides */" style={{ ...inputStyle, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }} />
