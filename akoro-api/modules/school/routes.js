@@ -1239,7 +1239,7 @@ router.post("/site/ai-login", async (req, res) => {
     // token: the portal exchanges it for a session on its OWN origin, so the
     // login survives even when third-party cookies are partitioned/blocked.
     const handoff = signHandoff(user.id);
-    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${SCHOOL_PORTAL_URL}/chat?ai=${encodeURIComponent(handoff)}` });
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${SCHOOL_PORTAL_URL}/ai-chat?ai=${encodeURIComponent(handoff)}` });
   } catch (e) {
     console.error("[ai-login]", e);
     res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });

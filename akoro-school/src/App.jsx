@@ -15,6 +15,7 @@ import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
+import AiChatPage   from './pages/AiChatPage.jsx';
 import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import MarketplacePage     from './pages/MarketplacePage.jsx';
@@ -196,6 +197,8 @@ function AppRoutes() {
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute anyRole><ChatPage /></ProtectedRoute>} />
+      {/* Standalone AI chat opened from the public website — no sidebar/chrome */}
+      <Route path="/ai-chat" element={<ProtectedRoute anyRole><AiChatPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<Navigate to="/settings-billing" replace />} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
