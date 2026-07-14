@@ -20,7 +20,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole, issueTokenPair } from "../auth/routes.js";
 import {
   initializeTransaction,
   verifyTransaction,
@@ -907,18 +907,25 @@ function aiChatWidgetHtml(apiOrigin) {
   ovl.addEventListener('click',function(e){if(e.target===ovl)close();});
   var roleBtns=root.querySelectorAll('.ak-ai-roles button');
   for(var i=0;i<roleBtns.length;i++){roleBtns[i].addEventListener('click',function(){for(var j=0;j<roleBtns.length;j++)roleBtns[j].classList.remove('on');this.classList.add('on');});}
+  function selectedRole(){for(var k=0;k<roleBtns.length;k++){if(roleBtns[k].classList.contains('on'))return roleBtns[k].getAttribute('data-r');}return 'student';}
   document.getElementById('ak-ai-go').addEventListener('click',function(){
     var em=document.getElementById('ak-ai-em').value.trim(), pw=document.getElementById('ak-ai-pw').value;
     var err=document.getElementById('ak-ai-err'); err.style.display='none';
-    if(!em||!pw){err.textContent='Enter your email and password.';err.style.display='block';return;}
+    if(!em){err.textContent='Enter your email address.';err.style.display='block';return;}
+    if(!pw){err.textContent='Enter your password.';err.style.display='block';return;}
     var btn=this; btn.disabled=true; btn.textContent='Signing in…';
-    fetch(API+'/api/auth/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})})
-      .then(function(r){return r.json().catch(function(){return {};}).then(function(d){return {ok:r.ok,d:d};});})
-      .then(function(res){
-        if(res.ok){window.location.href=PORTAL+'/chat';}
-        else{err.textContent=(res.d&&(res.d.message||res.d.error))||'Sign-in failed. Check your details.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';}
+    fetch(API+'/api/school/site/ai-login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:location.hostname,email:em,password:pw,role:selectedRole()})})
+      .then(function(r){return r.json().catch(function(){return {};});})
+      .then(function(d){
+        if(d&&d.success){
+          var first=((d.name||'').split(' ')[0])||'there';
+          document.getElementById('ak-ai-card').innerHTML='<div style="text-align:center;padding:18px 6px"><div style="font-size:42px;margin-bottom:10px">✅</div><h3>Welcome, '+first+'!</h3><p style="margin-top:6px">Signed in as '+(d.role||'member')+' · opening your AI assistant…</p></div>';
+          setTimeout(function(){window.location.href=d.redirect;},1000);
+        } else {
+          err.textContent=(d&&d.message)||'Sign-in failed. Please check your details.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';
+        }
       })
-      .catch(function(){err.textContent='Could not reach the server. Try again.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';});
+      .catch(function(){err.textContent='Could not reach the server. Please try again.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';});
   });
   if(/^\\/ai-chat\\/?$/.test(window.location.pathname)) open();
 })();</script>`;
@@ -1175,6 +1182,66 @@ router.get("/site/by-host", async (req, res) => {
   } catch (e) {
     console.error("[site render by-host]", e);
     res.status(500).type("html").send("<h1>Something went wrong rendering this page.</h1>");
+  }
+});
+
+// ── POST /api/school/site/ai-login  (PUBLIC — gated AI-chat sign-in) ─────────
+// The website's floating AI bot signs a visitor in ONLY if they belong to the
+// school whose site they're on. Returns clear, role-aware messages so the
+// widget can tell the visitor exactly what went wrong. On success it issues
+// the shared session cookie and returns where to open the AI chat:
+//   student → the learner app;  teacher / admin → the school portal.
+const LEARNER_APP_URL = (process.env.FRONTEND_URL || process.env.MAIN_SITE_URL || "https://akoro.name.ng").replace(/\/$/, "");
+const roleLabel = { admin: "an admin", teacher: "a teacher", student: "a student" };
+router.post("/site/ai-login", async (req, res) => {
+  try {
+    const { host, email, password, role: wantRole } = req.body || {};
+    const school = await resolveSchoolByHost(host);
+    if (!school) return res.status(404).json({ success: false, code: "no_school", message: "This website isn't connected to a school yet." });
+
+    const { data: user } = await db.from("users").select("*").eq("email", String(email || "").toLowerCase().trim()).maybeSingle();
+    if (!user) return res.status(401).json({ success: false, code: "no_user", message: "No Akoro account uses that email. Check the address or ask your school to add you." });
+
+    const ok = await bcrypt.compare(String(password || ""), user.password_hash || "");
+    if (!ok) return res.status(401).json({ success: false, code: "bad_password", message: "Incorrect password. Please try again." });
+
+    if (user.deleted_at) return res.status(403).json({ success: false, code: "inactive", message: "This account has been deleted." });
+    if (!user.is_active)  return res.status(403).json({ success: false, code: "inactive", message: "This account is deactivated. Sign in on the portal to reactivate it." });
+
+    // Membership in THIS school decides the actual role.
+    let actualRole = null;
+    if (user.id === school.admin_user_id) actualRole = "admin";
+    if (!actualRole) {
+      const { data: t } = await db.from("school_teachers").select("teacher_id").eq("school_id", school.id).eq("teacher_id", user.id).maybeSingle();
+      if (t) actualRole = "teacher";
+    }
+    if (!actualRole) {
+      const cids = await classroomIds(school.id);
+      if (cids.length) {
+        const { data: cs } = await db.from("classroom_students").select("id").eq("user_id", user.id).in("classroom_id", cids).limit(1).maybeSingle();
+        if (cs) actualRole = "student";
+      }
+    }
+    if (!actualRole) {
+      return res.status(403).json({ success: false, code: "not_member", message: `This account isn't a student, teacher or admin at ${school.name}. Only members of the school can use its AI assistant.` });
+    }
+
+    // If they picked a tab that doesn't match their membership, say so.
+    if (wantRole && wantRole !== actualRole) {
+      return res.status(403).json({ success: false, code: "role_mismatch", message: `That email is registered as ${roleLabel[actualRole]} at ${school.name}, not ${roleLabel[wantRole] || "that role"}. Switch the tab and try again.` });
+    }
+
+    // Two-factor accounts can't complete the short widget flow.
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      return res.status(403).json({ success: false, code: "twofa", message: "This account uses two-factor authentication. Please sign in on the portal instead." });
+    }
+
+    await issueTokenPair(res, user);
+    const redirect = actualRole === "student" ? `${LEARNER_APP_URL}/app` : `${SCHOOL_PORTAL_URL}/chat`;
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect });
+  } catch (e) {
+    console.error("[ai-login]", e);
+    res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });
   }
 });
 

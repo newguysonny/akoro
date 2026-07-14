@@ -160,6 +160,10 @@ function clearAuthCookies(res) {
   res.clearCookie("akoro_refresh", { path: "/api/auth/refresh" });
 }
 export { clearAuthCookies };
+// Issue an authenticated session (sets access+refresh cookies). Exported so
+// other modules (e.g. the school website's gated AI-chat login) can sign a
+// user in without duplicating the cookie/token plumbing. Defined below.
+export { issueTokenPair };
 
 /**
  * Revoke the access token on the current request (deny-list its jti) and
