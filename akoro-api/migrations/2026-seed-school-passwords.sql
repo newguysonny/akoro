@@ -5,9 +5,29 @@
 -- Priya2026), hashed with pgcrypto's bcrypt (verified by the Node bcrypt at
 -- login). Only the demo school's own members are touched. Idempotent.
 --
---   Admin   : school@demo.akoro.app                 → Admin2026
---   Teachers: teacher1..6@demo.akoro.app            → <FirstName>2026
---   Students: stu.<class><n>@demo.akoro.app         → <FirstName>2026
+-- Exact test credentials (password is the FIRST NAME + 2026):
+--   ADMIN
+--     school@demo.akoro.app        Admin2026
+--   TEACHERS
+--     teacher1@demo.akoro.app      Amara2026
+--     teacher2@demo.akoro.app      Tobi2026
+--     teacher3@demo.akoro.app      Ngozi2026
+--     teacher4@demo.akoro.app      Chidi2026
+--     teacher5@demo.akoro.app      Fatima2026
+--     teacher6@demo.akoro.app      Emeka2026
+--   STUDENTS  (assigned by email order)
+--     stu.jss11@demo.akoro.app     Priya2026
+--     stu.jss12@demo.akoro.app     Amara2026
+--     stu.jss21@demo.akoro.app     Chidi2026
+--     stu.jss22@demo.akoro.app     Amina2026
+--     stu.jss31@demo.akoro.app     Tunde2026
+--     stu.jss32@demo.akoro.app     Ngozi2026
+--     stu.ss11@demo.akoro.app      Emeka2026
+--     stu.ss12@demo.akoro.app      Zainab2026
+--     stu.ss21@demo.akoro.app      Bola2026
+--     stu.ss22@demo.akoro.app      Kunle2026
+--     stu.ss31@demo.akoro.app      Fatima2026
+--     stu.ss32@demo.akoro.app      David2026
 -- =============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
@@ -37,14 +57,15 @@ BEGIN
     FROM public.school_teachers st
    WHERE st.school_id = v_school AND st.teacher_id = u.id;
 
-  -- Students → assign a real first name (keep their class suffix) + FirstName2026
+  -- Students → assign a real first name (keep their class suffix) + FirstName2026.
+  -- Ordered by EMAIL so the mapping is stable and predictable (see table below).
   FOR r IN
-    SELECT DISTINCT u.id, u.full_name
+    SELECT DISTINCT u.id, u.email, u.full_name
     FROM public.users u
     JOIN public.classroom_students cs ON cs.user_id = u.id
     JOIN public.classrooms c          ON c.id = cs.classroom_id
     WHERE c.school_id = v_school AND u.role = 'student'
-    ORDER BY u.id
+    ORDER BY u.email
   LOOP
     i := i + 1;
     UPDATE public.users
