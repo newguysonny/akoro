@@ -68,7 +68,9 @@ export default function AppearancePage() {
     headerScripts: '', footerScripts: '',
     primaryColor: '#1a56db', secondaryColor: '#6b7280', accentColor: '#f59e0b', bgMode: 'Light',
     socialLinks: {}, sections: DEFAULT_SECTIONS, customCss: '',
+    templateColors: {},
   });
+  const [tplVars, setTplVars] = useState([]);   // the active template's own CSS colour variables
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const setSoc = (k) => (e) => setF((p) => ({ ...p, socialLinks: { ...p.socialLinks, [k]: e.target.value } }));
   const toggleSection = (key) => setF((p) => ({ ...p, sections: p.sections.map((s) => (s.key === key ? { ...s, on: !s.on } : s)) }));
@@ -85,8 +87,10 @@ export default function AppearancePage() {
         accentColor: d.accentColor || p.accentColor, bgMode: d.bgMode || 'Light',
         socialLinks: d.socialLinks || {}, sections: (Array.isArray(d.sections) && d.sections.length) ? d.sections : DEFAULT_SECTIONS,
         customCss: d.customCss || '',
+        templateColors: d.templateColors || {},
       }));
       setTemplateActive(!!d.homeIsDocument);
+      setTplVars(Array.isArray(d.templateColorVars) ? d.templateColorVars : []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -109,6 +113,7 @@ export default function AppearancePage() {
         headerScripts: f.headerScripts, footerScripts: f.footerScripts,
         primaryColor: f.primaryColor, secondaryColor: f.secondaryColor, accentColor: f.accentColor, bgMode: f.bgMode,
         socialLinks: f.socialLinks, sections: f.sections, customCss: f.customCss,
+        templateColors: f.templateColors,
       });
       setSaved(true); setTimeout(() => setSaved(false), 2000);
     } catch { /* ignore */ }
@@ -139,6 +144,29 @@ export default function AppearancePage() {
                   injected into <b>every template page</b>.
                 </p>
               </div>
+            )}
+            {templateActive && tplVars.length > 0 && (
+              <Card icon={Droplet} iconColor="#0EA5E9" title="Brand Colors">
+                <p style={{ fontSize: 12, color: MUTED2, margin: '0 0 12px', fontFamily: FONT }}>
+                  Your template's colour palette — change these to match your school's brand. Applies to every page.
+                </p>
+                {tplVars.map((v) => {
+                  const current = f.templateColors[v.name] || v.value;
+                  // <input type=color> needs #rrggbb — expand shorthand hex for the picker.
+                  const hex6 = /^#[0-9a-fA-F]{3}$/.test(current) ? `#${current.slice(1).split('').map((c) => c + c).join('')}` : current;
+                  const label = v.name.replace(/^--/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                  return (
+                    <ColorField key={v.name} label={label}
+                      value={/^#[0-9a-fA-F]{6}$/.test(hex6) ? hex6 : '#000000'}
+                      onChange={(val) => setF((p) => ({ ...p, templateColors: { ...p.templateColors, [v.name]: val } }))} />
+                  );
+                })}
+                {Object.keys(f.templateColors).length > 0 && (
+                  <button onClick={() => setF((p) => ({ ...p, templateColors: {} }))} style={{ marginTop: 4, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                    Reset to template colours
+                  </button>
+                )}
+              </Card>
             )}
             {!templateActive && (<>
             <Card icon={Star} iconColor="#F59E0B" title="Hero Section">

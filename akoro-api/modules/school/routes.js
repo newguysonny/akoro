@@ -804,7 +804,7 @@ async function getWebsiteConfig(schoolId) {
   return created;
 }
 const shapeWebsite = (w) => ({
-  enabled: w.enabled, mode: w.mode, themeId: w.theme_id, syncSchoolInfo: !!w.sync_school_info, aiChatEnabled: !!w.ai_chat_enabled,
+  enabled: w.enabled, mode: w.mode, themeId: w.theme_id, syncSchoolInfo: !!w.sync_school_info, aiChatEnabled: !!w.ai_chat_enabled, templateColors: w.template_colors || {},
   heroTitle: w.hero_title, heroSubtitle: w.hero_subtitle, heroImageUrl: w.hero_image_url,
   aboutText: w.about_text, metaTitle: w.meta_title, metaKeywords: w.meta_keywords,
   metaDescription: w.meta_description, ogImageUrl: w.og_image_url,
@@ -859,6 +859,28 @@ async function buildSiteMenus(schoolId) {
 // A page whose content is a whole HTML document is served as-is (its own
 // header/footer/styles) rather than wrapped in the builder chrome.
 const isFullDocument = (c) => /^\s*(<!doctype html|<html[\s>])/i.test(c || "");
+
+// The active template's editable brand colours: CSS custom properties found in
+// the home document's :root block whose values look like colours.
+function parseTemplateColorVars(doc) {
+  const out = [];
+  const root = String(doc || "").match(/:root\s*{([^}]*)}/);
+  if (!root) return out;
+  for (const m of root[1].matchAll(/(--[a-zA-Z0-9_-]+)\s*:\s*([^;]+)/g)) {
+    const value = m[2].trim();
+    if (/^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()/.test(value)) out.push({ name: m[1], value });
+  }
+  return out;
+}
+
+// Per-school overrides for those variables, injected after the template's own
+// styles so they win — this is how each school brands a shared template.
+function templateColorStyle(colors) {
+  const entries = Object.entries(colors || {}).filter(([k, v]) => /^--[a-zA-Z0-9_-]+$/.test(k) && /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\))$/.test(String(v).trim()));
+  if (!entries.length) return "";
+  return `<style data-akoro-brand>:root{${entries.map(([k, v]) => `${k}:${String(v).trim()}`).join(";")}}</style>`;
+}
+
 
 // ── AI chat widget (Sync AI Bot) ─────────────────────────────────────────────
 // Injected on every rendered site page when website.ai_chat_enabled: a
@@ -1006,6 +1028,7 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOr
     let html = raw;
     if (isFullDocument(html)) {
       const headBits = [
+        templateColorStyle(website.template_colors),
         website.custom_css ? `<style>${website.custom_css}</style>` : "",
         website.header_scripts || "",
       ].filter(Boolean).join("\n");
@@ -1096,9 +1119,17 @@ router.post("/website/preview-site", authenticateToken, requireRole(SCHOOL_ROLES
       // preview shows what visitors actually see, not the stale theme page.
       const { data: home } = await db.schema("mgmt").from("site_pages")
         .select("title, content, status, deleted_at").eq("school_id", school.id).eq("slug", "home").maybeSingle();
-      html = (home && home.status === "published" && !home.deleted_at)
-        ? (isFullDocument(home.content) ? home.content : renderSitePage(draft, ctx, home, { hideTitle: true }))
-        : renderThemePage(draft, ctx);
+      if (home && home.status === "published" && !home.deleted_at) {
+        if (isFullDocument(home.content)) {
+          html = home.content;
+          const brand = templateColorStyle(draft.template_colors);
+          if (brand) html = html.includes("</head>") ? html.replace("</head>", `${brand}\n</head>`) : brand + html;
+        } else {
+          html = renderSitePage(draft, ctx, home, { hideTitle: true });
+        }
+      } else {
+        html = renderThemePage(draft, ctx);
+      }
     }
     res.json({ success: true, html });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1185,13 +1216,14 @@ router.get("/website", authenticateToken, async (req, res) => {
     const { data: home } = await db.schema("mgmt").from("site_pages")
       .select("content, status, deleted_at").eq("school_id", school.id).eq("slug", "home").maybeSingle();
     const homeIsDocument = !!(home && home.status === "published" && !home.deleted_at && isFullDocument(home.content));
-    res.json({ success: true, data: { ...shapeWebsite(website), slug, defaultDomain, customDomain: dom?.domain || null, siteUrl, homeIsDocument } });
+    const templateColorVars = homeIsDocument ? parseTemplateColorVars(home.content) : [];
+    res.json({ success: true, data: { ...shapeWebsite(website), slug, defaultDomain, customDomain: dom?.domain || null, siteUrl, homeIsDocument, templateColorVars } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // camelCase (API) → snake_case (DB column) map for the website config.
 const WEBSITE_FIELD_MAP = {
-  enabled: "enabled", mode: "mode", themeId: "theme_id", syncSchoolInfo: "sync_school_info", aiChatEnabled: "ai_chat_enabled",
+  enabled: "enabled", mode: "mode", themeId: "theme_id", syncSchoolInfo: "sync_school_info", aiChatEnabled: "ai_chat_enabled", templateColors: "template_colors",
   heroTitle: "hero_title", heroSubtitle: "hero_subtitle", heroImageUrl: "hero_image_url",
   aboutText: "about_text", metaTitle: "meta_title", metaKeywords: "meta_keywords",
   metaDescription: "meta_description", ogImageUrl: "og_image_url",

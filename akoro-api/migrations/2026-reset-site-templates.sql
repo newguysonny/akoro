@@ -1,24 +1,31 @@
 -- =============================================================
 -- 2026-reset-site-templates.sql
--- Website builder reset: remove every default/sample website template row
--- from the database (per-school clones of the old shared gallery + seeded
--- demo templates). Schools' own uploaded templates (any other name) are
--- untouched. The gallery is rebuilt in code from the new Vista template
--- (defaultTemplates/vista.json), whose import creates full-fidelity pages.
--- Idempotent (plain DELETEs).
+-- Website builder reset: remove dead default/sample website template rows.
+-- Schema migrations re-run on EVERY deploy, so this must never touch a
+-- template a school has (re)installed from the current gallery:
+--   • Chrisland / Classic / demo-templates — old samples, always removed.
+--   • Vista — remove only OLD broken clones (their import payload pages were
+--     stripped body fragments); the current gallery's clones store pages as
+--     full <!doctype html> documents and are preserved. This is what keeps a
+--     school's ACTIVE template intact across deploys.
+-- Schools' own uploaded templates (any other name) are untouched.
 -- =============================================================
 
 DELETE FROM edu.school_website_templates
 WHERE name IN (
-  'Vista Charter — School Site',
   'Chrisland Schools — School Site',
   'Classic School Site',
   'demo-templates'
 );
 
+DELETE FROM edu.school_website_templates
+WHERE name = 'Vista Charter — School Site'
+  AND (
+    import_payload IS NULL
+    OR import_payload->'pages'->0->>'content' NOT ILIKE '<!doctype html%'
+  );
+
 -- Remove the old hardcoded sample custom domain the demo seed used to insert.
--- Real domains are added by schools in Settings → Domain; the base domain is
--- derived from FRONTEND_URL, never stored.
 DELETE FROM edu.school_domains WHERE domain = 'www.akorodemoacademy.com';
 
 NOTIFY pgrst, 'reload schema';
