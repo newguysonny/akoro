@@ -131,6 +131,26 @@ function verifyToken(token) {
   });
 }
 
+// Short-lived (2 min) hand-off token — used to carry an authenticated identity
+// across a top-level navigation to a different app domain (e.g. the public
+// school site's AI-chat login → the school portal), where a cross-site cookie
+// set during the widget fetch may be partitioned/blocked. The destination app
+// exchanges it for a real session on its OWN origin. Exported for the school
+// module.
+const signHandoff = (userId) => {
+  const payload = { sub: userId, type: "ai_handoff", iss: JWT_ISSUER, aud: JWT_AUDIENCE };
+  return USE_RSA
+    ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: 120 })
+    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: 120 });
+};
+const verifyHandoff = (token) => {
+  try {
+    const d = verifyToken(token);
+    return d && d.type === "ai_handoff" ? d.sub : null;
+  } catch { return null; }
+};
+export { signHandoff, verifyHandoff };
+
 // ─── § COOKIE HELPERS ─────────────────────────────────────────────────────────
 
 const IS_PROD = process.env.NODE_ENV === "production";

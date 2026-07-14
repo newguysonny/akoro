@@ -118,8 +118,12 @@ import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
 const INSTRUCTOR_ROLES = ['school', 'school_admin', 'instructor', 'admin'];
 
 function ProtectedRoute({ children, anyRole = false }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, booting } = useAuth();
   const location = useLocation();
+  // Exchanging an AI-chat hand-off token — wait rather than bounce to /signin.
+  if (booting) {
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, system-ui, sans-serif', color: '#6B6B80' }}>Signing you in…</div>;
+  }
   if (!isAuthenticated) {
     localStorage.setItem('akoro_redirect', location.pathname + location.search);
     return <Navigate to="/signin" replace />;

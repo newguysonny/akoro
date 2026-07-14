@@ -20,7 +20,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../db.js";
-import { authenticateToken, requireRole, issueTokenPair } from "../auth/routes.js";
+import { authenticateToken, requireRole, issueTokenPair, signHandoff, verifyHandoff } from "../auth/routes.js";
 import {
   initializeTransaction,
   verifyTransaction,
@@ -1235,12 +1235,31 @@ router.post("/site/ai-login", async (req, res) => {
       return res.status(403).json({ success: false, code: "twofa", message: "This account uses two-factor authentication. Please sign in on the portal instead." });
     }
 
-    await issueTokenPair(res, user);
-    // Everyone opens the same school AI chat.
-    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${SCHOOL_PORTAL_URL}/chat` });
+    // Redirect to the school portal's AI chat, carrying a short-lived hand-off
+    // token: the portal exchanges it for a session on its OWN origin, so the
+    // login survives even when third-party cookies are partitioned/blocked.
+    const handoff = signHandoff(user.id);
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${SCHOOL_PORTAL_URL}/chat?ai=${encodeURIComponent(handoff)}` });
   } catch (e) {
     console.error("[ai-login]", e);
     res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });
+  }
+});
+
+// ── POST /api/school/site/ai-login/exchange  (PUBLIC — hand-off → session) ──
+// Called by the school portal from its OWN origin with the hand-off token from
+// the AI-chat login redirect. Verifies it and issues the real session cookie.
+router.post("/site/ai-login/exchange", async (req, res) => {
+  try {
+    const userId = verifyHandoff(String(req.body?.token || ""));
+    if (!userId) return res.status(401).json({ success: false, message: "This sign-in link expired. Please sign in again." });
+    const { data: user } = await db.from("users").select("*").eq("id", userId).maybeSingle();
+    if (!user || user.deleted_at || !user.is_active) return res.status(403).json({ success: false, message: "Account unavailable." });
+    await issueTokenPair(res, user);
+    res.json({ success: true });
+  } catch (e) {
+    console.error("[ai-login exchange]", e);
+    res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
   }
 });
 

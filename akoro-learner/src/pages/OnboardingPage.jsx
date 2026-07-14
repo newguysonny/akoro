@@ -16,7 +16,7 @@ const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemi
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
-  const { user, markOnboarded } = useAuth();
+  const { user, markOnboarded, logout } = useAuth();
   const { displayMode, accentColor, setMode, setAccent } = useTheme();
   const { language, setLanguage, t } = useLang();
 
@@ -127,6 +127,8 @@ export default function OnboardingPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', background: 'var(--ak-bg)', padding: '24px 20px', fontFamily: "'Nunito',sans-serif" }}>
+      {/* Escape hatch: never get stuck on onboarding */}
+      <button onClick={logout} style={{ position: 'fixed', top: 16, right: 18, zIndex: 50, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.12)', background: 'rgba(255,255,255,0.92)', color: '#6B6B80', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Log out</button>
 
       {/* Brand + progress */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>

@@ -11,15 +11,20 @@
 -- Schools' own uploaded templates (any other name) are untouched.
 -- =============================================================
 
+-- Never delete a template a school currently has ACTIVE (is_active): this
+-- migration re-runs on every deploy, and deleting the active template is what
+-- was resetting schools' sites. Only inactive dead artefacts are removed.
 DELETE FROM edu.school_website_templates
-WHERE name IN (
-  'Chrisland Schools — School Site',
-  'Classic School Site',
-  'demo-templates'
-);
+WHERE is_active = false
+  AND name IN (
+    'Chrisland Schools — School Site',
+    'Classic School Site',
+    'demo-templates'
+  );
 
 DELETE FROM edu.school_website_templates
-WHERE name = 'Vista Charter — School Site'
+WHERE is_active = false
+  AND name = 'Vista Charter — School Site'
   AND (
     import_payload IS NULL
     OR import_payload->'pages'->0->>'content' NOT ILIKE '<!doctype html%'

@@ -42,6 +42,11 @@ async function authFetch(path, body) {
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(getStoredUser);
   const [loading, setLoading] = useState(false);
+  // True while we exchange an AI-chat hand-off token (?ai=) from the public
+  // school website for a session — routing waits so it doesn't bounce to /signin.
+  const [booting, setBooting] = useState(() => {
+    try { return new URLSearchParams(window.location.search).has('ai'); } catch { return false; }
+  });
   const [error,   setError]   = useState(null);
 
   const isAuthenticated = !!user;
@@ -125,13 +130,37 @@ export function AuthProvider({ children }) {
     if (userObj) saveUser(userObj);
   }, [saveUser]);
 
-  // Verify session on mount
-  useEffect(() => {
-    if (!getStoredUser()) return;
+  const loadMe = useCallback(() =>
     fetch(`${API}/api/auth/me`, { credentials: 'include' })
       .then(async (r) => { const t = await r.text(); try { return t ? JSON.parse(t) : {}; } catch { return {}; } })
-      .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
-      .catch(() => refresh());
+      .then(({ data }) => { if (data?.id) { saveUser(data); return true; } clearUser(); return false; })
+      .catch(() => false),
+  [saveUser, clearUser]);
+
+  // Verify session on mount. An AI-chat hand-off (?ai=<token>) from the public
+  // school website is exchanged HERE (on the portal's own origin) for a real
+  // session cookie, then the URL is cleaned.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const handoff = params.get('ai');
+    if (handoff) {
+      fetch(`${API}/api/school/site/ai-login/exchange`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: handoff }),
+      })
+        .then((r) => (r.ok ? loadMe() : false))
+        .catch(() => false)
+        .finally(() => {
+          params.delete('ai');
+          const q = params.toString();
+          window.history.replaceState({}, '', window.location.pathname + (q ? `?${q}` : ''));
+          setBooting(false);
+        });
+      return;
+    }
+    if (!getStoredUser()) return;
+    loadMe().then((ok) => { if (!ok) refresh(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Proactive refresh every 13 minutes (access token TTL = 15 min)
@@ -143,7 +172,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, error, isAuthenticated,
+      user, loading, error, isAuthenticated, booting,
       login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
