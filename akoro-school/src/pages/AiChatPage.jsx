@@ -5,10 +5,11 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2 } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader } from 'lucide-react';
 import { apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, FONT } from '../constants.js';
+import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?";
 
@@ -21,15 +22,45 @@ export default function AiChatPage() {
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
 
+  // Attachment modal (Photo/Image OCR · Upload file · Upload document)
+  const [attachMenu, setAttachMenu]   = useState(false);
+  const [attachModal, setAttachModal] = useState(false);
+  const [attachType, setAttachType]   = useState('ocr'); // 'ocr' | 'file' | 'doc'
+  const [ocrText, setOcrText]         = useState('');
+  const [ocrRunning, setOcrRunning]   = useState(false);
+  const [ocrError, setOcrError]       = useState('');
+  const [attachFile, setAttachFile]   = useState(null);
+
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
-  const send = useCallback(async () => {
-    const body = text.trim();
+  const openAttach = (type) => { setAttachType(type); setAttachModal(true); setAttachMenu(false); setOcrText(''); setOcrError(''); setAttachFile(null); };
+
+  const handleOcrUploaded = useCallback(async ({ id }) => {
+    setOcrRunning(true); setOcrError('');
+    try {
+      const { pollOcr } = await import('../services/uploadApi.js');
+      const txt = await pollOcr(id);
+      setOcrText(txt || '');
+    } catch (err) {
+      setOcrError(err.message || 'Could not extract text from that image.');
+    } finally { setOcrRunning(false); }
+  }, []);
+
+  const handleAttachUploaded = useCallback(({ fileUrl, fileName }) => {
+    setAttachFile({ fileUrl, fileName });
+  }, []);
+
+  const ATTACH_ITEMS = [
+    { type: 'ocr', icon: <Camera size={15} color={GREEN} />,   label: 'Photo / Image OCR', desc: 'Scan & extract text' },
+    { type: 'file', icon: <Upload size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
+    { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
+  ];
+
+  const ask = useCallback(async (body) => {
     if (!body || busy) return;
-    setText('');
+    setBusy(true);
     const next = [...messages, { from: 'me', text: body }];
     setMessages(next);
-    setBusy(true);
     try {
       const history = next.map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text })).slice(-8);
       const data = await apiPost('/api/adaptive/chat/tutor', {
@@ -39,7 +70,28 @@ export default function AiChatPage() {
     } catch {
       setMessages((p) => [...p, { from: 'agent', text: 'Sorry — I had trouble responding just now. Please try again.' }]);
     } finally { setBusy(false); }
-  }, [text, busy, messages, isStudent]);
+  }, [busy, messages, isStudent]);
+
+  const send = useCallback(() => {
+    const body = text.trim();
+    if (!body || busy) return;
+    setText('');
+    ask(body);
+  }, [text, busy, ask]);
+
+  const sendAttachment = useCallback(() => {
+    let body = '';
+    if (attachType === 'ocr') {
+      if (!ocrText.trim()) return;
+      body = `Here's text I scanned from an image — please help me with it:\n\n${ocrText.trim()}`;
+    } else {
+      if (!attachFile) return;
+      body = `I've attached a ${attachType === 'doc' ? 'document' : 'file'}: ${attachFile.fileName}\n${attachFile.fileUrl}\n\nPlease take a look and help me with it.`;
+    }
+    setAttachModal(false);
+    setOcrText(''); setAttachFile(null); setOcrError('');
+    ask(body);
+  }, [attachType, ocrText, attachFile, ask]);
 
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
 
@@ -89,6 +141,28 @@ export default function AiChatPage() {
       {/* Composer */}
       <div style={{ flexShrink: 0, padding: '12px 16px', background: WHITE, borderTop: `1px solid ${BORDER}` }}>
         <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+          {/* Attachment + menu */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            {attachMenu && (
+              <>
+                <div onClick={() => setAttachMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
+                <div style={{ position: 'absolute', bottom: 52, left: 0, zIndex: 11, width: 240, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,.14)', overflow: 'hidden' }}>
+                  {ATTACH_ITEMS.map((it) => (
+                    <button key={it.type} onClick={() => openAttach(it.type)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 13px', border: 'none', borderBottom: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 8, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{it.icon}</span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: INK }}>{it.label}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: MUTED2 }}>{it.desc}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <button onClick={() => setAttachMenu((v) => !v)} title="Attach" style={{ width: 44, height: 44, borderRadius: 12, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Plus size={20} style={{ transform: attachMenu ? 'rotate(45deg)' : 'none', transition: 'transform .15s' }} />
+            </button>
+          </div>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -103,6 +177,40 @@ export default function AiChatPage() {
         </div>
         <p style={{ maxWidth: 760, margin: '8px auto 0', fontSize: 10.5, color: MUTED2, textAlign: 'center' }}>AI can make mistakes — check important information.</p>
       </div>
+
+      {/* Attachment modal */}
+      <Modal
+        open={attachModal}
+        onClose={() => setAttachModal(false)}
+        title={attachType === 'ocr' ? '📷 Photo / Image OCR' : attachType === 'doc' ? '📄 Upload Document' : '📎 Upload File'}
+      >
+        {attachType === 'ocr' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <FileUploadZone label="Upload an image to scan & extract text" accept="image/*" onUploaded={handleOcrUploaded} />
+            {ocrRunning && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: MUTED }}>
+                <Loader size={14} style={{ animation: 'spin .8s linear infinite' }} /> Extracting text…
+              </div>
+            )}
+            {ocrError && <p style={{ fontSize: 12.5, color: '#EF4444', margin: 0 }}>{ocrError}</p>}
+            {ocrText && (
+              <>
+                <Txa label="Extracted text (edit before sending)" rows={6} value={ocrText} onChange={(e) => setOcrText(e.target.value)} />
+                <Btn onClick={sendAttachment} disabled={!ocrText.trim()}>Send to assistant</Btn>
+              </>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <FileUploadZone
+              label={attachType === 'doc' ? 'Upload a lesson note, worksheet or document' : 'Upload a PDF, Word, Excel or other file'}
+              accept={attachType === 'doc' ? '.pdf,.doc,.docx,.pptx,.xlsx,.txt' : '*'}
+              onUploaded={handleAttachUploaded}
+            />
+            <Btn onClick={sendAttachment} disabled={!attachFile}>Attach &amp; send</Btn>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
