@@ -6,16 +6,40 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader } from 'lucide-react';
-import { apiPost } from '../services/api.js';
+import { API, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?";
 
+const SITE_KEY = 'akoro_ai_return';
+
 export default function AiChatPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const isStudent = user?.role === 'student';
+
+  // Remember the school website that opened this chat so "Sign out" returns
+  // there instead of the portal's /signin. The referrer is captured once on
+  // first mount (before it can be lost) and cached for the session.
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem(SITE_KEY) && document.referrer) {
+        const ref = new URL(document.referrer);
+        if (ref.origin !== window.location.origin) sessionStorage.setItem(SITE_KEY, ref.origin);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Log out, then send the user back to the school website homepage they came
+  // from (falls back to the portal sign-in if we don't know the origin).
+  const logout = useCallback(async () => {
+    try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' }); } catch { /* ignore */ }
+    try { localStorage.removeItem('akoro_user'); } catch { /* ignore */ }
+    let dest = '/signin';
+    try { dest = sessionStorage.getItem(SITE_KEY) || dest; } catch { /* ignore */ }
+    window.location.href = dest;
+  }, []);
   const firstName = (user?.fullName || '').split(' ')[0] || '';
   const [messages, setMessages] = useState([{ from: 'agent', text: GREETING }]);
   const [text, setText] = useState('');
