@@ -6,13 +6,16 @@
  * POST /api/voice/transcribe  — audio → OpenAI Whisper STT → transcript
  * POST /api/voice/speak       — text  → OpenAI TTS → audio stream
  * POST /api/voice/reply       — audio → STT → (session) → TTS → full response
+ * POST /api/voice/agent-token — mint a Deepgram token for the realtime
+ *                                Agent (speech-to-speech) voice chat widget
  */
 
 import { Router }        from "express";
 import OpenAI, { toFile } from "openai";
 import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
-import { transcribeBufferDeepgram, hasDeepgram } from "./deepgram.js";
+import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
+import { tutorSystemPrompt } from "../adaptive-learning/chat.js";
 
 const router  = Router();
 const openai  = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -120,6 +123,36 @@ router.post("/reply", authenticateToken, upload.single("audio"), async (req, res
 
   } catch (err) {
     console.error("[voice/reply]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════
+   POST /api/voice/agent-token
+   Mints a short-lived Deepgram token so the client can open the
+   realtime Agent (speech-to-speech) WebSocket directly, plus the
+   role-aware tutor prompt/greeting to configure that session.
+   Returns: { access_token, prompt, greeting, agentName }
+══════════════════════════════════════════════════════════════ */
+router.post("/agent-token", authenticateToken, async (req, res) => {
+  try {
+    if (!hasDeepgram()) return res.status(503).json({ error: "Voice chat is not configured" });
+
+    const role = req.user?.role === "student" ? "student" : "instructor";
+    const firstName = (req.user?.fullName || "").split(" ")[0] || "";
+    const token = await grantAgentToken();
+    if (!token?.access_token) return res.status(502).json({ error: "Could not start voice session" });
+
+    res.json({
+      success: true,
+      access_token: token.access_token,
+      agentName: "Akoro",
+      greeting: `Hi${firstName ? " " + firstName : ""}! I'm your school's AI study assistant. Ask me anything — go ahead, I'm listening.`,
+      prompt: tutorSystemPrompt({ agentName: "Akoro", role })
+        + " You are speaking out loud in a live voice conversation — keep replies short and natural, 1-3 sentences, no markdown, no bullet lists, no code blocks.",
+    });
+  } catch (err) {
+    console.error("[voice/agent-token]", err.message);
     res.status(500).json({ error: err.message });
   }
 });

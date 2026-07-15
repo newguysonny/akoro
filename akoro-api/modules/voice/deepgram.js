@@ -24,6 +24,16 @@ function client() {
 
 export const hasDeepgram = () => !!process.env.DEEPGRAM_API_KEY;
 
+/**
+ * Mint a short-lived Deepgram token for a client to open the realtime Agent
+ * (speech-to-speech) WebSocket directly — used by the voice chat widget.
+ */
+export async function grantAgentToken() {
+  const { result, error } = await client().auth.grantToken();
+  if (error) throw error;
+  return result;
+}
+
 // Domain hints that improve recognition of exam/STEM vocabulary.
 const KEYTERMS = [
   "calculus", "differentiation", "integration", "theorem",

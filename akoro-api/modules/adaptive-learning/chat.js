@@ -604,7 +604,7 @@ router.post("/chat", async (req, res) => {
 // Used by the "Agent Chat" tab in both the learner and instructor apps for
 // normal conversation. Locked to educational topics; does NOT create tasks or
 // touch the knowledge base.
-function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}) {
+export function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}) {
   const audience = role === "instructor"
     ? "You assist teachers with academic subjects, lesson planning, pedagogy, assessment design, and explaining concepts so they can teach more effectively."
     : "You assist students with academic subjects, studying, homework, exam preparation (e.g. WAEC, JAMB), and learning strategies.";

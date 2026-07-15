@@ -5,10 +5,11 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic } from 'lucide-react';
 import { API, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
+import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
 
 const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?";
@@ -54,10 +55,15 @@ export default function AiChatPage() {
   const [ocrRunning, setOcrRunning]   = useState(false);
   const [ocrError, setOcrError]       = useState('');
   const [attachFile, setAttachFile]   = useState(null);
+  const [voiceMode, setVoiceMode]     = useState(false);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
-  const openAttach = (type) => { setAttachType(type); setAttachModal(true); setAttachMenu(false); setOcrText(''); setOcrError(''); setAttachFile(null); };
+  const openAttach = (type) => {
+    setAttachMenu(false);
+    if (type === 'voice') { setVoiceMode(true); return; }
+    setAttachType(type); setAttachModal(true); setOcrText(''); setOcrError(''); setAttachFile(null);
+  };
 
   const handleOcrUploaded = useCallback(async ({ id }) => {
     setOcrRunning(true); setOcrError('');
@@ -78,7 +84,14 @@ export default function AiChatPage() {
     { type: 'ocr', icon: <Camera size={15} color={GREEN} />,   label: 'Photo / Image OCR', desc: 'Scan & extract text' },
     { type: 'file', icon: <Upload size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
     { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
+    { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
   ];
+
+  // A finished voice exchange (from Deepgram's ConversationText events) gets
+  // appended into the regular chat history so it's visible after switching back.
+  const handleVoiceExchange = useCallback(({ role, content }) => {
+    setMessages((p) => [...p, { from: role === 'assistant' ? 'agent' : 'me', text: content }]);
+  }, []);
 
   const ask = useCallback(async (body) => {
     if (!body || busy) return;
@@ -137,6 +150,10 @@ export default function AiChatPage() {
         </button>
       </header>
 
+      {voiceMode ? (
+        <VoiceChatPanel onClose={() => setVoiceMode(false)} onExchange={handleVoiceExchange} />
+      ) : (
+      <>
       {/* Messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '18px 16px' }}>
         <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -201,6 +218,8 @@ export default function AiChatPage() {
         </div>
         <p style={{ maxWidth: 760, margin: '8px auto 0', fontSize: 10.5, color: MUTED2, textAlign: 'center' }}>AI can make mistakes — check important information.</p>
       </div>
+      </>
+      )}
 
       {/* Attachment modal */}
       <Modal
