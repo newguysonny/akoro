@@ -379,14 +379,15 @@ router.get("/agents/pairs/:pairId", async (req, res) => {
 });
 
 router.get("/agents/preferences/:agentId", async (req, res) => {
-  try { res.json({ success: true, ...(await getAgentPreferences(req.params.agentId)) }); }
+  try { res.json({ success: true, ...(await getAgentPreferences(req.user.id)) }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post("/agents/preferences", async (req, res) => {
   try {
-    const { agentId, agentPairId } = req.body;
-    if (!agentId || !agentPairId) return res.status(400).json({ error: "agentId and agentPairId required" });
+    const { agentPairId } = req.body;
+    const agentId = req.user.id;   // caller's own agent — never a body-supplied id
+    if (!agentPairId) return res.status(400).json({ error: "agentPairId required" });
     await saveAgentPreferences(agentId, agentPairId);
     res.json({ success: true, agentId, agentPairId });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -399,8 +400,8 @@ router.post("/agents/preferences", async (req, res) => {
 // GET /decay/status/:studentId — full knowledge health dashboard
 router.get("/decay/status/:studentId", async (req, res) => {
   try {
-    const agent     = await getOrCreateStudentAgent(req.params.studentId);
-    const dashboard = await decayEngine.getKnowledgeDashboard(req.params.studentId, agent.id);
+    const agent     = await getOrCreateStudentAgent(req.user.id);
+    const dashboard = await decayEngine.getKnowledgeDashboard(req.user.id, agent.id);
     res.json({ success: true, agentId: agent.id, dashboard });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -409,7 +410,7 @@ router.get("/decay/status/:studentId", async (req, res) => {
 router.get("/decay/alerts/:studentId", async (req, res) => {
   try {
     const { limit = 20 } = req.query;
-    const studentId = req.params.studentId;
+    const studentId = req.user.id;
 
     // Original topic-level notifications
     const notifications = await decayEngine.getUnreadNotifications(
@@ -462,7 +463,7 @@ router.get("/decay/alerts/:studentId", async (req, res) => {
 // GET /decay/subjects/:studentId — all subjects + confidence summary
 router.get("/decay/subjects/:studentId", async (req, res) => {
   try {
-    const agent    = await getOrCreateStudentAgent(req.params.studentId);
+    const agent    = await getOrCreateStudentAgent(req.user.id);
     const subjects = await getAgentKnowledgeBySubject(agent.id);
     res.json({ success: true, subjects, agentId: agent.id });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -471,7 +472,7 @@ router.get("/decay/subjects/:studentId", async (req, res) => {
 // GET /decay/topics/:studentId/:subject — topics in a subject with health
 router.get("/decay/topics/:studentId/:subject", async (req, res) => {
   try {
-    const agent  = await getOrCreateStudentAgent(req.params.studentId);
+    const agent  = await getOrCreateStudentAgent(req.user.id);
     const topics = await getTopicsBySubject(agent.id, req.params.subject);
     res.json({ success: true, subject: req.params.subject, topics, agentId: agent.id });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -489,18 +490,17 @@ router.post("/decay/acknowledge/:notifId", async (req, res) => {
 // POST /decay/run — manually trigger decay check for a student (admin/dev use)
 router.post("/decay/run", async (req, res) => {
   try {
-    const { studentId } = req.body;
-
-    if (studentId) {
-      // Run decay for single student
-      const agent       = await getOrCreateStudentAgent(studentId);
-      const alertTopics = await decayEngine.applyDecay(agent.id);
-      res.json({ success: true, agentId: agent.id, alertTopics, count: alertTopics.length });
-    } else {
-      // Run full scheduler (all agents)
+    const runAll = req.body?.all === true;
+    if (runAll) {
+      // Full scheduler across every agent — admin only.
+      if (req.user.role !== "admin") return res.status(403).json({ error: "Admin only" });
       const result = await decayEngine.runDecayScheduler(null);
-      res.json({ success: true, ...result });
+      return res.json({ success: true, ...result });
     }
+    // Otherwise run decay for the authenticated caller's own agent.
+    const agent       = await getOrCreateStudentAgent(req.user.id);
+    const alertTopics = await decayEngine.applyDecay(agent.id);
+    res.json({ success: true, agentId: agent.id, alertTopics, count: alertTopics.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -509,13 +509,13 @@ router.post("/decay/run", async (req, res) => {
 // =============================================================
 
 router.get("/student/agent/:studentId", async (req, res) => {
-  try { res.json({ success: true, agent: await getOrCreateStudentAgent(req.params.studentId) }); }
+  try { res.json({ success: true, agent: await getOrCreateStudentAgent(req.user.id) }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.get("/student/agent/:studentId/intelligence", async (req, res) => {
   try {
-    const agent = await getOrCreateStudentAgent(req.params.studentId);
+    const agent = await getOrCreateStudentAgent(req.user.id);
     const intel = await getAgentIntelligence(agent.id);
     res.json({ success: true, intelligence: intel, agent });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -524,7 +524,7 @@ router.get("/student/agent/:studentId/intelligence", async (req, res) => {
 router.get("/student/agent/:studentId/growth", async (req, res) => {
   try {
     const { limit = 20 } = req.query;
-    const agent   = await getOrCreateStudentAgent(req.params.studentId);
+    const agent   = await getOrCreateStudentAgent(req.user.id);
     const history = await getAgentGrowthHistory(agent.id, Number(limit));
     res.json({ success: true, agent, history });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -536,7 +536,7 @@ router.get("/student/:studentId/knowledge", async (req, res) => {
     let q = db
       .schema("edu").from("student_knowledge")
       .select("id, topic, subject, content, source, confidence, tags, created_at")
-      .eq("student_id", req.params.studentId)
+      .eq("student_id", req.user.id)
       .order("created_at", { ascending: false })
       .range(Number(offset), Number(offset) + Number(limit) - 1);
     if (subject) q = q.eq("subject", subject);
@@ -550,9 +550,9 @@ router.post("/student/:studentId/knowledge", async (req, res) => {
   try {
     const { topic, subject, content, source = "manual", tags = [] } = req.body;
     if (!topic || !content) return res.status(400).json({ error: "topic and content required" });
-    const agent = await getOrCreateStudentAgent(req.params.studentId);
+    const agent = await getOrCreateStudentAgent(req.user.id);
     await saveStudentKnowledge({
-      studentId: req.params.studentId, agentId: agent.id,
+      studentId: req.user.id, agentId: agent.id,
       topic, subject, content, source, tags, confidence: 0.8,
     });
     res.json({ success: true, message: "Knowledge saved" });
@@ -563,7 +563,7 @@ router.get("/student/agent/:studentId/knowledge-search", async (req, res) => {
   try {
     const { q, limit = 5 } = req.query;
     if (!q) return res.status(400).json({ error: "q is required" });
-    const agent  = await getOrCreateStudentAgent(req.params.studentId);
+    const agent  = await getOrCreateStudentAgent(req.user.id);
     const chunks = await retrieveAgentKnowledge(agent.id, q, Number(limit));
     res.json({ success: true, chunks });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -578,7 +578,8 @@ router.post("/chat", async (req, res) => {
   try {
     const { agentId, message, feedback, studentId, history = [] } = req.body;
     if (!message) return res.status(400).json({ error: "message is required" });
-    if (studentId) return handleStudentChatWithTools(req, res, studentId, message, history, t0);
+    // Student tool-chat always runs as the authenticated caller.
+    if (studentId) return handleStudentChatWithTools(req, res, req.user.id, message, history, t0);
     if (!agentId)  return res.status(400).json({ error: "agentId required" });
 
     const knowledge = await retrieveKnowledge(agentId, message);
@@ -758,7 +759,7 @@ Never fabricate.`,
 
 router.get("/history/:ownerId", async (req, res) => {
   try {
-    const { ownerId } = req.params;
+    const ownerId = req.user.id;   // token-scoped — ignore any :ownerId in the URL
     const { limit = 50, offset = 0, mode } = req.query;
     const params = mode ? [ownerId, mode, Number(limit), Number(offset)] : [ownerId, Number(limit), Number(offset)];
     const sql = mode

@@ -16,6 +16,11 @@ import { authenticateToken } from "../auth/routes.js";
 
 const router = Router();
 
+// Staff (non-student) roles may view the review queue and other students'
+// assessment detail. Students may only see their own.
+const STAFF_ROLES = new Set(["instructor", "teacher", "admin"]);
+const isStaff = (req) => STAFF_ROLES.has(req.user?.role);
+
 const SUMMARY_COLS =
   "id, student_id, topic, subject, status, assessment_score, cheat_probability, " +
   "final_verdict, identity_verified, started_at, completed_at";
@@ -23,8 +28,8 @@ const SUMMARY_COLS =
 /* ── Caller's own assessment history ─────────────────────────── */
 router.get("/assessments", authenticateToken, async (req, res) => {
   try {
-    const studentId = req.user?.id || req.query.studentId;
-    if (!studentId) return res.status(400).json({ error: "studentId required" });
+    const studentId = req.user?.id;
+    if (!studentId) return res.status(400).json({ error: "auth required" });
 
     const { data, error } = await db.schema("edu")
       .from("assessment_sessions")
@@ -44,6 +49,7 @@ router.get("/assessments", authenticateToken, async (req, res) => {
 /* ── Instructor review queue: flagged / terminated first ─────── */
 router.get("/assessments/review", authenticateToken, async (req, res) => {
   try {
+    if (!isStaff(req)) return res.status(403).json({ error: "Staff access only" });
     const { status, verdict, limit = 50 } = req.query;
     let q = db.schema("edu").from("assessment_sessions").select(SUMMARY_COLS);
 
@@ -74,6 +80,10 @@ router.get("/assessments/:id", authenticateToken, async (req, res) => {
       .single();
     if (error) throw new Error(error.message);
     if (!data) return res.status(404).json({ error: "not found" });
+    // Only the candidate themselves or staff may see the transcript + the
+    // stored reference face photo + proctoring evidence.
+    if (data.student_id !== req.user.id && !isStaff(req))
+      return res.status(403).json({ error: "Not authorized to view this assessment" });
 
     res.json({
       success: true,

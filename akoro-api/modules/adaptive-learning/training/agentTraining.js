@@ -607,8 +607,9 @@ router.get("/run/:runId/export", (req, res) => {
 
 // POST /training/stream-start
 router.post("/stream-start", async (req, res) => {
-  const { teacherId, agentId, subject = "General" } = req.body;
-  if (!teacherId || !agentId) return res.status(400).json({ error: "teacherId and agentId required" });
+  const teacherId = req.user.id;   // caller trains their OWN agent only
+  const { agentId, subject = "General" } = req.body;
+  if (!agentId) return res.status(400).json({ error: "agentId required" });
   const sessionId = uuid(), wsToken = uuid(), runId = uuid();
   await db.schema("edu").from("training_sessions").insert({
     id: sessionId, teacher_id: teacherId, agent_id: agentId,
@@ -626,8 +627,9 @@ router.post("/stream-start", async (req, res) => {
 
 // POST /training/query
 router.post("/query", async (req, res) => {
-  const { teacherId, agentId, studentQuery } = req.body;
-  if (!teacherId || !studentQuery) return res.status(400).json({ error: "teacherId and studentQuery required" });
+  const teacherId = req.user.id;
+  const { agentId, studentQuery } = req.body;
+  if (!studentQuery) return res.status(400).json({ error: "studentQuery required" });
   try {
     const { buildAgentSystemPrompt } = await import("./agentPromptBuilder.js");
     const systemPrompt = await buildAgentSystemPrompt(teacherId, agentId, studentQuery);
@@ -668,6 +670,8 @@ router.get("/sessions/:teacherId", async (req, res) => {
 
 // GET /training/profile/:teacherId
 router.get("/profile/:teacherId", async (req, res) => {
+  if (req.params.teacherId !== req.user.id && req.user.role !== "admin")
+    return res.status(403).json({ error: "Not authorised" });
   const { data, error } = await db
     .schema("edu").from("teacher_profiles").select("*")
     .eq("teacher_id", req.params.teacherId).maybeSingle();
@@ -686,6 +690,8 @@ router.get("/orchestration/:agentId", async (req, res) => {
 
 // GET /training/chunks/:teacherId
 router.get("/chunks/:teacherId", async (req, res) => {
+  if (req.params.teacherId !== req.user.id && req.user.role !== "admin")
+    return res.status(403).json({ error: "Not authorised" });
   const { q, limit = 5 } = req.query;
   if (!q) return res.status(400).json({ error: "q is required" });
   try {
@@ -811,9 +817,9 @@ export default router;
  * Finalize via POST /api/adaptive/training/stream/end
  */
 export async function startLiveStream(req, res) {
-  const { subject, teacher_id } = req.body;
-  const teacherId = teacher_id ?? req.user?.id;
-  if (!teacherId) return res.status(400).json({ error: "teacher_id required" });
+  const { subject } = req.body;
+  const teacherId = req.user?.id;   // caller trains their own agent — no body override
+  if (!teacherId) return res.status(400).json({ error: "auth required" });
 
   const { data: session, error } = await db.schema("edu").from("training_sessions").insert({
     teacher_id:    teacherId,
