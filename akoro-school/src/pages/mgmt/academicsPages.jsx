@@ -52,6 +52,84 @@ export { AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, Subjec
 
 // SubjectsPage now lives in ./academics/SubjectsPage.jsx (rich toolbar).
 
+/* ── Curriculum / Scheme of Work / Syllabus ──────────────────────── */
+const TERM_OPTS = [
+  { value: 'First Term', label: 'First Term' },
+  { value: 'Second Term', label: 'Second Term' },
+  { value: 'Third Term', label: 'Third Term' },
+];
+const ONOFF_OPTS = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }];
+
+// Curriculum — one or more frameworks per school (optionally scoped to a level/session).
+export function CurriculumPage() {
+  return <ResourcePage title="Curriculum" subtitle="Curriculum frameworks adopted by the school" resource="curriculum"
+    columns={[
+      { key: 'name', label: 'Curriculum' }, { key: 'framework', label: 'Framework' },
+      { key: 'level_name', label: 'Level' }, { key: 'session_name', label: 'Session' }, { key: 'status', label: 'Status' },
+    ]}
+    fields={[
+      { key: 'name', label: 'Curriculum Name', required: true, placeholder: 'Nigerian National Curriculum (9-Year Basic)' },
+      { key: 'framework', label: 'Framework / Board', placeholder: 'NERDC · Cambridge · CBC · Montessori' },
+      { key: 'level_id', label: 'Academic Level (optional)', type: 'select', optionsFrom: { resource: 'academic-levels' } },
+      { key: 'session_id', label: 'Academic Session (optional)', type: 'select', optionsFrom: { resource: 'academic-sessions' } },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'document_url', label: 'Document URL (optional)', placeholder: 'https://…' },
+      { key: 'status', label: 'Status', type: 'select', options: ONOFF_OPTS, default: 'active' },
+    ]}
+    listFilters={[
+      { key: 'level_id', label: 'Level', optionsFrom: { resource: 'academic-levels' } },
+      { key: 'status', label: 'Status', options: ONOFF_OPTS },
+    ]} createLabel="New Curriculum" />;
+}
+
+// Scheme of Work — planned weekly coverage per class (optionally per subject).
+export function SchemeOfWorkPage() {
+  return <ResourcePage title="Scheme of Work" subtitle="Termly / weekly coverage plan per class" resource="scheme-of-work"
+    columns={[
+      { key: 'class_name', label: 'Class' }, { key: 'subject_name', label: 'Subject' },
+      { key: 'term', label: 'Term' }, { key: 'week', label: 'Week' }, { key: 'topic', label: 'Topic' }, { key: 'status', label: 'Status' },
+    ]}
+    fields={[
+      { key: 'class_id', label: 'Class', type: 'select', required: true, optionsFrom: { resource: 'classes' } },
+      { key: 'subject_id', label: 'Subject (optional)', type: 'select', optionsFrom: { resource: 'subjects' } },
+      { key: 'term', label: 'Term', type: 'select', options: TERM_OPTS },
+      { key: 'week', label: 'Week', placeholder: 'Week 1' },
+      { key: 'topic', label: 'Topic', required: true },
+      { key: 'objectives', label: 'Objectives', type: 'textarea' },
+      { key: 'activities', label: 'Activities', type: 'textarea' },
+      { key: 'resources', label: 'Resources / Materials', type: 'textarea' },
+      { key: 'status', label: 'Status', type: 'select', options: [{ value: 'planned', label: 'Planned' }, { value: 'ongoing', label: 'Ongoing' }, { value: 'completed', label: 'Completed' }], default: 'planned' },
+    ]}
+    listFilters={[
+      { key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } },
+      { key: 'subject_id', label: 'Subject', optionsFrom: { resource: 'subjects' } },
+      { key: 'term', label: 'Term', options: TERM_OPTS },
+    ]} createLabel="New Scheme" />;
+}
+
+// Syllabus — outline per subject (optionally scoped to a class).
+export function SyllabusPage() {
+  return <ResourcePage title="Syllabus" subtitle="Syllabus outline per subject" resource="subject-syllabus"
+    columns={[
+      { key: 'subject_name', label: 'Subject' }, { key: 'class_name', label: 'Class' },
+      { key: 'title', label: 'Title' }, { key: 'term', label: 'Term' }, { key: 'status', label: 'Status' },
+    ]}
+    fields={[
+      { key: 'subject_id', label: 'Subject', type: 'select', required: true, optionsFrom: { resource: 'subjects' } },
+      { key: 'class_id', label: 'Class (optional)', type: 'select', optionsFrom: { resource: 'classes' } },
+      { key: 'title', label: 'Syllabus Title', required: true, placeholder: 'JSS1 Mathematics Syllabus' },
+      { key: 'term', label: 'Term', type: 'select', options: TERM_OPTS },
+      { key: 'description', label: 'Description / Topics', type: 'textarea' },
+      { key: 'document_url', label: 'Document URL (optional)', placeholder: 'https://…' },
+      { key: 'status', label: 'Status', type: 'select', options: ONOFF_OPTS, default: 'active' },
+    ]}
+    listFilters={[
+      { key: 'subject_id', label: 'Subject', optionsFrom: { resource: 'subjects' } },
+      { key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } },
+      { key: 'status', label: 'Status', options: ONOFF_OPTS },
+    ]} createLabel="New Syllabus" />;
+}
+
 const ASSIGN_SUBJECT_FIELDS = (elective) => [
   { key: 'class_id', label: 'Class', type: 'select', required: true, optionsFrom: { resource: 'classes' } },
   { key: 'subject_id', label: 'Subject', type: 'select', required: true, optionsFrom: { resource: 'subjects' } },

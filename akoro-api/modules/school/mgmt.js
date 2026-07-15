@@ -95,6 +95,10 @@ const RESOURCES = {
   "periods": { table: "periods", fields: ["name","starts_at","ends_at","sort_order","class_id","type"], required: ["name"], refs: { class_id: ["classes","name"] }, filters: ["class_id","type"], orderBy: "sort_order", asc: true },
   "timetable-slots": { table: "timetable_slots", fields: ["class_id","section_id","day_of_week","period_id","subject_id","teacher_id"], required: ["class_id","day_of_week","period_id"], refs: { class_id: ["classes","name"], section_id: ["sections","name"], period_id: ["periods","name"], subject_id: ["subjects","name"] }, filters: ["class_id","section_id","day_of_week"], orderBy: "day_of_week", asc: true },
   "promotion-logs": { table: "promotion_logs", fields: [], refs: { from_class_id: ["classes","name"], to_class_id: ["classes","name"] }, readOnly: true },
+  // Curriculum (school-wide) · Scheme of Work (per class) · Syllabus (per subject)
+  "curriculum": { table: "curricula", fields: ["name","framework","level_id","session_id","description","document_url","status"], required: ["name"], refs: { level_id: ["academic_levels","name"], session_id: ["academic_sessions","name"] }, filters: ["level_id","session_id","status"], orderBy: "created_at", asc: false },
+  "scheme-of-work": { table: "scheme_of_work", fields: ["class_id","subject_id","term","week","topic","objectives","activities","resources","status"], required: ["class_id","topic"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","subject_id","term","status"], orderBy: "created_at", asc: false },
+  "subject-syllabus": { table: "subject_syllabus", fields: ["subject_id","class_id","title","term","description","document_url","status"], required: ["subject_id","title"], refs: { subject_id: ["subjects","name"], class_id: ["classes","name"] }, filters: ["subject_id","class_id","term","status"], orderBy: "created_at", asc: false },
 
   // Student Information
   "student-categories": { table: "student_categories", fields: ["name"], required: ["name"], orderBy: "name", asc: true },

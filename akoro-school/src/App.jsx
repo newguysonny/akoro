@@ -44,6 +44,7 @@ import {
   AcademicDashboardPage, AcademicSessionsPage, AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage,
   AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, AssignTeacherSubjectsPage, ManagePeriodsPage,
   ClassTimetablePage, PromoteStudentsPage,
+  CurriculumPage, SchemeOfWorkPage, SyllabusPage,
 } from './pages/mgmt/academicsPages.jsx';
 import {
   FeesDashboardPage, CollectFeesPage, SearchDueFeesPage, AllTransactionsPage, OnlineTransactionsPage,
@@ -244,6 +245,9 @@ function AppRoutes() {
       <Route path="/mgmt/sections"             element={<ProtectedRoute><SectionsPage /></ProtectedRoute>} />
       <Route path="/mgmt/section-types"        element={<ProtectedRoute><SectionTypesPage /></ProtectedRoute>} />
       <Route path="/mgmt/subjects"             element={<ProtectedRoute><SubjectsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/curriculum"           element={<ProtectedRoute><CurriculumPage /></ProtectedRoute>} />
+      <Route path="/mgmt/scheme-of-work"       element={<ProtectedRoute><SchemeOfWorkPage /></ProtectedRoute>} />
+      <Route path="/mgmt/syllabus"             element={<ProtectedRoute><SyllabusPage /></ProtectedRoute>} />
       <Route path="/mgmt/assign-subjects"      element={<ProtectedRoute><AssignSubjectsPage /></ProtectedRoute>} />
       <Route path="/mgmt/assign-electives"     element={<ProtectedRoute><AssignElectivesPage /></ProtectedRoute>} />
       <Route path="/mgmt/assign-class-teacher" element={<ProtectedRoute><AssignClassTeacherPage /></ProtectedRoute>} />
