@@ -10,7 +10,7 @@ export function useSessionAPI() {
       .then(d => { if (d.sessions?.length) setSessions(d.sessions); })
       .catch(() => {});
 
-    apiGet('/api/adaptive/sessions')
+    apiGet('/api/adaptive/teaching/sessions')
       .then(d => { if (d.sessions?.length) setAgentSessions(d.sessions); })
       .catch(() => {});
   }, []);

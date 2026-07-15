@@ -125,6 +125,12 @@ app.use(cors({
   allowedHeaders: ["Content-Type","Authorization"],
 }));
 app.use(cookieParser());
+// Paystack webhook signature validation needs the RAW request body. The raw
+// parser must run BEFORE the global JSON parser (body-parser skips bodies
+// already consumed by an earlier parser) — otherwise req.body arrives here as
+// a parsed object, .toString() yields "[object Object]", and every webhook is
+// rejected with "Invalid signature" (payments then never auto-grant agents).
+app.use("/api/adaptive/marketplace/webhook", express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);

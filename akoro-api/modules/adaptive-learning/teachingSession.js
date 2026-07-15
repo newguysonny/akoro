@@ -71,7 +71,7 @@ router.post("/configure", authenticateToken, async (req, res) => {
 ═══════════════════════════════════════════════════════════════ */
 router.get("/sessions", authenticateToken, async (req, res) => {
   try {
-    const studentId = req.user?.id || req.query.studentId;
+    const studentId = req.user?.id;   // token-derived only — no query override
     if (!studentId) return res.status(400).json({ error: "studentId required" });
 
     const { data: rows, error } = await db.schema("edu")
@@ -84,12 +84,14 @@ router.get("/sessions", authenticateToken, async (req, res) => {
 
     if (error) throw new Error(error.message);
 
-    // Enrich with per-subtopic confidence data
+    // Enrich with per-subtopic confidence data. NOTE: the PostgREST builder is
+    // a thenable without .catch — calling .catch() on it threw synchronously
+    // and turned this endpoint into a guaranteed 500. Supabase reports errors
+    // in the result object, so just ignore them here (enrichment is optional).
     const { data: confRows } = await db.schema("edu")
       .from("knowledge_confidence")
       .select("topic, subtopic, confidence, assess_count, misconceptions")
-      .eq("student_id", studentId)
-      .catch(() => ({ data: [] }));
+      .eq("student_id", studentId);
 
     const confByTopic = {};
     for (const c of confRows || []) {

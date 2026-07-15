@@ -39,7 +39,7 @@ const router = Router();
 
 // Training pipeline — instructor uploads audio/video to train their agent
 // POST /api/adaptive/training/start
-// GET  /api/adaptive/training/stream/:runId
+// GET  /api/adaptive/training/run/:runId/stream   (SSE progress)
 // GET  /api/adaptive/training/run/:runId
 // GET  /api/adaptive/training/sessions/:teacherId
 // DELETE /api/adaptive/training/sessions/:sessionId

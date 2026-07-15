@@ -124,12 +124,12 @@ export default function LearnerDashboard() {
       .catch(()=>{});
 
     // Decay alerts
-    apiGet("/api/adaptive/decay/alerts")
+    apiGet(`/api/adaptive/chat/decay/alerts/${STUDENT_ID}`)
       .then(d=>{ if(d.alerts?.length) setDecayAlerts(d.alerts); })
       .catch(()=>{});
 
     // Agent sessions (for Sessions + Revisions sub-tabs)
-    apiGet("/api/adaptive/sessions")
+    apiGet("/api/adaptive/teaching/sessions")
       .then(d=>{ if(d.sessions?.length) setAgentSessions(d.sessions); })
       .catch(()=>{});
   },[]);
