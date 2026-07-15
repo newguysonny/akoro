@@ -32,8 +32,30 @@ const TERMINATE_PROBABILITY = 0.85;
 // every submit after a blip vanish silently (new socket.id, no session).
 const RESUME_GRACE_MS = 3 * 60 * 1000;
 
+const GATEWAY_EVENTS = new Set([
+  "register_reference", "start_assessment", "proctor_frame", "resume_assessment",
+  "assessment_message", "request_assessment_summary", "end_assessment",
+]);
+
 export function setupAssessmentGateway(io) {
   io.on("connection", (socket) => {
+
+    // Proctored assessments are identity-critical: every gateway event requires
+    // an authenticated socket (io.use() JWT middleware in app.js), and the
+    // client-supplied studentId is overwritten with the token identity so no
+    // one can sit — or poison the proctoring record of — someone else's exam.
+    socket.use((packet, next) => {
+      const [event, payload] = packet;
+      if (GATEWAY_EVENTS.has(event)) {
+        const u = socket.data.user;
+        if (!u) { socket.emit("assessment_error", { code: "auth", message: "Sign in required." }); return; } // drop
+        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+          if ("studentId" in payload || event === "start_assessment" || event === "register_reference") payload.studentId = u.id;
+          if ("userId" in payload) payload.userId = u.id;
+        }
+      }
+      next();
+    });
 
     /* ── Register identity reference photo ─────────────────── */
     socket.on("register_reference", async ({ studentId, image }) => {
@@ -148,6 +170,9 @@ export function setupAssessmentGateway(io) {
     socket.on("resume_assessment", ({ assessmentId }) => {
       const state = assessmentId && assessments.get(assessmentId);
       if (!state) return socket.emit("assessment_error", { code: "no_session", message: "This assessment session has expired. Please restart the assessment." });
+      // Ownership: only the candidate who started the exam may resume it.
+      if (state.studentId && socket.data.user?.id !== state.studentId)
+        return socket.emit("assessment_error", { code: "no_session", message: "This assessment session belongs to another user." });
       if (state._expireTimer) { clearTimeout(state._expireTimer); state._expireTimer = null; }
       socket.data.assessmentId  = assessmentId;
       socket.data.referenceImage = state.referenceImage;

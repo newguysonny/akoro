@@ -421,7 +421,7 @@ export default function DiscoveryTab() {
     if (typeof window === 'undefined' || !window.io) return;
     let socket;
     try {
-      socket = window.io(API, { transports: ['websocket', 'polling'] });
+      socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
       const subscribe = () => socket.emit('subscribe-student', STUDENT_ID);
       subscribe();
       socket.on('connect', subscribe);   // re-join the room after a reconnect

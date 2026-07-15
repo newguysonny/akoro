@@ -33,7 +33,7 @@ import { SITE_BASE_DOMAINS }       from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
-import authModule                 from "./modules/auth/routes.js";
+import authModule, { authenticateSocket } from "./modules/auth/routes.js";
 import coursesModule              from "./modules/courses/index.js";
 import rankingModule              from "./modules/ranking/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
@@ -94,6 +94,16 @@ io.adapter(createAdapter(redisPub, redisSub));
 app.set("io", io);
 global.io = io;   // battle worker uses global.io
 
+// Authenticate every socket connection from its handshake cookies/token.
+// Anonymous connections are still ACCEPTED (socket.data.user = null) so public
+// flows keep working — but identity-bearing events (adaptive teaching,
+// proctored assessments, voice streaming, user-scoped rooms) require and use
+// socket.data.user instead of trusting client-supplied ids.
+io.use(async (socket, next) => {
+  socket.data.user = await authenticateSocket(socket);
+  next();
+});
+
 io.on("connection", (socket) => {
   socket.on("join-session",            (id) => socket.join(`session:${id}`));
   socket.on("leave-session",           (id) => socket.leave(`session:${id}`));
@@ -102,11 +112,13 @@ io.on("connection", (socket) => {
   socket.on("join-classroom",          (id) => socket.join(`classroom:${id}`));
   socket.on("join-battle",             (id) => socket.join(`battle:${id}`));
   socket.on("leave-battle",            (id) => socket.leave(`battle:${id}`));
-  socket.on("subscribe-notifications", (id) => socket.join(`user:${id}`));
-  socket.on("subscribe-student",       (id) => socket.join(`user:${id}`));
+  // User-scoped rooms: join the AUTHENTICATED user's room only — the payload
+  // id is ignored, so nobody can subscribe to someone else's notifications.
+  socket.on("subscribe-notifications", () => { const u = socket.data.user; if (u) socket.join(`user:${u.id}`); });
+  socket.on("subscribe-student",       () => { const u = socket.data.user; if (u) socket.join(`user:${u.id}`); });
   // Joins student:{id} room for decay alerts from decayEngine cron
-  socket.on("join-student-room",       (id) => socket.join(`student:${id}`));
-  socket.on("join-instructor",         (id) => socket.join(`instructor:${id}`));
+  socket.on("join-student-room",       () => { const u = socket.data.user; if (u) socket.join(`student:${u.id}`); });
+  socket.on("join-instructor",         () => { const u = socket.data.user; if (u) socket.join(`instructor:${u.id}`); });
 });
 
 setupAdaptiveWebSocket(io);

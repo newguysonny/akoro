@@ -54,6 +54,9 @@ export function setupVoiceStreaming(io) {
 
     /* ── start_voice_stream ──────────────────────────────────────── */
     socket.on("start_voice_stream", async () => {
+      // Realtime STT costs money per minute — authenticated sockets only
+      // (socket.data.user is set by the io.use() JWT middleware in app.js).
+      if (!socket.data.user) return socket.emit("voice_error", { message: "Sign in required." });
       // Close any leftover connection for this socket
       closeLiveConnection(socket.id);
 
@@ -128,6 +131,8 @@ export function setupVoiceStreaming(io) {
 
     /* ── start_tts_stream ───────────────────────────────────────── */
     socket.on("start_tts_stream", async ({ text, voice, seq }) => {
+      // TTS costs money per character — authenticated sockets only.
+      if (!socket.data.user) return socket.emit("voice_error", { message: "Sign in required." });
       // Cancel any in-progress TTS for this socket (previous turn barge-in)
       const existing = ttsStreams.get(socket.id);
       if (existing) { existing.abort(); ttsStreams.delete(socket.id); }

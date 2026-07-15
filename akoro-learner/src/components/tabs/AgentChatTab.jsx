@@ -74,7 +74,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     let socket;
     try {
       if (typeof window !== 'undefined' && window.io) {
-        socket = window.io(API, { transports: ['websocket', 'polling'] });
+        socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
         socketRef.current = socket;
         socket.on('connect', () => {
           socket.emit('subscribe-student', STUDENT_ID);

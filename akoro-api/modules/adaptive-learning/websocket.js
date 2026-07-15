@@ -335,15 +335,45 @@ export function setupWebSocket(io) {
   decayEngine.setWsManager(io);
   global._io = io;
 
+  // Events that act on a specific user's data. They require an authenticated
+  // socket (socket.data.user, set by the io.use() JWT middleware in app.js),
+  // and the client-supplied studentId/userId are OVERWRITTEN with the token
+  // identity — a client can never start/read/drive a session as someone else.
+  const IDENTITY_EVENTS = new Set([
+    "list_agent_pairs", "get_my_agents",
+    "start_session", "start_student_session", "start_decay_session", "start_adaptive_session",
+    "teacher_message", "request_summary", "resume_session", "end_session",
+    "switch_agent_pair", "get_knowledge_health", "get_subject_topics",
+    "acknowledge_alert", "get_state", "get_agent_growth",
+    "subscribe-student", "join-student-room",
+  ]);
+
   io.on("connection", (socket) => {
     console.log(`🔌 Connected: ${socket.id}`);
+
+    socket.use((packet, next) => {
+      const [event, payload] = packet;
+      if (IDENTITY_EVENTS.has(event)) {
+        const u = socket.data.user;
+        if (!u) { socket.emit("error", { message: "Sign in required." }); return; } // drop the packet
+        if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+          payload.userId = u.id;
+          if ("studentId" in payload || /^(start_student_session|start_decay_session|start_adaptive_session|get_knowledge_health|get_subject_topics|get_agent_growth)$/.test(event)) {
+            payload.studentId = u.id;
+          }
+        }
+      }
+      next();
+    });
 
     // ── subscribe-student / join-student-room ─────────────────
     // Joins the student room so out-of-session pushes (e.g.
     // agent_purchased after a marketplace payment) reach this socket
-    // even when no teaching session is active.
-    const joinStudentRoom = (studentId) => {
-      if (studentId) socket.join(`student:${studentId}`);
+    // even when no teaching session is active. Identity comes from the
+    // token — the payload id is ignored.
+    const joinStudentRoom = () => {
+      const u = socket.data.user;
+      if (u) socket.join(`student:${u.id}`);
     };
     socket.on("subscribe-student",  joinStudentRoom);
     socket.on("join-student-room",  joinStudentRoom);
@@ -668,6 +698,11 @@ export function setupWebSocket(io) {
     socket.on("resume_session", ({ sessionId, studentId, userId } = {}) => {
       const orchestrator = sessionId ? activeSessions.get(sessionId) : null;
       if (!orchestrator) return socket.emit("resume_failed", { sessionId: sessionId || null });
+
+      // Ownership: only the user who started the session may resume it.
+      const me = socket.data.user?.id;
+      const owner = orchestrator.userId || orchestrator.studentId;
+      if (owner && me && owner !== me) return socket.emit("resume_failed", { sessionId });
 
       cancelSessionReap(sessionId);
 

@@ -151,6 +151,47 @@ const verifyHandoff = (token) => {
 };
 export { signHandoff, verifyHandoff };
 
+/**
+ * authenticateSocket — verify the JWT for a Socket.IO connection.
+ * Reads akoro_access from the handshake cookies (or handshake.auth.token /
+ * Authorization Bearer) and applies the same checks as authenticateToken:
+ * algorithm whitelist, signature/claims, deny-list, active user, force-logout.
+ * Returns the safe user object, or null for anonymous/invalid connections —
+ * the io.use() middleware attaches the result and each socket module decides
+ * whether anonymous is acceptable for its events.
+ */
+export async function authenticateSocket(socket) {
+  try {
+    const raw = socket.handshake?.headers?.cookie || "";
+    const cookies = {};
+    for (const part of raw.split(";")) {
+      const i = part.indexOf("=");
+      if (i > 0) { try { cookies[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1)); } catch { /* skip bad cookie */ } }
+    }
+    const headerAuth = socket.handshake?.headers?.authorization;
+    const token = cookies.akoro_access
+      || socket.handshake?.auth?.token
+      || (headerAuth?.startsWith("Bearer ") ? headerAuth.slice(7) : null);
+    if (!token) return null;
+
+    const header = JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString());
+    if (!header.alg || header.alg === "none" || (!USE_RSA && header.alg !== "HS256") || (USE_RSA && !ALLOWED_ALGS.includes(header.alg))) return null;
+
+    const decoded = verifyToken(token);
+    if (decoded.jti && await DenyList.has(decoded.jti)) return null;
+
+    const { data: user } = await db.from("users")
+      .select("id,email,username,full_name,avatar_url,role,is_active,force_logout_at")
+      .eq("id", decoded.sub).maybeSingle();
+    if (!user || !user.is_active) return null;
+    if (user.force_logout_at && decoded.iat && decoded.iat * 1000 < new Date(user.force_logout_at).getTime()) return null;
+
+    return { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role };
+  } catch {
+    return null;
+  }
+}
+
 // ─── § COOKIE HELPERS ─────────────────────────────────────────────────────────
 
 const IS_PROD = process.env.NODE_ENV === "production";

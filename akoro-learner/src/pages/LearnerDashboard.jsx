@@ -139,7 +139,7 @@ export default function LearnerDashboard() {
     let socket;
     try {
       if (typeof window !== "undefined" && window.io) {
-        socket = window.io(API, { transports: ["websocket","polling"] });
+        socket = window.io(API, { transports: ["websocket","polling"], withCredentials: true });
 
         socket.on("connect", () => {
           // Join user room (live alerts + challenges)
