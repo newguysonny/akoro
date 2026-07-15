@@ -119,8 +119,9 @@ export default function VoiceChatPanel({ onClose, onExchange }) {
       };
       requestAnimationFrame(meter);
 
-      // 3. Open the Deepgram Agent WebSocket.
-      const socket = new WebSocket('wss://agent.deepgram.com/v1/agent/converse', ['bearer', cfg.access_token]);
+      // 3. Open the Deepgram Agent WebSocket. token_type is "bearer" for a
+      // temporary grant token, or "token" when using the raw API key.
+      const socket = new WebSocket('wss://agent.deepgram.com/v1/agent/converse', [cfg.token_type || 'bearer', cfg.access_token]);
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
 

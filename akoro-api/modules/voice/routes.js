@@ -140,12 +140,23 @@ router.post("/agent-token", authenticateToken, async (req, res) => {
 
     const role = req.user?.role === "student" ? "student" : "instructor";
     const firstName = (req.user?.fullName || "").split(" ")[0] || "";
-    const token = await grantAgentToken();
+
+    let token;
+    try {
+      token = await grantAgentToken();
+    } catch (err) {
+      // Surface the real Deepgram reason (e.g. FORBIDDEN) so the cause is clear.
+      console.error("[voice/agent-token] grant failed:", err.message);
+      return res.status(502).json({
+        error: `Voice chat could not start: ${err.message}. The Deepgram API key needs permission to grant tokens (or set DEEPGRAM_ALLOW_RAW_KEY=true).`,
+      });
+    }
     if (!token?.access_token) return res.status(502).json({ error: "Could not start voice session" });
 
     res.json({
       success: true,
       access_token: token.access_token,
+      token_type: token.token_type,
       agentName: "Akoro",
       greeting: `Hi${firstName ? " " + firstName : ""}! I'm your school's AI study assistant. Ask me anything — go ahead, I'm listening.`,
       prompt: tutorSystemPrompt({ agentName: "Akoro", role })

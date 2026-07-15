@@ -27,11 +27,32 @@ export const hasDeepgram = () => !!process.env.DEEPGRAM_API_KEY;
 /**
  * Mint a short-lived Deepgram token for a client to open the realtime Agent
  * (speech-to-speech) WebSocket directly — used by the voice chat widget.
+ *
+ * Returns { access_token, token_type }:
+ *  - token_type "bearer": a temporary grant token (preferred, short-lived).
+ *  - token_type "token":  the raw DEEPGRAM_API_KEY, used only when the key
+ *    cannot grant temporary tokens AND DEEPGRAM_ALLOW_RAW_KEY=true. Both are
+ *    valid WebSocket subprotocol credentials for Deepgram.
+ *
+ * grantToken() needs a key with permission to create tokens (Owner/Admin or
+ * a key with `keys:write`); a transcription-only key returns FORBIDDEN.
  */
 export async function grantAgentToken() {
-  const { result, error } = await client().auth.grantToken();
-  if (error) throw error;
-  return result;
+  try {
+    const { result, error } = await client().auth.grantToken();
+    if (error) throw error;
+    if (result?.access_token) return { access_token: result.access_token, token_type: "bearer" };
+    throw new Error("Deepgram returned no access token");
+  } catch (err) {
+    const detail = err?.err_msg || err?.message || "grantToken failed";
+    if (process.env.DEEPGRAM_ALLOW_RAW_KEY === "true" && process.env.DEEPGRAM_API_KEY) {
+      console.warn(`[deepgram] grantToken failed (${detail}); falling back to raw API key.`);
+      return { access_token: process.env.DEEPGRAM_API_KEY, token_type: "token" };
+    }
+    const e = new Error(detail);
+    e.deepgram = true;
+    throw e;
+  }
 }
 
 // Domain hints that improve recognition of exam/STEM vocabulary.
