@@ -1,3 +1,14 @@
+-- =============================================================
+-- 2026-base-schema.sql  —  CANONICAL BASE BOOTSTRAP (runs FIRST)
+-- The full platform schema: public.* (users, courses, sessions, xp, battles,
+-- schools, …) + the edu.* core. Fully idempotent (CREATE ... IF NOT EXISTS,
+-- DROP-then-CREATE for constraints/policies, ON CONFLICT for backfills), so it
+-- is a no-op on existing databases and safe to re-run on every deploy.
+-- Registered first in manifest.json so a clean database is bootstrapped before
+-- the incremental 2026-* patches that ALTER these tables.
+-- Requires the Supabase-provided pgvector extension and auth schema.
+-- =============================================================
+
 -- ============================================================
 -- Piabam Platform — Supabase Postgres Migration
 -- Run this in Supabase SQL Editor (Dashboard → SQL Editor → New query)
