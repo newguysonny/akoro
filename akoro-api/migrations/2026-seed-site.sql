@@ -30,8 +30,13 @@ BEGIN
   END IF;
 
   -- ── One-time cleanup of the earlier direct-seeded pages/menus ────────────
-  DELETE FROM mgmt.site_menus WHERE school_id = v_school AND name IN ('Main Menu', 'Footer Menu', 'Social Menu');
-  DELETE FROM mgmt.site_pages WHERE school_id = v_school AND slug IN ('home', 'about-us', 'admissions', 'academics', 'contact');
+  -- DANGER: this used to unconditionally DELETE the school's home/about/etc
+  -- pages. It only ran when the 'Classic School Site' template row was absent —
+  -- but 2026-reset-site-templates.sql used to delete that very row, making this
+  -- fire on normal redeploys and wipe an ACTIVE template's imported home page.
+  -- The legacy direct-seeded pages this was meant to remove are long gone, so
+  -- the destructive page/menu deletes are removed. Never delete live pages from
+  -- a seed. (reset-site-templates.sql no longer deletes the sentinel template.)
 
   -- ── Page contents (imported into the builder on activation) ──────────────
   v_home := $HTML$

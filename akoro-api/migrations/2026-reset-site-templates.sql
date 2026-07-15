@@ -14,11 +14,16 @@
 -- Never delete a template a school currently has ACTIVE (is_active): this
 -- migration re-runs on every deploy, and deleting the active template is what
 -- was resetting schools' sites. Only inactive dead artefacts are removed.
+-- NOTE: 'Classic School Site' is intentionally NOT deleted here. The demo seed
+-- (2026-seed-site.sql) uses the existence of that template row as its
+-- "already seeded — skip destructive cleanup" sentinel. Deleting it made the
+-- seed's guard misfire on the next deploy, which then wiped the school's live
+-- home page (slug 'home') — including an active template's imported home.
+-- Leaving the row intact keeps that guard stable across redeploys.
 DELETE FROM edu.school_website_templates
 WHERE is_active = false
   AND name IN (
     'Chrisland Schools — School Site',
-    'Classic School Site',
     'demo-templates'
   );
 
