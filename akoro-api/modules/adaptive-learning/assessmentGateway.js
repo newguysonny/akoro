@@ -134,6 +134,15 @@ export function setupAssessmentGateway(io) {
         });
         const result = state.scorer.push(frameSignals, now);
 
+        if (process.env.PROCTOR_DEBUG === "1" || process.env.PROCTOR_DEBUG === "true") {
+          const on = Object.entries(frameSignals).filter(([, v]) => v).map(([k]) => k).join(",") || "none";
+          console.log(
+            `[proctor] frame src=${detail.source} frameBytes=${frame ? frame.length : 0} ` +
+            `signalsOn=[${on}] prob=${result.probability} level=${result.level} ` +
+            `active=[${result.active.join(",")}]${detail.serviceError ? ` svcErr="${detail.serviceError}"` : ""}`
+          );
+        }
+
         // Log escalated signals as discrete cheat events (deduped by type+second).
         for (const esc of result.escalations) {
           const last = state.cheatEvents[state.cheatEvents.length - 1];
