@@ -31,12 +31,35 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   const doneRef  = useRef(false);
 
   /* ── TTS playback ────────────────────────────────────────── */
+  // ONE persistent <audio> element for all utterances. Mobile autoplay policy
+  // blocks .play() on an element that has never played from a user gesture —
+  // creating a fresh Audio() per socket-driven utterance meant TTS was
+  // silently blocked. primeAudio() unlocks this element during a real tap
+  // (e.g. the voice-mode toggle); after that, replays on the SAME element are
+  // allowed even when triggered by socket events.
+  const ensureAudioEl = useCallback(() => {
+    if (!audioRef.current) {
+      const a = new Audio();
+      a.playsInline = true;
+      audioRef.current = a;
+    }
+    return audioRef.current;
+  }, []);
+
+  const primeAudio = useCallback(() => {
+    const a = ensureAudioEl();
+    // Shortest valid silent WAV — played muted inside the gesture to unlock.
+    a.muted = true;
+    a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+    a.play().then(() => { a.pause(); a.muted = false; }).catch(() => { a.muted = false; });
+  }, [ensureAudioEl]);
+
   const stopSpeaking = useCallback(() => {
     wsRef.current?.emit("stop_tts_stream");
     if (audioRef.current) {
       audioRef.current.pause();
       try { URL.revokeObjectURL(audioRef.current.src); } catch {}
-      audioRef.current = null;
+      audioRef.current.removeAttribute("src");
     }
     msRef.current = null; sbRef.current = null; queueRef.current = []; doneRef.current = false;
   }, [wsRef]);
@@ -47,8 +70,8 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
     const seq = ++seqRef.current;
 
     const ms = new MediaSource();
-    const audio = new Audio();
-    audioRef.current = audio; msRef.current = ms; queueRef.current = []; doneRef.current = false;
+    const audio = ensureAudioEl();
+    msRef.current = ms; queueRef.current = []; doneRef.current = false;
     audio.src = URL.createObjectURL(ms);
 
     ms.addEventListener("sourceopen", () => {
@@ -66,23 +89,43 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
 
     audio.play().catch(() => {});
     wsRef.current.emit("start_tts_stream", { text, voice: ttsVoice, seq });
-  }, [wsRef, ttsVoice, stopSpeaking]);
+  }, [wsRef, ttsVoice, stopSpeaking, ensureAudioEl]);
 
   /* ── Mic capture (PCM16 mono @24k — what the server expects) ─ */
   const startListening = useCallback(async () => {
     if (listening) return;
+    primeAudio();     // user gesture — unlock TTS playback for this session
     stopSpeaking();   // barge-in
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
-      const ctx  = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      // Prefer a 24k context (what the server expects); some mobile browsers
+      // reject a custom sampleRate, so fall back to the device default and
+      // downsample each buffer to 24k before sending.
+      const AC = window.AudioContext || window.webkitAudioContext;
+      let ctx;
+      try { ctx = new AC({ sampleRate: 24000 }); } catch { ctx = new AC(); }
       const src  = ctx.createMediaStreamSource(stream);
       const proc = ctx.createScriptProcessor(4096, 1, 1);
 
+      const toRate = 24000;
+      const downsample = (buf, fromRate) => {
+        if (fromRate === toRate) return buf;
+        const ratio = fromRate / toRate;
+        const out = new Float32Array(Math.round(buf.length / ratio));
+        for (let i = 0; i < out.length; i++) {
+          const start = Math.round(i * ratio), end = Math.min(buf.length, Math.round((i + 1) * ratio));
+          let sum = 0, n = 0;
+          for (let j = start; j < end; j++) { sum += buf[j]; n++; }
+          out[i] = n ? sum / n : 0;
+        }
+        return out;
+      };
+
       proc.onaudioprocess = (e) => {
         if (!readyRef.current || !wsRef.current?.connected) return;
-        const f32 = e.inputBuffer.getChannelData(0);
+        const f32 = downsample(e.inputBuffer.getChannelData(0), ctx.sampleRate);
         const i16 = new Int16Array(f32.length);
         for (let i = 0; i < f32.length; i++) {
           const s = Math.max(-1, Math.min(1, f32[i]));
@@ -109,7 +152,7 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
     } catch {
       setListening(false);
     }
-  }, [listening, wsRef, stopSpeaking]);
+  }, [listening, wsRef, stopSpeaking, primeAudio]);
 
   const stopListening = useCallback(() => {
     captureRef.current?.stop(); captureRef.current = null;
@@ -170,5 +213,5 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   // Cleanup on unmount.
   useEffect(() => () => { captureRef.current?.stop(); stopSpeaking(); }, [stopSpeaking]);
 
-  return { listening, interim, startListening, stopListening, speak, stopSpeaking };
+  return { listening, interim, startListening, stopListening, speak, stopSpeaking, primeAudio };
 }

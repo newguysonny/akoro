@@ -47,7 +47,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   };
 
   // Voice I/O over the same socket — auto-submits the spoken answer.
-  const { listening, interim, startListening, stopListening, speak, stopSpeaking } = useVoiceSession({
+  const { listening, interim, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
     wsRef,
     ttsVoice: "alloy",
     onTranscript: (text) => submitAnswer(text),
@@ -69,7 +69,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
     setVoiceMode(v => {
       const next = !v;
       if (!next) { stopListening(); stopSpeaking(); }
-      else spokenRef.current = blocks.length;   // don't replay backlog on enable
+      else { primeAudio(); spokenRef.current = blocks.length; }   // unlock TTS in this tap; don't replay backlog
       return next;
     });
   };
@@ -85,6 +85,13 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   useEffect(() => {
     const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true });
     wsRef.current = ws;
+
+    // Mobile connections flap: on every (re)connect, re-bind the live session
+    // on the server — otherwise answers/frames emitted after a blip are
+    // attached to a socket the server doesn't associate with the assessment.
+    ws.on("connect", () => {
+      if (assessIdRef.current) ws.emit("resume_assessment", { assessmentId: assessIdRef.current });
+    });
 
     ws.on("reference_saved", () => { setRefSaving(false); _beginExam(); });
     ws.on("assessment_ready", d => {
@@ -102,7 +109,16 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
     });
     ws.on("assessment_summary", d => { setSummary(d); setPhase("summary"); setLoading(false); });
     ws.on("assessment_terminated", d => { setTerminated(d); });
-    ws.on("assessment_error", e => { console.warn("[assessment]", e.message); setLoading(false); });
+    ws.on("assessment_error", e => {
+      console.warn("[assessment]", e.message);
+      setLoading(false);
+      // Surface it in the chat instead of failing silently; a dropped session
+      // also triggers an immediate resume attempt.
+      if (e.code === "no_session" && assessIdRef.current) {
+        ws.emit("resume_assessment", { assessmentId: assessIdRef.current });
+      }
+      if (e.message) setBlocks(prev => [...prev, { type: "proctor-flag", text: e.message }]);
+    });
 
     return () => { ws.emit("end_assessment"); ws.disconnect(); };
   }, []);

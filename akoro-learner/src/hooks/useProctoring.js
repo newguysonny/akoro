@@ -22,7 +22,7 @@ export function useProctoring({ enabled = true, onFrame } = {}) {
   const [status, setStatus]   = useState("idle");   // idle|loading|running|denied|error
   const [signals, setSignals] = useState({ faceCount: 0, facePresent: false, lookingAway: false, audioLevel: 0 });
 
-  const videoRef   = useRef(null);
+  const videoElRef = useRef(null);
   const canvasRef  = useRef(null);
   const modelRef   = useRef(null);
   const streamRef  = useRef(null);
@@ -32,9 +32,21 @@ export function useProctoring({ enabled = true, onFrame } = {}) {
   const onFrameRef = useRef(onFrame);
   onFrameRef.current = onFrame;
 
+  // Callback ref: the consent screen and the exam monitor render DIFFERENT
+  // <video> elements at different times. Re-attach the live stream whenever a
+  // new element mounts — an object ref only got the stream at init time, so
+  // the exam-phase video stayed black and capture() never saw a ready frame.
+  const videoRef = useCallback((node) => {
+    videoElRef.current = node;
+    if (node && streamRef.current && node.srcObject !== streamRef.current) {
+      node.srcObject = streamRef.current;
+      node.play().catch(() => {});
+    }
+  }, []);
+
   /* Capture one frame: run face detection, read audio, emit signals + JPEG. */
   const capture = useCallback(async () => {
-    const video  = videoRef.current;
+    const video  = videoElRef.current;
     const canvas = canvasRef.current;
     const model  = modelRef.current;
     if (!video || !canvas || !model || video.readyState < 2) return;
@@ -80,7 +92,7 @@ export function useProctoring({ enabled = true, onFrame } = {}) {
 
   /* Capture a single high-quality still for identity registration. */
   const captureReference = useCallback(() => {
-    const video = videoRef.current, canvas = canvasRef.current;
+    const video = videoElRef.current, canvas = canvasRef.current;
     if (!video || !canvas) return null;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, FRAME_W, FRAME_H);
@@ -111,7 +123,7 @@ export function useProctoring({ enabled = true, onFrame } = {}) {
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
 
-        const video = videoRef.current;
+        const video = videoElRef.current;
         if (video) { video.srcObject = stream; await video.play().catch(() => {}); }
 
         // Wire audio analyser.

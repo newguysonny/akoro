@@ -27,6 +27,10 @@ const assessments = new Map();
 const MIN_FRAME_INTERVAL_MS = 1200;
 // Auto-terminate threshold — sustained high cheat probability ends the exam.
 const TERMINATE_PROBABILITY = 0.85;
+// How long a live session survives a socket drop before it's abandoned.
+// Mobile connections flap constantly; deleting on the first disconnect made
+// every submit after a blip vanish silently (new socket.id, no session).
+const RESUME_GRACE_MS = 3 * 60 * 1000;
 
 export function setupAssessmentGateway(io) {
   io.on("connection", (socket) => {
@@ -137,11 +141,27 @@ export function setupAssessmentGateway(io) {
       }
     });
 
+    /* ── Resume after a reconnect ──────────────────────────── */
+    // socket.io reconnects get a fresh socket (and empty socket.data). The
+    // client re-sends its assessmentId so the new socket re-binds to the
+    // still-live session instead of every subsequent emit being dropped.
+    socket.on("resume_assessment", ({ assessmentId }) => {
+      const state = assessmentId && assessments.get(assessmentId);
+      if (!state) return socket.emit("assessment_error", { code: "no_session", message: "This assessment session has expired. Please restart the assessment." });
+      if (state._expireTimer) { clearTimeout(state._expireTimer); state._expireTimer = null; }
+      socket.data.assessmentId  = assessmentId;
+      socket.data.referenceImage = state.referenceImage;
+      socket.data.referenceUrl   = state.referenceUrl;
+      socket.join(`assessment:${assessmentId}`);
+      socket.emit("assessment_resumed", { assessmentId });
+    });
+
     /* ── One Q&A turn ──────────────────────────────────────── */
     socket.on("assessment_message", async ({ message }) => {
       const id = socket.data.assessmentId;
       const state = id && assessments.get(id);
-      if (!state || !message) return;
+      if (!message) return;
+      if (!state) return socket.emit("assessment_error", { code: "no_session", message: "Connection to the assessment was lost — attempting to reconnect…" });
 
       try {
         socket.emit("assessment_typing");
@@ -197,11 +217,18 @@ export function setupAssessmentGateway(io) {
 
     socket.on("disconnect", () => {
       const id = socket.data.assessmentId;
-      // Keep the record; mark abandoned if it never completed.
       const state = id && assessments.get(id);
       if (state && !state.completed) {
-        _markStatus(state, "abandoned").catch(() => {});
-        assessments.delete(id);
+        // Grace period: keep the session alive so a reconnecting client can
+        // resume_assessment. Only abandon if nobody comes back in time.
+        if (state._expireTimer) clearTimeout(state._expireTimer);
+        state._expireTimer = setTimeout(() => {
+          const s = assessments.get(id);
+          if (s && !s.completed) {
+            _markStatus(s, "abandoned").catch(() => {});
+            assessments.delete(id);
+          }
+        }, RESUME_GRACE_MS);
       }
     });
   });
