@@ -16,7 +16,17 @@
  * functional without the GPU service — degraded, not broken.
  */
 
-const SERVICE_URL = process.env.PROCTOR_SERVICE_URL || null;
+// Normalize the configured URL: tolerate a value with no scheme (e.g. a bare
+// Railway host like "proctor-production-x.up.railway.app") — fetch() requires
+// an absolute URL, so default to https:// when no protocol is present.
+function normalizeServiceUrl(raw) {
+  if (!raw) return null;
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+const SERVICE_URL = normalizeServiceUrl(process.env.PROCTOR_SERVICE_URL);
 const SERVICE_TIMEOUT_MS = 4000;
 // Set PROCTOR_DEBUG=1 in Railway to log every frame's service round-trip.
 const DEBUG = process.env.PROCTOR_DEBUG === "1" || process.env.PROCTOR_DEBUG === "true";

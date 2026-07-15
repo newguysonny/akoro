@@ -182,8 +182,10 @@ router.get("/sessions", authenticateToken, async (req, res) => {
       .eq("student_id", userId)
       .in("status", ["active", "complete"])
       .order("updated_at", { ascending: false })
-      .limit(20)
-      .catch(e => { console.log(`[sessions] adaptive_sessions catch: ${e.message}`); return { data: [] }; });
+      .limit(20);
+    // NOTE: the PostgREST builder is a thenable without .catch — calling
+    // .catch() on it threw synchronously and 500'd this endpoint. Errors are
+    // reported in agentErr below instead.
 
     console.log(`[sessions] agent rows=${agentRows?.length ?? 0} agentErr=${agentErr?.message ?? null}`);
 
