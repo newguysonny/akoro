@@ -6,7 +6,7 @@ import { useLang, LS_LANGUAGE } from '../../contexts/LanguageContext.jsx';
 import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
 import {
-  BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON,
+  BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, rowBase,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';

@@ -98,7 +98,7 @@ function Section({ title, children }) {
     </div>
   );
 }
-const rowBase = {
+export const rowBase = {
   display:'flex',alignItems:'center',padding:'13px 16px',
   borderBottom:'1px solid var(--ak-border)',background:'var(--ak-surface)',
   fontFamily:"'Nunito',sans-serif",
