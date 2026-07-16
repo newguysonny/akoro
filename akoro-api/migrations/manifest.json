@@ -66,6 +66,7 @@
     "2026-seed-timetable.sql",
     "2026-seed-staff.sql",
     "2026-seed-doc-templates.sql",
-    "2026-seed-site.sql"
+    "2026-seed-site.sql",
+    "2026-seed-blog.sql"
   ]
 }

@@ -43,6 +43,13 @@ function Block({ block }) {
           ))}
         </ul>
       );
+    case 'image':
+      return block.src ? (
+        <figure style={{ margin: '32px 0' }}>
+          <img src={block.src} alt={block.alt || ''} loading="lazy" style={{ width: '100%', borderRadius: 16, display: 'block', boxShadow: '0 12px 40px rgba(15,10,30,.14)' }} />
+          {block.alt && <figcaption style={{ fontSize: 13.5, color: MUTED, textAlign: 'center', marginTop: 10, fontStyle: 'italic' }}>{block.alt}</figcaption>}
+        </figure>
+      ) : null;
     case 'p':
     default:
       return <p style={{ fontSize: 17, lineHeight: 1.85, color: TEXT, margin: '0 0 20px' }} {...html(block.text)} />;

@@ -5,7 +5,7 @@
  * typed-block array, so this converts markdown ⇄ blocks.
  */
 import { useState, useRef } from 'react';
-import { Bold, Italic, Heading, List, Quote, Link2, Code, Eye, Pencil } from 'lucide-react';
+import { Bold, Italic, Heading, List, Quote, Link2, Code, Image as ImageIcon, Eye, Pencil } from 'lucide-react';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
 /* ── Inline markdown → HTML (shared shape with the reader) ─────────────────── */
@@ -26,9 +26,12 @@ export function blocksToMarkdown(blocks = []) {
     if (b.type === 'h') return `## ${b.text || ''}`;
     if (b.type === 'quote') return `> ${b.text || ''}`;
     if (b.type === 'list') return (b.items || []).map((it) => `- ${it}`).join('\n');
+    if (b.type === 'image') return `![${b.alt || ''}](${b.src || b.url || ''})`;
     return b.text || '';
   }).join('\n\n');
 }
+
+const IMG_RE = /^!\[([^\]]*)\]\(([^)\s]+)\)$/;
 
 export function markdownToBlocks(md = '') {
   const lines = String(md || '').replace(/\r\n/g, '\n').split('\n');
@@ -39,6 +42,8 @@ export function markdownToBlocks(md = '') {
   const flushList = () => { if (list.length) { blocks.push({ type: 'list', items: list.slice() }); list = []; } };
   for (const raw of lines) {
     const line = raw.trimEnd();
+    const img = line.trim().match(IMG_RE);
+    if (img) { flushPara(); flushList(); blocks.push({ type: 'image', src: img[2], alt: img[1] || '' }); continue; }
     if (/^#{1,6}\s+/.test(line)) { flushPara(); flushList(); blocks.push({ type: 'h', text: line.replace(/^#{1,6}\s+/, '').trim() }); continue; }
     if (/^>\s?/.test(line)) { flushPara(); flushList(); blocks.push({ type: 'quote', text: line.replace(/^>\s?/, '').trim() }); continue; }
     if (/^[-*]\s+/.test(line)) { flushPara(); list.push(line.replace(/^[-*]\s+/, '').trim()); continue; }
@@ -58,6 +63,7 @@ function Preview({ md }) {
         if (b.type === 'h') return <h2 key={i} style={{ fontSize: 22, fontWeight: 800, margin: '20px 0 10px' }} dangerouslySetInnerHTML={{ __html: mdInline(b.text) }} />;
         if (b.type === 'quote') return <blockquote key={i} style={{ margin: '16px 0', padding: '12px 18px', background: LIGHT, borderLeft: `4px solid ${AMBER}`, borderRadius: '0 10px 10px 0', fontStyle: 'italic', fontWeight: 600 }} dangerouslySetInnerHTML={{ __html: mdInline(b.text) }} />;
         if (b.type === 'list') return <ul key={i} style={{ margin: '10px 0', paddingLeft: 22 }}>{b.items.map((it, j) => <li key={j} style={{ margin: '4px 0' }} dangerouslySetInnerHTML={{ __html: mdInline(it) }} />)}</ul>;
+        if (b.type === 'image') return b.src ? <figure key={i} style={{ margin: '16px 0' }}><img src={b.src} alt={b.alt || ''} style={{ maxWidth: '100%', borderRadius: 10, display: 'block' }} />{b.alt && <figcaption style={{ fontSize: 12, color: MUTED2, marginTop: 6, textAlign: 'center' }}>{b.alt}</figcaption>}</figure> : null;
         return <p key={i} style={{ margin: '0 0 14px', fontSize: 15 }} dangerouslySetInnerHTML={{ __html: mdInline(b.text) }} />;
       })}
       {(!md || !md.trim()) && <p style={{ color: MUTED2, fontStyle: 'italic' }}>Nothing to preview yet.</p>}
@@ -99,6 +105,18 @@ export default function MarkdownEditor({ value, onChange, minHeight = 320 }) {
     onChange(value.slice(0, a) + md + value.slice(b));
     requestAnimationFrame(() => { el.focus(); const p = a + md.length; el.setSelectionRange(p, p); });
   };
+  const insertImage = () => {
+    const el = ref.current; if (!el) return;
+    const url = window.prompt('Image URL', 'https://');
+    if (!url) return;
+    const alt = window.prompt('Caption / alt text (optional)', '') || '';
+    const a = el.selectionStart;
+    // Put the image on its own line (block image).
+    const nl = (a > 0 && value[a - 1] !== '\n') ? '\n\n' : '';
+    const md = `${nl}![${alt}](${url})\n\n`;
+    onChange(value.slice(0, a) + md + value.slice(a));
+    requestAnimationFrame(() => { el.focus(); const p = a + md.length; el.setSelectionRange(p, p); });
+  };
 
   const tbtn = (onClick, Icon, title) => (
     <button type="button" onClick={onClick} title={title} style={{ width: 32, height: 30, borderRadius: 7, border: `1px solid ${BORDER}`, background: WHITE, color: INK, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={15} /></button>
@@ -115,6 +133,7 @@ export default function MarkdownEditor({ value, onChange, minHeight = 320 }) {
         {tbtn(() => prefixLines('> '), Quote, 'Quote')}
         {tbtn(() => wrap('`', '`', 'code'), Code, 'Inline code')}
         {tbtn(insertLink, Link2, 'Link')}
+        {tbtn(insertImage, ImageIcon, 'Image')}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 4, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 2 }}>
           <button type="button" onClick={() => setTab('write')} style={segStyle(tab === 'write')}><Pencil size={13} /> Write</button>
