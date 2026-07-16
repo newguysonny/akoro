@@ -20,6 +20,7 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../db.js";
+import { notifyUser } from "../notify.js";
 import { authenticateToken, requireRole, issueTokenPair, signHandoff, verifyHandoff } from "../auth/routes.js";
 import {
   initializeTransaction,
@@ -208,6 +209,25 @@ router.post("/teacher-requests/:teacherId", authenticateToken, requireRole(SCHOO
       .eq("school_id", school.id).eq("teacher_id", req.params.teacherId);
     if (error) throw new Error(error.message);
     if (status === "approved") await db.from("classrooms").update({ school_id: school.id }).eq("teacher_id", req.params.teacherId).is("school_id", null);
+
+    // Notify the teacher of the decision.
+    const { data: teacher } = await db.from("users").select("full_name, email").eq("id", req.params.teacherId).maybeSingle();
+    const approved = status === "approved";
+    notifyUser({
+      userId: req.params.teacherId,
+      type: "school_membership",
+      title: approved ? `You've joined ${school.name}` : `Request to join ${school.name} declined`,
+      content: approved ? `${school.name} approved your request to join.` : `${school.name} declined your request to join.`,
+      email: teacher?.email ? {
+        to: teacher.email, name: teacher.full_name,
+        subject: approved ? `Approved: you've joined ${school.name}` : `Update on your request to join ${school.name}`,
+        heading: approved ? "Request approved 🎉" : "Request update",
+        body: approved
+          ? `Good news — <strong>${school.name}</strong> approved your request to join. Your classes and students are now linked to the school.`
+          : `<strong>${school.name}</strong> declined your request to join. You can request another school anytime from your dashboard.`,
+        ctaUrl: process.env.INSTRUCTOR_FRONTEND_URL || undefined, ctaLabel: "Open dashboard →",
+      } : null,
+    });
     res.json({ success: true, status });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

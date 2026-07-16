@@ -38,6 +38,7 @@ import { body, validationResult }         from "express-validator";
 import bcrypt                             from "bcrypt";
 import crypto                             from "crypto";
 import db                                 from "../../db.js";
+import { notifyUser }                      from "../notify.js";
 import { authenticateToken, requireRole, endSession } from "../auth/routes.js";
 import multerLib                           from "multer";
 
@@ -1551,6 +1552,16 @@ router.post("/schools/:schoolId/teacher-requests/:teacherId", authenticateToken,
   // On approval, carry the school onto the teacher's classrooms so their
   // students become school-owned going forward.
   if (status === "approved") await db.from("classrooms").update({ school_id: schoolId }).eq("teacher_id", teacherId).is("school_id", null);
+
+  const { data: sch } = await db.from("school_profiles").select("name").eq("id", schoolId).maybeSingle();
+  const { data: t } = await db.from("users").select("full_name, email").eq("id", teacherId).maybeSingle();
+  const approvedT = status === "approved";
+  notifyUser({
+    userId: teacherId, type: "school_membership",
+    title: approvedT ? `You've joined ${sch?.name || "the school"}` : `Request to join ${sch?.name || "the school"} declined`,
+    content: approvedT ? `${sch?.name || "The school"} approved your request.` : `${sch?.name || "The school"} declined your request.`,
+    email: t?.email ? { to: t.email, name: t.full_name, subject: approvedT ? `Approved: you've joined ${sch?.name}` : `Update on your school request`, heading: approvedT ? "Request approved 🎉" : "Request update", body: approvedT ? `<strong>${sch?.name}</strong> approved your request to join.` : `<strong>${sch?.name}</strong> declined your request to join.`, ctaUrl: process.env.INSTRUCTOR_FRONTEND_URL || undefined, ctaLabel: "Open dashboard →" } : null,
+  });
   res200(res, { status });
 }));
 
@@ -1603,17 +1614,32 @@ router.post("/teacher/join-requests/:id", authenticateToken, requireRole(["instr
   if (!reqRow) return res404(res, "Request not found");
   if (reqRow.classrooms?.teacher_id !== req.user.id) return res403(res, "Not your classroom");
 
+  const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).maybeSingle();
+  const { data: student } = await db.from("users").select("id, full_name, email").eq("id", reqRow.user_id).maybeSingle();
+  const teacherName = me?.full_name || "Your teacher";
+
   if (req.body.decision === "reject") {
     await db.from("classroom_students").update({ status: "removed" }).eq("id", reqRow.id);
+    notifyUser({
+      userId: reqRow.user_id, type: "class_membership",
+      title: `Request to join ${teacherName}'s class declined`,
+      content: `${teacherName} declined your request to join their class.`,
+      email: student?.email ? { to: student.email, name: student.full_name, subject: "Update on your class request", heading: "Request update", body: `${teacherName} declined your request to join their class. You can choose another teacher anytime.`, ctaUrl: process.env.FRONTEND_URL || undefined, ctaLabel: "Open Akoro →" } : null,
+    });
     return res200(res, { status: "removed" });
   }
   await db.from("classroom_students").update({ status: "active" }).eq("id", reqRow.id);
   // Mirror into the school roster if the teacher has a school.
   const schoolId = reqRow.classrooms?.school_id || (await getTeacherApprovedSchoolId(req.user.id));
   if (schoolId) {
-    const { data: student } = await db.from("users").select("id, full_name, email").eq("id", reqRow.user_id).maybeSingle();
     await ensureSisRecord(schoolId, student, req.user.id).catch((e) => console.warn("[profiles] SIS mirror failed:", e.message));
   }
+  notifyUser({
+    userId: reqRow.user_id, type: "class_membership",
+    title: `You've joined ${teacherName}'s class`,
+    content: `${teacherName} approved your request to join their class.`,
+    email: student?.email ? { to: student.email, name: student.full_name, subject: `Approved: you've joined ${teacherName}'s class`, heading: "You're in 🎉", body: `${teacherName} approved your request. You can now learn together in Akoro.`, ctaUrl: process.env.FRONTEND_URL || undefined, ctaLabel: "Start learning →" } : null,
+  });
   res200(res, { status: "active" });
 }));
 

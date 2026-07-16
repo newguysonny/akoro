@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
+import SchoolNudge from '../../components/SchoolNudge.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
@@ -83,6 +84,7 @@ export default function HomePage() {
       subtitle="Here's what's happening today"
     >
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <SchoolNudge />
         {/* Stats grid */}
         <div style={{
           display: 'grid',

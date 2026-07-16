@@ -314,3 +314,21 @@ export async function sendPasswordChangedEmail({ to, name, ip, signinUrl }) {
     html,
   });
 }
+
+/**
+ * Generic notification email — used for approval decisions and similar
+ * one-off messages. Optional CTA button.
+ */
+export async function sendNotificationEmail({ to, name, subject, heading, body, ctaUrl, ctaLabel }) {
+  const greeting = name && name !== "there" ? `Hi ${name},` : "Hi,";
+  const html = layout(`
+    <div style="text-align:center;margin-bottom:22px;">
+      <h1 style="margin:0 0 6px;font-size:23px;font-weight:800;color:${INK};">${heading}</h1>
+      <p style="margin:0;font-size:14px;color:${MUTED};">${greeting}</p>
+    </div>
+    <p style="font-size:14px;color:${MUTED};margin:0 0 24px;line-height:1.7;text-align:center;">${body}</p>
+    ${ctaUrl ? `<div style="text-align:center;margin-bottom:24px;">${btn(ctaLabel || "Open Akoro →", ctaUrl)}</div>` : ""}
+    <p style="font-size:12.5px;color:${SUBTLE};margin:0;text-align:center;line-height:1.6;">You're receiving this because of activity on your Akoro account.</p>
+  `);
+  await sendEmail({ to, subject, text: `${greeting}\n\n${body}${ctaUrl ? `\n\n${ctaLabel || "Open"}: ${ctaUrl}` : ""}`, html });
+}
