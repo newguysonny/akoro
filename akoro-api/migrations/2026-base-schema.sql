@@ -1496,9 +1496,13 @@ CREATE TABLE IF NOT EXISTS edu.marketplace_listings (
   teacher_avatar   TEXT,
   agent_avatar     TEXT,
   style_summary    TEXT,  -- e.g. "Warm, example-first, conversational"
+  cover_image_url  TEXT,  -- listing banner shown on discovery cards
   created_at       TIMESTAMPTZ DEFAULT now(),
   updated_at       TIMESTAMPTZ DEFAULT now()
 );
+
+-- Backfill for databases created before cover_image_url existed.
+ALTER TABLE edu.marketplace_listings ADD COLUMN IF NOT EXISTS cover_image_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_marketplace_active
   ON edu.marketplace_listings(is_active, subject, price_kobo);
@@ -1594,7 +1598,8 @@ SELECT
   tp.style_profile,
   tp.concepts_taught,
   tp.total_hours_trained,
-  tp.session_count       AS training_sessions
+  tp.session_count       AS training_sessions,
+  ml.cover_image_url
 FROM edu.marketplace_listings ml
 LEFT JOIN edu.teacher_profiles tp ON tp.agent_id = ml.agent_id
 WHERE ml.is_active = true;

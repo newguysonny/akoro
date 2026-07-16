@@ -22,11 +22,16 @@
 // ─── § IMPORTS ────────────────────────────────────────────────────────────────
 
 import { Router }                         from "express";
+import multerLib                          from "multer";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { generateSchedule }               from "./schedule.js";
 import { renderDocument }                  from "../school/documentRenderer.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "../school/defaultDocs/index.js";
+import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
+
+// In-memory multer for course cover uploads (8 MB cap, images only).
+const upload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -1539,6 +1544,17 @@ router.get   ("/courses",     listCourses);
 router.post  ("/courses",     createCourse);
 router.patch ("/courses/:id", updateCourse);
 router.delete("/courses/:id", deleteCourse);
+
+// POST /api/instructor/courses/upload — upload a course cover, returns { url }.
+router.post("/courses/upload", upload.single("file"), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: "No file provided" });
+  if (!/^image\//.test(req.file.mimetype || "")) return res.status(400).json({ success: false, message: "Only image files are allowed" });
+  await ensureBucket().catch(() => {});
+  const ext  = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const path = `course-covers/${req.user.id}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+  const url  = await uploadPublicFile(path, req.file.buffer, req.file.mimetype);
+  res.status(201).json({ success: true, url });
+}));
 
 // Live Sessions
 router.get   ("/sessions",     listSessions);

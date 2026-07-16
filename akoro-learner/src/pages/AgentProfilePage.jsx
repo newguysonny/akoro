@@ -92,6 +92,12 @@ export default function AgentProfilePage() {
 
   return shell(
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '16px 18px 120px' }}>
+      {full.cover_image_url && (
+        <div style={{ width: '100%', aspectRatio: '16/7', borderRadius: 16, overflow: 'hidden', marginBottom: 16, background: `${sc}12`, border: `1px solid ${sc}22` }}>
+          <img src={full.cover_image_url} alt="" onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
         <div style={{ width: 64, height: 64, borderRadius: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, background: `${sc}14`, border: `1.5px solid ${sc}33` }}>{full.teacher_avatar || full.agent_avatar || '🎓'}</div>
         <div style={{ flex: 1, minWidth: 0 }}>

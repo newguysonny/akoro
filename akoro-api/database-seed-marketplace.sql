@@ -149,6 +149,12 @@ ON CONFLICT (user_id) DO UPDATE
   SET purchased_agents = EXCLUDED.purchased_agents,
       updated_at       = now();
 
--- ─── § 6. SANITY CHECK ──────────────────────────────────────────────────────
+-- ─── § 6. COVER IMAGES ──────────────────────────────────────────────────────
+-- Stable placeholder banner per listing (only fills blanks; idempotent).
+UPDATE edu.marketplace_listings
+SET cover_image_url = 'https://picsum.photos/seed/agent-' || id::text || '/600/360'
+WHERE cover_image_url IS NULL OR cover_image_url = '';
+
+-- ─── § 7. SANITY CHECK ──────────────────────────────────────────────────────
 -- SELECT title, subject, price_kobo, total_students, avg_rating, rating_count
 -- FROM edu.marketplace_summary ORDER BY avg_rating DESC;

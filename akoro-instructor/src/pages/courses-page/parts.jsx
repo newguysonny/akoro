@@ -6,6 +6,7 @@ import { Plus, Video, BookOpen, Users, Clock, Calendar, Trash2, Edit2, ChevronRi
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, Sel, StatusPill, PlatBadge, CoursTypeBadge, Toast } from '../../components/Primitives.jsx';
 import { useCoursesAPI } from '../../hooks/useCoursesAPI.js';
+import { API } from '../../services/api.js';
 import LiveClassWizard from '../../components/LiveClassWizard.jsx';
 import OnDemandWizard from '../../components/OnDemandWizard.jsx';
 import CourseCurriculum from '../../components/CourseCurriculum.jsx';
@@ -78,9 +79,21 @@ function ScheduleSessionModal({ open, onClose, onSubmit, courses }) {
 }
 
 /* ── Edit Course Modal ──────────────────────────────────────────────── */
+// Upload a course cover, returns its public URL.
+async function uploadCourseCover(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${API}/api/instructor/courses/upload`, { method: 'POST', credentials: 'include', body: fd });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || 'Upload failed');
+  return json.url;
+}
+
 function EditCourseModal({ open, course, onClose, onSave }) {
-  const [form, setForm] = useState({ title: '', description: '', level: 'all', status: 'active' });
+  const [form, setForm] = useState({ title: '', description: '', level: 'all', status: 'active', thumbnail: '' });
   const [loading, setLoading] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverErr, setCoverErr] = useState('');
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
@@ -89,8 +102,19 @@ function EditCourseModal({ open, course, onClose, onSave }) {
       description: course.description || '',
       level:       course.level || 'all',
       status:      course.status || 'active',
+      thumbnail:   course.thumbnail || '',
     });
   }, [course]);
+
+  const onCoverPick = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setCoverErr(''); setCoverBusy(true);
+    try { const url = await uploadCourseCover(f); setField('thumbnail', url); }
+    catch (err) { setCoverErr(err.message || 'Upload failed'); }
+    finally { setCoverBusy(false); }
+  };
 
   const handleSave = async () => {
     if (!form.title.trim()) return;
@@ -117,6 +141,33 @@ function EditCourseModal({ open, course, onClose, onSave }) {
               color: INK, background: WHITE, outline: 'none', resize: 'vertical',
             }}
           />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6, fontFamily: FONT }}>Cover image</label>
+          <div style={{
+            height: 120, borderRadius: 12, border: `1.5px dashed ${BORDER}`, overflow: 'hidden',
+            background: form.thumbnail ? `url(${form.thumbnail}) center/cover` : LIGHT,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+          }}>
+            {!form.thumbnail && <span style={{ fontSize: 12, fontWeight: 600, color: MUTED, fontFamily: FONT }}>No cover yet</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8,
+              border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 700,
+              cursor: coverBusy ? 'default' : 'pointer', fontFamily: FONT,
+            }}>
+              {coverBusy ? 'Uploading…' : (form.thumbnail ? 'Replace cover' : 'Upload cover')}
+              <input type="file" accept="image/*" disabled={coverBusy} onChange={onCoverPick} style={{ display: 'none' }} />
+            </label>
+            {form.thumbnail && !coverBusy && (
+              <button type="button" onClick={() => setField('thumbnail', '')}
+                style={{ background: 'none', border: 'none', color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                Remove
+              </button>
+            )}
+          </div>
+          {coverErr && <div style={{ fontSize: 11.5, fontWeight: 600, color: '#EF4444', marginTop: 6, fontFamily: FONT }}>{coverErr}</div>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Sel label="Level" value={form.level} onChange={e => setField('level', e.target.value)}>
