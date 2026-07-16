@@ -7,7 +7,8 @@ import QRCode from 'qrcode';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { setup2FA, enable2FA, disable2FA } from '../../services/settingsApi.js';
 import {
-  BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON,
+  BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, subjIcon,
+  EMOJI_LIST, AVATAR_LIST, ACCENTS,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 

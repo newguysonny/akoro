@@ -181,6 +181,8 @@ function SubjectsRow({ subjects,onClick,color=BRAND }) {
 
 
 export {
-  BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON,
+  BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, subjIcon,
+  STUDY_LEVELS, EXAM_BOARDS, SCHOOL_TYPES, YEARS, LANGUAGES, COUNTRIES, GOALS, GUIDES,
+  EMOJI_LIST, AVATAR_LIST, ACCENTS,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 };

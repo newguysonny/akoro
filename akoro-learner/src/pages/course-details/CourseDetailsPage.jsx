@@ -12,7 +12,7 @@ import { API } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
 
 /* ── palette ──────────────────────────────────────────────── */
-import { INK, LIGHT, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
+import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
 
 export default function CourseDetailsPage() {
   const { slug } = useParams();
