@@ -4,7 +4,7 @@
  * Students are custom.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2 } from 'lucide-react';
+import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2, Sparkles } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
@@ -239,6 +239,21 @@ export function ClassTimetablePage() {
     finally { setBusy(false); }
   };
 
+  const loadTemplate = async (replace = false) => {
+    if (!classId) return;
+    setBusy(true);
+    try {
+      const res = await apiPost(`${BASE}/timetable/load-template`, { class_id: classId, section_id: sectionId || '', replace });
+      showToast(`Loaded ${res.variant} template — ${res.created} lessons placed ✓`);
+      loadSlots();
+    } catch (e) {
+      // Class already has a timetable → confirm replace.
+      if ((e.message || '').toLowerCase().includes('already has')) {
+        if (window.confirm('This class already has a timetable. Replace it with the starter template?')) return loadTemplate(true);
+      } else showToast(e.message || 'Could not load template');
+    } finally { setBusy(false); }
+  };
+
   // ── Meta (footer) ──
   const [metaForm, setMetaForm] = useState({});
   useEffect(() => {
@@ -275,6 +290,7 @@ export function ClassTimetablePage() {
         <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 150, cursor: 'pointer' }}>
           <option value="">All sections</option>{sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        {classId && <button onClick={loadTemplate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Sparkles size={14} /> Load starter template</button>}
         {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
       </div>
 

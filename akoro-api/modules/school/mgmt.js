@@ -24,6 +24,7 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
 import { renderDocument } from "./documentRenderer.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";
+import { PERIOD_DEFS, TEACH_PERIOD_NAMES, TEMPLATE_SUBJECTS, JUNIOR_GRID, SENIOR_GRID } from "./timetableTemplate.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -1884,6 +1885,71 @@ router.post("/students/:id/assign-fee-groups", authenticateToken, requireRole(SC
       assigned = rows.length;
     }
     res.json({ success: true, assigned });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Load a starter timetable template into a class ────────────────────────
+// Body: { class_id, section_id?, variant?: 'junior'|'senior', replace?: bool }
+// Seeds the 14 periods + subjects (if missing) and fills the class grid.
+// Without replace, refuses (409) if the class already has slots.
+router.post("/timetable/load-template", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { class_id, section_id = null, replace = false } = req.body;
+    if (!class_id) return res.status(400).json({ error: "class_id is required" });
+
+    // Choose grid: explicit variant, else infer from class name (JSS→junior).
+    const { data: cls } = await M().from("classes").select("name").eq("id", class_id).eq("school_id", school.id).maybeSingle();
+    if (!cls) return res.status(404).json({ error: "Class not found" });
+    const variant = req.body.variant || (/^(jss|grade|primary|basic|junior)/i.test(cls.name) ? "junior" : "senior");
+    const grid = variant === "senior" ? SENIOR_GRID : JUNIOR_GRID;
+
+    // Existing slots guard.
+    let sq = M().from("timetable_slots").select("id").eq("school_id", school.id).eq("class_id", class_id);
+    sq = section_id ? sq.eq("section_id", section_id) : sq.is("section_id", null);
+    const { data: existing } = await sq;
+    if (existing?.length && !replace) {
+      return res.status(409).json({ error: "This class already has a timetable.", code: "exists", count: existing.length });
+    }
+    if (existing?.length && replace) {
+      let dq = M().from("timetable_slots").delete().eq("school_id", school.id).eq("class_id", class_id);
+      dq = section_id ? dq.eq("section_id", section_id) : dq.is("section_id", null);
+      await dq;
+    }
+
+    // Ensure subjects (by code) and map code → id.
+    const codes = TEMPLATE_SUBJECTS.map((s) => s[1]);
+    let { data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes);
+    const have = new Set((subs || []).map((s) => s.code));
+    const toAdd = TEMPLATE_SUBJECTS.filter((s) => !have.has(s[1])).map(([name, code, type]) => ({ school_id: school.id, name, code, subject_type: type }));
+    if (toAdd.length) { await M().from("subjects").insert(toAdd); ({ data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes)); }
+    const subjIdByCode = Object.fromEntries((subs || []).map((s) => [s.code, s.id]));
+
+    // Ensure the 14 periods (by name) and map name → id.
+    let { data: pers } = await M().from("periods").select("id, name").eq("school_id", school.id).in("name", PERIOD_DEFS.map((p) => p.name));
+    const havePer = new Set((pers || []).map((p) => p.name));
+    const addPer = PERIOD_DEFS.filter((p) => !havePer.has(p.name)).map((p) => ({ school_id: school.id, ...p }));
+    if (addPer.length) { await M().from("periods").insert(addPer); ({ data: pers } = await M().from("periods").select("id, name").eq("school_id", school.id).in("name", PERIOD_DEFS.map((p) => p.name))); }
+    const perIdByName = Object.fromEntries((pers || []).map((p) => [p.name, p.id]));
+
+    // Build the slot rows from the grid.
+    const rows = [];
+    grid.forEach((day, di) => {
+      day.forEach((cell, ci) => {
+        const [code, alt] = Array.isArray(cell) ? cell : [cell, null];
+        const period_id = perIdByName[TEACH_PERIOD_NAMES[ci]];
+        const subject_id = subjIdByCode[code];
+        if (!period_id || !subject_id) return;
+        rows.push({ school_id: school.id, class_id, section_id, day_of_week: di + 1, period_id, subject_id, alt_subject_id: alt ? (subjIdByCode[alt] || null) : null });
+      });
+    });
+    if (rows.length) {
+      const { error } = await M().from("timetable_slots").insert(rows);
+      if (error) throw new Error(error.message);
+    }
+
+    res.json({ success: true, variant, created: rows.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
