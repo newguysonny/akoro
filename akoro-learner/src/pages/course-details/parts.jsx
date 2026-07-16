@@ -487,7 +487,7 @@ function mapCourse(api) {
 }
 
 /* ── guest / overview view ────────────────────────────────── */
-function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
+function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive }) {
   const isVideo = type === 'video';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
   const [tab, setTab] = useState('about');
@@ -521,10 +521,10 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 180 }}>
             {!isEnrolled && (isVideo
-              ? <Btn variant="primary" size="lg" style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff' }}><ShoppingCart size={15} />Buy · {course.priceLabel}</Btn>
-              : <Btn variant="red" size="lg"><Radio size={15} />Join live class</Btn>)}
-            {isEnrolled && isVideo && <Btn variant="primary" size="lg" style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff' }}><Play size={15} />Continue watching</Btn>}
-            {isEnrolled && !isVideo && <Btn variant="red" size="lg"><Radio size={15} />Join live now</Btn>}
+              ? <Btn variant="primary" size="lg" onClick={onEnrol} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff', opacity: enrolling ? .6 : 1 }}><ShoppingCart size={15} />{enrolling ? 'Enrolling…' : `Buy · ${course.priceLabel}`}</Btn>
+              : <Btn variant="red" size="lg" onClick={onEnrol} style={{ opacity: enrolling ? .6 : 1 }}><Radio size={15} />{enrolling ? 'Enrolling…' : 'Enrol · Join live'}</Btn>)}
+            {isEnrolled && isVideo && <Btn variant="primary" size="lg" onClick={onPlay} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff' }}><Play size={15} />Continue watching</Btn>}
+            {isEnrolled && !isVideo && <Btn variant="red" size="lg" onClick={onJoinLive}><Radio size={15} />Join live now</Btn>}
           </div>
         </div>
         {isEnrolled && (
@@ -568,7 +568,9 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay }) {
                 <div style={{ textAlign: 'center', marginBottom: 14 }}>
                   <div style={{ fontSize: 28, fontWeight: 900, color: INK }}>{course.priceLabel}</div>
                 </div>
-                {isVideo ? <Btn variant="primary" style={{ width: '100%' }}><ShoppingCart size={14} />Enrol now</Btn> : <Btn variant="red" style={{ width: '100%' }}><Radio size={14} />Join class</Btn>}
+                {isVideo
+                  ? <Btn variant="primary" onClick={onEnrol} style={{ width: '100%', opacity: enrolling ? .6 : 1 }}><ShoppingCart size={14} />{enrolling ? 'Enrolling…' : 'Enrol now'}</Btn>
+                  : <Btn variant="red" onClick={onEnrol} style={{ width: '100%', opacity: enrolling ? .6 : 1 }}><Radio size={14} />{enrolling ? 'Enrolling…' : 'Enrol · Join class'}</Btn>}
                 <div style={{ textAlign: 'center', fontSize: 11, color: MUTED2, margin: '10px 0 14px' }}>30-day money-back guarantee</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 13.5, color: MUTED }}>
                   {[[<Play size={13} />, isVideo ? `${course.hours}h on-demand video` : 'Live sessions'], [<Brain size={13} />, 'AI agent included'], [<Award size={13} />, 'Certificate of completion']].map(([ic, tx], i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ color: BRAND }}>{ic}</span>{tx}</div>)}

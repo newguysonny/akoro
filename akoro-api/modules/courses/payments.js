@@ -94,7 +94,7 @@ const paymentHandlers = {
 
     const { data: course } = await db
       .from("courses")
-      .select("id, title, price, discount_price, discount_expires_at, is_free, currency, instructor_id, is_published")
+      .select("id, slug, title, price, discount_price, discount_expires_at, is_free, currency, instructor_id, is_published")
       .eq("id", course_id).single();
 
     if (!course)           return res404(res, "Course not found");
@@ -158,7 +158,10 @@ const paymentHandlers = {
         currency:     course.currency ?? "NGN",
         reference:    `akoro_${payment.id}_${Date.now()}`,
         metadata:     { payment_id: payment.id, course_id, user_id: userId, course_title: course.title, coupon_id: couponRecord?.id ?? null },
-        callback_url: `${process.env.APP_URL}/api/payments/verify`,
+        // Where Paystack redirects the learner's browser after payment. Must be
+        // a frontend page (the webhook POST /api/payments/verify handles the
+        // enrolment server-side). The course page re-checks access on ?payment.
+        callback_url: `${process.env.FRONTEND_URL || "https://akoro.app"}/course/${course.slug}?payment=success`,
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
     );

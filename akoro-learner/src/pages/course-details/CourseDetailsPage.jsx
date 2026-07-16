@@ -9,7 +9,8 @@ import {
   Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video,
 } from 'lucide-react';
 import { API } from '../../services/api.js';
-import { BRAND } from '../../constants.js';
+import { BRAND, GREEN, RED } from '../../constants.js';
+import Toast from '../../components/common/Toast.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
 import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
@@ -21,6 +22,14 @@ export default function CourseDetailsPage() {
   const [courseType, setCourseType] = useState('live');
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const checkEnrolled = async (cid, seed = false) => {
+    if (!cid) return seed;
+    const prog = await fetch(`${API}/api/courses/${cid}/progress`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    return seed || !!(prog && prog.success !== false && (prog.data || prog.overall_progress != null || prog.modules));
+  };
 
   useEffect(() => {
     let alive = true;
@@ -29,12 +38,7 @@ export default function CourseDetailsPage() {
       // Fetch the course by name (slug) or id, then probe enrollment with its real id.
       const res = await fetch(`${API}/api/courses/${slug}/full`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const mapped = mapCourse(res?.course || res);
-      let enrolled = mapped.enrolled;
-      const cid = mapped.course.id;
-      if (cid) {
-        const prog = await fetch(`${API}/api/courses/${cid}/progress`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-        enrolled = enrolled || !!(prog && prog.success !== false && (prog.data || prog.overall_progress != null || prog.modules));
-      }
+      const enrolled = await checkEnrolled(mapped.course.id, mapped.enrolled);
       if (!alive) return;
       setData(mapped);
       setCourseType(mapped.type);
@@ -44,6 +48,42 @@ export default function CourseDetailsPage() {
   }, [slug]);
 
   const view = data || mapCourse(null);
+
+  // Enrol / purchase. Free → immediate enrolment; paid → Paystack checkout.
+  const enroll = async () => {
+    const cid = view.course.id;
+    if (!cid || enrolling) return;
+    setEnrolling(true);
+    try {
+      const r = await fetch(`${API}/api/payments/initiate`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ course_id: cid }),
+      });
+      if (r.status === 401) { localStorage.setItem('akoro_redirect', `/course/${slug}`); navigate('/signin'); return; }
+      const d = await r.json().catch(() => ({}));
+      const body = d.data || d;
+      if (!r.ok) { setToast({ msg: d.message || body.message || 'Could not enrol', color: RED }); return; }
+      if (body.free) { setIsEnrolled(true); setToast({ msg: 'Enrolled! 🎉', color: GREEN }); }
+      else if (body.checkout_url) { window.location.href = body.checkout_url; }
+      else { setToast({ msg: 'Enrolment started', color: GREEN }); }
+    } catch { setToast({ msg: 'Network error — please retry', color: RED }); }
+    finally { setEnrolling(false); }
+  };
+
+  // Return from Paystack (?payment=success) — the webhook creates the
+  // enrolment; re-check access and clean the URL.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (!p.get('payment') || !view.course.id) return;
+    if (p.get('payment') === 'success') {
+      checkEnrolled(view.course.id).then((ok) => {
+        setIsEnrolled(ok);
+        setToast({ msg: ok ? 'Payment confirmed — you’re enrolled! 🎉' : 'Payment received — enrolment finalising…', color: GREEN });
+      });
+    }
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [view.course.id]);
 
   return (
     <div style={{ minHeight: '100vh', background: BG, fontFamily: FONT, color: INK }}>
@@ -69,9 +109,14 @@ export default function CourseDetailsPage() {
         ) : isEnrolled && courseType === 'video' ? (
           <EnrolledVideoView course={view.course} modules={view.modules} />
         ) : (
-          <CourseOverview type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules} onPlay={() => {}} />
+          <CourseOverview
+            type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
+            onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
+            onJoinLive={() => view.course.id && navigate(`/live/${view.course.id}`)} />
         )}
       </div>
+
+      {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>
   );
 }
