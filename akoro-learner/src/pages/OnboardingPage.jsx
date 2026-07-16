@@ -51,6 +51,8 @@ export default function OnboardingPage() {
     if (step === 0) {
       if (!fullName.trim())   { setErr(t('onboarding.err_name')); return false; }
       if (!studyLevel)        { setErr(t('onboarding.err_level')); return false; }
+      // A teacher is required (unless none exist yet to choose from).
+      if (teachers.length > 0 && !teacherId) { setErr('Please choose your teacher'); return false; }
     }
     if (step === 1) {
       if (!agentName.trim())  { setErr(t('onboarding.err_agent')); return false; }
@@ -190,9 +192,9 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div style={{ marginTop: 14 }}>
-              <label style={lbl}>Your teacher <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>(you can choose later)</span></label>
+              <label style={lbl}>Your teacher <span style={{ fontWeight: 500, color: RED }}>*</span></label>
               <select value={teacherId} onChange={e => setTeacherId(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
-                <option value="">I'm learning on my own</option>
+                <option value="">{teachers.length ? 'Select your teacher…' : 'No teachers available yet'}</option>
                 {teachers.map(tt => <option key={tt.id} value={tt.id}>{tt.full_name}{tt.school_name ? ` · ${tt.school_name}` : ''}</option>)}
               </select>
               {teacherId && <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '6px 2px 0' }}>Your teacher will approve your request to join their class.</p>}

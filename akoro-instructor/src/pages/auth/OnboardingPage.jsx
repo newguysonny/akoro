@@ -40,6 +40,8 @@ export default function OnboardingPage() {
   const validateStep = () => {
     setErr('');
     if (step === 0 && !fullName.trim()) { setErr('Please enter your name'); return false; }
+    // A school is required (unless none exist yet to choose from).
+    if (step === 0 && schools.length > 0 && !schoolId) { setErr('Please choose your school'); return false; }
     if (step === 1 && subjects.length === 0) { setErr('Pick at least one subject you teach'); return false; }
     return true;
   };
@@ -137,9 +139,9 @@ export default function OnboardingPage() {
               <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Dr. Amara Osei" style={inp}/>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Your school <span style={{ fontWeight: 500, color: '#9490A0' }}>(you can join later)</span></label>
+              <label style={lbl}>Your school <span style={{ fontWeight: 500, color: RED }}>*</span></label>
               <select value={schoolId} onChange={e => setSchoolId(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
-                <option value="">I'm independent — no school</option>
+                <option value="">{schools.length ? 'Select your school…' : 'No schools available yet'}</option>
                 {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               {schoolId && <p style={{ fontSize: 11.5, color: '#9490A0', margin: '6px 2px 0' }}>The school admin will approve your request to join.</p>}
