@@ -2,6 +2,8 @@
  * Settings — shared colors, reference data, and presentational atoms.
  */
 
+import { useLang } from '../../contexts/LanguageContext.jsx';
+
 const BRAND  = '#6C3BFF';
 const RED    = '#EF4444';
 const ORANGE = '#E8884A';

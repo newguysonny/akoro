@@ -7,6 +7,7 @@ import {
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet } from './sheets.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 
 /* ─── Agent tab ───────────────────────────────────────────────── */
 function AgentTab({ agent, setAgent, onSaveAgent }) {
