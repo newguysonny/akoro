@@ -18,6 +18,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -102,6 +103,47 @@ function AgentCard({ listing, owned, onOpen }) {
         <span style={{ fontSize: 13, fontWeight: 900, color: listing.is_free ? GREEN : BRAND }}>
           {fmtPrice(listing.price_kobo, listing.currency, t('discovery.free'))}
         </span>
+      </div>
+    </button>
+  );
+}
+
+/* ── Course card (live / video catalogue) ──────────────────── */
+function CourseCard({ course, onOpen }) {
+  const { t } = useLang();
+  const grad = Array.isArray(course.grad) ? course.grad : ['#EEE', '#DDD'];
+  const isLive = course.type === 'live';
+  return (
+    <button
+      onClick={() => onOpen(course)}
+      style={{
+        textAlign: 'left', background: 'var(--ak-surface)', border: '1px solid #EDE9FE', borderRadius: 16,
+        padding: 14, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'flex-start',
+        gap: 12, width: '100%', boxShadow: '0 2px 10px rgba(108,59,255,.04)',
+      }}>
+      <div style={{
+        width: 54, height: 54, borderRadius: 14, flexShrink: 0, display: 'flex',
+        alignItems: 'center', justifyContent: 'center', fontSize: 26,
+        background: `linear-gradient(135deg, ${grad[0]}, ${grad[1]})`,
+      }}>{course.emoji || '📘'}</div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{course.title}</span>
+          <span style={{ fontSize: 9, fontWeight: 900, color: isLive ? RED : BRAND, background: isLive ? 'rgba(239,68,68,.12)' : 'rgba(108,59,255,.12)', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>
+            {isLive ? t('discovery.live') : t('discovery.video')}
+          </span>
+        </div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 2, textTransform: 'capitalize' }}>
+          {course.subject || t('discovery.general')} · {course.level}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>⏱ {course.dur}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
+            <span style={{ color: GOLD }}>★</span>{course.rating} · 👥 {course.rev}
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: course.priceNum === 0 ? GREEN : BRAND, marginLeft: 'auto' }}>{course.price}</span>
+        </div>
       </div>
     </button>
   );
@@ -362,14 +404,16 @@ function PurchaseHistorySheet({ onClose }) {
 /* ── Main tab ──────────────────────────────────────────────── */
 export default function DiscoveryTab() {
   const { t } = useLang();
+  const navigate = useNavigate();
+  const [cat,      setCat]      = useState('guides'); // guides | live | video
   const [listings, setListings] = useState([]);
+  const [courses,  setCourses]  = useState([]);
+  const [courseLoading, setCourseLoading] = useState(false);
   const [loading,  setLoading]  = useState(true);
   const [subject,  setSubject]  = useState('all');
   const [freeOnly, setFreeOnly] = useState(false);
   const [query,    setQuery]    = useState('');
-  const [active,   setActive]   = useState(null);   // open listing
   const [ownedIds, setOwnedIds] = useState(new Set());
-  const [busy,     setBusy]     = useState(false);
   const [toast,    setToast]    = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -455,128 +499,128 @@ export default function DiscoveryTab() {
     window.history.replaceState({}, '', window.location.pathname);
   }, [loadOwned]);
 
-  const ownedActive = active ? ownedIds.has(active.agent_id) : false;
-
-  const handlePurchase = async (listing) => {
-    setBusy(true);
-    try {
-      const d = await apiPost(`${MKT}/checkout`, { studentId: STUDENT_ID, listingId: listing.id });
-      if (d.authorization_url) {
-        window.location.href = d.authorization_url;   // → Paystack
-        return;
-      }
-      // Free agent granted immediately
-      setOwnedIds(prev => new Set(prev).add(listing.agent_id));
-      setToast({ msg: d.message || `${listing.title} unlocked!`, color: GREEN });
-      setActive(null);
-    } catch (e) {
-      const msg = String(e.message || '').includes('409') ? t('discovery.already_own') : t('discovery.checkout_failed');
-      setToast({ msg, color: RED });
-    } finally { setBusy(false); }
-  };
-
-  const handleUse = async (listing) => {
-    setBusy(true);
-    try {
-      await apiPost(`${MKT}/set-default`, {
-        userId:        STUDENT_ID,
-        agentPairId:   `trained:${listing.agent_id}`,
-        activeAgentId: listing.agent_id,
-      });
-      setToast({ msg: `${listing.title} ${t('discovery.now_active')}`, color: GREEN });
-      setActive(null);
-    } catch {
-      setToast({ msg: t('discovery.could_not_set'), color: RED });
-    } finally { setBusy(false); }
-  };
-
-  const handleReview = async (listing, rating, reviewText) => {
-    try {
-      await apiPost(`${MKT}/review`, { studentId: STUDENT_ID, listingId: listing.id, rating, reviewText });
-      setToast({ msg: t('discovery.review_posted'), color: GREEN });
-      return true;
-    } catch (e) {
-      const msg = String(e.message || '').includes('403') ? t('discovery.purchase_first') : t('discovery.could_not_review');
-      setToast({ msg, color: RED });
-      return false;
-    }
-  };
+  // Live / Video course catalogue — fetched on demand when the tab opens.
+  useEffect(() => {
+    if (cat === 'guides') return;
+    let alive = true;
+    setCourseLoading(true);
+    apiGet(`/api/courses/published?type=${cat}&limit=40`)
+      .then(d => { if (alive) setCourses(d.courses || []); })
+      .catch(() => { if (alive) { setCourses([]); setToast({ msg: t('discovery.could_not_load'), color: RED }); } })
+      .finally(() => { if (alive) setCourseLoading(false); });
+    return () => { alive = false; };
+  }, [cat]);
 
   const subjectKeys = useMemo(() => Object.keys(SUBJECTS), []);
+
+  const CATS = [
+    { key: 'guides', label: t('discovery.cat_guides'), icon: '🧑‍🏫' },
+    { key: 'live',   label: t('discovery.cat_live'),   icon: '🔴' },
+    { key: 'video',  label: t('discovery.cat_video'),  icon: '🎬' },
+  ];
 
   return (
     <div style={{ padding: '4px 14px 90px', fontFamily: FONT }}>
       <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
 
-      {/* Search + purchases */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
-          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('discovery.search')}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 13, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
-          />
-        </div>
-        <button onClick={() => setHistoryOpen(true)} title="My purchases"
-          style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 18, cursor: 'pointer' }}>
-          🧾
-        </button>
-      </div>
-
-      {/* Subject pills + free toggle */}
-      <div style={{ display: 'flex', gap: 7, marginTop: 11, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-        {subjectKeys.map((key) => {
-          const s = SUBJECTS[key];
-          const on = subject === key;
+      {/* Category tabs — Teaching Guides / Live Classes / Video Courses */}
+      <div style={{ display: 'flex', gap: 7, marginTop: 8 }}>
+        {CATS.map((c) => {
+          const on = cat === c.key;
           return (
-            <button key={key} onClick={() => setSubject(key)} style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100,
-              border: on ? `1.5px solid ${s.color}` : '1.5px solid #E5E0F5', background: on ? `${s.color}12` : 'var(--ak-surface)',
+            <button key={c.key} onClick={() => setCat(c.key)} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '9px 6px', borderRadius: 12,
+              border: on ? `1.5px solid ${BRAND}` : '1.5px solid #E5E0F5', background: on ? `${BRAND}12` : 'var(--ak-surface)',
               cursor: 'pointer', fontFamily: FONT,
             }}>
-              <span style={{ fontSize: 12 }}>{s.icon}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 800, color: on ? s.color : 'var(--ak-text-sub)' }}>{s.label}</span>
+              <span style={{ fontSize: 13 }}>{c.icon}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: on ? BRAND : 'var(--ak-text-sub)' }}>{c.label}</span>
             </button>
           );
         })}
-        <button onClick={() => setFreeOnly(f => !f)} style={{
-          flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100,
-          border: freeOnly ? `1.5px solid ${GREEN}` : '1.5px solid #E5E0F5', background: freeOnly ? `${GREEN}12` : 'var(--ak-surface)',
-          cursor: 'pointer', fontFamily: FONT,
-        }}>
-          <span style={{ fontSize: 11.5, fontWeight: 800, color: freeOnly ? GREEN : 'var(--ak-text-sub)' }}>✨ {t('discovery.free')}</span>
-        </button>
       </div>
 
-      {/* Results */}
-      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
-        {loading ? (
-          [0, 1, 2].map(i => <div key={i} style={{ height: 120, borderRadius: 16, background: 'var(--ak-surface)', opacity: .55 }} />)
-        ) : listings.length === 0 ? (
-          <div style={{ background: 'var(--ak-surface)', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, opacity: .3 }}>🔭</div>
-            <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '10px 0 0' }}>{t('discovery.no_agents')}</p>
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>{t('discovery.no_agents_hint')}</p>
+      {/* Teaching Guides — searchable agent marketplace */}
+      {cat === 'guides' && (
+        <>
+          {/* Search + purchases */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('discovery.search')}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 13, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
+              />
+            </div>
+            <button onClick={() => setHistoryOpen(true)} title="My purchases"
+              style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 18, cursor: 'pointer' }}>
+              🧾
+            </button>
           </div>
-        ) : (
-          listings.map((l) => (
-            <AgentCard key={l.id} listing={l} owned={ownedIds.has(l.agent_id)} onOpen={setActive} />
-          ))
-        )}
-      </div>
 
-      {active && (
-        <AgentSheet
-          listing={active}
-          owned={ownedActive}
-          busy={busy}
-          onClose={() => setActive(null)}
-          onPurchase={handlePurchase}
-          onUse={handleUse}
-          onReview={handleReview}
-        />
+          {/* Subject pills + free toggle */}
+          <div style={{ display: 'flex', gap: 7, marginTop: 11, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+            {subjectKeys.map((key) => {
+              const s = SUBJECTS[key];
+              const on = subject === key;
+              return (
+                <button key={key} onClick={() => setSubject(key)} style={{
+                  flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100,
+                  border: on ? `1.5px solid ${s.color}` : '1.5px solid #E5E0F5', background: on ? `${s.color}12` : 'var(--ak-surface)',
+                  cursor: 'pointer', fontFamily: FONT,
+                }}>
+                  <span style={{ fontSize: 12 }}>{s.icon}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: on ? s.color : 'var(--ak-text-sub)' }}>{s.label}</span>
+                </button>
+              );
+            })}
+            <button onClick={() => setFreeOnly(f => !f)} style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100,
+              border: freeOnly ? `1.5px solid ${GREEN}` : '1.5px solid #E5E0F5', background: freeOnly ? `${GREEN}12` : 'var(--ak-surface)',
+              cursor: 'pointer', fontFamily: FONT,
+            }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: freeOnly ? GREEN : 'var(--ak-text-sub)' }}>✨ {t('discovery.free')}</span>
+            </button>
+          </div>
+
+          {/* Agent results */}
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
+            {loading ? (
+              [0, 1, 2].map(i => <div key={i} style={{ height: 120, borderRadius: 16, background: 'var(--ak-surface)', opacity: .55 }} />)
+            ) : listings.length === 0 ? (
+              <div style={{ background: 'var(--ak-surface)', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
+                <div style={{ fontSize: 40, opacity: .3 }}>🔭</div>
+                <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '10px 0 0' }}>{t('discovery.no_agents')}</p>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>{t('discovery.no_agents_hint')}</p>
+              </div>
+            ) : (
+              listings.map((l) => (
+                <AgentCard key={l.id} listing={l} owned={ownedIds.has(l.agent_id)} onOpen={(li) => navigate(`/agent/${li.id}`)} />
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Live Classes / Video Courses — course catalogue */}
+      {cat !== 'guides' && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
+          {courseLoading ? (
+            [0, 1, 2].map(i => <div key={i} style={{ height: 90, borderRadius: 16, background: 'var(--ak-surface)', opacity: .55 }} />)
+          ) : courses.length === 0 ? (
+            <div style={{ background: 'var(--ak-surface)', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, opacity: .3 }}>{cat === 'live' ? '🔴' : '🎬'}</div>
+              <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '10px 0 0' }}>{t('discovery.no_courses')}</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>{t('discovery.no_courses_hint')}</p>
+            </div>
+          ) : (
+            courses.map((c) => (
+              <CourseCard key={c.id} course={c} onOpen={(co) => navigate(`/course/${co.slug}`)} />
+            ))
+          )}
+        </div>
       )}
 
       {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}

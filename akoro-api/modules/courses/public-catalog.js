@@ -85,10 +85,13 @@ router.get("/courses/published", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 12, 50);
 
-    const { data, error } = await db
+    let q = db
       .from("courses")
       .select("id, slug, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, course_modules(title, order_index)")
-      .eq("is_published", true)
+      .eq("is_published", true);
+    // Optional ?type=live|video filter for the discovery categories.
+    if (req.query.type === "live" || req.query.type === "video") q = q.eq("course_type", req.query.type);
+    const { data, error } = await q
       .order("rating", { ascending: false })
       .order("total_students", { ascending: false })
       .limit(limit);
@@ -104,6 +107,7 @@ router.get("/courses/published", async (req, res) => {
       return {
         id:       c.id,
         slug:     c.slug,
+        type:     c.course_type,
         cat:      m.cat,
         emoji:    m.emoji,
         grad:     m.grad,
