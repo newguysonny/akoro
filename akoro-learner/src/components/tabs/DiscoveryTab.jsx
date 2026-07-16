@@ -1,31 +1,29 @@
 /**
  * DiscoveryTab.jsx
  * ─────────────────────────────────────────────────────────────
- * Browse, preview and purchase trained teacher agents.
+ * Udemy-style discovery feed: a Categories chip row plus horizontal
+ * "rails" of rich course cards for each content type.
  *
- * Data source: /api/adaptive/marketplace/* (edu.marketplace_summary view)
- *   GET  /listings?subject=&free=        — browse
- *   GET  /search?q=&subject=             — search
- *   GET  /listings/:id                   — full profile
- *   GET  /reviews/:listingId             — reviews
- *   GET  /my-agents/:userId              — owned agents (purchased + platform)
- *   POST /checkout { studentId, listingId } — free→grant, paid→Paystack URL
- *   POST /set-default { userId, agentPairId, activeAgentId } — adopt agent
+ *   · Teaching Guides — trained teacher agents  → /agent/:id
+ *   · Live Classes    — published live courses  → /course/:slug
+ *   · Video Courses   — published video courses → /course/:slug
  *
- * On purchase, the agent_id lands in
- * edu.user_agent_preferences.purchased_agents; "Use this agent" writes
- * default_pair_id = trained:<agentId> + active_agent_id.
+ * Data sources:
+ *   GET /api/adaptive/marketplace/listings          — agents
+ *   GET /api/courses/published?type=live|video      — course catalogue
+ *   GET /api/adaptive/marketplace/my-agents/:userId — owned agents (badges)
+ *   GET /api/adaptive/marketplace/purchases/:userId — purchase history sheet
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
-import { API, apiGet, apiPost } from '../../services/api.js';
+import { API, apiGet } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
 
-const FONT  = "'Nunito', sans-serif";
-const MKT    = '/api/adaptive/marketplace';
+const FONT = "'Nunito', sans-serif";
+const MKT  = '/api/adaptive/marketplace';
 
 const fmtPrice = (kobo, currency = 'NGN', freeLabel = 'Free') =>
   !kobo || kobo === 0
@@ -41,6 +39,17 @@ const fmtCount = (n) => {
 const subjectColor = (subject) =>
   SUBJECT_COLORS[(subject || '').toLowerCase()] || BRAND;
 
+// Map a free-text subject ("Physics", "Further Mathematics") to one of our
+// category keys so the Categories chips can filter every rail consistently.
+const catOf = (subject) => {
+  const s = (subject || '').toLowerCase();
+  if (/math/.test(s)) return 'maths';
+  if (/english|literatur|essay|writing/.test(s)) return 'english';
+  if (/physic|chem|bio|science|comput|python|econom|account|data/.test(s)) return 'science';
+  return 'other';
+};
+const matchCat = (subject, cat) => cat === 'all' || catOf(subject) === cat;
+
 /* ── Stars ─────────────────────────────────────────────────── */
 function Stars({ rating = 0, size = 12 }) {
   const r = Number(rating) || 0;
@@ -53,287 +62,169 @@ function Stars({ rating = 0, size = 12 }) {
   );
 }
 
-/* ── Listing card ──────────────────────────────────────────── */
-function AgentCard({ listing, owned, onOpen }) {
+// Rating line in the Udemy style: bold score · stars · (count)
+function RatingLine({ score, count }) {
+  const s = Number(score) || 0;
+  if (!s) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5 }}>
+      <span style={{ fontSize: 12.5, fontWeight: 900, color: '#B4690E' }}>{s.toFixed(1)}</span>
+      <Stars rating={s} size={12} />
+      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>({fmtCount(count)})</span>
+    </div>
+  );
+}
+
+/* ── Course card (Udemy vertical) ──────────────────────────── */
+const CARD_W = 172;
+function CourseCard({ course, onOpen, wide }) {
+  const { t } = useLang();
+  const grad = Array.isArray(course.grad) ? course.grad : ['#EDE9FE', '#DDD3FF'];
+  const isLive = course.type === 'live';
+  const free = course.priceNum === 0;
+  return (
+    <button
+      onClick={() => onOpen(course)}
+      style={{
+        textAlign: 'left', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+        fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 7,
+        width: wide ? '100%' : CARD_W, flexShrink: 0,
+      }}>
+      {/* thumbnail */}
+      <div style={{
+        width: '100%', aspectRatio: '16/10', borderRadius: 12, overflow: 'hidden', position: 'relative',
+        background: `linear-gradient(135deg, ${grad[0]}, ${grad[1]})`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid var(--ak-border)',
+      }}>
+        <span style={{ fontSize: 46 }}>{course.emoji || '📘'}</span>
+        <span style={{
+          position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, letterSpacing: .3,
+          color: '#fff', background: isLive ? RED : 'rgba(17,12,40,.72)', padding: '3px 7px', borderRadius: 6,
+        }}>{isLive ? `● ${t('discovery.live')}` : t('discovery.video')}</span>
+      </div>
+
+      <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.25,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 34 }}>
+        {course.title}
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', textTransform: 'capitalize',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {course.subject || t('discovery.general')} · {course.level}
+      </div>
+      <RatingLine score={Number(course.rating)} count={course.rev} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
+        <span style={{ fontSize: 14, fontWeight: 900, color: free ? GREEN : 'var(--ak-text)' }}>{course.price}</span>
+        {free && <span style={{ fontSize: 9, fontWeight: 900, color: GREEN, background: 'rgba(16,185,129,.12)', padding: '2px 6px', borderRadius: 5 }}>{t('discovery.free').toUpperCase()}</span>}
+      </div>
+    </button>
+  );
+}
+
+/* ── Agent card (Udemy vertical) ───────────────────────────── */
+function AgentCard({ listing, owned, onOpen, wide }) {
   const { t } = useLang();
   const sc = subjectColor(listing.subject);
   return (
     <button
       onClick={() => onOpen(listing)}
       style={{
-        textAlign: 'left', background: 'var(--ak-surface)', border: '1px solid #EDE9FE', borderRadius: 16,
-        padding: 14, cursor: 'pointer', fontFamily: FONT, display: 'flex', flexDirection: 'column',
-        gap: 10, width: '100%', boxShadow: '0 2px 10px rgba(108,59,255,.04)',
-      }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
-        <div style={{
-          width: 46, height: 46, borderRadius: 13, flexShrink: 0, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', fontSize: 24,
-          background: `${sc}14`, border: `1.5px solid ${sc}33`,
-        }}>{listing.teacher_avatar || listing.agent_avatar || '🎓'}</div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{listing.title}</span>
-            {owned && <span style={{ fontSize: 9, fontWeight: 900, color: GREEN, background: 'rgba(16,185,129,.12)', padding: '2px 6px', borderRadius: 6 }}>{t('discovery.owned')}</span>}
-          </div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 2 }}>
-            {t('discovery.by')} {listing.teacher_name || t('discovery.teacher')}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, fontWeight: 800, color: sc, background: `${sc}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              <Stars rating={listing.avg_rating} size={11} />
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{Number(listing.avg_rating || 0).toFixed(1)} ({listing.rating_count || 0})</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {listing.style_summary && (
-        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-sub)', margin: 0, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {listing.style_summary}
-        </p>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #F3F0FF', paddingTop: 9 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          👥 {fmtCount(listing.total_students)} {t('discovery.learning')}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 900, color: listing.is_free ? GREEN : BRAND }}>
-          {fmtPrice(listing.price_kobo, listing.currency, t('discovery.free'))}
-        </span>
-      </div>
-    </button>
-  );
-}
-
-/* ── Course card (live / video catalogue) ──────────────────── */
-function CourseCard({ course, onOpen }) {
-  const { t } = useLang();
-  const grad = Array.isArray(course.grad) ? course.grad : ['#EEE', '#DDD'];
-  const isLive = course.type === 'live';
-  return (
-    <button
-      onClick={() => onOpen(course)}
-      style={{
-        textAlign: 'left', background: 'var(--ak-surface)', border: '1px solid #EDE9FE', borderRadius: 16,
-        padding: 14, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'flex-start',
-        gap: 12, width: '100%', boxShadow: '0 2px 10px rgba(108,59,255,.04)',
+        textAlign: 'left', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+        fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 7,
+        width: wide ? '100%' : CARD_W, flexShrink: 0,
       }}>
       <div style={{
-        width: 54, height: 54, borderRadius: 14, flexShrink: 0, display: 'flex',
-        alignItems: 'center', justifyContent: 'center', fontSize: 26,
-        background: `linear-gradient(135deg, ${grad[0]}, ${grad[1]})`,
-      }}>{course.emoji || '📘'}</div>
+        width: '100%', aspectRatio: '16/10', borderRadius: 12, overflow: 'hidden', position: 'relative',
+        background: `linear-gradient(135deg, ${sc}22, ${sc}0D)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: `1px solid ${sc}33`,
+      }}>
+        <span style={{ fontSize: 46 }}>{listing.teacher_avatar || listing.agent_avatar || '🎓'}</span>
+        {owned && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6 }}>{t('discovery.owned')}</span>}
+        <span style={{ position: 'absolute', bottom: 7, right: 7, fontSize: 9, fontWeight: 900, color: sc, background: '#fff', padding: '3px 7px', borderRadius: 6, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
+      </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{course.title}</span>
-          <span style={{ fontSize: 9, fontWeight: 900, color: isLive ? RED : BRAND, background: isLive ? 'rgba(239,68,68,.12)' : 'rgba(108,59,255,.12)', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>
-            {isLive ? t('discovery.live') : t('discovery.video')}
-          </span>
-        </div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 2, textTransform: 'capitalize' }}>
-          {course.subject || t('discovery.general')} · {course.level}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>⏱ {course.dur}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
-            <span style={{ color: GOLD }}>★</span>{course.rating} · 👥 {course.rev}
-          </span>
-          <span style={{ fontSize: 12.5, fontWeight: 900, color: course.priceNum === 0 ? GREEN : BRAND, marginLeft: 'auto' }}>{course.price}</span>
-        </div>
+      <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.25,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 34 }}>
+        {listing.title}
+      </div>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {t('discovery.by')} {listing.teacher_name || t('discovery.teacher')}
+      </div>
+      <RatingLine score={Number(listing.avg_rating)} count={listing.rating_count} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 1 }}>
+        <span style={{ fontSize: 14, fontWeight: 900, color: listing.is_free ? GREEN : 'var(--ak-text)' }}>
+          {fmtPrice(listing.price_kobo, listing.currency, t('discovery.free'))}
+        </span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>👥 {fmtCount(listing.total_students)}</span>
       </div>
     </button>
   );
 }
 
-/* ── Interactive star picker ───────────────────────────────── */
-function StarInput({ value, onChange }) {
+/* ── Section rail: header + See all + horizontal scroll / grid ── */
+function Rail({ title, accent, count, loading, expanded, onToggle, children, emptyText }) {
+  const { t } = useLang();
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <button key={i} onClick={() => onChange(i)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 1 }}>
-          <span style={{ fontSize: 26, color: i <= value ? GOLD : 'var(--ak-border2)' }}>★</span>
-        </button>
-      ))}
-    </div>
+    <section style={{ marginTop: 26 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 14px', gap: 10 }}>
+        <h2 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0, lineHeight: 1.15 }}>
+          {title.pre}<span style={{ color: accent }}>{title.hi}</span>
+        </h2>
+        {count > 0 && (
+          <button onClick={onToggle} style={{ background: 'none', border: 'none', color: BRAND, fontSize: 13, fontWeight: 900, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {expanded ? t('discovery.show_less') : t('discovery.see_all')}
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', gap: 12, padding: '14px 14px 4px', overflow: 'hidden' }}>
+          {[0, 1, 2].map(i => <div key={i} style={{ width: CARD_W, flexShrink: 0, height: 170, borderRadius: 12, background: 'var(--ak-surface)', opacity: .55 }} />)}
+        </div>
+      ) : count === 0 ? (
+        <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text-muted)', padding: '10px 14px 0', margin: 0 }}>{emptyText}</p>
+      ) : expanded ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '18px 12px', padding: '14px 14px 4px' }}>
+          {children}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 12, padding: '14px 14px 6px', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+          {children}
+        </div>
+      )}
+    </section>
   );
 }
 
-/* ── Detail sheet ──────────────────────────────────────────── */
-function AgentSheet({ listing, owned, onClose, onPurchase, onUse, onReview, busy }) {
+/* ── Category chips ────────────────────────────────────────── */
+function Categories({ value, onChange }) {
   const { t } = useLang();
-  const [full,     setFull]     = useState(listing);
-  const [reviews,  setReviews]  = useState([]);
-  const [myRating, setMyRating] = useState(0);
-  const [myText,   setMyText]   = useState('');
-  const [posting,  setPosting]  = useState(false);
-  const [posted,   setPosted]   = useState(false);
-  const sc = subjectColor(listing.subject);
-
-  useEffect(() => {
-    let alive = true;
-    apiGet(`${MKT}/listings/${listing.id}`).then(d => { if (alive && d.listing) setFull(prev => ({ ...prev, ...d.listing })); }).catch(() => {});
-    apiGet(`${MKT}/reviews/${listing.id}`).then(d => { if (alive) setReviews(d.reviews || []); }).catch(() => {});
-    return () => { alive = false; };
-  }, [listing.id]);
-
-  const submitReview = async () => {
-    if (!myRating) return;
-    setPosting(true);
-    const ok = await onReview(listing, myRating, myText.trim());
-    setPosting(false);
-    if (ok) {
-      setPosted(true);
-      // Optimistically prepend so the user sees their review immediately
-      setReviews(prev => [{ id: `me-${Date.now()}`, rating: myRating, review_text: myText.trim() }, ...prev]);
-    }
-  };
-
-  const useCases = full.topics_covered?.length ? full.topics_covered
-    : full.concepts_taught?.length ? full.concepts_taught
-    : full.preview_topics || [];
-
+  const keys = Object.keys(SUBJECTS);
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: 'var(--ak-surface)', width: '100%', maxWidth: 540, maxHeight: '92vh', borderRadius: '22px 22px 0 0',
-        overflowY: 'auto', fontFamily: FONT, animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)',
-      }}>
-        {/* grabber */}
-        <div style={{ position: 'sticky', top: 0, background: 'var(--ak-surface)', padding: '10px 0 4px', display: 'flex', justifyContent: 'center', zIndex: 2 }}>
-          <div style={{ width: 38, height: 4, borderRadius: 4, background: 'var(--ak-border2)' }} />
-        </div>
-
-        <div style={{ padding: '8px 18px 20px' }}>
-          {/* header */}
-          <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start' }}>
-            <div style={{ width: 60, height: 60, borderRadius: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, background: `${sc}14`, border: `1.5px solid ${sc}33` }}>
-              {full.teacher_avatar || full.agent_avatar || '🎓'}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>{full.title}</h2>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 3 }}>{t('discovery.by')} {full.teacher_name || t('discovery.teacher')}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                <Stars rating={full.avg_rating} size={13} />
-                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{Number(full.avg_rating || 0).toFixed(1)} · {full.rating_count || 0} {t('discovery.reviews')}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* stat strip */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 16 }}>
-            {[
-              { label: t('discovery.learners'),  value: fmtCount(full.total_students), icon: '👥' },
-              { label: t('discovery.trained_on'), value: `${Math.round(full.total_hours_trained || 0)}h`, icon: '🎓' },
-              { label: t('discovery.sessions'),  value: fmtCount(full.training_sessions), icon: '📈' },
-            ].map((s) => (
-              <div key={s.label} style={{ background: '#F8F6FF', borderRadius: 12, padding: '10px 6px', textAlign: 'center' }}>
-                <div style={{ fontSize: 16 }}>{s.icon}</div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', marginTop: 2 }}>{s.value}</div>
-                <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: .3 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* subject + price row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: sc, background: `${sc}14`, padding: '4px 11px', borderRadius: 20, textTransform: 'capitalize' }}>{full.subject || t('discovery.general')}</span>
-            <span style={{ fontSize: 20, fontWeight: 900, color: full.is_free ? GREEN : BRAND }}>{fmtPrice(full.price_kobo, full.currency, t('discovery.free'))}</span>
-          </div>
-
-          {full.description && (
-            <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ak-text-sec)', lineHeight: 1.6, marginTop: 14 }}>{full.description}</p>
-          )}
-
-          {full.sample_tip && (
-            <div style={{ background: 'rgba(108,59,255,.06)', border: '1px solid rgba(108,59,255,.15)', borderRadius: 12, padding: '11px 13px', marginTop: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 900, color: BRAND, letterSpacing: .4, marginBottom: 4 }}>{t('discovery.sample_tip')}</div>
-              <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text-sec)', margin: 0, lineHeight: 1.5, fontStyle: 'italic' }}>"{full.sample_tip}"</p>
-            </div>
-          )}
-
-          {/* use cases */}
-          {useCases.length > 0 && (
-            <div style={{ marginTop: 18 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 8 }}>{t('discovery.what_learn')}</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                {useCases.slice(0, 12).map((t, i) => (
-                  <span key={i} style={{ fontSize: 11.5, fontWeight: 700, color: '#4B5563', background: 'var(--ak-border)', padding: '5px 11px', borderRadius: 9 }}>{t}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* write a review — owners only */}
-          {owned && (
-            <div style={{ marginTop: 20, background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 14, padding: '13px 14px' }}>
-              <div style={{ fontSize: 11.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 9 }}>
-                {posted ? t('discovery.thanks_review') : t('discovery.rate_agent')}
-              </div>
-              {!posted && (
-                <>
-                  <StarInput value={myRating} onChange={setMyRating} />
-                  <textarea
-                    value={myText}
-                    onChange={(e) => setMyText(e.target.value)}
-                    placeholder={t('discovery.review_ph')}
-                    rows={2}
-                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, padding: '10px 12px', borderRadius: 11, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none', resize: 'none', lineHeight: 1.45 }}
-                  />
-                  <button onClick={submitReview} disabled={!myRating || posting}
-                    style={{ marginTop: 9, padding: '9px 16px', borderRadius: 11, border: 'none',
-                      background: (!myRating || posting) ? '#E5E1F2' : `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`,
-                      color: (!myRating || posting) ? 'var(--ak-text-muted)' : '#fff', fontSize: 12.5, fontWeight: 800,
-                      cursor: (!myRating || posting) ? 'default' : 'pointer', fontFamily: FONT }}>
-                    {posting ? t('discovery.posting') : t('discovery.submit_review')}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* reviews */}
-          {reviews.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 8 }}>{t('discovery.recent_reviews')}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {reviews.slice(0, 5).map((r) => (
-                  <div key={r.id} style={{ background: '#FBFAFF', border: '1px solid #F0ECFF', borderRadius: 12, padding: '10px 12px' }}>
-                    <Stars rating={r.rating} size={11} />
-                    {r.review_text && <p style={{ fontSize: 12.5, fontWeight: 600, color: '#4B5563', margin: '5px 0 0', lineHeight: 1.45 }}>{r.review_text}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* sticky action bar */}
-        <div style={{ position: 'sticky', bottom: 0, background: 'var(--ak-surface)', backdropFilter: 'blur(8px)', borderTop: '1px solid #EDE9FE', padding: '12px 18px calc(12px + env(safe-area-inset-bottom,0px))', display: 'flex', gap: 10 }}>
-          {owned ? (
-            <button onClick={() => onUse(full)} disabled={busy} style={primaryBtn(GREEN, busy)}>
-              {busy ? t('discovery.setting') : t('discovery.use_agent')}
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}>
+        <h2 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>{t('discovery.categories')}</h2>
+      </div>
+      <div style={{ display: 'flex', gap: 9, marginTop: 12, padding: '0 14px 2px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {keys.map((key) => {
+          const s = SUBJECTS[key];
+          const on = value === key;
+          return (
+            <button key={key} onClick={() => onChange(key)} style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 100,
+              border: on ? `1.5px solid ${s.color}` : '1.5px solid var(--ak-border3)',
+              background: on ? `${s.color}12` : 'var(--ak-surface)', cursor: 'pointer', fontFamily: FONT,
+            }}>
+              <span style={{ fontSize: 14 }}>{s.icon}</span>
+              <span style={{ fontSize: 13.5, fontWeight: 800, color: on ? s.color : 'var(--ak-text)', whiteSpace: 'nowrap' }}>{s.label}</span>
             </button>
-          ) : (
-            <button onClick={() => onPurchase(full)} disabled={busy} style={primaryBtn(BRAND, busy)}>
-              {busy ? t('discovery.processing') : full.is_free ? t('discovery.get_free') : `${t('discovery.unlock')} · ${fmtPrice(full.price_kobo, full.currency)}`}
-            </button>
-          )}
-        </div>
+          );
+        })}
       </div>
     </div>
   );
 }
-
-const primaryBtn = (color, busy) => ({
-  flex: 1, padding: '14px', borderRadius: 14, border: 'none',
-  background: busy ? '#C7C2E0' : `linear-gradient(135deg, ${color}, ${color}CC)`,
-  color: '#fff', fontSize: 14, fontWeight: 900, cursor: busy ? 'default' : 'pointer',
-  fontFamily: FONT,
-});
 
 /* ── Purchase history sheet ────────────────────────────────── */
 function PurchaseHistorySheet({ onClose }) {
@@ -405,15 +296,16 @@ function PurchaseHistorySheet({ onClose }) {
 export default function DiscoveryTab() {
   const { t } = useLang();
   const navigate = useNavigate();
-  const [cat,      setCat]      = useState('guides'); // guides | live | video
-  const [listings, setListings] = useState([]);
-  const [courses,  setCourses]  = useState([]);
-  const [courseLoading, setCourseLoading] = useState(false);
-  const [loading,  setLoading]  = useState(true);
-  const [subject,  setSubject]  = useState('all');
-  const [freeOnly, setFreeOnly] = useState(false);
-  const [query,    setQuery]    = useState('');
+  const [agents,  setAgents]  = useState([]);
+  const [live,    setLive]    = useState([]);
+  const [video,   setVideo]   = useState([]);
+  const [lAgents, setLAgents] = useState(true);
+  const [lLive,   setLLive]   = useState(true);
+  const [lVideo,  setLVideo]  = useState(true);
+  const [cat,     setCat]     = useState('all');
+  const [query,   setQuery]   = useState('');
   const [ownedIds, setOwnedIds] = useState(new Set());
+  const [expanded, setExpanded] = useState({});   // { live, video, guides }
   const [toast,    setToast]    = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -425,42 +317,24 @@ export default function DiscoveryTab() {
     } catch { /* not fatal */ }
   }, []);
 
-  const loadListings = useCallback(async () => {
-    setLoading(true);
-    try {
-      let d;
-      if (query.trim()) {
-        const sub = subject !== 'all' ? `&subject=${subject}` : '';
-        d = await apiGet(`${MKT}/search?q=${encodeURIComponent(query.trim())}${sub}`);
-      } else {
-        const params = new URLSearchParams();
-        if (subject !== 'all') params.set('subject', subject);
-        if (freeOnly) params.set('free', 'true');
-        params.set('limit', '40');
-        d = await apiGet(`${MKT}/listings?${params.toString()}`);
-      }
-      setListings(d.listings || []);
-    } catch (e) {
-      setToast({ msg: t('discovery.could_not_load'), color: RED });
-      setListings([]);
-    } finally { setLoading(false); }
-  }, [subject, freeOnly, query]);
+  const loadAll = useCallback(async () => {
+    setLAgents(true); setLLive(true); setLVideo(true);
+    apiGet(`${MKT}/listings?limit=40`)
+      .then(d => setAgents(d.listings || [])).catch(() => setAgents([])).finally(() => setLAgents(false));
+    apiGet(`/api/courses/published?type=live&limit=40`)
+      .then(d => setLive(d.courses || [])).catch(() => setLive([])).finally(() => setLLive(false));
+    apiGet(`/api/courses/published?type=video&limit=40`)
+      .then(d => setVideo(d.courses || [])).catch(() => setVideo([])).finally(() => setLVideo(false));
+  }, []);
 
-  useEffect(() => { loadOwned(); }, [loadOwned]);
-  useEffect(() => {
-    const t = setTimeout(loadListings, query ? 350 : 0);  // debounce search
-    return () => clearTimeout(t);
-  }, [loadListings, query]);
+  useEffect(() => { loadOwned(); loadAll(); }, [loadOwned, loadAll]);
 
-  // Keep the latest loaders reachable from the once-mounted socket effect.
-  const loadListingsRef = useRef(loadListings);
-  const loadOwnedRef    = useRef(loadOwned);
-  loadListingsRef.current = loadListings;
-  loadOwnedRef.current    = loadOwned;
+  const loadAllRef   = useRef(loadAll);
+  const loadOwnedRef = useRef(loadOwned);
+  loadAllRef.current   = loadAll;
+  loadOwnedRef.current = loadOwned;
 
-  // Live refresh — backend pushes agent_purchased after a payment confirms
-  // (Paystack webhook). Reuses the shared window.io socket; only detaches its
-  // own listener on unmount so the dashboard's connection stays alive.
+  // Live refresh — backend pushes agent_purchased after a payment confirms.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.io) return;
     let socket;
@@ -468,163 +342,94 @@ export default function DiscoveryTab() {
       socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
       const subscribe = () => socket.emit('subscribe-student', STUDENT_ID);
       subscribe();
-      socket.on('connect', subscribe);   // re-join the room after a reconnect
-
+      socket.on('connect', subscribe);
       const onPurchased = (data) => {
         if (data?.agentId) setOwnedIds(prev => new Set(prev).add(data.agentId));
         else loadOwnedRef.current();
         setToast({ msg: data?.message || t('discovery.new_unlocked'), color: GREEN });
-        loadListingsRef.current();   // refresh learner counts / owned badges
+        loadAllRef.current();
       };
       socket.on('agent_purchased', onPurchased);
-      return () => {
-        socket.off('agent_purchased', onPurchased);
-        socket.off('connect', subscribe);
-      };
+      return () => { socket.off('agent_purchased', onPurchased); socket.off('connect', subscribe); };
     } catch { /* WS unavailable */ }
   }, []);
 
-  // Detect a Paystack redirect return (?payment=success&agentId=…)
+  // Paystack redirect return (?payment=success&agentId=…)
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const pay = p.get('payment');
     if (!pay) return;
-    if (pay === 'success') {
-      setToast({ msg: t('discovery.unlocked_picker'), color: GREEN });
-      loadOwned();
-    } else if (pay === 'failed' || pay === 'cancelled' || pay === 'error') {
-      setToast({ msg: t('discovery.payment_incomplete'), color: RED });
-    }
-    // strip query so it doesn't re-fire
+    if (pay === 'success') { setToast({ msg: t('discovery.unlocked_picker'), color: GREEN }); loadOwned(); }
+    else if (['failed', 'cancelled', 'error'].includes(pay)) setToast({ msg: t('discovery.payment_incomplete'), color: RED });
     window.history.replaceState({}, '', window.location.pathname);
   }, [loadOwned]);
 
-  // Live / Video course catalogue — fetched on demand when the tab opens.
-  useEffect(() => {
-    if (cat === 'guides') return;
-    let alive = true;
-    setCourseLoading(true);
-    apiGet(`/api/courses/published?type=${cat}&limit=40`)
-      .then(d => { if (alive) setCourses(d.courses || []); })
-      .catch(() => { if (alive) { setCourses([]); setToast({ msg: t('discovery.could_not_load'), color: RED }); } })
-      .finally(() => { if (alive) setCourseLoading(false); });
-    return () => { alive = false; };
-  }, [cat]);
+  const q = query.trim().toLowerCase();
+  const byQuery = (text) => !q || (text || '').toLowerCase().includes(q);
 
-  const subjectKeys = useMemo(() => Object.keys(SUBJECTS), []);
+  const fAgents = useMemo(() => agents.filter(a => matchCat(a.subject, cat) && byQuery(`${a.title} ${a.teacher_name} ${a.subject}`)), [agents, cat, q]);
+  const fLive   = useMemo(() => live.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [live, cat, q]);
+  const fVideo  = useMemo(() => video.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [video, cat, q]);
 
-  const CATS = [
-    { key: 'guides', label: t('discovery.cat_guides'), icon: '🧑‍🏫' },
-    { key: 'live',   label: t('discovery.cat_live'),   icon: '🔴' },
-    { key: 'video',  label: t('discovery.cat_video'),  icon: '🎬' },
-  ];
+  const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
 
   return (
-    <div style={{ padding: '4px 14px 90px', fontFamily: FONT }}>
+    <div style={{ padding: '4px 0 90px', fontFamily: FONT }}>
       <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
 
-      {/* Category tabs — Teaching Guides / Live Classes / Video Courses */}
-      <div style={{ display: 'flex', gap: 7, marginTop: 8 }}>
-        {CATS.map((c) => {
-          const on = cat === c.key;
-          return (
-            <button key={c.key} onClick={() => setCat(c.key)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '9px 6px', borderRadius: 12,
-              border: on ? `1.5px solid ${BRAND}` : '1.5px solid #E5E0F5', background: on ? `${BRAND}12` : 'var(--ak-surface)',
-              cursor: 'pointer', fontFamily: FONT,
-            }}>
-              <span style={{ fontSize: 13 }}>{c.icon}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 800, color: on ? BRAND : 'var(--ak-text-sub)' }}>{c.label}</span>
-            </button>
-          );
-        })}
+      {/* Search + purchases */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 14px 0' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('discovery.search')}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
+          />
+        </div>
+        <button onClick={() => setHistoryOpen(true)} title="My purchases"
+          style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 18, cursor: 'pointer' }}>
+          🧾
+        </button>
       </div>
 
-      {/* Teaching Guides — searchable agent marketplace */}
-      {cat === 'guides' && (
-        <>
-          {/* Search + purchases */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('discovery.search')}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 13, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
-              />
-            </div>
-            <button onClick={() => setHistoryOpen(true)} title="My purchases"
-              style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid #E5E0F5', background: 'var(--ak-surface)', fontSize: 18, cursor: 'pointer' }}>
-              🧾
-            </button>
-          </div>
+      <Categories value={cat} onChange={setCat} />
 
-          {/* Subject pills + free toggle */}
-          <div style={{ display: 'flex', gap: 7, marginTop: 11, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-            {subjectKeys.map((key) => {
-              const s = SUBJECTS[key];
-              const on = subject === key;
-              return (
-                <button key={key} onClick={() => setSubject(key)} style={{
-                  flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100,
-                  border: on ? `1.5px solid ${s.color}` : '1.5px solid #E5E0F5', background: on ? `${s.color}12` : 'var(--ak-surface)',
-                  cursor: 'pointer', fontFamily: FONT,
-                }}>
-                  <span style={{ fontSize: 12 }}>{s.icon}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: on ? s.color : 'var(--ak-text-sub)' }}>{s.label}</span>
-                </button>
-              );
-            })}
-            <button onClick={() => setFreeOnly(f => !f)} style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 100,
-              border: freeOnly ? `1.5px solid ${GREEN}` : '1.5px solid #E5E0F5', background: freeOnly ? `${GREEN}12` : 'var(--ak-surface)',
-              cursor: 'pointer', fontFamily: FONT,
-            }}>
-              <span style={{ fontSize: 11.5, fontWeight: 800, color: freeOnly ? GREEN : 'var(--ak-text-sub)' }}>✨ {t('discovery.free')}</span>
-            </button>
-          </div>
+      {/* Teaching Guides */}
+      <Rail
+        title={{ pre: t('discovery.rail_guides_pre'), hi: t('discovery.cat_guides') }}
+        accent={BRAND} count={fAgents.length} loading={lAgents}
+        expanded={!!expanded.guides} onToggle={() => toggle('guides')}
+        emptyText={t('discovery.no_agents')}>
+        {(expanded.guides ? fAgents : fAgents.slice(0, 10)).map((a) => (
+          <AgentCard key={a.id} listing={a} owned={ownedIds.has(a.agent_id)} wide={expanded.guides} onOpen={(li) => navigate(`/agent/${li.id}`)} />
+        ))}
+      </Rail>
 
-          {/* Agent results */}
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
-            {loading ? (
-              [0, 1, 2].map(i => <div key={i} style={{ height: 120, borderRadius: 16, background: 'var(--ak-surface)', opacity: .55 }} />)
-            ) : listings.length === 0 ? (
-              <div style={{ background: 'var(--ak-surface)', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
-                <div style={{ fontSize: 40, opacity: .3 }}>🔭</div>
-                <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '10px 0 0' }}>{t('discovery.no_agents')}</p>
-                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>{t('discovery.no_agents_hint')}</p>
-              </div>
-            ) : (
-              listings.map((l) => (
-                <AgentCard key={l.id} listing={l} owned={ownedIds.has(l.agent_id)} onOpen={(li) => navigate(`/agent/${li.id}`)} />
-              ))
-            )}
-          </div>
-        </>
-      )}
+      {/* Live Classes */}
+      <Rail
+        title={{ pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }}
+        accent={RED} count={fLive.length} loading={lLive}
+        expanded={!!expanded.live} onToggle={() => toggle('live')}
+        emptyText={t('discovery.no_courses')}>
+        {(expanded.live ? fLive : fLive.slice(0, 10)).map((c) => (
+          <CourseCard key={c.id} course={c} wide={expanded.live} onOpen={(co) => navigate(`/course/${co.slug}`)} />
+        ))}
+      </Rail>
 
-      {/* Live Classes / Video Courses — course catalogue */}
-      {cat !== 'guides' && (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
-          {courseLoading ? (
-            [0, 1, 2].map(i => <div key={i} style={{ height: 90, borderRadius: 16, background: 'var(--ak-surface)', opacity: .55 }} />)
-          ) : courses.length === 0 ? (
-            <div style={{ background: 'var(--ak-surface)', border: '1px dashed #DDD3FF', borderRadius: 16, padding: 40, textAlign: 'center' }}>
-              <div style={{ fontSize: 40, opacity: .3 }}>{cat === 'live' ? '🔴' : '🎬'}</div>
-              <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '10px 0 0' }}>{t('discovery.no_courses')}</p>
-              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '4px 0 0' }}>{t('discovery.no_courses_hint')}</p>
-            </div>
-          ) : (
-            courses.map((c) => (
-              <CourseCard key={c.id} course={c} onOpen={(co) => navigate(`/course/${co.slug}`)} />
-            ))
-          )}
-        </div>
-      )}
+      {/* Video Courses */}
+      <Rail
+        title={{ pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }}
+        accent={GREEN} count={fVideo.length} loading={lVideo}
+        expanded={!!expanded.video} onToggle={() => toggle('video')}
+        emptyText={t('discovery.no_courses')}>
+        {(expanded.video ? fVideo : fVideo.slice(0, 10)).map((c) => (
+          <CourseCard key={c.id} course={c} wide={expanded.video} onOpen={(co) => navigate(`/course/${co.slug}`)} />
+        ))}
+      </Rail>
 
       {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}
-
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>
   );
