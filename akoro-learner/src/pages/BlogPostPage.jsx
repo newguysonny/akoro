@@ -9,14 +9,27 @@ const B = '#6C3BFF', INK = '#0F0A1E', TEXT = '#3F3A52', MUTED = '#7A7588', BORDE
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
+// Inline markdown → HTML: **bold**, *italic*, _italic_, `code`, [text](url).
+const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function mdInline(text) {
+  let s = esc(text);
+  s = s.replace(/`([^`]+)`/g, '<code style="background:#F1EEFB;padding:1px 5px;border-radius:4px;font-size:.92em">$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  s = s.replace(/(^|\s)_([^_]+)_(?=\s|$)/g, '$1<em>$2</em>');
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, `<a href="$2" target="_blank" rel="noopener noreferrer" style="color:${B};text-decoration:underline">$1</a>`);
+  return s;
+}
+const html = (t) => ({ dangerouslySetInnerHTML: { __html: mdInline(t) } });
+
 function Block({ block }) {
   switch (block.type) {
     case 'h':
-      return <h2 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 'clamp(22px,3vw,28px)', color: INK, margin: '40px 0 14px', lineHeight: 1.3 }}>{block.text}</h2>;
+      return <h2 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 'clamp(22px,3vw,28px)', color: INK, margin: '40px 0 14px', lineHeight: 1.3 }} {...html(block.text)} />;
     case 'quote':
       return (
         <blockquote style={{ margin: '32px 0', padding: '20px 28px', background: TINT, borderLeft: `4px solid ${B}`, borderRadius: '0 12px 12px 0' }}>
-          <p style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 'clamp(18px,2.4vw,22px)', color: INK, margin: 0, lineHeight: 1.5, fontStyle: 'italic' }}>{block.text}</p>
+          <p style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 'clamp(18px,2.4vw,22px)', color: INK, margin: 0, lineHeight: 1.5, fontStyle: 'italic' }} {...html(block.text)} />
         </blockquote>
       );
     case 'list':
@@ -25,14 +38,14 @@ function Block({ block }) {
           {block.items.map((it, i) => (
             <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: 17, lineHeight: 1.7, color: TEXT }}>
               <ChevronRight size={18} color={B} style={{ marginTop: 5, flexShrink: 0 }} />
-              <span>{it}</span>
+              <span {...html(it)} />
             </li>
           ))}
         </ul>
       );
     case 'p':
     default:
-      return <p style={{ fontSize: 17, lineHeight: 1.85, color: TEXT, margin: '0 0 20px' }}>{block.text}</p>;
+      return <p style={{ fontSize: 17, lineHeight: 1.85, color: TEXT, margin: '0 0 20px' }} {...html(block.text)} />;
   }
 }
 

@@ -1,15 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast, Inp, Txa, Sel, Skeleton } from '../components/Primitives.jsx';
+import MarkdownEditor, { blocksToMarkdown, markdownToBlocks } from '../components/MarkdownEditor.jsx';
 import useAdminAPI from '../hooks/useAdminAPI.js';
 import { apiPatch } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
 const CATS = ['Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies'];
-const BLOCK_TYPES = ['p', 'h', 'quote', 'list'];
-const BLOCK_LABELS = { p: 'Paragraph', h: 'Heading', quote: 'Pull Quote', list: 'List (one item per line)' };
 const STATUSES = ['draft', 'published', 'archived'];
 
 function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
@@ -27,7 +26,7 @@ export default function BlogPostEditorPage() {
     title: '', slug: '', excerpt: '', category: CATS[0], author: '', author_role: '',
     read_min: 5, image: '', featured: false, status: 'draft',
   });
-  const [blocks, setBlocks] = useState([{ type: 'p', text: '' }]);
+  const [markdown, setMarkdown] = useState('');
 
   const showToast = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 3500); };
   const setField = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -38,20 +37,14 @@ export default function BlogPostEditorPage() {
       const post = posts.find(p => p.id === id);
       if (!post) { showToast('Post not found', 'error'); navigate('/content/blog'); return; }
       setForm({ title: post.title || '', slug: post.slug || '', excerpt: post.excerpt || '', category: post.category || CATS[0], author: post.author || '', author_role: post.author_role || '', read_min: post.read_min || 5, image: post.image || '', featured: !!post.featured, status: post.status || 'draft' });
-      setBlocks((post.body || []).map(b => b.type === 'list' ? { ...b, text: (b.items || []).join('\n') } : { type: b.type, text: b.text || '' }));
+      setMarkdown(blocksToMarkdown(post.body || []));
     }).catch(() => showToast('Failed to load post', 'error')).finally(() => setLoading(false));
   }, [id]);
-
-  const addBlock = () => setBlocks(b => [...b, { type: 'p', text: '' }]);
-  const removeBlock = i => setBlocks(b => b.filter((_, idx) => idx !== i));
-  const setBlock = (i, k, v) => setBlocks(b => b.map((bl, idx) => idx === i ? { ...bl, [k]: v } : bl));
-
-  const buildBody = () => blocks.map(b => b.type === 'list' ? { type: 'list', items: b.text.split('\n').map(s => s.trim()).filter(Boolean) } : { type: b.type, text: b.text });
 
   const handleSave = async () => {
     if (!form.title) return showToast('Title is required', 'error');
     setSaving(true);
-    const payload = { ...form, read_min: parseInt(form.read_min) || 5, body: buildBody() };
+    const payload = { ...form, read_min: parseInt(form.read_min) || 5, body: markdownToBlocks(markdown) };
     if (!payload.slug) payload.slug = slugify(form.title);
     try {
       if (isNew) { await api.createBlogPost(payload); showToast('Post created'); navigate('/content/blog'); }
@@ -89,27 +82,12 @@ export default function BlogPostEditorPage() {
             </div>
           </div>
 
-          {/* Body blocks */}
+          {/* Body — rich markdown editor */}
           <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ marginBottom: 12 }}>
               <span style={{ fontWeight: 700, fontSize: 14, color: INK }}>Article Body</span>
-              <Btn variant="ghost" size="sm" onClick={addBlock}><Plus size={13} /> Add block</Btn>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {blocks.map((block, i) => (
-                <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14 }}>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                    <Sel value={block.type} onChange={e => setBlock(i, 'type', e.target.value)} style={{ flex: 1, fontSize: 13 }}>
-                      {BLOCK_TYPES.map(t => <option key={t} value={t}>{BLOCK_LABELS[t]}</option>)}
-                    </Sel>
-                    <Btn variant="ghost" size="sm" onClick={() => removeBlock(i)} style={{ color: '#EF4444' }}><Trash2 size={13} /></Btn>
-                  </div>
-                  <Txa value={block.text} onChange={e => setBlock(i, 'text', e.target.value)}
-                    rows={block.type === 'list' ? 4 : block.type === 'p' ? 4 : 2}
-                    placeholder={block.type === 'list' ? 'One item per line…' : block.type === 'h' ? 'Section heading…' : block.type === 'quote' ? 'Pull quote text…' : 'Paragraph text…'} />
-                </div>
-              ))}
-            </div>
+            <MarkdownEditor value={markdown} onChange={setMarkdown} />
           </div>
         </div>
 
