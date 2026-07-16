@@ -170,8 +170,9 @@ router.get("/instructors", authenticateToken, async (req, res) => {
     if (!school) return;
     const { data: links } = await db
       .from("school_teachers")
-      .select("teacher_id, created_at, users:users!school_teachers_teacher_id_fkey(id, full_name, email, avatar_url, subjects)")
+      .select("teacher_id, created_at, status, users:users!school_teachers_teacher_id_fkey(id, full_name, email, avatar_url, subjects)")
       .eq("school_id", school.id)
+      .eq("status", "approved")
       .order("created_at", { ascending: false });
 
     const rows = (links || []).map((l) => l.users).filter(Boolean);
@@ -180,6 +181,34 @@ router.get("/instructors", authenticateToken, async (req, res) => {
       return { id: u.id, full_name: u.full_name, email: u.email, avatar_url: u.avatar_url, subjects: u.subjects || [], course_count: count || 0 };
     }));
     res.json({ success: true, data: withCounts });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/school/teacher-requests — pending teachers who asked to join ─────
+router.get("/teacher-requests", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data } = await db.from("school_teachers")
+      .select("teacher_id, requested_at, status, users:users!school_teachers_teacher_id_fkey(id, full_name, email, avatar_url, subjects)")
+      .eq("school_id", school.id).eq("status", "pending").order("requested_at", { ascending: true });
+    res.json({ success: true, data: (data || []).map((r) => ({ teacher_id: r.teacher_id, requested_at: r.requested_at, full_name: r.users?.full_name, email: r.users?.email, avatar_url: r.users?.avatar_url, subjects: r.users?.subjects || [] })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/teacher-requests/:teacherId  { decision } ────────────────
+router.post("/teacher-requests/:teacherId", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const decision = req.body?.decision;
+    if (!["approve", "reject"].includes(decision)) return res.status(400).json({ error: "decision must be approve or reject" });
+    const status = decision === "approve" ? "approved" : "rejected";
+    const { error } = await db.from("school_teachers").update({ status, decided_at: new Date(), decided_by: req.user.id })
+      .eq("school_id", school.id).eq("teacher_id", req.params.teacherId);
+    if (error) throw new Error(error.message);
+    if (status === "approved") await db.from("classrooms").update({ school_id: school.id }).eq("teacher_id", req.params.teacherId).is("school_id", null);
+    res.json({ success: true, status });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

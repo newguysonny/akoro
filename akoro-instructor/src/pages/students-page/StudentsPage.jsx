@@ -17,6 +17,7 @@ import {
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
 import { EnrolModal, StudentSheet, StudentRow } from './parts.jsx';
+import JoinRequests from './JoinRequests.jsx';
 
 export default function StudentsPage() {
   const { getStudents, removeStudent } = useStudentsAPI();
@@ -83,6 +84,9 @@ export default function StudentsPage() {
         </Btn>
       }
     >
+      {/* Pending learner join requests */}
+      <JoinRequests onChanged={load} />
+
       {/* Search */}
       <div style={{ position: 'relative', marginBottom: 20, maxWidth: 420 }}>
         <Search size={16} color={MUTED} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />

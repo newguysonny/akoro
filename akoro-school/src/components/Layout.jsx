@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import {
   LayoutDashboard, Banknote, Landmark, Users, GraduationCap, DoorOpen,
-  ClipboardList, Layers, Laptop, UserCog, CalendarClock, NotebookPen,
+  ClipboardList, Layers, Laptop, UserCog, UserCheck, CalendarClock, NotebookPen,
   ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone,
   Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
   LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
   { section: 'STAFF & TEAM', items: [
     { label: 'Academic Staff', icon: GraduationCap, to: '/staff/academic' },
     { label: 'Non-Academic Staff', icon: UserCog, to: '/staff/non-academic' },
+    { label: 'Teacher Requests', icon: UserCheck, to: '/staff/teacher-requests' },
   ]},
   { section: 'MANAGEMENT', items: [
     { label: 'Finance & Fees', icon: Banknote, moduleKey: 'fees_collection', children: [
