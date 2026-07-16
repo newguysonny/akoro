@@ -1,5 +1,5 @@
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { API } from '../../services/api.js';
@@ -19,12 +19,18 @@ export default function OnboardingPage() {
   const [err, setErr]     = useState('');
 
   const [fullName, setFullName]         = useState(user?.fullName || '');
-  const [schoolName, setSchoolName]     = useState('');
+  const [schools, setSchools]           = useState([]);
+  const [schoolId, setSchoolId]         = useState('');   // '' = independent
   const [subjects, setSubjects]         = useState([]);
   const [headline, setHeadline]         = useState('');
   // Teaching guide — the instructor's AI persona for their students
   const [guideName, setGuideName]       = useState('');
   const [guideEmoji, setGuideEmoji]     = useState('🧠');
+
+  useEffect(() => {
+    fetch(`${API}/api/profiles/directory/schools`, { credentials: 'include' })
+      .then(r => r.json()).then(j => setSchools(j.data || [])).catch(() => {});
+  }, []);
 
   const toggleSubject = (s) =>
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -51,7 +57,7 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fullName:      fullName.trim(),
-          schoolName:    schoolName.trim() || undefined,
+          schoolName:    schools.find(s => s.id === schoolId)?.name || undefined,
           subjects,
           // Teaching guide persona — instructor's AI guide for their students
           teachingGuide: guideName.trim() || undefined,
@@ -62,6 +68,13 @@ export default function OnboardingPage() {
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.message || 'Could not save your setup');
+      }
+      // Request to join the chosen school (approval by the school admin).
+      if (schoolId) {
+        await fetch(`${API}/api/profiles/me/school-request`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ school_id: schoolId }),
+        }).catch(() => {});
       }
       markOnboarded();
       navigate('/', { replace: true });
@@ -124,8 +137,12 @@ export default function OnboardingPage() {
               <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Dr. Amara Osei" style={inp}/>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>School / institution <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>
-              <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder="Westwood Academy" style={inp}/>
+              <label style={lbl}>Your school <span style={{ fontWeight: 500, color: '#9490A0' }}>(you can join later)</span></label>
+              <select value={schoolId} onChange={e => setSchoolId(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                <option value="">I'm independent — no school</option>
+                {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              {schoolId && <p style={{ fontSize: 11.5, color: '#9490A0', margin: '6px 2px 0' }}>The school admin will approve your request to join.</p>}
             </div>
             <div>
               <label style={lbl}>Short headline <span style={{ fontWeight: 500, color: '#9490A0' }}>(optional)</span></label>

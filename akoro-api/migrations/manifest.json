@@ -50,7 +50,8 @@
     "2026-weekly-forecast.sql",
     "2026-reset-site-templates.sql",
     "2026-site-ai-chat.sql",
-    "2026-template-colors.sql"
+    "2026-template-colors.sql",
+    "2026-ownership-links.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

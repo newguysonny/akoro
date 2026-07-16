@@ -119,6 +119,58 @@ const findOrCreateStudent = async (name, email, phone = null) => {
 };
 
 /**
+ * getTeacherApprovedSchoolId — the school a teacher has been approved into
+ * (or null). Ownership flows from here: a teacher's students belong to it.
+ */
+const getTeacherApprovedSchoolId = async (teacherId) => {
+  const { data } = await db.from("school_teachers")
+    .select("school_id").eq("teacher_id", teacherId).eq("status", "approved")
+    .order("created_at", { ascending: true }).limit(1).maybeSingle();
+  return data?.school_id ?? null;
+};
+
+/**
+ * ensureDefaultClassroom — a teacher's first classroom, created on demand.
+ * Carries the teacher's approved school_id so classroom_students are
+ * transitively school-owned.
+ */
+const ensureDefaultClassroom = async (teacherId) => {
+  const { data: existing } = await db.from("classrooms")
+    .select("id, school_id").eq("teacher_id", teacherId)
+    .order("created_at", { ascending: true }).limit(1).maybeSingle();
+  const schoolId = await getTeacherApprovedSchoolId(teacherId);
+  if (existing) {
+    if (schoolId && !existing.school_id) await db.from("classrooms").update({ school_id: schoolId }).eq("id", existing.id);
+    return existing.id;
+  }
+  const { data: created, error } = await db.from("classrooms")
+    .insert({ teacher_id: teacherId, school_id: schoolId, name: "My Class" }).select("id").single();
+  if (error) throw new Error(error.message);
+  return created.id;
+};
+
+/**
+ * ensureSisRecord — mirror a platform student into the school's SIS roster
+ * (mgmt.students) so teacher-added students also appear in the school's
+ * Student Information module. No-op if the teacher has no approved school or
+ * the student is already rostered. `created_by` records the teacher.
+ */
+const ensureSisRecord = async (schoolId, user, teacherId) => {
+  if (!schoolId || !user?.id) return;
+  const M = db.schema("mgmt");
+  const { data: exists } = await M.from("students").select("id").eq("school_id", schoolId).eq("user_id", user.id).maybeSingle();
+  if (exists) return;
+  const parts = (user.full_name || "").trim().split(/\s+/);
+  const first = parts.shift() || (user.email?.split("@")[0] ?? "Student");
+  const last = parts.join(" ") || first;
+  const admission_no = `T-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 900 + 100)}`;
+  await M.from("students").insert({
+    school_id: schoolId, user_id: user.id, created_by: teacherId,
+    admission_no, first_name: first, last_name: last, status: "active",
+  });
+};
+
+/**
  * sendWelcomeCredentials
  * Sends the new student their login credentials via email/SMS.
  */
@@ -294,7 +346,7 @@ const teacherHandlers = {
     // Verify ownership
     const { data: classroom } = await db
       .from("classrooms")
-      .select("id, teacher_id, name, student_limit, is_upgraded")
+      .select("id, teacher_id, school_id, name, student_limit, is_upgraded")
       .eq("id", classroomId)
       .single();
 
@@ -329,6 +381,14 @@ const teacherHandlers = {
       user_id:      user.id,
       status:       "active",
     });
+
+    // Ownership: if the teacher belongs to a school, mirror the student into
+    // the school's SIS roster (mgmt.students) so schools own them too.
+    const teacherSchoolId = await getTeacherApprovedSchoolId(req.user.id);
+    if (teacherSchoolId) {
+      if (!classroom.school_id) await db.from("classrooms").update({ school_id: teacherSchoolId }).eq("id", classroomId);
+      await ensureSisRecord(teacherSchoolId, user, req.user.id).catch((e) => console.warn("[profiles] SIS mirror failed:", e.message));
+    }
 
     // Send welcome credentials if new account
     await sendWelcomeCredentials({
@@ -567,10 +627,13 @@ const schoolHandlers = {
       isNew       = true;
     }
 
-    // Link teacher to school
+    // Link teacher to school — admin-added teachers are approved immediately.
     await db.from("school_teachers").upsert({
       school_id:  schoolId,
       teacher_id: teacherUser.id,
+      status:     "approved",
+      decided_at: new Date(),
+      decided_by: req.user.id,
     }, { onConflict: "school_id,teacher_id" });
 
     // Link to classroom if provided
@@ -1410,6 +1473,148 @@ router.delete("/me", authenticateToken, asyncHandler(async (req, res) => {
   await endSession(req, res);
 
   res200(res, { deleted: true });
+}));
+
+// ═══════════════ OWNERSHIP: school ↔ teacher ↔ student links ═══════════════
+
+/* ── Directories (for onboarding pickers) ─────────────────────────────── */
+
+// GET /api/profiles/directory/schools — active schools a teacher can join.
+router.get("/directory/schools", authenticateToken, asyncHandler(async (req, res) => {
+  const { data } = await db.from("school_profiles")
+    .select("id, name, logo_url, address").eq("is_active", true).order("name", { ascending: true }).limit(500);
+  res200(res, data || []);
+}));
+
+// GET /api/profiles/directory/teachers — instructors a learner can join.
+// Includes the school each teacher is approved into (for grouping).
+router.get("/directory/teachers", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: teachers } = await db.from("users")
+    .select("id, full_name, username, avatar_url").eq("role", "instructor").eq("is_active", true).order("full_name", { ascending: true }).limit(500);
+  const ids = (teachers || []).map((t) => t.id);
+  let schoolByTeacher = {};
+  if (ids.length) {
+    const { data: links } = await db.from("school_teachers")
+      .select("teacher_id, school_profiles ( name )").in("teacher_id", ids).eq("status", "approved");
+    schoolByTeacher = Object.fromEntries((links || []).map((l) => [l.teacher_id, l.school_profiles?.name || null]));
+  }
+  res200(res, (teachers || []).map((t) => ({ id: t.id, full_name: t.full_name, username: t.username, avatar_url: t.avatar_url, school_name: schoolByTeacher[t.id] || null })));
+}));
+
+/* ── Teacher → school request + link status ───────────────────────────── */
+
+// GET /api/profiles/me/school-link — the caller's school link + status.
+router.get("/me/school-link", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
+  const { data } = await db.from("school_teachers")
+    .select("school_id, status, school_profiles ( name, logo_url )").eq("teacher_id", req.user.id)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  res200(res, data ? { school_id: data.school_id, status: data.status, name: data.school_profiles?.name, logo_url: data.school_profiles?.logo_url } : null);
+}));
+
+// POST /api/profiles/me/school-request { school_id } — request to join a school.
+router.post("/me/school-request", authenticateToken, requireRole(["instructor", "admin"]), [body("school_id").notEmpty()], runValidation, asyncHandler(async (req, res) => {
+  const { school_id } = req.body;
+  const { data: school } = await db.from("school_profiles").select("id").eq("id", school_id).eq("is_active", true).maybeSingle();
+  if (!school) return res404(res, "School not found");
+  const { data, error } = await db.from("school_teachers").upsert({
+    school_id, teacher_id: req.user.id, status: "pending", requested_at: new Date(),
+  }, { onConflict: "school_id,teacher_id" }).select("status").single();
+  if (error) throw new Error(error.message);
+  res201(res, { status: data.status, message: "Request sent — awaiting school approval." });
+}));
+
+/* ── School admin: teacher join requests ──────────────────────────────── */
+
+const ownsSchool = async (req, schoolId) => {
+  const { data } = await db.from("school_profiles").select("id").eq("id", schoolId).eq("admin_user_id", req.user.id).maybeSingle();
+  return !!data;
+};
+
+// GET /api/profiles/schools/:schoolId/teacher-requests?status=pending
+router.get("/schools/:schoolId/teacher-requests", authenticateToken, requireRole(["school_admin", "admin"]), asyncHandler(async (req, res) => {
+  if (!(await ownsSchool(req, req.params.schoolId))) return res403(res, "Not your school");
+  const status = req.query.status || "pending";
+  const { data } = await db.from("school_teachers")
+    .select("id, teacher_id, status, requested_at, users ( full_name, email, avatar_url )")
+    .eq("school_id", req.params.schoolId).eq("status", status).order("requested_at", { ascending: true });
+  res200(res, (data || []).map((r) => ({ id: r.id, teacher_id: r.teacher_id, status: r.status, requested_at: r.requested_at, full_name: r.users?.full_name, email: r.users?.email, avatar_url: r.users?.avatar_url })));
+}));
+
+// POST /api/profiles/schools/:schoolId/teacher-requests/:teacherId  { decision }
+router.post("/schools/:schoolId/teacher-requests/:teacherId", authenticateToken, requireRole(["school_admin", "admin"]), [body("decision").isIn(["approve", "reject"])], runValidation, asyncHandler(async (req, res) => {
+  const { schoolId, teacherId } = req.params;
+  if (!(await ownsSchool(req, schoolId))) return res403(res, "Not your school");
+  const status = req.body.decision === "approve" ? "approved" : "rejected";
+  const { error } = await db.from("school_teachers").update({ status, decided_at: new Date(), decided_by: req.user.id })
+    .eq("school_id", schoolId).eq("teacher_id", teacherId);
+  if (error) throw new Error(error.message);
+  // On approval, carry the school onto the teacher's classrooms so their
+  // students become school-owned going forward.
+  if (status === "approved") await db.from("classrooms").update({ school_id: schoolId }).eq("teacher_id", teacherId).is("school_id", null);
+  res200(res, { status });
+}));
+
+/* ── Learner → teacher request + link status ──────────────────────────── */
+
+// GET /api/profiles/me/teacher-link — the learner's teacher membership.
+router.get("/me/teacher-link", authenticateToken, asyncHandler(async (req, res) => {
+  const { data } = await db.from("classroom_students")
+    .select("status, classrooms ( teacher_id, name, users:teacher_id ( full_name ) )")
+    .eq("user_id", req.user.id).in("status", ["pending", "active"])
+    .order("requested_at", { ascending: false }).limit(1).maybeSingle();
+  res200(res, data ? { status: data.status, teacher_id: data.classrooms?.teacher_id, teacher_name: data.classrooms?.users?.full_name, classroom_name: data.classrooms?.name } : null);
+}));
+
+// POST /api/profiles/me/teacher-request { teacher_id } — request to join a teacher.
+router.post("/me/teacher-request", authenticateToken, [body("teacher_id").notEmpty()], runValidation, asyncHandler(async (req, res) => {
+  const { teacher_id } = req.body;
+  const { data: teacher } = await db.from("users").select("id").eq("id", teacher_id).eq("role", "instructor").maybeSingle();
+  if (!teacher) return res404(res, "Teacher not found");
+  const classroomId = await ensureDefaultClassroom(teacher_id);
+  const { data: existing } = await db.from("classroom_students").select("id, status").eq("classroom_id", classroomId).eq("user_id", req.user.id).maybeSingle();
+  if (existing) {
+    if (existing.status === "removed") await db.from("classroom_students").update({ status: "pending", requested_at: new Date() }).eq("id", existing.id);
+    return res200(res, { status: existing.status === "removed" ? "pending" : existing.status, message: "Request updated." });
+  }
+  const { error } = await db.from("classroom_students").insert({ classroom_id: classroomId, user_id: req.user.id, status: "pending", requested_at: new Date() });
+  if (error) throw new Error(error.message);
+  res201(res, { status: "pending", message: "Request sent — awaiting teacher approval." });
+}));
+
+/* ── Teacher: student join requests ───────────────────────────────────── */
+
+// GET /api/profiles/teacher/join-requests — pending learners across my classes.
+router.get("/teacher/join-requests", authenticateToken, requireRole(["instructor", "admin"]), asyncHandler(async (req, res) => {
+  const { data: classes } = await db.from("classrooms").select("id, name").eq("teacher_id", req.user.id);
+  const ids = (classes || []).map((c) => c.id);
+  if (!ids.length) return res200(res, []);
+  const nameById = Object.fromEntries((classes || []).map((c) => [c.id, c.name]));
+  const { data } = await db.from("classroom_students")
+    .select("id, classroom_id, user_id, requested_at, users ( full_name, email, avatar_url )")
+    .in("classroom_id", ids).eq("status", "pending").order("requested_at", { ascending: true });
+  res200(res, (data || []).map((r) => ({ id: r.id, classroom_id: r.classroom_id, classroom_name: nameById[r.classroom_id], user_id: r.user_id, requested_at: r.requested_at, full_name: r.users?.full_name, email: r.users?.email, avatar_url: r.users?.avatar_url })));
+}));
+
+// POST /api/profiles/teacher/join-requests/:id { decision } — approve/reject.
+router.post("/teacher/join-requests/:id", authenticateToken, requireRole(["instructor", "admin"]), [body("decision").isIn(["approve", "reject"])], runValidation, asyncHandler(async (req, res) => {
+  // Load the request and verify the classroom is mine.
+  const { data: reqRow } = await db.from("classroom_students")
+    .select("id, classroom_id, user_id, classrooms ( teacher_id, school_id )").eq("id", req.params.id).maybeSingle();
+  if (!reqRow) return res404(res, "Request not found");
+  if (reqRow.classrooms?.teacher_id !== req.user.id) return res403(res, "Not your classroom");
+
+  if (req.body.decision === "reject") {
+    await db.from("classroom_students").update({ status: "removed" }).eq("id", reqRow.id);
+    return res200(res, { status: "removed" });
+  }
+  await db.from("classroom_students").update({ status: "active" }).eq("id", reqRow.id);
+  // Mirror into the school roster if the teacher has a school.
+  const schoolId = reqRow.classrooms?.school_id || (await getTeacherApprovedSchoolId(req.user.id));
+  if (schoolId) {
+    const { data: student } = await db.from("users").select("id, full_name, email").eq("id", reqRow.user_id).maybeSingle();
+    await ensureSisRecord(schoolId, student, req.user.id).catch((e) => console.warn("[profiles] SIS mirror failed:", e.message));
+  }
+  res200(res, { status: "active" });
 }));
 
 export default router;

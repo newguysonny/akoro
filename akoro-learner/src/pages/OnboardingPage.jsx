@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
@@ -30,12 +30,19 @@ export default function OnboardingPage() {
   const [studyLevel, setStudyLevel] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [subjects, setSubjects]     = useState([]);
+  const [teachers, setTeachers]     = useState([]);
+  const [teacherId, setTeacherId]   = useState('');   // '' = self-study, no teacher
   // Step 2 — student agent
   const [agentName,  setAgentName]  = useState('');
   const [agentEmoji, setAgentEmoji] = useState('🤖');
 
   const toggleSubject = (s) =>
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+
+  useEffect(() => {
+    fetch(`${API}/api/profiles/directory/teachers`, { credentials: 'include' })
+      .then(r => r.json()).then(j => setTeachers(j.data || [])).catch(() => {});
+  }, []);
 
   const STEPS = [t('onboarding.step_profile'), t('onboarding.step_agent'), t('onboarding.step_prefs')];
 
@@ -97,6 +104,14 @@ export default function OnboardingPage() {
       if (!agentRes.ok) {
         const j = await agentRes.json().catch(() => ({}));
         throw new Error(j.message || 'Could not save your agent. Please try again.');
+      }
+
+      // 3. Request to join the chosen teacher's class (teacher approves).
+      if (teacherId) {
+        await fetch(`${API}/api/profiles/me/teacher-request`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_id: teacherId }),
+        }).catch(() => {});
       }
 
       markOnboarded();
@@ -173,6 +188,14 @@ export default function OnboardingPage() {
                 <label style={lbl}>{t('onboarding.school')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
                 <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder={t('onboarding.school_ph')} style={inp}/>
               </div>
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <label style={lbl}>Your teacher <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>(you can choose later)</span></label>
+              <select value={teacherId} onChange={e => setTeacherId(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
+                <option value="">I'm learning on my own</option>
+                {teachers.map(tt => <option key={tt.id} value={tt.id}>{tt.full_name}{tt.school_name ? ` · ${tt.school_name}` : ''}</option>)}
+              </select>
+              {teacherId && <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '6px 2px 0' }}>Your teacher will approve your request to join their class.</p>}
             </div>
             <div>
               <label style={lbl}>{t('onboarding.subjects_studying')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
