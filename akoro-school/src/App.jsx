@@ -193,9 +193,10 @@ function AppRoutes() {
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/courses" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
-      <Route path="/instructors" element={<ProtectedRoute><InstructorsPage /></ProtectedRoute>} />
-      <Route path="/classes" element={<ProtectedRoute><ClassroomsPage /></ProtectedRoute>} />
-      <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
+      {/* Consolidated into the management modules. */}
+      <Route path="/instructors" element={<Navigate to="/staff/academic" replace />} />
+      <Route path="/classes" element={<Navigate to="/mgmt/classes" replace />} />
+      <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />

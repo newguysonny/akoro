@@ -24,7 +24,6 @@ function useMediaQuery(query) {
 const NAV = [
   { to: '/',         icon: Home,          label: 'Home' },
   { to: '/courses',  icon: BookOpen,      label: 'Courses' },
-  { to: '/students', icon: Users,         label: 'Students' },
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
   { to: '/documents', icon: FileText,     label: 'Documents' },

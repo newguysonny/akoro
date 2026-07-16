@@ -22,7 +22,7 @@ import AppCenterPage       from './pages/AppCenterPage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
 import { CurriculumPage, SyllabusPage, SubjectsPage, ClassTimetablePage, WeeklyForecastPage, DailySchedulePage } from './pages/mgmt/academic.jsx';
-import { StudentListPage, StudentAttendancePage, BehaviorRecordsPage } from './pages/mgmt/students.jsx';
+import { StudentAttendancePage, BehaviorRecordsPage } from './pages/mgmt/students.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
 
@@ -92,7 +92,8 @@ function AppRoutes() {
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/courses" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
-      <Route path="/students" element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
+      {/* Students now live under Management → My Students. */}
+      <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/documents"     element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
@@ -101,7 +102,7 @@ function AppRoutes() {
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       {/* Management (teacher-scoped student info + academics) */}
-      <Route path="/mgmt/students"        element={<ProtectedRoute><StudentListPage /></ProtectedRoute>} />
+      <Route path="/mgmt/students"        element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
       <Route path="/mgmt/attendance"      element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
       <Route path="/mgmt/behavior"        element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />
       <Route path="/mgmt/curriculum"      element={<ProtectedRoute><CurriculumPage /></ProtectedRoute>} />

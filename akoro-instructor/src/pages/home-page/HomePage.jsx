@@ -107,8 +107,8 @@ export default function HomePage() {
               <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 14px', fontFamily: FONT }}>Quick Actions</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 <QuickAction icon={Video}    label="New Live Class"   desc="Schedule a live session"     color={AMBER}  onClick={() => navigate('/courses')} />
-                <QuickAction icon={Eye}      label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/students')} />
-                <QuickAction icon={Plus}     label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/students?add=1')} />
+                <QuickAction icon={Eye}      label="View Students"    desc="Manage your enrolled learners" color={BLUE} onClick={() => navigate('/mgmt/students')} />
+                <QuickAction icon={Plus}     label="Add Student"      desc="Enroll a new learner"         color={GREEN}  onClick={() => navigate('/mgmt/students?add=1')} />
                 <QuickAction icon={Swords}   label="Create Battle"    desc="Launch a quiz battle"         color={PURPLE} onClick={() => navigate('/battles')} />
                 <QuickAction icon={BookOpen} label="New On-Demand"    desc="Build a video course"         color={BLUE}   onClick={() => navigate('/courses')} />
                 <QuickAction icon={Bot}      label="AI Assistant"     desc="Chat with your AI tutor"      color={AMBER}  onClick={() => navigate('/chat')} />

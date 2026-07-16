@@ -4,44 +4,10 @@
  * scoped to created_by. Attendance / behavior use the shared mgmt resources.
  */
 import ResourcePage from '../../components/mgmt/ResourcePage.jsx';
-import { useAuth } from '../../contexts/AuthContext.jsx';
 
-const GENDER_OPTS = [{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'other', label: 'Other' }];
-const STATUS_OPTS = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'alumni', label: 'Alumni' }];
-
-// Student list — only students this teacher added (created_by = me).
-export function StudentListPage() {
-  const { user } = useAuth();
-  if (!user?.id) return null;
-  return <ResourcePage title="My Students" subtitle="Students you've added" resource="students"
-    fixedFilters={{ created_by: user.id }}
-    columns={[
-      { key: 'admission_no', label: 'Adm. No' },
-      { key: 'first_name', label: 'First' }, { key: 'last_name', label: 'Last' },
-      { key: 'class_name', label: 'Class' }, { key: 'status', label: 'Status' }, { key: 'is_disabled', label: 'Disabled' },
-    ]}
-    fields={[
-      { key: 'admission_no', label: 'Admission No', required: true, placeholder: 'e.g. 2026-001' },
-      { key: 'first_name', label: 'First Name', required: true },
-      { key: 'last_name', label: 'Last Name', required: true },
-      { key: 'gender', label: 'Gender', type: 'select', options: GENDER_OPTS },
-      { key: 'dob', label: 'Date of Birth', type: 'date' },
-      { key: 'class_id', label: 'Class', type: 'select', optionsFrom: { resource: 'classes' } },
-      { key: 'section_id', label: 'Section', type: 'select', optionsFrom: { resource: 'sections' } },
-      { key: 'guardian_name', label: 'Guardian Name' },
-      { key: 'guardian_phone', label: 'Guardian Phone' },
-      { key: 'student_email', label: 'Student Email' },
-      { key: 'status', label: 'Status', type: 'select', options: STATUS_OPTS, default: 'active' },
-      { key: 'is_disabled', label: 'Disabled (no access)', type: 'toggle' },
-      { key: 'disability_note', label: 'Reason (if disabled)', type: 'textarea' },
-    ]}
-    listFilters={[
-      { key: 'class_id', label: 'Class', optionsFrom: { resource: 'classes' } },
-      { key: 'status', label: 'Status', options: STATUS_OPTS },
-      { key: 'is_disabled', label: 'Disabled', options: [{ value: 'true', label: 'Disabled' }, { value: 'false', label: 'Active' }] },
-    ]}
-    createLabel="Add Student" />;
-}
+// NOTE: "My Students" (add/list/disable, with Manual Entry / Send Invite /
+// Import CSV) is served by the full StudentsPage under /mgmt/students. These
+// pages cover the SIS-side records that page doesn't: attendance + behavior.
 
 export function StudentAttendancePage() {
   return <ResourcePage title="Student Attendance" subtitle="Mark and review attendance" resource="student-attendance"

@@ -175,9 +175,8 @@ const NAV_SECTIONS = [
   { section: 'MODULES', items: [
     // Real, live pages — the only things this section contains.
     { label: 'Courses', icon: BookOpen, to: '/courses' },
-    { label: 'Instructors', icon: Presentation, to: '/instructors' },
-    { label: 'Classes', icon: GraduationCap, to: '/classes' },
-    { label: 'Students', icon: Users, to: '/students' },
+    // Instructors / Classes / Students now live under Academic Staff,
+    // Academics → Classes, and Student Information respectively.
     { label: 'Battles', icon: Swords, to: '/battles' },
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
     { label: 'Assessments', icon: FileCheck, to: '/assessments' },
