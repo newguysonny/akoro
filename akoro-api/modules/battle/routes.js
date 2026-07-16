@@ -851,6 +851,13 @@ router.post("/courses/:courseId/questions-bank/generate", authenticateToken, req
 export { updateKnowledgeConfidence };
 export default router;
 
+// ─── § RESPONSE HELPERS (used by the endpoints below) ────────────────────────
+const res200 = (res, data)      => res.status(200).json({ success: true,  data });
+const res201 = (res, data)      => res.status(201).json({ success: true,  data });
+const res400 = (res, message)   => res.status(400).json({ success: false, error: message });
+const res403 = (res, message)   => res.status(403).json({ success: false, error: message });
+const res404 = (res, message)   => res.status(404).json({ success: false, error: message });
+
 // ─── § MISSING ENDPOINTS — added per frontend audit ──────────────────────────
 
 /**

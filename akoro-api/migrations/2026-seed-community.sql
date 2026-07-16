@@ -64,7 +64,7 @@ BEGIN
     IF a1.id IS NOT NULL AND a2.id IS NOT NULL THEN
       FOR bt IN
         SELECT * FROM (VALUES
-          ('Demo Battle · Chain Rule Gauntlet', 'active',    'medium', 100, 23, now(),                     7, 5, 70, 80),
+          ('Demo Battle · Chain Rule Gauntlet', 'live',      'medium', 100, 23, now(),                     7, 5, 70, 80),
           ('Demo Battle · Integration Masters', 'scheduled', 'medium', 100,  0, now() + interval '45 minutes', 0, 0, 100, 100),
           ('Demo Battle · WAEC Prep',           'completed', 'hard',   150,  0, now() - interval '2 hours', 9, 7, 100, 0)
         ) AS t(title, status, difficulty, xp, viewers, start, sa, sb, ha, hb)
