@@ -35,10 +35,13 @@
 
 import { Router }                         from "express";
 import { body, validationResult }         from "express-validator";
+import multerLib                          from "multer";
 import { contentDb }                      from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
 
 const router = Router();
+const upload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -214,6 +217,18 @@ const blogWriteValidators = [
   body("category").trim().notEmpty().withMessage("category is required"),
   body("author").trim().notEmpty().withMessage("author is required"),
 ];
+
+// POST /api/content/admin/blog/upload — upload a blog image, returns { url }.
+router.post("/admin/blog/upload", ...adminOnly, upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res400(res, "No file provided");
+    if (!/^image\//.test(req.file.mimetype || "")) return res400(res, "Only image files are allowed");
+    await ensureBucket().catch(() => {});
+    const ext = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `blog/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+    const url = await uploadPublicFile(path, req.file.buffer, req.file.mimetype);
+    res201(res, { url });
+  }));
 
 router.post("/admin/blog/posts", adminOnly, blogWriteValidators,
   asyncHandler(async (req, res) => {

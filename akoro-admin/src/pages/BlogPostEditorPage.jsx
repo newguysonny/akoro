@@ -5,8 +5,18 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast, Inp, Txa, Sel, Skeleton } from '../components/Primitives.jsx';
 import MarkdownEditor, { blocksToMarkdown, markdownToBlocks } from '../components/MarkdownEditor.jsx';
 import useAdminAPI from '../hooks/useAdminAPI.js';
-import { apiPatch } from '../services/api.js';
+import { API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+
+// Upload an image to the blog bucket, returns its public URL.
+async function uploadBlogImage(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${API}/api/content/admin/blog/upload`, { method: 'POST', credentials: 'include', body: fd });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || 'Upload failed');
+  return json.data?.url;
+}
 
 const CATS = ['Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies'];
 const STATUSES = ['draft', 'published', 'archived'];
@@ -27,6 +37,7 @@ export default function BlogPostEditorPage() {
     read_min: 5, image: '', featured: false, status: 'draft',
   });
   const [markdown, setMarkdown] = useState('');
+  const [coverBusy, setCoverBusy] = useState(false);
 
   const showToast = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 3500); };
   const setField = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -87,7 +98,7 @@ export default function BlogPostEditorPage() {
             <div style={{ marginBottom: 12 }}>
               <span style={{ fontWeight: 700, fontSize: 14, color: INK }}>Article Body</span>
             </div>
-            <MarkdownEditor value={markdown} onChange={setMarkdown} />
+            <MarkdownEditor value={markdown} onChange={setMarkdown} onUpload={uploadBlogImage} />
           </div>
         </div>
 
@@ -105,7 +116,11 @@ export default function BlogPostEditorPage() {
             <Inp label="Author" value={form.author} onChange={setField('author')} style={{ marginBottom: 14 }} />
             <Inp label="Author Role" value={form.author_role} onChange={setField('author_role')} style={{ marginBottom: 14 }} />
             <Inp label="Read time (minutes)" type="number" value={form.read_min} onChange={setField('read_min')} style={{ marginBottom: 14 }} />
-            <Inp label="Cover image URL" value={form.image} onChange={setField('image')} placeholder="https://…" style={{ marginBottom: 14 }} />
+            <Inp label="Cover image URL" value={form.image} onChange={setField('image')} placeholder="https://… or upload below" style={{ marginBottom: 8 }} />
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12, fontWeight: 700, cursor: coverBusy ? 'default' : 'pointer', marginBottom: 14, fontFamily: FONT }}>
+              <Save size={13} /> {coverBusy ? 'Uploading…' : 'Upload cover image'}
+              <input type="file" accept="image/*" disabled={coverBusy} onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; setCoverBusy(true); try { const url = await uploadBlogImage(f); setForm(ff => ({ ...ff, image: url })); } catch (err) { showToast(err.message || 'Upload failed', 'error'); } finally { setCoverBusy(false); } }} style={{ display: 'none' }} />
+            </label>
             {form.image && <img src={form.image} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 14 }} />}
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: INK }}>
               <input type="checkbox" checked={form.featured} onChange={setField('featured')} />

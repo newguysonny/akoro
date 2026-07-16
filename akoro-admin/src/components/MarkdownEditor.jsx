@@ -72,9 +72,11 @@ function Preview({ md }) {
 }
 
 /* ── Editor ────────────────────────────────────────────────────────────────── */
-export default function MarkdownEditor({ value, onChange, minHeight = 320 }) {
+export default function MarkdownEditor({ value, onChange, minHeight = 320, onUpload }) {
   const [tab, setTab] = useState('write');   // write | preview
+  const [uploading, setUploading] = useState(false);
   const ref = useRef(null);
+  const fileRef = useRef(null);
 
   // Wrap the current selection with before/after (e.g. ** ** for bold).
   const wrap = (before, after = before, placeholder = '') => {
@@ -105,17 +107,23 @@ export default function MarkdownEditor({ value, onChange, minHeight = 320 }) {
     onChange(value.slice(0, a) + md + value.slice(b));
     requestAnimationFrame(() => { el.focus(); const p = a + md.length; el.setSelectionRange(p, p); });
   };
-  const insertImage = () => {
-    const el = ref.current; if (!el) return;
-    const url = window.prompt('Image URL', 'https://');
-    if (!url) return;
-    const alt = window.prompt('Caption / alt text (optional)', '') || '';
-    const a = el.selectionStart;
-    // Put the image on its own line (block image).
+  const insertImageMd = (url, alt = '') => {
+    const el = ref.current;
+    const a = el ? el.selectionStart : value.length;
     const nl = (a > 0 && value[a - 1] !== '\n') ? '\n\n' : '';
     const md = `${nl}![${alt}](${url})\n\n`;
     onChange(value.slice(0, a) + md + value.slice(a));
-    requestAnimationFrame(() => { el.focus(); const p = a + md.length; el.setSelectionRange(p, p); });
+    requestAnimationFrame(() => { if (el) { el.focus(); const p = a + md.length; el.setSelectionRange(p, p); } });
+  };
+  // Image button: upload a file if an uploader is provided, else paste a URL.
+  const onImageClick = () => { if (onUpload) fileRef.current?.click(); else { const url = window.prompt('Image URL', 'https://'); if (url) insertImageMd(url, window.prompt('Caption (optional)', '') || ''); } };
+  const onFilePicked = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try { const url = await onUpload(file); if (url) insertImageMd(url, ''); }
+    catch (err) { window.alert(err.message || 'Upload failed'); }
+    finally { setUploading(false); }
   };
 
   const tbtn = (onClick, Icon, title) => (
@@ -133,7 +141,9 @@ export default function MarkdownEditor({ value, onChange, minHeight = 320 }) {
         {tbtn(() => prefixLines('> '), Quote, 'Quote')}
         {tbtn(() => wrap('`', '`', 'code'), Code, 'Inline code')}
         {tbtn(insertLink, Link2, 'Link')}
-        {tbtn(insertImage, ImageIcon, 'Image')}
+        {tbtn(onImageClick, ImageIcon, onUpload ? 'Upload image' : 'Image URL')}
+        {uploading && <span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER }}>Uploading…</span>}
+        <input ref={fileRef} type="file" accept="image/*" onChange={onFilePicked} style={{ display: 'none' }} />
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 4, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 2 }}>
           <button type="button" onClick={() => setTab('write')} style={segStyle(tab === 'write')}><Pencil size={13} /> Write</button>
