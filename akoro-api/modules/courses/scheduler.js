@@ -321,9 +321,95 @@ const expireSession = async (session) => {
   await emitToParticipants(session.course_id, "live_class_ended", { sessionId: session.id, status: "ended" });
 };
 
+// ─── § DEMO SESSION REGENERATOR ───────────────────────────────────────────────
+//
+// Keeps the seeded demo live courses perpetually testable, so the golden path
+// (discover → enrol → receive live update → join) can be exercised any time:
+//   · demo-live-rapid  → a session at every 10-minute boundary (next hour)
+//   · other demo-*live* → one daily session (17:00 UTC) for the next 7 days
+//
+// It only ever touches courses seeded with a `demo-` slug, so on a pure prod
+// database (no demo data) every query returns nothing and it is a no-op.
+// Idempotent: sessions are keyed by their exact scheduled_start, so re-runs
+// only insert the gaps.
+
+const RAPID_SLUG    = "demo-live-rapid";
+const TEN_MIN_MS    = 10 * 60000;
+const HOUR_MS       = 60 * 60000;
+const DAY_MS        = 24 * HOUR_MS;
+const DAILY_UTC_HR  = 17;              // 17:00 UTC ≈ 18:00 WAT
+
+const existingStarts = async (courseId, sinceMs) => {
+  const { data } = await db
+    .from("live_sessions")
+    .select("scheduled_start")
+    .eq("course_id", courseId)
+    .in("status", ["scheduled", "live"])
+    .gte("scheduled_start", new Date(sinceMs).toISOString());
+  return new Set((data ?? []).map((r) => new Date(r.scheduled_start).toISOString()));
+};
+
+const ensureDemoSessions = async () => {
+  const now = Date.now();
+
+  // ── Rapid course: fill the next hour with 10-minute-spaced sessions. ──
+  const { data: rapid } = await db
+    .from("courses")
+    .select("id, instructor_id, subject")
+    .eq("slug", RAPID_SLUG).eq("is_published", true)
+    .maybeSingle();
+
+  if (rapid) {
+    const first = Math.ceil(now / TEN_MIN_MS) * TEN_MIN_MS;   // next 10-min mark
+    const have  = await existingStarts(rapid.id, now - TEN_MIN_MS);
+    const rows  = [];
+    for (let k = 0; k < 6; k++) {
+      const iso = new Date(first + k * TEN_MIN_MS).toISOString();
+      if (have.has(iso)) continue;
+      rows.push({
+        course_id: rapid.id, instructor_id: rapid.instructor_id,
+        title: "⚡ Rapid Demo Session", topic: "Live flow test", subject: rapid.subject,
+        session_type: "class", platform: "zoom",
+        scheduled_start: iso, scheduled_end: new Date(first + k * TEN_MIN_MS + TEN_MIN_MS).toISOString(),
+        max_participants: 50, status: "scheduled",
+      });
+    }
+    if (rows.length) await db.from("live_sessions").insert(rows);
+  }
+
+  // ── Daily courses: one session per day (17:00 UTC) for the next 7 days. ──
+  const { data: dailies } = await db
+    .from("courses")
+    .select("id, instructor_id, subject, title, slug")
+    .eq("is_published", true).eq("course_type", "live")
+    .like("slug", "demo-%").neq("slug", RAPID_SLUG);
+
+  for (const c of dailies ?? []) {
+    const base = new Date(now);
+    base.setUTCHours(DAILY_UTC_HR, 0, 0, 0);
+    const have = await existingStarts(c.id, now - HOUR_MS);
+    const rows = [];
+    for (let d = 0; d < 7; d++) {
+      const t = base.getTime() + d * DAY_MS;
+      if (t <= now) continue;                       // only future slots
+      const iso = new Date(t).toISOString();
+      if (have.has(iso)) continue;
+      rows.push({
+        course_id: c.id, instructor_id: c.instructor_id,
+        title: `${c.title} — Daily Session`, topic: c.subject, subject: c.subject,
+        session_type: "class", platform: "zoom",
+        scheduled_start: iso, scheduled_end: new Date(t + HOUR_MS).toISOString(),
+        max_participants: 50, status: "scheduled",
+      });
+    }
+    if (rows.length) await db.from("live_sessions").insert(rows);
+  }
+};
+
 // ─── § CRON JOBS ──────────────────────────────────────────────────────────────
 //
 // One 1-minute tick drives the whole lifecycle off the live_sessions table:
+//   · top up the perpetual demo sessions (rapid + daily)
 //   · create meeting link ≤15 min before start
 //   · scheduled → live at start
 //   · live → ended after end + grace
@@ -335,6 +421,10 @@ const tick = async () => {
   if (_tickRunning) return;           // avoid overlap on slow DB
   _tickRunning = true;
   try {
+    // Keep the demo courses perpetually live-testable. Never fatal.
+    try { await ensureDemoSessions(); }
+    catch (err) { console.error("[scheduler] demo regen error:", err.message); }
+
     const now = Date.now();
     const horizon = new Date(now + LINK_LEAD_MIN * 60000).toISOString();
 

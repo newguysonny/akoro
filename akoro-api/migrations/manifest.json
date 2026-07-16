@@ -57,6 +57,7 @@
     "2026-seed-school.sql",
     "2026-seed-school-passwords.sql",
     "2026-seed-demo-course.sql",
+    "2026-seed-demo-live-classes.sql",
     "2026-seed-community.sql",
     "2026-enroll-test-students.sql",
     "2026-seed-school-portal.sql",

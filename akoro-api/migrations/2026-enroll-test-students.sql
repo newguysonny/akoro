@@ -11,7 +11,7 @@ SELECT u.id, c.id, 'active'
 FROM public.users u
 CROSS JOIN public.courses c
 WHERE u.email IN ('priya@student.akoro.app', 'amaka@student.akoro.app')
-  AND c.slug LIKE 'demo-fmaths-%'
+  AND c.slug LIKE 'demo-%'
 ON CONFLICT (user_id, course_id) DO UPDATE SET status = 'active';
 
 -- Verify:
