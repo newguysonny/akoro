@@ -31,11 +31,34 @@ const SCHOOL_ROLES = ["school", "school_admin", "admin"];
 const M = () => db.schema("mgmt");
 
 async function getMySchool(req, res) {
-  const { data } = await db.from("school_profiles").select("id, name")
+  // School admins own a school directly.
+  const { data: owned } = await db.from("school_profiles").select("id, name")
     .eq("admin_user_id", req.user.id).order("created_at", { ascending: true }).limit(1).maybeSingle();
-  if (!data) { res.status(404).json({ error: "No school is linked to this account." }); return null; }
-  return data;
+  if (owned) return owned;
+  // A teacher approved into a school works within that school's context.
+  const { data: link } = await db.from("school_teachers").select("school_id")
+    .eq("teacher_id", req.user.id).eq("status", "approved").order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (link) {
+    const { data: sch } = await db.from("school_profiles").select("id, name").eq("id", link.school_id).maybeSingle();
+    if (sch) return sch;
+  }
+  res.status(404).json({ error: "No school is linked to this account." }); return null;
 }
+
+// Instructors may write only the classroom-relevant resources (student info +
+// academics). School admins may write everything. Reads are school-scoped.
+const INSTRUCTOR_WRITABLE = new Set([
+  "students", "student-attendance", "behavior-records", "student-categories", "student-houses",
+  "subjects", "classes", "sections", "periods", "academic-sessions", "academic-levels",
+  "timetable-slots", "timetable-meta", "curriculum", "subject-syllabus", "scheme-of-work",
+]);
+function requireMgmtWrite(req, res, next) {
+  const role = req.user?.role;
+  if (["school", "school_admin", "admin"].includes(role)) return next();
+  if (role === "instructor" && INSTRUCTOR_WRITABLE.has(req.params.resource)) return next();
+  return res.status(403).json({ error: "Not permitted for this resource" });
+}
+const MGMT_ROLES = [...SCHOOL_ROLES, "instructor"];
 
 const studentLabel = (s) => [s.first_name, s.last_name].filter(Boolean).join(" ");
 
@@ -115,7 +138,7 @@ const RESOURCES = {
       "bank_name","bank_account_no","bank_ifsc","permanent_address","previous_school","extra_fields"],
     required: ["admission_no","first_name","last_name"],
     refs: { class_id: ["classes","name"], section_id: ["sections","name"], category_id: ["student_categories","name"], house_id: ["student_houses","name"] },
-    filters: ["class_id","section_id","status","is_disabled","category_id","house_id"] },
+    filters: ["class_id","section_id","status","is_disabled","category_id","house_id","created_by"] },
   "student-transport": { table: "student_transport", fields: ["student_id","route_id","vehicle_id","pickup_point","fee","status"], required: ["student_id"], refs: { student_id: ["students", studentLabel], route_id: ["transport_routes","name"], vehicle_id: ["vehicles","plate_no"] }, filters: ["student_id","status"] },
   "student-attendance": { table: "student_attendance", fields: ["student_id","date","status","note"], required: ["student_id","date"], refs: { student_id: ["students", studentLabel] }, filters: ["date","student_id","status"], orderBy: "date", asc: false },
   "behavior-records": { table: "behavior_records", fields: ["student_id","incident_type","severity","polarity","points","description","action_taken","recorded_on"], required: ["student_id","incident_type"], refs: { student_id: ["students", studentLabel] }, filters: ["student_id","severity","polarity"], orderBy: "recorded_on", asc: false },
@@ -1893,7 +1916,7 @@ router.post("/students/:id/assign-fee-groups", authenticateToken, requireRole(SC
 // Body: { class_id, section_id?, variant?: 'junior'|'senior', replace?: bool }
 // Seeds the 14 periods + subjects (if missing) and fills the class grid.
 // Without replace, refuses (409) if the class already has slots.
-router.post("/timetable/load-template", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+router.post("/timetable/load-template", authenticateToken, requireRole(MGMT_ROLES), async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -1980,7 +2003,7 @@ router.get("/forecast", authenticateToken, async (req, res) => {
 // POST /forecast/save  — upsert the week header and any provided cells.
 // Body: { class_id, section_id?, week_start, week_end?, theme?, notes?,
 //         prepared_by?, cells?: [{ day_of_week, period_id, activity, notes? }] }
-router.post("/forecast/save", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+router.post("/forecast/save", authenticateToken, requireRole(MGMT_ROLES), async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
@@ -2038,7 +2061,7 @@ router.get("/:resource", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post("/:resource", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+router.post("/:resource", authenticateToken, requireMgmtWrite, async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
     if (!cfg || cfg.readOnly || cfg.readOnlyCreate) return res.status(404).json({ error: "Unknown resource" });
@@ -2048,6 +2071,8 @@ router.post("/:resource", authenticateToken, requireRole(SCHOOL_ROLES), async (r
     for (const f of cfg.required || []) {
       if (body[f] === undefined || body[f] === null || body[f] === "") return res.status(400).json({ error: `${f} is required` });
     }
+    // Stamp teacher provenance so instructors can filter to their own students.
+    if (req.params.resource === "students" && req.user.role === "instructor") body.created_by = req.user.id;
     const { data, error } = await M().from(cfg.table).insert({ ...body, school_id: school.id }).select("*").single();
     if (error) {
       if (error.code === "23505") return res.status(409).json({ error: "A record with those unique values already exists" });
@@ -2057,7 +2082,7 @@ router.post("/:resource", authenticateToken, requireRole(SCHOOL_ROLES), async (r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put("/:resource/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+router.put("/:resource/:id", authenticateToken, requireMgmtWrite, async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
     if (!cfg || cfg.readOnly) return res.status(404).json({ error: "Unknown resource" });
@@ -2075,7 +2100,7 @@ router.put("/:resource/:id", authenticateToken, requireRole(SCHOOL_ROLES), async
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete("/:resource/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+router.delete("/:resource/:id", authenticateToken, requireMgmtWrite, async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
     if (!cfg) return res.status(404).json({ error: "Unknown resource" });

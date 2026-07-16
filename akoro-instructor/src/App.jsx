@@ -21,6 +21,8 @@ import MarketplacePage     from './pages/MarketplacePage.jsx';
 import AppCenterPage       from './pages/AppCenterPage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
+import { CurriculumPage, SyllabusPage, SubjectsPage, ClassTimetablePage, WeeklyForecastPage, DailySchedulePage } from './pages/mgmt/academic.jsx';
+import { StudentListPage, StudentAttendancePage, BehaviorRecordsPage } from './pages/mgmt/students.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
 
@@ -98,6 +100,16 @@ function AppRoutes() {
       <Route path="/documents/:id" element={<ProtectedRoute><DocumentEditorPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+      {/* Management (teacher-scoped student info + academics) */}
+      <Route path="/mgmt/students"        element={<ProtectedRoute><StudentListPage /></ProtectedRoute>} />
+      <Route path="/mgmt/attendance"      element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
+      <Route path="/mgmt/behavior"        element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/curriculum"      element={<ProtectedRoute><CurriculumPage /></ProtectedRoute>} />
+      <Route path="/mgmt/syllabus"        element={<ProtectedRoute><SyllabusPage /></ProtectedRoute>} />
+      <Route path="/mgmt/subjects"        element={<ProtectedRoute><SubjectsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/timetable"       element={<ProtectedRoute><ClassTimetablePage /></ProtectedRoute>} />
+      <Route path="/mgmt/weekly-forecast" element={<ProtectedRoute><WeeklyForecastPage /></ProtectedRoute>} />
+      <Route path="/mgmt/daily-schedule"  element={<ProtectedRoute><DailySchedulePage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />

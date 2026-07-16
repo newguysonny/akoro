@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -35,6 +35,22 @@ const NAV = [
   { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },
   { to: '/profile',  icon: UserCircle,    label: 'Profile' },
   { to: '/settings', icon: Settings,      label: 'Settings' },
+];
+
+// Management section — desktop sidebar only (teacher-scoped student info +
+// academics). Rendered under a header, below the core nav.
+const MGMT_NAV = [
+  { header: 'STUDENT INFORMATION' },
+  { to: '/mgmt/students',        icon: Users,         label: 'My Students' },
+  { to: '/mgmt/attendance',      icon: ClipboardList, label: 'Attendance' },
+  { to: '/mgmt/behavior',        icon: ListChecks,    label: 'Behavior Records' },
+  { header: 'ACADEMIC' },
+  { to: '/mgmt/curriculum',      icon: BookMarked,    label: 'Curriculum' },
+  { to: '/mgmt/syllabus',        icon: FileText,      label: 'Syllabus' },
+  { to: '/mgmt/subjects',        icon: BookOpen,      label: 'Subjects' },
+  { to: '/mgmt/timetable',       icon: CalendarDays,  label: 'Class Timetable' },
+  { to: '/mgmt/weekly-forecast', icon: CalendarClock, label: 'Weekly Forecast' },
+  { to: '/mgmt/daily-schedule',  icon: GraduationCap, label: 'Daily Schedule' },
 ];
 
 function NavItem({ to, icon: Icon, label, compact }) {
@@ -97,6 +113,9 @@ export function Sidebar() {
       {/* Nav */}
       <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
         {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
+        {MGMT_NAV.map((item, i) => item.header
+          ? (compact ? <div key={`h${i}`} style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '10px 12px' }} /> : <div key={`h${i}`} style={{ fontSize: 10, fontWeight: 700, letterSpacing: .5, color: MUTED2, padding: '14px 18px 6px' }}>{item.header}</div>)
+          : <NavItem key={item.to} {...item} compact={compact} />)}
       </nav>
 
       {/* User */}
