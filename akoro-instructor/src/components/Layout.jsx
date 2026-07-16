@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -80,9 +80,16 @@ function NavItem({ to, icon: Icon, label, compact }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
-  const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+  const [query, setQuery] = useState('');
+  const medium = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+  // Icons-only when the hamburger collapsed it OR on a medium screen.
+  const compact = collapsed || medium;
+
+  const q = query.trim().toLowerCase();
+  const navItems  = q ? NAV.filter((i) => i.label.toLowerCase().includes(q)) : NAV;
+  const mgmtItems = q ? MGMT_NAV.filter((i) => !i.header && i.label.toLowerCase().includes(q)) : MGMT_NAV;
 
   return (
     <aside style={{
@@ -110,12 +117,32 @@ export function Sidebar() {
         </div>
       </div>
 
+      {/* Search menu */}
+      {!compact ? (
+        <div style={{ padding: '12px 14px 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 10, padding: '8px 12px' }}>
+            <Search size={15} color={MUTED2} style={{ flexShrink: 0 }} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search menu…"
+              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: WHITE, fontSize: 13, fontFamily: FONT, minWidth: 0 }} />
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+          <Search size={17} color={MUTED2} />
+        </div>
+      )}
+
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
-        {MGMT_NAV.map((item, i) => item.header
-          ? (compact ? <div key={`h${i}`} style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '10px 12px' }} /> : <div key={`h${i}`} style={{ fontSize: 10, fontWeight: 700, letterSpacing: .5, color: MUTED2, padding: '14px 18px 6px' }}>{item.header}</div>)
-          : <NavItem key={item.to} {...item} compact={compact} />)}
+      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
+        {navItems.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
+        {q
+          ? mgmtItems.map(item => <NavItem key={item.to} {...item} compact={compact} />)
+          : MGMT_NAV.map((item, i) => item.header
+              ? (compact ? <div key={`h${i}`} style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '10px 12px' }} /> : <div key={`h${i}`} style={{ fontSize: 10, fontWeight: 700, letterSpacing: .5, color: MUTED2, padding: '14px 18px 6px' }}>{item.header}</div>)
+              : <NavItem key={item.to} {...item} compact={compact} />)}
+        {q && !navItems.length && !mgmtItems.length && (
+          <div style={{ padding: '16px 20px', fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No menu matches “{query}”.</div>
+        )}
       </nav>
 
       {/* User */}
@@ -219,7 +246,7 @@ function BellButton() {
   );
 }
 
-export function TopBar({ title, subtitle, action }) {
+export function TopBar({ title, subtitle, action, onToggleSidebar }) {
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 10,
@@ -228,9 +255,15 @@ export function TopBar({ title, subtitle, action }) {
       padding: '16px 28px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     }}>
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
-        {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* Hamburger — collapses the sidebar to icons-only */}
+        <button onClick={onToggleSidebar} title="Toggle sidebar" style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
+          <Menu size={17} />
+        </button>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
+          {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
@@ -271,11 +304,12 @@ export function BottomNav() {
 }
 
 export function PageLayout({ children, title, subtitle, action }) {
+  const [collapsed, setCollapsed] = useState(false);
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+      <Sidebar collapsed={collapsed} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <TopBar title={title} subtitle={subtitle} action={action} />
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={() => setCollapsed((c) => !c)} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           {children}
         </main>
