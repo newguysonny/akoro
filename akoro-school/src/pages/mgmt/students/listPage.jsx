@@ -138,6 +138,7 @@ export function StudentListPage() {
         <button onClick={() => navigate('/mgmt/student-admission')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <UserPlus size={15} /> Admit Student
         </button>
+        <button onClick={() => setModal('enrol')} style={{ ...toolBtn(GREEN), background: `${GREEN}12` }}><Mail size={14} /> Enrol / Invite</button>
         <button onClick={() => navigate('/mgmt/students/bulk-upload')} style={{ ...toolBtn(BLUE), background: `${BLUE}12` }}><Upload size={14} /> Bulk Upload</button>
         <button onClick={() => navigate('/mgmt/students/bulk-photos')} style={{ ...toolBtn(PURPLE), background: `${PURPLE}12` }}><Image size={14} /> Bulk Photos</button>
         <button onClick={() => navigate('/mgmt/students/bulk-docs')} style={{ ...toolBtn(GREEN), background: `${GREEN}12` }}><FileUp size={14} /> Bulk Docs</button>
@@ -254,6 +255,7 @@ export function StudentListPage() {
       )}
 
       {modal === 'bulk-edit' && <BulkEditModal count={selectedIds.length} classes={classes} sections={sections} onClose={() => setModal(null)} onSave={async (patch) => { try { await apiPost(`${BASE}/students/bulk-update`, { ids: selectedIds, ...patch }); showToast(`Updated ${selectedIds.length} student(s)`); setModal(null); load(); } catch (e) { showToast(e.message || 'Bulk update failed'); } }} />}
+      {modal === 'enrol' && <EnrolStudentModal onClose={() => setModal(null)} onDone={load} showToast={showToast} navigate={navigate} />}
 
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, maxWidth: '80vw' }}>{toast}</div>}
     </PageLayout>
@@ -285,6 +287,85 @@ function BulkEditModal({ count, classes, sections, onClose, onSave }) {
       <button onClick={() => onSave({ class_id: classId, section_id: sectionId, status })} disabled={!classId && !sectionId && !status} style={{ width: '100%', marginTop: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: (!classId && !sectionId && !status) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (!classId && !sectionId && !status) ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: (!classId && !sectionId && !status) ? 'default' : 'pointer', fontFamily: FONT }}>
         <CheckSquare size={14} /> Apply to {count} student(s)
       </button>
+    </ModalShell>
+  );
+}
+
+/* ── Enrol / Invite modal — Manual Entry · Send Invite · Import CSV ───────── */
+function EnrolStudentModal({ onClose, onDone, showToast, navigate }) {
+  const [tab, setTab] = useState('manual');            // manual | invite | csv
+  const [fullNameV, setFullNameV] = useState('');
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);          // { temp_password, email } | { invited }
+
+  const submit = async (sendEmail) => {
+    if (!email.trim()) return showToast('Email is required');
+    setBusy(true);
+    try {
+      const r = await apiPost(`${BASE}/students/enrol`, { fullName: fullNameV.trim(), email: email.trim(), sendEmail });
+      onDone?.();
+      if (sendEmail) { setResult({ invited: true, email: email.trim() }); }
+      else { setResult({ temp_password: r.temp_password, email: email.trim(), existing: !r.account_created }); }
+    } catch (e) { showToast(e.message || 'Could not enrol student'); }
+    finally { setBusy(false); }
+  };
+
+  const TabBtn = ({ id, icon: Icon, label }) => (
+    <button onClick={() => { setTab(id); setResult(null); }} style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: `1px solid ${tab === id ? AMBER : BORDER}`, background: tab === id ? `${AMBER}12` : WHITE, color: tab === id ? '#B45309' : MUTED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+      <Icon size={14} /> {label}
+    </button>
+  );
+
+  return (
+    <ModalShell title="Enrol a student" onClose={onClose} width={440}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <TabBtn id="manual" icon={UserPlus} label="Manual" />
+        <TabBtn id="invite" icon={Mail} label="Invite" />
+        <TabBtn id="csv" icon={Upload} label="CSV" />
+      </div>
+
+      {result ? (
+        <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
+          {result.invited ? (
+            <p style={{ fontSize: 13.5, color: INK, margin: 0 }}>Invite sent to <strong>{result.email}</strong> with sign-in details. ✓</p>
+          ) : result.existing ? (
+            <p style={{ fontSize: 13.5, color: INK, margin: 0 }}><strong>{result.email}</strong> already had an account — added to your school. ✓</p>
+          ) : (
+            <div>
+              <p style={{ fontSize: 13, color: MUTED, margin: '0 0 10px' }}>Account created for <strong>{result.email}</strong>. Share this temporary password (shown once):</p>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 14px' }}>
+                <code style={{ fontSize: 15, fontWeight: 800, color: INK, letterSpacing: .5 }}>{result.temp_password}</code>
+                <button onClick={() => { navigator.clipboard?.writeText(result.temp_password); showToast('Copied'); }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: AMBER, display: 'flex' }}><Copy size={15} /></button>
+              </div>
+            </div>
+          )}
+          <button onClick={onClose} style={{ display: 'block', width: '100%', marginTop: 18, padding: '11px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Done</button>
+        </div>
+      ) : tab === 'csv' ? (
+        <div style={{ textAlign: 'center', padding: '10px 0' }}>
+          <p style={{ fontSize: 13, color: MUTED, margin: '0 0 14px' }}>Import many students at once from a spreadsheet.</p>
+          <button onClick={() => { onClose(); navigate('/mgmt/students/bulk-upload'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Upload size={15} /> Go to Bulk Upload</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Full name {tab === 'invite' && <span style={{ fontWeight: 500, color: MUTED2 }}>(optional)</span>}</label>
+            <input value={fullNameV} onChange={(e) => setFullNameV(e.target.value)} placeholder="Ada Obi" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="student@example.com" type="email" style={inputStyle} />
+          </div>
+          <button onClick={() => submit(tab === 'invite')} disabled={busy || !email.trim()} style={{ marginTop: 4, padding: '11px', borderRadius: 11, border: 'none', background: (busy || !email.trim()) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (busy || !email.trim()) ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: (busy || !email.trim()) ? 'default' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : (tab === 'invite' ? <Mail size={14} /> : <UserPlus size={14} />)}
+            {tab === 'invite' ? 'Send invite' : 'Create account'}
+          </button>
+          <p style={{ fontSize: 11, color: MUTED2, margin: 0, textAlign: 'center' }}>
+            {tab === 'invite' ? 'Emails the student their sign-in details.' : 'Creates the account and shows a temporary password once.'}
+          </p>
+        </div>
+      )}
     </ModalShell>
   );
 }

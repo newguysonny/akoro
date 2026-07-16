@@ -421,6 +421,84 @@ router.post("/classrooms/:id/students", authenticateToken, requireRole(SCHOOL_RO
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/school/students/enrol ──────────────────────────────────────────
+// Manual Entry / Send Invite: create a learner account (if new), add them to a
+// school classroom, and mirror into the SIS roster. Body:
+//   { fullName, email, sendEmail? }  — sendEmail=true emails credentials
+//   (the "invite" flow); otherwise the temp password is returned to show once.
+router.post("/students/enrol", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const email = (req.body.email || "").toLowerCase().trim();
+    const fullName = (req.body.fullName || "").trim();
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    // Find or create the learner account (capture temp password for new ones).
+    let tempPassword = null, isNew = false;
+    let { data: user } = await db.from("users").select("id, full_name, email").eq("email", email).maybeSingle();
+    if (!user) {
+      tempPassword = crypto.randomBytes(8).toString("base64").slice(0, 10);
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+      const base = (email.split("@")[0] || `user${Date.now()}`).replace(/[^a-zA-Z0-9_]/g, "_");
+      const { data: created, error } = await db.from("users").insert({
+        email, username: `${base}_${Math.floor(Math.random() * 9000) + 1000}`,
+        password_hash: passwordHash, full_name: fullName || null, role: "student", is_active: true, must_change_password: true,
+      }).select("id, full_name, email").single();
+      if (error) { if (error.code === "23505") return res.status(409).json({ error: "That email is already registered" }); throw new Error(error.message); }
+      user = created; isNew = true;
+    }
+
+    // Ensure a school classroom (school-owned; the admin is the placeholder teacher).
+    let { data: room } = await db.from("classrooms").select("id").eq("school_id", school.id).order("created_at", { ascending: true }).limit(1).maybeSingle();
+    if (!room) {
+      const { data: r } = await db.from("classrooms").insert({ teacher_id: req.user.id, school_id: school.id, name: `${school.name} — General` }).select("id").single();
+      room = r;
+    }
+    const { data: already } = await db.from("classroom_students").select("id").eq("classroom_id", room.id).eq("user_id", user.id).maybeSingle();
+    if (!already) await db.from("classroom_students").insert({ classroom_id: room.id, user_id: user.id, status: "active" });
+
+    // Mirror into the SIS roster (mgmt.students).
+    const M = db.schema("mgmt");
+    const { data: sis } = await M.from("students").select("id").eq("school_id", school.id).eq("user_id", user.id).maybeSingle();
+    if (!sis) {
+      const parts = (user.full_name || fullName || email.split("@")[0]).trim().split(/\s+/);
+      const first = parts.shift() || "Student"; const last = parts.join(" ") || first;
+      await M.from("students").insert({
+        school_id: school.id, user_id: user.id, created_by: req.user.id,
+        admission_no: `S-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 900 + 100)}`,
+        first_name: first, last_name: last, status: "active",
+      }).select("id").maybeSingle();
+    }
+
+    // Email credentials on the invite path.
+    const wantEmail = req.body.sendEmail === true || req.body.sendEmail === "true";
+    if (wantEmail && isNew && tempPassword) {
+      const loginUrl = process.env.FRONTEND_URL || "https://akoro.name.ng";
+      notifyUser({
+        userId: user.id, type: "account_created",
+        title: `Welcome to ${school.name}`,
+        content: `An account was created for you at ${school.name}.`,
+        email: {
+          to: user.email, name: user.full_name || fullName,
+          subject: `You've been added to ${school.name} on Akoro`,
+          heading: "Your account is ready 🎓",
+          body: `<strong>${school.name}</strong> added you to Akoro. Sign in with <strong>${user.email}</strong> and the temporary password <strong>${tempPassword}</strong>, then change it.`,
+          ctaUrl: loginUrl, ctaLabel: "Sign in →",
+        },
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      student: { id: user.id, full_name: user.full_name || fullName, email: user.email },
+      account_created: isNew,
+      temp_password: (isNew && !wantEmail) ? tempPassword : undefined,
+      message: isNew ? (wantEmail ? "Invite sent with login details" : "Account created") : "Student added",
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // =============================================================
 // SCHOOL AGENT — the school's dedicated AI agent (one per school).
 // Reuses the user_agents record of the school-admin account, so the whole
