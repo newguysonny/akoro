@@ -4,7 +4,7 @@
  * Students are custom.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft } from 'lucide-react';
+import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
@@ -153,7 +153,19 @@ export function AssignElectivesPage() {
 
 // ManagePeriodsPage now lives in ./academics/PeriodsPage.jsx (class-first + type).
 
-/* ── Class Timetable (grid) ──────────────────────────────────────── */
+/* ── Class Timetable (printed-style grid) ─────────────────────────── */
+const SPECIAL_TYPES = { assembly: 1, break: 1, lunch: 1, activity: 1 };
+const SPECIAL_LABEL = {
+  assembly: 'ASSEMBLY · CLASS MEETING · PPI',
+  break: 'BREAK',
+  lunch: 'LUNCH',
+  activity: 'GAMES · CLUBS & SOCIETIES · CAREER GUIDANCE',
+};
+const specialStyle = (type) => type === 'break' || type === 'lunch'
+  ? { bg: `${AMBER}14`, fg: '#B45309' }
+  : { bg: `${INK}0A`, fg: INK };
+const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
+
 export function ClassTimetablePage() {
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
@@ -162,8 +174,10 @@ export function ClassTimetablePage() {
   const [classId, setClassId] = useState('');
   const [sectionId, setSectionId] = useState('');
   const [slots, setSlots] = useState([]);
-  const [cell, setCell] = useState(null);      // { day, period, slot? }
+  const [meta, setMeta] = useState(null);         // timetable_meta row (or null)
+  const [cell, setCell] = useState(null);         // { day, period, slot? }
   const [cellSubject, setCellSubject] = useState('');
+  const [cellAlt, setCellAlt] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
@@ -176,34 +190,47 @@ export function ClassTimetablePage() {
   }, []);
 
   const loadSlots = useCallback(() => {
-    if (!classId) return setSlots([]);
-    const params = new URLSearchParams({ class_id: classId });
-    if (sectionId) params.set('section_id', sectionId);
-    apiGet(`${BASE}/timetable-slots?${params}`).then((r) => setSlots(r.data || [])).catch(() => {});
+    if (!classId) { setSlots([]); setMeta(null); return; }
+    const p = new URLSearchParams({ class_id: classId });
+    if (sectionId) p.set('section_id', sectionId);
+    apiGet(`${BASE}/timetable-slots?${p}`).then((r) => setSlots(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/timetable-meta?class_id=${classId}`).then((r) => {
+      const rows = r.data || [];
+      setMeta(rows.find((m) => (sectionId ? m.section_id === sectionId : !m.section_id)) || rows[0] || null);
+    }).catch(() => setMeta(null));
   }, [classId, sectionId]);
   useEffect(() => { loadSlots(); }, [loadSlots]);
 
-  const slotAt = (day, periodId) => slots.find((s) => s.day_of_week === day && s.period_id === periodId);
-  // Periods are class-specific; fall back to any global (class-less) periods.
+  const subjById = Object.fromEntries(subjects.map((s) => [s.id, s]));
+  const codeOf = (id) => id ? (subjById[id]?.code || subjById[id]?.name || '') : '';
+  const className = classes.find((c) => c.id === classId)?.name || '';
+
   const classPeriods = periods.filter((p) => p.class_id === classId);
-  const gridPeriods = classPeriods.length ? classPeriods : periods.filter((p) => !p.class_id);
+  const cols = (classPeriods.length ? classPeriods : periods.filter((p) => !p.class_id))
+    .slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const slotAt = (day, periodId) => slots.find((s) => s.day_of_week === day && s.period_id === periodId);
+
+  // Subjects that appear → Key legend.
+  const usedIds = [...new Set(slots.flatMap((s) => [s.subject_id, s.alt_subject_id]).filter(Boolean))];
+  const legend = usedIds.map((id) => subjById[id]).filter(Boolean)
+    .sort((a, b) => (a.code || a.name).localeCompare(b.code || b.name));
 
   const openCell = (day, period) => {
     const slot = slotAt(day, period.id);
     setCellSubject(slot?.subject_id || '');
+    setCellAlt(slot?.alt_subject_id || '');
     setCell({ day, period, slot });
   };
-
   const saveCell = async () => {
     setBusy(true);
     try {
-      if (cell.slot) await apiPut(`${BASE}/timetable-slots/${cell.slot.id}`, { subject_id: cellSubject || '' });
-      else await apiPost(`${BASE}/timetable-slots`, { class_id: classId, section_id: sectionId || '', day_of_week: cell.day, period_id: cell.period.id, subject_id: cellSubject || '' });
+      const body = { subject_id: cellSubject || '', alt_subject_id: cellAlt || '' };
+      if (cell.slot) await apiPut(`${BASE}/timetable-slots/${cell.slot.id}`, body);
+      else await apiPost(`${BASE}/timetable-slots`, { class_id: classId, section_id: sectionId || '', day_of_week: cell.day, period_id: cell.period.id, ...body });
       setCell(null); loadSlots();
     } catch (e) { showToast(e.message || 'Could not save'); }
     finally { setBusy(false); }
   };
-
   const clearCell = async () => {
     if (!cell.slot) return setCell(null);
     setBusy(true);
@@ -212,66 +239,155 @@ export function ClassTimetablePage() {
     finally { setBusy(false); }
   };
 
+  // ── Meta (footer) ──
+  const [metaForm, setMetaForm] = useState({});
+  useEffect(() => {
+    setMetaForm(meta || { title: className ? `${className.toUpperCase()} TIMETABLE` : '', prepared_by: '', approved_by: '', head_of_curriculum: '', approved: false, approved_on: '' });
+  }, [meta, className]);
+  const saveMeta = async () => {
+    setBusy(true);
+    try {
+      const body = { class_id: classId, section_id: sectionId || '', title: metaForm.title || '', prepared_by: metaForm.prepared_by || '', approved_by: metaForm.approved_by || '', head_of_curriculum: metaForm.head_of_curriculum || '', approved: !!metaForm.approved, approved_on: metaForm.approved_on || '' };
+      if (meta?.id) await apiPut(`${BASE}/timetable-meta/${meta.id}`, body);
+      else await apiPost(`${BASE}/timetable-meta`, body);
+      showToast('Timetable details saved ✓'); loadSlots();
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  const approved = !!metaForm.approved;
+  const badge = (
+    <span style={{ display: 'inline-block', padding: '3px 12px', borderRadius: 6, background: GREEN, color: WHITE, fontSize: 11, fontWeight: 900, letterSpacing: .5, transform: 'rotate(-4deg)' }}>APPROVED</span>
+  );
+
   return (
-    <PageLayout title="Class Timetable" subtitle="Weekly lesson grid per class">
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+    <PageLayout title="Class Timetable" subtitle="Printed weekly timetable per class">
+      <style>{`@media print {
+        body * { visibility: hidden !important; }
+        #tt-print, #tt-print * { visibility: visible !important; }
+        #tt-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
+        .tt-controls, .tt-noprint { display: none !important; }
+      }`}</style>
+      <div className="tt-controls" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(''); }} style={{ ...inputStyle, width: 170, cursor: 'pointer' }}>
           <option value="">— select class —</option>{classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 150, cursor: 'pointer' }}>
           <option value="">All sections</option>{sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
       </div>
 
       {!classId ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
           Pick a class to view and edit its timetable.
         </div>
       ) : (
-        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 680 }}>
-            <thead>
-              <tr style={{ background: LIGHT }}>
-                <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>PERIOD</th>
-                {DAYS.map((d) => <th key={d.n} style={{ textAlign: 'center', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2 }}>{d.label.toUpperCase()}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {gridPeriods.map((p) => (
-                <tr key={p.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <td style={{ padding: '10px 14px', fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap' }}>
-                    {p.name}{p.starts_at && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: MUTED2 }}>{String(p.starts_at).slice(0, 5)}–{String(p.ends_at || '').slice(0, 5)}</span>}
-                  </td>
-                  {DAYS.map((d) => {
-                    const slot = slotAt(d.n, p.id);
-                    return (
-                      <td key={d.n} onClick={() => openCell(d.n, p)} style={{ padding: 6, textAlign: 'center', cursor: 'pointer' }}>
-                        <div style={{ padding: '9px 6px', borderRadius: 8, background: slot?.subject_name ? `${BLUE}10` : LIGHT, border: `1px ${slot?.subject_name ? 'solid' : 'dashed'} ${slot?.subject_name ? `${BLUE}44` : BORDER}`, fontSize: 12, fontWeight: 700, color: slot?.subject_name ? BLUE : MUTED2 }}>
-                          {slot?.subject_name || '+'}
-                        </div>
-                      </td>
-                    );
-                  })}
+        <div id="tt-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 6, padding: 14, fontFamily: FONT }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+            {approved ? badge : <span />}
+            <div style={{ textAlign: 'center', flex: 1 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: INK, letterSpacing: .3 }}>{className.toUpperCase()} — {metaForm.title || 'TIMETABLE'}</div>
+            </div>
+            {approved ? badge : <span />}
+          </div>
+
+          {/* Grid */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820, tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={ttTh}>TIME<br />DAY</th>
+                  {cols.map((p) => (
+                    <th key={p.id} style={{ ...ttTh, color: RED }}>
+                      {hhmm(p.starts_at)}<br />{hhmm(p.ends_at)}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {DAYS.map((d, di) => (
+                  <tr key={d.n}>
+                    <td style={{ ...ttDay }}>{d.label.toUpperCase()}</td>
+                    {cols.map((p) => {
+                      const sp = SPECIAL_TYPES[p.type];
+                      if (sp) {
+                        if (di !== 0) return null;   // merged across all day rows
+                        const { bg, fg } = specialStyle(p.type);
+                        return (
+                          <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${INK}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}>
+                            <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, letterSpacing: .5, whiteSpace: 'nowrap' }}>
+                              {SPECIAL_LABEL[p.type] || p.name}
+                            </div>
+                          </td>
+                        );
+                      }
+                      const slot = slotAt(d.n, p.id);
+                      const code = codeOf(slot?.subject_id);
+                      const alt = codeOf(slot?.alt_subject_id);
+                      return (
+                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${INK}`, padding: '6px 3px', textAlign: 'center', cursor: 'pointer', height: 44, background: code ? WHITE : `${LIGHT}` }}>
+                          {code ? (
+                            <div style={{ fontSize: 12, fontWeight: 800, color: INK, lineHeight: 1.15 }}>
+                              {code}
+                              {alt && <><div style={{ fontSize: 9, fontWeight: 600, color: MUTED2, fontStyle: 'italic' }}>or</div><div>{alt}</div></>}
+                            </div>
+                          ) : <span style={{ color: MUTED2, fontSize: 13 }}>+</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Key + footer */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+            <div style={{ flex: '1 1 240px', border: `1px solid ${INK}`, borderRadius: 6, padding: '10px 12px', background: `${AMBER}0A` }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: INK, marginBottom: 6, letterSpacing: .5 }}>KEY</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px' }}>
+                {legend.length ? legend.map((s) => (
+                  <div key={s.id} style={{ fontSize: 10.5, color: INK }}><b>{s.code || s.name}</b>{s.code ? ` – ${s.name}` : ''}</div>
+                )) : <span style={{ fontSize: 11, color: MUTED2 }}>No subjects placed yet.</span>}
+              </div>
+            </div>
+            <div className="tt-footer" style={{ flex: '1 1 300px', border: `1px solid ${INK}`, borderRadius: 6, padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'center' }}>
+              <FooterField label="Time table Prepared by" value={metaForm.prepared_by} onChange={(v) => setMetaForm((f) => ({ ...f, prepared_by: v }))} />
+              <FooterField label="Time table Approved by" value={metaForm.approved_by} onChange={(v) => setMetaForm((f) => ({ ...f, approved_by: v }))} />
+              <FooterField label="Head of Curriculum" value={metaForm.head_of_curriculum} onChange={(v) => setMetaForm((f) => ({ ...f, head_of_curriculum: v }))} />
+              <FooterField label="Date" type="date" value={metaForm.approved_on || ''} onChange={(v) => setMetaForm((f) => ({ ...f, approved_on: v }))} />
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, color: INK, cursor: 'pointer' }}>
+                <input type="checkbox" checked={approved} onChange={(e) => setMetaForm((f) => ({ ...f, approved: e.target.checked }))} style={{ width: 15, height: 15, accentColor: GREEN }} />
+                <CheckCircle2 size={14} color={approved ? GREEN : MUTED2} /> Approved
+              </label>
+              <button className="tt-noprint" onClick={saveMeta} disabled={busy} style={{ justifySelf: 'end', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 15px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Cell editor */}
       {cell && (
         <div onClick={() => setCell(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: WHITE, borderRadius: 16, padding: '20px 20px 22px', fontFamily: FONT }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <p style={{ fontSize: 14.5, fontWeight: 800, color: INK, margin: 0 }}>{DAYS.find((d) => d.n === cell.day)?.label} — {cell.period.name}</p>
+              <p style={{ fontSize: 14.5, fontWeight: 800, color: INK, margin: 0 }}>{DAYS.find((d) => d.n === cell.day)?.label} · {hhmm(cell.period.starts_at)}–{hhmm(cell.period.ends_at)}</p>
               <button onClick={() => setCell(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><X size={17} /></button>
             </div>
             <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Subject</label>
-            <select value={cellSubject} onChange={(e) => setCellSubject(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 16 }}>
-              <option value="">— none —</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <select value={cellSubject} onChange={(e) => setCellSubject(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 12 }}>
+              <option value="">— none —</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} — ${s.name}` : s.name}</option>)}
+            </select>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>Optional alternative (shown as “or”)</label>
+            <select value={cellAlt} onChange={(e) => setCellAlt(e.target.value)} style={{ ...inputStyle, cursor: 'pointer', marginBottom: 16 }}>
+              <option value="">— none —</option>{subjects.filter((s) => s.id !== cellSubject).map((s) => <option key={s.id} value={s.id}>{s.code ? `${s.code} — ${s.name}` : s.name}</option>)}
             </select>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              {cell.slot && <button onClick={clearCell} disabled={busy} style={{ padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Clear Slot</button>}
+              {cell.slot && <button onClick={clearCell} disabled={busy} style={{ padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Clear</button>}
               <button onClick={saveCell} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
                 {busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save
               </button>
@@ -284,6 +400,19 @@ export function ClassTimetablePage() {
     </PageLayout>
   );
 }
+
+const ttTh = { border: `1px solid ${INK}`, padding: '5px 3px', fontSize: 10, fontWeight: 800, color: INK, textAlign: 'center', background: LIGHT, lineHeight: 1.2 };
+const ttDay = { border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 900, color: INK, textAlign: 'center', background: LIGHT, whiteSpace: 'nowrap' };
+
+function FooterField({ label, value, onChange, type = 'text' }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9.5, fontWeight: 700, color: MUTED2, marginBottom: 2 }}>{label}</div>
+      <input type={type} value={value || ''} onChange={(e) => onChange(e.target.value)} style={{ width: '100%', border: 'none', borderBottom: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, outline: 'none', padding: '2px 0', background: 'transparent' }} />
+    </div>
+  );
+}
+
 
 /* ── Promote Students ────────────────────────────────────────────── */
 export function PromoteStudentsPage() {
