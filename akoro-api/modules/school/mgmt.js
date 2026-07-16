@@ -189,6 +189,7 @@ const RESOURCES = {
 
   // Lesson Planner
   "lesson-plans": { table: "lesson_plans", fields: ["teacher_id","class_id","subject_id","week_label","topic","objectives","activities","resources","feedback","status"], required: ["topic"], refs: { teacher_id: ["users","full_name","public"], class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["status","class_id","teacher_id"] },
+  "forecast-weeks": { table: "forecast_weeks", fields: ["class_id","section_id","week_start","week_end","theme","notes","prepared_by"], required: ["class_id","week_start"], refs: { class_id: ["classes","name"], section_id: ["sections","name"] }, filters: ["class_id","section_id","week_start"], orderBy: "week_start", asc: false },
 
   // OSM
   "osm-sessions": { table: "osm_sessions", fields: ["teacher_id","observer_name","session_date","focus_area","status"], required: [], refs: { teacher_id: ["users","full_name","public"] }, filters: ["status"] },
@@ -1950,6 +1951,69 @@ router.post("/timetable/load-template", authenticateToken, requireRole(SCHOOL_RO
     }
 
     res.json({ success: true, variant, created: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Weekly Forecast: header + cells for a class/week ──────────────────────
+// GET /forecast?class_id=&section_id=&week_start=YYYY-MM-DD
+// Returns { week, cells } (week is null if none saved yet). The subject per
+// cell is resolved on the client from the timetable, so this only carries the
+// planned activities + the week header.
+router.get("/forecast", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { class_id, section_id = null, week_start } = req.query;
+    if (!class_id || !week_start) return res.status(400).json({ error: "class_id and week_start are required" });
+    let wq = M().from("forecast_weeks").select("*").eq("school_id", school.id).eq("class_id", class_id).eq("week_start", week_start);
+    wq = section_id ? wq.eq("section_id", section_id) : wq.is("section_id", null);
+    const { data: week } = await wq.maybeSingle();
+    let cells = [];
+    if (week) {
+      const { data } = await M().from("forecast_cells").select("day_of_week, period_id, activity, notes").eq("week_id", week.id);
+      cells = data || [];
+    }
+    res.json({ success: true, data: { week: week || null, cells } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /forecast/save  — upsert the week header and any provided cells.
+// Body: { class_id, section_id?, week_start, week_end?, theme?, notes?,
+//         prepared_by?, cells?: [{ day_of_week, period_id, activity, notes? }] }
+router.post("/forecast/save", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const b = req.body || {};
+    if (!b.class_id || !b.week_start) return res.status(400).json({ error: "class_id and week_start are required" });
+    const section_id = b.section_id || null;
+
+    // Upsert the week header.
+    let wq = M().from("forecast_weeks").select("id").eq("school_id", school.id).eq("class_id", b.class_id).eq("week_start", b.week_start);
+    wq = section_id ? wq.eq("section_id", section_id) : wq.is("section_id", null);
+    let { data: week } = await wq.maybeSingle();
+    const header = { week_end: b.week_end || null, theme: b.theme ?? null, notes: b.notes ?? null, prepared_by: b.prepared_by ?? null, updated_at: new Date() };
+    if (week) {
+      await M().from("forecast_weeks").update(header).eq("id", week.id);
+    } else {
+      const { data: created, error } = await M().from("forecast_weeks")
+        .insert({ school_id: school.id, class_id: b.class_id, section_id, week_start: b.week_start, ...header })
+        .select("id").single();
+      if (error) throw new Error(error.message);
+      week = created;
+    }
+
+    // Upsert each provided cell (empty activity clears it).
+    let saved = 0;
+    for (const c of Array.isArray(b.cells) ? b.cells : []) {
+      if (!c.period_id || !c.day_of_week) continue;
+      const row = { school_id: school.id, week_id: week.id, day_of_week: c.day_of_week, period_id: c.period_id, activity: c.activity ?? null, notes: c.notes ?? null };
+      const { data: ex } = await M().from("forecast_cells").select("id").eq("week_id", week.id).eq("day_of_week", c.day_of_week).eq("period_id", c.period_id).maybeSingle();
+      if (ex) await M().from("forecast_cells").update({ activity: row.activity, notes: row.notes }).eq("id", ex.id);
+      else await M().from("forecast_cells").insert(row);
+      saved++;
+    }
+    res.json({ success: true, weekId: week.id, saved });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

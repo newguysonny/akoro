@@ -47,6 +47,7 @@
     "2026-section-types.sql",
     "2026-periods-class-type.sql",
     "2026-timetable-layout.sql",
+    "2026-weekly-forecast.sql",
     "2026-reset-site-templates.sql",
     "2026-site-ai-chat.sql",
     "2026-template-colors.sql"

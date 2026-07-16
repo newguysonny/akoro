@@ -506,3 +506,255 @@ export function PromoteStudentsPage() {
     </PageLayout>
   );
 }
+
+/* ── Weekly Forecast & Daily Schedule (timetable-driven) ─────────────── */
+// Shared helpers: snap a date to the Monday of its week, add days, format.
+function mondayOf(dateStr) {
+  const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  const dow = (d.getDay() + 6) % 7;                 // 0 = Monday
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const prettyDate = (iso) => { try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); } catch { return iso; } };
+const DOW_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+// Load class + timetable context shared by both pages.
+function useTimetableContext(classId, sectionId) {
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [periods, setPeriods] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [slots, setSlots] = useState([]);
+  useEffect(() => {
+    apiGet(`${BASE}/classes`).then((r) => setClasses(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/sections`).then((r) => setSections(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/periods`).then((r) => setPeriods(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/subjects`).then((r) => setSubjects(r.data || [])).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!classId) { setSlots([]); return; }
+    const p = new URLSearchParams({ class_id: classId });
+    if (sectionId) p.set('section_id', sectionId);
+    apiGet(`${BASE}/timetable-slots?${p}`).then((r) => setSlots(r.data || [])).catch(() => {});
+  }, [classId, sectionId]);
+  const subjById = Object.fromEntries(subjects.map((s) => [s.id, s]));
+  const classPeriods = periods.filter((p) => p.class_id === classId);
+  const cols = (classPeriods.length ? classPeriods : periods.filter((p) => !p.class_id))
+    .slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const codeOf = (id) => id ? (subjById[id]?.code || subjById[id]?.name || '') : '';
+  const slotAt = (day, pid) => slots.find((s) => s.day_of_week === day && s.period_id === pid);
+  const subjectLabel = (day, pid) => {
+    const s = slotAt(day, pid);
+    if (!s) return '';
+    const c = codeOf(s.subject_id); const a = codeOf(s.alt_subject_id);
+    return a ? `${c} / ${a}` : c;
+  };
+  return { classes, sections, periods, subjects, cols, subjById, slotAt, subjectLabel };
+}
+
+export function WeeklyForecastPage() {
+  const [classId, setClassId] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [weekStart, setWeekStart] = useState(mondayOf());
+  const ctx = useTimetableContext(classId, sectionId);
+  const [theme, setTheme] = useState('');
+  const [preparedBy, setPreparedBy] = useState('');
+  const [cellMap, setCellMap] = useState({});   // `${day}_${pid}` → activity
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState('');
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+  const className = ctx.classes.find((c) => c.id === classId)?.name || '';
+
+  const loadForecast = useCallback(() => {
+    if (!classId || !weekStart) { setCellMap({}); setTheme(''); setPreparedBy(''); return; }
+    const p = new URLSearchParams({ class_id: classId, week_start: weekStart });
+    if (sectionId) p.set('section_id', sectionId);
+    apiGet(`${BASE}/forecast?${p}`).then((r) => {
+      const { week, cells } = r.data || {};
+      setTheme(week?.theme || ''); setPreparedBy(week?.prepared_by || '');
+      setCellMap(Object.fromEntries((cells || []).map((c) => [`${c.day_of_week}_${c.period_id}`, c.activity || ''])));
+    }).catch(() => {});
+  }, [classId, sectionId, weekStart]);
+  useEffect(() => { loadForecast(); }, [loadForecast]);
+
+  const setCell = (day, pid, v) => setCellMap((m) => ({ ...m, [`${day}_${pid}`]: v }));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const cells = [];
+      for (const d of DAYS) for (const p of ctx.cols) {
+        if (p.type && p.type !== 'teaching') continue;
+        const v = cellMap[`${d.n}_${p.id}`];
+        if (v !== undefined) cells.push({ day_of_week: d.n, period_id: p.id, activity: v });
+      }
+      await apiPost(`${BASE}/forecast/save`, { class_id: classId, section_id: sectionId || '', week_start: weekStart, week_end: addDays(weekStart, 4), theme, prepared_by: preparedBy, cells });
+      showToast('Forecast saved ✓');
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <PageLayout title="Weekly Forecast" subtitle="What will be taught each day — follows the class timetable">
+      <style>{`@media print { body * { visibility: hidden !important; } #wf-print, #wf-print * { visibility: visible !important; } #wf-print { position: absolute; left:0; top:0; width:100%; } .wf-noprint { display:none !important; } }`}</style>
+      <div className="wf-noprint" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+        <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(''); }} style={{ ...inputStyle, width: 160, cursor: 'pointer' }}>
+          <option value="">— class —</option>{ctx.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 140, cursor: 'pointer' }}>
+          <option value="">All sections</option>{ctx.sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(e.target.value))} style={{ ...inputStyle, width: 160 }} title="Any day — snaps to that week's Monday" />
+        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+      </div>
+
+      {!classId ? (
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>Pick a class and week to plan.</div>
+      ) : (
+        <div id="wf-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 14, fontFamily: FONT }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: INK }}>WEEKLY FORECAST — {className.toUpperCase()}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ padding: '6px 12px', borderRadius: 8, background: LIGHT, fontSize: 12.5, fontWeight: 700, color: INK }}>Week: {prettyDate(weekStart)} – {prettyDate(addDays(weekStart, 4))}</span>
+              <input value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="Theme…" style={{ ...inputStyle, width: 200, padding: '6px 10px' }} />
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 860, tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={ttTh}>DAY \ TIME</th>
+                  {ctx.cols.map((p) => <th key={p.id} style={{ ...ttTh, color: RED }}>{hhmm(p.starts_at)}<br />{hhmm(p.ends_at)}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {DAYS.map((d, di) => (
+                  <tr key={d.n}>
+                    <td style={ttDay}>{d.label.toUpperCase()}</td>
+                    {ctx.cols.map((p) => {
+                      if (p.type && p.type !== 'teaching') {
+                        if (di !== 0) return null;
+                        const { bg, fg } = specialStyle(p.type);
+                        return <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${INK}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, whiteSpace: 'nowrap' }}>{SPECIAL_LABEL[p.type] || p.name}</div></td>;
+                      }
+                      const subj = ctx.subjectLabel(d.n, p.id);
+                      return (
+                        <td key={p.id} style={{ border: `1px solid ${INK}`, padding: 4, verticalAlign: 'top' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: subj ? BLUE : MUTED2, marginBottom: 2 }}>{subj || '—'}</div>
+                          <textarea value={cellMap[`${d.n}_${p.id}`] || ''} onChange={(e) => setCell(d.n, p.id, e.target.value)} placeholder="…" rows={2}
+                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 11, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.3 }} />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="wf-noprint" style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: MUTED2 }}>Prepared by</span>
+            <input value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} style={{ ...inputStyle, width: 220, padding: '6px 10px' }} />
+          </div>
+        </div>
+      )}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+    </PageLayout>
+  );
+}
+
+export function DailySchedulePage() {
+  const [classId, setClassId] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const ctx = useTimetableContext(classId, sectionId);
+  const [cellMap, setCellMap] = useState({});   // periodId → activity
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState('');
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+  const className = ctx.classes.find((c) => c.id === classId)?.name || '';
+  const weekStart = mondayOf(date);
+  const dow = ((new Date(date + 'T00:00:00').getDay()) + 6) % 7 + 1;   // 1=Mon
+
+  const loadDay = useCallback(() => {
+    if (!classId) { setCellMap({}); return; }
+    const p = new URLSearchParams({ class_id: classId, week_start: weekStart });
+    if (sectionId) p.set('section_id', sectionId);
+    apiGet(`${BASE}/forecast?${p}`).then((r) => {
+      const cells = (r.data?.cells || []).filter((c) => c.day_of_week === dow);
+      setCellMap(Object.fromEntries(cells.map((c) => [c.period_id, c.activity || ''])));
+    }).catch(() => {});
+  }, [classId, sectionId, weekStart, dow]);
+  useEffect(() => { loadDay(); }, [loadDay]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const cells = ctx.cols.filter((p) => !p.type || p.type === 'teaching').map((p) => ({ day_of_week: dow, period_id: p.id, activity: cellMap[p.id] ?? '' }));
+      await apiPost(`${BASE}/forecast/save`, { class_id: classId, section_id: sectionId || '', week_start: weekStart, week_end: addDays(weekStart, 4), cells });
+      showToast('Daily schedule saved ✓');
+    } catch (e) { showToast(e.message || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <PageLayout title="Daily Schedule" subtitle="A single day's plan, period by period — follows the class timetable">
+      <style>{`@media print { body * { visibility: hidden !important; } #ds-print, #ds-print * { visibility: visible !important; } #ds-print { position:absolute; left:0; top:0; width:100%; } .ds-noprint { display:none !important; } }`}</style>
+      <div className="ds-noprint" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+        <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(''); }} style={{ ...inputStyle, width: 160, cursor: 'pointer' }}>
+          <option value="">— class —</option>{ctx.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ ...inputStyle, width: 140, cursor: 'pointer' }}>
+          <option value="">All sections</option>{ctx.sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: 160 }} />
+        {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
+        {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
+      </div>
+
+      {!classId ? (
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>Pick a class and date.</div>
+      ) : dow > 5 ? (
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>{DOW_NAMES[dow - 1]} is a weekend — no scheduled periods.</div>
+      ) : (
+        <div id="ds-print" style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 14, fontFamily: FONT, maxWidth: 720 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: INK, marginBottom: 10 }}>{className.toUpperCase()} — {DOW_NAMES[dow - 1].toUpperCase()}, {prettyDate(date)}</div>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ ...ttTh, width: 90 }}>TIME</th>
+                <th style={{ ...ttTh, width: 120 }}>SUBJECT</th>
+                <th style={ttTh}>WHAT WILL BE DONE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ctx.cols.map((p) => {
+                const special = p.type && p.type !== 'teaching';
+                const { bg, fg } = special ? specialStyle(p.type) : { bg: WHITE, fg: INK };
+                const subj = special ? '' : ctx.subjectLabel(dow, p.id);
+                return (
+                  <tr key={p.id}>
+                    <td style={{ border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', background: special ? bg : LIGHT }}>{hhmm(p.starts_at)}–{hhmm(p.ends_at)}</td>
+                    {special ? (
+                      <td colSpan={2} style={{ border: `1px solid ${INK}`, padding: '6px 10px', background: bg, color: fg, fontWeight: 900, fontSize: 12, letterSpacing: .5 }}>{SPECIAL_LABEL[p.type] || p.name}</td>
+                    ) : (
+                      <>
+                        <td style={{ border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 12, fontWeight: 800, color: subj ? BLUE : MUTED2 }}>{subj || '—'}</td>
+                        <td style={{ border: `1px solid ${INK}`, padding: 4 }}>
+                          <textarea value={cellMap[p.id] || ''} onChange={(e) => setCellMap((m) => ({ ...m, [p.id]: e.target.value }))} placeholder="…" rows={1}
+                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'vertical', fontSize: 12, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.35 }} />
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+    </PageLayout>
+  );
+}

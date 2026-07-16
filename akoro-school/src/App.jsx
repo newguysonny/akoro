@@ -45,6 +45,7 @@ import {
   AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, AssignTeacherSubjectsPage, ManagePeriodsPage,
   ClassTimetablePage, PromoteStudentsPage,
   CurriculumPage, SchemeOfWorkPage, SyllabusPage,
+  WeeklyForecastPage, DailySchedulePage,
 } from './pages/mgmt/academicsPages.jsx';
 import {
   FeesDashboardPage, CollectFeesPage, SearchDueFeesPage, AllTransactionsPage, OnlineTransactionsPage,
@@ -254,6 +255,8 @@ function AppRoutes() {
       <Route path="/mgmt/assign-teacher-subjects" element={<ProtectedRoute><AssignTeacherSubjectsPage /></ProtectedRoute>} />
       <Route path="/mgmt/periods"              element={<ProtectedRoute><ManagePeriodsPage /></ProtectedRoute>} />
       <Route path="/mgmt/class-timetable"      element={<ProtectedRoute><ClassTimetablePage /></ProtectedRoute>} />
+      <Route path="/mgmt/weekly-forecast"      element={<ProtectedRoute><WeeklyForecastPage /></ProtectedRoute>} />
+      <Route path="/mgmt/daily-schedule"       element={<ProtectedRoute><DailySchedulePage /></ProtectedRoute>} />
       <Route path="/mgmt/promote-students"     element={<ProtectedRoute><PromoteStudentsPage /></ProtectedRoute>} />
       {/* Management — Finance & Fees */}
       <Route path="/mgmt/fees-dashboard"       element={<ProtectedRoute><FeesDashboardPage /></ProtectedRoute>} />

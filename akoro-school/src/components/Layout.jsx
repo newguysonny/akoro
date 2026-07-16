@@ -81,6 +81,8 @@ const NAV_SECTIONS = [
       { label: 'Assign Class Teacher', to: '/mgmt/assign-class-teacher' },
       { label: 'Manage Periods', to: '/mgmt/periods' },
       { label: 'Class Timetable', to: '/mgmt/class-timetable' },
+      { label: 'Weekly Forecast', to: '/mgmt/weekly-forecast' },
+      { label: 'Daily Schedule', to: '/mgmt/daily-schedule' },
       { label: 'Promote Students', to: '/mgmt/promote-students' },
     ] },
     { label: 'Front Office', icon: DoorOpen, moduleKey: 'front_office', children: [
