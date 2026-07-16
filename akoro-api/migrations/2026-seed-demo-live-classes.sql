@@ -124,6 +124,15 @@ BEGIN
   END LOOP;
 END $$;
 
+-- ── Cover images for all demo courses (stable placeholder per slug). ──
+-- Loaded by the learner's browser directly, so it isn't subject to the
+-- API's outbound proxy. Only fills blanks, so real uploads are never
+-- overwritten and re-runs are idempotent.
+UPDATE public.courses
+SET cover_image_url = 'https://picsum.photos/seed/' || slug || '/600/360'
+WHERE slug LIKE 'demo-%'
+  AND (cover_image_url IS NULL OR cover_image_url = '');
+
 -- Verify:
 -- SELECT title, course_type, is_published, price FROM public.courses WHERE slug LIKE 'demo-%' ORDER BY course_type, title;
 -- SELECT c.title, ls.title, ls.scheduled_start, ls.status

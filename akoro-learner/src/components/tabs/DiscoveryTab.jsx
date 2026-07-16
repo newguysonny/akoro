@@ -97,7 +97,11 @@ function CourseCard({ course, onOpen, wide }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         border: '1px solid var(--ak-border)',
       }}>
-        <span style={{ fontSize: 46 }}>{course.emoji || '📘'}</span>
+        {course.img
+          ? <img src={course.img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          : null}
+        <span style={{ fontSize: 46, opacity: course.img ? 0 : 1 }}>{course.emoji || '📘'}</span>
         <span style={{
           position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, letterSpacing: .3,
           color: '#fff', background: isLive ? RED : 'rgba(17,12,40,.72)', padding: '3px 7px', borderRadius: 6,
@@ -371,7 +375,30 @@ export default function DiscoveryTab() {
   const fLive   = useMemo(() => live.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [live, cat, q]);
   const fVideo  = useMemo(() => video.filter(c => matchCat(c.subject, cat) && byQuery(`${c.title} ${c.subject}`)), [video, cat, q]);
 
+  // Curated Udemy-style sections, derived from the combined course pool.
+  const pool = useMemo(() => [...fLive, ...fVideo], [fLive, fVideo]);
+  const recommended = useMemo(() =>
+    [...pool].sort((a, b) => (b.ratingNum - a.ratingNum) || (b.students - a.students)), [pool]);
+  const trending = useMemo(() =>
+    [...pool].sort((a, b) => (b.students - a.students) || (b.ratingNum - a.ratingNum)), [pool]);
+  const featured = useMemo(() => {
+    const hot = pool.filter(c => c.ratingNum >= 4.7);
+    return (hot.length ? hot : pool).filter(c => c.priceNum > 0 || pool.every(x => x.priceNum === 0));
+  }, [pool]);
+
+  const loadingCourses = lLive || lVideo;
   const toggle = (k) => setExpanded(e => ({ ...e, [k]: !e[k] }));
+
+  const courseRail = (key, titleObj, accent, items, loading) => (
+    <Rail
+      title={titleObj} accent={accent} count={items.length} loading={loading}
+      expanded={!!expanded[key]} onToggle={() => toggle(key)}
+      emptyText={t('discovery.no_courses')}>
+      {(expanded[key] ? items : items.slice(0, 10)).map((c, i) => (
+        <CourseCard key={`${key}-${c.id}-${i}`} course={c} wide={expanded[key]} onOpen={(co) => navigate(`/course/${co.slug}`)} />
+      ))}
+    </Rail>
+  );
 
   return (
     <div style={{ padding: '4px 0 90px', fontFamily: FONT }}>
@@ -396,6 +423,9 @@ export default function DiscoveryTab() {
 
       <Categories value={cat} onChange={setCat} />
 
+      {/* Recommended for you */}
+      {courseRail('reco', { pre: t('discovery.rail_reco_pre'), hi: t('discovery.rail_reco_hi') }, BRAND, recommended, loadingCourses)}
+
       {/* Teaching Guides */}
       <Rail
         title={{ pre: t('discovery.rail_guides_pre'), hi: t('discovery.cat_guides') }}
@@ -408,26 +438,16 @@ export default function DiscoveryTab() {
       </Rail>
 
       {/* Live Classes */}
-      <Rail
-        title={{ pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }}
-        accent={RED} count={fLive.length} loading={lLive}
-        expanded={!!expanded.live} onToggle={() => toggle('live')}
-        emptyText={t('discovery.no_courses')}>
-        {(expanded.live ? fLive : fLive.slice(0, 10)).map((c) => (
-          <CourseCard key={c.id} course={c} wide={expanded.live} onOpen={(co) => navigate(`/course/${co.slug}`)} />
-        ))}
-      </Rail>
+      {courseRail('live', { pre: t('discovery.rail_live_pre'), hi: t('discovery.cat_live') }, RED, fLive, lLive)}
 
       {/* Video Courses */}
-      <Rail
-        title={{ pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }}
-        accent={GREEN} count={fVideo.length} loading={lVideo}
-        expanded={!!expanded.video} onToggle={() => toggle('video')}
-        emptyText={t('discovery.no_courses')}>
-        {(expanded.video ? fVideo : fVideo.slice(0, 10)).map((c) => (
-          <CourseCard key={c.id} course={c} wide={expanded.video} onOpen={(co) => navigate(`/course/${co.slug}`)} />
-        ))}
-      </Rail>
+      {courseRail('video', { pre: t('discovery.rail_video_pre'), hi: t('discovery.cat_video') }, GREEN, fVideo, lVideo)}
+
+      {/* Trending courses */}
+      {courseRail('trending', { pre: t('discovery.rail_trending_pre'), hi: t('discovery.rail_trending_hi') }, '#E8884A', trending, loadingCourses)}
+
+      {/* Featured courses */}
+      {courseRail('featured', { pre: t('discovery.rail_featured_pre'), hi: t('discovery.rail_featured_hi') }, '#EC4899', featured, loadingCourses)}
 
       {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}

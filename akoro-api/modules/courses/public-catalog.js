@@ -87,7 +87,7 @@ router.get("/courses/published", async (req, res) => {
 
     let q = db
       .from("courses")
-      .select("id, slug, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, course_modules(title, order_index)")
+      .select("id, slug, title, description, subject, level, is_free, price, currency, total_students, rating, total_hours, course_type, cover_image_url, course_modules(title, order_index)")
       .eq("is_published", true);
     // Optional ?type=live|video filter for the discovery categories.
     if (req.query.type === "live" || req.query.type === "video") q = q.eq("course_type", req.query.type);
@@ -113,9 +113,12 @@ router.get("/courses/published", async (req, res) => {
         grad:     m.grad,
         title:    c.title,
         subject:  c.subject,
+        img:      c.cover_image_url || null,
         dur:      c.total_hours ? `${c.total_hours}h` : "Self-paced",
         rating:   c.rating ? Number(c.rating).toFixed(1) : "—",
+        ratingNum: c.rating ? Number(c.rating) : 0,
         rev:      compact(c.total_students),
+        students: c.total_students || 0,
         level:    titleCase(c.level) || "All levels",
         price:    formatPrice(c),
         priceNum: c.is_free ? 0 : c.price || 0,
