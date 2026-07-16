@@ -299,30 +299,27 @@ export default function LearnerDashboard() {
   const totalUnread       = sessions.reduce((sum,s)=>sum+s.unread,0);
   const pendingChallenges = challenges.filter(c=>!acceptedIds.has(c.id)).length;
 
-  const handleAcceptChallenge = () => {
+  const handleAcceptChallenge = async () => {
     if (!selectedChallenge) return;
     const c = selectedChallenge;
     setAcceptedIds(prev => new Set([...prev, c.id]));
     setSelectedChallenge(null);
-    const newBattle = {
-      ...c, id:`B-${Date.now()}`,
-      agentA:{ id:"nexus",name:"Nexus",emoji:"🤖",owner:"You",ownerEmoji:"👤",bg:"#FEF0E6",color:"#E8884A",isYou:true,score:0,hp:100 },
-      agentB:{ id:"opp",name:(c.agentBName||c.challenger.split(" ")[0]+"'s Agent"),emoji:(c.agentBEmoji||"⚡"),owner:c.challenger,ownerEmoji:"👦🏽",bg:(c.agentBBg||"#C8D8E8"),color:(c.agentBColor||BRAND),score:0,hp:100 },
-      topic:c.title, viewers:0, xpPool:parseInt((c.xpPrize||"0").replace(/\D/g,""),10)||200, totalQ:0, currentQNum:0, winner:null, startedAgo:null, question:null,
-    };
-    // Also persist to backend (real endpoint)
-    apiPost(`/api/battle/challenges/${c.id}/accept`).catch(()=>{});
-    if (c.battleType==="immediate") {
-      const liveBattle={...newBattle,status:"live",startedAgo:0,startsIn:null};
-      setBattles(prev=>[...prev,liveBattle]); setLiveBattleModal(liveBattle);
-      setToast(`⚡ Battle started! ${c.challenger} vs Nexus — Watch Live now.`);
-    } else if (c.battleType==="classroom") {
-      const classroomBattle={...newBattle,status:"live",startedAgo:0,startsIn:null,battleType:"classroom",participants:c.participants||[],agentA:c.teacherAgent||{id:"pythia",name:"Pythia",emoji:"🔮",owner:"Teacher",bg:"#EDE8F8",color:"#7C3AED",isTeacher:true,score:0,hp:100},viewers:Math.floor(Math.random()*15)+5};
-      setBattles(prev=>[...prev,classroomBattle]); setLiveBattleModal(classroomBattle);
-      setToast(`🏫 Class battle started! ${c.participants?.length} agents competing — Watch Live.`);
-    } else {
-      setBattles(prev=>[...prev,{...newBattle,status:"scheduled",startsIn:c.scheduledFor||"Scheduled"}]);
-      setToast(`🗓 ${c.challenger}'s battle scheduled! Find it in Battles › Scheduled.`);
+    try {
+      // Persist against the real engine; it flips the battle live (or scheduled)
+      // and enqueues the worker's start job. Use the REAL battle id it returns.
+      const r = await apiPost(`/api/battle/challenges/${c.id}/accept`);
+      const status = r.status || 'live';
+      const battle = { id: r.battle_id, status, title: c.title, topic: c.title, xpPool: c.xpPrize };
+      setBattles(prev => [battle, ...prev.filter(b => b.id !== battle.id)]);
+      if (status === 'live') {
+        setLiveBattleModal(battle);
+        setToast(`⚡ Challenge accepted — the battle is starting!`);
+      } else {
+        setToast(`🗓 Battle scheduled — find it in Battles › Scheduled.`);
+      }
+    } catch (e) {
+      setAcceptedIds(prev => { const n = new Set(prev); n.delete(c.id); return n; });
+      setToast('Could not accept the challenge. Please retry.');
     }
   };
 
