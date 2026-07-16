@@ -2051,6 +2051,55 @@ router.post("/forecast/save", authenticateToken, requireRole(MGMT_ROLES), async 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Attendance register: whole-class marking in one screen ────────────────
+// GET /api/school/mgmt/attendance/roster?class_id=&section_id=&date=YYYY-MM-DD
+// Returns the class roster with each student's status for that date (or null).
+router.get("/attendance/roster", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { class_id, section_id, date } = req.query;
+    if (!class_id || !date) return res.status(400).json({ error: "class_id and date are required" });
+    let q = M().from("students").select("id, admission_no, roll_no, first_name, last_name")
+      .eq("school_id", school.id).eq("class_id", class_id).eq("status", "active");
+    if (section_id) q = q.eq("section_id", section_id);
+    const { data: students } = await q;
+    const rows = students || [];
+    rows.sort((a, b) => String(a.roll_no || a.admission_no || "").localeCompare(String(b.roll_no || b.admission_no || ""), undefined, { numeric: true }));
+    const ids = rows.map((s) => s.id);
+    let byStudent = {};
+    if (ids.length) {
+      const { data: att } = await M().from("student_attendance").select("student_id, status, note").eq("date", date).in("student_id", ids);
+      byStudent = Object.fromEntries((att || []).map((a) => [a.student_id, a]));
+    }
+    res.json({ success: true, data: rows.map((s) => ({
+      student_id: s.id, admission_no: s.admission_no, roll_no: s.roll_no,
+      name: [s.first_name, s.last_name].filter(Boolean).join(" "),
+      status: byStudent[s.id]?.status || null, note: byStudent[s.id]?.note || "",
+    })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/school/mgmt/attendance/mark  { date, records: [{student_id, status, note?}] }
+router.post("/attendance/mark", authenticateToken, requireRole(MGMT_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { date, records } = req.body;
+    if (!date || !Array.isArray(records)) return res.status(400).json({ error: "date and records[] are required" });
+    const VALID = new Set(["present", "absent", "late", "excused"]);
+    let saved = 0;
+    for (const r of records) {
+      if (!r.student_id || !VALID.has(r.status)) continue;
+      const { data: ex } = await M().from("student_attendance").select("id").eq("student_id", r.student_id).eq("date", date).maybeSingle();
+      if (ex) await M().from("student_attendance").update({ status: r.status, note: r.note || null }).eq("id", ex.id);
+      else await M().from("student_attendance").insert({ school_id: school.id, student_id: r.student_id, date, status: r.status, note: r.note || null });
+      saved++;
+    }
+    res.json({ success: true, saved });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 
 router.get("/:resource", authenticateToken, async (req, res) => {

@@ -35,6 +35,7 @@ import AdmissionSettingsPage from './pages/AdmissionSettingsPage.jsx';
 import ManageSubscriptionPage from './pages/ManageSubscriptionPage.jsx';
 import SubscriptionHistoryPage from './pages/SubscriptionHistoryPage.jsx';
 import AuditTrailPage from './pages/AuditTrailPage.jsx';
+import AttendanceRegisterPage from './pages/mgmt/AttendanceRegisterPage.jsx';
 import {
   StudentDashboardPage, StudentAdmissionPage, StudentListPage, StudentAttendancePage,
   BehaviorRecordsPage, StudentHousesPage, StudentCategoriesPage, DisabledStudentsPage, HealthRecordsPage,
@@ -235,6 +236,7 @@ function AppRoutes() {
       <Route path="/mgmt/students/:id/health/new"   element={<ProtectedRoute><HealthRecordFormPage /></ProtectedRoute>} />
       <Route path="/mgmt/students/:id/behavior/new" element={<ProtectedRoute><BehaviorRecordFormPage /></ProtectedRoute>} />
       <Route path="/mgmt/assign-class"       element={<ProtectedRoute><AssignClassPage /></ProtectedRoute>} />
+      <Route path="/mgmt/attendance-register" element={<ProtectedRoute><AttendanceRegisterPage /></ProtectedRoute>} />
       <Route path="/mgmt/student-attendance" element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
       <Route path="/mgmt/behavior-records"   element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />
       <Route path="/mgmt/student-houses"     element={<ProtectedRoute><StudentHousesPage /></ProtectedRoute>} />
