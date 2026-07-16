@@ -39,7 +39,7 @@ export const taskWorker = new Worker("task-runner", async (job) => {
     const tools        = await getToolsForTask(task);
     const toolDefs     = tools.map((t) => t.definition);
     const toolMap      = new Map(tools.map((t) => [t.definition.name, t]));
-    const toolCtx      = { taskId: task.id, runId: run.id };
+    const toolCtx      = { taskId: task.id, runId: run.id, teacherId: task.creator_id, courseId: task.course_id ?? null };
     const agentSteps   = [];
     const outputs      = [];
     const messages     = [{ role: "user", content: ctx.prompt }];

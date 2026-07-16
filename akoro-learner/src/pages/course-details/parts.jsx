@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { API } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
+import BattleModal from '../../components/battles/BattleModal.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
 
@@ -365,7 +366,7 @@ const BATTLES = [
   { id: 4, topic: 'WAEC Prep Battle', a: 1, b: 4, sa: 9, sb: 7, status: 'completed', viewers: 0 },
 ];
 
-function BattleCard({ b }) {
+function BattleCard({ b, onOpen }) {
   // b.a / b.b may be agent indices (demo) or agent objects (real)
   const A = typeof b.a === 'object' ? b.a : AGENTS[b.a];
   const B = typeof b.b === 'object' ? b.b : AGENTS[b.b];
@@ -400,7 +401,8 @@ function BattleCard({ b }) {
         <div style={{ width: 34, height: 34, borderRadius: '50%', background: INK, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>VS</div>
         <Side ag={B} score={sb} win={bWin} />
       </div>
-      <Btn variant={b.status === 'live' ? 'primary' : 'outline'} size="sm" style={{ width: '100%' }}>
+      <Btn variant={b.status === 'live' ? 'primary' : 'outline'} size="sm" style={{ width: '100%', opacity: b.id ? 1 : .6 }}
+        onClick={() => b.id && onOpen?.(b)}>
         {b.status === 'live' ? <><Swords size={12} />Watch live</> : b.status === 'upcoming' ? <><Play size={12} />Preview</> : <>View result</>}
       </Btn>
     </div>
@@ -410,6 +412,7 @@ function BattleCard({ b }) {
 function BattlesSection({ battles: real, leaderboard: realLb }) {
   const BATTLE_LIST = real?.length ? real : BATTLES;
   const [filter, setFilter] = useState('all');
+  const [openBattle, setOpenBattle] = useState(null);
   const live = BATTLE_LIST.filter((b) => b.status === 'live');
   const upcoming = BATTLE_LIST.filter((b) => b.status === 'upcoming');
   const completed = BATTLE_LIST.filter((b) => b.status === 'completed');
@@ -423,7 +426,7 @@ function BattlesSection({ battles: real, leaderboard: realLb }) {
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, animation: color === RED ? 'cp-pulse 1.3s ease infinite' : 'none' }} />
         <span style={{ fontSize: 11.5, fontWeight: 900, letterSpacing: '.04em', textTransform: 'uppercase', color }}>{label} · {items.length}</span>
       </div>
-      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{items.map((b) => <BattleCard key={b.id} b={b} />)}</div>
+      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>{items.map((b) => <BattleCard key={b.id} b={b} onOpen={setOpenBattle} />)}</div>
     </div>
   );
 
@@ -462,6 +465,7 @@ function BattlesSection({ battles: real, leaderboard: realLb }) {
           </div>
         ))}
       </div>
+      {openBattle && <BattleModal battle={openBattle} onClose={() => setOpenBattle(null)} />}
     </section>
   );
 }

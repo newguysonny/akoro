@@ -119,6 +119,7 @@ export async function executeCreateBattle(rawInput, ctx) {
   // ── Step 2: Call the existing Battles API ────────────────────────────────
   const battleApiPayload = {
     courseId:         input.courseId,
+    teacherId:        ctx.teacherId,
     title,
     battleType:       input.battleType,
     difficulty:       input.difficulty,
@@ -286,10 +287,33 @@ async function getEnrolledStudents(courseId) {
   }
 }
 
+// Normalise a Claude-generated question into a gradable MCQ:
+// returns { options: string[], correctIndex } or null if it can't be graded.
+export function resolveMcq(q) {
+  let options = Array.isArray(q.options) ? q.options.map((o) => String(o)) : [];
+  const answer = String(q.answer ?? "").trim();
+  if (!options.length) {
+    if (q.type === "true_false" || /^(true|false)$/i.test(answer)) options = ["True", "False"];
+    else return null; // short_answer — not representable as an MCQ battle question
+  }
+  const norm = (s) => String(s).trim().replace(/^[A-E][.)]\s*/i, "").toLowerCase();
+  let idx = options.findIndex((o) => norm(o) === norm(answer));
+  if (idx < 0) idx = options.findIndex((o) => norm(o).includes(norm(answer)) || (norm(answer) && norm(answer).includes(norm(o))));
+  if (idx < 0) idx = 0;
+  return { options, correctIndex: idx };
+}
+
 // ─── Direct battle creation (no HTTP — same process) ─────────────────────────
-// Override the HTTP callBattlesApi with a direct Supabase insert
 async function callBattlesApi(payload) {
   const db = (await import("../../../db.js")).default;
+  if (!payload.teacherId) throw new Error("create_battle: missing creator (teacherId) — cannot create battle");
+
+  // Grade + normalise questions BEFORE inserting so total_questions is accurate.
+  const graded = (payload.questions ?? [])
+    .map((q) => { const m = resolveMcq(q); return m ? { ...q, ...m } : null; })
+    .filter(Boolean);
+  if (!graded.length) throw new Error("create_battle: no gradable multiple-choice questions were generated");
+
   const { data, error } = await db.from("battles").insert({
     course_id:        payload.courseId,
     battle_type:      payload.battleType === "classroom" ? "classroom" : "open",
@@ -297,6 +321,7 @@ async function callBattlesApi(payload) {
     description:      payload.description ?? null,
     subject:          payload.subject ?? "General",
     difficulty:       payload.difficulty ?? "medium",
+    total_questions:  graded.length,
     xp_prize:         payload.xpPool ?? 500,
     xp_pool:          payload.xpPool ?? 500,
     time_limit_seconds: payload.timeLimitSeconds ?? 30,
@@ -304,21 +329,24 @@ async function callBattlesApi(payload) {
     peak_viewers:     0,
     scheduled_start:  payload.scheduledAt ?? null,
     expires_at:       new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    created_by:       payload.teacherId ?? null,
+    created_by:       payload.teacherId,
   }).select().single();
   if (error) throw new Error(error.message);
 
-  // Insert questions
-  if (payload.questions?.length) {
-    for (let i = 0; i < payload.questions.length; i++) {
-      const q = payload.questions[i];
-      await db.from("battle_questions").insert({
-        battle_id: data.id, question_order: i + 1,
-        question_text: q.question, options_json: JSON.stringify(q.options ?? []),
-        correct_answer_index: 0, topic: q.concept ?? "general",
-        xp_value: q.points ?? 35, time_limit_seconds: payload.timeLimitSeconds ?? 30,
-      });
-    }
-  }
+  await db.from("battle_questions").insert(graded.map((q, i) => ({
+    battle_id: data.id, question_order: i + 1,
+    question_text: q.question, options_json: JSON.stringify(q.options),
+    correct_answer_index: q.correctIndex, topic: q.concept ?? "general",
+    xp_value: q.points ?? 35, time_limit_seconds: payload.timeLimitSeconds ?? 30,
+  })));
+
+  // Enqueue lifecycle so the open lobby cleans itself up (students join → it
+  // auto-starts when full, or the teacher starts it manually).
+  try {
+    const { battleQueue } = await import("../../battle/worker.js");
+    await battleQueue.add("expire-battle", { action: "expire-battle", battleId: data.id },
+      { delay: new Date(data.expires_at).getTime() - Date.now() });
+  } catch (e) { console.warn("[create-battle] could not enqueue expire job:", e.message); }
+
   return { id: data.id, status: data.status, title: data.title };
 }

@@ -1,9 +1,28 @@
 // modules/tasks/tools/challenge-peer.js
 // Student-facing 1v1 battle challenge against a peer.
 
+import Anthropic                from "@anthropic-ai/sdk";
 import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
+import { resolveMcq }           from "./create-battle.js";
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Generate a small set of gradable MCQs for a 1v1 topic battle.
+async function generatePeerQuestions(topic, subject, difficulty, count = 8) {
+  const prompt = `Generate exactly ${count} ${difficulty} multiple-choice questions on "${topic}" (${subject}) for a 1v1 student battle.
+Respond with JSON only (no fences): {"questions":[{"question":"...","options":["A ...","B ...","C ...","D ..."],"answer":"<full text of correct option>","concept":"...","points":35}]}`;
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6", max_tokens: 3000,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const raw = response.content.filter((b) => b.type === "text").map((b) => b.text).join("").replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(raw);
+  return (parsed.questions ?? [])
+    .map((q) => { const m = resolveMcq(q); return m ? { ...q, ...m } : null; })
+    .filter(Boolean);
+}
 
 export const challengePeerDefinition = {
   name: "challenge_peer",
@@ -50,33 +69,47 @@ export async function executeChallengePeer(rawInput, ctx) {
   const input = paramsSchema.parse(rawInput);
 
   const task = await TaskDB.findById(ctx.taskId);
-  const studentId = task?.creator_id;
+  const studentId = task?.creator_id ?? ctx.teacherId;
+  if (!studentId) throw new Error("challenge_peer: could not resolve the challenger");
 
-  const now = Date.now();
-  const scheduledStart = new Date(now + 5 * 60 * 1000).toISOString();
-  const expiresAt      = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+  // Both sides need an active agent (battle_participants.agent_id is NOT NULL).
+  const creatorAgentId  = await resolveAgentId(studentId);
+  const opponentAgentId = await resolveAgentId(input.opponentId);
+  if (!creatorAgentId)  throw new Error("challenge_peer: you need an active agent before challenging");
+  if (!opponentAgentId) throw new Error("challenge_peer: that peer has no active agent yet");
+
+  // Generate the questions up front so the battle can actually run once accepted.
+  const graded = await generatePeerQuestions(input.topic, input.subject, input.difficulty);
+  if (!graded.length) throw new Error("challenge_peer: could not generate battle questions");
+
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   const { data: battle, error } = await db.from("battles").insert({
-    course_id:          null,
+    course_id:          ctx.courseId ?? null,
     battle_type:        "1v1",
     title:              `Challenge: ${input.topic}`,
     description:        `1v1 battle on ${input.topic}`,
     subject:            input.subject,
     difficulty:         input.difficulty,
+    total_questions:    graded.length,
     xp_prize:           input.xpPrize,
     xp_pool:            input.xpPrize,
     time_limit_seconds: 30,
-    status:             "scheduled",
+    status:             "lobby",
     peak_viewers:       0,
-    scheduled_start:    scheduledStart,
+    scheduled_start:    null,
     expires_at:         expiresAt,
-    created_by:         studentId ?? null,
+    created_by:         studentId,
   }).select().single();
 
   if (error) throw new Error(error.message);
 
-  const creatorAgentId  = await resolveAgentId(studentId);
-  const opponentAgentId = await resolveAgentId(input.opponentId);
+  await db.from("battle_questions").insert(graded.map((q, i) => ({
+    battle_id: battle.id, question_order: i + 1,
+    question_text: q.question, options_json: JSON.stringify(q.options),
+    correct_answer_index: q.correctIndex, topic: q.concept ?? input.topic,
+    xp_value: q.points ?? 35, time_limit_seconds: 30,
+  })));
 
   await db.from("battle_participants").insert([
     {

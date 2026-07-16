@@ -419,7 +419,7 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
     const allBattleIds   = battles.map(r => r.battles.id);
     const { data: parts } = await db
       .from("battle_participants")
-      .select("battle_id, user_id, role, score, is_winner, users ( full_name, avatar_url )")
+      .select("battle_id, user_id, role, score, hp, is_winner, users ( full_name, avatar_url ), user_agents ( agent_name, agent_emoji, agent_color, agent_bg )")
       .in("battle_id", allBattleIds);
 
     const partsByBattle = {};
@@ -458,22 +458,22 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
           : null,
         agentA: {
           id:     me?.user_id  ?? userId,
-          name:   "Nexus",
-          emoji:  "🤖",
-          bg:     "#FEF0E6",
-          color:  myColor,
+          name:   me?.user_agents?.agent_name  ?? "Your agent",
+          emoji:  me?.user_agents?.agent_emoji ?? "🤖",
+          bg:     me?.user_agents?.agent_bg    ?? "#FEF0E6",
+          color:  me?.user_agents?.agent_color ?? myColor,
           isYou:  true,
           score:  me?.score ?? 0,
-          hp:     100,
+          hp:     me?.hp ?? 100,
         },
         agentB: {
           id:     opp?.user_id ?? "opp",
-          name:   opp?.users?.full_name?.split(" ")[0] + "'s Agent" ?? "Opponent",
-          emoji:  "⚡",
-          bg:     "#C8D8E8",
-          color:  oppColor,
+          name:   opp?.user_agents?.agent_name ?? ((opp?.users?.full_name?.split(" ")[0] ?? "Opponent") + "'s Agent"),
+          emoji:  opp?.user_agents?.agent_emoji ?? "⚡",
+          bg:     opp?.user_agents?.agent_bg    ?? "#C8D8E8",
+          color:  opp?.user_agents?.agent_color ?? oppColor,
           score:  opp?.score ?? 0,
-          hp:     100,
+          hp:     opp?.hp ?? 100,
         },
         winner:       me?.is_winner ? "agentA" : opp?.is_winner ? "agentB" : null,
         courseId:     b.course_id,
