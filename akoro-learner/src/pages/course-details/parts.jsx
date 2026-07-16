@@ -268,7 +268,57 @@ function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
 /* ── reviews ──────────────────────────────────────────────── */
 const RV_EMOJI = ['👦🏾', '👧🏾', '🧑🏽', '👩🏻', '👨🏿', '👩🏾'];
 const RV_BG = ['#D4EAD8', '#E4D4F0', '#C8D8E8', '#F0E4C8', '#F8E8FF', '#FFE8C0'];
-function Reviews({ reviews }) {
+// Post a course review (enrolled learners only). Returns the saved review.
+async function submitCourseReview(courseId, rating, comment) {
+  const r = await fetch(`${API}/api/courses/${courseId}/reviews`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rating, comment }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) throw new Error('Please sign in to review');
+  if (r.status === 403) throw new Error('Enrol in this course to leave a review');
+  if (!r.ok) throw new Error(d.message || 'Could not post review');
+  return d.data || d;
+}
+
+function ReviewForm({ courseId }) {
+  const [rating, setRating] = useState(0);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [posted, setPosted] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    if (!rating || busy) return;
+    setBusy(true); setErr('');
+    try { await submitCourseReview(courseId, rating, text.trim()); setPosted(true); }
+    catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (posted) return (
+    <div style={{ ...card, padding: 16, marginBottom: 14, fontSize: 13.5, fontWeight: 700, color: '#2AA76E' }}>✓ Thanks for your review!</div>
+  );
+  return (
+    <div style={{ ...card, padding: 18, marginBottom: 14 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 8 }}>Rate this course</div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+        {[1, 2, 3, 4, 5].map((i) => (
+          <button key={i} onClick={() => setRating(i)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 1 }}>
+            <Star size={24} fill={i <= rating ? GOLD : 'none'} color={i <= rating ? GOLD : '#CFC8BC'} strokeWidth={1.5} />
+          </button>
+        ))}
+      </div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Share what you thought… (optional)"
+        style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontFamily: FONT, fontSize: 13, color: INK, background: '#fff', outline: 'none', resize: 'vertical' }} />
+      {err && <div style={{ fontSize: 12, fontWeight: 600, color: '#EF4444', marginTop: 6 }}>{err}</div>}
+      <Btn variant="primary" onClick={submit} style={{ marginTop: 10, opacity: (!rating || busy) ? .6 : 1 }}>{busy ? 'Posting…' : 'Submit review'}</Btn>
+    </div>
+  );
+}
+
+function Reviews({ reviews, courseId, canReview }) {
   const data = reviews?.length
     ? reviews.map((r, i) => ({ emoji: RV_EMOJI[i % RV_EMOJI.length], bg: RV_BG[i % RV_BG.length], name: r.name, rating: r.rating, date: r.date, text: r.text }))
     : [
@@ -277,7 +327,9 @@ function Reviews({ reviews }) {
         { emoji: '👨🏿', bg: '#C8D8E8', name: 'Babatunde F.', rating: 4, date: '2 weeks ago', text: 'Solid course. Would love even more practice questions.' },
       ];
   return (
-    <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>
+    <div>
+      {canReview && courseId && <ReviewForm courseId={courseId} />}
+      <div className="cp-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 6 }}>
       {data.map((r, i) => (
         <div key={i} style={{ ...card, padding: 18, flex: '0 0 min(320px,82vw)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -292,6 +344,7 @@ function Reviews({ reviews }) {
           <p style={{ fontSize: 13.5, color: '#3A3A52', lineHeight: 1.6, fontStyle: 'italic', margin: 0 }}>"{r.text}"</p>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -622,7 +675,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       )}
 
       {/* Reviews */}
-      {tab === 'reviews' && <Reviews reviews={course.reviews} />}
+      {tab === 'reviews' && <Reviews reviews={course.reviews} courseId={course.id} canReview={isEnrolled} />}
 
       {/* Always-on community sections */}
       <BattlesSection battles={course.battles} leaderboard={course.leaderboard} />
@@ -641,9 +694,36 @@ function EnrolledVideoView({ course, modules }) {
   const [tab, setTab] = useState('content');
   const done = modules.reduce((a, m) => a + m.lessons.filter((l) => l.done).length, 0);
   const total = modules.reduce((a, m) => a + m.lessons.length, 0);
+  const complete = total > 0 && done === total;
+
+  const [certBusy, setCertBusy] = useState(false);
+  const [certErr, setCertErr] = useState('');
+  const getCertificate = async () => {
+    if (!course.id || certBusy) return;
+    setCertBusy(true); setCertErr('');
+    try {
+      const r = await fetch(`${API}/api/courses/${course.id}/certificate`, { method: 'POST', credentials: 'include' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.message || 'Certificate not available yet');
+      const url = (d.data || d).certificate_url;
+      if (url) window.open(url, '_blank'); else setCertErr('Certificate is generating — try again shortly');
+    } catch (e) { setCertErr(e.message); }
+    finally { setCertBusy(false); }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {complete && (
+        <div style={{ ...card, padding: 18, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', background: 'linear-gradient(135deg,#F0FFF6,#EAF6FF)', border: '1px solid #CDEBD8' }}>
+          <div style={{ fontSize: 34 }}>🎉</div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>Course complete!</div>
+            <div style={{ fontSize: 12.5, color: MUTED }}>You’ve finished every lesson. Download your certificate.</div>
+            {certErr && <div style={{ fontSize: 12, fontWeight: 600, color: '#EF4444', marginTop: 4 }}>{certErr}</div>}
+          </div>
+          <Btn variant="primary" onClick={getCertificate} style={{ opacity: certBusy ? .6 : 1 }}><Award size={15} />{certBusy ? 'Preparing…' : 'Get certificate'}</Btn>
+        </div>
+      )}
       <div style={{ borderRadius: 18, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
         <VideoPlayer lesson={lesson} courseEmoji={course.emoji} />
         <div style={{ background: '#0d1220', padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -663,7 +743,7 @@ function EnrolledVideoView({ course, modules }) {
 
       {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} />}
       {tab === 'about' && <div style={{ ...card, padding: 22 }}><p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7, margin: 0 }}>{course.description || 'A complete course covering the full syllabus with lessons and quizzes.'}</p></div>}
-      {tab === 'reviews' && <Reviews reviews={course.reviews} />}
+      {tab === 'reviews' && <Reviews reviews={course.reviews} courseId={course.id} canReview />}
       {tab === 'battles' && <BattlesSection battles={course.battles} leaderboard={course.leaderboard} />}
       {tab === 'revisions' && <RevisionsSection revisions={course.revisions} />}
     </div>

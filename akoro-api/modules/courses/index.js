@@ -9,8 +9,6 @@
 
 import { Router }               from "express";
 
-import coursesRouter,
-  { sessionHandlers }           from "./courses.js";
 import paymentsRouter           from "./payments.js";
 import cartRouter               from "./cart.js";
 import contentRouter            from "./course-content.js";
@@ -39,8 +37,12 @@ const router = Router();
 // captured by coursesRouter's "/:id" route.
 router.use(publicCatalogRouter);   // /courses/published, /live-sessions, /instructors/featured
 
+// NOTE: the legacy in-memory `courses.js` mock router is intentionally NOT
+// mounted. Real course CRUD lives in /api/instructor/courses (DB-backed);
+// reads come from public-catalog + course-content. Mounting the mock here
+// also shadowed the real GET /courses/search (bundles) via its /:id route.
+
 // Prefixed sub-routers
-router.use("/courses",   coursesRouter);
 router.use("/meeting",   meetingRouter);
 router.use("/payments",  paymentsRouter);
 router.use("/stream",    streamRouter);
@@ -63,8 +65,5 @@ router.use(subtitlesRouter);
 router.use(payoutsRouter);
 router.use(bundlesRouter);       // /courses/search, /user/wishlist, /bundles
 router.use(cartRouter);          // /cart, /cart/checkout
-
-// Global sessions list
-router.get("/sessions", sessionHandlers.listAll);
 
 export default router;

@@ -34,6 +34,7 @@ import cron          from "node-cron";
 import axios         from "axios";
 import db            from "../../db.js";
 import { createMeeting } from "./meeting-integration.js";
+import { authenticateToken, requireRole } from "../auth/routes.js";
 
 // This scheduler is now backed by the `live_sessions` Postgres table — the same
 // rows the instructor app and live-sessions router read/write. Status vocabulary
@@ -517,9 +518,12 @@ const schedulerHandlers = {
 
 const router = Router();
 
+// All manual triggers require an authenticated instructor/admin — these can
+// force a session live/ended and provision meeting links.
+router.use(authenticateToken);
 router.get ("/links/:sessionId",    schedulerHandlers.getLinkBySession);
-router.post("/links/:sessionId",    schedulerHandlers.createLink);
-router.post("/activate/:sessionId", schedulerHandlers.activate);
-router.post("/end/:sessionId",      schedulerHandlers.end);
+router.post("/links/:sessionId",    requireRole(["instructor", "admin"]), schedulerHandlers.createLink);
+router.post("/activate/:sessionId", requireRole(["instructor", "admin"]), schedulerHandlers.activate);
+router.post("/end/:sessionId",      requireRole(["instructor", "admin"]), schedulerHandlers.end);
 
 export default router;
