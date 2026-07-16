@@ -44,6 +44,7 @@ const MGMT_NAV = [
   { to: '/mgmt/attendance',      icon: ClipboardList, label: 'Attendance' },
   { to: '/mgmt/behavior',        icon: ListChecks,    label: 'Behavior Records' },
   { header: 'ACADEMIC' },
+  { to: '/mgmt/my-timetable',    icon: CalendarClock, label: 'My Timetable' },
   { to: '/mgmt/curriculum',      icon: BookMarked,    label: 'Curriculum' },
   { to: '/mgmt/syllabus',        icon: FileText,      label: 'Syllabus' },
   { to: '/mgmt/subjects',        icon: BookOpen,      label: 'Subjects' },

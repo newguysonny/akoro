@@ -2051,6 +2051,49 @@ router.post("/forecast/save", authenticateToken, requireRole(MGMT_ROLES), async 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── A teacher's own weekly timetable ──────────────────────────────────────
+// Derives the caller's periods from the subjects they teach
+// (class_subjects.teacher_id / class_teachers), plus any slot assigned to them
+// directly. Returns the teaching periods + the caller's cells.
+router.get("/timetable/my", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const me = req.user.id;
+
+    const { data: cs } = await M().from("class_subjects").select("class_id, subject_id").eq("school_id", school.id).eq("teacher_id", me);
+    const pairs = new Set((cs || []).map((c) => `${c.class_id}:${c.subject_id}`));
+    const myClassIds = [...new Set((cs || []).map((c) => c.class_id))];
+
+    // Slots: assigned directly to me, or scheduling a subject I teach.
+    const bySlot = new Map();
+    const { data: direct } = await M().from("timetable_slots").select("*").eq("school_id", school.id).eq("teacher_id", me);
+    (direct || []).forEach((s) => bySlot.set(s.id, s));
+    if (myClassIds.length) {
+      const { data: cslots } = await M().from("timetable_slots").select("*").eq("school_id", school.id).in("class_id", myClassIds);
+      (cslots || []).forEach((s) => { if (pairs.has(`${s.class_id}:${s.subject_id}`)) bySlot.set(s.id, s); });
+    }
+
+    // Enrichment maps.
+    const [{ data: classes }, { data: subjects }, { data: periods }] = await Promise.all([
+      M().from("classes").select("id, name").eq("school_id", school.id),
+      M().from("subjects").select("id, name, code").eq("school_id", school.id),
+      M().from("periods").select("id, name, starts_at, ends_at, sort_order, type, class_id").eq("school_id", school.id),
+    ]);
+    const cName = Object.fromEntries((classes || []).map((c) => [c.id, c.name]));
+    const sMap = Object.fromEntries((subjects || []).map((s) => [s.id, s]));
+
+    const cells = [...bySlot.values()].map((s) => ({
+      day_of_week: s.day_of_week, period_id: s.period_id,
+      class_name: cName[s.class_id] || "", subject: sMap[s.subject_id]?.code || sMap[s.subject_id]?.name || "",
+      alt: s.alt_subject_id ? (sMap[s.alt_subject_id]?.code || sMap[s.alt_subject_id]?.name || "") : null,
+    }));
+    // Periods to display: school-wide teaching set (fall back to any).
+    const teaching = (periods || []).filter((p) => !p.class_id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    res.json({ success: true, data: { periods: teaching.length ? teaching : (periods || []), cells, teaches: (cs || []).length > 0 || cells.length > 0 } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Attendance register: whole-class marking in one screen ────────────────
 // GET /api/school/mgmt/attendance/roster?class_id=&section_id=&date=YYYY-MM-DD
 // Returns the class roster with each student's status for that date (or null).

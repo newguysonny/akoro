@@ -658,3 +658,60 @@ export function SubjectsPage() {
       { key: 'subject_type', label: 'Type', type: 'select', options: [{ value: 'core', label: 'Core' }, { value: 'elective', label: 'Elective' }], default: 'core' },
     ]} createLabel="New Subject" />;
 }
+
+/* ── My Timetable — the teacher's own weekly schedule ────────────────────── */
+export function MyTimetablePage() {
+  const [data, setData] = useState(null);   // { periods, cells, teaches }
+  useEffect(() => { apiGet(`${BASE}/timetable/my`).then((r) => setData(r.data)).catch(() => setData({ periods: [], cells: [], teaches: false })); }, []);
+
+  if (!data) return <PageLayout title="My Timetable" subtitle="Your weekly teaching schedule"><div style={{ padding: 40, textAlign: 'center', color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div></PageLayout>;
+
+  const cols = (data.periods || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const cellAt = (day, pid) => (data.cells || []).find((c) => c.day_of_week === day && c.period_id === pid);
+
+  return (
+    <PageLayout title="My Timetable" subtitle="Your weekly teaching schedule">
+      {!data.teaches ? (
+        <div style={{ padding: 44, textAlign: 'center', color: MUTED2, fontSize: 13.5, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+          You have no subjects assigned yet. Ask your school to assign you to classes/subjects.
+        </div>
+      ) : (
+        <div style={{ background: WHITE, border: `2px solid ${INK}`, borderRadius: 8, padding: 12, overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 780, tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th style={ttTh}>DAY \ TIME</th>
+                {cols.map((p) => <th key={p.id} style={{ ...ttTh, color: RED }}>{hhmm(p.starts_at)}<br />{hhmm(p.ends_at)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {DAYS.map((d, di) => (
+                <tr key={d.n}>
+                  <td style={ttDay}>{d.label.toUpperCase()}</td>
+                  {cols.map((p) => {
+                    if (p.type && p.type !== 'teaching') {
+                      if (di !== 0) return null;
+                      const { bg, fg } = specialStyle(p.type);
+                      return <td key={p.id} rowSpan={DAYS.length} style={{ border: `1px solid ${INK}`, background: bg, padding: 2, textAlign: 'center', verticalAlign: 'middle' }}><div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: 11, fontWeight: 900, color: fg, whiteSpace: 'nowrap' }}>{SPECIAL_LABEL[p.type] || p.name}</div></td>;
+                    }
+                    const c = cellAt(d.n, p.id);
+                    return (
+                      <td key={p.id} style={{ border: `1px solid ${INK}`, padding: '6px 4px', textAlign: 'center', height: 46, background: c ? `${AMBER}0C` : WHITE }}>
+                        {c ? (
+                          <div style={{ lineHeight: 1.2 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: INK }}>{c.subject}{c.alt ? ` / ${c.alt}` : ''}</div>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: BLUE }}>{c.class_name}</div>
+                          </div>
+                        ) : <span style={{ color: MUTED2, fontSize: 11 }}>—</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </PageLayout>
+  );
+}
