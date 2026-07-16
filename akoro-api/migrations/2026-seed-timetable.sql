@@ -24,6 +24,22 @@ BEGIN
   IF v_school IS NULL THEN RAISE NOTICE 'Demo school not found — skipping timetable seed.'; RETURN; END IF;
 
   -- ── Subjects (codes are what the grid displays) ────────────────────────
+  -- Align the code of any subject that already exists under the same name
+  -- (e.g. a prior seed's Mathematics/MTH → MATHS) so the grid lookup by code
+  -- resolves. Guarded so it never creates a duplicate code.
+  UPDATE mgmt.subjects m SET code = v.c
+    FROM (VALUES
+      ('English','ENG'), ('Social Studies','SST'), ('Mathematics','MATHS'), ('Business Studies','BST'),
+      ('Kiswahili','KISW'), ('Religious Education','REL.E'), ('Visual Arts','V.Arts'), ('Performing Arts','P.Arts'),
+      ('Pre-Technical Studies','PRE-TECH'), ('Physical Education & Sports','P.E&S'), ('Agriculture','AGRIC'),
+      ('Integrated Science','INT/SCI'), ('Health Education','H.E'), ('Home Science','H.SCIE'),
+      ('Computer Science','COMP SCIE'), ('Life Skills','L/SKILL'), ('Biology','BIO'), ('Chemistry','CHE'),
+      ('Physics','PHY'), ('Economics','ECON'), ('Geography','GEO'), ('Literature','LIT')
+    ) AS v(n,c)
+    WHERE m.school_id = v_school AND m.name = v.n AND m.code IS DISTINCT FROM v.c
+      AND NOT EXISTS (SELECT 1 FROM mgmt.subjects m2 WHERE m2.school_id = v_school AND m2.code = v.c AND m2.id <> m.id);
+
+  -- Insert only subjects absent by BOTH name and code (the unique key is name).
   INSERT INTO mgmt.subjects (school_id, name, code, subject_type)
   SELECT v_school, s.n, s.c, s.t FROM (VALUES
     ('English','ENG','core'), ('Social Studies','SST','core'),
@@ -37,7 +53,7 @@ BEGIN
     ('Biology','BIO','core'), ('Chemistry','CHE','core'), ('Physics','PHY','core'),
     ('Economics','ECON','core'), ('Geography','GEO','core'), ('Literature','LIT','core')
   ) AS s(n,c,t)
-  WHERE NOT EXISTS (SELECT 1 FROM mgmt.subjects WHERE school_id = v_school AND code = s.c);
+  WHERE NOT EXISTS (SELECT 1 FROM mgmt.subjects m WHERE m.school_id = v_school AND (m.name = s.n OR m.code = s.c));
 
   -- ── 14 school-wide periods (recreate cleanly) ──────────────────────────
   -- Remove the old plain demo periods and any prior timetable periods so the

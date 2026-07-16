@@ -1942,12 +1942,23 @@ router.post("/timetable/load-template", authenticateToken, requireRole(MGMT_ROLE
       await dq;
     }
 
-    // Ensure subjects (by code) and map code → id.
+    // Ensure the template subjects exist, reconciling with any that a school
+    // already has. The unique key is (school_id, name), so we must match by
+    // name — never blindly insert by code (that hits the name-unique
+    // constraint, e.g. an existing Mathematics/MTH vs template Mathematics/MATHS).
+    const { data: existingSubs } = await M().from("subjects").select("id, name, code").eq("school_id", school.id);
+    const byName = new Map((existingSubs || []).map((s) => [s.name.toLowerCase(), s]));
+    const byCode = new Map((existingSubs || []).filter((s) => s.code).map((s) => [s.code, s]));
+    for (const [name, code] of TEMPLATE_SUBJECTS) {
+      const ex = byName.get(name.toLowerCase());
+      if (ex && ex.code !== code && !byCode.has(code)) { await M().from("subjects").update({ code }).eq("id", ex.id); byCode.set(code, ex); ex.code = code; }
+    }
+    const toAdd = TEMPLATE_SUBJECTS
+      .filter(([name, code]) => !byName.has(name.toLowerCase()) && !byCode.has(code))
+      .map(([name, code, type]) => ({ school_id: school.id, name, code, subject_type: type }));
+    if (toAdd.length) await M().from("subjects").insert(toAdd);
     const codes = TEMPLATE_SUBJECTS.map((s) => s[1]);
-    let { data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes);
-    const have = new Set((subs || []).map((s) => s.code));
-    const toAdd = TEMPLATE_SUBJECTS.filter((s) => !have.has(s[1])).map(([name, code, type]) => ({ school_id: school.id, name, code, subject_type: type }));
-    if (toAdd.length) { await M().from("subjects").insert(toAdd); ({ data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes)); }
+    const { data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes);
     const subjIdByCode = Object.fromEntries((subs || []).map((s) => [s.code, s.id]));
 
     // Ensure the 14 periods (by name) and map name → id.
