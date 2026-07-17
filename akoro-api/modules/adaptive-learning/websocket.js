@@ -626,10 +626,10 @@ export function setupWebSocket(io) {
           decayPayload,
           historyBlocks,
           guideProfile: {
-            name:        orchestrator.profile?.guideName  || "NaNa Esumai",
-            emoji:       orchestrator.profile?.guideEmoji || "🧠",
-            renderStyle: orchestrator.profile?.renderStyle || null,
-            ttsVoice:    orchestrator.profile?.renderStyle?.ttsVoice || "alloy",
+            name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
+            emoji:       orchestrator.guideOrchestrator?.guide?.emoji || "🧠",
+            renderStyle: orchestrator.guideOrchestrator?.guide?.renderStyle || null,
+            ttsVoice:    orchestrator.guideOrchestrator?.guide?.renderStyle?.ttsVoice || "alloy",
           },
         });
 
@@ -824,10 +824,10 @@ export function setupWebSocket(io) {
           initialState:     init.initialState,
           studentAgentName: init.studentAgentName,
           guideProfile: {
-            name:        orchestrator.profile?.guideName  || "NaNa Esumai",
-            emoji:       orchestrator.profile?.guideEmoji || "🧠",
-            renderStyle: orchestrator.profile?.renderStyle || null,
-            ttsVoice:    orchestrator.profile?.renderStyle?.ttsVoice || "alloy",
+            name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
+            emoji:       orchestrator.guideOrchestrator?.guide?.emoji || "🧠",
+            renderStyle: orchestrator.guideOrchestrator?.guide?.renderStyle || null,
+            ttsVoice:    orchestrator.guideOrchestrator?.guide?.renderStyle?.ttsVoice || "alloy",
           },
         });
       } catch (err) {
