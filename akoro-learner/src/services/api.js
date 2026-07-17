@@ -44,3 +44,52 @@ export async function apiDelete(path) {
   if (!r.ok) throw new Error(`DELETE ${path} -> ${r.status}`);
   return r.json();
 }
+
+/**
+ * POST a request and consume a Server-Sent Events stream.
+ *   onDelta(textChunk) — called for each incremental token
+ *   onDone(payload)    — called once with the final { reply, metadata }
+ * Returns the accumulated reply text. Throws on network/stream errors so the
+ * caller can fall back to a non-streaming request.
+ */
+export async function streamPost(path, body, { onDelta, onDone } = {}) {
+  const r = await fetch(`${API}${path}`, {
+    ...BASE_OPTS,
+    method:  'POST',
+    headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' },
+    body:    JSON.stringify(body),
+  });
+  if (!r.ok || !r.body) throw new Error(`STREAM ${path} -> ${r.status}`);
+
+  const reader  = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let full   = '';
+
+  const handleEvent = (raw) => {
+    let event = 'message', data = '';
+    for (const line of raw.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data += line.slice(5).trim();
+    }
+    if (!data) return;
+    let parsed; try { parsed = JSON.parse(data); } catch { return; }
+    if (event === 'delta' && parsed.text != null) { full += parsed.text; onDelta?.(parsed.text); }
+    else if (event === 'done')  { if (parsed.reply != null) full = parsed.reply; onDone?.(parsed); }
+    else if (event === 'error') { throw new Error(parsed.error || 'stream error'); }
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const raw = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      handleEvent(raw);
+    }
+  }
+  if (buffer.trim()) handleEvent(buffer);
+  return full;
+}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
+import { API,  apiGet, apiPost, apiPatch, streamPost } from '../../services/api.js';
 import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
@@ -174,21 +174,43 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       return;
     }
 
-    // Normal AI chat — OpenAI educational tutor (no tasks/tools)
+    // Normal AI chat — OpenAI educational tutor (no tasks/tools).
+    // Stream tokens so the reply starts appearing immediately; fall back to a
+    // plain request if the stream can't be established.
+    const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
+    const payload={ message: text, history: history.slice(-8), agentName, role: "student" };
+    const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const replyId=Date.now()+Math.random();
+    let started=false;
+    const ensureBubble=()=>{
+      if(started) return;
+      started=true;
+      setLoading(false);   // hide typing dots — the bubble now carries the text
+      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2}]);
+    };
+    const appendDelta=(chunk)=>{
+      ensureBubble();
+      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:m.text+chunk}:m));
+    };
     try {
-      const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
-      const data = await apiPost("/api/adaptive/chat/tutor", {
-        message: text,
-        history: history.slice(-8),
-        agentName,
-        role: "student",
+      await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
+        onDelta: appendDelta,
+        onDone: ({ reply })=>{ if(reply!=null){ ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:reply}:m)); } },
       });
-      const reply = data.reply || data.response || t('agent.fallback');
-      const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:reply,time:t2}]);
+      if(!started){ // stream produced nothing — show fallback text
+        setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.fallback'),time:t2}]);
+      }
     } catch {
-      const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.error_connection'),time:t2}]);
+      // Streaming failed before any token — try a normal request, then error.
+      if(!started){
+        try {
+          const data = await apiPost("/api/adaptive/chat/tutor", payload);
+          const reply = data.reply || data.response || t('agent.fallback');
+          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:reply,time:t2}]);
+        } catch {
+          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
+        }
+      }
     }
     setLoading(false);
   };

@@ -619,6 +619,11 @@ Be clear, encouraging, and age-appropriate. Explain step by step with examples. 
 
 router.post("/tutor", async (req, res) => {
   const t0 = Date.now();
+  // Opt into token streaming with ?stream=1 (or Accept: text/event-stream).
+  // The reply is delivered as Server-Sent Events so the client can render
+  // tokens as they arrive instead of waiting for the whole completion.
+  const wantsStream = req.query.stream === "1" || req.query.stream === "true"
+    || (req.headers.accept || "").includes("text/event-stream");
   try {
     const { message, history = [], agentName, role } = req.body;
     if (!message || !message.trim()) return res.status(400).json({ error: "message is required" });
@@ -627,22 +632,61 @@ router.post("/tutor", async (req, res) => {
       .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
       .slice(-10);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.6,
-      max_tokens: 700,
-      messages: [
-        { role: "system", content: tutorSystemPrompt({ agentName, role }) },
-        ...safeHistory,
-        { role: "user", content: message.trim() },
-      ],
-    });
+    const messages = [
+      { role: "system", content: tutorSystemPrompt({ agentName, role }) },
+      ...safeHistory,
+      { role: "user", content: message.trim() },
+    ];
 
-    const reply = completion.choices?.[0]?.message?.content?.trim()
-      || "I'm here to help with your studies — ask me anything about your subjects!";
-    res.json({ success: true, reply, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+    if (!wantsStream) {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.6,
+        max_tokens: 700,
+        messages,
+      });
+      const reply = completion.choices?.[0]?.message?.content?.trim()
+        || "I'm here to help with your studies — ask me anything about your subjects!";
+      return res.json({ success: true, reply, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+    }
+
+    // ── Streaming path (SSE) ──────────────────────────────────────────────
+    res.writeHead(200, {
+      "Content-Type":      "text/event-stream",
+      "Cache-Control":     "no-cache, no-transform",
+      "Connection":        "keep-alive",
+      "X-Accel-Buffering": "no",   // disable proxy buffering (nginx)
+    });
+    res.flushHeaders?.();
+
+    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+    let full = "";
+    try {
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.6,
+        max_tokens: 700,
+        stream: true,
+        messages,
+      });
+      for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (delta) { full += delta; send("delta", { text: delta }); }
+      }
+      if (!full.trim()) full = "I'm here to help with your studies — ask me anything about your subjects!";
+      send("done", { reply: full, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+    } catch (streamErr) {
+      console.error("[/chat/tutor stream]", streamErr);
+      send("error", { error: streamErr.message });
+    }
+    res.end();
   } catch (err) {
     console.error("[/chat/tutor]", err);
+    if (wantsStream && res.headersSent) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+      return res.end();
+    }
     res.status(500).json({ error: err.message });
   }
 });
