@@ -52,7 +52,8 @@
     "2026-site-ai-chat.sql",
     "2026-template-colors.sql",
     "2026-ownership-links.sql",
-    "2026-chat-sessions.sql"
+    "2026-chat-sessions.sql",
+    "2026-task-output-types.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

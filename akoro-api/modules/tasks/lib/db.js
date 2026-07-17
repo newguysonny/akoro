@@ -40,10 +40,14 @@ export const TaskDB = {
   },
 
   async updateStatus(id, status, extra = {}) {
-    const updates = { status, ...extra };
-    if (extra.startedAt)   updates.started_at   = extra.startedAt;
-    if (extra.completedAt) updates.completed_at = extra.completedAt;
-    if (extra.bullJobId)   updates.bull_job_id   = extra.bullJobId;
+    // Map ONLY the known camelCase options to real snake_case columns. Spreading
+    // `extra` directly would leak keys like `bullJobId`/`completedAt` into the
+    // update, and PostgREST rejects unknown columns — breaking the whole call.
+    // `!== undefined` lets callers explicitly clear a timestamp with null.
+    const updates = { status };
+    if (extra.startedAt   !== undefined) updates.started_at   = extra.startedAt;
+    if (extra.completedAt !== undefined) updates.completed_at = extra.completedAt;
+    if (extra.bullJobId   !== undefined) updates.bull_job_id  = extra.bullJobId;
     const { data, error } = await db.from("tasks").update(updates).eq("id", id).select().single();
     if (error) throw new Error(error.message);
     return data;
@@ -116,8 +120,11 @@ export const TaskRunDB = {
   },
 
   async update(id, updates) {
-    const payload = { ...updates };
-    if (updates.agentSteps !== undefined) payload.agent_steps = JSON.stringify(updates.agentSteps);
+    // Strip the camelCase `agentSteps` before it reaches PostgREST (unknown
+    // column → rejected update); map it to the real `agent_steps` JSONB.
+    const { agentSteps, ...rest } = updates;
+    const payload = { ...rest };
+    if (agentSteps !== undefined) payload.agent_steps = JSON.stringify(agentSteps);
     const { data, error } = await db.from("task_runs").update(payload).eq("id", id).select().single();
     if (error) throw new Error(error.message);
     return data;
