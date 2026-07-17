@@ -45,6 +45,7 @@ export default function LandingPage() {
         <QuickInfo onSignup={goSignup}/>
         <TrustRatings />
         <ProblemSolution/>
+        <HowItWorks/>
         <Outcomes/>
         <Pricing/>
         <Instructors/>

@@ -72,25 +72,45 @@ function HowItWorks() {
     { num: '04', icon: <Trophy size={28} color={B}/>, title: 'Rise the ranks', desc: 'Climb classroom and inter-school leaderboards. Challenge friends, earn XP, and prove your knowledge in live battles.' },
   ];
   return (
-    <section id="how-it-works" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
-      <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+    <section id="how-it-works" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif", position: 'relative', overflow: 'hidden' }}>
+      {/* Scroll-driven drift on the ghost numerals (progressive enhancement,
+          adapted from the baseline-2026 reference); falls back to static. */}
+      <style>{`
+        .ak-plate { position: relative; display: grid; grid-template-columns: 1fr; align-items: center;
+          padding: 44px 0; border-top: 1px solid #E8E2D9; }
+        .ak-plate:first-child { border-top: none; }
+        .ak-plate-num { position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+          font-weight: 900; font-size: clamp(96px, 17vw, 210px); line-height: .8; color: ${B};
+          opacity: .07; z-index: 0; pointer-events: none; letter-spacing: -.04em; user-select: none; }
+        .ak-plate-body { position: relative; z-index: 1; display: flex; gap: 22px; align-items: flex-start; max-width: 640px; }
+        @media (prefers-reduced-motion: no-preference) {
+          @supports (animation-timeline: view()) {
+            .ak-plate-num { animation: ak-plate-drift linear both; animation-timeline: view(); animation-range: entry 0% cover 55%; }
+            @keyframes ak-plate-drift { from { opacity: 0; transform: translateY(calc(-50% + 44px)); } to { opacity: .07; transform: translateY(-50%); } }
+          }
+        }
+      `}</style>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <SL center>How it works</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
             From first session to <em style={{ color: B, fontStyle: 'italic' }}>top of class</em>
           </h2>
           <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>Four simple steps that turn passive studying into active mastery.</p>
         </div>
-        <div className="ak-how-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 20, marginBottom: 36 }}>
+        <div>
           {steps.map(({ num, icon, title, desc }, i) => (
-            <Reveal key={num} delay={i * 0.09}>
-              <div style={{ background: '#fff', border: '1px solid #EDE8E1', borderRadius: 20, padding: '28px 24px', height: '100%', transition: 'transform .2s,box-shadow .2s', cursor: 'default' }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = `0 12px 32px ${B}14`; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
-                <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 18 }}>STEP {num}</div>
-                <div style={{ marginBottom: 16 }}>{icon}</div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1A2E', marginBottom: 10, lineHeight: 1.35 }}>{title}</h3>
-                <p style={{ fontSize: 14, color: '#6B6B80', lineHeight: 1.7 }}>{desc}</p>
+            <Reveal key={num} delay={i * 0.06}>
+              <div className="ak-plate">
+                <span className="ak-plate-num fsyne" aria-hidden="true">{num}</span>
+                <div className="ak-plate-body">
+                  <div style={{ flexShrink: 0, width: 58, height: 58, borderRadius: 16, background: `${B}0D`, border: `1px solid ${B}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
+                  <div>
+                    <div className="fsyne" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: B, marginBottom: 8 }}>STEP {num}</div>
+                    <h3 style={{ fontSize: 'clamp(19px,2.4vw,24px)', fontWeight: 800, color: '#1A1A2E', marginBottom: 8, lineHeight: 1.25 }}>{title}</h3>
+                    <p style={{ fontSize: 15, color: '#6B6B80', lineHeight: 1.7 }}>{desc}</p>
+                  </div>
+                </div>
               </div>
             </Reveal>
           ))}
