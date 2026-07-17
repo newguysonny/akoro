@@ -43,7 +43,7 @@ export default function SigninPage() {
   const handleVerify = async (e) => {
     e.preventDefault(); setFormErr('');
     if (!/^\d{6}$/.test(code)) { setFormErr(t('auth.enter_6digit')); return; }
-    try { await verifyTwoFactor({ challengeToken: challenge, code }); navigate('/', { replace:true }); }
+    try { await verifyTwoFactor({ challengeToken: challenge, code }); navigate('/app', { replace:true }); }
     catch (err) { setFormErr(err.message); }
   };
 

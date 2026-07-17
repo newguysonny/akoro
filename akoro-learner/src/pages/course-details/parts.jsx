@@ -511,7 +511,7 @@ const REVISIONS = [
 ];
 const RV_HOST_EMOJI = ['👦🏾', '👧🏾', '🧑🏽', '👨🏿'];
 const RV_HOST_BG = ['#D4EAD8', '#E4D4F0', '#C8D8E8', '#F0E4C8'];
-function RevisionsSection({ revisions }) {
+function RevisionsSection({ revisions, onJoinLive }) {
   const list = revisions?.length
     ? revisions.map((s, i) => ({ id: i, topic: s.topic, host: s.host, emoji: RV_HOST_EMOJI[i % RV_HOST_EMOJI.length], bg: RV_HOST_BG[i % RV_HOST_BG.length], time: s.time, joined: s.joined, max: s.max, status: s.status === 'live' ? 'live' : 'upcoming' }))
     : REVISIONS;
@@ -537,7 +537,7 @@ function RevisionsSection({ revisions }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED2, marginBottom: 5 }}><span><Users size={10} style={{ display: 'inline', marginRight: 3 }} />{s.joined}/{s.max}</span><span>{Math.round((s.joined / s.max) * 100)}% full</span></div>
               <div style={{ height: 5, background: '#EDE8E1', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(s.joined / s.max) * 100}%`, background: BRAND, borderRadius: 4 }} /></div>
             </div>
-            <Btn variant={s.status === 'upcoming' ? 'outline' : s.status === 'live' ? 'green' : 'primary'} size="sm" style={{ width: '100%' }}>
+            <Btn variant={s.status === 'upcoming' ? 'outline' : s.status === 'live' ? 'green' : 'primary'} size="sm" style={{ width: '100%' }} onClick={onJoinLive}>
               {s.status === 'upcoming' ? <><CalendarPlus size={12} />Reserve</> : <><Radio size={12} />{s.status === 'live' ? 'Join' : 'Join early'}</>}
             </Btn>
           </div>
@@ -685,7 +685,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.status === 'live' ? RED : s.status === 'upcoming' ? BRAND : '#C9C5BE', animation: s.status === 'live' ? 'cp-pulse 1.3s ease infinite' : 'none' }} />
                 <div><div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{s.topic}</div><div style={{ fontSize: 12, color: MUTED2 }}>{s.date}{s.time ? ` · ${s.time}` : ''}</div></div>
               </div>
-              {s.status === 'live' && <Btn variant="red" size="sm"><Radio size={11} />Join</Btn>}
+              {s.status === 'live' && <Btn variant="red" size="sm" onClick={onJoinLive}><Radio size={11} />Join</Btn>}
               {s.status === 'upcoming' && <Btn variant="outline" size="sm"><CalendarPlus size={11} />RSVP</Btn>}
               {s.status === 'recorded' && <Btn variant="ghost" size="sm"><MonitorPlay size={11} />Replay</Btn>}
             </div>
@@ -716,7 +716,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
 
       {/* Always-on community sections */}
       <BattlesSection battles={course.battles} leaderboard={course.leaderboard} lobbies={course.openLobbies} />
-      <RevisionsSection revisions={course.revisions} />
+      <RevisionsSection revisions={course.revisions} onJoinLive={onJoinLive} />
     </div>
   );
 }

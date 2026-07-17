@@ -337,6 +337,24 @@ export default function LearnerDashboard() {
     catch { /* non-fatal — the challenger just won't get the decline notice */ }
   };
 
+  // Join a live class: the backend returns the meeting URL only once the
+  // session is actually live. Surfaces the server's message otherwise
+  // (not started yet / full → waitlisted / not enrolled).
+  const joinLive = async (s) => {
+    try {
+      const res = await fetch(`${API}/api/live-sessions/${s.id}/join`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const j = await res.json().catch(() => ({}));
+      const d = j?.data ?? j;
+      if (res.ok && d?.meeting_url) { window.open(d.meeting_url, "_blank", "noopener"); return; }
+      setToast(j?.message || d?.message || t('sheet.live_not_ready'));
+    } catch {
+      setToast(t('common.network_error'));
+    }
+  };
+
   const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
   const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
 
@@ -669,6 +687,7 @@ export default function LearnerDashboard() {
           onAssess={s => { setSelectedSession(null); setAssessSession(s); }}
           onStartTeach={s=>{
             setSelectedSession(null);
+            if (s.type === "live") { joinLive(s); return; }   // live class → open the meeting
             const decay = decayBySession[s.id] || (s.decayAlertId && decayAlerts.find(a=>a.id===s.decayAlertId)) || null;
             if (decay) {
               // Revise Teaching → DecaySessionModal
