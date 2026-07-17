@@ -2,6 +2,7 @@
  * Landing page — content sections.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Brain, Zap, Swords, BarChart3, Mic, School, WifiOff, Trophy,
@@ -64,31 +65,67 @@ function ProblemSolution() {
 }
 
 /* ══════════════ HOW IT WORKS ══════════════ */
+const HIW_VT = 'ak-hiw-morph';
 function HowItWorks() {
   const steps = [
-    { num: '01', icon: <Target size={28} color={B}/>, title: 'Pick a topic', desc: 'Choose from curriculum subjects or create your own. Set subtopics and learning objectives — your agent starts calibrated, not cold.' },
-    { num: '02', icon: <Brain size={28} color={B}/>, title: 'Teach your agent', desc: 'Explain concepts via chat or voice. NaNa Esumai guides every step — she listens, asks probing questions, and flags misconceptions in real time.' },
-    { num: '03', icon: <Repeat2 size={28} color={B}/>, title: 'Get assessed by Sargeant', desc: 'Sargeant tests your agent on everything you taught. Your confidence score updates after every assessment — before you forget.' },
-    { num: '04', icon: <Trophy size={28} color={B}/>, title: 'Rise the ranks', desc: 'Climb classroom and inter-school leaderboards. Challenge friends, earn XP, and prove your knowledge in live battles.' },
+    { num: '01', glyph: '◎', icon: <Target size={26} color={B}/>, title: 'Pick a topic', desc: 'Choose from curriculum subjects or create your own. Set subtopics and learning objectives so your agent starts calibrated, not cold — you decide exactly what it should master.' },
+    { num: '02', glyph: '✦', icon: <Brain size={26} color={B}/>, title: 'Teach your agent', desc: 'Explain concepts by chat or voice. NaNa Esumai guides every step — she listens, asks probing questions, and flags misconceptions in real time, so teaching forces you to truly understand.' },
+    { num: '03', glyph: '❖', icon: <Repeat2 size={26} color={B}/>, title: 'Get assessed by Sargeant', desc: 'Sargeant tests your agent on everything you taught. Your confidence score updates after every assessment — surfacing exactly what to revise, right before you would have forgotten it.' },
+    { num: '04', glyph: '▲', icon: <Trophy size={26} color={B}/>, title: 'Rise the ranks', desc: 'Climb classroom and inter-school leaderboards. Challenge friends, earn XP, and prove your knowledge in live agent battles — mastery becomes something you can see and compete on.' },
   ];
+  const [open, setOpen] = useState(null);
+  const [slow, setSlow] = useState(false);
+  const tiles = useRef({});
+  const busy  = useRef(false);
+
+  // Shared-element morph via the View Transition API (adapted from the
+  // baseline-2026 "Morph gallery"). Unsupported browsers get a plain cut.
+  const withVT = (fn) => (typeof document !== 'undefined' && document.startViewTransition
+    ? document.startViewTransition(fn)
+    : (fn(), { finished: Promise.resolve() }));
+
+  const openStep = (i) => {
+    if (busy.current || open !== null) return;
+    busy.current = true;
+    const el = tiles.current[i];
+    if (el) el.style.viewTransitionName = HIW_VT;        // old snapshot = tile
+    const t = withVT(() => {
+      if (el) el.style.viewTransitionName = '';          // avoid a duplicate name in the new snapshot
+      flushSync(() => setOpen(i));                        // new snapshot = detail panel
+    });
+    Promise.resolve(t.finished).catch(() => {}).finally(() => { busy.current = false; });
+  };
+
+  const closeStep = () => {
+    if (busy.current || open === null) return;
+    busy.current = true;
+    const i = open;
+    const t = withVT(() => {
+      flushSync(() => setOpen(null));                     // detail (old) → tiles
+      const el = tiles.current[i];
+      if (el) el.style.viewTransitionName = HIW_VT;       // new snapshot = tile
+    });
+    Promise.resolve(t.finished).catch(() => {}).finally(() => {
+      const el = tiles.current[i];
+      if (el) el.style.viewTransitionName = '';
+      busy.current = false;
+    });
+  };
+
+  const toggleSlow = (e) => {
+    setSlow(e.target.checked);
+    if (typeof document !== 'undefined') document.documentElement.style.setProperty('--ak-vt', e.target.checked ? '2.4s' : '.45s');
+  };
+
+  const cur = open !== null ? steps[open] : null;
+
   return (
     <section id="how-it-works" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif", position: 'relative', overflow: 'hidden' }}>
-      {/* Scroll-driven drift on the ghost numerals (progressive enhancement,
-          adapted from the baseline-2026 reference); falls back to static. */}
       <style>{`
-        .ak-plate { position: relative; display: grid; grid-template-columns: 1fr; align-items: center;
-          padding: 44px 0; border-top: 1px solid #E8E2D9; }
-        .ak-plate:first-child { border-top: none; }
-        .ak-plate-num { position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-          font-weight: 900; font-size: clamp(96px, 17vw, 210px); line-height: .8; color: ${B};
-          opacity: .07; z-index: 0; pointer-events: none; letter-spacing: -.04em; user-select: none; }
-        .ak-plate-body { position: relative; z-index: 1; display: flex; gap: 22px; align-items: flex-start; max-width: 640px; }
-        @media (prefers-reduced-motion: no-preference) {
-          @supports (animation-timeline: view()) {
-            .ak-plate-num { animation: ak-plate-drift linear both; animation-timeline: view(); animation-range: entry 0% cover 55%; }
-            @keyframes ak-plate-drift { from { opacity: 0; transform: translateY(calc(-50% + 44px)); } to { opacity: .07; transform: translateY(-50%); } }
-          }
-        }
+        ::view-transition-group(${HIW_VT}) { animation-duration: var(--ak-vt, .45s); }
+        @media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: .001s !important; } }
+        .ak-hiw-tile { text-align: left; cursor: pointer; background: #fff; border: 1px solid #EDE8E1; border-radius: 18px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px; font-family: inherit; transition: border-color .2s, box-shadow .2s, transform .2s; }
+        .ak-hiw-tile:hover { border-color: ${B}55; box-shadow: 0 12px 30px ${B}14; transform: translateY(-3px); }
       `}</style>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
@@ -96,25 +133,48 @@ function HowItWorks() {
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
             From first session to <em style={{ color: B, fontStyle: 'italic' }}>top of class</em>
           </h2>
-          <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>Four simple steps that turn passive studying into active mastery.</p>
+          <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>
+            Four simple steps that turn passive studying into active mastery. <span style={{ color: '#9490A0' }}>Tap a step to expand.</span>
+          </p>
         </div>
-        <div>
-          {steps.map(({ num, icon, title, desc }, i) => (
-            <Reveal key={num} delay={i * 0.06}>
-              <div className="ak-plate">
-                <span className="ak-plate-num fsyne" aria-hidden="true">{num}</span>
-                <div className="ak-plate-body">
-                  <div style={{ flexShrink: 0, width: 58, height: 58, borderRadius: 16, background: `${B}0D`, border: `1px solid ${B}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
-                  <div>
-                    <div className="fsyne" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: B, marginBottom: 8 }}>STEP {num}</div>
-                    <h3 style={{ fontSize: 'clamp(19px,2.4vw,24px)', fontWeight: 800, color: '#1A1A2E', marginBottom: 8, lineHeight: 1.25 }}>{title}</h3>
-                    <p style={{ fontSize: 15, color: '#6B6B80', lineHeight: 1.7 }}>{desc}</p>
-                  </div>
-                </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 14 }}>
+          {steps.map(({ num, glyph, icon, title }, i) => (
+            <button key={num} ref={(el) => { tiles.current[i] = el; }} className="ak-hiw-tile"
+              onClick={() => openStep(i)} aria-expanded={open === i}
+              style={{ visibility: open === i ? 'hidden' : 'visible' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ width: 46, height: 46, borderRadius: 13, background: `${B}0D`, border: `1px solid ${B}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+                <span aria-hidden="true" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: 30, color: `${B}66`, lineHeight: 1 }}>{glyph}</span>
               </div>
-            </Reveal>
+              <div className="fsyne" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: B }}>STEP {num}</div>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.3 }}>{title}</h3>
+              <span style={{ marginTop: 'auto', fontSize: 13, fontWeight: 700, color: B }}>Learn more →</span>
+            </button>
           ))}
         </div>
+
+        {cur && (
+          <div style={{ viewTransitionName: HIW_VT, marginTop: 16, background: '#fff', border: `1.5px solid ${B}`, borderRadius: 20, padding: '30px 30px 26px', boxShadow: `0 18px 44px ${B}18` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+              <span style={{ width: 56, height: 56, borderRadius: 15, background: `${B}0D`, border: `1px solid ${B}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{cur.icon}</span>
+              <div>
+                <div className="fsyne" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: B }}>STEP {cur.num}</div>
+                <h3 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, color: '#1A1A2E', lineHeight: 1.2 }}>{cur.title}</h3>
+              </div>
+            </div>
+            <p style={{ fontSize: 16, color: '#4A4658', lineHeight: 1.75, maxWidth: 680 }}>{cur.desc}</p>
+            <button onClick={closeStep} style={{ marginTop: 18, background: `${B}0D`, border: `1px solid ${B}22`, color: B, fontWeight: 700, fontSize: 13.5, borderRadius: 100, padding: '9px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>Collapse ↩</button>
+          </div>
+        )}
+
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#9490A0', cursor: 'pointer', fontWeight: 600 }}>
+            <input type="checkbox" checked={slow} onChange={toggleSlow} style={{ accentColor: B, cursor: 'pointer' }} />
+            Slow-motion morph ×6
+          </label>
+        </div>
+
         <Reveal>
           <ProTip />
         </Reveal>
