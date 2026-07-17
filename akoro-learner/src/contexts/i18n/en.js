@@ -91,6 +91,8 @@ export const EN = {
   'rankings.courses':       'Courses',
   'rankings.inter_schools': 'Inter-Schools',
   'rankings.you':           'YOU',
+  'rankings.empty':         'No rankings yet',
+  'rankings.empty_hint':    'Earn XP from lessons, quizzes, battles and teaching sessions to climb the board.',
   'rankings.top_leaderboard':'🏆 TOP LEADERBOARD',
   'rankings.day_streak':    'd streak',
   'rankings.completions':   'completions',

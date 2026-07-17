@@ -11,27 +11,32 @@ function RankingsTab() {
   const [loading, setLoading] = useState(false);
   const BOARD_TABS=[{key:"classroom",label:t('rankings.classroom'),icon:"🏫"},{key:"courses",label:t('rankings.courses'),icon:"📘"},{key:"interSchool",label:t('rankings.inter_schools'),icon:"🌍"}];
 
-  // Fetch ranking data when boardType changes.
-  // Ranking endpoints wrap their payload in `data` (res200 helper).
+  // Each board ranks a different entity: classroom=students, courses=courses,
+  // inter-school=schools. Ranking endpoints wrap their payload in `data`.
   useEffect(() => {
+    let alive = true;
     setLoading(true);
-    // Classroom is resolved server-side via /my-classroom; courses + inter-school use global.
-    const endpoint = boardType === 'classroom'
-      ? '/api/ranking/my-classroom'
-      : '/api/ranking/global';
+    setData([]);
+    const endpoint = boardType === 'classroom' ? '/api/ranking/my-classroom'
+      : boardType === 'courses'                ? '/api/ranking/courses'
+      :                                          '/api/ranking/schools';
     apiGet(endpoint)
       .then(res => {
+        if (!alive) return;
         const leaders = res.data?.leaders || res.leaders || [];
         setData(leaders.map(r => ({
-          rank: r.rank,
-          name: r.full_name || r.username || 'Unknown',
-          avatar: r.avatar_url || `https://i.pravatar.cc/150?u=${r.user_id}`,
-          xp: r.total_xp || 0,
-          isMe: r.is_me || false,
+          rank:     r.rank,
+          name:     r.name || r.full_name || r.username || 'Unknown',
+          avatar:   r.avatar || r.avatar_url || `https://i.pravatar.cc/150?u=${r.id || r.user_id}`,
+          xp:       r.total_xp || 0,
+          isMe:     r.is_me || false,
+          subject:  r.subject,
+          students: r.students,
         })));
       })
-      .catch(() => setData([]))
-      .finally(() => setLoading(false));
+      .catch(() => { if (alive) setData([]); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, [boardType]);
 
   const changeColor=c=>c&&c.startsWith("+")?GREEN:c&&c.startsWith("-")?RED:"var(--ak-text-muted)";
@@ -44,6 +49,17 @@ function RankingsTab() {
           </button>
         ))}
       </div>
+      {loading && data.length===0 && (
+        <div style={{ padding:"48px 24px",textAlign:"center",color:"var(--ak-text-muted)",fontSize:13,fontWeight:600 }}>Loading rankings…</div>
+      )}
+      {!loading && data.length===0 && (
+        <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
+          <span style={{ fontSize:52,opacity:.2 }}>🏆</span>
+          <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-sub)" }}>{t('rankings.empty')}</p>
+          <p style={{ fontSize:12,color:"var(--ak-text-muted)",textAlign:"center",maxWidth:280 }}>{t('rankings.empty_hint')}</p>
+        </div>
+      )}
+      {data.length>0 && (<>
       <div style={{ padding:"18px 16px 12px",background:`linear-gradient(160deg,${BRAND}12,${BRAND}04)`,borderBottom:"1px solid var(--ak-border)" }}>
         <p style={{ fontSize:10,fontWeight:800,color:BRAND,letterSpacing:.5,margin:"0 0 12px",textAlign:"center" }}>🏆 TOP LEADERBOARD</p>
         <div style={{ display:"flex",alignItems:"flex-end",justifyContent:"center",gap:10 }}>
@@ -76,6 +92,7 @@ function RankingsTab() {
           );
         })}
       </div>
+      </>)}
     </div>
   );
 }
