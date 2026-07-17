@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiGet, apiPost, apiPatch } from '../../services/api.js';
+import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
@@ -50,6 +51,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [draftName,  setDraftName]  = useState(initName);
   const [draftEmoji, setDraftEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
+  const shownName = agentName || t('agent.learning_agent');
   const [taskOpen,   setTaskOpen]   = useState(false);
   const [taskFilter, setTaskFilter] = useState("pending");
   const [tTitle,     setTTitle]     = useState("");
@@ -125,6 +127,19 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     setAgentName(name); setAgentEmoji(emoji);
   };
 
+  // The parent fetches the agent profile asynchronously; if it resolves after
+  // this tab mounts, sync the incoming name/emoji so the header isn't blank.
+  useEffect(() => {
+    if (agentNameProp && agentNameProp !== agentName) {
+      setAgentName(agentNameProp);
+      setMessages(prev => (prev.length === 1 && prev[0].id === 1
+        ? [greeting(agentNameProp, agentEmojiProp || agentEmoji)]
+        : prev));
+    }
+    if (agentEmojiProp && agentEmojiProp !== agentEmoji) setAgentEmoji(agentEmojiProp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentNameProp, agentEmojiProp]);
+
   useEffect(()=>{ if(feedRef.current) feedRef.current.scrollTop=feedRef.current.scrollHeight; },[messages,loading]);
 
   const sendMessage=async(overrideText)=>{
@@ -181,8 +196,8 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const saveCustomise=()=>{
     const name=draftName||agentName||'My Agent';
     updateAgentName(name, draftEmoji);
-    // Persist to backend (non-critical)
-    apiPost("/api/user/agent", { agent_name: name, agent_emoji: draftEmoji }).catch(()=>{});
+    // Persist to backend (non-critical). The endpoint is a PUT upsert; POST 404s.
+    putAgent({ name, emoji: draftEmoji }).catch(()=>{});
     setCustOpen(false);
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.updated').replace('{name}',name).replace('{emoji}',draftEmoji),time:t2}]);
@@ -223,7 +238,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
             {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:GREEN,border:"2px solid #fff",animation:"pulse-dot 2s ease-in-out infinite" }}/>
           </div>
           <div>
-            <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{agentName}</p>
+            <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{shownName}</p>
             <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${t('common.online')} · ${t('agent.learning_agent')}`}</span></div>
           </div>
         </div>
@@ -261,7 +276,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
             <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 16px" }}>
-              <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={t('agent.ask_anything').replace('{name}', agentName)} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
+              <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={t('agent.ask_anything').replace('{name}', shownName)} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
               <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>{t('agent.task')}
               </button>

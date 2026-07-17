@@ -93,7 +93,8 @@ export default function LearnerDashboard() {
 
     // Agent profile — student agent + guide agent
     apiGet("/api/user/agent")
-      .then(d=>{
+      .then(res=>{
+        const d = res?.data ?? res;
         if (d.agent_name) setAgentProfile({
           name:            d.agent_name,
           emoji:           d.agent_emoji  || '🤖',

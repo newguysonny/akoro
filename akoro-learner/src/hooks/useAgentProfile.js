@@ -18,7 +18,8 @@ export function useAgentProfile() {
   });
 
   useEffect(() => {
-    apiGet('/api/user/agent').then(d => {
+    apiGet('/api/user/agent').then(res => {
+      const d = res?.data ?? res;
       if (d.agent_name) setAgentProfile({
         name:            d.agent_name,
         emoji:           d.agent_emoji   || '🤖',

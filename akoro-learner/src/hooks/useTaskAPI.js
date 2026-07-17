@@ -8,7 +8,8 @@ export function useTaskAPI() {
 
   // Fetch agent ID once (needed for task creation)
   useEffect(() => {
-    apiGet('/api/user/agent').then(d => {
+    apiGet('/api/user/agent').then(res => {
+      const d = res?.data ?? res;
       if (d.agent?.id || d.id) setAgentId(d.agent?.id ?? d.id);
     }).catch(() => {});
   }, []);
