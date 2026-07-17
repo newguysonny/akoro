@@ -3,10 +3,9 @@
 // The agent calls this tool when the teacher uploads answer scripts
 // and asks for grading.
 
-import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB, TaskFileDB } from "../lib/db.js";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 import { parseJsonLoose } from "./_json.js";
 
 
@@ -103,7 +102,6 @@ export async function executeGradeSubmissions(rawInput, ctx) {
 
 // ─── LLM grading call ─────────────────────────────────────────────────────────
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function callLlmForGrading(input) {
   const rubricSection = input.rubric
@@ -142,16 +140,13 @@ Respond with JSON only — no markdown, no preamble:
   ]
 }`;
 
-  const response = await anthropic.messages.create({
-    model:      ANTHROPIC_MODEL,
+  const response = await openai.chat.completions.create({
+    model:      OPENAI_MODEL,
     max_tokens: 2048,
     messages:   [{ role: "user", content: prompt }],
   });
 
-  const text = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  const text = (response.choices?.[0]?.message?.content ?? "");
 
   return parseJsonLoose(text);
 }

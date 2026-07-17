@@ -4,10 +4,8 @@
 import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
-import Anthropic                from "@anthropic-ai/sdk";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const explainConceptDefinition = {
   name: "explain_concept",
@@ -79,15 +77,12 @@ ${styleInstructions}
 Include at least one clear, concrete example.
 Respond with the explanation text only — no preamble, no markdown headings.`;
 
-  const response = await anthropic.messages.create({
-    model:      ANTHROPIC_MODEL,
+  const response = await openai.chat.completions.create({
+    model:      OPENAI_MODEL,
     max_tokens: 2048,
     messages:   [{ role: "user", content: prompt }],
   });
 
-  return response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("")
+  return (response.choices?.[0]?.message?.content ?? "")
     .trim();
 }

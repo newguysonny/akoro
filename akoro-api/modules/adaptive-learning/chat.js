@@ -14,10 +14,9 @@
 import express from "express";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
-import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
+import { OPENAI_MODEL } from "../../lib/aiModel.js";
 const { Pool } = pkg;
 import OpenAI    from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../../db.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
@@ -38,7 +37,6 @@ const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
 const query      = (text, params) => pool.query(text, params);
 const openai     = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const PHASE_PLAN = [
   "Phase 1 → what do they know",
@@ -857,39 +855,43 @@ async function handleStudentChatWithTools(req, res, studentId, message, history,
   let iterations = 0;
   const MAX_LOOPS = 3;
 
+  // OpenAI function-calling tool schema (mapped from the Anthropic-style defs).
+  const openAiTools = CHAT_TOOLS.map((t) => ({
+    type: "function",
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
+
   try {
     while (iterations < MAX_LOOPS) {
       iterations++;
-      const response = await anthropic.messages.create({
-        model: ANTHROPIC_MODEL, max_tokens: 1024,
-        system: systemPrompt, tools: CHAT_TOOLS, messages,
+      const response = await openai.chat.completions.create({
+        model: OPENAI_MODEL, max_tokens: 1024,
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
+        tools:    openAiTools,
       });
 
-      if (response.stop_reason === "end_turn") {
-        const reply = response.content.filter(b => b.type === "text").map(b => b.text).join("");
+      const msg       = response.choices?.[0]?.message ?? { role: "assistant", content: "" };
+      const toolCalls = msg.tool_calls ?? [];
+
+      if (!toolCalls.length) {
         return res.json({
-          success: true, response: reply,
+          success: true, response: msg.content ?? "",
           toolExecutions,
           metadata: { agentLevel: agent.level, knowledgeScore: Math.round(agent.knowledge_score), chunksUsed: chunks.length, responseTimeMs: Date.now() - t0 },
         });
       }
 
-      if (response.stop_reason === "tool_use") {
-        messages.push({ role: "assistant", content: response.content });
-        const toolResults = [];
-        for (const block of response.content) {
-          if (block.type !== "tool_use") continue;
-          const result = await executeChatTool(block.name, block.input, studentId);
-          toolExecutions.push({ tool: block.name, input: block.input, result });
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result) });
-        }
-        messages.push({ role: "user", content: toolResults });
-        continue;
+      messages.push(msg);   // assistant turn carrying tool_calls
+      for (const call of toolCalls) {
+        let input = {};
+        try { input = JSON.parse(call.function.arguments || "{}"); } catch { input = {}; }
+        const result = await executeChatTool(call.function.name, input, studentId);
+        toolExecutions.push({ tool: call.function.name, input, result });
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
       }
-      break;
     }
-  } catch (anthropicErr) {
-    console.warn("[/chat] Anthropic tool loop failed, falling back to OpenAI:", anthropicErr.message);
+  } catch (llmErr) {
+    console.warn("[/chat] OpenAI tool loop failed, falling back:", llmErr.message);
   }
 
   // Fallback: original OpenAI knowledge-base response

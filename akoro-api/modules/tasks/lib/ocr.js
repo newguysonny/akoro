@@ -1,14 +1,11 @@
 /**
  * modules/tasks/lib/ocr.js
- * Extracts text from uploaded files using Claude Vision for images/PDFs.
+ * Extracts text from uploaded files using OpenAI vision for images.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import https     from "https";
 import http      from "http";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
 const IMAGE_TYPES = new Set(["image/jpeg","image/jpg","image/png","image/webp","image/gif","image/bmp"]);
 const TEXT_TYPES  = new Set(["text/plain","text/markdown","text/csv","text/html","application/json"]);
@@ -19,11 +16,13 @@ export async function extractTextFromUrl(fileUrl, mimeType, fileName) {
       const text = await fetchText(fileUrl);
       return { success: true, text, method: "text" };
     }
-    if (IMAGE_TYPES.has(mimeType) || mimeType === "application/pdf") {
-      const text = await extractWithVision(fileUrl, mimeType, fileName);
+    if (IMAGE_TYPES.has(mimeType)) {
+      const text = await extractWithVision(fileUrl, fileName);
       return { success: true, text, method: "vision" };
     }
-    return { success: false, error: `Unsupported file type: ${mimeType}` };
+    // OpenAI chat vision handles images only; PDFs aren't supported here.
+    // OCR is best-effort background enrichment, so we skip rather than fail hard.
+    return { success: false, error: `Unsupported file type for OCR: ${mimeType}` };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -41,16 +40,16 @@ async function fetchText(url) {
   });
 }
 
-async function extractWithVision(fileUrl, mimeType, fileName) {
-  const response = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL, max_tokens: 4096,
+async function extractWithVision(fileUrl, fileName) {
+  const response = await openai.chat.completions.create({
+    model: OPENAI_MODEL, max_tokens: 4096,
     messages: [{
       role: "user",
       content: [
-        { type: "image", source: { type: "url", url: fileUrl } },
-        { type: "text",  text: `Extract all text from this file "${fileName}". Return only the extracted text, no commentary.` },
+        { type: "text",      text: `Extract all text from this file "${fileName}". Return only the extracted text, no commentary.` },
+        { type: "image_url", image_url: { url: fileUrl } },
       ],
     }],
   });
-  return response.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  return response.choices?.[0]?.message?.content ?? "";
 }

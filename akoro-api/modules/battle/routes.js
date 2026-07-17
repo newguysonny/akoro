@@ -50,10 +50,9 @@
  */
 
 import { Router }                         from "express";
-import Anthropic                          from "@anthropic-ai/sdk";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
 let _battleQueue = null;
@@ -857,15 +856,16 @@ router.post("/courses/:courseId/questions-bank/generate", authenticateToken, req
   const { topic, subject, difficulty = "intermediate", count = 15 } = req.body;
   if (!topic || !subject) return res.status(400).json({ error: "topic and subject are required" });
 
-  const client  = new Anthropic();
-  const message = await client.messages.create({
-    model:      ANTHROPIC_MODEL,
+  const message = await openai.chat.completions.create({
+    model:      OPENAI_MODEL,
     max_tokens: 2000,
-    system:     `You are an expert educator. Generate exactly ${count} multiple-choice questions about "${topic}" for ${subject} at ${difficulty} difficulty. Return ONLY valid JSON with no preamble or markdown. Format: { "questions": [{ "question_text": "...", "options": ["A","B","C","D"], "correct_answer_index": 0, "topic": "${topic}", "xp_value": 35 }] }`,
-    messages:   [{ role: "user", content: `Generate ${count} ${difficulty} ${subject} questions about ${topic}.` }],
+    messages:   [
+      { role: "system", content: `You are an expert educator. Generate exactly ${count} multiple-choice questions about "${topic}" for ${subject} at ${difficulty} difficulty. Return ONLY valid JSON with no preamble or markdown. Format: { "questions": [{ "question_text": "...", "options": ["A","B","C","D"], "correct_answer_index": 0, "topic": "${topic}", "xp_value": 35 }] }` },
+      { role: "user", content: `Generate ${count} ${difficulty} ${subject} questions about ${topic}.` },
+    ],
   });
 
-  const raw = message.content[0].text.replace(/```json|```/g, "").trim();
+  const raw = (message.choices?.[0]?.message?.content ?? "").replace(/```json|```/g, "").trim();
   const { questions } = JSON.parse(raw);
 
   let inserted = 0;

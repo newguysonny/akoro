@@ -8,14 +8,12 @@
 // The tool owns zero DB logic — all battle persistence goes through the
 // existing battles API so there's one source of truth.
 
-import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { sendBulkNotifications } from "../lib/notifications.js";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Internal service URL — the battles API running in the same backend
 const BATTLES_API = process.env.BATTLES_API_URL ?? "http://localhost:3000/api/battles";
@@ -245,16 +243,13 @@ Respond with JSON only — no markdown fences, no commentary:
 
 Note: "options" is only required for mcq type. Omit it for true_false and short_answer.`;
 
-  const response = await anthropic.messages.create({
-    model:      ANTHROPIC_MODEL,
+  const response = await openai.chat.completions.create({
+    model:      OPENAI_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });
 
-  const raw = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("")
+  const raw = (response.choices?.[0]?.message?.content ?? "")
     .replace(/```json|```/g, "")
     .trim();
 

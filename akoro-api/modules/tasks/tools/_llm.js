@@ -1,21 +1,21 @@
 // modules/tasks/tools/_llm.js
-// Small shared Anthropic helper for tool executors — keeps each tool concise.
+// Small shared OpenAI helper for tool executors — keeps each tool concise.
 
-import Anthropic from "@anthropic-ai/sdk";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 import { parseJsonLoose } from "./_json.js";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = ANTHROPIC_MODEL;
+const MODEL = OPENAI_MODEL;
 
 export async function llmText(prompt, { system, maxTokens = 2048, model = MODEL } = {}) {
-  const resp = await anthropic.messages.create({
+  const messages = [];
+  if (system) messages.push({ role: "system", content: system });
+  messages.push({ role: "user", content: prompt });
+  const resp = await openai.chat.completions.create({
     model,
     max_tokens: maxTokens,
-    ...(system ? { system } : {}),
-    messages: [{ role: "user", content: prompt }],
+    messages,
   });
-  return resp.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  return resp.choices?.[0]?.message?.content ?? "";
 }
 
 export async function llmJson(prompt, opts = {}) {

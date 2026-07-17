@@ -3,11 +3,10 @@
 // Produces an HTML report and a summary string. Optionally generates a CSV.
 // This is a good example of a tool that chains fetch-student-data internally.
 
-import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { executeFetchStudentData } from "./fetch-student-data.js";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 import { parseJsonLoose } from "./_json.js";
 
 
@@ -118,7 +117,6 @@ function filterStudents(students, reportType, studentId) {
 
 // ─── LLM report generation ────────────────────────────────────────────────────
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function generateReportContent(reportType, students, summary, periodDays) {
   const studentTable = students
@@ -147,16 +145,13 @@ Respond with JSON only — no markdown, no preamble:
   "html": "<a complete, self-contained HTML snippet (no <html>/<body> tags) with a styled report table and key metrics. Use inline styles only. Keep it clean and professional.>"
 }`;
 
-  const response = await anthropic.messages.create({
-    model:      ANTHROPIC_MODEL,
+  const response = await openai.chat.completions.create({
+    model:      OPENAI_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });
 
-  const text = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  const text = (response.choices?.[0]?.message?.content ?? "");
 
   return parseJsonLoose(text);
 }

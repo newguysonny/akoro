@@ -1,11 +1,30 @@
 /**
  * lib/aiModel.js
- * Single source of truth for the Anthropic model id used across the task
- * tools, battle, instructor and chat agent loops.
+ * Single source of truth for the LLM the agent loops use — task tools, battle
+ * question generation, adaptive chat tools, instructor tools and agentService.
  *
- * Previously every call site hardcoded an unrecognised model id, so every
- * Anthropic call risked a 400 and there was no one place to correct it. Set
- * ANTHROPIC_MODEL to pin whatever your account is entitled to; the default
- * tracks the current Sonnet tier.
+ * The platform standardises on OpenAI (the same key that already powers voice,
+ * the tutor chat and the trained adaptive agents). Override the model with
+ * OPENAI_MODEL; it defaults to the tutor-chat model.
  */
-export const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+import OpenAI from "openai";
+
+export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+export const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+/**
+ * llmComplete — one-shot chat completion returning plain text.
+ * Mirrors the old Anthropic single-prompt helpers so call sites stay small.
+ */
+export async function llmComplete(prompt, { system, maxTokens = 2048, temperature } = {}) {
+  const messages = [];
+  if (system) messages.push({ role: "system", content: system });
+  messages.push({ role: "user", content: prompt });
+  const res = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    max_tokens: maxTokens,
+    ...(temperature != null ? { temperature } : {}),
+    messages,
+  });
+  return res.choices?.[0]?.message?.content ?? "";
+}

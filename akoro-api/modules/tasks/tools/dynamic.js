@@ -11,13 +11,11 @@
  *   loadDynamicToolsForUser(userId) → array of built config tools the user can use
  */
 
-import Anthropic        from "@anthropic-ai/sdk";
 import db               from "../../../db.js";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = ANTHROPIC_MODEL;
+const MODEL = OPENAI_MODEL;
 
 // Fill {{var}} placeholders in a template string from the tool input.
 function fillTemplate(str, vars) {
@@ -35,14 +33,16 @@ async function runLlmPrompt(row, input, ctx) {
   const prompt = fillTemplate(cfg.prompt, input);
   if (!prompt.trim()) throw new Error(`Tool "${row.name}" has an empty prompt config`);
 
-  const resp = await anthropic.messages.create({
+  const resp = await openai.chat.completions.create({
     model:      cfg.model ?? MODEL,
     max_tokens: cfg.maxTokens ?? 1024,
-    ...(cfg.system ? { system: cfg.system } : {}),
-    messages:   [{ role: "user", content: prompt }],
+    messages:   [
+      ...(cfg.system ? [{ role: "system", content: cfg.system }] : []),
+      { role: "user", content: prompt },
+    ],
   });
 
-  const text = resp.content.filter(b => b.type === "text").map(b => b.text).join("");
+  const text = (resp.choices?.[0]?.message?.content ?? "");
   const outputType = cfg.outputType ?? "message";
 
   await TaskOutputDB.create({

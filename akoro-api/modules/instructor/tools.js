@@ -16,10 +16,9 @@
  */
 
 import { Router } from "express";
-import Anthropic from "@anthropic-ai/sdk";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import {
   initializeTransaction,
   verifyTransaction,
@@ -27,7 +26,6 @@ import {
 } from "../adaptive-learning/marketplace/paystackService.js";
 
 const router = Router();
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const VALID_TARGETS = ["lesson_plan", "worksheet", "report", "exam_prep", "generic"];
 const INSTRUCTOR_APP_URL =
   process.env.INSTRUCTOR_APP_URL || "https://instructor.akoro.app";
@@ -79,8 +77,8 @@ router.post("/templates", authenticateToken, requireRole(["instructor", "teacher
     let structure = {};
     let bodyMarkdown = req.body.bodyMarkdown || null;
     try {
-      const resp = await anthropic.messages.create({
-        model: ANTHROPIC_MODEL,
+      const resp = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
         max_tokens: 2000,
         messages: [{
           role: "user",
@@ -92,7 +90,7 @@ router.post("/templates", authenticateToken, requireRole(["instructor", "teacher
             `Return JSON only:\n{\n  "structure": { "sections": ["<ordered heading>", ...], "style": "<tone/formatting notes>", "conventions": ["<rule>", ...] },\n  "bodyMarkdown": "<markdown template with {{placeholders}} preserving the original headings & layout>"\n}`,
         }],
       });
-      const text = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim()
+      const text = (resp.choices?.[0]?.message?.content ?? "").trim()
         .replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
       const parsed = JSON.parse(text);
       structure    = parsed.structure || {};

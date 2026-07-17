@@ -1,24 +1,22 @@
 // modules/tasks/tools/challenge-peer.js
 // Student-facing 1v1 battle challenge against a peer.
 
-import Anthropic                from "@anthropic-ai/sdk";
 import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
 import { resolveMcq }           from "./create-battle.js";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Generate a small set of gradable MCQs for a 1v1 topic battle.
 async function generatePeerQuestions(topic, subject, difficulty, count = 8) {
   const prompt = `Generate exactly ${count} ${difficulty} multiple-choice questions on "${topic}" (${subject}) for a 1v1 student battle.
 Respond with JSON only (no fences): {"questions":[{"question":"...","options":["A ...","B ...","C ...","D ..."],"answer":"<full text of correct option>","concept":"...","points":35}]}`;
-  const response = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL, max_tokens: 3000,
+  const response = await openai.chat.completions.create({
+    model: OPENAI_MODEL, max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });
-  const raw = response.content.filter((b) => b.type === "text").map((b) => b.text).join("").replace(/```json|```/g, "").trim();
+  const raw = (response.choices?.[0]?.message?.content ?? "").replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(raw);
   return (parsed.questions ?? [])
     .map((q) => { const m = resolveMcq(q); return m ? { ...q, ...m } : null; })

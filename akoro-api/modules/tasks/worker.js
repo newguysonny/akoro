@@ -1,26 +1,24 @@
 /**
  * modules/tasks/worker.js
- * BullMQ worker that runs the Anthropic agent loop for task execution.
- * Converted from TypeScript to JS ESM.
+ * BullMQ worker that runs the OpenAI agent loop (function calling) for task
+ * execution. Converted from TypeScript to JS ESM.
  */
 
 import { Worker }   from "bullmq";
 import Redis        from "ioredis";
-import Anthropic    from "@anthropic-ai/sdk";
 import { TaskDB, TaskRunDB, AgentDB } from "./lib/db.js";
 import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 import { bullRedisOptions }                        from "../../lib/redisOptions.js";
-import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 
 const MAX_TOOL_ITERATIONS = 20;
-const MODEL               = ANTHROPIC_MODEL;
+const MODEL               = OPENAI_MODEL;
 
 const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[tasks/worker Redis]", err.message));
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const taskWorker = new Worker("task-runner", async (job) => {
   const { taskId } = job.data;
@@ -38,55 +36,62 @@ export const taskWorker = new Worker("task-runner", async (job) => {
   try {
     const ctx          = await buildContext(task);
     const tools        = await getToolsForTask(task);
-    const toolDefs     = tools.map((t) => t.definition);
+    // OpenAI function-calling tool schema.
+    const toolDefs     = tools.map((t) => ({
+      type: "function",
+      function: {
+        name:        t.definition.name,
+        description: t.definition.description,
+        parameters:  t.definition.input_schema,
+      },
+    }));
     const toolMap      = new Map(tools.map((t) => [t.definition.name, t]));
     const toolCtx      = { taskId: task.id, runId: run.id, teacherId: task.creator_id, courseId: task.course_id ?? null };
     const agentSteps   = [];
     const outputs      = [];
-    const messages     = [{ role: "user", content: ctx.prompt }];
+    const messages     = [
+      { role: "system", content: ctx.systemPrompt },
+      { role: "user",   content: ctx.prompt },
+    ];
 
     let iterations = 0;
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
-      const response = await anthropic.messages.create({
+      const response = await openai.chat.completions.create({
         model: MODEL, max_tokens: 4096,
-        system:   ctx.systemPrompt,
-        tools:    toolDefs,
+        ...(toolDefs.length ? { tools: toolDefs } : {}),
         messages,
       });
 
-      const step = { role: "assistant", content: response.content, stopReason: response.stop_reason, iteration: iterations };
-      agentSteps.push(step);
+      const msg    = response.choices?.[0]?.message ?? { role: "assistant", content: "" };
+      const finish = response.choices?.[0]?.finish_reason;
+      agentSteps.push({ role: "assistant", content: msg.content ?? null, toolCalls: msg.tool_calls ?? null, finishReason: finish, iteration: iterations });
       await TaskRunDB.update(run.id, { agentSteps });
-      messages.push({ role: "assistant", content: response.content });
 
-      // Extract any text output
-      for (const block of response.content) {
-        if (block.type === "text" && block.text.trim()) {
-          outputs.push({ type: "message", text: block.text });
+      // Echo the assistant turn back (may carry tool_calls) — required before
+      // the matching tool results.
+      messages.push(msg);
+
+      if (msg.content && msg.content.trim()) outputs.push({ type: "message", text: msg.content });
+
+      const toolCalls = msg.tool_calls ?? [];
+      if (!toolCalls.length) break;   // finish_reason "stop" — no tools requested
+
+      for (const call of toolCalls) {
+        const name       = call.function?.name;
+        const registered = toolMap.get(name);
+        let content;
+        if (!registered) {
+          content = `Tool "${name}" not found`;
+        } else {
+          await deliverProgress(task, `Using tool: ${name}...`);
+          let args = {};
+          try { args = JSON.parse(call.function.arguments || "{}"); } catch { args = {}; }
+          try { content = JSON.stringify(await registered.execute(args, toolCtx)); }
+          catch (err) { content = `Tool error: ${err.message}`; }
         }
-      }
-
-      if (response.stop_reason === "end_turn") break;
-
-      if (response.stop_reason === "tool_use") {
-        const toolResults = [];
-        for (const block of response.content) {
-          if (block.type !== "tool_use") continue;
-          const registered = toolMap.get(block.name);
-          if (!registered) {
-            toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `Tool "${block.name}" not found`, is_error: true });
-            continue;
-          }
-          await deliverProgress(task, `Using tool: ${block.name}...`);
-          try {
-            const result = await registered.execute(block.input, toolCtx);
-            toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result) });
-          } catch (err) {
-            toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `Tool error: ${err.message}`, is_error: true });
-          }
-        }
-        messages.push({ role: "user", content: toolResults });
+        // One tool message per tool_call_id, or OpenAI rejects the next call.
+        messages.push({ role: "tool", tool_call_id: call.id, content });
       }
     }
 

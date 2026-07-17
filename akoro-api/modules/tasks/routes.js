@@ -13,7 +13,7 @@ import { extractIntent }                  from "./lib/context.js";
 import { createPresignedUpload }          from "./lib/storage.js";
 import { extractTextFromUrl }             from "./lib/ocr.js";
 import { ALL_TOOLS }                      from "./tools/index.js";
-import { ANTHROPIC_MODEL }                from "../../lib/aiModel.js";
+import { OPENAI_MODEL }                   from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 
 const router = Router();
@@ -33,7 +33,7 @@ router.get("/health", async (req, res) => {
   } catch (err) { out.redis = "down"; out.queueError = err.message; }
 
   // Anthropic config — the model id every tool runs on, and whether a key is set.
-  out.anthropic = { model: ANTHROPIC_MODEL, keyConfigured: !!process.env.ANTHROPIC_API_KEY };
+  out.openai = { model: OPENAI_MODEL, keyConfigured: !!process.env.OPENAI_API_KEY };
 
   // Tool registry — how many tools loaded, and every output_type they emit
   // (must all exist in the output_type enum or their inserts fail).
@@ -66,7 +66,7 @@ router.get("/health", async (req, res) => {
     };
   } catch (err) { out.tasksError = err.message; }
 
-  const healthy = out.redis === "up" && out.worker.enabled && out.anthropic.keyConfigured;
+  const healthy = out.redis === "up" && out.worker.enabled && out.openai.keyConfigured;
   res.json({ ok: healthy, ...out });
 });
 

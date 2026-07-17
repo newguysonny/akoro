@@ -4,12 +4,10 @@
 import { z }                       from "zod";
 import { TaskDB, TaskOutputDB }    from "../lib/db.js";
 import db                          from "../../../db.js";
-import Anthropic                   from "@anthropic-ai/sdk";
 import { v4 as uuid }              from "uuid";
-import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 import { parseJsonLoose } from "./_json.js";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export const quizMeDefinition = {
   name: "quiz_me",
@@ -90,16 +88,13 @@ Respond with a JSON array only — no markdown, no preamble:
   }
 ]`;
 
-  const response = await anthropic.messages.create({
-    model:      ANTHROPIC_MODEL,
+  const response = await openai.chat.completions.create({
+    model:      OPENAI_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });
 
-  const text = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  const text = (response.choices?.[0]?.message?.content ?? "");
 
   const parsed = parseJsonLoose(text);
   return parsed.map((q) => ({ ...q, id: q.id || uuid() }));
