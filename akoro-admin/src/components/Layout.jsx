@@ -39,7 +39,19 @@ const NAV = [
   { to: '/settings',         icon: Settings,        label: 'Settings' },
 ];
 
-function NavItem({ to, icon: Icon, label, compact }) {
+function Badge({ count, style }) {
+  if (!count) return null;
+  return (
+    <span style={{
+      minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
+      background: '#EF4444', color: WHITE, fontSize: 10.5, fontWeight: 800,
+      fontFamily: FONT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      lineHeight: 1, ...style,
+    }}>{count > 99 ? '99+' : count}</span>
+  );
+}
+
+function NavItem({ to, icon: Icon, label, compact, badge = 0 }) {
   return (
     <NavLink
       to={to}
@@ -54,21 +66,41 @@ function NavItem({ to, icon: Icon, label, compact }) {
         textDecoration: 'none', color: isActive ? WHITE : MUTED2,
         background: isActive ? `${AMBER}22` : 'transparent',
         fontFamily: FONT, fontSize: 14, fontWeight: isActive ? 600 : 400,
-        transition: 'all .15s',
+        transition: 'all .15s', position: 'relative',
         borderLeft: compact
           ? '3px solid transparent'
           : (isActive ? `3px solid ${AMBER}` : '3px solid transparent'),
       })}
     >
-      <Icon size={18} />
+      <span style={{ position: 'relative', display: 'flex' }}>
+        <Icon size={18} />
+        {compact && <Badge count={badge} style={{ position: 'absolute', top: -7, left: 10, minWidth: 16, height: 16 }} />}
+      </span>
       {!compact && <span>{label}</span>}
+      {!compact && <Badge count={badge} style={{ marginLeft: 'auto' }} />}
     </NavLink>
   );
+}
+
+// Poll the unread contact-message count for the Messages nav badge.
+function useUnreadMessages() {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => apiGet('/api/contact/messages?status=new&limit=1')
+      .then(r => { if (alive) setUnread(r?.unread ?? 0); })
+      .catch(() => {});
+    poll();
+    const t = setInterval(poll, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  return unread;
 }
 
 export function Sidebar() {
   const { user, logout } = useAuth();
   const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+  const unread = useUnreadMessages();
 
   return (
     <aside style={{
@@ -98,7 +130,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
+        {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} badge={item.to === '/messages' ? unread : 0} />)}
       </nav>
 
       {/* User */}
@@ -224,6 +256,7 @@ export function TopBar({ title, subtitle, action }) {
 }
 
 export function BottomNav() {
+  const unread = useUnreadMessages();
   return (
     <div style={{
       display: 'none',
@@ -245,7 +278,10 @@ export function BottomNav() {
             fontSize: 10, fontFamily: FONT, fontWeight: isActive ? 600 : 400,
           })}
         >
-          <Icon size={20} />
+          <span style={{ position: 'relative', display: 'flex' }}>
+            <Icon size={20} />
+            {to === '/messages' && <Badge count={unread} style={{ position: 'absolute', top: -6, left: 12, minWidth: 15, height: 15 }} />}
+          </span>
           {label}
         </NavLink>
       ))}
