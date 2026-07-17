@@ -377,10 +377,6 @@ export default function LearnerDashboard() {
               </div>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              <button onClick={()=>navigate("/live")} title="Live Classes"
-                style={{ display:"flex",alignItems:"center",gap:5,background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,padding:"6px 12px",cursor:"pointer",color:BRAND,fontSize:11,fontWeight:800,fontFamily:"'Nunito',sans-serif" }}>
-                🎥 {t('dash.live')}
-              </button>
               <button onClick={()=>navigate("/notifications")} title="Notifications"
                 style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer",fontSize:15 }}>
                 🔔

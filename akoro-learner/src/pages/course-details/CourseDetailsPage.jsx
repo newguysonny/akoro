@@ -141,7 +141,7 @@ export default function CourseDetailsPage() {
           <CourseOverview
             type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
             onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
-            onJoinLive={() => view.course.id && navigate(`/live/${view.course.id}`)} />
+            onJoinLive={() => navigate('/app')} />
         )}
       </div>
 

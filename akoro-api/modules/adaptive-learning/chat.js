@@ -425,10 +425,12 @@ router.get("/decay/alerts/:studentId", async (req, res) => {
     const alerts = [];
 
     for (const a of subtopicAlerts) {
-      if (!seenSessions.has(a.sessionId)) {
-        seenSessions.add(a.sessionId);
-        alerts.push(a);
-      }
+      // Only dedupe by a REAL sessionId — subtopic alerts without a session
+      // (session_id null) are distinct rows and must all be kept, else they
+      // all collapse onto the single `null` key.
+      if (a.sessionId && seenSessions.has(a.sessionId)) continue;
+      if (a.sessionId) seenSessions.add(a.sessionId);
+      alerts.push(a);
     }
 
     // Add topic-level notifications not already covered by subtopic alerts

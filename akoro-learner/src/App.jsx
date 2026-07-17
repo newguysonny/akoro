@@ -17,7 +17,6 @@ import AuthCallback        from './pages/auth/AuthCallback.jsx';
 import ForgotPasswordPage  from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage   from './pages/auth/ResetPasswordPage.jsx';
 import FDEAdminPage     from './pages/FDEAdminPage.jsx';
-import LiveClassesPage  from './pages/LiveClassesPage.jsx';
 import NotificationsPage from './pages/NotificationsPage.jsx';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
@@ -78,9 +77,7 @@ function AppRoutes() {
       <Route path="/app" element={<ProtectedRoute><LearnerDashboard /></ProtectedRoute>}/>
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
-      <Route path="/live" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
-      <Route path="/live/:courseId" element={<ProtectedRoute><LiveClassesPage /></ProtectedRoute>}/>
       <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
       <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
       <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>
