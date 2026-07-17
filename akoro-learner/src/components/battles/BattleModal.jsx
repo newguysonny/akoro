@@ -140,9 +140,31 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
     return () => { clearInterval(hb); try { s.emit('leave-battle', battleId); s.disconnect(); } catch { /* noop */ } };
   }, [battleId]);
 
-  // Keep the latest `selected` reachable from the socket closure.
-  const selectedRef = useRef(null);
-  selectedRef.current = selected;
+  // Keep the latest values reachable from socket/interval closures.
+  const selectedRef = useRef(null); selectedRef.current = selected;
+  const questionRef = useRef(null); questionRef.current = question;
+  const revealRef   = useRef(null); revealRef.current = reveal;
+
+  // Safety net: while live, re-sync from REST every 12s so a dropped socket
+  // event (or a battle progressing without a delivered emit) still surfaces —
+  // scoreboard refreshes, and the current unanswered question is recovered.
+  useEffect(() => {
+    if (status !== 'live' || !battleId) return;
+    const iv = setInterval(async () => {
+      const st = await apiGet(`${B}/battles/${battleId}/state`).catch(() => null);
+      if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); if (st.viewer_count != null) setViewerCount(st.viewer_count); }
+      if (!questionRef.current || (selectedRef.current != null && !revealRef.current)) {
+        const qd = await apiGet(`${B}/battles/${battleId}/questions`).catch(() => null);
+        const active = qd?.questions?.find((q) => q.correctAnswerIndex == null);
+        if (active && active.questionOrder !== questionRef.current?.questionOrder) {
+          setQuestion({ questionOrder: active.questionOrder, questionText: active.questionText, options: active.options, topic: active.topic, xpValue: active.xpValue, timeLimitMs: 15000 });
+          setReveal(null); setSelected(null); setMyResult(null);
+          qStartRef.current = Date.now();
+        }
+      }
+    }, 12000);
+    return () => clearInterval(iv);
+  }, [status, battleId]);
 
   useEffect(() => {
     if (status !== 'live' || !question || reveal || timer <= 0) return;

@@ -181,6 +181,15 @@ app.use("/api/profiles", standardLimit, profilesModule);
 app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
+
+// Eagerly start the BullMQ battle worker at boot (it was previously imported
+// lazily on the first enqueue, so battles could stall until some action kicked
+// it). Guarded by REDIS_URL so environments without Redis stay quiet.
+if (process.env.REDIS_URL) {
+  import("./modules/battle/worker.js")
+    .then(() => console.log("[battle] worker started at boot"))
+    .catch((e) => console.error("[battle] worker failed to start:", e.message));
+}
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase

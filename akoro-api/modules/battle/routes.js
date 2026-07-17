@@ -65,6 +65,20 @@ async function getBattleQueue() {
 
 const router = Router();
 
+// ─── Health check (public) ────────────────────────────────────────────────────
+// Diagnoses the real-time pipeline: is Redis reachable and is the battle queue
+// live? If this reports redis:down, seeded 'live' battles will render their
+// first question but never advance (grading/reveal runs in the worker).
+router.get("/health", async (req, res) => {
+  try {
+    const q = await getBattleQueue();
+    const counts = await q.getJobCounts("active", "waiting", "delayed", "completed", "failed");
+    res.json({ ok: true, redis: "up", queue: counts, socket: !!global.io });
+  } catch (err) {
+    res.status(200).json({ ok: false, redis: "down", socket: !!global.io, error: err.message });
+  }
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const asyncHandler = (fn) => (req, res, next) =>
