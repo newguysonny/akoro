@@ -70,14 +70,27 @@ BEGIN
         ) AS t(title, status, difficulty, xp, viewers, start, sa, sb, ha, hb)
       LOOP
         BEGIN
-          IF NOT EXISTS (SELECT 1 FROM public.battles WHERE course_id = cid AND title = bt.title) THEN
-            INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, status, peak_viewers, scheduled_start, expires_at, created_by)
-            SELECT cid, '1v1', bt.title, '1v1 battle', 'Further Mathematics', bt.difficulty, bt.xp, bt.xp, 600, bt.status, bt.viewers, bt.start, now() + interval '1 day', c.instructor_id
+          SELECT id INTO bid FROM public.battles WHERE course_id = cid AND title = bt.title;
+          IF bid IS NULL THEN
+            INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, total_questions, status, peak_viewers, scheduled_start, expires_at, created_by)
+            SELECT cid, '1v1', bt.title, '1v1 battle', 'Further Mathematics', bt.difficulty, bt.xp, bt.xp, 600, 5, bt.status, bt.viewers, bt.start, now() + interval '1 day', c.instructor_id
             FROM public.courses c WHERE c.id = cid
             RETURNING id INTO bid;
             INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp) VALUES
               (bid, a1.user_id, a1.id, 'creator',  bt.sa, bt.ha),
               (bid, a2.user_id, a2.id, 'opponent', bt.sb, bt.hb);
+          END IF;
+          -- Seed the actual questions so the arena shows a question + options
+          -- (without these there is nothing for the modal to render). Guarded
+          -- separately so it also backfills battles seeded before this revision.
+          IF bid IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.battle_questions WHERE battle_id = bid) THEN
+            INSERT INTO public.battle_questions (battle_id, question_order, question_text, options_json, correct_answer_index, topic, subject, xp_value, time_limit_seconds) VALUES
+              (bid, 1, 'Derivative of ln(x)?',            '["x","1/x","e^x","ln(x)/x"]',                          1, 'Differentiation', 'Further Mathematics', 30, 15),
+              (bid, 2, 'What is d/dx of sin(3x)?',        '["cos(3x)","3cos(3x)","-3cos(3x)","3sin(3x)"]',        1, 'Chain Rule',      'Further Mathematics', 35, 15),
+              (bid, 3, 'Integrate: 3x^2 dx',              '["6x + C","x^3 + C","x^3","3x^3 + C"]',                 1, 'Integration',     'Further Mathematics', 30, 15),
+              (bid, 4, 'lim(x -> 0) sin(x)/x = ?',        '["0","Infinity","1","Undefined"]',                     2, 'Limits',          'Further Mathematics', 35, 15),
+              (bid, 5, 'What is d/dx of e^(2x)?',         '["e^(2x)","2e^x","2e^(2x)","e^x"]',                     2, 'Differentiation', 'Further Mathematics', 40, 15);
+            UPDATE public.battles SET total_questions = 5 WHERE id = bid;
           END IF;
         EXCEPTION WHEN OTHERS THEN
           RAISE NOTICE 'battle "%" skipped for %: %', bt.title, cid, SQLERRM;
