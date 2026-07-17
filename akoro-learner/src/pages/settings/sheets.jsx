@@ -237,15 +237,17 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
   const [val,setVal]=useState(value??'');
   const [pw, setPw] =useState({ current:'',next:'',confirm:'' });
   const [del,setDel]=useState('');
+  const [err,setErr]=useState('');
   const inp = { width:'100%',padding:'11px 14px',borderRadius:12,
     border:'1.5px solid var(--ak-border2)',outline:'none',fontSize:14,
     fontFamily:"'Nunito',sans-serif",color:'var(--ak-text)',
     background:'var(--ak-surface)',boxSizing:'border-box',marginTop:6 };
   const handle = () => {
     if(type==='change-password'){
-      if(!pw.current){alert(t('settings.enter_current_pw'));return;}
-      if(pw.next.length<8){alert(t('settings.pw_too_short'));return;}
-      if(pw.next!==pw.confirm){alert(t('settings.pw_no_match'));return;}
+      if(!pw.current){setErr(t('settings.enter_current_pw'));return;}
+      if(pw.next.length<8){setErr(t('settings.pw_too_short'));return;}
+      if(pw.next!==pw.confirm){setErr(t('settings.pw_no_match'));return;}
+      setErr('');
     }
     if(type==='delete-confirm'&&del!=='DELETE') return;
     onSave(field, type==='change-password'?pw:val);
@@ -348,6 +350,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
                 color:del==='DELETE'?RED:'var(--ak-text)',letterSpacing:1 }}/>
           </>
         )}
+        {err&&<p style={{ margin:'12px 0 0',fontSize:13,fontWeight:700,color:RED }}>{err}</p>}
         <div style={{ display:'flex',gap:10,marginTop:20 }}>
           <button onClick={onClose} style={{ flex:1,padding:'13px',borderRadius:14,
             border:'1.5px solid var(--ak-border2)',background:'var(--ak-surface-hover)',

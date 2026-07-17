@@ -216,7 +216,8 @@ export default function BlogPage() {
             <Rss size={28} style={{ marginBottom: 14 }} />
             <p style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 20, margin: '0 0 10px' }}>Prefer RSS?</p>
             <p style={{ fontSize: 15, lineHeight: 1.6, margin: '0 0 18px', opacity: .85 }}>Subscribe to our feed and read in your favourite reader.</p>
-            <a href="#" style={{ color: '#fff', fontWeight: 700, fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <a href="/blog" onClick={(e) => { e.preventDefault(); navigator.clipboard?.writeText(`${window.location.origin}/blog`); }}
+              style={{ color: '#fff', fontWeight: 700, fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
               Copy feed URL <ArrowRight size={15} />
             </a>
           </div>

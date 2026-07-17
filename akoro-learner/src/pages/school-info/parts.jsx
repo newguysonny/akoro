@@ -39,7 +39,7 @@ function AnnouncementBar({ onDismiss }) {
     >
       <span className="max-w-md leading-snug">
         🏫 280+ partner schools trust Akoro. See how they{" "}
-        <a href="#" className="font-bold underline underline-offset-2">
+        <a href="/signup" className="font-bold underline underline-offset-2">
           transformed learning
         </a>
         .
@@ -270,7 +270,7 @@ function FeatureAccordion() {
                   {item.desc}
                 </p>
                 <a
-                  href="#"
+                  href="/signup"
                   className="inline-block text-base font-bold underline underline-offset-2 pb-6"
                   style={{ color: B }}
                 >
@@ -332,7 +332,7 @@ function TestimonialQuote() {
         </p>
 
         <a
-          href="#"
+          href="/signup"
           className="text-base font-bold underline underline-offset-2"
           style={{ color: B }}
         >
@@ -367,7 +367,7 @@ function FeatureRow({ title, desc, linkText, image, reverse = false }) {
             {desc}
           </p>
           <a
-            href="#"
+            href="/signup"
             className="text-base font-bold underline underline-offset-2"
             style={{ color: B }}
           >
@@ -414,7 +414,7 @@ function MoreFeatures() {
         {items.map(({ label, icon: Icon, color }) => (
           <a
             key={label}
-            href="#"
+            href="/signup"
             className="group flex flex-col justify-between h-32 rounded-2xl border-2 px-6 py-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:translate-y-0 active:shadow-md"
             style={{ borderColor: color }}
             onMouseEnter={(e) => (e.currentTarget.style.background = `${color}0D`)}

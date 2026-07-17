@@ -308,9 +308,9 @@ export function SiteFooter() {
   const navigate = useNavigate();
   const go = (href) => { if (href.startsWith('/')) navigate(href); };
   const cols = [
-    { title: 'Product',     links: [['How it works','#'],['Courses','#'],['Live Classes','#'],['Pricing','#'],['Agent Battles','#'],['Certifications','#']] },
-    { title: 'For Schools', links: [['Enterprise Starter','#'],['Enterprise Pro','#'],['School Dashboard','#'],['Pilot Programme','#'],['NDPR Compliance','#'],['Case Studies','#']] },
-    { title: 'Company',     links: [['About Us','/about'],['Blog','/blog'],['Careers','/careers'],['Press','#'],['Contact','/contact'],['Partners','/partners'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
+    { title: 'Product',     links: [['How it works','/student-info'],['For students','/student-info'],['For instructors','/instructor-info'],['Browse courses','/signup'],['Agent Battles','/student-info']] },
+    { title: 'For Schools', links: [['Schools overview','/school-info'],['Pilot programme','/school-info'],['Data & privacy','/privacy'],['Talk to sales','/contact'],['Become a partner','/partners']] },
+    { title: 'Company',     links: [['About Us','/about'],['Blog','/blog'],['Careers','/careers'],['Press','/contact'],['Contact','/contact'],['Partners','/partners'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
   ];
   const socials = [
     { icon: <FaXTwitter size={14}/>,  label: 'X' },

@@ -41,7 +41,7 @@ function Header({ onDrawer }) {
   ];
   return (
     <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 900, height: 68, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', background: scrolled ? 'rgba(255,255,255,.97)' : 'rgba(255,255,255,.85)', backdropFilter: 'blur(14px)', borderBottom: scrolled ? '1px solid #EDE8E1' : 'none', transition: 'all .3s', fontFamily: "'DM Sans',sans-serif" }}>
-      <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <AkoroLogo size={34} radius={10}/>
         <span className="fs" style={{ fontSize: 20, color: '#1A1A2E' }}>Akoro</span>
       </a>
