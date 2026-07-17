@@ -1,26 +1,28 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 
 const SLIDES = [
   {
     image:
       "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=900&h=950&fit=crop",
-    text: "Where curiosity leads and community thrives",
+    text: "Teach your AI agent. Actually learn it.",
   },
   {
     image:
       "https://images.unsplash.com/photo-1588072432836-e10032774350?w=900&h=950&fit=crop",
-    text: "Joyful learning since 1966",
+    text: "Learn by teaching — your agent grows as you do.",
   },
   {
     image:
       "https://images.unsplash.com/photo-1509062522246-3755977927d7?w=900&h=950&fit=crop",
-    text: "Nurturing kindness, creativity & excellence",
+    text: "Your agent is waiting. Start learning for real.",
   },
 ];
 
 const SLIDE_DURATION = 5000; // ms
 
 export default function SFSHero() {
+  const navigate = useNavigate();
   const [current, setCurrent] = useState(0);
   const [prev, setPrev] = useState(null);
   const timerRef = useRef(null);
@@ -86,6 +88,22 @@ export default function SFSHero() {
               </div>
             );
           })}
+
+          {/* Persistent CTA over the hero (does not animate with the slides) */}
+          <div className="absolute inset-x-0 bottom-0 z-10 flex justify-center px-8 pb-7">
+            <button
+              onClick={() => navigate("/signup")}
+              className="inline-flex items-center gap-2 rounded-full font-extrabold text-white transition-transform hover:-translate-y-0.5"
+              style={{
+                background: "#6C3BFF",
+                padding: "13px 28px",
+                fontSize: "clamp(0.95rem, 2.5vw, 1.05rem)",
+                boxShadow: "0 10px 28px rgba(108,59,255,0.45)",
+              }}
+            >
+              Start free →
+            </button>
+          </div>
         </div>
       </div>
     </div>
