@@ -50,6 +50,7 @@ import voiceModule               from "./modules/voice/routes.js";
 import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
 import contentModule             from "./modules/content/routes.js";
 import adminModule              from "./modules/admin/index.js";
+import contactModule            from "./modules/contact/routes.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -198,6 +199,7 @@ app.use("/api/school",     standardLimit, schoolModule);        // school partne
 app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
+app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

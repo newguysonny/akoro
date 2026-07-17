@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { apiPost } from '../services/api.js';
 import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import { Handshake, School, Cpu, Globe, HeartHandshake, Award, TrendingUp, Users, CheckCircle2, ArrowRight, Mail, Building2, BookOpen, Zap } from 'lucide-react';
 
@@ -81,13 +82,26 @@ export default function PartnersPage() {
   const [form, setForm] = useState({ name: '', org: '', email: '', type: '', message: '' });
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  const handleSubmit = e => {
+  const handleSubmit = async e => {
     e.preventDefault();
-    setSending(true);
-    setTimeout(() => { setSending(false); setSent(true); }, 1200);
+    if (!form.name || !form.email || !form.message) return;
+    setSending(true); setError('');
+    try {
+      await apiPost('/api/contact', {
+        kind: 'partner',
+        name: form.name, email: form.email,
+        organisation: form.org, subject: form.type, message: form.message,
+      });
+      setSent(true);
+    } catch {
+      setError("Couldn't submit right now. Please try again, or email schools@akoro.app.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const inputStyle = { width: '100%', padding: '13px 16px', borderRadius: 10, border: `1.5px solid ${BORDER}`, fontSize: 15, fontFamily: '"DM Sans",sans-serif', color: INK, outline: 'none', background: '#fff', boxSizing: 'border-box' };
@@ -297,6 +311,7 @@ export default function PartnersPage() {
                   <textarea value={form.message} onChange={set('message')} rows={4} placeholder="What are you hoping to achieve through this partnership?"
                     style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
                 </div>
+                {error && <p style={{ color: '#DC2626', fontSize: 13.5, margin: 0, fontWeight: 600 }}>{error}</p>}
                 <button type="submit" disabled={sending}
                   style={{ padding: '14px', background: sending ? '#9E8CFF' : B, color: '#fff', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: sending ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   {sending ? 'Sending…' : (<>Submit application <ArrowRight size={17} /></>)}

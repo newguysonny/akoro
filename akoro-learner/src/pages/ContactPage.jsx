@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiPost } from '../services/api.js';
 import { SiteNav, SiteFooter } from '../components/SiteChrome.jsx';
 import {
   Send, MessageCircle, CheckCircle2,
@@ -42,17 +43,26 @@ export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', organisation: '', message: '' });
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.message || !topic) return;
-    setSending(true);
-    // In production wire to your contact API / email service
-    await new Promise(r => setTimeout(r, 1200));
-    setSending(false);
-    setSent(true);
+    setSending(true); setError('');
+    try {
+      await apiPost('/api/contact', {
+        kind: 'contact',
+        name: form.name, email: form.email,
+        organisation: form.organisation, subject: topic, message: form.message,
+      });
+      setSent(true);
+    } catch {
+      setError("Couldn't send your message. Please try again, or email hello@akoro.app.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const inputStyle = {
@@ -174,6 +184,8 @@ export default function ContactPage() {
                     <textarea required rows={5} value={form.message} onChange={set('message')} placeholder="Tell us what's on your mind…"
                       style={{ ...inputStyle, resize: 'vertical', minHeight: 130, lineHeight: 1.6 }} />
                   </div>
+
+                  {error && <p style={{ color: '#DC2626', fontSize: 13.5, margin: 0, fontWeight: 600 }}>{error}</p>}
 
                   <button type="submit" disabled={sending || !topic}
                     style={{ background: (!topic || sending) ? '#D1D5DB' : B, color: '#fff', padding: '14px 28px', borderRadius: 12, border: 'none', cursor: (!topic || sending) ? 'not-allowed' : 'pointer', fontSize: 15, fontWeight: 800, fontFamily: "'Nunito', sans-serif", transition: 'background .2s, box-shadow .2s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, boxShadow: (!topic || sending) ? 'none' : `0 4px 14px ${B}45` }}>

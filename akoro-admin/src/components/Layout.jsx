@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -34,6 +34,7 @@ const NAV = [
   { to: '/reports',          icon: FileBarChart,    label: 'Reports' },
   { to: '/content/blog',     icon: FileText,        label: 'Blog' },
   { to: '/content/careers',  icon: Briefcase,       label: 'Careers' },
+  { to: '/messages',         icon: Inbox,           label: 'Messages' },
   { to: '/notifications',    icon: Bell,            label: 'Notifications' },
   { to: '/settings',         icon: Settings,        label: 'Settings' },
 ];
