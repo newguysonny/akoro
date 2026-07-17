@@ -70,13 +70,32 @@ const router = Router();
 // live? If this reports redis:down, seeded 'live' battles will render their
 // first question but never advance (grading/reveal runs in the worker).
 router.get("/health", async (req, res) => {
+  const out = { socket: !!global.io };
+
+  // Redis / queue
   try {
     const q = await getBattleQueue();
-    const counts = await q.getJobCounts("active", "waiting", "delayed", "completed", "failed");
-    res.json({ ok: true, redis: "up", queue: counts, socket: !!global.io });
-  } catch (err) {
-    res.status(200).json({ ok: false, redis: "down", socket: !!global.io, error: err.message });
-  }
+    out.redis = "up";
+    out.queue = await q.getJobCounts("active", "waiting", "delayed", "completed", "failed");
+  } catch (err) { out.redis = "down"; out.queueError = err.message; }
+
+  // Data coverage — do live battles actually have questions to render?
+  try {
+    const { data: liveB } = await db.from("battles").select("id, title, total_questions, battle_type").eq("status", "live").limit(100);
+    const ids = (liveB ?? []).map((b) => b.id);
+    const { data: qrows } = ids.length ? await db.from("battle_questions").select("battle_id").in("battle_id", ids) : { data: [] };
+    const withQ = new Set((qrows ?? []).map((r) => r.battle_id));
+    const missing = (liveB ?? []).filter((b) => !withQ.has(b.id));
+    out.battles = {
+      live: ids.length,
+      withQuestions: ids.length - missing.length,
+      missingQuestions: missing.length,
+      sampleMissing: missing.slice(0, 3).map((b) => ({ id: b.id, title: b.title })),
+      sampleReady:   (liveB ?? []).filter((b) => withQ.has(b.id)).slice(0, 3).map((b) => ({ id: b.id, title: b.title, type: b.battle_type })),
+    };
+  } catch (err) { out.battlesError = err.message; }
+
+  res.json({ ok: out.redis === "up", ...out });
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
