@@ -19,6 +19,7 @@ import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
 import {
   initializeTransaction,
   verifyTransaction,
@@ -79,7 +80,7 @@ router.post("/templates", authenticateToken, requireRole(["instructor", "teacher
     let bodyMarkdown = req.body.bodyMarkdown || null;
     try {
       const resp = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: 2000,
         messages: [{
           role: "user",

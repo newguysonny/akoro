@@ -8,6 +8,7 @@ import { z }              from "zod";
 import { TaskOutputDB }   from "../lib/db.js";
 
 import { v4 as uuid }     from "uuid";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
 // This is the shape the Anthropic API sees.
@@ -127,7 +128,7 @@ Respond with a JSON array only — no markdown, no preamble:
 ]`;
 
   const response = await anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      ANTHROPIC_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });

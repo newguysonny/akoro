@@ -12,6 +12,7 @@ import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { sendBulkNotifications } from "../lib/notifications.js";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -245,7 +246,7 @@ Respond with JSON only — no markdown fences, no commentary:
 Note: "options" is only required for mcq type. Omit it for true_false and short_answer.`;
 
   const response = await anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      ANTHROPIC_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });

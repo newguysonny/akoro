@@ -6,6 +6,7 @@ import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
 import { resolveMcq }           from "./create-battle.js";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,7 +15,7 @@ async function generatePeerQuestions(topic, subject, difficulty, count = 8) {
   const prompt = `Generate exactly ${count} ${difficulty} multiple-choice questions on "${topic}" (${subject}) for a 1v1 student battle.
 Respond with JSON only (no fences): {"questions":[{"question":"...","options":["A ...","B ...","C ...","D ..."],"answer":"<full text of correct option>","concept":"...","points":35}]}`;
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6", max_tokens: 3000,
+    model: ANTHROPIC_MODEL, max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });
   const raw = response.content.filter((b) => b.type === "text").map((b) => b.text).join("").replace(/```json|```/g, "").trim();

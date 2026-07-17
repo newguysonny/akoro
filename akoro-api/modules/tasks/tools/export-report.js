@@ -7,6 +7,7 @@ import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { executeFetchStudentData } from "./fetch-student-data.js";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ Respond with JSON only — no markdown, no preamble:
 }`;
 
   const response = await anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      ANTHROPIC_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });

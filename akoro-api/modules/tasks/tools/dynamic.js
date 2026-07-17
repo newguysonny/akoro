@@ -14,9 +14,10 @@
 import Anthropic        from "@anthropic-ai/sdk";
 import db               from "../../../db.js";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = "claude-sonnet-4-6";
+const MODEL = ANTHROPIC_MODEL;
 
 // Fill {{var}} placeholders in a template string from the tool input.
 function fillTemplate(str, vars) {

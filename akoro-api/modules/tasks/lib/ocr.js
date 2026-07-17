@@ -6,6 +6,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import https     from "https";
 import http      from "http";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -42,7 +43,7 @@ async function fetchText(url) {
 
 async function extractWithVision(fileUrl, mimeType, fileName) {
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6", max_tokens: 4096,
+    model: ANTHROPIC_MODEL, max_tokens: 4096,
     messages: [{
       role: "user",
       content: [

@@ -14,6 +14,7 @@
 import express from "express";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
+import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
 const { Pool } = pkg;
 import OpenAI    from "openai";
 import Anthropic from "@anthropic-ai/sdk";
@@ -860,7 +861,7 @@ async function handleStudentChatWithTools(req, res, studentId, message, history,
     while (iterations < MAX_LOOPS) {
       iterations++;
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6", max_tokens: 1024,
+        model: ANTHROPIC_MODEL, max_tokens: 1024,
         system: systemPrompt, tools: CHAT_TOOLS, messages,
       });
 

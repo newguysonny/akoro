@@ -13,9 +13,10 @@ import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 import { bullRedisOptions }                        from "../../lib/redisOptions.js";
+import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
 
 const MAX_TOOL_ITERATIONS = 20;
-const MODEL               = "claude-sonnet-4-6";
+const MODEL               = ANTHROPIC_MODEL;
 
 const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[tasks/worker Redis]", err.message));

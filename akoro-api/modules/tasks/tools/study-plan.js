@@ -5,6 +5,7 @@ import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
 import Anthropic                from "@anthropic-ai/sdk";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -89,7 +90,7 @@ Respond with a JSON array only — no markdown, no preamble:
 ]`;
 
   const response = await anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      ANTHROPIC_MODEL,
     max_tokens: 4096,
     messages:   [{ role: "user", content: prompt }],
   });

@@ -2,9 +2,10 @@
 // Small shared Anthropic helper for tool executors — keeps each tool concise.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = "claude-sonnet-4-6";
+const MODEL = ANTHROPIC_MODEL;
 
 export async function llmText(prompt, { system, maxTokens = 2048, model = MODEL } = {}) {
   const resp = await anthropic.messages.create({

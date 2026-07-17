@@ -53,6 +53,7 @@ import { Router }                         from "express";
 import Anthropic                          from "@anthropic-ai/sdk";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { ANTHROPIC_MODEL } from "../../lib/aiModel.js";
 
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
 let _battleQueue = null;
@@ -858,7 +859,7 @@ router.post("/courses/:courseId/questions-bank/generate", authenticateToken, req
 
   const client  = new Anthropic();
   const message = await client.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      ANTHROPIC_MODEL,
     max_tokens: 2000,
     system:     `You are an expert educator. Generate exactly ${count} multiple-choice questions about "${topic}" for ${subject} at ${difficulty} difficulty. Return ONLY valid JSON with no preamble or markdown. Format: { "questions": [{ "question_text": "...", "options": ["A","B","C","D"], "correct_answer_index": 0, "topic": "${topic}", "xp_value": 35 }] }`,
     messages:   [{ role: "user", content: `Generate ${count} ${difficulty} ${subject} questions about ${topic}.` }],

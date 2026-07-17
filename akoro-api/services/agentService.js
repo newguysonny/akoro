@@ -1,8 +1,8 @@
 /**
  * services/agentService.js  —  Piabam AI Agent Reply Generator
  *
- * Uses the Anthropic claude-sonnet-4-6 model to generate short, contextual
- * replies from a student's AI agent in the live class chat feed.
+ * Uses the shared Anthropic model (lib/aiModel.js) to generate short,
+ * contextual replies from a student's AI agent in the live class chat feed.
  *
  * Called by:
  *   - chat.js     POST /api/courses/:courseId/messages/agent
@@ -14,6 +14,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import db        from "../db.js";
+import { ANTHROPIC_MODEL } from "../lib/aiModel.js";
 
 const client = new Anthropic();   // reads ANTHROPIC_API_KEY from env
 
@@ -62,7 +63,7 @@ export const generateAgentReply = async ({ courseId, triggerMessage, agentName, 
     .single();
 
   const response = await client.messages.create({
-    model:      "claude-sonnet-4-6",
+    model:      ANTHROPIC_MODEL,
     max_tokens: 150,
     system: `You are ${agentName}, a student's AI learning companion in a ${course?.title ?? "class"} course (subject: ${course?.subject ?? "general"}).
 You are helpful, enthusiastic, and academically focused.
