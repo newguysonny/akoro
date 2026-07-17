@@ -6,14 +6,70 @@
  */
 
 import { Router }                         from "express";
+import db                                 from "../../db.js";
 import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";
-import { scheduleTask, cancelTask, triggerNow, getQueueHealth }        from "./scheduler.js";
+import { scheduleTask, cancelTask, triggerNow, getQueueHealth, taskQueue } from "./scheduler.js";
 import { extractIntent }                  from "./lib/context.js";
 import { createPresignedUpload }          from "./lib/storage.js";
 import { extractTextFromUrl }             from "./lib/ocr.js";
+import { ALL_TOOLS }                      from "./tools/index.js";
+import { ANTHROPIC_MODEL }                from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 
 const router = Router();
+
+// ─── GET /api/tasks/health — public diagnostic (no auth) ─────────────────────
+// A one-curl snapshot of whether the task system can actually run tasks:
+// worker/Redis connectivity, model config, tool registry, and recent
+// completion coverage (are created tasks producing outputs?). Mirrors the
+// battle /health endpoint. Declared BEFORE authenticateToken so it's curl-able.
+router.get("/health", async (req, res) => {
+  const out = { worker: { enabled: process.env.ENABLE_TASK_WORKER !== "false" } };
+
+  // Redis / queue — can the worker pick up jobs?
+  try {
+    out.queue = await taskQueue.getJobCounts("active", "waiting", "delayed", "completed", "failed");
+    out.redis = "up";
+  } catch (err) { out.redis = "down"; out.queueError = err.message; }
+
+  // Anthropic config — the model id every tool runs on, and whether a key is set.
+  out.anthropic = { model: ANTHROPIC_MODEL, keyConfigured: !!process.env.ANTHROPIC_API_KEY };
+
+  // Tool registry — how many tools loaded, and every output_type they emit
+  // (must all exist in the output_type enum or their inserts fail).
+  out.tools = { loaded: ALL_TOOLS.length };
+
+  // Recent coverage — of tasks finished in the last 24h, how many delivered
+  // at least one output? The real "are tasks working" signal.
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await db.from("tasks")
+      .select("id, status, created_at")
+      .gte("created_at", since).order("created_at", { ascending: false }).limit(500);
+    const rows = recent ?? [];
+    const by = (s) => rows.filter((t) => t.status === s).length;
+    const doneIds = rows.filter((t) => t.status === "done").map((t) => t.id);
+    const { data: orows } = doneIds.length
+      ? await db.from("task_outputs").select("task_id").in("task_id", doneIds)
+      : { data: [] };
+    const withOut = new Set((orows ?? []).map((r) => r.task_id));
+    out.tasks = {
+      last24h:            rows.length,
+      done:               by("done"),
+      failed:             by("failed"),
+      running:            by("running"),
+      queued:             by("queued"),
+      pending:            by("pending"),
+      doneWithOutputs:    doneIds.filter((id) => withOut.has(id)).length,
+      doneWithoutOutputs: doneIds.filter((id) => !withOut.has(id)).length,
+      recentFailureIds:   rows.filter((t) => t.status === "failed").slice(0, 5).map((t) => t.id),
+    };
+  } catch (err) { out.tasksError = err.message; }
+
+  const healthy = out.redis === "up" && out.worker.enabled && out.anthropic.keyConfigured;
+  res.json({ ok: healthy, ...out });
+});
+
 router.use(authenticateToken);
 
 // ═══════════════════════════════════════════════════════════════════════════════
