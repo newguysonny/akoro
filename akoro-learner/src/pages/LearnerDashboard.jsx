@@ -266,9 +266,13 @@ export default function LearnerDashboard() {
                   : bySubject.filter(s=>s.type==="agent");
 
   // Agent sub-tab data
+  // Prefer the richer /teaching/sessions data; fall back to the agent-type
+  // items from /student/sessions (same source that drives the Agent tab count)
+  // so the Sessions sub-tab is never empty when the count says there are some.
+  const agentSessionsBase = agentSessions.length ? agentSessions : sessions.filter(s=>s.type==="agent");
   const agentSessionsFiltered = agentSubjectFilter==="all"
-    ? agentSessions
-    : agentSessions.filter(s=>s.subject===agentSubjectFilter);
+    ? agentSessionsBase
+    : agentSessionsBase.filter(s=>s.subject===agentSubjectFilter);
   const agentRevisions = agentSubjectFilter==="all"
     ? decayAlerts
     : decayAlerts.filter(a=>a.subject===agentSubjectFilter);

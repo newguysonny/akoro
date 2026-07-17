@@ -104,7 +104,11 @@ router.get("/sessions", authenticateToken, async (req, res) => {
       history:"english", geography:"english" };
 
     const sessions = (rows || []).map((s, i) => {
-      const subtopics    = JSON.parse(s.subtopics || "[]");
+      // subtopics is JSONB — the client returns it already parsed (array).
+      // Only parse when it comes back as a string; never JSON.parse an array.
+      let subtopics = s.subtopics;
+      if (typeof subtopics === "string") { try { subtopics = JSON.parse(subtopics); } catch { subtopics = []; } }
+      if (!Array.isArray(subtopics)) subtopics = [];
       const topicConf    = confByTopic[s.topic] || [];
       const avgConf      = topicConf.length
         ? Math.round(topicConf.reduce((sum, c) => sum + c.confidence, 0) / topicConf.length)
