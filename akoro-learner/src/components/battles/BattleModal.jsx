@@ -158,6 +158,9 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const me  = participants.find((p) => p.userId === myId);
   const A   = me || sorted[0];
   const Bp  = participants.find((p) => p.userId !== myId) || sorted[1];
+  const teacher  = participants.find((p) => p.role === 'teacher');
+  const students = participants.filter((p) => p !== teacher).sort((a, b) => b.score - a.score || b.hp - a.hp);
+  const curOrder = question?.questionOrder ?? (answered.length ? Math.max(...answered.map((a) => a.order)) : 0);
 
   const answer = async (idx) => {
     if (selected !== null || reveal || !question || answering || !iAmParticipant) return;
@@ -199,6 +202,34 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
 
   const AgentPill = ({ p, big }) => (
     <div style={{ width: big ? 52 : 42, height: big ? 52 : 42, borderRadius: '50%', background: `${p?.agentColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: big ? 26 : 22, flexShrink: 0, boxShadow: `0 0 16px ${p?.agentColor}66` }}>{p?.agentEmoji}</div>
+  );
+
+  const TimerRing = () => (
+    <div style={{ position: 'relative', width: 34, height: 34 }}>
+      <svg viewBox="0 0 36 36" style={{ width: 34, height: 34, transform: 'rotate(-90deg)' }}>
+        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,.10)" strokeWidth="3" />
+        <circle cx="18" cy="18" r="15" fill="none" stroke={timerColor} strokeWidth="3" strokeDasharray="94.2" strokeDashoffset={94.2 * (1 - timerPct / 100)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset .9s linear' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: timerColor }}>{timer}</div>
+    </div>
+  );
+
+  const StudentRow = ({ p, rank }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, background: p.userId === myId ? 'rgba(232,136,74,.15)' : 'rgba(255,255,255,.04)', border: p.userId === myId ? '1px solid rgba(232,136,74,.35)' : '1px solid rgba(255,255,255,.07)' }}>
+      <span style={{ fontSize: 12, width: 18, textAlign: 'center' }}>{rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank + 1}</span>
+      <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${p.agentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{p.agentEmoji}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.agentName}</span>
+          {p.userId === myId && <span style={{ fontSize: 8, fontWeight: 900, padding: '1px 5px', borderRadius: 20, background: 'rgba(232,136,74,.30)', color: '#E8884A' }}>YOU</span>}
+          {p.streak >= 2 && <span style={{ fontSize: 9, color: '#FB923C' }}>🔥{p.streak}</span>}
+        </div>
+        <div style={{ height: 4, marginTop: 3, background: 'rgba(255,255,255,.12)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${p.hp}%`, background: p.hp > 50 ? GREEN : p.hp > 25 ? GOLD : RED, borderRadius: 2, transition: 'width .5s' }} />
+        </div>
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'right' }}>{p.score}</div>
+    </div>
   );
 
   return (
@@ -259,56 +290,60 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
               {/* Scoreboard */}
               {(isLive || isCompleted) && (
                 <div style={panel}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.45)', letterSpacing: .4 }}>{isCompleted ? 'FINAL STANDINGS' : isClassroom ? 'LIVE SCOREBOARD' : 'HEAD TO HEAD'}</span>
-                    {isLive && question && !reveal && (
-                      <div style={{ position: 'relative', width: 34, height: 34 }}>
-                        <svg viewBox="0 0 36 36" style={{ width: 34, height: 34, transform: 'rotate(-90deg)' }}>
-                          <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,.10)" strokeWidth="3" />
-                          <circle cx="18" cy="18" r="15" fill="none" stroke={timerColor} strokeWidth="3" strokeDasharray="94.2" strokeDashoffset={94.2 * (1 - timerPct / 100)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset .9s linear' }} />
-                        </svg>
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: timerColor }}>{timer}</div>
-                      </div>
-                    )}
-                  </div>
-
                   {sorted.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '18px 0', color: 'rgba(255,255,255,.35)', fontSize: 12.5 }}>Waiting for participants…</div>
                   ) : isClassroom ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {sorted.map((p, rank) => (
-                        <div key={p.userId} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, background: p.userId === myId ? 'rgba(232,136,74,.15)' : 'rgba(255,255,255,.04)', border: p.userId === myId ? '1px solid rgba(232,136,74,.35)' : '1px solid rgba(255,255,255,.07)' }}>
-                          <span style={{ fontSize: 12, width: 18, textAlign: 'center' }}>{rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank + 1}</span>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${p.agentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{p.agentEmoji}</div>
+                    <>
+                      {/* Teacher card */}
+                      {teacher && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 12, background: 'rgba(124,58,237,.16)', border: '1px solid rgba(124,58,237,.32)', marginBottom: 12 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', background: `${teacher.agentColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, boxShadow: `0 0 16px ${teacher.agentColor}66` }}>{teacher.agentEmoji}</div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                              <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.agentName}</span>
-                              {p.userId === myId && <span style={{ fontSize: 8, fontWeight: 900, padding: '1px 5px', borderRadius: 20, background: 'rgba(232,136,74,.30)', color: '#E8884A' }}>YOU</span>}
-                              {p.streak >= 2 && <span style={{ fontSize: 9, color: '#FB923C' }}>🔥{p.streak}</span>}
-                            </div>
-                            <div style={{ height: 4, marginTop: 3, background: 'rgba(255,255,255,.12)', borderRadius: 2, overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${p.hp}%`, background: p.hp > 50 ? GREEN : p.hp > 25 ? GOLD : RED, borderRadius: 2, transition: 'width .5s' }} />
-                            </div>
+                            <div style={{ color: '#fff', fontWeight: 800, fontSize: 13.5 }}>{teacher.agentName}</div>
+                            <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 7px', borderRadius: 20, background: 'rgba(124,58,237,.35)', color: '#C4B5FD' }}>TEACHER</span>
                           </div>
-                          <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'right' }}>{p.score}</div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 24, fontWeight: 900, color: teacher.agentColor }}>{teacher.score}</div>
+                            <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,.35)' }}>{teacher.hp} HP</div>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                      )}
+                      {/* vs N student agents + timer + question count */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 4px' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.40)' }}>vs {students.length} student agent{students.length === 1 ? '' : 's'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {isLive && question && !reveal && <TimerRing />}
+                          {totalQ > 0 && <span style={{ fontSize: 10, color: 'rgba(255,255,255,.35)' }}>Q{curOrder}/{totalQ}</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {students.map((p, rank) => <StudentRow key={p.userId} p={p} rank={rank} />)}
+                      </div>
+                    </>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      {[A, Bp].map((ag, idx) => ag && (
-                        <div key={idx} style={{ flex: 1, textAlign: 'center' }}>
-                          <AgentPill p={ag} big />
-                          <div style={{ color: '#fff', fontWeight: 800, fontSize: 12.5, marginTop: 6 }}>{ag.agentName}{ag.userId === myId ? '' : ''}</div>
-                          {ag.userId === myId && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: 'rgba(255,255,255,.12)', color: '#fff' }}>YOU</span>}
-                          <div style={{ fontSize: 30, fontWeight: 900, marginTop: 4, color: ag.agentColor }}>{ag.score}</div>
-                          <div style={{ marginTop: 5 }}>
-                            <div style={{ height: 8, background: 'rgba(255,255,255,.12)', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: `${ag.hp}%`, background: ag.hp > 50 ? GREEN : ag.hp > 25 ? GOLD : RED, borderRadius: 4, transition: 'width .5s' }} /></div>
-                            <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,.35)', marginTop: 2 }}>{ag.hp} HP</div>
-                          </div>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,.45)', letterSpacing: .4 }}>{isCompleted ? 'FINAL STANDINGS' : 'HEAD TO HEAD'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {totalQ > 0 && <span style={{ fontSize: 10, color: 'rgba(255,255,255,.35)' }}>Q{curOrder}/{totalQ}</span>}
+                          {isLive && question && !reveal && <TimerRing />}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        {[A, Bp].map((ag, idx) => ag && (
+                          <div key={idx} style={{ flex: 1, textAlign: 'center' }}>
+                            <AgentPill p={ag} big />
+                            <div style={{ color: '#fff', fontWeight: 800, fontSize: 12.5, marginTop: 6 }}>{ag.agentName}</div>
+                            {ag.userId === myId && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: 'rgba(255,255,255,.12)', color: '#fff' }}>YOU</span>}
+                            <div style={{ fontSize: 30, fontWeight: 900, marginTop: 4, color: ag.agentColor }}>{ag.score}</div>
+                            <div style={{ marginTop: 5 }}>
+                              <div style={{ height: 8, background: 'rgba(255,255,255,.12)', borderRadius: 4, overflow: 'hidden' }}><div style={{ height: '100%', width: `${ag.hp}%`, background: ag.hp > 50 ? GREEN : ag.hp > 25 ? GOLD : RED, borderRadius: 4, transition: 'width .5s' }} /></div>
+                              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,.35)', marginTop: 2 }}>{ag.hp} HP</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               )}

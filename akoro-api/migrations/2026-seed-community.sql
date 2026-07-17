@@ -99,4 +99,42 @@ BEGIN
     END IF;
 
   END LOOP;
+
+  -- ── One classroom demo battle: a teacher agent vs the whole class ──
+  --     (so the modal's "TEACHER · vs N student agents · Qx/5" view has data)
+  BEGIN
+    SELECT id INTO cid FROM public.courses WHERE slug LIKE 'demo-fmaths-%' ORDER BY created_at NULLS LAST, id LIMIT 1;
+    IF cid IS NOT NULL AND a1.id IS NOT NULL THEN
+      SELECT id INTO bid FROM public.battles WHERE course_id = cid AND title = 'Demo Class Battle · Calculus Championship';
+      IF bid IS NULL THEN
+        INSERT INTO public.battles (course_id, battle_type, title, description, subject, difficulty, xp_prize, xp_pool, time_limit_seconds, total_questions, status, peak_viewers, expires_at, created_by)
+        SELECT cid, 'classroom', 'Demo Class Battle · Calculus Championship', 'Teacher agent challenges the class', 'Further Mathematics', 'hard', 500, 500, 600, 5, 'live', 21, now() + interval '1 day', c.instructor_id
+        FROM public.courses c WHERE c.id = cid
+        RETURNING id INTO bid;
+        -- Teacher agent
+        INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp)
+        VALUES (bid, a1.user_id, a1.id, 'teacher', 9, 64);
+        -- Up to 6 student agents (any other agents, distinct users)
+        INSERT INTO public.battle_participants (battle_id, user_id, agent_id, role, score, hp)
+        SELECT bid, s.user_id, s.id, 'participant',
+               (ARRAY[5,7,4,6,3,9])[s.rn], (ARRAY[85,70,90,78,94,62])[s.rn]
+        FROM (
+          SELECT ua.id, ua.user_id, row_number() OVER (ORDER BY ua.created_at NULLS LAST) AS rn
+          FROM public.user_agents ua
+          WHERE ua.id <> a1.id AND ua.user_id <> a1.user_id
+        ) s
+        WHERE s.rn <= 6;
+      END IF;
+      IF bid IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.battle_questions WHERE battle_id = bid) THEN
+        INSERT INTO public.battle_questions (battle_id, question_order, question_text, options_json, correct_answer_index, topic, subject, xp_value, time_limit_seconds) VALUES
+          (bid, 1, 'Derivative of ln(x)?',            '["x","1/x","e^x","ln(x)/x"]',                          1, 'Differentiation', 'Further Mathematics', 30, 15),
+          (bid, 2, 'What is d/dx of sin(3x)?',        '["cos(3x)","3cos(3x)","-3cos(3x)","3sin(3x)"]',        1, 'Chain Rule',      'Further Mathematics', 35, 15),
+          (bid, 3, 'Integrate: 3x^2 dx',              '["6x + C","x^3 + C","x^3","3x^3 + C"]',                 1, 'Integration',     'Further Mathematics', 30, 15),
+          (bid, 4, 'lim(x -> 0) sin(x)/x = ?',        '["0","Infinity","1","Undefined"]',                     2, 'Limits',          'Further Mathematics', 35, 15),
+          (bid, 5, 'What is d/dx of e^(2x)?',         '["e^(2x)","2e^x","2e^(2x)","e^x"]',                     2, 'Differentiation', 'Further Mathematics', 40, 15);
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'classroom demo battle skipped: %', SQLERRM;
+  END;
 END $$;
