@@ -323,6 +323,15 @@ export default function LearnerDashboard() {
     }
   };
 
+  const handleDeclineChallenge = async () => {
+    if (!selectedChallenge) return;
+    const c = selectedChallenge;
+    setSelectedChallenge(null);
+    setAcceptedIds(prev => new Set([...prev, c.id]));   // hide it from the pending list
+    try { await apiPost(`/api/battle/challenges/${c.id}/decline`, {}); }
+    catch { /* non-fatal — the challenger just won't get the decline notice */ }
+  };
+
   const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
   const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
 
@@ -647,7 +656,7 @@ export default function LearnerDashboard() {
           />
         )}
 
-        {selectedChallenge && <ChallengeModal challenge={selectedChallenge} onAccept={handleAcceptChallenge} onDecline={()=>setSelectedChallenge(null)} onClose={()=>setSelectedChallenge(null)}/>}
+        {selectedChallenge && <ChallengeModal challenge={selectedChallenge} onAccept={handleAcceptChallenge} onDecline={handleDeclineChallenge} onClose={()=>setSelectedChallenge(null)}/>}
         {/* AssessmentRoom — proctored Sergeant assessment (TF.js + WS gateway) */}
         {assessSession && (
           <AssessmentRoom

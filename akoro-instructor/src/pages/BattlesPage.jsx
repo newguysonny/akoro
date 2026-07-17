@@ -4,6 +4,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, StatusPill, Badge, Toast, Skeleton } from '../components/Primitives.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
+import QuestionBankModal from '../components/QuestionBankModal.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 
@@ -150,6 +151,7 @@ export default function BattlesPage() {
   const [battles, setBattles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal,   setModal]   = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
   const [toast,   setToast]   = useState(null);
   const [filter,  setFilter]  = useState('all');
 
@@ -213,9 +215,14 @@ export default function BattlesPage() {
       title="Battles"
       subtitle="Create and manage quiz battles for your students"
       action={
-        <Btn size="sm" onClick={() => setModal(true)}>
-          <Plus size={14} /> New Battle
-        </Btn>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn size="sm" variant="secondary" onClick={() => setBankOpen(true)}>
+            <Target size={14} /> Question Bank
+          </Btn>
+          <Btn size="sm" onClick={() => setModal(true)}>
+            <Plus size={14} /> New Battle
+          </Btn>
+        </div>
       }
     >
       {/* Stats row */}
@@ -272,6 +279,7 @@ export default function BattlesPage() {
       )}
 
       <NewBattleModal open={modal} onClose={() => setModal(false)} onSubmit={handleCreate} />
+      <QuestionBankModal open={bankOpen} onClose={() => setBankOpen(false)} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );

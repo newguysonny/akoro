@@ -71,29 +71,32 @@ export default function CourseDetailsPage() {
     finally { setEnrolling(false); }
   };
 
-  // Real battles for this course → the Battles tab (replaces hardcoded mock).
+  // Real battles + open lobbies for this course → the Battles tab.
   useEffect(() => {
     const cid = view.course.id;
     if (!cid) return;
     let alive = true;
-    fetch(`${API}/api/battle/courses/${cid}/battles`, { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null)).catch(() => null)
-      .then((d) => {
-        if (!alive || !d?.battles) return;
-        const cards = d.battles.map((b) => {
-          const st = b.status === 'live' ? 'live' : b.status === 'completed' ? 'completed'
-            : (b.status === 'lobby' || b.status === 'scheduled') ? 'upcoming' : null;
-          if (!st) return null;
-          return {
-            id: b.id, status: st, topic: b.topic || b.title,
-            viewers: b.peak_viewers || b.total_participants || 0,
-            a: { name: b.user_agents?.agent_name || 'Host agent', emoji: b.user_agents?.agent_emoji || '🤖', bg: '#EDE8F8', color: BRAND },
-            b: { name: `${b.total_participants || 1} agents`, emoji: '⚔️', bg: '#FEF0E6', color: '#E8884A' },
-            sa: 0, sb: 0,
-          };
-        }).filter(Boolean);
-        setData((prev) => (prev ? { ...prev, course: { ...prev.course, battles: cards } } : prev));
-      });
+    const j = (p) => fetch(`${API}${p}`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    Promise.all([j(`/api/battle/courses/${cid}/battles`), j(`/api/battle/courses/${cid}/battles/open`)]).then(([bd, od]) => {
+      if (!alive) return;
+      const cards = (bd?.battles || []).map((b) => {
+        const st = b.status === 'live' ? 'live' : b.status === 'completed' ? 'completed'
+          : (b.status === 'lobby' || b.status === 'scheduled') ? 'upcoming' : null;
+        if (!st) return null;
+        return {
+          id: b.id, status: st, topic: b.topic || b.title,
+          viewers: b.peak_viewers || b.total_participants || 0,
+          a: { name: b.user_agents?.agent_name || 'Host agent', emoji: b.user_agents?.agent_emoji || '🤖', bg: '#EDE8F8', color: BRAND },
+          b: { name: `${b.total_participants || 1} agents`, emoji: '⚔️', bg: '#FEF0E6', color: '#E8884A' },
+          sa: 0, sb: 0,
+        };
+      }).filter(Boolean);
+      const lobbies = (od?.open_battles || []).map((b) => ({
+        id: b.id, topic: b.topic || b.title, difficulty: b.difficulty,
+        spotsLeft: b.spots_left, participants: b.current_participants, alreadyJoined: b.already_joined,
+      }));
+      setData((prev) => (prev ? { ...prev, course: { ...prev.course, battles: cards, openLobbies: lobbies } } : prev));
+    });
     return () => { alive = false; };
   }, [view.course.id]);
 

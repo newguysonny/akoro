@@ -51,12 +51,36 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
 
   const pushLog = (msg, ts) => setLog((prev) => [...prev.slice(-80), { msg, ts: ts || new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }]);
 
-  // Initial state snapshot (scoreboard + status).
+  // Initial snapshot + reconnect recovery: pull state, past log, and (for a
+  // live battle) the current question so a mid-battle refresh restores the view
+  // instead of showing a blank arena until the next socket tick.
   useEffect(() => {
     if (!battleId) return;
-    apiGet(`${B}/battles/${battleId}/state`)
-      .then((d) => { setStatus(d.status); setParticipants((d.participants || []).map(mapStateP)); })
-      .catch(() => {});
+    let alive = true;
+    (async () => {
+      const [st, qd, lg] = await Promise.all([
+        apiGet(`${B}/battles/${battleId}/state`).catch(() => null),
+        apiGet(`${B}/battles/${battleId}/questions`).catch(() => null),
+        apiGet(`${B}/battles/${battleId}/log`).catch(() => null),
+      ]);
+      if (!alive) return;
+      if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); }
+      if (lg?.logs?.length) {
+        setLog(lg.logs.map((e) => ({ msg: e.message, ts: e.created_at ? new Date(e.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' })));
+      }
+      if (st?.status === 'live' && qd?.questions?.length) {
+        const active = qd.questions.find((q) => q.correctAnswerIndex == null); // not yet revealed
+        if (active) {
+          setQuestion((prev) => prev || {
+            questionOrder: active.questionOrder, questionText: active.questionText,
+            options: active.options, topic: active.topic, xpValue: active.xpValue, timeLimitMs: 15000,
+          });
+          qStartRef.current = Date.now();
+          if (active.myAnswer != null) { setSelected(active.myAnswer); setMyResult({ is_correct: active.isCorrect, xp_gained: active.xpGained || 0 }); }
+        }
+      }
+    })();
+    return () => { alive = false; };
   }, [battleId]);
 
   // Completed → final scoreboard.

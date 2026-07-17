@@ -8,7 +8,7 @@ import {
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
   Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video,
 } from 'lucide-react';
-import { API } from '../../services/api.js';
+import { API, apiPost } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
 import BattleModal from '../../components/battles/BattleModal.jsx';
 
@@ -409,10 +409,24 @@ function BattleCard({ b, onOpen }) {
   );
 }
 
-function BattlesSection({ battles: real, leaderboard: realLb }) {
+function BattlesSection({ battles: real, leaderboard: realLb, lobbies }) {
   const BATTLE_LIST = real?.length ? real : BATTLES;
   const [filter, setFilter] = useState('all');
   const [openBattle, setOpenBattle] = useState(null);
+  const [joining, setJoining] = useState(null);
+  const [lobbyState, setLobbyState] = useState(null);
+  const lobbyList = lobbyState ?? lobbies ?? [];
+
+  const joinLobby = async (lb) => {
+    if (joining) return;
+    setJoining(lb.id);
+    try {
+      await apiPost(`/api/battle/battles/${lb.id}/join`, {});
+      setLobbyState((prev) => (prev ?? lobbies ?? []).map((x) => x.id === lb.id ? { ...x, alreadyJoined: true } : x));
+      setOpenBattle({ id: lb.id, status: 'lobby', topic: lb.topic });
+    } catch { /* full / already in / expired — surfaced by disabled state */ }
+    finally { setJoining(null); }
+  };
   const live = BATTLE_LIST.filter((b) => b.status === 'live');
   const upcoming = BATTLE_LIST.filter((b) => b.status === 'upcoming');
   const completed = BATTLE_LIST.filter((b) => b.status === 'completed');
@@ -438,6 +452,25 @@ function BattlesSection({ battles: real, leaderboard: realLb }) {
           <div key={l} style={{ ...card, padding: 14 }}><div style={{ fontSize: 20, fontWeight: 900, color: c }}>{v}</div><div style={{ fontSize: 11.5, color: MUTED }}>{l}</div></div>
         ))}
       </div>
+      {/* Open lobbies — join to play */}
+      {lobbyList.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 900, letterSpacing: '.04em', textTransform: 'uppercase', color: '#E8884A' }}>Open lobbies · {lobbyList.length}</div>
+          <div className="cp-scroll" style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6 }}>
+            {lobbyList.map((lb) => (
+              <div key={lb.id} style={{ ...card, padding: 16, flex: '0 0 min(260px,80vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{lb.topic}</div>
+                <div style={{ fontSize: 11.5, color: MUTED }}>{lb.participants} in · {lb.spotsLeft} spot{lb.spotsLeft === 1 ? '' : 's'} left</div>
+                <Btn variant={lb.alreadyJoined ? 'outline' : 'primary'} size="sm" style={{ width: '100%', opacity: (joining === lb.id || lb.spotsLeft <= 0) ? .6 : 1 }}
+                  onClick={() => lb.alreadyJoined ? setOpenBattle({ id: lb.id, status: 'lobby', topic: lb.topic }) : joinLobby(lb)}>
+                  {joining === lb.id ? 'Joining…' : lb.alreadyJoined ? <><Swords size={12} />Enter lobby</> : lb.spotsLeft <= 0 ? 'Full' : <><Plus size={12} />Join battle</>}
+                </Btn>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filter */}
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 12, width: 'fit-content' }}>
         {[['all', 'All battles'], ['live', '🔴 Live now']].map(([k, l]) => (
@@ -682,7 +715,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       {tab === 'reviews' && <Reviews reviews={course.reviews} courseId={course.id} canReview={isEnrolled} />}
 
       {/* Always-on community sections */}
-      <BattlesSection battles={course.battles} leaderboard={course.leaderboard} />
+      <BattlesSection battles={course.battles} leaderboard={course.leaderboard} lobbies={course.openLobbies} />
       <RevisionsSection revisions={course.revisions} />
     </div>
   );
@@ -748,7 +781,7 @@ function EnrolledVideoView({ course, modules }) {
       {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} />}
       {tab === 'about' && <div style={{ ...card, padding: 22 }}><p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7, margin: 0 }}>{course.description || 'A complete course covering the full syllabus with lessons and quizzes.'}</p></div>}
       {tab === 'reviews' && <Reviews reviews={course.reviews} courseId={course.id} canReview />}
-      {tab === 'battles' && <BattlesSection battles={course.battles} leaderboard={course.leaderboard} />}
+      {tab === 'battles' && <BattlesSection battles={course.battles} leaderboard={course.leaderboard} lobbies={course.openLobbies} />}
       {tab === 'revisions' && <RevisionsSection revisions={course.revisions} />}
     </div>
   );
