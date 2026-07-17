@@ -313,6 +313,10 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
     platform = data.provider;
   }
 
+  // Normalise the UI/session value ("meet") to the OAuth/token provider
+  // ("google") so token lookup and the switch below both resolve.
+  platform = toOAuth(platform);
+
   const accessToken = await ensureValidToken(userId, platform);
   const endTime     = new Date(new Date(startTime).getTime() + durationMin * 60_000).toISOString();
 

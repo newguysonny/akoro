@@ -62,6 +62,7 @@
     "2026-seed-school-passwords.sql",
     "2026-seed-demo-course.sql",
     "2026-seed-demo-live-classes.sql",
+    "2026-demo-live-meet.sql",
     "2026-seed-agent-covers.sql",
     "2026-seed-community.sql",
     "2026-seed-battle-questions.sql",
