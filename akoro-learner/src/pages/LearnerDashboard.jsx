@@ -662,13 +662,13 @@ export default function LearnerDashboard() {
 
         {selectedSession && <SessionSheet
           session={selectedSession}
-          decayAlert={decayBySession[selectedSession.id]||null}
+          decayAlert={decayBySession[selectedSession.id] || (selectedSession.decayAlertId && decayAlerts.find(a=>a.id===selectedSession.decayAlertId)) || null}
           agentProfile={agentProfile}
           onClose={()=>setSelectedSession(null)}
           onAssess={s => { setSelectedSession(null); setAssessSession(s); }}
           onStartTeach={s=>{
             setSelectedSession(null);
-            const decay = decayBySession[s.id];
+            const decay = decayBySession[s.id] || (s.decayAlertId && decayAlerts.find(a=>a.id===s.decayAlertId)) || null;
             if (decay) {
               // Revise Teaching → DecaySessionModal
               setDecaySession(decay);

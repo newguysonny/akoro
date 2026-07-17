@@ -9,17 +9,19 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
   const sc           = SUBJECT_COLORS[session.subject] || BRAND;
   const pri          = PRIORITY_CONFIG[session.priority] || { dot:BRAND, bg:`${BRAND}10`, color:BRAND, label:"Upcoming", pulse:false };
   const isDecay      = !!decayAlert;
-  const isContinuation = !isDecay && session.type === "agent" && !!session.hasHistory;
+  const isAgent      = !isDecay && session.type === "agent";
+  const isContinuation = isAgent && !!session.hasHistory;   // drives the CTA only
   const drop         = isDecay ? (decayAlert.prevConfidence||0) - (decayAlert.confidence||0) : 0;
 
   const ctaLabel = isDecay       ? t('sheet.revise_teaching')
     : isContinuation             ? t('sheet.continue_teaching')
+    : isAgent                    ? t('sheet.start_teaching')
     : session.type === "live"    ? t('sheet.join_live')
     :                              t('sheet.start_teaching');
 
   const ctaBg = isDecay
     ? `linear-gradient(135deg,${RED},#DC2626)`
-    : isContinuation
+    : isAgent
     ? `linear-gradient(135deg,#10B981,#059669)`
     : `linear-gradient(135deg,${sc},${sc}CC)`;
 
@@ -30,7 +32,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
 
       {/* Header */}
       <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:14 }}>
-        {(isDecay||isContinuation) ? (
+        {(isDecay||isAgent) ? (
           <div style={{ width:46,height:46,borderRadius:"50%",background:`${BRAND}15`,
             border:`2px solid ${isDecay?RED:GREEN}`,display:"flex",alignItems:"center",
             justifyContent:"center",fontSize:24,flexShrink:0 }}>
@@ -43,25 +45,25 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
           <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{session.title}</p>
           <p style={{ fontSize:11.5,color:"var(--ak-text-muted)",margin:0,fontWeight:600 }}>
             {isDecay ? `${agentProfile?.name||t('card.agent')} · ${t('card.needs_your_help')}`
-              : isContinuation ? `${agentProfile?.name||t('card.agent')} · ${session.daysSince||0}${t('sheet.days_ago_short')}`
+              : isAgent ? `${agentProfile?.name||t('card.agent')} · ${session.daysSince!=null?`${session.daysSince}${t('sheet.days_ago_short')}`:t('sheet.badge_continue')}`
               : `${session.tutor||""} · ${session.level||""}`}
           </p>
         </div>
-        <div style={{ background:isDecay?`${RED}12`:isContinuation?`${GREEN}12`:pri.bg,borderRadius:8,padding:"5px 12px",display:"flex",alignItems:"center",gap:5 }}>
-          {(isDecay||isContinuation||pri.pulse)&&<div style={{ width:6,height:6,borderRadius:"50%",background:isDecay?RED:isContinuation?GREEN:pri.dot,animation:"pulse-dot 1.2s ease-in-out infinite" }}/>}
-          <span style={{ fontSize:11,fontWeight:800,color:isDecay?RED:isContinuation?GREEN:pri.color }}>
-            {isDecay?t('sheet.badge_review'):isContinuation?t('sheet.badge_continue'):pri.label}
+        <div style={{ background:isDecay?`${RED}12`:isAgent?`${GREEN}12`:pri.bg,borderRadius:8,padding:"5px 12px",display:"flex",alignItems:"center",gap:5 }}>
+          {(isDecay||isAgent||pri.pulse)&&<div style={{ width:6,height:6,borderRadius:"50%",background:isDecay?RED:isAgent?GREEN:pri.dot,animation:"pulse-dot 1.2s ease-in-out infinite" }}/>}
+          <span style={{ fontSize:11,fontWeight:800,color:isDecay?RED:isAgent?GREEN:pri.color }}>
+            {isDecay?t('sheet.badge_review'):isAgent?t('sheet.badge_continue'):pri.label}
           </span>
         </div>
       </div>
 
       {/* Topic badge */}
       <div style={{ display:"inline-flex",alignItems:"center",gap:6,
-        background:isDecay?`${RED}10`:isContinuation?`${GREEN}10`:`${sc}12`,
-        border:`1px solid ${isDecay?`${RED}30`:isContinuation?`${GREEN}30`:`${sc}25`}`,
+        background:isDecay?`${RED}10`:isAgent?`${GREEN}10`:`${sc}12`,
+        border:`1px solid ${isDecay?`${RED}30`:isAgent?`${GREEN}30`:`${sc}25`}`,
         borderRadius:8,padding:"5px 12px",marginBottom:12 }}>
         <span style={{ fontSize:13 }}>{SUBJECTS[session.subject]?.icon}</span>
-        <span style={{ fontSize:12,fontWeight:700,color:isDecay?RED:isContinuation?GREEN:sc }}>{session.topic}</span>
+        <span style={{ fontSize:12,fontWeight:700,color:isDecay?RED:isAgent?GREEN:sc }}>{session.topic}</span>
       </div>
 
       {/* DECAY details */}
@@ -104,8 +106,8 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
         </div>
       </>)}
 
-      {/* CONTINUATION details */}
-      {isContinuation&&(<>
+      {/* AGENT session details */}
+      {isAgent&&(<>
         <div style={{ background:"#F0FDF4",borderRadius:14,border:"1px solid rgba(16,185,129,.20)",padding:"12px 14px",marginBottom:12 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
             <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('sheet.avg_confidence')}</span>
@@ -114,9 +116,11 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
           <div style={{ height:6,background:"var(--ak-tag-bg)",borderRadius:99,overflow:"hidden",marginBottom:6 }}>
             <div style={{ height:"100%",width:`${session.avgConfidence||session.progress||0}%`,background:`linear-gradient(90deg,${GREEN}88,${GREEN})`,borderRadius:99 }}/>
           </div>
-          <p style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
-            {t('sheet.last_taught')} {session.daysSince===0?t('sheet.today'):session.daysSince===1?t('sheet.yesterday'):`${session.daysSince||0} ${t('sheet.days_ago')}`}
-          </p>
+          {isContinuation&&(
+            <p style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
+              {t('sheet.last_taught')} {session.daysSince===0?t('sheet.today'):session.daysSince===1?t('sheet.yesterday'):`${session.daysSince||0} ${t('sheet.days_ago')}`}
+            </p>
+          )}
         </div>
         {session.subtopicList?.length>0&&(
           <div style={{ background:"var(--ak-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"11px 14px",marginBottom:12 }}>
@@ -145,7 +149,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
       </>)}
 
       {/* NORMAL session details */}
-      {!isDecay&&!isContinuation&&(<>
+      {!isDecay&&!isAgent&&(<>
         <p style={{ fontSize:14,color:"var(--ak-text-sec)",fontWeight:600,lineHeight:1.6,marginBottom:14 }}>{session.description}</p>
         {session.progress>0&&(
           <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>

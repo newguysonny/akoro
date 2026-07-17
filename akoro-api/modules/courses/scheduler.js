@@ -370,6 +370,7 @@ const ensureDemoSessions = async () => {
       rows.push({
         course_id: rapid.id, instructor_id: rapid.instructor_id,
         title: "⚡ Rapid Demo Session", topic: "Live flow test", subject: rapid.subject,
+        description: "A fast-turnaround demo session for the live-class flow. Join to see the lobby, the going-live transition, and the in-class experience end to end. We'll run through a short worked example and take questions live.",
         session_type: "class", platform: "zoom",
         scheduled_start: iso, scheduled_end: new Date(first + k * TEN_MIN_MS + TEN_MIN_MS).toISOString(),
         max_participants: 50, status: "scheduled",
@@ -398,6 +399,7 @@ const ensureDemoSessions = async () => {
       rows.push({
         course_id: c.id, instructor_id: c.instructor_id,
         title: `${c.title} — Daily Session`, topic: c.subject, subject: c.subject,
+        description: `Live ${c.subject} class with your instructor. This session covers the core ideas step by step, works through exam-style problems on the board, and leaves time for live Q&A. Come with your questions — bring a notebook and a calculator.`,
         session_type: "class", platform: "zoom",
         scheduled_start: iso, scheduled_end: new Date(t + HOUR_MS).toISOString(),
         max_participants: 50, status: "scheduled",

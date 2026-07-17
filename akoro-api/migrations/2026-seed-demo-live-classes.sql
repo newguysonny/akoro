@@ -96,9 +96,11 @@ BEGIN
       IF cdef.slug = 'demo-live-rapid' THEN
         -- Three sessions at 10-minute spacing so one goes live almost immediately.
         INSERT INTO public.live_sessions
-          (course_id, instructor_id, title, topic, subject, session_type, platform,
+          (course_id, instructor_id, title, description, topic, subject, session_type, platform,
            scheduled_start, scheduled_end, max_participants, current_participants, status)
-        SELECT cdef.id, keep_inst, '⚡ Rapid Demo Session', 'Live flow test', cdef.subject,
+        SELECT cdef.id, keep_inst, '⚡ Rapid Demo Session',
+               'A fast-turnaround demo session for the live-class flow. Join to see the lobby, the going-live transition, and the in-class experience end to end. We''ll run through a short worked example and take questions live.',
+               'Live flow test', cdef.subject,
                'class', 'zoom', s.start, s.start + interval '10 minutes', 50,
                floor(random() * 15)::int, 'scheduled'
         FROM (VALUES
@@ -109,9 +111,11 @@ BEGIN
       ELSE
         -- Daily cadence: today, tomorrow, day-after (all early evening-ish).
         INSERT INTO public.live_sessions
-          (course_id, instructor_id, title, topic, subject, session_type, platform,
+          (course_id, instructor_id, title, description, topic, subject, session_type, platform,
            scheduled_start, scheduled_end, max_participants, current_participants, status)
-        SELECT cdef.id, keep_inst, cdef.title || ' — Session', cdef.subject, cdef.subject,
+        SELECT cdef.id, keep_inst, cdef.title || ' — Session',
+               'Live ' || cdef.subject || ' class with your instructor. This session covers the core ideas step by step, works through exam-style problems on the board, and leaves time for live Q&A. Come with your questions — bring a notebook and a calculator.',
+               cdef.subject, cdef.subject,
                'class', 'zoom', s.start, s.start + interval '1 hour', 50,
                floor(random() * 30)::int, 'scheduled'
         FROM (VALUES
@@ -123,6 +127,20 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- ── Backfill descriptions on existing demo live sessions ─────────────
+-- Sessions seeded before this column was populated (and any topped up by
+-- the scheduler with a blank description) get a sensible learner-facing
+-- blurb so the session sheet isn't empty. Only fills blanks → idempotent.
+UPDATE public.live_sessions ls
+SET description = 'Live ' || COALESCE(c.subject, ls.subject, 'class') ||
+      ' class with your instructor. This session covers the core ideas step by step, '
+   || 'works through exam-style problems on the board, and leaves time for live Q&A. '
+   || 'Come with your questions — bring a notebook and a calculator.'
+FROM public.courses c
+WHERE ls.course_id = c.id
+  AND c.slug LIKE 'demo-%'
+  AND (ls.description IS NULL OR ls.description = '');
 
 -- ── Cover images for all demo courses (stable placeholder per slug). ──
 -- Loaded by the learner's browser directly, so it isn't subject to the
