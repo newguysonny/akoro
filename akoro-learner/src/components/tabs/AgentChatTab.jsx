@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { API,  apiGet, apiPost, apiPatch, streamPost } from '../../services/api.js';
+import { API,  apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
@@ -27,6 +27,17 @@ const QUICK_PROMPTS = [
   { text:"Explain Mitosis",      key:"agent.qp_explain" },
   { text:"Help with an essay",   key:"agent.qp_essay" },
 ];
+// Compact relative time for the sessions drawer ("now", "5m", "3h", "2d").
+const relTime = (iso) => {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60)     return "now";
+  if (s < 3600)   return `${Math.floor(s/60)}m`;
+  if (s < 86400)  return `${Math.floor(s/3600)}h`;
+  if (s < 604800) return `${Math.floor(s/86400)}d`;
+  return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+};
+
 const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
 const AGENT_CONFIG = { name: '', avatars: AGENT_AVATARS };
 
@@ -58,6 +69,88 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [tDesc,      setTDesc]      = useState("");
   const [tPriority,  setTPriority]  = useState("medium");
   const feedRef = useRef(null);
+
+  // ── Persistent chat sessions ───────────────────────────────────────────────
+  const [sessions,      setSessions]      = useState([]);
+  const [sessionId,     setSessionId]     = useState(null);
+  const [drawerOpen,    setDrawerOpen]    = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const sessionIdRef = useRef(null);
+  const creatingRef  = useRef(null);   // in-flight create → avoids double sessions
+  const setSession = (id) => { sessionIdRef.current = id; setSessionId(id); };
+
+  const CHAT_BASE = "/api/adaptive/chat";
+
+  const loadSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions`);
+      setSessions(d?.sessions ?? []);
+      return d?.sessions ?? [];
+    } catch { return []; }
+    finally { setSessionsLoading(false); }
+  };
+
+  // Lazily create a session on first message; concurrency-safe.
+  const ensureSession = async (firstText) => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    if (creatingRef.current) return creatingRef.current;
+    creatingRef.current = (async () => {
+      try {
+        const d = await apiPost(`${CHAT_BASE}/sessions`, { title: firstText || "" });
+        const id = d?.session?.id ?? null;
+        if (id) { setSession(id); setSessions(prev => [d.session, ...prev]); }
+        return id;
+      } catch { return null; }
+      finally { creatingRef.current = null; }
+    })();
+    return creatingRef.current;
+  };
+
+  const persistToSession = async (sid, role, text) => {
+    if (!sid || !text) return;
+    try { await apiPost(`${CHAT_BASE}/sessions/${sid}/messages`, { role, text }); }
+    catch { /* non-critical — chat still works in-memory */ }
+  };
+
+  const openSession = async (id) => {
+    setDrawerOpen(false);
+    if (id === sessionIdRef.current) return;
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages`);
+      const msgs = (d?.messages ?? []).map(m => ({
+        id: m.id,
+        from: m.role === "user" ? "me" : "agent",
+        text: m.text,
+        time: new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }));
+      setSession(id);
+      setMessages(msgs.length ? msgs : [greeting(agentName, agentEmoji)]);
+    } catch { /* keep current view on failure */ }
+  };
+
+  const newChat = () => {
+    setDrawerOpen(false);
+    setSession(null);
+    setMessages([greeting(agentName, agentEmoji)]);
+  };
+
+  const removeSession = async (id, e) => {
+    e?.stopPropagation?.();
+    setSessions(prev => prev.filter(s => s.id !== id));
+    try { await apiDelete(`${CHAT_BASE}/sessions/${id}`); } catch { /* ignore */ }
+    if (id === sessionIdRef.current) newChat();
+  };
+
+  // On mount: load the session list and resume the most recent conversation
+  // so a refresh doesn't lose the chat.
+  useEffect(() => {
+    (async () => {
+      const list = await loadSessions();
+      if (list.length && !sessionIdRef.current) openSession(list[0].id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask, getOutputs } = useTaskAPI();
 
@@ -150,25 +243,32 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     const userMsg={id:Date.now(),from:"me",text,time:ts};
     setMessages(prev=>[...prev,userMsg]); setLoading(true);
 
+    // Persist the user message (creating the session on first send). Errors are
+    // swallowed inside the helpers so the chat still works offline.
+    const sid = await ensureSession(text);
+    persistToSession(sid, "user", text);
+    // Show an agent bubble AND persist it, so a refresh reloads the same text.
+    const say = (txt) => { pushAgent(txt); persistToSession(sid, "agent", txt); };
+
     // Agentic task intents ("quiz me", "explain…", "study plan", "remind me",
     // "challenge…") run a real task and stream the result back into the chat.
     if(isTaskIntent(text)){
-      pushAgent(t('agent.error_working'));
+      pushAgent(t('agent.error_working'));   // transient status — not persisted
       try {
         const task = await createTask({ title: text, priority: "medium" });
         if(!task?.id) throw new Error("no task");
         const { outputs, failed, timedOut } = await waitForTask(task.id);
         if(failed){
-          pushAgent(t('agent.error_problem'));
+          say(t('agent.error_problem'));
         } else if(timedOut){
-          pushAgent(t('agent.error_timeout'));
+          say(t('agent.error_timeout'));
         } else {
           const texts = formatTaskOutputs(outputs);
-          if(texts.length) texts.forEach(pushAgent);
-          else pushAgent(t('agent.all_done_tasks'));
+          if(texts.length) texts.forEach(say);
+          else say(t('agent.all_done_tasks'));
         }
       } catch {
-        pushAgent(t('agent.error_task'));
+        say(t('agent.error_task'));
       }
       setLoading(false);
       return;
@@ -192,26 +292,30 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       ensureBubble();
       setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:m.text+chunk}:m));
     };
+    let finalReply="";
     try {
-      await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
+      finalReply = await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
         onDelta: appendDelta,
         onDone: ({ reply })=>{ if(reply!=null){ ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:reply}:m)); } },
       });
       if(!started){ // stream produced nothing — show fallback text
-        setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.fallback'),time:t2}]);
+        finalReply=t('agent.fallback');
+        setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
       }
     } catch {
       // Streaming failed before any token — try a normal request, then error.
       if(!started){
         try {
           const data = await apiPost("/api/adaptive/chat/tutor", payload);
-          const reply = data.reply || data.response || t('agent.fallback');
-          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:reply,time:t2}]);
+          finalReply = data.reply || data.response || t('agent.fallback');
+          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
         } catch {
+          finalReply="";
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
         }
       }
     }
+    if(finalReply && finalReply.trim()) persistToSession(sid, "agent", finalReply);
     setLoading(false);
   };
 
@@ -278,7 +382,11 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       </div>
       {innerTab==="chat"&&(
         <>
-          <div style={{ display:"flex",gap:7,padding:"10px 18px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:7,padding:"10px 18px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+            <button onClick={()=>{loadSessions();setDrawerOpen(true);}} title={t('agent.chats')} aria-label={t('agent.chats')} style={{ flexShrink:0,width:30,height:30,borderRadius:9,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0 }}>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div style={{ width:1,height:18,background:"var(--ak-border)",flexShrink:0 }}/>
             {QUICK_PROMPTS.map(p=><button key={p.text} onClick={()=>sendMessage(p.text)} style={{ flexShrink:0,padding:"5px 12px",borderRadius:20,border:`1px solid ${BRAND}30`,background:`${BRAND}08`,color:BRAND,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap" }}>{t(p.key)}</button>)}
           </div>
           <div ref={feedRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12 }}>
@@ -375,6 +483,42 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
             <button onClick={saveCustomise} style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{t('agent.save_agent')}
             </button>
+          </div>
+        </div></>
+      )}
+      {/* Chat sessions drawer (hamburger) */}
+      {drawerOpen&&(
+        <><div onClick={()=>setDrawerOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
+        <div style={{ position:"fixed",top:0,bottom:0,left:0,zIndex:2100,width:"min(86vw,320px)",background:"var(--ak-surface)",boxShadow:"6px 0 40px rgba(0,0,0,.18)",animation:"drawer-in .28s cubic-bezier(.32,1,.64,1)",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column" }}>
+          <style>{`@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 16px 12px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+            <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{t('agent.chats')}</p>
+            <button onClick={()=>setDrawerOpen(false)} style={{ background:"none",border:"none",cursor:"pointer",padding:4,display:"flex" }}><XIcon size={17} color="var(--ak-text-muted)"/></button>
+          </div>
+          <div style={{ padding:"12px 16px",flexShrink:0 }}>
+            <button onClick={newChat} style={{ width:"100%",padding:"11px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_chat')}
+            </button>
+          </div>
+          <div style={{ flex:1,overflowY:"auto",padding:"0 10px 16px" }}>
+            {sessionsLoading&&sessions.length===0?(
+              <p style={{ textAlign:"center",fontSize:12,color:"var(--ak-text-muted)",padding:"20px 0" }}>{t('common.loading')}</p>
+            ):sessions.length===0?(
+              <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:34,opacity:.3 }}>💬</span><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
+            ):sessions.map(s=>{
+              const active=s.id===sessionId;
+              return (
+                <div key={s.id} onClick={()=>openSession(s.id)} style={{ display:"flex",alignItems:"center",gap:8,padding:"10px 10px",borderRadius:10,cursor:"pointer",background:active?`${BRAND}12`:"transparent",border:`1px solid ${active?`${BRAND}30`:"transparent"}`,marginBottom:2 }}>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <p style={{ fontSize:13,fontWeight:active?800:700,color:active?BRAND:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{s.title||t('agent.new_chat')}</p>
+                    <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"2px 0 0" }}>{relTime(s.last_message_at)}</p>
+                  </div>
+                  <button onClick={(e)=>removeSession(s.id,e)} title={t('common.delete')} style={{ background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",flexShrink:0,opacity:.6 }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div></>
       )}

@@ -13,6 +13,7 @@ export const EN = {
   /* ── Common ── */
   'common.save':    'Save',
   'common.cancel':  'Cancel',
+  'common.delete':  'Delete',
   'common.loading': 'Loading…',
   'common.error':   'Something went wrong',
   'common.retry':   'Try again',
@@ -178,6 +179,9 @@ export const EN = {
   'agent.chat':          'Chat',
   'agent.tasks':         'Tasks',
   'agent.stats':         'Stats',
+  'agent.chats':         'Chats',
+  'agent.new_chat':      'New chat',
+  'agent.no_chats':      'No chats yet',
   'agent.pending':       'Pending',
   'agent.done':          'Done',
   'agent.task_title':    'TASK TITLE',

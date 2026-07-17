@@ -603,6 +603,139 @@ router.post("/chat", async (req, res) => {
   } catch (err) { console.error("[/chat]", err); res.status(500).json({ error: err.message }); }
 });
 
+// ─── Persistent chat sessions ────────────────────────────────────────────────
+// Per-user conversations for the Agent Chat tab, browsable + resumable from
+// the sessions drawer. All routes are already behind authenticateToken.
+
+const sessionTitleFrom = (text) => {
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "New chat";
+  return clean.length > 48 ? clean.slice(0, 48).trimEnd() + "…" : clean;
+};
+
+// GET /sessions — the user's sessions, newest activity first.
+router.get("/sessions", async (req, res) => {
+  try {
+    const { data, error } = await db
+      .from("chat_sessions")
+      .select("id, title, created_at, updated_at, last_message_at")
+      .eq("user_id", req.user.id)
+      .order("last_message_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, sessions: data ?? [] });
+  } catch (err) {
+    console.error("[/chat/sessions GET]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /sessions — create a new (empty) session.
+router.post("/sessions", async (req, res) => {
+  try {
+    const title = sessionTitleFrom(req.body?.title);
+    const { data, error } = await db
+      .from("chat_sessions")
+      .insert({ user_id: req.user.id, title })
+      .select("id, title, created_at, updated_at, last_message_at")
+      .single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, session: data });
+  } catch (err) {
+    console.error("[/chat/sessions POST]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /sessions/:id/messages — messages for one owned session.
+router.get("/sessions/:id/messages", async (req, res) => {
+  try {
+    const { data: session } = await db
+      .from("chat_sessions").select("id")
+      .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    const { data, error } = await db
+      .from("chat_messages")
+      .select("id, role, text, created_at")
+      .eq("session_id", req.params.id)
+      .order("created_at", { ascending: true });
+    if (error) throw new Error(error.message);
+    res.json({ success: true, messages: data ?? [] });
+  } catch (err) {
+    console.error("[/chat/sessions messages GET]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /sessions/:id/messages — append a message and bump session activity.
+router.post("/sessions/:id/messages", async (req, res) => {
+  try {
+    const { role, text } = req.body || {};
+    if (role !== "user" && role !== "agent") return res.status(400).json({ error: "role must be user or agent" });
+    if (!text || !String(text).trim()) return res.status(400).json({ error: "text is required" });
+
+    const { data: session } = await db
+      .from("chat_sessions").select("id, title")
+      .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    const { data: message, error } = await db
+      .from("chat_messages")
+      .insert({ session_id: session.id, user_id: req.user.id, role, text: String(text) })
+      .select("id, role, text, created_at")
+      .single();
+    if (error) throw new Error(error.message);
+
+    // Auto-title from the first user message; always bump activity.
+    const patch = { last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    if (role === "user" && (!session.title || session.title === "New chat")) {
+      patch.title = sessionTitleFrom(text);
+    }
+    await db.from("chat_sessions").update(patch).eq("id", session.id);
+
+    res.status(201).json({ success: true, message, title: patch.title });
+  } catch (err) {
+    console.error("[/chat/sessions messages POST]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /sessions/:id — rename a session.
+router.patch("/sessions/:id", async (req, res) => {
+  try {
+    const title = sessionTitleFrom(req.body?.title);
+    const { data, error } = await db
+      .from("chat_sessions")
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq("id", req.params.id).eq("user_id", req.user.id)
+      .select("id, title").maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.status(404).json({ error: "Session not found" });
+    res.json({ success: true, session: data });
+  } catch (err) {
+    console.error("[/chat/sessions PATCH]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /sessions/:id — remove a session and its messages (cascade).
+router.delete("/sessions/:id", async (req, res) => {
+  try {
+    const { data, error } = await db
+      .from("chat_sessions")
+      .delete()
+      .eq("id", req.params.id).eq("user_id", req.user.id)
+      .select("id").maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.status(404).json({ error: "Session not found" });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[/chat/sessions DELETE]", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── /chat/tutor — plain educational AI chat (OpenAI, no tools/tasks) ─────────
 // Used by the "Agent Chat" tab in both the learner and instructor apps for
 // normal conversation. Locked to educational topics; does NOT create tasks or
