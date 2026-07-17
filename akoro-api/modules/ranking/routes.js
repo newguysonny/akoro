@@ -94,55 +94,59 @@ export const awardXP = async ({ userId, courseId = null, classroomId = null, rea
 const refreshLeaderboard = async () => {
   console.log("[ranking] 🔄 Refreshing leaderboard...");
 
-  // Aggregate total XP per user per course
-  const { data: courseXP } = await db
-    .from("xp_transactions")
-    .select("user_id, course_id, amount")
-    .not("course_id", "is", null);
+  // ── Aggregate all XP ──────────────────────────────────────────────────────
+  const { data: txns } = await db.from("xp_transactions").select("user_id, course_id, amount");
 
-  // Aggregate total XP per user per classroom
-  const { data: classroomXP } = await db
-    .from("xp_transactions")
-    .select("user_id, classroom_id, amount")
-    .not("classroom_id", "is", null);
+  const globalMap = {};   // user_id -> total xp (ALL sources, so global is complete)
+  const courseMap = {};   // `${user}:${course}` -> { user_id, course_id, total_xp }
+  for (const t of (txns ?? [])) {
+    globalMap[t.user_id] = (globalMap[t.user_id] ?? 0) + (t.amount ?? 0);
+    if (t.course_id) {
+      const k = `${t.user_id}:${t.course_id}`;
+      courseMap[k] = courseMap[k] ?? { user_id: t.user_id, course_id: t.course_id, total_xp: 0 };
+      courseMap[k].total_xp += (t.amount ?? 0);
+    }
+  }
 
-  // Build aggregations
-  const courseMap    = {};
+  // Classroom scope = each active member's total XP credited to their classroom
+  // (transactions rarely carry classroom_id, so derive it from membership).
+  const { data: members } = await db.from("classroom_students").select("user_id, classroom_id").eq("status", "active");
   const classroomMap = {};
-  const globalMap    = {};
-
-  for (const row of (courseXP ?? [])) {
-    const key = `${row.user_id}:${row.course_id}`;
-    courseMap[key]    = (courseMap[key] ?? { user_id: row.user_id, course_id: row.course_id, total_xp: 0 });
-    courseMap[key].total_xp += row.amount;
-    globalMap[row.user_id] = (globalMap[row.user_id] ?? 0) + row.amount;
+  for (const m of (members ?? [])) {
+    const k = `${m.user_id}:${m.classroom_id}`;
+    classroomMap[k] = { user_id: m.user_id, classroom_id: m.classroom_id, total_xp: globalMap[m.user_id] ?? 0 };
   }
 
-  for (const row of (classroomXP ?? [])) {
-    const key = `${row.user_id}:${row.classroom_id}`;
-    classroomMap[key]    = (classroomMap[key] ?? { user_id: row.user_id, classroom_id: row.classroom_id, total_xp: 0 });
-    classroomMap[key].total_xp += row.amount;
-  }
+  // ── Build rows + compute rank within each scope group ─────────────────────
+  const globalRows    = Object.entries(globalMap).map(([uid, xp]) => ({ user_id: uid, scope: "global",    course_id: null, classroom_id: null, scope_ref_id: null, total_xp: xp }));
+  const courseRows    = Object.values(courseMap).map((r)          => ({ user_id: r.user_id, scope: "course",    course_id: r.course_id, classroom_id: null, scope_ref_id: r.course_id, total_xp: r.total_xp }));
+  const classroomRows = Object.values(classroomMap).map((r)       => ({ user_id: r.user_id, scope: "classroom", course_id: null, classroom_id: r.classroom_id, scope_ref_id: r.classroom_id, total_xp: r.total_xp }));
 
-  // Upsert leaderboard records
-  const upserts = [
-    ...Object.values(courseMap).map((r) => ({ ...r, scope: "course" })),
-    ...Object.values(classroomMap).map((r) => ({ ...r, scope: "classroom" })),
-    ...Object.entries(globalMap).map(([uid, xp]) => ({ user_id: uid, total_xp: xp, scope: "global" })),
-  ];
+  const assignRanks = (rows, groupOf) => {
+    const groups = {};
+    for (const r of rows) { const g = groupOf(r); (groups[g] ??= []).push(r); }
+    for (const g of Object.values(groups)) {
+      g.sort((a, b) => b.total_xp - a.total_xp);
+      g.forEach((r, i) => { r.rank = i + 1; r.updated_at = now(); });
+    }
+  };
+  assignRanks(globalRows,    () => "g");
+  assignRanks(courseRows,    (r) => r.course_id);
+  assignRanks(classroomRows, (r) => r.classroom_id);
 
-  if (upserts.length) {
-    // Add scope_ref_id for course/classroom rows so battle queries can join
-    const withRef = upserts.map((u) => ({
-      ...u,
-      scope_ref_id: u.course_id ?? u.classroom_id ?? null,
-    }));
-    await db.from("xp_leaderboard")
-      .upsert(withRef, { onConflict: "user_id,scope,course_id,classroom_id" })
-      .catch((e) => console.warn("[ranking] leaderboard upsert error:", e.message));
-  }
+  const all = [...globalRows, ...courseRows, ...classroomRows];
 
-  console.log(`[ranking] ✅ Leaderboard refreshed  entries=${upserts.length}`);
+  // ── Clean rebuild (avoids the NULL-in-UNIQUE upsert duplicate bug). Only the
+  // app-managed scopes are rebuilt; battle_course is left to the battle worker.
+  try {
+    await db.from("xp_leaderboard").delete().in("scope", ["global", "course", "classroom"]);
+    for (let i = 0; i < all.length; i += 500) {
+      const chunk = all.slice(i, i + 500);
+      if (chunk.length) await db.from("xp_leaderboard").insert(chunk);
+    }
+  } catch (e) { console.warn("[ranking] leaderboard rebuild error:", e.message); }
+
+  console.log(`[ranking] ✅ Leaderboard refreshed  entries=${all.length}`);
 };
 
 // Run every 15 minutes
@@ -403,6 +407,68 @@ const handlers = {
   }),
 
   /**
+   * GET /api/ranking/courses
+   * Top COURSES ranked by total XP earned in them (the Courses board).
+   */
+  courses: asyncHandler(async (req, res) => {
+    const { limit = 50 } = req.query;
+
+    const { data: rows } = await db.from("xp_leaderboard").select("course_id, total_xp").eq("scope", "course");
+    const xpByCourse = {};
+    for (const r of (rows ?? [])) if (r.course_id) xpByCourse[r.course_id] = (xpByCourse[r.course_id] ?? 0) + (r.total_xp ?? 0);
+
+    const ids = Object.keys(xpByCourse);
+    if (!ids.length) return res200(res, { scope: "courses", leaders: [] }, { total: 0 });
+
+    const { data: courses } = await db
+      .from("courses")
+      .select("id, title, subject, cover_image_url, total_students, course_type")
+      .in("id", ids);
+
+    const leaders = (courses ?? [])
+      .map((c) => ({ id: c.id, name: c.title, subject: c.subject, avatar: c.cover_image_url, type: c.course_type, total_xp: xpByCourse[c.id] ?? 0, students: c.total_students ?? 0 }))
+      .sort((a, b) => b.total_xp - a.total_xp)
+      .slice(0, Number(limit))
+      .map((c, i) => ({ rank: i + 1, ...c }));
+
+    res200(res, { scope: "courses", leaders }, { total: leaders.length });
+  }),
+
+  /**
+   * GET /api/ranking/schools
+   * Top SCHOOLS ranked by aggregate student XP (the Inter-Schools board).
+   */
+  schools: asyncHandler(async (req, res) => {
+    const { limit = 50 } = req.query;
+
+    const [schoolsR, classroomsR, membersR, globalR] = await Promise.all([
+      db.from("school_profiles").select("id, name, logo_url"),
+      db.from("classrooms").select("id, school_id"),
+      db.from("classroom_students").select("user_id, classroom_id").eq("status", "active"),
+      db.from("xp_leaderboard").select("user_id, total_xp").eq("scope", "global"),
+    ]);
+
+    const xpByUser  = Object.fromEntries((globalR.data ?? []).map((r) => [r.user_id, r.total_xp ?? 0]));
+    const schoolOf  = Object.fromEntries((classroomsR.data ?? []).map((c) => [c.id, c.school_id]));
+    const agg = {};   // school_id -> { xp, students:Set }
+    for (const m of (membersR.data ?? [])) {
+      const sid = schoolOf[m.classroom_id];
+      if (!sid) continue;
+      (agg[sid] ??= { xp: 0, students: new Set() });
+      agg[sid].xp += xpByUser[m.user_id] ?? 0;
+      agg[sid].students.add(m.user_id);
+    }
+
+    const leaders = (schoolsR.data ?? [])
+      .map((s) => ({ id: s.id, name: s.name, avatar: s.logo_url, total_xp: agg[s.id]?.xp ?? 0, students: agg[s.id]?.students.size ?? 0 }))
+      .sort((a, b) => b.total_xp - a.total_xp)
+      .slice(0, Number(limit))
+      .map((s, i) => ({ rank: i + 1, ...s }));
+
+    res200(res, { scope: "schools", leaders }, { total: leaders.length });
+  }),
+
+  /**
    * GET /api/ranking/me
    * Current user's XP summary across all scopes.
    */
@@ -466,6 +532,8 @@ router.get ("/course/:courseId",        authenticateToken, handlers.course);
 router.get ("/classroom/:classroomId",  authenticateToken, handlers.classroom);
 router.get ("/school/:schoolId",        authenticateToken, handlers.school);
 router.get ("/global",                  handlers.global);
+router.get ("/courses",                 handlers.courses);
+router.get ("/schools",                 handlers.schools);
 router.get ("/me",                      authenticateToken, handlers.me);
 router.post("/award",                   authenticateToken, requireRole(["admin"]), handlers.awardManual);
 router.post("/refresh",                 authenticateToken, requireRole(["admin"]), handlers.refresh);

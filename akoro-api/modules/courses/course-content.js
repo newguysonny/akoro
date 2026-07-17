@@ -34,6 +34,7 @@ import { Router }                         from "express";
 import { body, param, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { awardXP, XP }                     from "../ranking/routes.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
 
@@ -442,6 +443,11 @@ const lessonHandlers = {
     if (!lesson) return res404(res, "Lesson not found");
     const courseId = lesson.course_modules?.course_id;
 
+    // Was it already completed? (so XP is awarded once, not on every re-complete)
+    const { data: prior } = await db.from("lesson_progress")
+      .select("completed").eq("user_id", userId).eq("lesson_id", lessonId).maybeSingle();
+    const wasCompleted = !!prior?.completed;
+
     // Upsert progress as completed
     await db
       .from("lesson_progress")
@@ -475,6 +481,12 @@ const lessonHandlers = {
       .eq("user_id", userId)
       .eq("course_id", courseId);
 
+    // Ranking XP — first completion only. Course-completion bonus at 100%.
+    if (!wasCompleted && courseId) {
+      awardXP({ userId, courseId, reason: "lesson_complete", amount: XP.LESSON_COMPLETE }).catch(() => {});
+      if (progress === 100) awardXP({ userId, courseId, reason: "course_complete", amount: XP.COURSE_COMPLETE }).catch(() => {});
+    }
+
     res200(res, { completed: true, courseProgress: progress });
   }),
 
@@ -489,7 +501,7 @@ const lessonHandlers = {
 
     const { data: lesson } = await db
       .from("lessons")
-      .select("id, lesson_type, content_json")
+      .select("id, lesson_type, content_json, course_modules(course_id)")
       .eq("id", lessonId)
       .single();
 
@@ -517,6 +529,11 @@ const lessonHandlers = {
     const score  = Math.round((correct / questions.length) * 100);
     const passed = score >= passing_score;
 
+    // Was this quiz already passed? (award XP once)
+    const { data: priorQ } = await db.from("lesson_progress")
+      .select("completed").eq("user_id", req.user.id).eq("lesson_id", lessonId).maybeSingle();
+    const wasPassed = !!priorQ?.completed;
+
     // Save score to lesson_progress
     await db
       .from("lesson_progress")
@@ -531,6 +548,12 @@ const lessonHandlers = {
         },
         { onConflict: "user_id,lesson_id" }
       );
+
+    // Ranking XP — first pass only; perfect score earns more.
+    if (passed && !wasPassed) {
+      const courseId = lesson.course_modules?.course_id ?? null;
+      awardXP({ userId: req.user.id, courseId, reason: score === 100 ? "quiz_perfect" : "quiz_pass", amount: score === 100 ? XP.QUIZ_PERFECT : XP.QUIZ_PASS }).catch(() => {});
+    }
 
     res200(res, {
       score,

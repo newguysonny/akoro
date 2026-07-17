@@ -101,11 +101,22 @@ async function completeSessionRecord(orchestrator) {
   const id = orchestrator?.dbSessionId;
   if (!id) return;
   try {
+    // Read prior status + student so ranking XP is awarded exactly once.
+    const { data: prior } = await db.schema("edu").from("adaptive_sessions")
+      .select("status, student_id").eq("id", id).maybeSingle();
+
     await db.schema("edu").from("adaptive_sessions").update({
       status:       "complete",
       completed_at: new Date().toISOString(),
       updated_at:   new Date().toISOString(),
     }).eq("id", id);
+
+    if (prior && prior.status !== "complete" && prior.student_id) {
+      try {
+        const { awardXP, XP } = await import("../ranking/routes.js");
+        awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND }).catch(() => {});
+      } catch { /* ranking module unavailable — non-fatal */ }
+    }
   } catch (e) {
     console.warn("[adaptive_sessions complete]", e.message);
   }
