@@ -378,8 +378,8 @@ export default function LearnerDashboard() {
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
               <button onClick={()=>navigate("/notifications")} title="Notifications"
-                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer",fontSize:15 }}>
-                🔔
+                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                 {notifUnread>0&&(
                   <span style={{ position:"absolute",top:-3,right:-3,background:RED,color:"#fff",borderRadius:"50%",minWidth:16,height:16,padding:"0 4px",fontSize:9,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>
                     {notifUnread>9?"9+":notifUnread}
@@ -391,6 +391,7 @@ export default function LearnerDashboard() {
               </div>
             </div>
           </div>
+          {(tab==="sessions"||tab==="challenges")&&(
           <div style={{ display:"flex" }}>
             {[{key:"sessions",label:t('dash.my_sessions'),count:totalUnread,countColor:BRAND},{key:"challenges",label:t('dash.challenges'),count:pendingChallenges,countColor:RED}].map(({key,label,count,countColor})=>(
               <button key={key} onClick={()=>setTab(key)} style={{ flex:1,padding:"10px 0 12px",background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:tab===key?800:600,color:tab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${tab===key?BRAND:"transparent"}`,transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Nunito',sans-serif" }}>
@@ -398,6 +399,7 @@ export default function LearnerDashboard() {
               </button>
             ))}
           </div>
+          )}
         </div>
 
         {/* SCROLLABLE CONTENT */}
@@ -589,7 +591,8 @@ export default function LearnerDashboard() {
         {/* BOTTOM NAV */}
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
           {NAV_ITEMS.map(({key,icon,label})=>{
-            const navActive=tab===key;
+            // "Learn" (key "sessions") stays active on the Challenges sub-tab too.
+            const navActive = tab===key || (key==="sessions" && tab==="challenges");
             return (
               <div key={key} onClick={()=>setTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"#9CA3AF",minWidth:56,padding:"2px 0" }}>
                 <div style={{ position:"relative" }}>
