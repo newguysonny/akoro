@@ -62,6 +62,7 @@
     "2026-seed-community.sql",
     "2026-seed-battle-questions.sql",
     "2026-enroll-test-students.sql",
+    "2026-seed-priya-sessions.sql",
     "2026-seed-school-portal.sql",
     "2026-seed-mgmt.sql",
     "2026-seed-mgmt-2.sql",
