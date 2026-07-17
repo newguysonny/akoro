@@ -6,6 +6,7 @@ import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
 import Anthropic                from "@anthropic-ai/sdk";
 import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { parseJsonLoose } from "./_json.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -100,5 +101,5 @@ Respond with a JSON array only — no markdown, no preamble:
     .map((b) => b.text)
     .join("");
 
-  return JSON.parse(text);
+  return parseJsonLoose(text);
 }

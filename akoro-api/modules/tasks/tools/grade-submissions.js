@@ -7,6 +7,7 @@ import Anthropic        from "@anthropic-ai/sdk";
 import { z }            from "zod";
 import { TaskOutputDB, TaskFileDB } from "../lib/db.js";
 import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { parseJsonLoose } from "./_json.js";
 
 
 
@@ -152,7 +153,7 @@ Respond with JSON only — no markdown, no preamble:
     .map((b) => b.text)
     .join("");
 
-  return JSON.parse(text);
+  return parseJsonLoose(text);
 }
 
 // ─── Grade letter helper (also used by export-report) ─────────────────────────

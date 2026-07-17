@@ -9,6 +9,7 @@ import { TaskOutputDB }   from "../lib/db.js";
 
 import { v4 as uuid }     from "uuid";
 import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { parseJsonLoose } from "./_json.js";
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
 // This is the shape the Anthropic API sees.
@@ -138,7 +139,7 @@ Respond with a JSON array only — no markdown, no preamble:
     .map((b) => b.text)
     .join("");
 
-  const parsed = JSON.parse(text);
+  const parsed = parseJsonLoose(text);
 
   // Ensure all questions have valid UUIDs
   return parsed.map((q) => ({ ...q, id: q.id || uuid() }));

@@ -3,6 +3,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { parseJsonLoose } from "./_json.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = ANTHROPIC_MODEL;
@@ -22,11 +23,7 @@ export async function llmJson(prompt, opts = {}) {
     prompt + "\n\nRespond with valid JSON only — no markdown fences, no preamble.",
     opts
   );
-  const cleaned = text.trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-  return JSON.parse(cleaned);
+  return parseJsonLoose(text);
 }
 
 // Shared pedagogy enrichment — appended to teaching-content prompts so outputs

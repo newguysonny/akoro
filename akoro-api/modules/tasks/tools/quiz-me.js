@@ -7,6 +7,7 @@ import db                          from "../../../db.js";
 import Anthropic                   from "@anthropic-ai/sdk";
 import { v4 as uuid }              from "uuid";
 import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { parseJsonLoose } from "./_json.js";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -100,6 +101,6 @@ Respond with a JSON array only — no markdown, no preamble:
     .map((b) => b.text)
     .join("");
 
-  const parsed = JSON.parse(text);
+  const parsed = parseJsonLoose(text);
   return parsed.map((q) => ({ ...q, id: q.id || uuid() }));
 }

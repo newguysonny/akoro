@@ -8,6 +8,7 @@ import { z }            from "zod";
 import { TaskOutputDB } from "../lib/db.js";
 import { executeFetchStudentData } from "./fetch-student-data.js";
 import { ANTHROPIC_MODEL } from "../../../lib/aiModel.js";
+import { parseJsonLoose } from "./_json.js";
 
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ Respond with JSON only — no markdown, no preamble:
     .map((b) => b.text)
     .join("");
 
-  return JSON.parse(text);
+  return parseJsonLoose(text);
 }
 
 function daysSince(isoDate) {
