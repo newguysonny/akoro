@@ -234,11 +234,15 @@ function Categories({ value, onChange }) {
   );
 }
 
-/* ── Purchase history sheet ────────────────────────────────── */
+/* ── Library sheet — purchased agents + enrolled courses ───── */
 function PurchaseHistorySheet({ onClose }) {
   const { t } = useLang();
+  const navigate = useNavigate();
+  const [tab,     setTab]     = useState('agents');
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState([]);
+  const [cLoading, setCLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -246,6 +250,10 @@ function PurchaseHistorySheet({ onClose }) {
       .then(d => { if (alive) setRows(d.purchases || []); })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false); });
+    apiGet('/api/user/enrollments')
+      .then(d => { if (alive) setCourses((d.data || d.enrollments || []).filter(e => e.courses)); })
+      .catch(() => {})
+      .finally(() => { if (alive) setCLoading(false); });
     return () => { alive = false; };
   }, []);
 
@@ -255,6 +263,19 @@ function PurchaseHistorySheet({ onClose }) {
     : s === 'refunded'         ? { label: t('discovery.st_refunded'), color: 'var(--ak-text-muted)' }
     :                            { label: t('discovery.st_failed'),   color: RED };
 
+  const openCourse = (slug) => { if (slug) { onClose(); navigate(`/course/${slug}`); } };
+
+  const TabBtn = ({ id, label, count }) => {
+    const on = tab === id;
+    return (
+      <button onClick={() => setTab(id)} style={{
+        flex: 1, padding: '9px 6px', borderRadius: 11, border: on ? `1.5px solid ${BRAND}` : '1.5px solid #E5E0F5',
+        background: on ? `${BRAND}12` : 'var(--ak-surface)', cursor: 'pointer', fontFamily: FONT,
+        fontSize: 12.5, fontWeight: 800, color: on ? BRAND : 'var(--ak-text-sub)',
+      }}>{label}{count != null ? ` · ${count}` : ''}</button>
+    );
+  };
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--ak-surface)', width: '100%', maxWidth: 540, maxHeight: '80vh', borderRadius: '22px 22px 0 0', overflowY: 'auto', fontFamily: FONT, animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
@@ -262,37 +283,87 @@ function PurchaseHistorySheet({ onClose }) {
           <div style={{ width: 38, height: 4, borderRadius: 4, background: 'var(--ak-border2)' }} />
         </div>
         <div style={{ padding: '6px 18px 24px' }}>
-          <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '4px 0 14px' }}>{t('discovery.my_purchases')}</h2>
-          {loading ? (
-            [0, 1].map(i => <div key={i} style={{ height: 64, borderRadius: 12, background: '#F3F1FF', opacity: .6, marginBottom: 9 }} />)
-          ) : rows.length === 0 ? (
-            <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 30, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--ak-text-muted)' }}>
-              {t('discovery.no_purchases')}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {rows.map((p) => {
-                const listing = p['edu.marketplace_listings'] || p.marketplace_listings || {};
-                const m = statusMeta(p.paystack_status, p.access_granted);
-                return (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--ak-surface)', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {listing.title || p.metadata?.listing_title || t('discovery.agent')}
+          <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--ak-text)', margin: '4px 0 12px' }}>{t('discovery.my_library')}</h2>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <TabBtn id="agents"  label={t('discovery.tab_agents')}  count={loading ? null : rows.length} />
+            <TabBtn id="courses" label={t('discovery.tab_courses')} count={cLoading ? null : courses.length} />
+          </div>
+
+          {tab === 'agents' && (
+            loading ? (
+              [0, 1].map(i => <div key={i} style={{ height: 64, borderRadius: 12, background: '#F3F1FF', opacity: .6, marginBottom: 9 }} />)
+            ) : rows.length === 0 ? (
+              <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 30, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--ak-text-muted)' }}>
+                {t('discovery.no_purchases')}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {rows.map((p) => {
+                  const listing = p['edu.marketplace_listings'] || p.marketplace_listings || {};
+                  const m = statusMeta(p.paystack_status, p.access_granted);
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--ak-surface)', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {listing.title || p.metadata?.listing_title || t('discovery.agent')}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 2 }}>
+                          {listing.teacher_name || p.metadata?.teacher_name || t('discovery.teacher')}
+                          {p.purchased_at ? ` · ${new Date(p.purchased_at).toLocaleDateString()}` : ''}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 2 }}>
-                        {listing.teacher_name || p.metadata?.teacher_name || t('discovery.teacher')}
-                        {p.purchased_at ? ` · ${new Date(p.purchased_at).toLocaleDateString()}` : ''}
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)' }}>{fmtPrice(p.amount_kobo, p.currency, t('discovery.free'))}</div>
+                        <span style={{ fontSize: 9.5, fontWeight: 800, color: m.color, background: `${m.color}18`, padding: '2px 7px', borderRadius: 20 }}>{m.label}</span>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)' }}>{fmtPrice(p.amount_kobo, p.currency, t('discovery.free'))}</div>
-                      <span style={{ fontSize: 9.5, fontWeight: 800, color: m.color, background: `${m.color}18`, padding: '2px 7px', borderRadius: 20 }}>{m.label}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+          {tab === 'courses' && (
+            cLoading ? (
+              [0, 1].map(i => <div key={i} style={{ height: 64, borderRadius: 12, background: '#F3F1FF', opacity: .6, marginBottom: 9 }} />)
+            ) : courses.length === 0 ? (
+              <div style={{ background: '#FBFAFF', border: '1px dashed #DDD3FF', borderRadius: 14, padding: 30, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'var(--ak-text-muted)' }}>
+                {t('discovery.no_courses_enrolled')}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {courses.map((e) => {
+                  const c = e.courses || {};
+                  const live = c.course_type === 'live';
+                  const pct = Math.max(0, Math.min(100, e.progress || 0));
+                  return (
+                    <button key={e.id} onClick={() => openCourse(c.slug)} style={{ display: 'flex', alignItems: 'center', gap: 11, background: 'var(--ak-surface)', border: '1px solid #F0ECFF', borderRadius: 13, padding: '11px 13px', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', width: '100%' }}>
+                      <div style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, overflow: 'hidden', background: `linear-gradient(135deg, ${BRAND}18, ${BRAND}08)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                        {c.cover_image_url
+                          ? <img src={c.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(ev) => { ev.currentTarget.style.display = 'none'; }} />
+                          : (live ? '🔴' : '🎬')}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</span>
+                          <span style={{ fontSize: 8.5, fontWeight: 900, color: live ? RED : BRAND, background: live ? 'rgba(239,68,68,.12)' : 'rgba(108,59,255,.12)', padding: '1px 5px', borderRadius: 5, flexShrink: 0 }}>{live ? t('discovery.live') : t('discovery.video')}</span>
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.users?.full_name || t('discovery.teacher')}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
+                          <div style={{ flex: 1, height: 4, background: 'var(--ak-border)', borderRadius: 3, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: GREEN, borderRadius: 3 }} />
+                          </div>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)' }}>{pct}%</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       </div>
