@@ -229,6 +229,12 @@ if ("gpu" in navigator) { /* WebGPU */ } else { /* WebGL2 */ }
 
 ### Source
 BASE/LINE'26 demo — "one file, zero dependencies, all browser." Built as a
-demonstration; explicitly "view source, take anything." This doc is a summary of
-its claims, not a copy of its code (the full ~93 KB HTML/WGSL/GLSL source is not
-included here — grab it via the browser's View Source on the artifact if needed).
+demonstration; explicitly "view source, take anything." This doc summarizes its
+claims; the **full working source is vendored in this repo** so you can read the
+WGSL/GLSL shaders, the CSS, and the runtime feature detection directly, and open
+it in a browser to see each technique live:
+
+- [`references/baseline-2026.html`](./references/baseline-2026.html) — the
+  complete single-file demo (self-contained HTML + inline JS/WGSL/GLSL; the only
+  external requests are two Google Fonts). Open it in a July-2026 evergreen
+  browser; it degrades politely elsewhere (see [plate 08 / the audit](#8-live-capability-audit)).
