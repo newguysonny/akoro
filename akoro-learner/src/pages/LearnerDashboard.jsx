@@ -456,16 +456,6 @@ export default function LearnerDashboard() {
                 </>
               )}
 
-              {/* ── Subject filter chips (all + agent tabs only) ── */}
-              {sessionTab!=="live"&&(
-                <div style={{ display:"flex",gap:8,padding:"10px 18px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",flexShrink:0 }}>
-                  {[{key:"all",label:"All",icon:"📚"},...["maths","english","science"].map(s=>({key:s,label:SUBJECTS[s].label,icon:SUBJECTS[s].icon}))].map(({key,label,icon})=>{
-                    const color=SUBJECT_COLORS[key]||BRAND,cnt=key==="all"?sessions.length:sessions.filter(ses=>ses.subject===key).length,active=subjectFilter===key;
-                    return <div key={key} onClick={()=>setSubjectFilter(key)} style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,background:active?`${color}16`:"#F9FAFB",border:`1.5px solid ${active?color:"#F3F4F6"}`,borderRadius:10,padding:"6px 12px",cursor:"pointer",transition:"all .2s" }}><span style={{ fontSize:12 }}>{icon}</span><span style={{ fontSize:11,fontWeight:800,color:active?color:"#6B7280" }}>{label}</span><span style={{ fontSize:10,fontWeight:700,color:active?color:"#9CA3AF",background:active?`${color}18`:"#F3F4F6",borderRadius:6,padding:"0 5px" }}>{cnt}</span></div>;
-                  })}
-                </div>
-              )}
-
               {/* ── Session list ── */}
               {/* ── All + Live filtered lists ── */}
               {sessionTab!=="agent"&&(
