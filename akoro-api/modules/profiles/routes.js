@@ -808,7 +808,7 @@ router.get("/admin/teachers",                                          authentic
 // ─── Student / self settings ──────────────────────────────────────────────────
 
 const PROFILE_SELECT = [
-  "id","email","username","full_name","avatar_url","phone","role",
+  "id","email","username","full_name","avatar_url","avatar_emoji","phone","role",
   "country","school_name","school_type","year_group","study_level",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
   "subjects","two_factor_enabled","onboarding_completed","created_at",
@@ -845,6 +845,7 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
     username:        user.username,
     fullName:        user.full_name,
     avatarUrl:       user.avatar_url,
+    avatarEmoji:     user.avatar_emoji,
     phone:           user.phone,
     role:            user.role,
     country:         user.country,
@@ -900,6 +901,7 @@ router.patch("/me", authenticateToken, [
   body("fullName").optional().trim().isLength({ min: 1, max: 120 }),
   body("username").optional().trim().isLength({ min: 3, max: 40 }).matches(/^[a-zA-Z0-9_]+$/),
   body("phone").optional().trim(),
+  body("avatarEmoji").optional().trim(),
   body("country").optional().trim(),
   body("schoolName").optional().trim(),
   body("schoolType").optional().trim(),
@@ -916,7 +918,7 @@ router.patch("/me", authenticateToken, [
 ], runValidation, asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const {
-    fullName, username, phone, country, schoolName, schoolType,
+    fullName, username, phone, avatarEmoji, country, schoolName, schoolType,
     yearGroup, studyLevel, language, displayMode, accentColor,
     teachingGuide, guideEmoji, subjects, twoFactorEnabled, onboardingCompleted,
   } = req.body;
@@ -932,6 +934,7 @@ router.patch("/me", authenticateToken, [
   if (fullName       !== undefined) patch.full_name        = fullName;
   if (username       !== undefined) patch.username         = username;
   if (phone          !== undefined) patch.phone            = phone;
+  if (avatarEmoji    !== undefined) patch.avatar_emoji     = avatarEmoji;
   if (country        !== undefined) patch.country          = country;
   if (schoolName     !== undefined) patch.school_name      = schoolName;
   if (schoolType     !== undefined) patch.school_type      = schoolType;
