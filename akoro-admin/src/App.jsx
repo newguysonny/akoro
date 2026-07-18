@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
+import AkoroLogo from './components/common/AkoroLogo.jsx';
 
 import DashboardPage        from './pages/DashboardPage.jsx';
 import UsersPage            from './pages/UsersPage.jsx';
@@ -49,13 +50,35 @@ function GuestRoute({ children }) {
   return children;
 }
 
-const NotFound = () => (
-  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', fontFamily:'DM Sans,sans-serif', flexDirection:'column', gap:12 }}>
-    <h1 style={{ fontSize:48, fontWeight:800, color:'#E8884A' }}>404</h1>
-    <p style={{ color:'#6B6B80' }}>Page not found.</p>
-    <a href="/" style={{ color:'#E8884A', fontWeight:600 }}>← Dashboard</a>
-  </div>
-);
+const NotFound = () => {
+  const AMBER = '#E8884A', INK = '#1A1A2E', MUTED = '#6B6B80', BORDER = '#EDE8E1';
+  const links = [
+    { to: '/',          label: 'Dashboard' },
+    { to: '/users',     label: 'Users' },
+    { to: '/courses',   label: 'Courses' },
+    { to: '/settings',  label: 'Settings' },
+  ];
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh',
+      fontFamily:'DM Sans,sans-serif', flexDirection:'column', gap:18, background:'#FAF8F5', padding:24, textAlign:'center' }}>
+      <AkoroLogo size={44} radius={12} />
+      <h1 style={{ fontSize:64, fontWeight:800, color:AMBER, margin:0, lineHeight:1 }}>404</h1>
+      <div>
+        <p style={{ color:INK, fontWeight:700, fontSize:18, margin:'0 0 4px' }}>Page not found</p>
+        <p style={{ color:MUTED, fontSize:14, margin:0 }}>The page you’re looking for doesn’t exist or has moved.</p>
+      </div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:10, justifyContent:'center', marginTop:4 }}>
+        {links.map(l => (
+          <Link key={l.to} to={l.to} style={{
+            padding:'8px 16px', borderRadius:10, border:`1.5px solid ${BORDER}`,
+            background:'#fff', color:INK, textDecoration:'none', fontSize:13, fontWeight:600,
+          }}>{l.label}</Link>
+        ))}
+      </div>
+      <Link to="/" style={{ color:AMBER, fontWeight:700, textDecoration:'none', fontSize:14, marginTop:4 }}>← Back to Dashboard</Link>
+    </div>
+  );
+};
 
 export default function App() {
   return (

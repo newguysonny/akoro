@@ -17,7 +17,6 @@ import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 import ProTip from '../../components/ProTip.jsx';
 import { SiteNav, SFSHeader, SiteFooter } from '../../components/SiteChrome.jsx';
 import SFSHero from '../../components/SFSHero.jsx';
-import ShaderField from '../../components/ShaderField.jsx';
 import NewsCarousel from '../../components/NewsCarousel.jsx';
 import TrustRatings from '../../components/TrustRatings.jsx';
 import QuickActions from '../../components/QuickActions.jsx';
@@ -128,10 +127,7 @@ function HowItWorks() {
         .ak-hiw-tile { text-align: left; cursor: pointer; background: #fff; border: 1px solid #EDE8E1; border-radius: 18px; padding: 22px 20px; display: flex; flex-direction: column; gap: 12px; font-family: inherit; transition: border-color .2s, box-shadow .2s, transform .2s; }
         .ak-hiw-tile:hover { border-color: ${B}55; box-shadow: 0 12px 30px ${B}14; transform: translateY(-3px); }
       `}</style>
-      {/* GPU noise field (plate 01) + light scrim so text stays readable */}
-      <ShaderField />
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 0, background: 'radial-gradient(120% 90% at 50% 0%, rgba(250,248,245,.72), rgba(250,248,245,.90) 70%)' }} />
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <SL center>How it works</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
