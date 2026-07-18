@@ -28,6 +28,8 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import { generateSchedule }               from "./schedule.js";
 import { renderDocument }                  from "../school/documentRenderer.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "../school/defaultDocs/index.js";
+import { openai, OPENAI_MODEL }            from "../../lib/aiModel.js";
+import { parseJsonLoose }                  from "../tasks/tools/_json.js";
 import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
 
 // In-memory multer for course cover uploads (8 MB cap, images only).
@@ -1641,6 +1643,49 @@ router.post("/documents/templates", async (req, res) => {
     if (error) return res.status(error.code === "23505" ? 409 : 500).json({ error: error.code === "23505" ? "You already have a template with that name" : error.message });
     res.status(201).json({ success: true, data });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// AI-create a document template from an uploaded sample's OCR text.
+router.post("/documents/templates/from-sample", async (req, res) => {
+  try {
+    const { name, category = "form", sourceText } = req.body;
+    if (!name?.trim())       return res.status(400).json({ error: "name is required" });
+    if (!sourceText?.trim()) return res.status(400).json({ error: "sourceText is required (upload a sample first)" });
+
+    const prompt =
+      `A teacher uploaded a sample of an existing printable document (extracted text below). ` +
+      `Recreate it as a reusable, print-friendly HTML template that mirrors its headings, sections, order and layout. ` +
+      `Replace every value that would change between documents (names, dates, scores, IDs, addresses, amounts) with a {{snake_case_placeholder}} token. ` +
+      `Use self-contained inline styles only.\n\n` +
+      `Return JSON only:\n{\n  "description": "<one short line>",\n  "body": "<HTML using inline styles and {{placeholders}}>",\n  "variables": [{ "key": "<snake_case>", "label": "<Human label>" }]\n}\n\n` +
+      `SAMPLE:\n"""${String(sourceText).slice(0, 8000)}"""`;
+
+    const resp = await openai.chat.completions.create({
+      model: OPENAI_MODEL, max_tokens: 3000,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const parsed = parseJsonLoose(resp.choices?.[0]?.message?.content ?? "");
+    const body = String(parsed.body || "").trim();
+    if (!body) return res.status(422).json({ error: "Could not build a template from that sample" });
+
+    const row = {
+      user_id:     req.user.id,
+      name:        name.trim(),
+      description: parsed.description || null,
+      category,
+      page_size:   "A4",
+      orientation: "portrait",
+      body,
+      css:         null,
+      variables:   Array.isArray(parsed.variables) ? parsed.variables : [],
+    };
+    const { data, error } = await DOC().insert(row).select("*").single();
+    if (error) return res.status(error.code === "23505" ? 409 : 500).json({ error: error.code === "23505" ? "You already have a template with that name" : error.message });
+    res.status(201).json({ success: true, data });
+  } catch (e) {
+    console.error("[documents/from-sample]", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.put("/documents/templates/:id", async (req, res) => {

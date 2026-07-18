@@ -9,7 +9,7 @@ import {
   FileText, Plus, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award, Sparkles,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { CreateTemplateModal } from './marketplace-page/parts.jsx';
+import { uploadAndOcr } from '../services/uploadApi.js';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 
@@ -44,6 +44,72 @@ const IconBlock = ({ cat, height = 122 }) => (
     {cat === 'certificate' ? <Award size={30} color={catColor.certificate} /> : <FileText size={28} color={catColor[cat] || BLUE} />}
   </div>
 );
+
+/* Upload a sample → OCR → AI builds a document template (saved to this grid). */
+function CreateDocModal({ onClose, onSaved }) {
+  const fileRef = useRef(null);
+  const [stage, setStage]   = useState('upload');   // upload | extracting | review
+  const [name, setName]     = useState('');
+  const [category, setCategory] = useState('form');
+  const [text, setText]     = useState('');
+  const [error, setError]   = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!name) setName(f.name.replace(/\.[^.]+$/, ''));
+    setError(''); setStage('extracting');
+    try { const ocr = await uploadAndOcr(f); setText(ocr || ''); setStage('review'); }
+    catch (err) { setError(err.message || 'Could not read that file'); setStage('upload'); }
+  };
+
+  const save = async () => {
+    if (!name.trim() || !text.trim()) { setError('Add a name and upload a sample.'); return; }
+    setSaving(true); setError('');
+    try { const res = await apiPost(`${BASE}/documents/templates/from-sample`, { name: name.trim(), category, sourceText: text }); onSaved(res.data); }
+    catch (err) { setError(err.message || 'Could not create template'); setSaving(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,20,.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: WHITE, borderRadius: 18, width: '100%', maxWidth: 440, padding: 22, fontFamily: FONT, boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <p style={{ fontSize: 16, fontWeight: 900, color: INK, margin: '0 0 4px' }}>Create a template</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+        </div>
+        <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 18px', lineHeight: 1.5 }}>Upload a photo of an existing document — a report card, certificate, form or letter. We’ll turn it into a reusable template you can fill and print.</p>
+
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden onChange={onFile} />
+        <div onClick={() => stage !== 'extracting' && fileRef.current?.click()} style={{ border: `2px dashed ${BORDER}`, borderRadius: 16, padding: '28px 20px', textAlign: 'center', cursor: stage === 'extracting' ? 'default' : 'pointer', marginBottom: 16 }}>
+          {stage === 'extracting' ? (
+            <><Loader2 size={22} color={AMBER} style={{ animation: 'spin .8s linear infinite' }} /><p style={{ fontSize: 12, color: MUTED2, margin: '6px 0 0' }}>Reading the document…</p></>
+          ) : stage === 'review' ? (
+            <><FileText size={22} color={GREEN} /><p style={{ fontSize: 13, fontWeight: 800, color: INK, margin: '6px 0 0' }}>Sample read ✓</p><p style={{ fontSize: 11.5, color: MUTED2, margin: '2px 0 0' }}>Tap to choose a different file</p></>
+          ) : (
+            <><Sparkles size={22} color={AMBER} /><p style={{ fontSize: 13.5, fontWeight: 800, color: INK, margin: '6px 0 0' }}>Tap to upload a sample</p><p style={{ fontSize: 11.5, color: MUTED2, margin: '2px 0 0' }}>Image or PDF</p></>
+          )}
+        </div>
+
+        <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED2 }}>Template name</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Term Report Card" style={{ ...inputStyle, marginTop: 5, marginBottom: 12 }} />
+        <label style={{ fontSize: 11.5, fontWeight: 700, color: MUTED2 }}>Category</label>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ ...inputStyle, marginTop: 5, marginBottom: 4, cursor: 'pointer' }}>
+          {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+
+        {error && <p style={{ fontSize: 12.5, color: RED, margin: '10px 0 0', fontWeight: 600 }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+          <button onClick={save} disabled={saving || stage !== 'review'} style={{ flex: 1.4, padding: '10px', borderRadius: 10, border: 'none', background: (saving || stage !== 'review') ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (saving || stage !== 'review') ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: (saving || stage !== 'review') ? 'default' : 'pointer', fontFamily: FONT }}>
+            {saving ? 'Saving…' : 'Save template'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
@@ -109,9 +175,9 @@ export default function DocumentsPage() {
 
       {gen && <GenerateModal seed={gen} allDocs={docs || []} onClose={() => setGen(null)} showToast={showToast} onDone={load} />}
       {showCreate && (
-        <CreateTemplateModal
+        <CreateDocModal
           onClose={() => setShowCreate(false)}
-          onSaved={() => { setShowCreate(false); showToast('Template saved ✓'); }}
+          onSaved={() => { setShowCreate(false); showToast('Template created ✓'); load(); }}
         />
       )}
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
