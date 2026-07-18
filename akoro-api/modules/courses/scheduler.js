@@ -204,6 +204,22 @@ const emitToParticipants = async (courseId, event, payload) => {
   for (const uid of ids) io.to(`user:${uid}`).emit(event, payload);
 };
 
+// Persist a bell notification for every enrolled student of a course.
+// Best-effort — a notification failure never blocks the session lifecycle.
+const notifyParticipantsDB = async (courseId, { type, title, content, relatedId }) => {
+  try {
+    const ids = await courseParticipants(courseId);
+    if (!ids.length) return;
+    const nowIso = new Date().toISOString();
+    await db.from("notifications").insert(ids.map((uid) => ({
+      user_id: uid, type, title, content: content ?? null,
+      related_id: relatedId ?? null, is_read: false, created_at: nowIso,
+    })));
+  } catch (err) {
+    console.warn("[scheduler] notification insert failed:", err.message);
+  }
+};
+
 // Read a teacher's connected platform credentials from user_settings.
 // Shape: settings.streaming_platforms[platform] = { connected, meeting_url,
 //        host_email, refresh_token, access_token, connected_at }
@@ -300,6 +316,11 @@ const activateSession = async (session) => {
   await emitToParticipants(session.course_id, "live_class_live", {
     sessionId: session.id, title: session.title, status: "live",
     joinUrl: session.join_url ?? session.meeting_url ?? null,
+  });
+  await notifyParticipantsDB(session.course_id, {
+    type: "live_class", title: "🔴 Live class started",
+    content: `${session.title} is live now — tap Join Live to enter.`,
+    relatedId: session.id,
   });
 };
 

@@ -46,6 +46,7 @@ export const EN = {
   'sessions.no_revisions': 'No revisions needed',
   'sessions.all_up_to_date':'All your agent sessions are up to date!',
   'sessions.starting_soon':'Starting Soon',
+  'sessions.live_soon':     'Live & Soon',
   'sessions.today':        'Today',
   'sessions.tomorrow':     'Tomorrow',
   'sessions.this_week':    'This Week',

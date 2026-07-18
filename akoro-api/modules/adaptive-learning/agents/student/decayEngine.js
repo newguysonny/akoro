@@ -375,6 +375,21 @@ export class DecayEngine {
         .select("id")
         .single();
 
+      // Also surface it in the general bell notifications so it shows up
+      // alongside live-class and other alerts. Best-effort.
+      try {
+        await supabase.from("notifications").insert({
+          user_id:    studentId,
+          type:       "knowledge_decay",
+          title:      `📉 Revise ${t.topic}`,
+          content:    message,
+          related_id: notif?.id ?? null,
+          is_read:    false,
+        });
+      } catch (e) {
+        console.warn("[decay] bell notification insert failed:", e.message);
+      }
+
       // Emit to student's socket room
       if (io) {
         io.to(`student:${studentId}`).emit("knowledge_decay_alert", {
