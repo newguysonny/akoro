@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
@@ -34,8 +34,22 @@ import { useBattleAPI }    from '../hooks/useBattleAPI.js';
 
 export default function LearnerDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useLang();
-  const [tab,               setTab]              = useState("sessions");
+
+  // Top-level tab is mirrored in the URL (?tab=…) so the browser Back/Forward
+  // buttons move between tabs instead of jumping straight out to the landing
+  // page, and a deep-link / refresh restores the right tab.
+  const VALID_TABS = ["sessions", "discovery", "rankings", "battles", "agent", "challenges"];
+  const tabFromUrl = () => {
+    const p = new URLSearchParams(location.search).get("tab");
+    return VALID_TABS.includes(p) ? p : "sessions";
+  };
+  const [tab,               setTab]              = useState(tabFromUrl);
+  // Keep tab in sync when the URL changes (Back/Forward, deep link).
+  useEffect(() => { setTab(tabFromUrl()); }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A user tab switch pushes a history entry; the effect above then sets state.
+  const goTab = (key) => navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
   const [agentSubTab,       setAgentSubTab]       = useState("sessions");
@@ -191,7 +205,7 @@ export default function LearnerDashboard() {
         socket.on("new_challenge", challenge => {
           setToast(`⚡ ${challenge.challenger} challenged you!`);
           setChallenges(prev => [challenge, ...prev]);
-          setTab("challenges");
+          goTab("challenges");
         });
 
         // Gap 2 fix: correct battle event name from backend
@@ -427,7 +441,7 @@ export default function LearnerDashboard() {
           {(tab==="sessions"||tab==="challenges")&&(
           <div style={{ display:"flex" }}>
             {[{key:"sessions",label:t('dash.my_sessions'),count:totalUnread,countColor:BRAND},{key:"challenges",label:t('dash.challenges'),count:pendingChallenges,countColor:RED}].map(({key,label,count,countColor})=>(
-              <button key={key} onClick={()=>setTab(key)} style={{ flex:1,padding:"10px 0 12px",background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:tab===key?800:600,color:tab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${tab===key?BRAND:"transparent"}`,transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Nunito',sans-serif" }}>
+              <button key={key} onClick={()=>goTab(key)} style={{ flex:1,padding:"10px 0 12px",background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:tab===key?800:600,color:tab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${tab===key?BRAND:"transparent"}`,transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Nunito',sans-serif" }}>
                 {label}{count>0&&<span style={{ background:tab===key?countColor:"#E5E7EB",color:tab===key?"#fff":"#6B7280",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800 }}>{count}</span>}
               </button>
             ))}
@@ -611,14 +625,14 @@ export default function LearnerDashboard() {
                   <span style={{ fontSize:48,opacity:.25 }}>✅</span>
                   <p style={{ fontSize:14,fontWeight:800,color:"#9CA3AF",textAlign:"center" }}>{t('challenges.all_accepted')}</p>
                   <p style={{ fontSize:12,fontWeight:600,color:"#D1D5DB",textAlign:"center" }}>{t('challenges.check_battles')}</p>
-                  <button onClick={()=>setTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenges.go_to_battles')}</button>
+                  <button onClick={()=>goTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenges.go_to_battles')}</button>
                 </div>
               ):challenges.filter(c=>!acceptedIds.has(c.id)).map(c=><ChallengeRow key={c.id} challenge={c} onTap={setSelectedChallenge}/>)}
             </div>
           )}
           {tab==="discovery" && <DiscoveryTab/>}
           {tab==="rankings" && <RankingsTab/>}
-          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>setTab("challenges")}/>}
+          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}
         </div>
 
@@ -628,7 +642,7 @@ export default function LearnerDashboard() {
             // "Learn" (key "sessions") stays active on the Challenges sub-tab too.
             const navActive = tab===key || (key==="sessions" && tab==="challenges");
             return (
-              <div key={key} onClick={()=>setTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"#9CA3AF",minWidth:56,padding:"2px 0" }}>
+              <div key={key} onClick={()=>goTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"#9CA3AF",minWidth:56,padding:"2px 0" }}>
                 <div style={{ position:"relative" }}>
                   <span style={{ fontSize:22 }}>{icon}</span>
                   {key==="sessions"&&totalUnread>0&&<div style={{ position:"absolute",top:-3,right:-6,width:14,height:14,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center" }}><span style={{ fontSize:8,fontWeight:900,color:"#fff" }}>{totalUnread}</span></div>}

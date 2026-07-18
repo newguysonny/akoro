@@ -2,7 +2,7 @@
  * CourseDetailsPage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
@@ -19,6 +19,16 @@ import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, Live
 export default function CourseDetailsPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Smart back: if we arrived here from within the app there's real history to
+  // pop; if the page was deep-linked / opened in a new tab (location.key is the
+  // initial 'default' entry), go to the dashboard instead of exiting to landing.
+  const goBack = () => {
+    if (location.key && location.key !== 'default') { navigate(-1); return; }
+    // Deep-linked / new tab: signed-in learners land on the dashboard, guests on home.
+    const signedIn = (() => { try { return !!localStorage.getItem('akoro_user'); } catch { return false; } })();
+    navigate(signedIn ? '/app' : '/');
+  };
   const [data, setData] = useState(null);
   const [courseType, setCourseType] = useState('live');
   const [isEnrolled, setIsEnrolled] = useState(false);
@@ -121,7 +131,7 @@ export default function CourseDetailsPage() {
       {/* Nav */}
       <div style={{ background: '#fff', borderBottom: `1px solid ${BORDER}`, position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 18px', height: 56, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 700, color: MUTED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}><ChevronLeft size={16} />Back</button>
+          <button onClick={goBack} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 700, color: MUTED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}><ChevronLeft size={16} />Back</button>
           <div style={{ height: 20, width: 1, background: BORDER }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate('/')}>
             <AkoroLogo size={28} radius={8} />
