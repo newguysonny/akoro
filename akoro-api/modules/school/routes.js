@@ -92,7 +92,7 @@ router.use("/mgmt", mgmtRouter);
 async function getMySchool(req, res) {
   const { data } = await db
     .from("school_profiles")
-    .select("id, name, description, logo_url, website, address, phone, is_active, created_at, slug, acronym, principal_name, country, state, lga, city, education_levels, ownership_type, curriculum, year_established, gender_type, boarding_type, student_band, favicon_url, principal_signature_url")
+    .select("id, name, description, logo_url, website, address, phone, is_active, verification_status, created_at, slug, acronym, principal_name, country, state, lga, city, education_levels, ownership_type, curriculum, year_established, gender_type, boarding_type, student_band, favicon_url, principal_signature_url")
     .eq("admin_user_id", req.user.id)
     .order("created_at", { ascending: true })
     .limit(1)

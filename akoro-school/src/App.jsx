@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import GlobalStyles from './components/GlobalStyles.jsx';
+import VerificationGate, { useSchoolVerification } from './components/VerificationGate.jsx';
 import SigninPage         from './pages/auth/SigninPage.jsx';
 import SignupPage         from './pages/auth/SignupPage.jsx';
 import OnboardingPage     from './pages/auth/OnboardingPage.jsx';
@@ -148,6 +149,20 @@ function ProtectedRoute({ children, anyRole = false }) {
   if (user && user.onboardingCompleted === false) {
     return <Navigate to="/onboarding" replace />;
   }
+  return <SchoolVerificationGuard user={user}>{children}</SchoolVerificationGuard>;
+}
+
+/* Withholds the dashboard from a school owner until an akoro admin approves the
+   school (verification_status = pending/rejected). Only gates the account that
+   owns the school — teachers/admins using this app are unaffected. */
+function SchoolVerificationGuard({ user, children }) {
+  const isOwner = user?.role === 'school_admin' || user?.role === 'school';
+  const { loading, status } = useSchoolVerification(isOwner);
+  if (!isOwner) return children;
+  if (loading) {
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#6B6B80' }}>Loading your school…</div>;
+  }
+  if (status === 'pending' || status === 'rejected') return <VerificationGate status={status} />;
   return children;
 }
 

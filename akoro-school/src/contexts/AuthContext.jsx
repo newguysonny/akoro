@@ -117,7 +117,7 @@ export function AuthProvider({ children }) {
       await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch { /* ignore */ }
     clearUser();
-    window.location.href = '/signin';
+    window.location.href = '/signin';  // full reload also clears the cached school-verification status
   }, [clearUser]);
 
   const loginWithGoogle = useCallback((redirectAfter = '/') => {
