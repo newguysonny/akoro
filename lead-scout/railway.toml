@@ -1,0 +1,19 @@
+# Railway deployment config for the Akoro lead-scout service.
+# Deploy this directory as its OWN Railway service (separate from akoro-api).
+#
+#   Root Directory: lead-scout
+#   Builder:        Dockerfile (set below)
+#
+# Railway injects $PORT; the Dockerfile CMD binds to it.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Hit /health so Railway only routes traffic once the container is up.
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+numReplicas = 1
