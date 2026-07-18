@@ -51,8 +51,16 @@ const handlers = {
 
     if (error) throw new Error(error.message);
 
-    const unread = (data ?? []).filter((n) => !n.is_read).length;
-    res200(res, data ?? [], { total: count ?? 0, unread });
+    // Unread must be the TOTAL count of unread rows, not just those on this
+    // page — otherwise a ?limit=1 badge poll caps the count at 1.
+    const { count: unread, error: unreadErr } = await db
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", req.user.id)
+      .eq("is_read", false);
+    if (unreadErr) throw new Error(unreadErr.message);
+
+    res200(res, data ?? [], { total: count ?? 0, unread: unread ?? 0 });
   }),
 
   // POST /api/notifications/mark-read
