@@ -131,8 +131,14 @@ export default function LearnerDashboard() {
       .catch(()=>{});
 
     // Agent sessions (for Sessions + Revisions sub-tabs)
+    loadAgentSessions();
+  },[]);
+
+  // Reload the persisted agent sessions — called on mount and whenever a
+  // teaching/decay session closes so a new session shows up immediately.
+  const loadAgentSessions = useCallback(() => {
     apiGet("/api/adaptive/teaching/sessions")
-      .then(d=>{ if(d.sessions?.length) setAgentSessions(d.sessions); })
+      .then(d=>{ setAgentSessions(d.sessions || []); })
       .catch(()=>{});
   },[]);
 
@@ -173,7 +179,7 @@ export default function LearnerDashboard() {
               : s
           ));
           setSessionTab("live");
-          setLiveSubTab("starting-soon");
+          setLiveSubTab("live");
         });
 
         // Live class ended — only now does it leave the learner's list.
@@ -267,11 +273,9 @@ export default function LearnerDashboard() {
 
   const bySubject = subjectFilter==="all" ? sessions : sessions.filter(s=>s.subject===subjectFilter);
   const liveBase  = liveSubjectFilter==="all" ? sessions : sessions.filter(s=>s.subject===liveSubjectFilter);
-  // A live class stays in the urgent "Live & soon" tab from starting-soon
-  // through its whole live window — so it doesn't vanish the moment it starts.
-  const liveMatch = (s, tab) => s.type==="live" && (
-    tab==="starting-soon" ? (s.scheduleBucket==="live" || s.scheduleBucket==="starting-soon")
-                          : s.scheduleBucket===tab);
+  // Each live sub-tab matches its own bucket — Live now and Starting soon are
+  // separate pills so a live class shows under "Live now" for its whole window.
+  const liveMatch = (s, tab) => s.type==="live" && s.scheduleBucket===tab;
   const filtered  = sessionTab==="all"   ? bySubject
                   : sessionTab==="live"  ? liveBase.filter(s=>liveMatch(s, liveSubTab))
                   : bySubject.filter(s=>s.type==="agent");
@@ -454,14 +458,15 @@ export default function LearnerDashboard() {
                 <>
                   <div style={{ display:"flex",gap:7,padding:"10px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",background:"#FAFBFF",flexShrink:0 }}>
                     {[
-                      {key:"starting-soon", label:t('sessions.live_soon'),   icon:"🔴"},
+                      {key:"live",          label:t('sessions.live_now'),      icon:"🔴"},
+                      {key:"starting-soon", label:t('sessions.starting_soon'), icon:"⏰"},
                       {key:"today",         label:t('sessions.today'),         icon:"📅"},
                       {key:"tomorrow",      label:t('sessions.tomorrow'),      icon:"🌅"},
                       {key:"week",          label:t('sessions.this_week'),     icon:"📆"},
                     ].map(({key,label,icon})=>{
                       const cnt = bySubject.filter(s=>liveMatch(s,key)).length;
                       const active = liveSubTab===key;
-                      const isAlert = key==="starting-soon"&&cnt>0;
+                      const isAlert = (key==="live"||key==="starting-soon")&&cnt>0;
                       return (
                         <button key={key} onClick={()=>setLiveSubTab(key)}
                           style={{ flexShrink:0,display:"flex",alignItems:"center",gap:5,
@@ -665,7 +670,7 @@ export default function LearnerDashboard() {
           <TeachAgentModal
             session={teachSession?.topic ? null : teachSession}
             config={teachSession?.topic ? teachSession : null}
-            onClose={()=>setTeachSession(null)}
+            onClose={()=>{ setTeachSession(null); loadAgentSessions(); }}
           />
         )}
 
@@ -674,7 +679,7 @@ export default function LearnerDashboard() {
           <DecaySessionModal
             alert={decaySession}
             agentProfile={agentProfile}
-            onClose={() => setDecaySession(null)}
+            onClose={() => { setDecaySession(null); loadAgentSessions(); }}
           />
         )}
 

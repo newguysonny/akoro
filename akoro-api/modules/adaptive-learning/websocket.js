@@ -60,8 +60,10 @@ async function createSessionRecord(orchestrator, { studentId, topic, subject, op
     const { data, error } = await db.schema("edu").from("adaptive_sessions").insert({
       student_id:             studentId,
       student_agent_id:       orchestrator.studentAgentRecord?.id || null,
-      topic,
-      subject:                subject || null,
+      // topic + subject are NOT NULL — never let a missing value silently drop
+      // the whole session row (which is what kept sessions off the list).
+      topic:                  topic || "Untitled session",
+      subject:                subject || "General",
       subtopics:              JSON.stringify(orchestrator.session?.mustKnowParts || []),
       objectives:             "{}",
       current_subtopic_idx:   0,
