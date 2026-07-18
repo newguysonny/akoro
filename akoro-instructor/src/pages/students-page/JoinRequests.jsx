@@ -10,12 +10,17 @@ import { UserPlus, Check, X, Loader2 } from 'lucide-react';
 import { apiGet, apiPost } from '../../services/api.js';
 import { AMBER, INK, MUTED, BORDER, WHITE, GREEN, RED, FONT } from '../../constants.js';
 
-export default function JoinRequests({ onChanged }) {
+export default function JoinRequests({ onChanged, showEmpty = false }) {
   const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(() => {
-    apiGet('/api/profiles/teacher/join-requests').then((r) => setRows(r.data || [])).catch(() => setRows([]));
+    setLoading(true);
+    apiGet('/api/profiles/teacher/join-requests')
+      .then((r) => setRows(r.data || []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -29,7 +34,17 @@ export default function JoinRequests({ onChanged }) {
     finally { setBusyId(null); }
   };
 
-  if (!rows.length) return null;
+  // Empty: as a banner (default) render nothing; as a page, show an empty state.
+  if (!rows.length) {
+    if (!showEmpty) return null;
+    return (
+      <div style={{ border: `1.5px solid ${BORDER}`, background: WHITE, borderRadius: 14, padding: '48px 24px', textAlign: 'center', fontFamily: FONT }}>
+        <UserPlus size={30} color={MUTED} style={{ marginBottom: 10 }} />
+        <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>{loading ? 'Loading requests…' : 'No pending join requests'}</div>
+        {!loading && <div style={{ fontSize: 13, color: MUTED, marginTop: 4 }}>When a learner asks to join your class, they’ll appear here for approval.</div>}
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginBottom: 20, border: `1.5px solid ${AMBER}55`, background: `${AMBER}0A`, borderRadius: 14, padding: '12px 14px', fontFamily: FONT }}>

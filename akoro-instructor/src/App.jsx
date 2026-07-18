@@ -10,6 +10,7 @@ import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
+import JoinRequestsPage from './pages/JoinRequestsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import DocumentsPage, { DocumentEditorPage } from './pages/DocumentsPage.jsx';
@@ -104,6 +105,7 @@ function AppRoutes() {
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       {/* Management (teacher-scoped student info + academics) */}
       <Route path="/mgmt/students"        element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/join-requests"   element={<ProtectedRoute><JoinRequestsPage /></ProtectedRoute>} />
       <Route path="/mgmt/students/:id"    element={<ProtectedRoute><StudentProfilePage /></ProtectedRoute>} />
       <Route path="/mgmt/attendance"      element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
       <Route path="/mgmt/behavior"        element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />

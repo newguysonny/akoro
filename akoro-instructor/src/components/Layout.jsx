@@ -26,6 +26,7 @@ const NAV = [
 const MGMT_NAV = [
   { label: 'Student Information', icon: Users, children: [
     { label: 'My Students',      to: '/mgmt/students' },
+    { label: 'Join Requests',    to: '/mgmt/join-requests', badgeKey: 'joinRequests' },
     { label: 'Attendance',       to: '/mgmt/attendance' },
     { label: 'Behavior Records', to: '/mgmt/behavior' },
   ] },
@@ -67,16 +68,44 @@ function NavItem({ to, icon: Icon, label, compact }) {
   );
 }
 
+/* Poll the pending join-request count for the nav badge. */
+function useJoinRequestCount() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => apiGet('/api/profiles/teacher/join-requests')
+      .then((r) => { if (alive) setCount((r?.data || []).length); })
+      .catch(() => {});
+    poll();
+    const t = setInterval(poll, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  return count;
+}
+
+/* Small count pill for nav badges. */
+function NavBadge({ count }) {
+  if (!count) return null;
+  return (
+    <span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: '#EF4444', color: WHITE, fontSize: 10, fontWeight: 800, fontFamily: FONT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 /* Expandable nav group (dropdown) — matches the school dashboard. */
-function Group({ item, collapsed, open, onToggle }) {
+function Group({ item, collapsed, open, onToggle, badges = {} }) {
+  const groupBadge = item.children.reduce((n, c) => n + (c.badgeKey ? (badges[c.badgeKey] || 0) : 0), 0);
   return (
     <div>
       <button title={collapsed ? item.label : undefined} onClick={onToggle}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '10px 16px', margin: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, background: open && !collapsed ? 'rgba(255,255,255,.04)' : 'transparent', color: open ? WHITE : MUTED2 }}
+        style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '10px 16px', margin: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, background: open && !collapsed ? 'rgba(255,255,255,.04)' : 'transparent', color: open ? WHITE : MUTED2 }}
         onMouseEnter={(e) => { e.currentTarget.style.color = WHITE; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = open ? WHITE : MUTED2; }}>
         <item.icon size={18} />
         {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
+        {!collapsed && groupBadge > 0 && !open && <NavBadge count={groupBadge} />}
+        {collapsed && groupBadge > 0 && <span style={{ position: 'absolute', top: 4, right: 12, width: 8, height: 8, borderRadius: '50%', background: '#EF4444' }} />}
         {!collapsed && <ChevronDown size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
       </button>
       {open && !collapsed && (
@@ -84,7 +113,9 @@ function Group({ item, collapsed, open, onToggle }) {
           {item.children.map((c) => (
             <NavLink key={c.label} to={c.to} end={c.to === '/'}
               style={({ isActive }) => ({ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', textDecoration: 'none', fontFamily: FONT, fontSize: 12.5, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', borderRadius: 8 })}>
-              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{c.label}
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{c.label}</span>
+              {c.badgeKey && <NavBadge count={badges[c.badgeKey] || 0} />}
             </NavLink>
           ))}
         </div>
@@ -102,6 +133,9 @@ export function Sidebar({ collapsed = false }) {
   // dashboard). Previously `collapsed || medium` locked the sidebar to
   // icons-only on 769–1024px widths, so the hamburger could never expand it.
   const compact = collapsed;
+
+  const joinRequestCount = useJoinRequestCount();
+  const badges = { joinRequests: joinRequestCount };
 
   const q = query.trim().toLowerCase();
   const navItems   = q ? NAV.filter((i) => i.label.toLowerCase().includes(q)) : NAV;
@@ -154,7 +188,7 @@ export function Sidebar({ collapsed = false }) {
       <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
         {navItems.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
         {mgmtGroups.map((g) => (
-          <Group key={g.label} item={g} collapsed={compact}
+          <Group key={g.label} item={g} collapsed={compact} badges={badges}
             open={q ? true : !!openGroups[g.label]} onToggle={() => toggleGroup(g.label)} />
         ))}
         {q && !navItems.length && !mgmtGroups.length && (
