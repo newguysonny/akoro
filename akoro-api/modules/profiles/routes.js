@@ -503,6 +503,7 @@ const schoolHandlers = {
         boarding_type:    boardingType ?? null,
         student_band:     studentBand  ?? null,
         is_active:     true,
+        verification_status: "pending",   // awaits akoro admin approval
       })
       .select()
       .single();

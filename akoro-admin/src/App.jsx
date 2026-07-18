@@ -5,6 +5,7 @@ import AkoroLogo from './components/common/AkoroLogo.jsx';
 import DashboardPage        from './pages/DashboardPage.jsx';
 import UsersPage            from './pages/UsersPage.jsx';
 import InstructorsPage      from './pages/InstructorsPage.jsx';
+import SchoolsPage          from './pages/SchoolsPage.jsx';
 import CoursesPage          from './pages/CoursesPage.jsx';
 import BlogAdminPage        from './pages/BlogAdminPage.jsx';
 import BlogPostEditorPage   from './pages/BlogPostEditorPage.jsx';
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="/"                  element={<AdminRoute><DashboardPage /></AdminRoute>} />
           <Route path="/users"             element={<AdminRoute><UsersPage /></AdminRoute>} />
           <Route path="/instructors"       element={<AdminRoute><InstructorsPage /></AdminRoute>} />
+          <Route path="/schools"           element={<AdminRoute><SchoolsPage /></AdminRoute>} />
           <Route path="/courses"           element={<AdminRoute><CoursesPage /></AdminRoute>} />
           <Route path="/content/blog"      element={<AdminRoute><BlogAdminPage /></AdminRoute>} />
           <Route path="/content/blog/new"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />

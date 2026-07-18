@@ -14,6 +14,10 @@
  *   PATCH  /api/admin/instructors/:id/verify        set is_verified=true
  *   PATCH  /api/admin/instructors/:id/suspend       set is_active=false
  *
+ *   GET    /api/admin/schools                        list schools (?search=&status=&limit=&offset=)
+ *   PATCH  /api/admin/schools/:id/verify             set verification_status=verified
+ *   PATCH  /api/admin/schools/:id/reject             set verification_status=rejected
+ *
  *   GET    /api/admin/courses                       list courses (?search=&limit=&offset=)
  *   PATCH  /api/admin/courses/:id                   update course fields
  *   DELETE /api/admin/courses/:id                   delete course
@@ -190,6 +194,48 @@ router.patch("/instructors/:id/suspend", adminOnly, asyncHandler(async (req, res
   if (!data) return err404(res, "Instructor not found");
   ok(res, data);
 }));
+
+// ── Schools ──────────────────────────────────────────────────────────────────
+// Verify schools that sign up before they go live (mirrors instructor verify).
+
+const SCHOOL_COLS =
+  "id,name,logo_url,website,address,phone,is_active,verification_status,verified_at,created_at," +
+  "admin:users!school_profiles_admin_user_id_fkey(id,full_name,email)";
+
+router.get("/schools", adminOnly, asyncHandler(async (req, res) => {
+  const { search = "", status = "", limit = 50, offset = 0 } = req.query;
+  const lim = Math.min(Number(limit) || 50, 200);
+  const off = Number(offset) || 0;
+
+  let q = db.from("school_profiles").select(SCHOOL_COLS, { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(off, off + lim - 1);
+
+  if (["pending", "verified", "rejected"].includes(status)) q = q.eq("verification_status", status);
+  if (search) q = q.or(`name.ilike.%${search}%,website.ilike.%${search}%,address.ilike.%${search}%`);
+
+  const { data, count, error } = await q;
+  if (error) throw error;
+  ok(res, data, { total: count, limit: lim, offset: off });
+}));
+
+const setSchoolStatus = (status) => asyncHandler(async (req, res) => {
+  const { data, error } = await db.from("school_profiles")
+    .update({
+      verification_status: status,
+      verified_at:         status === "verified" ? new Date().toISOString() : null,
+      updated_at:          new Date().toISOString(),
+    })
+    .eq("id", req.params.id)
+    .select(SCHOOL_COLS)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return err404(res, "School not found");
+  ok(res, data);
+});
+
+router.patch("/schools/:id/verify", adminOnly, setSchoolStatus("verified"));
+router.patch("/schools/:id/reject", adminOnly, setSchoolStatus("rejected"));
 
 // ── Courses ──────────────────────────────────────────────────────────────────
 

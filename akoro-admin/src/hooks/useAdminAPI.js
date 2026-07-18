@@ -17,6 +17,10 @@ export default function useAdminAPI() {
     verifyInstructor:(id)     => apiPatch(`/api/admin/instructors/${id}/verify`).then(r => r.data),
     suspendInstructor:(id)    => apiPatch(`/api/admin/instructors/${id}/suspend`).then(r => r.data),
 
+    getSchools:      (p = {}) => apiGet(`/api/admin/schools?${new URLSearchParams(p)}`).then(r => r.data),
+    verifySchool:    (id)     => apiPatch(`/api/admin/schools/${id}/verify`).then(r => r.data),
+    rejectSchool:    (id)     => apiPatch(`/api/admin/schools/${id}/reject`).then(r => r.data),
+
     // ─── Courses ─────────────────────────────────────────────────────────
     getCourses:      (p = {}) => apiGet(`/api/admin/courses?${new URLSearchParams(p)}`).then(r => r.data),
     updateCourse:    (id, d)  => apiPatch(`/api/admin/courses/${id}`, d).then(r => r.data),
