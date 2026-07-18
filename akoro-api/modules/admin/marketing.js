@@ -43,6 +43,16 @@ router.post("/marketing/jobs", ...adminOnly, async (req, res) => {
   } catch (e) { proxyError(res, e); }
 });
 
+// Import + audit a school-list CSV (body: { csv, weak_websites_only, limit }).
+router.post("/marketing/import", ...adminOnly, async (req, res) => {
+  try {
+    const r = await fetch(`${SCOUT()}/jobs/import`, {
+      method: "POST", headers: HEADERS(), body: JSON.stringify(req.body ?? {}),
+    });
+    res.status(r.status).json(await r.json());
+  } catch (e) { proxyError(res, e); }
+});
+
 router.get("/marketing/jobs/:id", ...adminOnly, async (req, res) => {
   try {
     const r = await fetch(`${SCOUT()}/jobs/${encodeURIComponent(req.params.id)}`, { headers: HEADERS() });

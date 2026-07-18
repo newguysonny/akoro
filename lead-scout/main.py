@@ -32,8 +32,20 @@ DATA.mkdir(exist_ok=True)
 app = FastAPI(title="akoro-lead-scout")
 SECRET = os.environ.get("LEAD_SCOUT_SECRET", "")
 
-CSV_COLUMNS = ["name", "category", "address", "phone", "website",
-               "website_status", "pitch_score", "reasons", "source"]
+CSV_COLUMNS = ["name", "category", "address", "phone", "email", "website",
+               "website_status", "pitch_score", "reasons",
+               "facebook", "instagram", "twitter", "linkedin", "source"]
+
+# Accepted CSV header aliases → our field names (case-insensitive).
+COLUMN_ALIASES = {
+    "name": "name", "school": "name", "school_name": "name", "school name": "name",
+    "institution": "name", "business": "name",
+    "website": "website", "url": "website", "web": "website", "site": "website",
+    "phone": "phone", "telephone": "phone", "tel": "phone", "mobile": "phone", "contact": "phone",
+    "email": "email", "e-mail": "email",
+    "address": "address", "location": "address", "town": "address", "city": "address",
+    "category": "category", "type": "category",
+}
 
 
 class JobRequest(BaseModel):
@@ -42,6 +54,12 @@ class JobRequest(BaseModel):
     targets: list[str] = Field(default=["osm"])
     limit: int = Field(default=100, ge=1, le=500)
     weak_websites_only: bool = False
+
+
+class ImportRequest(BaseModel):
+    csv: str = Field(min_length=1)
+    weak_websites_only: bool = False
+    limit: int = Field(default=500, ge=1, le=2000)
 
 
 def check_auth(secret: str | None):
@@ -64,6 +82,33 @@ def load_job(job_id: str) -> dict:
     return json.loads(p.read_text())
 
 
+async def finalize(job: dict, leads: list[dict], limit: int, weak_only: bool, warnings: list[str]):
+    """Shared tail: dedupe → cap → audit+enrich → filter → sort → done."""
+    seen, unique = set(), []
+    for l in leads:
+        k = (l.get("name") or "").strip().lower()
+        if k and k not in seen:
+            seen.add(k)
+            unique.append(l)
+    unique = unique[:limit]
+
+    job.update(status="auditing", found=len(unique), warnings=warnings)
+    save_job(job)
+
+    try:
+        await audit_all(unique)
+    except Exception as e:
+        warnings.append(f"audit: {e}")
+
+    if weak_only:
+        unique = [l for l in unique if l.get("pitch_score", 0) >= 50]
+    unique.sort(key=lambda l: -l.get("pitch_score", 0))
+
+    job.update(status="done", leads=unique, found=len(unique), warnings=warnings,
+               finished_at=datetime.datetime.utcnow().isoformat() + "Z")
+    save_job(job)
+
+
 async def run_job(job: dict, req: JobRequest):
     leads, warnings = [], []
     for target in req.targets:
@@ -81,32 +126,37 @@ async def run_job(job: dict, req: JobRequest):
                 warnings.append(f"{target}: no results")
         except Exception as e:
             warnings.append(f"{target}: {e}")
+    await finalize(job, leads, req.limit, req.weak_websites_only, warnings)
 
-    # Dedupe by lowercase name.
-    seen, unique = set(), []
-    for l in leads:
-        k = (l.get("name") or "").strip().lower()
-        if k and k not in seen:
-            seen.add(k)
-            unique.append(l)
-    unique = unique[: req.limit]
 
-    job.update(status="auditing", found=len(unique), warnings=warnings)
-    save_job(job)
+def parse_csv(text: str) -> list[dict]:
+    """Parse an uploaded school-list CSV into lead dicts, mapping header aliases."""
+    import csv as _csv
+    import io as _io
+    reader = _csv.DictReader(_io.StringIO(text))
+    leads = []
+    for raw in reader:
+        lead = {"source": "import", "category": "school"}
+        for header, value in raw.items():
+            if header is None:
+                continue
+            field = COLUMN_ALIASES.get(header.strip().lower())
+            if field and value and str(value).strip():
+                lead[field] = str(value).strip()
+        if lead.get("name"):
+            leads.append(lead)
+    return leads
 
+
+async def run_import(job: dict, req: ImportRequest):
+    warnings = []
     try:
-        await audit_all(unique)
+        leads = parse_csv(req.csv)
     except Exception as e:
-        warnings.append(f"audit: {e}")
-
-    if req.weak_websites_only:
-        unique = [l for l in unique if l.get("pitch_score", 0) >= 50]
-    unique.sort(key=lambda l: -l.get("pitch_score", 0))
-
-    job.update(status="done", leads=unique, found=len(unique),
-               warnings=warnings,
-               finished_at=datetime.datetime.utcnow().isoformat() + "Z")
-    save_job(job)
+        leads, warnings = [], [f"csv parse: {e}"]
+    if not leads:
+        warnings.append("No rows with a recognisable name column were found")
+    await finalize(job, leads, req.limit, req.weak_websites_only, warnings)
 
 
 @app.get("/health")
@@ -124,6 +174,17 @@ async def create_job(req: JobRequest, x_internal_secret: str | None = Header(Non
            "created_at": datetime.datetime.utcnow().isoformat() + "Z"}
     save_job(job)
     asyncio.create_task(run_job(job, req))
+    return {"id": job["id"], "status": job["status"]}
+
+
+@app.post("/jobs/import", status_code=201)
+async def create_import(req: ImportRequest, x_internal_secret: str | None = Header(None)):
+    check_auth(x_internal_secret)
+    job = {"id": uuid.uuid4().hex[:12], "status": "running", "request": {"mode": "import"},
+           "found": 0, "warnings": [], "leads": [],
+           "created_at": datetime.datetime.utcnow().isoformat() + "Z"}
+    save_job(job)
+    asyncio.create_task(run_import(job, req))
     return {"id": job["id"], "status": job["status"]}
 
 

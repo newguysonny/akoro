@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Download, Loader2, Globe, AlertTriangle, MapPin, Sparkles } from 'lucide-react';
+import { Search, Download, Loader2, Globe, AlertTriangle, MapPin, Sparkles, Upload, Mail, Facebook, Instagram, Twitter, Linkedin } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Toast } from '../components/Primitives.jsx';
 import { API, apiGet, apiPost } from '../services/api.js';
@@ -33,8 +33,15 @@ export default function MarketingPage() {
   const [starting, setStarting] = useState(false);
   const [toast, setToast] = useState(null);
   const pollRef = useRef(null);
+  const fileRef = useRef(null);
 
   const showToast = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 3500); };
+
+  const beginJob = (id, status) => {
+    setJob({ id, status: status || 'running', leads: [], warnings: [] });
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => poll(id), 3000);
+  };
 
   const toggleTarget = (k) => setTargets((t) => (t.includes(k) ? t.filter((x) => x !== k) : [...t, k]));
 
@@ -58,11 +65,24 @@ export default function MarketingPage() {
         weak_websites_only: weakOnly,
       });
       if (!res?.id) throw new Error(res?.message || 'Could not start job');
-      setJob({ id: res.id, status: res.status || 'running', leads: [], warnings: [] });
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(() => poll(res.id), 3000);
+      beginJob(res.id, res.status);
     } catch (e) {
       showToast(e.message || 'Could not start job', 'error');
+    } finally { setStarting(false); }
+  };
+
+  const onImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';           // allow re-selecting the same file
+    if (!file) return;
+    setStarting(true); setJob(null);
+    try {
+      const csv = await file.text();
+      const res = await apiPost('/api/admin/marketing/import', { csv, weak_websites_only: weakOnly });
+      if (!res?.id) throw new Error(res?.message || 'Could not import');
+      beginJob(res.id, res.status);
+    } catch (err) {
+      showToast(err.message || 'Could not import CSV', 'error');
     } finally { setStarting(false); }
   };
 
@@ -121,11 +141,16 @@ export default function MarketingPage() {
               <input type="checkbox" checked={weakOnly} onChange={(e) => setWeakOnly(e.target.checked)} style={{ accentColor: AMBER }} />
               Weak / no website only (best pitch targets)
             </label>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={onImportFile} />
+            <button onClick={() => fileRef.current?.click()} disabled={starting || busy} title="Import a school-list CSV (name, website, phone, email, address) — we audit + enrich each"
+              style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 13, fontWeight: 800, cursor: (starting || busy) ? 'default' : 'pointer', fontFamily: FONT, opacity: (starting || busy) ? 0.6 : 1 }}>
+              <Upload size={15} /> Import list (CSV)
+            </button>
             <button onClick={start} disabled={starting || busy}
-              style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, border: 'none',
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, border: 'none',
                 background: (starting || busy) ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: (starting || busy) ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: (starting || busy) ? 'default' : 'pointer', fontFamily: FONT }}>
               {starting || busy ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={15} />}
-              {busy ? (job.status === 'auditing' ? 'Auditing websites…' : 'Finding leads…') : 'Find leads'}
+              {busy ? (job.status === 'auditing' ? 'Auditing…' : 'Finding leads…') : 'Find leads'}
             </button>
           </div>
         </div>
@@ -163,7 +188,7 @@ export default function MarketingPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
                   <thead><tr>
                     <th style={th}>SCHOOL</th><th style={th}>WEBSITE</th><th style={th}>WHY PITCH</th>
-                    <th style={{ ...th, textAlign: 'center' }}>SCORE</th><th style={th}>CONTACT</th><th style={th}>SOURCE</th>
+                    <th style={{ ...th, textAlign: 'center' }}>SCORE</th><th style={th}>CONTACT</th><th style={th}>SOCIALS</th><th style={th}>SOURCE</th>
                   </tr></thead>
                   <tbody>
                     {leads.map((l, i) => {
@@ -177,7 +202,17 @@ export default function MarketingPage() {
                           </td>
                           <td style={{ ...td, maxWidth: 260, fontSize: 12, color: MUTED }}>{(l.reasons || []).join('; ') || '—'}</td>
                           <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: l.pitch_score >= 70 ? RED : l.pitch_score >= 50 ? '#B45309' : MUTED2 }}>{l.pitch_score ?? '—'}</td>
-                          <td style={{ ...td, fontSize: 12 }}>{l.phone || '—'}</td>
+                          <td style={{ ...td, fontSize: 12 }}>
+                            <div>{l.phone || '—'}</div>
+                            {l.email && <a href={`mailto:${l.email}`} style={{ color: BLUE, textDecoration: 'none', fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 2 }}><Mail size={11} /> {l.email}</a>}
+                          </td>
+                          <td style={td}>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              {[[l.facebook, Facebook], [l.instagram, Instagram], [l.twitter, Twitter], [l.linkedin, Linkedin]].map(([url, Icon], k) =>
+                                url ? <a key={k} href={url} target="_blank" rel="noreferrer" style={{ color: BLUE }}><Icon size={14} /></a> : null)}
+                              {!l.facebook && !l.instagram && !l.twitter && !l.linkedin && <span style={{ color: MUTED2, fontSize: 12 }}>—</span>}
+                            </div>
+                          </td>
                           <td style={{ ...td, fontSize: 11.5, color: MUTED2 }}>{l.source}</td>
                         </tr>
                       );
