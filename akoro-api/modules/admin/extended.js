@@ -35,8 +35,10 @@
  */
 
 import { Router } from "express";
+import bcrypt from "bcrypt";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { sendWelcomeEmail } from "../auth/emails.js";
 
 const router   = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -427,6 +429,69 @@ router.post("/users/invite-csv", adminOnly, asyncHandler(async (req, res) => {
   }
 
   ok(res, { invited, skipped, errors });
+}));
+
+// POST /users/create
+// Create a real, ready-to-login account (learner / instructor / school).
+// Sets a password (auto-generated if none given) and emails the person the
+// correct portal sign-in link. Returns the temp password when generated so the
+// admin can share it.
+const CREATE_ROLES = ["student", "instructor", "school_admin"];
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
+const FRONTEND_URL            = process.env.FRONTEND_URL            || "https://akoro.app";
+const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL || "https://instructor.akoro.app";
+const SCHOOL_FRONTEND_URL     = process.env.SCHOOL_FRONTEND_URL     || "https://school.akoro.app";
+
+const genPassword = () =>
+  Array.from({ length: 12 }, () =>
+    "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789".charAt(
+      Math.floor(Math.random() * 54))).join("");
+
+router.post("/users/create", adminOnly, asyncHandler(async (req, res) => {
+  const email     = String(req.body.email || "").toLowerCase().trim();
+  const fullName  = String(req.body.full_name || "").trim();
+  const role      = req.body.role || "student";
+  const provided  = req.body.password ? String(req.body.password) : "";
+
+  if (!email)    return err400(res, "email is required");
+  if (!fullName) return err400(res, "full_name is required");
+  if (!CREATE_ROLES.includes(role))
+    return err400(res, "role must be student, instructor or school_admin");
+  if (provided && provided.length < 8)
+    return err400(res, "password must be at least 8 characters");
+
+  const { data: existing } = await db.from("users").select("id").eq("email", email).maybeSingle();
+  if (existing) return err409(res, "A user with this email already exists");
+
+  // Unique username derived from the email local-part.
+  const base = (email.split("@")[0] || "user").replace(/[^a-z0-9_]/g, "_").slice(0, 30) || "user";
+  let username = `${base}_${Date.now().toString(36).slice(-4)}`;
+  const { data: clash } = await db.from("users").select("id").eq("username", username).maybeSingle();
+  if (clash) username = `${username}_${Math.random().toString(36).slice(2, 6)}`;
+
+  const password     = provided || genPassword();
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+
+  const { data: user, error } = await db.from("users").insert({
+    email, username,
+    password_hash:        passwordHash,
+    full_name:            fullName,
+    role,
+    is_active:            true,
+    email_verified:       false,
+    onboarding_completed: false,
+    created_at:           new Date().toISOString(),
+  }).select("id,email,full_name,username,role,is_active,created_at").single();
+
+  if (error) throw error;
+
+  const loginUrl = role === "instructor"   ? `${INSTRUCTOR_FRONTEND_URL}/signin`
+    : role === "school_admin"              ? `${SCHOOL_FRONTEND_URL}/signin`
+    : `${FRONTEND_URL}/signin`;
+  sendWelcomeEmail({ to: user.email, name: user.full_name || user.username, loginUrl, role }).catch(() => {});
+
+  // Only reveal the password when we generated it — never echo a chosen one.
+  ok201(res, { ...user, tempPassword: provided ? undefined : password, loginUrl });
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════

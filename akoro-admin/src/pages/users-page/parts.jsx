@@ -13,14 +13,15 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURP
 
 function RolePill({ role }) {
   const map = {
-    student:    { bg: '#EDE9FF', color: PURPLE },
-    instructor: { bg: '#FFF3DC', color: AMBER },
-    admin:      { bg: '#FFE4E4', color: RED },
+    student:      { bg: '#EDE9FF', color: PURPLE, label: 'learner' },
+    instructor:   { bg: '#FFF3DC', color: AMBER,  label: 'instructor' },
+    school_admin: { bg: '#DBEAFE', color: BLUE,   label: 'school' },
+    admin:        { bg: '#FFE4E4', color: RED,    label: 'admin' },
   };
   const cfg = map[role] || map.student;
   return (
     <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: cfg.bg, color: cfg.color }}>
-      {role}
+      {cfg.label || role}
     </span>
   );
 }

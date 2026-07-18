@@ -27,10 +27,13 @@ export default function UsersPage() {
   const [toast,        setToast]        = useState(null);
   const [drawerUser,   setDrawerUser]   = useState(null);
 
-  // Invite
+  // Create account
   const [inviteModal,  setInviteModal]  = useState(false);
-  const [inviteForm,   setInviteForm]   = useState({ email: '', full_name: '', role: 'student' });
+  const [inviteForm,   setInviteForm]   = useState({ email: '', full_name: '', role: 'student', password: '' });
   const [inviteBusy,   setInviteBusy]   = useState(false);
+  const [created,      setCreated]      = useState(null);
+
+  const resetCreate = () => { setInviteModal(false); setCreated(null); setInviteForm({ email: '', full_name: '', role: 'student', password: '' }); };
 
   // CSV import
   const [csvModal,     setCsvModal]     = useState(false);
@@ -118,15 +121,18 @@ export default function UsersPage() {
   };
 
   const handleInvite = async () => {
-    if (!inviteForm.email.trim()) return;
+    if (!inviteForm.email.trim() || !inviteForm.full_name.trim()) return;
     setInviteBusy(true);
     try {
-      await apiPost('/api/admin/users/invite', inviteForm);
-      setInviteModal(false);
-      setInviteForm({ email: '', full_name: '', role: 'student' });
-      showToast('Invitation sent successfully');
+      const body = { ...inviteForm };
+      if (!body.password.trim()) delete body.password; // blank → server generates one
+      const res = await apiPost('/api/admin/users/create', body);
+      const data = res?.data ?? res;
+      setCreated(data);          // show credentials + login link
+      showToast('Account created');
+      load();
     } catch (err) {
-      showToast(err.message || 'Failed to send invite', 'error');
+      showToast(err.message || 'Failed to create account', 'error');
     } finally {
       setInviteBusy(false);
     }
@@ -177,7 +183,7 @@ export default function UsersPage() {
         <Upload size={13} /> Import CSV
       </Btn>
       <Btn variant="primary" size="sm" onClick={() => setInviteModal(true)}>
-        <UserPlus size={13} /> Invite User
+        <UserPlus size={13} /> Create Account
       </Btn>
     </div>
   );
@@ -200,9 +206,9 @@ export default function UsersPage() {
           />
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {['all', 'student', 'instructor'].map(r => (
+          {['all', 'student', 'instructor', 'school_admin'].map(r => (
             <button key={r} style={CHIP(roleFilter === r)} onClick={() => { setRoleFilter(r); setPage(1); }}>
-              {r === 'all' ? 'All' : r === 'student' ? 'Students' : 'Instructors'}
+              {r === 'all' ? 'All' : r === 'student' ? 'Learners' : r === 'instructor' ? 'Instructors' : 'Schools'}
             </button>
           ))}
         </div>
@@ -294,45 +300,82 @@ export default function UsersPage() {
       {/* User Drawer */}
       {drawerUser && <UserDrawer user={drawerUser} onClose={() => setDrawerUser(null)} />}
 
-      {/* Invite User Modal */}
-      <Modal open={inviteModal} onClose={() => { setInviteModal(false); setInviteForm({ email: '', full_name: '', role: 'student' }); }} title="Invite User" width={460}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Inp
-            label="Email Address"
-            type="email"
-            placeholder="user@example.com"
-            value={inviteForm.email}
-            onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
-          />
-          <Inp
-            label="Full Name"
-            type="text"
-            placeholder="Jane Smith"
-            value={inviteForm.full_name}
-            onChange={e => setInviteForm(p => ({ ...p, full_name: e.target.value }))}
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: INK, fontFamily: FONT }}>Role</label>
-            <select
-              value={inviteForm.role}
-              onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
-              style={{
-                width: '100%', padding: '10px 14px', borderRadius: 10,
-                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14, fontFamily: FONT,
-                color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
-              }}
-            >
-              <option value="student">Student</option>
-              <option value="instructor">Instructor</option>
-            </select>
+      {/* Create Account Modal */}
+      <Modal open={inviteModal} onClose={resetCreate} title={created ? 'Account Created' : 'Create Account'} width={460}>
+        {created ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ fontSize: 13, color: MUTED, fontFamily: FONT, margin: 0, lineHeight: 1.6 }}>
+              <strong style={{ color: INK }}>{created.full_name || created.email}</strong> can now sign in.
+              A welcome email with the sign-in link has been sent.
+              {created.tempPassword ? ' Share the temporary password below — it won’t be shown again.' : ''}
+            </p>
+            <div style={{ background: LIGHT, borderRadius: 10, padding: '14px 16px', fontFamily: FONT, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div><span style={{ color: MUTED }}>Email:</span> <strong>{created.email}</strong></div>
+              {created.tempPassword && (
+                <div><span style={{ color: MUTED }}>Temp password:</span>{' '}
+                  <code style={{ background: WHITE, padding: '2px 8px', borderRadius: 6, border: `1px solid ${BORDER}`, fontWeight: 700 }}>{created.tempPassword}</code>
+                </div>
+              )}
+              {created.loginUrl && (
+                <div><span style={{ color: MUTED }}>Sign-in:</span> <a href={created.loginUrl} target="_blank" rel="noreferrer" style={{ color: AMBER }}>{created.loginUrl}</a></div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+              {created.tempPassword && (
+                <Btn variant="secondary" onClick={() => { navigator.clipboard?.writeText(`${created.email} / ${created.tempPassword}`); showToast('Credentials copied'); }}>Copy credentials</Btn>
+              )}
+              <Btn variant="primary" onClick={resetCreate}>Done</Btn>
+            </div>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-          <Btn variant="secondary" onClick={() => setInviteModal(false)}>Cancel</Btn>
-          <Btn variant="primary" disabled={inviteBusy || !inviteForm.email.trim()} onClick={handleInvite}>
-            {inviteBusy ? 'Sending…' : 'Send Invite'}
-          </Btn>
-        </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Inp
+                label="Full Name"
+                type="text"
+                placeholder="Jane Smith"
+                value={inviteForm.full_name}
+                onChange={e => setInviteForm(p => ({ ...p, full_name: e.target.value }))}
+              />
+              <Inp
+                label="Email Address"
+                type="email"
+                placeholder="user@example.com"
+                value={inviteForm.email}
+                onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: INK, fontFamily: FONT }}>Role</label>
+                <select
+                  value={inviteForm.role}
+                  onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: 10,
+                    border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14, fontFamily: FONT,
+                    color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+                  }}
+                >
+                  <option value="student">Learner</option>
+                  <option value="instructor">Instructor</option>
+                  <option value="school_admin">School</option>
+                </select>
+              </div>
+              <Inp
+                label="Password (optional — leave blank to auto-generate)"
+                type="text"
+                placeholder="Auto-generated if left blank"
+                value={inviteForm.password}
+                onChange={e => setInviteForm(p => ({ ...p, password: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <Btn variant="secondary" onClick={resetCreate}>Cancel</Btn>
+              <Btn variant="primary" disabled={inviteBusy || !inviteForm.email.trim() || !inviteForm.full_name.trim()} onClick={handleInvite}>
+                {inviteBusy ? 'Creating…' : 'Create Account'}
+              </Btn>
+            </div>
+          </>
+        )}
       </Modal>
 
       {/* CSV Import Modal */}
