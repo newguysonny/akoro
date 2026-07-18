@@ -16,6 +16,7 @@ import CouponsPage          from './pages/CouponsPage.jsx';
 import ReportsPage          from './pages/ReportsPage.jsx';
 import NotificationsPage    from './pages/NotificationsPage.jsx';
 import MessagesPage         from './pages/MessagesPage.jsx';
+import MarketingPage        from './pages/MarketingPage.jsx';
 import SettingsPage         from './pages/SettingsPage.jsx';
 import PrivacyPolicyPage    from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage   from './pages/TermsOfServicePage.jsx';
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/reports"           element={<AdminRoute><ReportsPage /></AdminRoute>} />
           <Route path="/notifications"     element={<AdminRoute><NotificationsPage /></AdminRoute>} />
           <Route path="/messages"          element={<AdminRoute><MessagesPage /></AdminRoute>} />
+          <Route path="/marketing"         element={<AdminRoute><MarketingPage /></AdminRoute>} />
           <Route path="/settings"          element={<AdminRoute><SettingsPage /></AdminRoute>} />
           <Route path="/privacy"           element={<PrivacyPolicyPage />} />
           <Route path="/terms"             element={<TermsOfServicePage />} />
