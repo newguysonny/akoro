@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus,
+  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus, Eye,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
@@ -16,7 +16,7 @@ import {
 } from '../../constants.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
-import { EnrolModal, StudentSheet, StudentRow } from './parts.jsx';
+import { EnrolModal, StudentSheet } from './parts.jsx';
 import JoinRequests from './JoinRequests.jsx';
 
 export default function StudentsPage() {
@@ -37,6 +37,11 @@ export default function StudentsPage() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
+
+  // School-dashboard table styling.
+  const th = { textAlign: 'left', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED, letterSpacing: .4, whiteSpace: 'nowrap' };
+  const td = { padding: '11px 14px', fontSize: 13, color: INK, borderTop: `1px solid ${BORDER}`, whiteSpace: 'nowrap' };
+  const iconBtn = (color) => ({ width: 30, height: 30, borderRadius: 7, border: 'none', background: `${color}15`, color, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' });
 
   const load = async () => {
     try {
@@ -124,10 +129,45 @@ export default function StudentsPage() {
           )}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(s => (
-            <StudentRow key={s.id || s.enrollmentId} student={s} onClick={setSelected} />
-          ))}
+        <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
+            <thead><tr>
+              <th style={th}>STUDENT</th>
+              <th style={th}>EMAIL</th>
+              <th style={th}>PROGRESS</th>
+              <th style={th}>STATUS</th>
+              <th style={{ ...th, textAlign: 'right' }}>ACTIONS</th>
+            </tr></thead>
+            <tbody>
+              {filtered.map(s => (
+                <tr key={s.id || s.enrollmentId}>
+                  <td style={{ ...td, whiteSpace: 'normal' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: `linear-gradient(135deg, ${AMBER}88, ${PURPLE}88)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: WHITE }}>
+                        {(s.fullName || s.email || '?')[0].toUpperCase()}
+                      </div>
+                      <button onClick={() => setSelected(s)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT, fontWeight: 700, color: BLUE, textAlign: 'left', fontSize: 13 }}>
+                        {s.fullName || 'Unknown'}
+                      </button>
+                    </div>
+                  </td>
+                  <td style={{ ...td, color: MUTED }}>{s.email || '—'}</td>
+                  <td style={td}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
+                      <div style={{ flex: 1, height: 6, borderRadius: 99, background: LIGHT, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${s.progress || 0}%`, background: AMBER, borderRadius: 99 }} />
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{s.progress || 0}%</span>
+                    </div>
+                  </td>
+                  <td style={td}><StatusPill status={s.status} /></td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    <button onClick={() => setSelected(s)} title="View profile" style={iconBtn(GREEN)}><Eye size={14} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
