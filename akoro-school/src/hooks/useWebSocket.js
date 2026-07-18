@@ -7,7 +7,7 @@ export function useInstructorSocket(userId) {
 
   useEffect(() => {
     if (!userId) return;
-    const socket = io(WS_URL, { withCredentials: true, transports: ['websocket', 'polling'] });
+    const socket = io(WS_URL, { withCredentials: true, transports: ['websocket', 'polling'], auth: { portal: 'school' } });
     socketRef.current = socket;
     socket.on('connect', () => {
       socket.emit('subscribe-notifications', userId);

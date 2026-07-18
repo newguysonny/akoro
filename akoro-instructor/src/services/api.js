@@ -10,7 +10,7 @@ export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
 const BASE_OPTS = {
   credentials: 'include',                 // send HttpOnly auth cookies
-  headers:     { 'Content-Type': 'application/json' },
+  headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
 };
 
 export async function apiGet(path) {

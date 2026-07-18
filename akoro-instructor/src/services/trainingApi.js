@@ -45,6 +45,7 @@ export function uploadTraining({ file, teacherId, agentId, subject, sessionTitle
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API}/api/adaptive/training/upload`);
     xhr.withCredentials = true; // send HttpOnly auth cookie
+    xhr.setRequestHeader('X-Akoro-Portal', 'instructor');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };

@@ -169,8 +169,15 @@ export async function authenticateSocket(socket) {
       if (i > 0) { try { cookies[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1)); } catch { /* skip bad cookie */ } }
     }
     const headerAuth = socket.handshake?.headers?.authorization;
-    const token = cookies.akoro_access
-      || socket.handshake?.auth?.token
+    // Portal-scoped cookie: prefer the portal the client declares, then any
+    // akoro_access_* cookie present, then the legacy shared cookie.
+    const declaredPortal = socket.handshake?.auth?.portal || socket.handshake?.query?.portal;
+    const scopedName = `akoro_access_${PORTAL_IDS.includes(declaredPortal) ? declaredPortal : "student"}`;
+    const anyScoped = Object.keys(cookies).find((k) => k.startsWith("akoro_access_"));
+    const token = socket.handshake?.auth?.token
+      || cookies[scopedName]
+      || (anyScoped ? cookies[anyScoped] : null)
+      || cookies.akoro_access
       || (headerAuth?.startsWith("Bearer ") ? headerAuth.slice(7) : null);
     if (!token) return null;
 
@@ -196,8 +203,22 @@ export async function authenticateSocket(socket) {
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
-function setAccessCookie(res, token) {
-  res.cookie("akoro_access", token, {
+// ─── Portal-scoped session cookies ────────────────────────────────────────────
+// Every frontend app (learner/instructor/school/admin) hits the same API, so a
+// single shared cookie meant one session for all of them. We scope the cookie
+// name per portal so each app holds an INDEPENDENT session in the same browser.
+// The portal is declared by the app via the X-Akoro-Portal header (and, for the
+// Google redirect which carries no header, via the OAuth `state`).
+const PORTAL_IDS = ["student", "instructor", "admin", "school"];
+const portalOf = (req) => {
+  const p = req?.headers?.["x-akoro-portal"];
+  return PORTAL_IDS.includes(p) ? p : "student";
+};
+const accessCookieName  = (portal) => `akoro_access_${PORTAL_IDS.includes(portal) ? portal : "student"}`;
+const refreshCookieName = (portal) => `akoro_refresh_${PORTAL_IDS.includes(portal) ? portal : "student"}`;
+
+function setAccessCookie(res, token, portal = "student") {
+  res.cookie(accessCookieName(portal), token, {
     httpOnly: true,
     secure:   IS_PROD,
     sameSite: IS_PROD ? "None" : "Lax",  // None required for cross-origin (API ↔ Vercel)
@@ -206,8 +227,8 @@ function setAccessCookie(res, token) {
   });
 }
 
-function setRefreshCookie(res, token) {
-  res.cookie("akoro_refresh", token, {
+function setRefreshCookie(res, token, portal = "student") {
+  res.cookie(refreshCookieName(portal), token, {
     httpOnly: true,
     secure:   IS_PROD,
     sameSite: IS_PROD ? "None" : "Lax",
@@ -216,7 +237,16 @@ function setRefreshCookie(res, token) {
   });
 }
 
-function clearAuthCookies(res) {
+function clearAuthCookies(res, portal = "student") {
+  res.clearCookie(accessCookieName(portal),  { path: "/" });
+  res.clearCookie(refreshCookieName(portal), { path: "/api/auth/refresh" });
+  clearLegacyCookies(res);
+}
+
+// The pre-portal-scoping shared cookies. Cleared on every fresh login/refresh so
+// a returning user migrates off the shared session (which all apps could read)
+// the moment they re-authenticate, instead of waiting for it to expire.
+function clearLegacyCookies(res) {
   res.clearCookie("akoro_access",  { path: "/" });
   res.clearCookie("akoro_refresh", { path: "/api/auth/refresh" });
 }
@@ -236,14 +266,15 @@ export async function endSession(req, res) {
     await DenyList.add(req.tokenJti, req.tokenExp * 1000);
   }
   // Revoke the refresh token too if present
-  const refreshToken = req.cookies?.akoro_refresh;
+  const portal = portalOf(req);
+  const refreshToken = req.cookies?.[refreshCookieName(portal)] || req.cookies?.akoro_refresh;
   if (refreshToken) {
     try {
       const decoded = verifyToken(refreshToken);
       await RefreshStore.delete(decoded.jti);
     } catch { /* expired/invalid — ignore */ }
   }
-  clearAuthCookies(res);
+  clearAuthCookies(res, portal);
 }
 
 // ─── § DENY-LIST (jti blacklist) ──────────────────────────────────────────────
@@ -326,7 +357,7 @@ const RefreshStore = {
  */
 export const authenticateToken = asyncHandler(async (req, res, next) => {
   // 1. Extract token — cookie first, then Bearer fallback
-  const cookieToken = req.cookies?.akoro_access;
+  const cookieToken = req.cookies?.[accessCookieName(portalOf(req))] || req.cookies?.akoro_access;
   const headerToken = (() => {
     const h = req.headers["authorization"];
     return h?.startsWith("Bearer ") ? h.slice(7) : null;
@@ -438,7 +469,7 @@ const signChallenge = (userId) => {
     : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: 300 });
 };
 
-const issueTokenPair = async (res, user) => {
+const issueTokenPair = async (res, user, portal = "student") => {
   const { token: accessToken, jti: accessJti } = signAccess(user);
   const family = randomUUID();
   const { token: refreshToken, jti: refreshJti } = signRefresh(user.id || user.id, family);
@@ -446,8 +477,9 @@ const issueTokenPair = async (res, user) => {
 
   await RefreshStore.save(refreshJti, user.id, family, refreshExp);
 
-  setAccessCookie(res, accessToken);
-  setRefreshCookie(res, refreshToken);
+  setAccessCookie(res, accessToken, portal);
+  setRefreshCookie(res, refreshToken, portal);
+  clearLegacyCookies(res);
 
   // Also return tokens in body for mobile clients
   return { accessToken, refreshToken, user: safeUser(user) };
@@ -486,7 +518,7 @@ const authHandlers = {
 
     if (error) return res400(res, "Registration failed");
 
-    const payload = await issueTokenPair(res, user);
+    const payload = await issueTokenPair(res, user, portalOf(req));
 
     const loginUrl = role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin`
       : role === "school_admin" ? `${SCHOOL_FRONTEND_URL}/signin`
@@ -536,7 +568,7 @@ const authHandlers = {
       return res200(res, { twoFactorRequired: true, challengeToken });
     }
 
-    const payload = await issueTokenPair(res, user);
+    const payload = await issueTokenPair(res, user, portalOf(req));
 
     const signinUrl = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
     sendLoginAlertEmail({
@@ -564,7 +596,7 @@ const authHandlers = {
 
     if (!verifyTOTP(user.two_factor_secret, code)) return res401(res, "Invalid authentication code");
 
-    const payload = await issueTokenPair(res, user);
+    const payload = await issueTokenPair(res, user, portalOf(req));
 
     const signinUrl2fa = user.role === "instructor" ? `${INSTRUCTOR_FRONTEND_URL}/signin` : `${FRONTEND_URL}/signin`;
     sendLoginAlertEmail({
@@ -619,14 +651,15 @@ const authHandlers = {
 
   // POST /api/auth/refresh  — rotate refresh token
   refresh: asyncHandler(async (req, res) => {
-    const refreshToken = req.cookies?.akoro_refresh || req.body?.refreshToken;
+    const portal = portalOf(req);
+    const refreshToken = req.cookies?.[refreshCookieName(portal)] || req.cookies?.akoro_refresh || req.body?.refreshToken;
     if (!refreshToken) return res401(res, "Refresh token required");
 
     let decoded;
     try {
       decoded = verifyToken(refreshToken);
     } catch {
-      clearAuthCookies(res);
+      clearAuthCookies(res, portal);
       return res401(res, "Invalid or expired refresh token");
     }
 
@@ -635,14 +668,14 @@ const authHandlers = {
     const stored = await RefreshStore.find(decoded.jti);
     if (!stored) {
       // Token not found — possible replay after expiry
-      clearAuthCookies(res);
+      clearAuthCookies(res, portal);
       return res401(res, "Refresh token not found");
     }
 
     if (stored.used) {
       // ⚠ REPLAY DETECTED — revoke entire family
       await RefreshStore.revokeFamily(stored.family);
-      clearAuthCookies(res);
+      clearAuthCookies(res, portal);
       return res401(res, "Refresh token reuse detected — all sessions revoked");
     }
 
@@ -651,7 +684,7 @@ const authHandlers = {
 
     const { data: user } = await db.from("users").select("*").eq("id", stored.user_id).maybeSingle();
     if (!user || !user.is_active) {
-      clearAuthCookies(res);
+      clearAuthCookies(res, portal);
       return res401(res, "User not found");
     }
 
@@ -661,8 +694,9 @@ const authHandlers = {
     const newRefreshExp = Math.floor(Date.now() / 1000) + REFRESH_TTL_SECS;
 
     await RefreshStore.save(newRefreshJti, user.id, stored.family, newRefreshExp);
-    setAccessCookie(res, accessToken);
-    setRefreshCookie(res, newRefreshToken);
+    setAccessCookie(res, accessToken, portal);
+    setRefreshCookie(res, newRefreshToken, portal);
+    clearLegacyCookies(res);
 
     res200(res, { accessToken, refreshToken: newRefreshToken, user: safeUser(user) });
   }),
@@ -674,14 +708,15 @@ const authHandlers = {
       await DenyList.add(req.tokenJti, req.tokenExp * 1000);
     }
     // Remove the refresh token if sent
-    const refreshToken = req.cookies?.akoro_refresh;
+    const portal = portalOf(req);
+    const refreshToken = req.cookies?.[refreshCookieName(portal)] || req.cookies?.akoro_refresh;
     if (refreshToken) {
       try {
         const decoded = verifyToken(refreshToken);
         await RefreshStore.delete(decoded.jti);
       } catch { /* expired or invalid — ignore */ }
     }
-    clearAuthCookies(res);
+    clearAuthCookies(res, portal);
     res200(res, { message: "Logged out" });
   }),
 
@@ -834,8 +869,11 @@ router.get("/google/callback",
 
     await RefreshStore.save(refreshJti, user.id, family, refreshExp);
 
-    setAccessCookie(res, accessToken);
-    setRefreshCookie(res, refreshToken);
+    // `portal` here comes from the OAuth state (set on /google?portal=…), so the
+    // cookie is scoped to the app that started the Google sign-in.
+    setAccessCookie(res, accessToken, portal);
+    setRefreshCookie(res, refreshToken, portal);
+    clearLegacyCookies(res);
 
     const safe = safeUser(user);
     const userParam = encodeURIComponent(JSON.stringify(safe));

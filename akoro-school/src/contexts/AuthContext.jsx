@@ -24,7 +24,7 @@ async function authFetch(path, body) {
     res = await fetch(`${API}${path}`, {
       method:      'POST',
       credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
+      headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
       body:        JSON.stringify(body),
     });
   } catch {
@@ -114,7 +114,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
     } catch { /* ignore */ }
     clearUser();
     window.location.href = '/signin';  // full reload also clears the cached school-verification status
@@ -131,7 +131,7 @@ export function AuthProvider({ children }) {
   }, [saveUser]);
 
   const loadMe = useCallback(() =>
-    fetch(`${API}/api/auth/me`, { credentials: 'include' })
+    fetch(`${API}/api/auth/me`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } })
       .then(async (r) => { const t = await r.text(); try { return t ? JSON.parse(t) : {}; } catch { return {}; } })
       .then(({ data }) => { if (data?.id) { saveUser(data); return true; } clearUser(); return false; })
       .catch(() => false),
@@ -146,7 +146,7 @@ export function AuthProvider({ children }) {
     if (handoff) {
       fetch(`${API}/api/school/site/ai-login/exchange`, {
         method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
         body: JSON.stringify({ token: handoff }),
       })
         .then((r) => (r.ok ? loadMe() : false))

@@ -22,7 +22,7 @@ async function authFetch(path, body) {
   const res = await fetch(`${API}${path}`, {
     method:      'POST',
     credentials: 'include',
-    headers:     { 'Content-Type': 'application/json' },
+    headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'instructor' },
     body:        JSON.stringify(body),
   });
   const json = await res.json();
@@ -100,7 +100,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } });
     } catch { /* ignore */ }
     clearUser();
     window.location.href = '/signin';
@@ -119,7 +119,7 @@ export function AuthProvider({ children }) {
   // Verify session on mount
   useEffect(() => {
     if (!getStoredUser()) return;
-    fetch(`${API}/api/auth/me`, { credentials: 'include' })
+    fetch(`${API}/api/auth/me`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } })
       .then(r => r.json())
       .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
       .catch(() => refresh());

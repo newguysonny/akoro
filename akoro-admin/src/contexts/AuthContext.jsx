@@ -22,7 +22,7 @@ async function authFetch(path, body) {
   const res = await fetch(`${API}${path}`, {
     method:      'POST',
     credentials: 'include',
-    headers:     { 'Content-Type': 'application/json' },
+    headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'admin' },
     body:        JSON.stringify(body),
   });
   const json = await res.json();
@@ -101,7 +101,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' } });
     } catch { /* ignore */ }
     clearUser();
     window.location.href = '/signin';
@@ -110,7 +110,7 @@ export function AuthProvider({ children }) {
   // Same as logout but without the hard redirect — caller controls navigation.
   const logoutSilent = useCallback(async () => {
     try {
-      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' } });
     } catch { /* ignore */ }
     clearUser();
   }, [clearUser]);
@@ -128,7 +128,7 @@ export function AuthProvider({ children }) {
   // Verify session on mount — sets initializing=false when done regardless of outcome
   useEffect(() => {
     if (!getStoredUser()) { setInitializing(false); return; }
-    fetch(`${API}/api/auth/me`, { credentials: 'include' })
+    fetch(`${API}/api/auth/me`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' } })
       .then(r => r.json())
       .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
       .catch(() => refresh())

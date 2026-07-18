@@ -135,7 +135,7 @@ app.use(cors({
   origin: allowedOrigins === '*' ? '*' : corsOriginFn,
   credentials: true,
   methods:     ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"],
+  allowedHeaders: ["Content-Type","Authorization","X-Akoro-Portal","X-Internal-Secret"],
 }));
 app.use(cookieParser());
 // Paystack webhook signature validation needs the RAW request body. The raw
