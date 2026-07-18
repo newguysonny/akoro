@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -21,21 +21,23 @@ const NAV = [
   { to: '/settings', icon: Settings,      label: 'Settings' },
 ];
 
-// Management section — desktop sidebar only (teacher-scoped student info +
-// academics). Rendered under a header, below the core nav.
+// Management — teacher-scoped student info + academics, as expandable dropdown
+// groups (matches the school dashboard).
 const MGMT_NAV = [
-  { header: 'STUDENT INFORMATION' },
-  { to: '/mgmt/students',        icon: Users,         label: 'My Students' },
-  { to: '/mgmt/attendance',      icon: ClipboardList, label: 'Attendance' },
-  { to: '/mgmt/behavior',        icon: ListChecks,    label: 'Behavior Records' },
-  { header: 'ACADEMIC' },
-  { to: '/mgmt/my-timetable',    icon: CalendarClock, label: 'My Timetable' },
-  { to: '/mgmt/curriculum',      icon: BookMarked,    label: 'Curriculum' },
-  { to: '/mgmt/syllabus',        icon: FileText,      label: 'Syllabus' },
-  { to: '/mgmt/subjects',        icon: BookOpen,      label: 'Subjects' },
-  { to: '/mgmt/timetable',       icon: CalendarDays,  label: 'Class Timetable' },
-  { to: '/mgmt/weekly-forecast', icon: CalendarClock, label: 'Weekly Forecast' },
-  { to: '/mgmt/daily-schedule',  icon: GraduationCap, label: 'Daily Schedule' },
+  { label: 'Student Information', icon: Users, children: [
+    { label: 'My Students',      to: '/mgmt/students' },
+    { label: 'Attendance',       to: '/mgmt/attendance' },
+    { label: 'Behavior Records', to: '/mgmt/behavior' },
+  ] },
+  { label: 'Academic', icon: GraduationCap, children: [
+    { label: 'My Timetable',    to: '/mgmt/my-timetable' },
+    { label: 'Curriculum',      to: '/mgmt/curriculum' },
+    { label: 'Syllabus',        to: '/mgmt/syllabus' },
+    { label: 'Subjects',        to: '/mgmt/subjects' },
+    { label: 'Class Timetable', to: '/mgmt/timetable' },
+    { label: 'Weekly Forecast', to: '/mgmt/weekly-forecast' },
+    { label: 'Daily Schedule',  to: '/mgmt/daily-schedule' },
+  ] },
 ];
 
 function NavItem({ to, icon: Icon, label, compact }) {
@@ -65,17 +67,47 @@ function NavItem({ to, icon: Icon, label, compact }) {
   );
 }
 
+/* Expandable nav group (dropdown) — matches the school dashboard. */
+function Group({ item, collapsed, open, onToggle }) {
+  return (
+    <div>
+      <button title={collapsed ? item.label : undefined} onClick={onToggle}
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 12, justifyContent: collapsed ? 'center' : 'flex-start', width: 'calc(100% - 16px)', padding: collapsed ? '11px 0' : '10px 16px', margin: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, background: open && !collapsed ? 'rgba(255,255,255,.04)' : 'transparent', color: open ? WHITE : MUTED2 }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = WHITE; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = open ? WHITE : MUTED2; }}>
+        <item.icon size={18} />
+        {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
+        {!collapsed && <ChevronDown size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />}
+      </button>
+      {open && !collapsed && (
+        <div style={{ margin: '2px 8px 6px 8px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
+          {item.children.map((c) => (
+            <NavLink key={c.label} to={c.to} end={c.to === '/'}
+              style={({ isActive }) => ({ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 10px', textDecoration: 'none', fontFamily: FONT, fontSize: 12.5, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', borderRadius: 8 })}>
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{c.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
   const [query, setQuery] = useState('');
+  const [openGroups, setOpenGroups] = useState({ 'Student Information': true });
+  const toggleGroup = (k) => setOpenGroups((o) => ({ ...o, [k]: !o[k] }));
   // The hamburger is the sole control for collapse/expand (matches the school
   // dashboard). Previously `collapsed || medium` locked the sidebar to
   // icons-only on 769–1024px widths, so the hamburger could never expand it.
   const compact = collapsed;
 
   const q = query.trim().toLowerCase();
-  const navItems  = q ? NAV.filter((i) => i.label.toLowerCase().includes(q)) : NAV;
-  const mgmtItems = q ? MGMT_NAV.filter((i) => !i.header && i.label.toLowerCase().includes(q)) : MGMT_NAV;
+  const navItems   = q ? NAV.filter((i) => i.label.toLowerCase().includes(q)) : NAV;
+  const mgmtGroups = q
+    ? MGMT_NAV.map((g) => ({ ...g, children: g.children.filter((c) => c.label.toLowerCase().includes(q)) })).filter((g) => g.children.length || g.label.toLowerCase().includes(q))
+    : MGMT_NAV;
 
   return (
     <aside style={{
@@ -121,12 +153,11 @@ export function Sidebar({ collapsed = false }) {
       {/* Nav */}
       <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
         {navItems.map(item => <NavItem key={item.to} {...item} compact={compact} />)}
-        {q
-          ? mgmtItems.map(item => <NavItem key={item.to} {...item} compact={compact} />)
-          : MGMT_NAV.map((item, i) => item.header
-              ? (compact ? <div key={`h${i}`} style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '10px 12px' }} /> : <div key={`h${i}`} style={{ fontSize: 10, fontWeight: 700, letterSpacing: .5, color: MUTED2, padding: '14px 18px 6px' }}>{item.header}</div>)
-              : <NavItem key={item.to} {...item} compact={compact} />)}
-        {q && !navItems.length && !mgmtItems.length && (
+        {mgmtGroups.map((g) => (
+          <Group key={g.label} item={g} collapsed={compact}
+            open={q ? true : !!openGroups[g.label]} onToggle={() => toggleGroup(g.label)} />
+        ))}
+        {q && !navItems.length && !mgmtGroups.length && (
           <div style={{ padding: '16px 20px', fontSize: 12.5, color: MUTED2, fontFamily: FONT }}>No menu matches “{query}”.</div>
         )}
       </nav>
