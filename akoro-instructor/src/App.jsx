@@ -23,6 +23,7 @@ import LibraryPage         from './pages/LibraryPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
 import { CurriculumPage, SyllabusPage, SubjectsPage, ClassTimetablePage, WeeklyForecastPage, DailySchedulePage, MyTimetablePage } from './pages/mgmt/academic.jsx';
 import { StudentAttendancePage, BehaviorRecordsPage } from './pages/mgmt/students.jsx';
+import StudentProfilePage from './pages/mgmt/StudentProfilePage.jsx';
 import PrivacyPolicyPage  from './pages/PrivacyPolicyPage.jsx';
 import TermsOfServicePage from './pages/TermsOfServicePage.jsx';
 
@@ -103,6 +104,7 @@ function AppRoutes() {
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       {/* Management (teacher-scoped student info + academics) */}
       <Route path="/mgmt/students"        element={<ProtectedRoute><StudentsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/students/:id"    element={<ProtectedRoute><StudentProfilePage /></ProtectedRoute>} />
       <Route path="/mgmt/attendance"      element={<ProtectedRoute><StudentAttendancePage /></ProtectedRoute>} />
       <Route path="/mgmt/behavior"        element={<ProtectedRoute><BehaviorRecordsPage /></ProtectedRoute>} />
       <Route path="/mgmt/curriculum"      element={<ProtectedRoute><CurriculumPage /></ProtectedRoute>} />
