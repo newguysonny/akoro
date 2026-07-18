@@ -6,21 +6,6 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
-/* Collapse the sidebar to icons-only on tablet widths (769–1024px).
-   Desktop (>1024px) and mobile (≤768px) are unchanged. */
-function useMediaQuery(query) {
-  const get = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(query).matches : false);
-  const [matches, setMatches] = useState(get);
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const onChange = () => setMatches(mql.matches);
-    onChange();
-    mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
-  }, [query]);
-  return matches;
-}
-
 const NAV = [
   { to: '/',         icon: Home,          label: 'Home' },
   { to: '/courses',  icon: BookOpen,      label: 'Courses' },
@@ -83,9 +68,10 @@ function NavItem({ to, icon: Icon, label, compact }) {
 export function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
   const [query, setQuery] = useState('');
-  const medium = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
-  // Icons-only when the hamburger collapsed it OR on a medium screen.
-  const compact = collapsed || medium;
+  // The hamburger is the sole control for collapse/expand (matches the school
+  // dashboard). Previously `collapsed || medium` locked the sidebar to
+  // icons-only on 769–1024px widths, so the hamburger could never expand it.
+  const compact = collapsed;
 
   const q = query.trim().toLowerCase();
   const navItems  = q ? NAV.filter((i) => i.label.toLowerCase().includes(q)) : NAV;
