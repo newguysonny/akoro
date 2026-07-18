@@ -6,9 +6,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  FileText, Plus, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award,
+  FileText, Plus, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award, Sparkles,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import { CreateTemplateModal } from './marketplace-page/parts.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 
@@ -49,6 +50,7 @@ export default function DocumentsPage() {
   const [docs, setDocs] = useState(null);
   const [cat, setCat] = useState('');
   const [gen, setGen] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
@@ -72,6 +74,7 @@ export default function DocumentsPage() {
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
           <button onClick={() => setGen({ pick: true })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Generate</button>
+          <button onClick={() => setShowCreate(true)} title="Upload a sample — AI builds a reusable template" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${PURPLE}55`, background: `${PURPLE}0C`, color: PURPLE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Sparkles size={14} /> Create Template</button>
           <button onClick={() => navigate('/documents/new')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Plus size={15} /> New Template</button>
         </div>
       </div>
@@ -105,6 +108,12 @@ export default function DocumentsPage() {
       )}
 
       {gen && <GenerateModal seed={gen} allDocs={docs || []} onClose={() => setGen(null)} showToast={showToast} onDone={load} />}
+      {showCreate && (
+        <CreateTemplateModal
+          onClose={() => setShowCreate(false)}
+          onSaved={() => { setShowCreate(false); showToast('Template saved ✓'); }}
+        />
+      )}
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
