@@ -11,7 +11,7 @@ import {
 import { API } from '../../services/api.js';
 import { BRAND, GREEN, RED } from '../../constants.js';
 import Toast from '../../components/common/Toast.jsx';
-import { AkoroWordmark } from '../../components/common/AkoroLogo.jsx';
+import AkoroLogo from '../../components/common/AkoroLogo.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
 import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
@@ -123,7 +123,10 @@ export default function CourseDetailsPage() {
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 18px', height: 56, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => navigate(-1)} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 700, color: MUTED, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}><ChevronLeft size={16} />Back</button>
           <div style={{ height: 20, width: 1, background: BORDER }} />
-          <AkoroWordmark height={22} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate('/')}>
+            <AkoroLogo size={28} radius={8} />
+            <span className="fs" style={{ fontSize: 17, fontWeight: 800, color: INK }}>Akoro</span>
+          </div>
           <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, padding: '4px 11px', borderRadius: 100, background: courseType === 'video' ? `${BRAND}14` : '#FEE2E2', color: courseType === 'video' ? BRAND : '#DC2626' }}>
             {courseType === 'video' ? '🎬 Video course' : '🔴 Live class'}
           </span>
