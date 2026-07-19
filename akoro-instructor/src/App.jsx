@@ -9,6 +9,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage  from './pages/auth/ResetPasswordPage.jsx';
 import HomePage     from './pages/HomePage.jsx';
 import CoursesPage  from './pages/CoursesPage.jsx';
+import SalesPage     from './pages/SalesPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import JoinRequestsPage from './pages/JoinRequestsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
@@ -94,6 +95,7 @@ function AppRoutes() {
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
       <Route path="/courses" element={<ProtectedRoute><CoursesPage /></ProtectedRoute>} />
+      <Route path="/sales" element={<ProtectedRoute><SalesPage /></ProtectedRoute>} />
       {/* Students now live under Management → My Students. */}
       <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
