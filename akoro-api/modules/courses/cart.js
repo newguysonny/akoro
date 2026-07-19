@@ -18,6 +18,7 @@ import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
+import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -409,6 +410,49 @@ const handlers = {
   }),
 
   /**
+   * GET /api/cart/verify/:reference
+   * Actively reconcile a cart payment with Paystack — a safety net for when the
+   * webhook is delayed or missed. Idempotent + race-safe: it only fulfils if it
+   * is the one to flip the payment pending→success (the webhook may win instead),
+   * and enrollFromCartWebhook's upserts/ownership checks make a double-run safe.
+   */
+  verifyCheckout: asyncHandler(async (req, res) => {
+    const { reference } = req.params;
+    const userId = req.user.id;
+
+    const { data: payment } = await db
+      .from("payments").select("*")
+      .eq("provider_reference", reference).eq("user_id", userId).single();
+    if (!payment) return res404(res, "Payment not found");
+    if (payment.status === "success")
+      return res200(res, { fulfilled: true, already: true });
+
+    // Ask Paystack whether the charge actually succeeded.
+    let tx;
+    try { tx = await verifyTransaction(reference); }
+    catch (e) { return res200(res, { fulfilled: false, pending: true, message: `Could not verify yet: ${e.message}` }); }
+
+    if (tx.status !== "success")
+      return res200(res, { fulfilled: false, status: tx.status });
+
+    // Flip pending→success — only the winner (webhook or this call) proceeds.
+    const { data: won } = await db.from("payments")
+      .update({ status: "success", paid_at: new Date().toISOString(), provider_response: tx })
+      .eq("id", payment.id).eq("status", "pending").select().maybeSingle();
+    if (!won) return res200(res, { fulfilled: true, already: true });   // webhook got here first
+
+    const meta = payment.provider_response || {};
+    await handlers.enrollFromCartWebhook({
+      paymentId:      payment.id,
+      userId,
+      cartCourseIds:  meta.course_ids  || tx.metadata?.cart_course_ids  || [],
+      cartListingIds: meta.listing_ids || tx.metadata?.cart_listing_ids || [],
+      couponId:       tx.metadata?.coupon_id ?? null,
+    });
+    return res200(res, { fulfilled: true, verified: true });
+  }),
+
+  /**
    * POST /api/cart/checkout
    * Checkout the entire cart in one Paystack transaction.
    * On webhook success: enrolls student in all courses + creates per-instructor earnings.
@@ -655,6 +699,7 @@ router.delete("/cart/listing/:listingId",   authenticateToken, handlers.removeLi
 router.delete("/cart/:courseId",            authenticateToken, handlers.remove);
 router.post  ("/cart/move-from-wishlist",   authenticateToken, [body("course_id").notEmpty()], runValidation, handlers.moveFromWishlist);
 router.post  ("/cart/apply-coupon",         authenticateToken, [body("coupon_code").notEmpty()], runValidation, handlers.applyCoupon);
+router.get   ("/cart/verify/:reference",    authenticateToken, handlers.verifyCheckout);
 router.post  ("/cart/checkout",             authenticateToken, handlers.checkout);
 
 export { handlers as cartHandlers };

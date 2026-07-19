@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
-import { applyCoupon as applyCouponApi, checkoutCart } from '../services/cartApi.js';
+import { applyCoupon as applyCouponApi, checkoutCart, verifyCheckout } from '../services/cartApi.js';
 import Toast from '../components/common/Toast.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -39,9 +39,27 @@ export default function CheckoutPage() {
   const [applying, setApplying] = useState(false);
   const [busy, setBusy]         = useState(false);
   const [toast, setToast]       = useState(null);
+  const [verifyState, setVerifyState] = useState('checking');   // checking | done | pending
 
-  // Returned from Paystack — refresh so the (now-fulfilled) cart clears.
-  useEffect(() => { if (payStatus === 'success') refresh(); }, [payStatus, refresh]);
+  // Returned from Paystack — actively reconcile with the backend (safety net for
+  // a delayed/missed webhook), then refresh so the fulfilled cart clears.
+  useEffect(() => {
+    if (payStatus !== 'success') return;
+    const reference = params.get('reference') || params.get('trxref');
+    let alive = true;
+    (async () => {
+      if (reference) {
+        try {
+          const d = await verifyCheckout(reference);
+          if (alive) setVerifyState(d?.fulfilled ? 'done' : 'pending');
+        } catch { if (alive) setVerifyState('pending'); }
+      } else {
+        if (alive) setVerifyState('done');   // no ref (e.g. free cart) — webhook/direct grant already ran
+      }
+      refresh();
+    })();
+    return () => { alive = false; };
+  }, [payStatus, params, refresh]);
 
   // ── Post-payment return screens ────────────────────────────────────────────
   if (payStatus === 'success') {
@@ -53,8 +71,11 @@ export default function CheckoutPage() {
           <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={38} color={GREEN} /></div>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment successful 🎉</h1>
           <p style={{ fontSize: 14.5, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: 0 }}>
-            You now have access to {boughtCount ? `all ${boughtCount} item${boughtCount === 1 ? '' : 's'}` : 'everything you purchased'}.
-            It’s ready in your sessions and library.
+            {verifyState === 'checking'
+              ? 'Confirming your payment…'
+              : verifyState === 'pending'
+                ? 'We’ve received your payment — your access unlocks automatically once it finishes confirming (this can take a moment for bank/USSD).'
+                : <>You now have access to {boughtCount ? `all ${boughtCount} item${boughtCount === 1 ? '' : 's'}` : 'everything you purchased'}. It’s ready in your sessions and library.</>}
           </p>
           {paidNgn != null && (
             <div style={{ margin: '20px auto 0', maxWidth: 300, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '14px 16px', fontSize: 13.5, fontFamily: FONT }}>

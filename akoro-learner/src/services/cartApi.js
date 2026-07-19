@@ -11,5 +11,6 @@ export const removeCourseFromCart = (courseId)  => apiDelete(`/api/cart/${course
 export const removeAgentFromCart  = (listingId) => apiDelete(`/api/cart/listing/${listingId}`);
 export const clearCart            = () => apiDelete('/api/cart');
 export const applyCoupon          = (coupon_code) => apiPost('/api/cart/apply-coupon', { coupon_code });
+export const verifyCheckout       = (reference) => apiGet(`/api/cart/verify/${encodeURIComponent(reference)}`).then((r) => r.data ?? r);
 export const checkoutCart         = ({ coupon_code, method } = {}) =>
   apiPost('/api/cart/checkout', { ...(coupon_code ? { coupon_code } : {}), ...(method ? { method } : {}) });
