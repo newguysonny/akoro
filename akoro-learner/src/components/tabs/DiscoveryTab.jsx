@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { useCart } from '../../contexts/CartContext.jsx';
 import Toast from '../common/Toast.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -77,7 +78,7 @@ function RatingLine({ score, count }) {
 
 /* ── Course card (Udemy vertical) ──────────────────────────── */
 const CARD_W = 172;
-function CourseCard({ course, onOpen, wide }) {
+function CourseCard({ course, onOpen, wide, inCart }) {
   const { t } = useLang();
   const grad = Array.isArray(course.grad) ? course.grad : ['#EDE9FE', '#DDD3FF'];
   const isLive = course.type === 'live';
@@ -106,6 +107,7 @@ function CourseCard({ course, onOpen, wide }) {
           position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, letterSpacing: .3,
           color: '#fff', background: isLive ? RED : 'rgba(17,12,40,.72)', padding: '3px 7px', borderRadius: 6,
         }}>{isLive ? `● ${t('discovery.live')}` : t('discovery.video')}</span>
+        {inCart && <span style={{ position: 'absolute', top: 7, right: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}>🛒 In cart</span>}
       </div>
 
       <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.25,
@@ -126,7 +128,7 @@ function CourseCard({ course, onOpen, wide }) {
 }
 
 /* ── Agent card (Udemy vertical) ───────────────────────────── */
-function AgentCard({ listing, owned, onOpen, wide }) {
+function AgentCard({ listing, owned, onOpen, wide, inCart }) {
   const { t } = useLang();
   const sc = subjectColor(listing.subject);
   return (
@@ -148,7 +150,9 @@ function AgentCard({ listing, owned, onOpen, wide }) {
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           : null}
         <span style={{ fontSize: 46, opacity: listing.cover_image_url ? 0 : 1 }}>{(() => { const a = listing.teacher_avatar || listing.agent_avatar; return (typeof a === 'string' && /^(https?:)?\/\//.test(a.trim())) ? '🎓' : (a || '🎓'); })()}</span>
-        {owned && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>{t('discovery.owned')}</span>}
+        {owned
+          ? <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>{t('discovery.owned')}</span>
+          : inCart && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>🛒 In cart</span>}
         <span style={{ position: 'absolute', bottom: 7, right: 7, fontSize: 9, fontWeight: 900, color: sc, background: '#fff', padding: '3px 7px', borderRadius: 6, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
       </div>
 
@@ -387,6 +391,7 @@ export default function DiscoveryTab() {
   const [expanded, setExpanded] = useState({});   // { live, video, guides }
   const [toast,    setToast]    = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { inCart } = useCart();
 
   const loadOwned = useCallback(async () => {
     try {
@@ -470,7 +475,7 @@ export default function DiscoveryTab() {
       expanded={!!expanded[key]} onToggle={() => toggle(key)}
       emptyText={t('discovery.no_courses')}>
       {(expanded[key] ? items : items.slice(0, 10)).map((c, i) => (
-        <CourseCard key={`${key}-${c.id}-${i}`} course={c} wide={expanded[key]} onOpen={(co) => navigate(`/course/${co.slug}`)} />
+        <CourseCard key={`${key}-${c.id}-${i}`} course={c} wide={expanded[key]} inCart={inCart(c.id)} onOpen={(co) => navigate(`/course/${co.slug}`)} />
       ))}
     </Rail>
   );
@@ -508,7 +513,7 @@ export default function DiscoveryTab() {
         expanded={!!expanded.guides} onToggle={() => toggle('guides')}
         emptyText={t('discovery.no_agents')}>
         {(expanded.guides ? fAgents : fAgents.slice(0, 10)).map((a) => (
-          <AgentCard key={a.id} listing={a} owned={ownedIds.has(a.agent_id)} wide={expanded.guides} onOpen={(li) => navigate(`/agent/${li.id}`)} />
+          <AgentCard key={a.id} listing={a} owned={ownedIds.has(a.agent_id)} inCart={inCart(a.id)} wide={expanded.guides} onOpen={(li) => navigate(`/agent/${li.id}`)} />
         ))}
       </Rail>
 
