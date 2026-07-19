@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
+import { useCart } from '../contexts/CartContext.jsx';
 
 // Components
 import TeacherNudge   from '../components/TeacherNudge.jsx';
@@ -37,6 +38,7 @@ export default function LearnerDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useLang();
+  const { count: cartCount } = useCart();
 
   // Top-level tab is mirrored in the URL (?tab=…) so the browser Back/Forward
   // buttons move between tabs instead of jumping straight out to the landing
@@ -425,6 +427,15 @@ export default function LearnerDashboard() {
               </div>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <button onClick={()=>navigate("/cart")} title="Cart"
+                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                {cartCount>0&&(
+                  <span style={{ position:"absolute",top:-3,right:-3,background:RED,color:"#fff",borderRadius:"50%",minWidth:16,height:16,padding:"0 4px",fontSize:9,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>
+                    {cartCount>9?"9+":cartCount}
+                  </span>
+                )}
+              </button>
               <button onClick={()=>navigate("/notifications")} title="Notifications"
                 style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
