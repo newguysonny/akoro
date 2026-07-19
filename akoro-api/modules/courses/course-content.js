@@ -577,6 +577,7 @@ const progressHandler = asyncHandler(async (req, res) => {
     .select("progress, enrolled_at")
     .eq("user_id", userId)
     .eq("course_id", courseId)
+    .eq("status", "active")
     .single();
 
   if (!enrollment) return res404(res, "Not enrolled in this course");

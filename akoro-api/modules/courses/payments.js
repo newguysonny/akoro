@@ -365,8 +365,10 @@ const enrollmentHandlers = {
   }),
 
   checkAccess: asyncHandler(async (req, res) => {
+    // Access requires an ACTIVE enrollment — consistent with the content gate
+    // and the Library, so a non-active enrollment is neither watchable nor listed.
     const { data } = await db.from("enrollments").select("id, status, progress, enrolled_at")
-      .eq("user_id", req.user.id).eq("course_id", req.params.courseId).single();
+      .eq("user_id", req.user.id).eq("course_id", req.params.courseId).eq("status", "active").single();
     if (!data) return res404(res, "Not enrolled");
     res200(res, data);
   }),
