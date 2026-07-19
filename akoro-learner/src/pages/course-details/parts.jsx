@@ -579,6 +579,7 @@ function mapCourse(api) {
 /* ── guest / overview view ────────────────────────────────── */
 function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive }) {
   const isVideo = type === 'video';
+  const isFree = course.priceLabel === 'Free';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
   const [tab, setTab] = useState('about');
   const done = modules.reduce((a, m) => a + m.lessons.filter((l) => l.done).length, 0);
@@ -611,7 +612,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 180 }}>
             {!isEnrolled && (isVideo
-              ? <Btn variant="primary" size="lg" onClick={onEnrol} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff', opacity: enrolling ? .6 : 1 }}><ShoppingCart size={15} />{enrolling ? 'Enrolling…' : `Buy · ${course.priceLabel}`}</Btn>
+              ? <Btn variant="primary" size="lg" onClick={onEnrol} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff', opacity: enrolling ? .6 : 1 }}><ShoppingCart size={15} />{enrolling ? 'Enrolling…' : isFree ? 'Enrol · Free' : `Buy · ${course.priceLabel}`}</Btn>
               : <Btn variant="red" size="lg" onClick={onEnrol} style={{ opacity: enrolling ? .6 : 1 }}><Radio size={15} />{enrolling ? 'Enrolling…' : 'Enrol · Join live'}</Btn>)}
             {isEnrolled && isVideo && <Btn variant="primary" size="lg" onClick={onPlay} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff' }}><Play size={15} />Continue watching</Btn>}
             {isEnrolled && !isVideo && <Btn variant="red" size="lg" onClick={onJoinLive}><Radio size={15} />Join live now</Btn>}
