@@ -8,6 +8,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API } from '../services/api.js';
+import { cacheClear } from '../services/offlineCache.js';
 
 const AuthContext = createContext(null);
 
@@ -95,13 +96,22 @@ export function AuthProvider({ children }) {
       const { data } = await authFetch('/api/auth/refresh', {});
       if (data?.user) saveUser(data.user);
       return true;
-    } catch { clearUser(); return false; }
+    } catch (err) {
+      // Offline / network failure: KEEP the cached session so an offline learner
+      // isn't bounced to sign-in — the service worker serves cached content until
+      // they reconnect. Only a real auth rejection (server responded) signs out.
+      const offline = (typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError';
+      if (offline) return false;
+      clearUser();
+      return false;
+    }
   }, [saveUser, clearUser]);
 
   const logout = useCallback(async () => {
     try {
       await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'student' } });
     } catch { /* ignore */ }
+    cacheClear().catch(() => {});   // drop cached data so the next account starts clean
     clearUser();
     window.location.href = '/signin';
   }, [clearUser]);

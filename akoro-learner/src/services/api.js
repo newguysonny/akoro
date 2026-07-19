@@ -6,6 +6,8 @@
  * No Authorization header — tokens never touch JS memory.
  */
 
+import { cacheGet, cacheSet } from './offlineCache.js';
+
 export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
 const BASE_OPTS = {
@@ -13,10 +15,32 @@ const BASE_OPTS = {
   headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
 };
 
-export async function apiGet(path) {
-  const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
-  if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
-  return r.json();
+// A thrown fetch (no HTTP response) or a browser marked offline = network error,
+// as opposed to the server responding with a 4xx/5xx.
+const isNetworkError = (err) => (typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError';
+
+// Tag a payload served from the offline cache so callers can show a "saved"
+// hint if they want; non-enumerable so it never changes the data's shape.
+function markOffline(data) {
+  try { if (data && typeof data === 'object') Object.defineProperty(data, '_offline', { value: true, enumerable: false }); } catch { /* frozen/primitive */ }
+  return data;
+}
+
+export async function apiGet(path, { cache = true } = {}) {
+  try {
+    const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
+    if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+    const json = await r.json();
+    if (cache) cacheSet(path, json);            // fire-and-forget snapshot
+    return json;
+  } catch (err) {
+    // Offline / network failure → serve the last-known-good copy if we have one.
+    if (cache && isNetworkError(err)) {
+      const hit = await cacheGet(path);
+      if (hit) return markOffline(hit.data);
+    }
+    throw err;
+  }
 }
 
 export async function apiPost(path, body) {
