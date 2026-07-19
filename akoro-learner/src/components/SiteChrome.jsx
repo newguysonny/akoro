@@ -8,9 +8,10 @@
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Menu, X, ArrowRight, BookOpen, Zap, Map, TrendingUp, DollarSign, Users, MessageSquare } from 'lucide-react';
+import { Menu, X, ArrowRight, BookOpen, Zap, Map, TrendingUp, DollarSign, Users, MessageSquare, Download, Share } from 'lucide-react';
 import { FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter } from 'react-icons/fa6';
 import AkoroLogo from './common/AkoroLogo.jsx';
+import { usePwaInstall } from '../hooks/usePwaInstall.js';
 
 /* ── Brand tokens (match landing page) ── */
 const B  = '#6C3BFF';
@@ -174,6 +175,13 @@ export function SFSHeader() {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const { hidden: installHidden, canPrompt, isIOS, promptInstall } = usePwaInstall();
+  const [iosHint, setIosHint] = useState(false);
+
+  const onInstallClick = async () => {
+    if (canPrompt) { await promptInstall(); return; }   // Android/desktop: native dialog
+    setIosHint((v) => !v);                                // iOS / no prompt: show the how-to hint
+  };
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 30);
@@ -209,9 +217,33 @@ export function SFSHeader() {
         <button className="h-10 px-5 text-xs font-bold tracking-wide text-white bg-[#F5A623]">
           Inquire
         </button>
-        <button className="h-10 px-5 text-xs font-bold tracking-wide text-white bg-[#0D9488]">
-          Donate
-        </button>
+        {!installHidden && (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={onInstallClick}
+              className="h-10 px-5 text-xs font-bold tracking-wide text-white bg-[#0D9488] flex items-center gap-1.5"
+            >
+              <Download size={14} /> Install app
+            </button>
+            {iosHint && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 950,
+                width: 236, background: '#fff', color: '#2D2D2D', borderRadius: 12,
+                boxShadow: '0 10px 30px rgba(0,0,0,.18)', border: '1px solid #E2DDD6',
+                padding: '12px 14px', fontSize: 12.5, lineHeight: 1.55, fontWeight: 500,
+                fontFamily: "'DM Sans',sans-serif",
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, marginBottom: 4 }}>
+                  <Share size={13} /> Add Akoro to your Home Screen
+                </div>
+                {isIOS
+                  ? <>Tap the <strong>Share</strong> icon in Safari, then choose <strong>“Add to Home Screen”</strong>.</>
+                  : <>Open your browser menu and choose <strong>“Install app”</strong> / <strong>“Add to Home screen”</strong>.</>}
+                <button onClick={() => setIosHint(false)} style={{ marginTop: 8, background: 'none', border: 'none', color: '#0D9488', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 12 }}>Got it</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ---------- HEADER (nav + logo) ---------- */}
