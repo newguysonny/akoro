@@ -773,7 +773,7 @@ router.get("/purchases/:userId", authenticateToken, async (req, res) => {
     const { data, error } = await db
       .schema("edu").from("agent_purchases")
       .select(`
-        id, agent_id, amount_kobo, currency,
+        id, agent_id, amount_kobo, currency, paystack_ref,
         paystack_status, access_granted, purchased_at,
         edu.marketplace_listings!inner(title, subject, teacher_name, price_kobo)
       `)

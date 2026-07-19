@@ -38,6 +38,7 @@ const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage
 const AgentProfilePage   = lazyWithRetry(() => import('./pages/AgentProfilePage.jsx'));
 const CartPage           = lazyWithRetry(() => import('./pages/CartPage.jsx'));
 const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
+const OrderHistoryPage   = lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx'));
 const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
@@ -103,6 +104,7 @@ function AppRoutes() {
       <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>
       <Route path="/cart"       element={<ProtectedRoute><CartPage /></ProtectedRoute>}/>
       <Route path="/checkout"   element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>}/>
+      <Route path="/orders"     element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
       <Route path="/instructor-info"    element={<InstructorInfoPage />}/>
