@@ -49,6 +49,7 @@ import { studentFeedRouter,
 import voiceModule               from "./modules/voice/routes.js";
 import { setupVoiceStreaming }   from "./modules/voice/streaming.js";
 import contentModule             from "./modules/content/routes.js";
+import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
 import passport                  from "passport";
@@ -144,6 +145,7 @@ app.use(cookieParser());
 // a parsed object, .toString() yields "[object Object]", and every webhook is
 // rejected with "Invalid signature" (payments then never auto-grant agents).
 app.use("/api/adaptive/marketplace/webhook", express.raw({ type: "application/json" }));
+app.use("/api/webhooks/paystack",            express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
@@ -175,6 +177,10 @@ app.get("/ready", (_req, res) =>
 //   standardLimit — read APIs      (100 req/min, by user or IP)
 //   teachingLimit — adaptive       (50 req/min, by user or IP)
 //   aiLimit       — AI operations  (10 req/min, by user or IP)
+// Unified Paystack webhook — verifies the signature once from the raw body and
+// dispatches to every fulfillment domain (course/cart, agent/tool, payouts).
+// This is the single URL configured in the Paystack dashboard.
+app.use("/api/webhooks/paystack", paystackWebhookRouter);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);

@@ -511,95 +511,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     const event = JSON.parse(rawBody);
     console.log("[Paystack Webhook] Event:", event.event);
 
-    // 2. Handle charge.success
-    if (event.event === "charge.success") {
-      const { reference, metadata, status } = event.data;
-
-      if (status !== "success") {
-        return res.sendStatus(200); // acknowledge but ignore
-      }
-
-      // 2a. Platform tool/asset purchase (instructor unlock) — keyed by reference
-      if (metadata?.kind === "platform_tool") {
-        const { data: row } = await db
-          .schema("edu").from("instructor_tool_access")
-          .select("id, instructor_id, access_granted")
-          .eq("paystack_ref", reference)
-          .single();
-
-        if (row && !row.access_granted) {
-          await db.schema("edu").from("instructor_tool_access").update({
-            access_granted:  true,
-            paystack_status: "success",
-            verified_at:     new Date(),
-          }).eq("id", row.id);
-
-          if (global._io && row.instructor_id) {
-            const payload = {
-              toolId:   metadata.tool_id,
-              toolName: metadata.tool_name,
-              message:  `🔓 "${metadata.tool_name}" unlocked for your agent.`,
-              timestamp: new Date().toISOString(),
-            };
-            // The instructor socket joins `user:{id}` (subscribe-notifications);
-            // emit to both rooms so the unlock reaches the chat live.
-            global._io.to(`user:${row.instructor_id}`).emit("tool_unlocked", payload);
-            global._io.to(`instructor:${row.instructor_id}`).emit("tool_unlocked", payload);
-          }
-          console.log(`[Webhook] ✅ Tool unlocked: instructor=${row.instructor_id} tool=${metadata.tool_id}`);
-        }
-        return res.sendStatus(200);
-      }
-
-      const purchaseId = metadata?.purchase_id;
-      const studentId  = metadata?.student_id;
-      const agentId    = metadata?.agent_id;
-      const listingId  = metadata?.listing_id;
-
-      if (!purchaseId || !studentId || !agentId) {
-        console.warn("[Webhook] Missing metadata:", metadata);
-        return res.sendStatus(200);
-      }
-
-      // Load purchase
-      const { data: purchase } = await db
-        .schema("edu").from("agent_purchases")
-        .select("id, access_granted")
-        .eq("id", purchaseId)
-        .single();
-
-      if (!purchase || purchase.access_granted) {
-        return res.sendStatus(200); // already processed
-      }
-
-      // Grant access
-      await grantAgentAccess(studentId, agentId, purchaseId);
-      await incrementListingStudents(listingId);
-
-      // Emit socket notification if io is available
-      if (global._io) {
-        global._io.to(`student:${studentId}`).emit("agent_purchased", {
-          agentId,
-          listingId,
-          agentName:  metadata?.listing_title || "Agent",
-          purchaseId,
-          message:    `🎉 Agent unlocked! You can now use "${metadata?.listing_title}" for your sessions.`,
-          timestamp:  new Date().toISOString(),
-        });
-      }
-
-      console.log(`[Webhook] ✅ Access granted: student=${studentId} agent=${agentId}`);
-    }
-
-    // 3. Handle refund.processed
-    if (event.event === "refund.processed") {
-      const { transaction_reference } = event.data;
-      await db
-        .schema("edu").from("agent_purchases")
-        .update({ paystack_status: "refunded", access_granted: false })
-        .eq("paystack_ref", transaction_reference);
-    }
-
+    await fulfillMarketplaceEvent(event);
     res.sendStatus(200);
 
   } catch (err) {
@@ -607,6 +519,104 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
     res.sendStatus(500);
   }
 });
+
+/**
+ * Fulfil a marketplace Paystack event (agent teaching-guide purchases and
+ * platform tool/asset unlocks). Idempotent — every grant is gated on a
+ * not-yet-granted row, so replays no-op. Returns true if the event matched a
+ * marketplace transaction, else false so a shared dispatcher can try another
+ * domain. Exported for the unified /api/webhooks/paystack dispatcher, which
+ * verifies the signature once from the raw body.
+ */
+export async function fulfillMarketplaceEvent(event) {
+  // charge.success — agent purchase or platform tool unlock
+  if (event.event === "charge.success") {
+    const { reference, metadata, status } = event.data;
+
+    if (status !== "success") return false;
+
+    // Platform tool/asset purchase (instructor unlock) — keyed by reference
+    if (metadata?.kind === "platform_tool") {
+      const { data: row } = await db
+        .schema("edu").from("instructor_tool_access")
+        .select("id, instructor_id, access_granted")
+        .eq("paystack_ref", reference)
+        .single();
+
+      if (row && !row.access_granted) {
+        await db.schema("edu").from("instructor_tool_access").update({
+          access_granted:  true,
+          paystack_status: "success",
+          verified_at:     new Date(),
+        }).eq("id", row.id);
+
+        if (global._io && row.instructor_id) {
+          const payload = {
+            toolId:   metadata.tool_id,
+            toolName: metadata.tool_name,
+            message:  `🔓 "${metadata.tool_name}" unlocked for your agent.`,
+            timestamp: new Date().toISOString(),
+          };
+          // The instructor socket joins `user:{id}` (subscribe-notifications);
+          // emit to both rooms so the unlock reaches the chat live.
+          global._io.to(`user:${row.instructor_id}`).emit("tool_unlocked", payload);
+          global._io.to(`instructor:${row.instructor_id}`).emit("tool_unlocked", payload);
+        }
+        console.log(`[Webhook] ✅ Tool unlocked: instructor=${row.instructor_id} tool=${metadata.tool_id}`);
+      }
+      return true;
+    }
+
+    const purchaseId = metadata?.purchase_id;
+    const studentId  = metadata?.student_id;
+    const agentId    = metadata?.agent_id;
+    const listingId  = metadata?.listing_id;
+
+    if (!purchaseId || !studentId || !agentId) return false;
+
+    // Load purchase
+    const { data: purchase } = await db
+      .schema("edu").from("agent_purchases")
+      .select("id, access_granted")
+      .eq("id", purchaseId)
+      .single();
+
+    if (!purchase || purchase.access_granted) {
+      return true; // already processed
+    }
+
+    // Grant access
+    await grantAgentAccess(studentId, agentId, purchaseId);
+    await incrementListingStudents(listingId);
+
+    // Emit socket notification if io is available
+    if (global._io) {
+      global._io.to(`student:${studentId}`).emit("agent_purchased", {
+        agentId,
+        listingId,
+        agentName:  metadata?.listing_title || "Agent",
+        purchaseId,
+        message:    `🎉 Agent unlocked! You can now use "${metadata?.listing_title}" for your sessions.`,
+        timestamp:  new Date().toISOString(),
+      });
+    }
+
+    console.log(`[Webhook] ✅ Access granted: student=${studentId} agent=${agentId}`);
+    return true;
+  }
+
+  // refund.processed — revoke the matching agent purchase
+  if (event.event === "refund.processed") {
+    const { transaction_reference } = event.data;
+    await db
+      .schema("edu").from("agent_purchases")
+      .update({ paystack_status: "refunded", access_granted: false })
+      .eq("paystack_ref", transaction_reference);
+    return true;
+  }
+
+  return false;
+}
 
 // =============================================================
 // PAYMENT CALLBACK (browser redirect after Paystack)

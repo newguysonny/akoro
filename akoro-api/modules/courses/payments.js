@@ -38,6 +38,77 @@ const runValidation = (req, res, next) => {
 
 const now = () => new Date().toISOString();
 
+/**
+ * Fulfil a Paystack `charge.success` for course / cart payments.
+ * Idempotent: enrollment upserts + earnings upsert onConflict + payment update
+ * is gated on status='pending', so replays are safe. Returns true if this
+ * charge belonged to a payments-ledger transaction (course or cart), else false
+ * so a shared dispatcher can hand it to another domain.
+ *
+ * Exported so the unified /api/webhooks/paystack dispatcher can reuse the exact
+ * same fulfillment logic after verifying the signature once from the raw body.
+ */
+export async function fulfillPaymentsCharge(data) {
+  const { payment_id, course_id, user_id, coupon_id, is_cart_checkout, cart_course_ids, cart_listing_ids } = data?.metadata ?? {};
+  if (!payment_id || !user_id) return false;
+
+  // Update payment
+  await db.from("payments").update({ status: "success", paid_at: now(), provider_response: data })
+    .eq("id", payment_id).eq("status", "pending");
+
+  // Cart checkout — a single payment covers many items (courses and/or agent
+  // teaching-guides). Fulfil the whole cart (previously the webhook enrolled
+  // only the first course, so the rest were paid-for but never granted).
+  const cartCourses  = Array.isArray(cart_course_ids)  ? cart_course_ids  : [];
+  const cartListings = Array.isArray(cart_listing_ids) ? cart_listing_ids : [];
+  if (is_cart_checkout && (cartCourses.length || cartListings.length)) {
+    await cartHandlers.enrollFromCartWebhook({
+      paymentId:      payment_id,
+      userId:         user_id,
+      cartCourseIds:  cartCourses,
+      cartListingIds: cartListings,
+      couponId:       coupon_id ?? null,
+    });
+    return true;
+  }
+
+  // Single-course checkout below.
+  if (!course_id) return true;
+
+  // Activate enrollment
+  await db.from("enrollments").upsert(
+    { user_id, course_id, payment_id, status: "active" }, { onConflict: "user_id,course_id" }
+  );
+  await db.rpc("increment_course_students", { course_id_input: course_id });
+
+  // ── Instructor earnings record (immutable audit trail) ────────────────
+  const { data: course }  = await db.from("courses").select("instructor_id, currency").eq("id", course_id).single();
+  const { data: payment } = await db.from("payments").select("amount_paid").eq("id", payment_id).single();
+
+  if (course?.instructor_id && payment?.amount_paid) {
+    const split = calculateCommission(payment.amount_paid);
+    await db.from("instructor_earnings").upsert({
+      instructor_id:      course.instructor_id,
+      course_id, payment_id, student_id: user_id,
+      gross_amount:       payment.amount_paid,
+      commission_percent: split.commissionPercent,
+      commission_amount:  split.commissionAmount,
+      net_amount:         split.netAmount,
+      currency:           course.currency ?? "NGN",
+      status:             "pending",
+    }, { onConflict: "payment_id" });
+  }
+
+  // Record coupon use
+  if (coupon_id) {
+    try { await db.from("coupon_uses").insert({ coupon_id, user_id, payment_id }); } catch {}
+    try { await db.rpc("increment_coupon_uses", { coupon_id_input: coupon_id }); } catch {}
+  }
+
+  console.log(`[payments] ✅ Enrolled user=${user_id}  course=${course_id}  net=₦${(payment?.amount_paid ?? 0) / 100}`);
+  return true;
+}
+
 // ─── Commission helper ────────────────────────────────────────────────────────
 // Reads from env — changing PLATFORM_COMMISSION_PERCENT only affects
 // future purchases, never existing earnings records.
@@ -203,64 +274,7 @@ const paymentHandlers = {
     const { event, data } = req.body;
     if (event !== "charge.success") return res.status(200).json({ received: true });
 
-    const { payment_id, course_id, user_id, coupon_id, is_cart_checkout, cart_course_ids, cart_listing_ids } = data.metadata ?? {};
-    if (!payment_id || !user_id)
-      return res.status(200).json({ received: true });
-
-    // Update payment
-    await db.from("payments").update({ status: "success", paid_at: now(), provider_response: data })
-      .eq("id", payment_id).eq("status", "pending");
-
-    // Cart checkout — a single payment covers many items (courses and/or agent
-    // teaching-guides). Fulfil the whole cart (previously the webhook enrolled
-    // only the first course, so the rest were paid-for but never granted).
-    const cartCourses  = Array.isArray(cart_course_ids)  ? cart_course_ids  : [];
-    const cartListings = Array.isArray(cart_listing_ids) ? cart_listing_ids : [];
-    if (is_cart_checkout && (cartCourses.length || cartListings.length)) {
-      await cartHandlers.enrollFromCartWebhook({
-        paymentId:      payment_id,
-        userId:         user_id,
-        cartCourseIds:  cartCourses,
-        cartListingIds: cartListings,
-        couponId:       coupon_id ?? null,
-      });
-      return res.status(200).json({ success: true });
-    }
-
-    // Single-course checkout below.
-    if (!course_id) return res.status(200).json({ received: true });
-
-    // Activate enrollment
-    await db.from("enrollments").upsert(
-      { user_id, course_id, payment_id, status: "active" }, { onConflict: "user_id,course_id" }
-    );
-    await db.rpc("increment_course_students", { course_id_input: course_id });
-
-    // ── Instructor earnings record (immutable audit trail) ────────────────
-    const { data: course }  = await db.from("courses").select("instructor_id, currency").eq("id", course_id).single();
-    const { data: payment } = await db.from("payments").select("amount_paid").eq("id", payment_id).single();
-
-    if (course?.instructor_id && payment?.amount_paid) {
-      const split = calculateCommission(payment.amount_paid);
-      await db.from("instructor_earnings").upsert({
-        instructor_id:      course.instructor_id,
-        course_id, payment_id, student_id: user_id,
-        gross_amount:       payment.amount_paid,
-        commission_percent: split.commissionPercent,
-        commission_amount:  split.commissionAmount,
-        net_amount:         split.netAmount,
-        currency:           course.currency ?? "NGN",
-        status:             "pending",
-      }, { onConflict: "payment_id" });
-    }
-
-    // Record coupon use
-    if (coupon_id) {
-      try { await db.from("coupon_uses").insert({ coupon_id, user_id, payment_id }); } catch {}
-      try { await db.rpc("increment_coupon_uses", { coupon_id_input: coupon_id }); } catch {}
-    }
-
-    console.log(`[payments] ✅ Enrolled user=${user_id}  course=${course_id}  net=₦${(payment?.amount_paid ?? 0) / 100}`);
+    await fulfillPaymentsCharge(data);
     res.status(200).json({ success: true });
   }),
 

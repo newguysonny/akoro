@@ -410,38 +410,50 @@ const payoutHandlers = {
       return res.status(400).json({ success: false, message: "Invalid signature" });
 
     const { event, data } = req.body;
-
-    if (event === "transfer.success") {
-      await db.from("payouts")
-        .update({ status: "completed", completed_at: now(), provider_response: data })
-        .eq("provider_reference", data.transfer_code);
-      console.log(`[payouts] ✅ Transfer complete  ref=${data.transfer_code}`);
-    }
-
-    if (event === "transfer.failed" || event === "transfer.reversed") {
-      // Roll back earnings to pending so instructor can retry
-      const { data: payout } = await db
-        .from("payouts")
-        .select("id")
-        .eq("provider_reference", data.transfer_code)
-        .single();
-
-      if (payout) {
-        await db.from("payouts")
-          .update({ status: "failed", failure_reason: data.reason ?? event, provider_response: data })
-          .eq("id", payout.id);
-
-        await db.from("instructor_earnings")
-          .update({ status: "pending", payout_id: null })
-          .eq("payout_id", payout.id);
-
-        console.warn(`[payouts] ⚠️  Transfer ${event}  ref=${data.transfer_code}`);
-      }
-    }
-
+    await fulfillTransferEvent(event, data);
     res.status(200).json({ received: true });
   }),
 };
+
+/**
+ * Fulfil a Paystack transfer webhook (instructor payout settlement).
+ * Idempotent — updates are keyed by transfer_code. Returns true if the event
+ * was a transfer event this domain owns, else false. Exported for the unified
+ * /api/webhooks/paystack dispatcher, which verifies the signature once.
+ */
+export async function fulfillTransferEvent(event, data) {
+  if (event === "transfer.success") {
+    await db.from("payouts")
+      .update({ status: "completed", completed_at: now(), provider_response: data })
+      .eq("provider_reference", data.transfer_code);
+    console.log(`[payouts] ✅ Transfer complete  ref=${data.transfer_code}`);
+    return true;
+  }
+
+  if (event === "transfer.failed" || event === "transfer.reversed") {
+    // Roll back earnings to pending so instructor can retry
+    const { data: payout } = await db
+      .from("payouts")
+      .select("id")
+      .eq("provider_reference", data.transfer_code)
+      .single();
+
+    if (payout) {
+      await db.from("payouts")
+        .update({ status: "failed", failure_reason: data.reason ?? event, provider_response: data })
+        .eq("id", payout.id);
+
+      await db.from("instructor_earnings")
+        .update({ status: "pending", payout_id: null })
+        .eq("payout_id", payout.id);
+
+      console.warn(`[payouts] ⚠️  Transfer ${event}  ref=${data.transfer_code}`);
+    }
+    return true;
+  }
+
+  return false;
+}
 
 // ─── Admin handlers ────────────────────────────────────────────────────────────
 
