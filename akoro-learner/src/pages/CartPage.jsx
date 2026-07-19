@@ -3,7 +3,7 @@
  * paid for together (or granted directly when everything's free).
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Trash2, ShoppingCart, BookOpen, Bot, ArrowRight } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import Toast from '../components/common/Toast.jsx';
@@ -14,6 +14,10 @@ const ngn = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 
 export default function CartPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Pop real history if we have it; else fall back to the dashboard (avoids the
+  // cart↔checkout back-loop and dead-ends on deep links).
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/app'); };
   const { cart, count, removeCourse, removeAgent, refresh } = useCart();
   const [removing, setRemoving] = useState(null);
   const [toast, setToast] = useState(null);
@@ -30,7 +34,7 @@ export default function CartPage() {
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--ak-bg)', fontFamily: FONT, color: 'var(--ak-text)' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }}><ArrowLeft size={20} /></button>
+        <button onClick={goBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }}><ArrowLeft size={20} /></button>
         <span style={{ fontSize: 15, fontWeight: 900 }}>Your Cart</span>
         {count > 0 && <span style={{ fontSize: 12, fontWeight: 800, color: BRAND, background: `${BRAND}14`, padding: '2px 10px', borderRadius: 20 }}>{count} item{count === 1 ? '' : 's'}</span>}
       </div>

@@ -4,7 +4,7 @@
  * direct grant when everything is free).
  */
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import { applyCoupon as applyCouponApi, checkoutCart } from '../services/cartApi.js';
@@ -23,6 +23,10 @@ const METHODS = [
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Pop real history if present; else fall back to the cart. Prevents the
+  // cart↔checkout back-loop.
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/cart'); };
   const [params] = useSearchParams();
   const payStatus = params.get('payment');   // 'success' | 'failed' | 'cancelled' | null
   const { cart, count, refresh } = useCart();
@@ -44,7 +48,7 @@ export default function CheckoutPage() {
     const boughtCount = Number(params.get('items')) || null;
     const paidNgn = params.get('amount') ? Number(params.get('amount')) / 100 : null;
     return (
-      <Shell navigate={navigate} count={count} title="Order confirmed">
+      <Shell onBack={goBack} count={count} title="Order confirmed">
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={38} color={GREEN} /></div>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment successful 🎉</h1>
@@ -66,7 +70,7 @@ export default function CheckoutPage() {
   }
   if (payStatus && payStatus !== 'success') {
     return (
-      <Shell navigate={navigate} count={count} title="Payment not completed">
+      <Shell onBack={goBack} count={count} title="Payment not completed">
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><XCircle size={38} color={RED} /></div>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment not completed</h1>
@@ -79,7 +83,7 @@ export default function CheckoutPage() {
 
   if (!items.length) {
     return (
-      <Shell navigate={navigate} count={count}>
+      <Shell onBack={goBack} count={count}>
         <div style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--ak-text-muted)' }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ak-text)' }}>Nothing to check out</div>
           <button onClick={() => navigate('/app')} style={{ marginTop: 16, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
@@ -121,7 +125,7 @@ export default function CheckoutPage() {
   const h = { fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 };
 
   return (
-    <Shell navigate={navigate} count={count}>
+    <Shell onBack={goBack} count={count}>
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '16px 18px 150px' }}>
         {/* Order summary */}
         <div style={card}>
@@ -215,11 +219,11 @@ export default function CheckoutPage() {
   );
 }
 
-function Shell({ navigate, count, title = 'Checkout', children }) {
+function Shell({ onBack, count, title = 'Checkout', children }) {
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--ak-bg)', fontFamily: FONT, color: 'var(--ak-text)' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => navigate('/cart')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }}><ArrowLeft size={20} /></button>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }}><ArrowLeft size={20} /></button>
         <span style={{ fontSize: 15, fontWeight: 900 }}>{title}</span>
         {count > 0 && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, color: BRAND, background: `${BRAND}14`, padding: '2px 10px', borderRadius: 20 }}>{count} item{count === 1 ? '' : 's'}</span>}
       </div>
