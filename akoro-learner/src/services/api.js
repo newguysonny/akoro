@@ -7,6 +7,7 @@
  */
 
 import { cacheGet, cacheSet } from './offlineCache.js';
+import { enqueue, allItems, remove, queueSize } from './offlineQueue.js';
 
 export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
@@ -43,30 +44,70 @@ export async function apiGet(path, { cache = true } = {}) {
   }
 }
 
-export async function apiPost(path, body) {
-  const r = await fetch(`${API}${path}`, {
-    ...BASE_OPTS,
-    method: 'POST',
-    body:   JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`POST ${path} -> ${r.status}`);
-  return r.json();
+// Shared write path. Pass { queueOffline: true } for replay-safe, fire-and-forget
+// mutations: if the request fails because we're offline, it's stored and replayed
+// on reconnect, and an optimistic { queued: true } is returned instead of throwing.
+async function apiSend(method, path, body, { queueOffline = false } = {}) {
+  try {
+    const r = await fetch(`${API}${path}`, {
+      ...BASE_OPTS,
+      method,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}`);
+    return r.json();
+  } catch (err) {
+    if (queueOffline && isNetworkError(err)) {
+      await enqueue({ method, path, body });
+      return { queued: true, _offline: true };
+    }
+    throw err;
+  }
 }
 
-export async function apiPatch(path, body) {
-  const r = await fetch(`${API}${path}`, {
-    ...BASE_OPTS,
-    method: 'PATCH',
-    body:   JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`PATCH ${path} -> ${r.status}`);
-  return r.json();
+export const apiPost   = (path, body, opts) => apiSend('POST', path, body, opts);
+export const apiPatch  = (path, body, opts) => apiSend('PATCH', path, body, opts);
+export const apiDelete = (path, opts)       => apiSend('DELETE', path, undefined, opts);
+
+let _flushing = false;
+/**
+ * Replay queued offline writes in FIFO order. Stops on a network error (still
+ * offline — retry later); drops an item that gets any HTTP response, including
+ * 4xx/5xx, so a permanently-rejected request can't wedge the queue. Emits
+ * `akoro:synced` when anything was flushed so the UI can refresh.
+ */
+export async function flushQueue() {
+  if (_flushing) return { flushed: 0, remaining: await queueSize() };
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { flushed: 0, remaining: await queueSize() };
+  _flushing = true;
+  let flushed = 0;
+  try {
+    for (const it of await allItems()) {
+      try {
+        await fetch(`${API}${it.path}`, {
+          ...BASE_OPTS,
+          method: it.method,
+          ...(it.body !== undefined ? { body: JSON.stringify(it.body) } : {}),
+        });
+        await remove(it.id); flushed++;          // server saw it (any status) → done
+      } catch (err) {
+        if (isNetworkError(err)) break;           // still offline — keep for next time
+        await remove(it.id); flushed++;           // client-side/other error — drop
+      }
+    }
+  } finally { _flushing = false; }
+  if (flushed && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('akoro:synced', { detail: { flushed } }));
+  }
+  return { flushed, remaining: await queueSize() };
 }
 
-export async function apiDelete(path) {
-  const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'DELETE' });
-  if (!r.ok) throw new Error(`DELETE ${path} -> ${r.status}`);
-  return r.json();
+/** Register reconnect + boot flushing. Call once at app start. */
+export function initOfflineSync() {
+  if (typeof window === 'undefined') return;
+  const run = () => flushQueue().catch(() => {});
+  window.addEventListener('online', run);
+  run();   // catch anything queued from a previous offline session
 }
 
 /**

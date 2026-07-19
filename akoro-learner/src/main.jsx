@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { io } from 'socket.io-client';
 import App from './App.jsx';
-import { API } from './services/api.js';
+import { API, initOfflineSync } from './services/api.js';
 import './index.css';
 
 /**
@@ -65,6 +65,9 @@ if (isTenantHost) {
   // global `window.io` (the socket.io client). Expose it once here so every
   // component that calls `window.io(API, …)` has a real client available.
   if (typeof window !== 'undefined') window.io = io;
+
+  // Replay any writes queued while offline (on boot + whenever we reconnect).
+  initOfflineSync();
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>

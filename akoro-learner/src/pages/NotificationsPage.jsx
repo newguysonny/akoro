@@ -96,7 +96,9 @@ export default function NotificationsPage() {
 
   const markRead = async (id) => {
     try {
-      await apiPost('/api/notifications/mark-read', { ids: [id] });
+      // Replay-safe + fire-and-forget → queue it if we're offline, apply the UI
+      // change optimistically either way.
+      await apiPost('/api/notifications/mark-read', { ids: [id] }, { queueOffline: true });
       setItems(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnread(u => Math.max(0, u - 1));
     } catch {}
@@ -104,7 +106,7 @@ export default function NotificationsPage() {
 
   const markAllRead = async () => {
     try {
-      await apiPost('/api/notifications/mark-read', { all: true });
+      await apiPost('/api/notifications/mark-read', { all: true }, { queueOffline: true });
       setItems(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnread(0);
     } catch {}
