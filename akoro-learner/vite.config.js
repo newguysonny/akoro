@@ -12,9 +12,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Auto-update the service worker when a new build ships; no user prompt.
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // Prompt mode: when a new build ships the SW waits, and the app shows a
+      // "new version available" banner (auto-reloads after a countdown). We
+      // register the SW ourselves (see UpdatePrompt) to receive onNeedRefresh.
+      registerType: 'prompt',
+      injectRegister: false,
       // Keep the hand-written public/manifest.json as the source of truth.
       manifest: false,
       // Don't run the SW during `vite dev` — avoids stale-cache confusion locally.
