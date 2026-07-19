@@ -6,6 +6,7 @@ import { useLang } from '../contexts/LanguageContext.jsx';
 
 // Components
 import TeacherNudge   from '../components/TeacherNudge.jsx';
+import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
 import SessionSheet   from '../components/sessions/SessionSheet.jsx';
 import BlockRenderer  from '../components/sessions/BlockRenderer.jsx';
@@ -451,6 +452,7 @@ export default function LearnerDashboard() {
 
         {/* SCROLLABLE CONTENT */}
         <div style={{ flex:1,overflowY:"auto",paddingBottom:72 }}>
+          <div style={{ padding:"10px 12px 0" }}><InstallBanner/></div>
           <TeacherNudge/>
           {tab==="sessions"&&(
             <div style={{ background:"var(--ak-surface)",display:"flex",flexDirection:"column",minHeight:"100%" }}>
