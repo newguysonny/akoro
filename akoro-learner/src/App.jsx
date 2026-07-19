@@ -4,6 +4,7 @@ import { AuthProvider, useAuth }   from './contexts/AuthContext.jsx';
 import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
+import OfflineBanner     from './components/common/OfflineBanner.jsx';
 import LandingPage      from './pages/LandingPage.jsx';
 import InstructorInfoPage      from './pages/InstructorInfoPage.jsx';
 import SchoolInfoPage      from './pages/SchoolInfoPage.jsx';
@@ -113,6 +114,7 @@ export default function App() {
           <AuthProvider>
             <BrowserRouter>
               <AppRoutes />
+              <OfflineBanner />
             </BrowserRouter>
           </AuthProvider>
         </LanguageProvider>
