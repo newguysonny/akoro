@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, Suspense } from 'react';
+import { lazyWithRetry } from './utils/lazyWithRetry.js';
 import { AuthProvider, useAuth }   from './contexts/AuthContext.jsx';
 import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
@@ -9,34 +10,34 @@ import OfflineBanner     from './components/common/OfflineBanner.jsx';
 
 // Route-level code splitting: each page is its own chunk, fetched on demand, so
 // the first load ships only the shell instead of the whole app in one bundle.
-const LandingPage        = lazy(() => import('./pages/LandingPage.jsx'));
-const InstructorInfoPage = lazy(() => import('./pages/InstructorInfoPage.jsx'));
-const SchoolInfoPage     = lazy(() => import('./pages/SchoolInfoPage.jsx'));
-const StudentInfoPage    = lazy(() => import('./pages/StudentInfoPage.jsx'));
-const OnboardingPage     = lazy(() => import('./pages/OnboardingPage.jsx'));
-const LearnerDashboard   = lazy(() => import('./pages/LearnerDashboard.jsx'));
-const SettingsPage       = lazy(() => import('./pages/SettingsPage.jsx'));
-const SigninPage         = lazy(() => import('./pages/auth/SigninPage.jsx'));
-const SignupPage         = lazy(() => import('./pages/auth/SignupPage.jsx'));
-const AuthCallback       = lazy(() => import('./pages/auth/AuthCallback.jsx'));
-const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage.jsx'));
-const ResetPasswordPage  = lazy(() => import('./pages/auth/ResetPasswordPage.jsx'));
-const FDEAdminPage       = lazy(() => import('./pages/FDEAdminPage.jsx'));
-const NotificationsPage  = lazy(() => import('./pages/NotificationsPage.jsx'));
-const PrivacyPolicyPage  = lazy(() => import('./pages/PrivacyPolicyPage.jsx'));
-const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage.jsx'));
-const AboutPage          = lazy(() => import('./pages/AboutPage.jsx'));
-const ContactPage        = lazy(() => import('./pages/ContactPage.jsx'));
-const CareersPage        = lazy(() => import('./pages/CareersPage.jsx'));
-const BlogPage           = lazy(() => import('./pages/BlogPage.jsx'));
-const BlogPostPage       = lazy(() => import('./pages/BlogPostPage.jsx'));
-const PartnersPage       = lazy(() => import('./pages/PartnersPage.jsx'));
-const AssessmentPage     = lazy(() => import('./pages/AssessmentPage.jsx'));
-const CourseDetailsPage  = lazy(() => import('./pages/CourseDetailsPage.jsx'));
-const AgentProfilePage   = lazy(() => import('./pages/AgentProfilePage.jsx'));
-const CartPage           = lazy(() => import('./pages/CartPage.jsx'));
-const CheckoutPage       = lazy(() => import('./pages/CheckoutPage.jsx'));
-const NotFoundPage       = lazy(() => import('./pages/NotFoundPage.jsx'));
+const LandingPage        = lazyWithRetry(() => import('./pages/LandingPage.jsx'));
+const InstructorInfoPage = lazyWithRetry(() => import('./pages/InstructorInfoPage.jsx'));
+const SchoolInfoPage     = lazyWithRetry(() => import('./pages/SchoolInfoPage.jsx'));
+const StudentInfoPage    = lazyWithRetry(() => import('./pages/StudentInfoPage.jsx'));
+const OnboardingPage     = lazyWithRetry(() => import('./pages/OnboardingPage.jsx'));
+const LearnerDashboard   = lazyWithRetry(() => import('./pages/LearnerDashboard.jsx'));
+const SettingsPage       = lazyWithRetry(() => import('./pages/SettingsPage.jsx'));
+const SigninPage         = lazyWithRetry(() => import('./pages/auth/SigninPage.jsx'));
+const SignupPage         = lazyWithRetry(() => import('./pages/auth/SignupPage.jsx'));
+const AuthCallback       = lazyWithRetry(() => import('./pages/auth/AuthCallback.jsx'));
+const ForgotPasswordPage = lazyWithRetry(() => import('./pages/auth/ForgotPasswordPage.jsx'));
+const ResetPasswordPage  = lazyWithRetry(() => import('./pages/auth/ResetPasswordPage.jsx'));
+const FDEAdminPage       = lazyWithRetry(() => import('./pages/FDEAdminPage.jsx'));
+const NotificationsPage  = lazyWithRetry(() => import('./pages/NotificationsPage.jsx'));
+const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx'));
+const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
+const AboutPage          = lazyWithRetry(() => import('./pages/AboutPage.jsx'));
+const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx'));
+const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
+const BlogPage           = lazyWithRetry(() => import('./pages/BlogPage.jsx'));
+const BlogPostPage       = lazyWithRetry(() => import('./pages/BlogPostPage.jsx'));
+const PartnersPage       = lazyWithRetry(() => import('./pages/PartnersPage.jsx'));
+const AssessmentPage     = lazyWithRetry(() => import('./pages/AssessmentPage.jsx'));
+const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage.jsx'));
+const AgentProfilePage   = lazyWithRetry(() => import('./pages/AgentProfilePage.jsx'));
+const CartPage           = lazyWithRetry(() => import('./pages/CartPage.jsx'));
+const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
+const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
 function ProtectedRoute({ children }) {
