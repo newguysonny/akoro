@@ -196,7 +196,7 @@ const paymentHandlers = {
     const { event, data } = req.body;
     if (event !== "charge.success") return res.status(200).json({ received: true });
 
-    const { payment_id, course_id, user_id, coupon_id, is_cart_checkout, cart_course_ids } = data.metadata ?? {};
+    const { payment_id, course_id, user_id, coupon_id, is_cart_checkout, cart_course_ids, cart_listing_ids } = data.metadata ?? {};
     if (!payment_id || !user_id)
       return res.status(200).json({ received: true });
 
@@ -204,15 +204,18 @@ const paymentHandlers = {
     await db.from("payments").update({ status: "success", paid_at: now(), provider_response: data })
       .eq("id", payment_id).eq("status", "pending");
 
-    // Cart checkout — a single payment covers many courses. Fulfil the whole
-    // cart (previously the webhook enrolled only the first course, so the rest
-    // were paid-for but never granted).
-    if (is_cart_checkout && Array.isArray(cart_course_ids) && cart_course_ids.length) {
+    // Cart checkout — a single payment covers many items (courses and/or agent
+    // teaching-guides). Fulfil the whole cart (previously the webhook enrolled
+    // only the first course, so the rest were paid-for but never granted).
+    const cartCourses  = Array.isArray(cart_course_ids)  ? cart_course_ids  : [];
+    const cartListings = Array.isArray(cart_listing_ids) ? cart_listing_ids : [];
+    if (is_cart_checkout && (cartCourses.length || cartListings.length)) {
       await cartHandlers.enrollFromCartWebhook({
-        paymentId:     payment_id,
-        userId:        user_id,
-        cartCourseIds: cart_course_ids,
-        couponId:      coupon_id ?? null,
+        paymentId:      payment_id,
+        userId:         user_id,
+        cartCourseIds:  cartCourses,
+        cartListingIds: cartListings,
+        couponId:       coupon_id ?? null,
       });
       return res.status(200).json({ success: true });
     }
