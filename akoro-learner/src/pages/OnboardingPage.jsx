@@ -11,6 +11,14 @@ const RED    = '#EF4444';
 const ACCENTS = [BRAND, '#3B82F6', '#10B981', '#E8884A', '#EC4899', '#F59E0B', '#EF4444', '#8B5CF6'];
 const GUIDE_EMOJIS = ['🧠', '🤖', '👾', '🦉', '🎓', '⚡', '🌟', '🔮', '🦋', '🎯', '🚀', '💡'];
 const STUDY_LEVELS = ['Primary', 'Junior Secondary', 'Senior Secondary', 'University', 'Adult learner'];
+// Class/year options shown in the dropdown, dependent on the chosen study level.
+const CLASSES_BY_LEVEL = {
+  'Primary':           ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'],
+  'Junior Secondary':  ['JSS 1', 'JSS 2', 'JSS 3'],
+  'Senior Secondary':  ['SSS 1', 'SSS 2', 'SSS 3'],
+  'University':        ['100 Level', '200 Level', '300 Level', '400 Level', '500 Level', 'Postgraduate'],
+  'Adult learner':     [],
+};
 const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemistry', 'Biology',
   'Computer Science', 'English Language', 'English Literature', 'Economics', 'Geography', 'History'];
 
@@ -178,13 +186,29 @@ export default function OnboardingPage() {
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>{t('onboarding.study_level')}</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {STUDY_LEVELS.map(l => <span key={l} onClick={() => setStudyLevel(l)} style={chip(studyLevel === l)}>{l}</span>)}
+                {STUDY_LEVELS.map(l => <span key={l} onClick={() => { setStudyLevel(l); setYearGroup(''); }} style={chip(studyLevel === l)}>{l}</span>)}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
               <div>
                 <label style={lbl}>{t('onboarding.year_class')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
-                <input value={yearGroup} onChange={e => setYearGroup(e.target.value)} placeholder={t('onboarding.year_ph')} style={inp}/>
+                {(() => {
+                  const classes = CLASSES_BY_LEVEL[studyLevel] || [];
+                  const disabled = !studyLevel || classes.length === 0;
+                  return (
+                    <select
+                      value={yearGroup}
+                      onChange={e => setYearGroup(e.target.value)}
+                      disabled={disabled}
+                      style={{ ...inp, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}
+                    >
+                      <option value="">
+                        {!studyLevel ? 'Choose a level first' : classes.length ? 'Select class…' : 'Not applicable'}
+                      </option>
+                      {classes.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  );
+                })()}
               </div>
               <div>
                 <label style={lbl}>{t('onboarding.school')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
