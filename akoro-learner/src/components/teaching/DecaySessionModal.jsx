@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
+import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function DecaySessionModal({ alert, onClose, agentProfile }) {
+  // Hold the activity lock so an auto-reload can't interrupt a decay session.
+  useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
   const agentNm  = agentProfile?.name  || AGENT_CONFIG.name;
   const agentEm  = agentProfile?.emoji || AGENT_CONFIG.emoji;

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
+import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
@@ -8,6 +9,8 @@ import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function TeachAgentModal({ session, config, onClose }) {
+  // Hold the activity lock so an auto-reload can't interrupt a teaching session.
+  useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
   const topic     = config?.topic    || session?.topic    || "your topic";
   const subject   = config?.subject  || session?.subject  || "science";

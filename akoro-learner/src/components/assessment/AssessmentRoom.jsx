@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD, getStudentId } from '../../constants.js';
+import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
@@ -21,6 +22,8 @@ import { XIcon } from '../common/Icons.jsx';
  * and assessment_turn (Q&A) on that connection.
  */
 function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, onClose }) {
+  // Hold the activity lock so an auto-reload can't interrupt the assessment.
+  useEffect(() => acquireActivityLock(), []);
   const [phase,   setPhase]   = useState("consent");   // consent | exam | summary
   const [blocks,  setBlocks]  = useState([]);
   const [input,   setInput]   = useState("");

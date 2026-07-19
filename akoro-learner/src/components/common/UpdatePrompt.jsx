@@ -9,12 +9,14 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
+import { isBusy, subscribeActivity } from '../../utils/activityLock.js';
 
 const COUNTDOWN = 10;
 
 export default function UpdatePrompt() {
   const [show, setShow] = useState(false);
   const [secs, setSecs] = useState(COUNTDOWN);
+  const [busy, setBusy] = useState(false);   // in a live session / assessment
   const updateSW = useRef(null);
 
   useEffect(() => {
@@ -24,12 +26,18 @@ export default function UpdatePrompt() {
     });
   }, []);
 
+  // Pause the countdown while the learner is in a protected flow.
   useEffect(() => {
-    if (!show) return;
+    setBusy(isBusy());
+    return subscribeActivity(setBusy);
+  }, []);
+
+  useEffect(() => {
+    if (!show || busy) return;   // paused while an activity holds the lock
     if (secs <= 0) { updateSW.current?.(true); return; }   // activate new SW + reload
     const t = setTimeout(() => setSecs((s) => s - 1), 1000);
     return () => clearTimeout(t);
-  }, [show, secs]);
+  }, [show, secs, busy]);
 
   if (!show) return null;
 
@@ -44,7 +52,9 @@ export default function UpdatePrompt() {
       gap: 12, flexWrap: 'wrap', boxShadow: '0 2px 14px rgba(0,0,0,.25)',
     }}>
       <span style={{ fontSize: 13, fontWeight: 700 }}>
-        A new version of Akoro is available — reloading in {secs}s
+        {busy
+          ? 'A new version of Akoro is available — it’ll reload when you finish.'
+          : `A new version of Akoro is available — reloading in ${secs}s`}
       </span>
       <span style={{ display: 'inline-flex', gap: 8 }}>
         <button onClick={reloadNow} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#6C3BFF', color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>Reload now</button>
