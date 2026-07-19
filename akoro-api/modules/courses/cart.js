@@ -413,10 +413,13 @@ const handlers = {
    * Checkout the entire cart in one Paystack transaction.
    * On webhook success: enrolls student in all courses + creates per-instructor earnings.
    *
-   * Optional body: { coupon_code }
+   * Optional body: { coupon_code, method }  — method: card | bank | ussd | any
    */
   checkout: asyncHandler(async (req, res) => {
-    const { coupon_code } = req.body;
+    const { coupon_code, method } = req.body;
+    // Map the chosen payment method to Paystack channels (omit → all methods).
+    const CHANNELS = { card: ["card"], bank: ["bank", "bank_transfer"], ussd: ["ussd"] };
+    const channels = CHANNELS[method] || null;
     const userId          = req.user.id;
 
     const cart = await getCartWithPrices(userId);
@@ -524,6 +527,7 @@ const handlers = {
         amount:    totalKobo,
         currency:  "NGN",
         reference: `akoro_cart_${payment.id}_${Date.now()}`,
+        ...(channels ? { channels } : {}),
         metadata: {
           payment_id:        payment.id,
           course_id:         courseCartIds[0] ?? null,

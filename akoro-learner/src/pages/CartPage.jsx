@@ -4,9 +4,8 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, ShoppingCart, BookOpen, Bot } from 'lucide-react';
+import { ArrowLeft, Trash2, ShoppingCart, BookOpen, Bot, ArrowRight } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
-import { checkoutCart } from '../services/cartApi.js';
 import Toast from '../components/common/Toast.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -16,7 +15,6 @@ const ngn = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
 export default function CartPage() {
   const navigate = useNavigate();
   const { cart, count, removeCourse, removeAgent, refresh } = useCart();
-  const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -27,20 +25,6 @@ export default function CartPage() {
     try { item.item_type === 'agent' ? await removeAgent(item.listing_id) : await removeCourse(item.course_id); }
     catch { setToast({ msg: 'Could not remove item', color: RED }); }
     finally { setRemoving(null); }
-  };
-
-  const pay = async () => {
-    if (!items.length) return;
-    setBusy(true);
-    try {
-      const res = await checkoutCart();
-      const d = res?.data ?? res;
-      if (d?.checkout_url) { window.location.href = d.checkout_url; return; }
-      if (d?.free) { setToast({ msg: d.message || 'Access granted! 🎉', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
-      setToast({ msg: 'Checkout started', color: GREEN }); await refresh();
-    } catch (e) {
-      setToast({ msg: e?.message || 'Checkout failed — please retry', color: RED });
-    } finally { setBusy(false); }
   };
 
   return (
@@ -94,8 +78,8 @@ export default function CartPage() {
               <span style={{ fontSize: 13, color: 'var(--ak-text-muted)', fontWeight: 700 }}>Subtotal</span>
               <span style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)' }}>{cart.subtotal_kobo === 0 ? 'Free' : ngn(cart.subtotal_ngn)}</span>
             </div>
-            <button onClick={pay} disabled={busy} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: busy ? '#C7C2E0' : `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 15, fontWeight: 900, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
-              {busy ? 'Processing…' : cart.subtotal_kobo === 0 ? 'Get all — Free' : `Pay all · ${ngn(cart.subtotal_ngn)}`}
+            <button onClick={() => navigate('/checkout')} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              Proceed to checkout <ArrowRight size={16} />
             </button>
           </div>
         </div>

@@ -10,4 +10,6 @@ export const addAgentToCart       = (listing_id) => apiPost('/api/cart', { item_
 export const removeCourseFromCart = (courseId)  => apiDelete(`/api/cart/${courseId}`);
 export const removeAgentFromCart  = (listingId) => apiDelete(`/api/cart/listing/${listingId}`);
 export const clearCart            = () => apiDelete('/api/cart');
-export const checkoutCart         = (coupon_code) => apiPost('/api/cart/checkout', coupon_code ? { coupon_code } : {});
+export const applyCoupon          = (coupon_code) => apiPost('/api/cart/apply-coupon', { coupon_code });
+export const checkoutCart         = ({ coupon_code, method } = {}) =>
+  apiPost('/api/cart/checkout', { ...(coupon_code ? { coupon_code } : {}), ...(method ? { method } : {}) });

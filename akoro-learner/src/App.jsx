@@ -35,6 +35,7 @@ const AssessmentPage     = lazy(() => import('./pages/AssessmentPage.jsx'));
 const CourseDetailsPage  = lazy(() => import('./pages/CourseDetailsPage.jsx'));
 const AgentProfilePage   = lazy(() => import('./pages/AgentProfilePage.jsx'));
 const CartPage           = lazy(() => import('./pages/CartPage.jsx'));
+const CheckoutPage       = lazy(() => import('./pages/CheckoutPage.jsx'));
 const NotFoundPage       = lazy(() => import('./pages/NotFoundPage.jsx'));
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
@@ -99,6 +100,7 @@ function AppRoutes() {
       <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
       <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>
       <Route path="/cart"       element={<ProtectedRoute><CartPage /></ProtectedRoute>}/>
+      <Route path="/checkout"   element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
       <Route path="/instructor-info"    element={<InstructorInfoPage />}/>
