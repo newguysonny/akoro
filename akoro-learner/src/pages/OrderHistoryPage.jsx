@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Receipt, BookOpen, ShoppingCart, Bot } from 'lucide-react';
 import { getOrderHistory, requestRefund } from '../services/ordersApi.js';
+import { verifyCheckout } from '../services/cartApi.js';
 import Toast from '../components/common/Toast.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -39,7 +40,19 @@ export default function OrderHistoryPage() {
 
   useEffect(() => {
     let alive = true;
-    getOrderHistory().then((o) => { if (alive) setOrders(o); }).catch(() => { if (alive) setOrders([]); });
+    getOrderHistory().then((o) => {
+      if (!alive) return;
+      setOrders(o);
+      // Self-heal: a paid cart order may be stuck 'pending' if its Paystack
+      // webhook was missed/delayed. Re-verify each with Paystack on open; a
+      // genuinely unpaid order just stays pending.
+      (o || []).filter((x) => x.status === 'pending' && x.kind === 'order' && x.reference).forEach(async (x) => {
+        try {
+          const d = await verifyCheckout(x.reference);
+          if (alive && d?.fulfilled) setOrders((list) => (list || []).map((y) => y.id === x.id ? { ...y, status: 'success' } : y));
+        } catch { /* leave pending */ }
+      });
+    }).catch(() => { if (alive) setOrders([]); });
     return () => { alive = false; };
   }, []);
 
