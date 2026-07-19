@@ -147,7 +147,7 @@ function AgentCard({ listing, owned, onOpen, wide }) {
           ? <img src={listing.cover_image_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           : null}
-        <span style={{ fontSize: 46, opacity: listing.cover_image_url ? 0 : 1 }}>{listing.teacher_avatar || listing.agent_avatar || '🎓'}</span>
+        <span style={{ fontSize: 46, opacity: listing.cover_image_url ? 0 : 1 }}>{(() => { const a = listing.teacher_avatar || listing.agent_avatar; return (typeof a === 'string' && /^(https?:)?\/\//.test(a.trim())) ? '🎓' : (a || '🎓'); })()}</span>
         {owned && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>{t('discovery.owned')}</span>}
         <span style={{ position: 'absolute', bottom: 7, right: 7, fontSize: 9, fontWeight: 900, color: sc, background: '#fff', padding: '3px 7px', borderRadius: 6, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
       </div>

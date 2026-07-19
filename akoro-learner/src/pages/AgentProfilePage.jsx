@@ -16,6 +16,24 @@ const fmtPrice = (kobo, currency = 'NGN', free = 'Free') => !kobo ? free : `${cu
 const fmtCount = (n) => { const v = Number(n) || 0; return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(v); };
 const subjectColor = (s) => SUBJECT_COLORS[(s || '').toLowerCase()] || BRAND;
 
+// The avatar field may hold an emoji OR an image URL. Render a URL as an image
+// (falling back to the emoji if it fails to load) instead of printing the raw
+// URL text, which overflowed the box and overlapped the title.
+function AgentAvatar({ value, sc }) {
+  const isUrl = typeof value === 'string' && /^(https?:)?\/\//.test(value.trim());
+  const [broken, setBroken] = useState(false);
+  const box = { width: 64, height: 64, borderRadius: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', fontSize: 34, background: `${sc}14`, border: `1.5px solid ${sc}33` };
+  if (isUrl && !broken) {
+    return (
+      <div style={box}>
+        <img src={value} alt="" onError={() => setBroken(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      </div>
+    );
+  }
+  return <div style={box}>{isUrl ? '🎓' : (value || '🎓')}</div>;
+}
+
 function Stars({ rating = 0, size = 13 }) {
   const r = Number(rating) || 0;
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <span key={i} style={{ fontSize: size, color: i <= Math.round(r) ? GOLD : 'var(--ak-border2)' }}>★</span>)}</span>;
@@ -99,7 +117,7 @@ export default function AgentProfilePage() {
         </div>
       )}
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <div style={{ width: 64, height: 64, borderRadius: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, background: `${sc}14`, border: `1.5px solid ${sc}33` }}>{full.teacher_avatar || full.agent_avatar || '🎓'}</div>
+        <AgentAvatar value={full.teacher_avatar || full.agent_avatar} sc={sc} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>{full.title}</h1>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ak-text-sub)', marginTop: 3 }}>{t('discovery.by')} {full.teacher_name || t('discovery.teacher')}</div>
