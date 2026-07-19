@@ -2,6 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Replay-safe, fire-and-forget write endpoints that may be queued offline and
+// replayed via the Background Sync API (even if the app is closed). MUST stay in
+// sync with the calls that pass { queueOffline: true } in the app code.
+const QUEUEABLE_POST = ['/api/notifications/mark-read', '/api/profiles/me/teacher-request', '/api/adaptive/marketplace/set-default'];
+const QUEUEABLE_PATCH = ['/api/profiles/me', '/api/profiles/me/notifications'];
+
 export default defineConfig({
   plugins: [
     react(),
@@ -20,7 +26,17 @@ export default defineConfig({
         // (face-detection) + hls video chunks are lazy-loaded, online-only
         // features (proctored assessment / video). They're cached on demand by
         // the asset runtime rule below instead of bloating the first-load precache.
-        globIgnores: ['**/blazeface*.js', '**/graph_model*.js', '**/hls*.js'],
+        globIgnores: [
+          // Heavy, online-only feature chunks (face-detection + video).
+          '**/blazeface*.js', '**/graph_model*.js', '**/hls*.js',
+          // Rarely-needed-offline marketing / legal / info pages — code-split into
+          // their own chunks and runtime-cached on first visit instead of bloating
+          // the first-install precache. Core learner flows stay precached.
+          '**/InstructorInfoPage-*.js', '**/SchoolInfoPage-*.js', '**/StudentInfoPage-*.js',
+          '**/AboutPage-*.js', '**/ContactPage-*.js', '**/CareersPage-*.js',
+          '**/BlogPage-*.js', '**/BlogPostPage-*.js', '**/PartnersPage-*.js',
+          '**/PrivacyPolicyPage-*.js', '**/TermsOfServicePage-*.js', '**/FDEAdminPage-*.js',
+        ],
         // SPA: offline navigations fall back to the cached shell (except API paths).
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
@@ -57,6 +73,26 @@ export default defineConfig({
               cacheName: 'akoro-fonts',
               expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Queueable POST writes → try network; if it fails offline, Workbox's
+            // Background Sync queue holds the request and replays it when
+            // connectivity returns, even if the tab/app is closed.
+            urlPattern: ({ url }) => QUEUEABLE_POST.includes(url.pathname),
+            handler: 'NetworkOnly',
+            method: 'POST',
+            options: {
+              backgroundSync: { name: 'akoro-writes-post', options: { maxRetentionTime: 60 * 24 } }, // 24h
+            },
+          },
+          {
+            // Queueable PATCH writes → same Background Sync treatment.
+            urlPattern: ({ url }) => QUEUEABLE_PATCH.includes(url.pathname),
+            handler: 'NetworkOnly',
+            method: 'PATCH',
+            options: {
+              backgroundSync: { name: 'akoro-writes-patch', options: { maxRetentionTime: 60 * 24 } },
             },
           },
         ],

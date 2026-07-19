@@ -58,7 +58,13 @@ async function apiSend(method, path, body, { queueOffline = false } = {}) {
     return r.json();
   } catch (err) {
     if (queueOffline && isNetworkError(err)) {
-      await enqueue({ method, path, body });
+      // When a service worker controls the page, its Background Sync queue has
+      // already captured this failed request and will replay it (even if the app
+      // is closed). Only when there's no SW controller do we fall back to the
+      // app-level queue, which flushes on reconnect/boot. Mutually exclusive, so
+      // the request is never queued twice.
+      const swControlled = typeof navigator !== 'undefined' && !!navigator.serviceWorker?.controller;
+      if (!swControlled) await enqueue({ method, path, body });
       return { queued: true, _offline: true };
     }
     throw err;

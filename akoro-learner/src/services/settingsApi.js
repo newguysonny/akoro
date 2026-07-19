@@ -2,10 +2,12 @@ import { apiGet, apiPatch, apiPost } from './api.js';
 
 export const getMyProfile = () => apiGet('/api/profiles/me');
 
-export const patchMyProfile = (patch) => apiPatch('/api/profiles/me', patch);
+// Profile + notification-preference saves are replay-safe → queue offline and
+// replay on reconnect (Background Sync) instead of failing.
+export const patchMyProfile = (patch) => apiPatch('/api/profiles/me', patch, { queueOffline: true });
 
 export const patchNotifications = (notif) =>
-  apiPatch('/api/profiles/me/notifications', notif);
+  apiPatch('/api/profiles/me/notifications', notif, { queueOffline: true });
 
 export const putAgent = (agentPatch) => {
   // Maps camelCase settings keys → snake_case API keys
@@ -37,7 +39,7 @@ export const getMyAgents = (userId) =>
 
 // Set the student's default/active guide agent (verifies ownership server-side)
 export const setDefaultAgent = ({ userId, agentPairId, activeAgentId }) =>
-  apiPost('/api/adaptive/marketplace/set-default', { userId, agentPairId, activeAgentId });
+  apiPost('/api/adaptive/marketplace/set-default', { userId, agentPairId, activeAgentId }, { queueOffline: true });
 
 export const changePassword = ({ currentPassword, newPassword }) => {
   const API = import.meta.env.VITE_API_URL || 'https://akoro.app';

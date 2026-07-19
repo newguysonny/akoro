@@ -32,7 +32,7 @@ export default function TeacherNudge() {
   const request = async () => {
     if (!teacherId) return;
     setBusy(true);
-    try { await apiPost('/api/profiles/me/teacher-request', { teacher_id: teacherId }); setLink({ status: 'pending', teacher_name: teachers.find((t) => t.id === teacherId)?.full_name }); }
+    try { await apiPost('/api/profiles/me/teacher-request', { teacher_id: teacherId }, { queueOffline: true }); setLink({ status: 'pending', teacher_name: teachers.find((t) => t.id === teacherId)?.full_name }); }
     catch { /* ignore */ } finally { setBusy(false); }
   };
 
