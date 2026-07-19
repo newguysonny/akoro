@@ -18,6 +18,7 @@ import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
+import { cartHandlers }                   from "./cart.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -195,13 +196,29 @@ const paymentHandlers = {
     const { event, data } = req.body;
     if (event !== "charge.success") return res.status(200).json({ received: true });
 
-    const { payment_id, course_id, user_id, coupon_id } = data.metadata ?? {};
-    if (!payment_id || !course_id || !user_id)
+    const { payment_id, course_id, user_id, coupon_id, is_cart_checkout, cart_course_ids } = data.metadata ?? {};
+    if (!payment_id || !user_id)
       return res.status(200).json({ received: true });
 
     // Update payment
     await db.from("payments").update({ status: "success", paid_at: now(), provider_response: data })
       .eq("id", payment_id).eq("status", "pending");
+
+    // Cart checkout — a single payment covers many courses. Fulfil the whole
+    // cart (previously the webhook enrolled only the first course, so the rest
+    // were paid-for but never granted).
+    if (is_cart_checkout && Array.isArray(cart_course_ids) && cart_course_ids.length) {
+      await cartHandlers.enrollFromCartWebhook({
+        paymentId:     payment_id,
+        userId:        user_id,
+        cartCourseIds: cart_course_ids,
+        couponId:      coupon_id ?? null,
+      });
+      return res.status(200).json({ success: true });
+    }
+
+    // Single-course checkout below.
+    if (!course_id) return res.status(200).json({ received: true });
 
     // Activate enrollment
     await db.from("enrollments").upsert(
