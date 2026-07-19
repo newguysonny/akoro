@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useCart } from '../../contexts/CartContext.jsx';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
@@ -28,6 +29,17 @@ export default function CourseDetailsPage() {
     // Deep-linked / new tab: signed-in learners land on the dashboard, guests on home.
     const signedIn = (() => { try { return !!localStorage.getItem('akoro_user'); } catch { return false; } })();
     navigate(signedIn ? '/app' : '/');
+  };
+  const { count: cartCount, inCart, addCourse } = useCart();
+  const [addingCart, setAddingCart] = useState(false);
+  const addToCart = async () => {
+    const cid = view?.course?.id;
+    if (!cid) return;
+    if (inCart(cid)) { navigate('/cart'); return; }
+    setAddingCart(true);
+    try { await addCourse(cid); setToast({ msg: 'Added to cart', color: GREEN }); }
+    catch (e) { setToast({ msg: String(e?.message || '').includes('enrolled') ? 'You’re already enrolled' : 'Could not add to cart', color: RED }); }
+    finally { setAddingCart(false); }
   };
   const [data, setData] = useState(null);
   const [courseType, setCourseType] = useState('live');
@@ -140,6 +152,10 @@ export default function CourseDetailsPage() {
           <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, padding: '4px 11px', borderRadius: 100, background: courseType === 'video' ? `${BRAND}14` : '#FEE2E2', color: courseType === 'video' ? BRAND : '#DC2626' }}>
             {courseType === 'video' ? '🎬 Video course' : '🔴 Live class'}
           </span>
+          <button onClick={() => navigate('/cart')} style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: INK, display: 'flex', padding: 4 }} aria-label="Cart">
+            <ShoppingCart size={19} />
+            {cartCount > 0 && <span style={{ position: 'absolute', top: -4, right: -6, minWidth: 15, height: 15, padding: '0 4px', borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 9.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{cartCount > 9 ? '9+' : cartCount}</span>}
+          </button>
         </div>
       </div>
 
@@ -152,6 +168,7 @@ export default function CourseDetailsPage() {
           <CourseOverview
             type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
             onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
+            onAddToCart={addToCart} addingCart={addingCart} inCart={inCart(view.course.id)}
             onJoinLive={() => navigate('/app')} />
         )}
       </div>

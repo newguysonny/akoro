@@ -3,6 +3,7 @@ import { useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth }   from './contexts/AuthContext.jsx';
 import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
+import { CartProvider }            from './contexts/CartContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
 import OfflineBanner     from './components/common/OfflineBanner.jsx';
 
@@ -33,6 +34,7 @@ const PartnersPage       = lazy(() => import('./pages/PartnersPage.jsx'));
 const AssessmentPage     = lazy(() => import('./pages/AssessmentPage.jsx'));
 const CourseDetailsPage  = lazy(() => import('./pages/CourseDetailsPage.jsx'));
 const AgentProfilePage   = lazy(() => import('./pages/AgentProfilePage.jsx'));
+const CartPage           = lazy(() => import('./pages/CartPage.jsx'));
 const NotFoundPage       = lazy(() => import('./pages/NotFoundPage.jsx'));
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
@@ -96,6 +98,7 @@ function AppRoutes() {
       <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
       <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
       <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>
+      <Route path="/cart"       element={<ProtectedRoute><CartPage /></ProtectedRoute>}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>
       <Route path="/terms"    element={<TermsOfServicePage />}/>
       <Route path="/instructor-info"    element={<InstructorInfoPage />}/>
@@ -127,10 +130,12 @@ export default function App() {
       <ThemeProvider>
         <LanguageProvider>
           <AuthProvider>
-            <BrowserRouter>
-              <AppRoutes />
-              <OfflineBanner />
-            </BrowserRouter>
+            <CartProvider>
+              <BrowserRouter>
+                <AppRoutes />
+                <OfflineBanner />
+              </BrowserRouter>
+            </CartProvider>
           </AuthProvider>
         </LanguageProvider>
       </ThemeProvider>

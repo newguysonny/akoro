@@ -4,7 +4,8 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, ShoppingCart, Check } from 'lucide-react';
+import { useCart } from '../contexts/CartContext.jsx';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, STUDENT_ID } from '../constants.js';
 import { apiGet, apiPost } from '../services/api.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
@@ -43,6 +44,8 @@ export default function AgentProfilePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useLang();
+  const { count: cartCount, inCart, addAgent } = useCart();
+  const [addingCart, setAddingCart] = useState(false);
   const [full, setFull] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [owned, setOwned] = useState(false);
@@ -76,6 +79,13 @@ export default function AgentProfilePage() {
       setToast({ msg: String(e.message || '').includes('409') ? t('discovery.already_own') : t('discovery.checkout_failed'), color: RED });
     } finally { setBusy(false); }
   };
+  const addToCart = async () => {
+    if (inCart(full.id)) { navigate('/cart'); return; }
+    setAddingCart(true);
+    try { await addAgent(full.id); setToast({ msg: 'Added to cart', color: GREEN }); }
+    catch (e) { setToast({ msg: String(e?.message || '').includes('own') ? 'You already own this' : 'Could not add to cart', color: RED }); }
+    finally { setAddingCart(false); }
+  };
   const use = async () => {
     setBusy(true);
     try {
@@ -97,6 +107,10 @@ export default function AgentProfilePage() {
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }}><ArrowLeft size={20} /></button>
         <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)' }}>Teaching Guide</span>
+        <button onClick={() => navigate('/cart')} style={{ marginLeft: 'auto', position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }} aria-label="Cart">
+          <ShoppingCart size={20} />
+          {cartCount > 0 && <span style={{ position: 'absolute', top: -6, right: -8, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: '#EF4444', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{cartCount > 9 ? '9+' : cartCount}</span>}
+        </button>
       </div>
       {children}
     </div>
@@ -176,7 +190,12 @@ export default function AgentProfilePage() {
         {owned ? (
           <button onClick={use} disabled={busy} style={actionBtn(GREEN, busy)}>{busy ? t('discovery.setting') : t('discovery.use_agent')}</button>
         ) : (
-          <button onClick={purchase} disabled={busy} style={actionBtn(BRAND, busy)}>{busy ? t('discovery.processing') : full.is_free ? t('discovery.get_free') : `${t('discovery.unlock')} · ${fmtPrice(full.price_kobo, full.currency)}`}</button>
+          <div style={{ display: 'flex', gap: 10, flex: 1 }}>
+            <button onClick={addToCart} disabled={addingCart} style={cartBtn(inCart(full.id))}>
+              {inCart(full.id) ? <><Check size={15} /> In cart</> : <><ShoppingCart size={15} /> {addingCart ? '…' : 'Add to cart'}</>}
+            </button>
+            <button onClick={purchase} disabled={busy} style={actionBtn(BRAND, busy)}>{busy ? t('discovery.processing') : full.is_free ? t('discovery.get_free') : `${t('discovery.unlock')} · ${fmtPrice(full.price_kobo, full.currency)}`}</button>
+          </div>
         )}
       </div>
 
@@ -186,3 +205,4 @@ export default function AgentProfilePage() {
 }
 
 const actionBtn = (color, busy) => ({ flex: 1, padding: '14px', borderRadius: 14, border: 'none', background: busy ? '#C7C2E0' : `linear-gradient(135deg, ${color}, ${color}CC)`, color: '#fff', fontSize: 15, fontWeight: 900, cursor: busy ? 'default' : 'pointer', fontFamily: FONT });
+const cartBtn = (active) => ({ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '14px 18px', borderRadius: 14, border: `1.5px solid ${BRAND}`, background: active ? `${BRAND}14` : 'var(--ak-surface)', color: BRAND, fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' });

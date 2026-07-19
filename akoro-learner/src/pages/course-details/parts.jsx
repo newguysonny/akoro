@@ -577,7 +577,7 @@ function mapCourse(api) {
 }
 
 /* ── guest / overview view ────────────────────────────────── */
-function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive }) {
+function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart }) {
   const isVideo = type === 'video';
   const isFree = course.priceLabel === 'Free';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
@@ -614,6 +614,11 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
             {!isEnrolled && (isVideo
               ? <Btn variant="primary" size="lg" onClick={onEnrol} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff', opacity: enrolling ? .6 : 1 }}><ShoppingCart size={15} />{enrolling ? 'Enrolling…' : isFree ? 'Enrol · Free' : `Buy · ${course.priceLabel}`}</Btn>
               : <Btn variant="red" size="lg" onClick={onEnrol} style={{ opacity: enrolling ? .6 : 1 }}><Radio size={15} />{enrolling ? 'Enrolling…' : 'Enrol · Join live'}</Btn>)}
+            {!isEnrolled && onAddToCart && (
+              <Btn variant="ghost" size="lg" onClick={onAddToCart} style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.55)', opacity: addingCart ? .6 : 1 }}>
+                {inCart ? <><Check size={15} /> In cart — view</> : <><Plus size={15} /> {addingCart ? 'Adding…' : 'Add to cart'}</>}
+              </Btn>
+            )}
             {isEnrolled && isVideo && <Btn variant="primary" size="lg" onClick={onPlay} style={{ background: '#fff', color: BRAND, border: '1.5px solid #fff' }}><Play size={15} />Continue watching</Btn>}
             {isEnrolled && !isVideo && <Btn variant="red" size="lg" onClick={onJoinLive}><Radio size={15} />Join live now</Btn>}
           </div>
