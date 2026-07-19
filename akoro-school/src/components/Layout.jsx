@@ -268,6 +268,7 @@ const NAV_SECTIONS = [
       { label: 'Audit Trail', to: '/settings-audit-trail' },
       { label: 'Subscription', to: '/settings-subscription' },
       { label: 'Subscription History', to: '/settings-subscription-history' },
+      { label: 'Tool Purchases', to: '/settings-tool-purchases' },
       { label: 'Module Settings', to: '/settings-modules' },
       'Biometric Devices',
     ] },

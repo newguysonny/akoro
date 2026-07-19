@@ -35,6 +35,7 @@ import PaymentGatewayPage from './pages/PaymentGatewayPage.jsx';
 import AdmissionSettingsPage from './pages/AdmissionSettingsPage.jsx';
 import ManageSubscriptionPage from './pages/ManageSubscriptionPage.jsx';
 import SubscriptionHistoryPage from './pages/SubscriptionHistoryPage.jsx';
+import ToolPurchasesPage from './pages/ToolPurchasesPage.jsx';
 import AuditTrailPage from './pages/AuditTrailPage.jsx';
 import AttendanceRegisterPage from './pages/mgmt/AttendanceRegisterPage.jsx';
 import {
@@ -239,6 +240,7 @@ function AppRoutes() {
       <Route path="/settings-admission" element={<ProtectedRoute><AdmissionSettingsPage /></ProtectedRoute>} />
       <Route path="/settings-subscription" element={<ProtectedRoute><ManageSubscriptionPage /></ProtectedRoute>} />
       <Route path="/settings-subscription-history" element={<ProtectedRoute><SubscriptionHistoryPage /></ProtectedRoute>} />
+      <Route path="/settings-tool-purchases" element={<ProtectedRoute><ToolPurchasesPage /></ProtectedRoute>} />
       <Route path="/settings-audit-trail" element={<ProtectedRoute><AuditTrailPage /></ProtectedRoute>} />
       {/* Management — Student Information */}
       <Route path="/mgmt/student-dashboard"  element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
