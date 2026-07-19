@@ -517,6 +517,15 @@ const handlers = {
 
     // Free cart — grant everything directly without Paystack
     if (totalKobo === 0) {
+      const freeCourseIds  = checkoutItems.filter((i) => i.item_type === "course").map((i) => i.course_id);
+      const freeListingIds = checkoutItems.filter((i) => i.item_type === "agent").map((i) => i.listing_id);
+      // Record a zero-amount success payment so the free order still appears in
+      // the learner's order history.
+      await db.from("payments").insert({
+        user_id: userId, course_id: freeCourseIds[0] ?? null, amount_paid: 0, currency: "NGN",
+        payment_provider: "free", status: "success", paid_at: new Date().toISOString(),
+        provider_response: { is_cart_checkout: true, course_ids: freeCourseIds, listing_ids: freeListingIds, item_count: checkoutItems.length, free: true },
+      });
       for (const item of checkoutItems) {
         if (item.item_type === "agent") {
           await grantAgentFromCart(userId, { listingId: item.listing_id, agentId: item.agent_id, amountKobo: 0, currency: item.currency });
@@ -556,6 +565,7 @@ const handlers = {
           coupon_code:      coupon_code ?? null,
           discount_applied: discountKobo,
           item_count:       checkoutItems.length,
+          method:           method || "any",   // for the "Processing" (async) label
         },
       })
       .select()

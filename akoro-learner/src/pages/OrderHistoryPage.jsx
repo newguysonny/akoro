@@ -20,13 +20,18 @@ const daysSince = (d) => d ? (Date.now() - new Date(d).getTime()) / 86_400_000 :
 const isRefundable = (o) => (o.kind === 'course' || o.kind === 'order') && o.status === 'success' && !!o.payment_id && daysSince(o.date) <= REFUND_WINDOW_DAYS;
 
 const STATUS = {
-  success:  { label: 'Paid',     bg: '#DCFCE7', color: GREEN },
-  pending:  { label: 'Pending',  bg: '#FEF3C7', color: '#B45309' },
-  refunded: { label: 'Refunded', bg: '#F1F0F4', color: '#6B6B80' },
-  failed:   { label: 'Failed',   bg: '#FEE2E2', color: RED },
-  abandoned:{ label: 'Abandoned',bg: '#FEE2E2', color: RED },
+  success:   { label: 'Paid',       bg: '#DCFCE7', color: GREEN },
+  processing:{ label: 'Processing', bg: '#DBEAFE', color: '#2563EB' },
+  pending:   { label: 'Pending',    bg: '#FEF3C7', color: '#B45309' },
+  refunded:  { label: 'Refunded',   bg: '#F1F0F4', color: '#6B6B80' },
+  failed:    { label: 'Failed',     bg: '#FEE2E2', color: RED },
+  abandoned: { label: 'Abandoned',  bg: '#FEE2E2', color: RED },
 };
 const KIND_ICON = { order: ShoppingCart, course: BookOpen, agent: Bot };
+// Pending + an async method (bank/USSD) is legitimately still settling → show
+// it as "Processing" rather than the more ambiguous "Pending".
+const effectiveStatus = (o) =>
+  (o.status === 'pending' && (o.method === 'bank' || o.method === 'ussd')) ? 'processing' : o.status;
 
 export default function OrderHistoryPage() {
   const navigate = useNavigate();
@@ -91,7 +96,7 @@ export default function OrderHistoryPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {orders.map((o) => {
-              const s = STATUS[o.status] || STATUS.pending;
+              const s = STATUS[effectiveStatus(o)] || STATUS.pending;
               const Icon = KIND_ICON[o.kind] || Receipt;
               return (
                 <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '13px 14px' }}>

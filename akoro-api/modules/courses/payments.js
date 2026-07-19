@@ -113,6 +113,13 @@ const paymentHandlers = {
         .upsert({ user_id: userId, course_id, status: "active" }, { onConflict: "user_id,course_id" })
         .select().single();
       await db.rpc("increment_course_students", { course_id_input: course_id });
+      // Record a zero-amount success payment so the free course shows in history.
+      try {
+        await db.from("payments").insert({
+          user_id: userId, course_id, amount_paid: 0, currency: course.currency ?? "NGN",
+          payment_provider: "free", status: "success", paid_at: now(),
+        });
+      } catch { /* history record is best-effort */ }
       return res201(res, { free: true, enrollment });
     }
 

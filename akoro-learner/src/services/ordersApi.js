@@ -38,6 +38,7 @@ export async function getOrderHistory() {
       amount_ngn: (p.amount_paid || 0) / 100,
       currency:  p.currency || 'NGN',
       status:    p.status,                       // success | pending | refunded | failed
+      method:    meta.method || null,             // card | bank | ussd | any (for the Processing label)
       reference: p.provider_reference || null,
       date:      p.paid_at || p.created_at,
     };
