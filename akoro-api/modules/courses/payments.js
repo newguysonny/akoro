@@ -277,23 +277,48 @@ const paymentHandlers = {
   // POST /api/payments/:paymentId/refund
   refund: asyncHandler(async (req, res) => {
     const { reason } = req.body;
+    const userId = req.user.id;
     const { data: payment } = await db
       .from("payments")
-      .select("id, user_id, course_id, amount_paid, paid_at, status, courses(refund_window_days)")
+      .select("id, user_id, course_id, amount_paid, paid_at, status, provider_response, courses(refund_window_days)")
       .eq("id", req.params.paymentId).single();
 
     if (!payment)                      return res404(res, "Payment not found");
-    if (payment.user_id !== req.user.id) return res403(res, "Not authorised");
+    if (payment.user_id !== userId)      return res403(res, "Not authorised");
     if (payment.status !== "success")    return res400(res, `Cannot refund: status is ${payment.status}`);
 
-    const windowDays = payment.courses?.refund_window_days ?? 30;
+    const meta   = payment.provider_response || {};
+    const isCart = !!meta.is_cart_checkout;
+
+    // Refund window: per-course for a single purchase; a flat 30 days for a cart
+    // (one transaction spanning several items).
+    const windowDays = isCart ? 30 : (payment.courses?.refund_window_days ?? 30);
     const daysSince  = (Date.now() - new Date(payment.paid_at).getTime()) / 86_400_000;
     if (windowDays > 0 && daysSince > windowDays)
       return res400(res, `Refund window of ${windowDays} days has expired`);
 
     await db.from("payments").update({ status: "refunded", refunded_at: now(), refund_reason: reason ?? null }).eq("id", payment.id);
-    await db.from("enrollments").update({ status: "refunded" }).eq("user_id", req.user.id).eq("course_id", payment.course_id);
     await db.from("instructor_earnings").update({ status: "refunded" }).eq("payment_id", payment.id);
+
+    // Revoke access for every item the payment covered.
+    const courseIds  = isCart ? (meta.course_ids  || []) : (payment.course_id ? [payment.course_id] : []);
+    const listingIds = isCart ? (meta.listing_ids || []) : [];
+
+    if (courseIds.length)
+      await db.from("enrollments").update({ status: "refunded" }).eq("user_id", userId).in("course_id", courseIds);
+
+    for (const listingId of listingIds) {
+      try {
+        const { data: listing } = await db.schema("edu").from("marketplace_listings").select("agent_id").eq("id", listingId).single();
+        await db.schema("edu").from("agent_purchases").update({ access_granted: false, paystack_status: "refunded" })
+          .eq("student_id", userId).eq("listing_id", listingId);
+        if (listing?.agent_id) {
+          const { data: prefs } = await db.schema("edu").from("user_agent_preferences").select("purchased_agents").eq("user_id", userId).single();
+          const kept = (prefs?.purchased_agents || []).filter((a) => a !== listing.agent_id);
+          await db.schema("edu").from("user_agent_preferences").update({ purchased_agents: kept }).eq("user_id", userId);
+        }
+      } catch { /* best-effort per item */ }
+    }
 
     res200(res, { message: "Refund processed" });
   }),

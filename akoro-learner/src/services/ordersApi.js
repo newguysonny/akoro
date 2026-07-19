@@ -4,7 +4,10 @@
  * (teaching-guide) purchases. Cart-bought agents are excluded from the agent
  * list since they're already represented by their cart order.
  */
-import { apiGet } from './api.js';
+import { apiGet, apiPost } from './api.js';
+
+// Self-service refund on a course/cart payment (within the guarantee window).
+export const requestRefund = (paymentId, reason) => apiPost(`/api/payments/${paymentId}/refund`, { reason });
 
 export const getTransactions = () =>
   apiGet('/api/transactions?limit=100').then((r) => r.data ?? r ?? []);
@@ -26,6 +29,7 @@ export async function getOrderHistory() {
     const isCart = !!meta.is_cart_checkout;
     return {
       id:        `pay_${p.id}`,
+      payment_id: p.id,                          // used for self-service refund
       kind:      isCart ? 'order' : 'course',
       title:     isCart
         ? `${meta.item_count || (meta.course_ids?.length || 0) + (meta.listing_ids?.length || 0)} items`
