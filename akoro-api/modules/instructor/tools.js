@@ -233,6 +233,22 @@ router.get("/outputs/:id", authenticateToken, async (req, res) => {
 
 // ── GET /api/instructor/tools ────────────────────────────────────────────────
 // Returns the full catalog split into tools/assets, each flagged with `owned`.
+// GET /api/instructor/tools/purchases — the instructor's tool purchase history
+router.get("/purchases", authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await db
+      .schema("edu").from("instructor_tool_access")
+      .select(`id, amount_kobo, currency, paystack_status, access_granted, purchased_at,
+        platform_tools ( name, emoji, kind )`)
+      .eq("instructor_id", req.user.id)
+      .order("purchased_at", { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, purchases: data || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 router.get("/", authenticateToken, async (req, res) => {
   try {
     const instructorId = req.user.id;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Languages, Moon, Palette, Bell, MessageCircle, Shield, Key, Lock,
-  PauseCircle, Trash2, HelpCircle, Bug, FileText, Info, ChevronRight,
+  PauseCircle, Trash2, HelpCircle, Bug, FileText, Info, ChevronRight, Receipt,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { PageLayout } from '../components/Layout.jsx';
@@ -97,6 +97,17 @@ export default function SettingsPage() {
   return (
     <PageLayout title="Settings" subtitle="Manage your preferences and account security">
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
+
+        {/* Billing */}
+        <Section title="Billing">
+          <Row
+            icon={Receipt}
+            label="Order history"
+            sublabel="Your tool & asset purchases"
+            onClick={() => navigate('/orders')}
+            right={<ChevronRight size={18} color={MUTED} />}
+          />
+        </Section>
 
         {/* Personalization */}
         <Section title="Personalization">
