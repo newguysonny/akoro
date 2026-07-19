@@ -537,7 +537,10 @@ const handlers = {
           cart_listing_ids:  listingCartIds,
           coupon_id:         couponRecord?.id ?? null,
         },
-        callback_url: `${process.env.APP_URL}/api/payments/verify`,
+        // Where Paystack redirects the BROWSER after payment — a real frontend
+        // page, not the webhook. Fulfilment happens via the Paystack webhook
+        // (POST /api/payments/verify), configured in the Paystack dashboard.
+        callback_url: `${process.env.FRONTEND_URL || "https://akoro.app"}/checkout?payment=success&items=${checkoutItems.length}&amount=${totalKobo}`,
       },
       { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } }
     );

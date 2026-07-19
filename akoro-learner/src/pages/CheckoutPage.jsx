@@ -3,9 +3,9 @@
  * payment method, then pay (one Paystack transaction for the whole cart, or a
  * direct grant when everything is free).
  */
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import { applyCoupon as applyCouponApi, checkoutCart } from '../services/cartApi.js';
 import Toast from '../components/common/Toast.jsx';
@@ -23,6 +23,8 @@ const METHODS = [
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const payStatus = params.get('payment');   // 'success' | 'failed' | 'cancelled' | null
   const { cart, count, refresh } = useCart();
   const items = cart.items || [];
   const isFree = (cart.subtotal_kobo || 0) === 0;
@@ -33,6 +35,47 @@ export default function CheckoutPage() {
   const [applying, setApplying] = useState(false);
   const [busy, setBusy]         = useState(false);
   const [toast, setToast]       = useState(null);
+
+  // Returned from Paystack — refresh so the (now-fulfilled) cart clears.
+  useEffect(() => { if (payStatus === 'success') refresh(); }, [payStatus, refresh]);
+
+  // ── Post-payment return screens ────────────────────────────────────────────
+  if (payStatus === 'success') {
+    const boughtCount = Number(params.get('items')) || null;
+    const paidNgn = params.get('amount') ? Number(params.get('amount')) / 100 : null;
+    return (
+      <Shell navigate={navigate} count={count} title="Order confirmed">
+        <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={38} color={GREEN} /></div>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment successful 🎉</h1>
+          <p style={{ fontSize: 14.5, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: 0 }}>
+            You now have access to {boughtCount ? `all ${boughtCount} item${boughtCount === 1 ? '' : 's'}` : 'everything you purchased'}.
+            It’s ready in your sessions and library.
+          </p>
+          {paidNgn != null && (
+            <div style={{ margin: '20px auto 0', maxWidth: 300, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '14px 16px', fontSize: 13.5, fontFamily: FONT }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--ak-text-muted)' }}><span>Items</span><span style={{ color: 'var(--ak-text)', fontWeight: 800 }}>{boughtCount ?? '—'}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}><span style={{ color: 'var(--ak-text-muted)' }}>Amount paid</span><span style={{ color: 'var(--ak-text)', fontWeight: 900 }}>{ngn(paidNgn)}</span></div>
+            </div>
+          )}
+          <button onClick={() => navigate('/app')} style={{ marginTop: 24, width: '100%', maxWidth: 300, padding: '13px', borderRadius: 13, border: 'none', background: `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>Go to my sessions</button>
+          <div><button onClick={() => navigate('/app')} style={{ marginTop: 10, background: 'none', border: 'none', color: BRAND, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Keep learning →</button></div>
+        </div>
+      </Shell>
+    );
+  }
+  if (payStatus && payStatus !== 'success') {
+    return (
+      <Shell navigate={navigate} count={count} title="Payment not completed">
+        <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><XCircle size={38} color={RED} /></div>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment not completed</h1>
+          <p style={{ fontSize: 14.5, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: 0 }}>Your payment didn’t go through and you weren’t charged. Your cart is still saved — try again whenever you’re ready.</p>
+          <button onClick={() => navigate('/checkout')} style={{ marginTop: 24, width: '100%', maxWidth: 300, padding: '13px', borderRadius: 13, border: 'none', background: `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>Back to checkout</button>
+        </div>
+      </Shell>
+    );
+  }
 
   if (!items.length) {
     return (
@@ -139,6 +182,12 @@ export default function CheckoutPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 11.5, color: 'var(--ak-text-muted)' }}>
               <ShieldCheck size={13} /> Payments are processed securely by Paystack.
             </div>
+            {(method === 'bank' || method === 'ussd') && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 8, padding: '9px 11px', borderRadius: 10, background: `${BRAND}0A`, border: `1px solid ${BRAND}22`, fontSize: 11.5, color: 'var(--ak-text-sec)', lineHeight: 1.5 }}>
+                <Clock size={13} color={BRAND} style={{ flexShrink: 0, marginTop: 1 }} />
+                {method === 'bank' ? 'Bank transfers' : 'USSD payments'} can take a moment to confirm — your access unlocks automatically once the payment clears.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -166,12 +215,12 @@ export default function CheckoutPage() {
   );
 }
 
-function Shell({ navigate, count, children }) {
+function Shell({ navigate, count, title = 'Checkout', children }) {
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--ak-bg)', fontFamily: FONT, color: 'var(--ak-text)' }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={() => navigate('/cart')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text)', display: 'flex' }}><ArrowLeft size={20} /></button>
-        <span style={{ fontSize: 15, fontWeight: 900 }}>Checkout</span>
+        <span style={{ fontSize: 15, fontWeight: 900 }}>{title}</span>
         {count > 0 && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, color: BRAND, background: `${BRAND}14`, padding: '2px 10px', borderRadius: 20 }}>{count} item{count === 1 ? '' : 's'}</span>}
       </div>
       {children}
