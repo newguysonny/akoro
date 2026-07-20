@@ -22,6 +22,9 @@ export default defineConfig({
       // Don't run the SW during `vite dev` — avoids stale-cache confusion locally.
       devOptions: { enabled: false },
       workbox: {
+        // Pull our Web Push handlers (push / notificationclick) into the
+        // generated service worker. Lives in public/ so it ships as /push-sw.js.
+        importScripts: ['/push-sw.js'],
         // Precache the built app shell so the app opens with no connection.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Keep the shell lean for low-bandwidth users: the heavy TensorFlow

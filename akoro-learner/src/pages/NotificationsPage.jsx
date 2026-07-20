@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, apiDelete } from '../services/api.js';
+import { pushSupported, getPushStatus, enablePush, disablePush } from '../services/pushApi.js';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
 /* Emoji + accent per notification type (matches the learner app's emoji style) */
@@ -103,6 +104,22 @@ export default function NotificationsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ── Web Push (PWA) opt-in ──────────────────────────────────────────────────
+  const [push, setPush] = useState({ supported: false, subscribed: false, permission: 'default' });
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => { if (pushSupported()) getPushStatus().then(setPush); }, []);
+
+  const togglePush = async () => {
+    setPushBusy(true);
+    try {
+      if (push.subscribed) { await disablePush(); }
+      else { await enablePush(); }
+      setPush(await getPushStatus());
+    } catch (e) {
+      alert(e?.message || 'Could not update push notifications.');
+    } finally { setPushBusy(false); }
+  };
+
   const markRead = async (id) => {
     try {
       // Replay-safe + fire-and-forget → queue it if we're offline, apply the UI
@@ -168,6 +185,29 @@ export default function NotificationsPage() {
             Unread {unread > 0 && `(${unread})`}
           </button>
         </div>
+
+        {/* Web Push opt-in (PWA) */}
+        {push.supported && push.permission !== 'denied' && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, padding: '10px 12px', background: push.subscribed ? '#ECFDF5' : '#F0EBFF', border: `1px solid ${push.subscribed ? '#A7F3D0' : '#DDD3FF'}`, borderRadius: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>
+                {push.subscribed ? '🔔 Push notifications on' : '🔕 Enable push notifications'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ak-text-muted)' }}>
+                {push.subscribed ? 'Get alerts even when the app is closed.' : 'Be notified of purchases, classes and replies.'}
+              </div>
+            </div>
+            <button onClick={togglePush} disabled={pushBusy}
+              style={{ flexShrink: 0, background: push.subscribed ? 'transparent' : BRAND, color: push.subscribed ? BRAND : '#fff', border: push.subscribed ? `1px solid ${BRAND}` : 'none', borderRadius: 100, padding: '7px 14px', cursor: pushBusy ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 800, fontFamily: "'Nunito',sans-serif" }}>
+              {pushBusy ? '…' : push.subscribed ? 'Turn off' : 'Turn on'}
+            </button>
+          </div>
+        )}
+        {push.supported && push.permission === 'denied' && (
+          <div style={{ marginTop: 12, padding: '10px 12px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 12, fontSize: 11.5, color: '#92400E', fontWeight: 700 }}>
+            Push is blocked in your browser settings. Allow notifications for this site to turn it on.
+          </div>
+        )}
       </div>
 
       {/* CONTENT */}

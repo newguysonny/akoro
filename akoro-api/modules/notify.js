@@ -12,6 +12,7 @@
  */
 import db from "../db.js";
 import { sendNotificationEmail } from "./auth/emails.js";
+import { sendPushToUser } from "./notifications/webpush.js";
 
 // Socket.io is exposed as global.io (app.js) and global._io (websocket.js) —
 // historically both aliases were used. Resolve whichever is set.
@@ -38,6 +39,19 @@ export async function notifyUser({ userId, type, title, content = null, relatedI
       is_read: false, created_at: row?.created_at || new Date().toISOString(),
     });
   } catch { /* no socket */ }
+
+  // Web Push to the user's PWA devices (best-effort; no-op if not subscribed or
+  // push is disabled). Respects the push_enabled preference.
+  try {
+    let pushEnabled = true;
+    try {
+      const { data: prefs } = await db
+        .from("user_notification_preferences")
+        .select("push_enabled").eq("user_id", userId).maybeSingle();
+      if (prefs && prefs.push_enabled === false) pushEnabled = false;
+    } catch { /* default on */ }
+    if (pushEnabled) sendPushToUser(userId, { title, body: content || title, link, type });
+  } catch { /* push best-effort */ }
 
   if (email?.to) {
     // Respect the user's email preference (default on when no row exists).

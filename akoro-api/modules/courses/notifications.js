@@ -17,6 +17,7 @@ import { Router }                         from "express";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
+import { getPublicKey, isPushEnabled }    from "../notifications/webpush.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -133,6 +134,49 @@ const handlers = {
     res200(res, data);
   }),
 
+  // GET /api/notifications/push/public-key
+  // The VAPID public key the browser needs to subscribe. Also tells the client
+  // whether push is configured server-side at all.
+  pushPublicKey: asyncHandler(async (req, res) => {
+    res200(res, { enabled: isPushEnabled(), public_key: getPublicKey() || null });
+  }),
+
+  // POST /api/notifications/push/subscribe
+  // Body: { subscription: { endpoint, keys: { p256dh, auth } } }
+  pushSubscribe: asyncHandler(async (req, res) => {
+    const sub = req.body?.subscription || req.body;
+    const endpoint = sub?.endpoint;
+    const p256dh   = sub?.keys?.p256dh;
+    const auth     = sub?.keys?.auth;
+    if (!endpoint || !p256dh || !auth)
+      return res.status(400).json({ success: false, message: "Invalid push subscription" });
+
+    const { error } = await db.from("web_push_subscriptions").upsert({
+      user_id:      req.user.id,
+      endpoint, p256dh, auth,
+      user_agent:   req.headers["user-agent"] || null,
+      last_used_at: now(),
+    }, { onConflict: "endpoint" });
+    if (error) throw new Error(error.message);
+
+    // Reflect the opt-in in the user's preferences.
+    await db.from("user_notification_preferences")
+      .upsert({ user_id: req.user.id, push_enabled: true, updated_at: now() }, { onConflict: "user_id" });
+
+    res200(res, { subscribed: true });
+  }),
+
+  // POST /api/notifications/push/unsubscribe
+  // Body: { endpoint }  — removes just this device.
+  pushUnsubscribe: asyncHandler(async (req, res) => {
+    const endpoint = req.body?.endpoint;
+    if (endpoint) {
+      await db.from("web_push_subscriptions").delete()
+        .eq("user_id", req.user.id).eq("endpoint", endpoint);
+    }
+    res200(res, { unsubscribed: true });
+  }),
+
   // POST /api/notifications/push-token
   registerPushToken: asyncHandler(async (req, res) => {
     const { push_token } = req.body;
@@ -163,5 +207,8 @@ router.delete("/notifications/:id",          authenticateToken, handlers.delete)
 router.get ("/notifications/preferences",    authenticateToken, handlers.getPreferences);
 router.put ("/notifications/preferences",    authenticateToken, handlers.updatePreferences);
 router.post("/notifications/push-token",     authenticateToken, [body("push_token").notEmpty()], runValidation, handlers.registerPushToken);
+router.get ("/notifications/push/public-key", authenticateToken, handlers.pushPublicKey);
+router.post("/notifications/push/subscribe",  authenticateToken, handlers.pushSubscribe);
+router.post("/notifications/push/unsubscribe", authenticateToken, handlers.pushUnsubscribe);
 
 export default router;
