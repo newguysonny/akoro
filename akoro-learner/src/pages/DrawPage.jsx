@@ -4,50 +4,39 @@
  *                  stroke-by-stroke. Best visual fidelity (not editable).
  *   • Excalidraw — editable hand-drawn shapes.
  *   • Mermaid    — structured flow/mind diagrams.
- * Loads a hand-authored SVG sample on first paint so quality is visible before
- * any live generation.
+ * The SVG engine has NO dependency on Excalidraw — the canvas (and its heavy
+ * bundle) is lazy-loaded only when a canvas engine is selected, so the default
+ * illustration always renders even if Excalidraw fails.
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Excalidraw, convertToExcalidrawElements } from '@excalidraw/excalidraw';
-import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
 import { apiPost } from '../services/api.js';
 import { BRAND } from '../constants.js';
 import { SAMPLES } from './draw/samples.js';
 
+const DrawCanvas = lazy(() => import('./draw/DrawCanvas.jsx'));
+
 const FONT = "'Nunito', sans-serif";
 const MODES = [
-  { key: 'svg',        label: '🎨 Illustration (SVG)' },
-  { key: 'excalidraw', label: '✏️ Editable (Excalidraw)' },
-  { key: 'mermaid',    label: '📊 Flowchart (Mermaid)' },
+  { key: 'svg',        label: '🎨 Illustration' },
+  { key: 'excalidraw', label: '✏️ Editable' },
+  { key: 'mermaid',    label: '📊 Flowchart' },
 ];
 const CHIPS = ['How electromagnetic induction works', 'How photosynthesis works', 'The structure of an atom', 'The water cycle', 'How a neuron fires'];
 
-// Strip any <script>/on* from SVG before injecting (defence-in-depth; the
-// backend already refuses scripts).
 const sanitizeSvg = (svg) => (svg || '')
   .replace(/<script[\s\S]*?<\/script>/gi, '')
   .replace(/\son\w+="[^"]*"/gi, '');
 
 export default function DrawPage() {
   const navigate = useNavigate();
-  const [api, setApi]       = useState(null);
   const [mode, setMode]     = useState('svg');
   const [prompt, setPrompt] = useState(SAMPLES[0].prompt);
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState(null);
-  const [svg, setSvg]       = useState(SAMPLES[0].svg);   // current SVG illustration
-  const [drawKey, setDrawKey] = useState(0);              // bump to replay draw-on
-  const svgWrapRef = useRef(null);
-
-  // Render Excalidraw elements onto the canvas.
-  const renderElements = useCallback((elements, files) => {
-    if (!api) return;
-    const els = convertToExcalidrawElements(elements);
-    api.updateScene({ elements: els });
-    if (files) api.addFiles(Object.values(files));
-    api.scrollToContent(els, { fitToContent: true, animate: true });
-  }, [api]);
+  const [svg, setSvg]       = useState(SAMPLES[0].svg);
+  const [payload, setPayload] = useState({ kind: 'elements', elements: SAMPLES[0].elements });
+  const [drawKey, setDrawKey] = useState(0);
 
   const generate = useCallback(async (text) => {
     const q = (text ?? prompt).trim();
@@ -60,20 +49,15 @@ export default function DrawPage() {
         if (!d?.svg) throw new Error('No illustration returned');
         setSvg(d.svg); setDrawKey((k) => k + 1);
       } else if (mode === 'mermaid') {
-        const { elements, files } = await parseMermaidToExcalidraw(d.mermaid, { fontSize: 16 });
-        renderElements(elements, files);
+        if (!d?.mermaid) throw new Error('No diagram returned');
+        setPayload({ kind: 'mermaid', mermaid: d.mermaid });
       } else {
-        renderElements(d.elements);
+        setPayload({ kind: 'elements', elements: d.elements || [] });
       }
     } catch (e) {
       setError(e?.message || 'Could not draw that. Try rephrasing.');
     } finally { setBusy(false); }
-  }, [prompt, busy, mode, renderElements]);
-
-  // When switching INTO a canvas mode, seed with the sample so it's not blank.
-  useEffect(() => {
-    if (mode === 'excalidraw' && api) renderElements(SAMPLES[0].elements);
-  }, [mode, api, renderElements]);
+  }, [prompt, busy, mode]);
 
   const showSvg = mode === 'svg';
 
@@ -99,7 +83,6 @@ export default function DrawPage() {
           </button>
         </div>
 
-        {/* Engine toggle */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {MODES.map((m) => (
             <button key={m.key} onClick={() => setMode(m.key)}
@@ -111,7 +94,6 @@ export default function DrawPage() {
             style={{ marginLeft: 'auto', background: 'var(--ak-bg)', color: 'var(--ak-text-sub)', border: '1px solid var(--ak-border2)', borderRadius: 100, padding: '6px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 800, fontFamily: FONT }}>↻ Replay</button>}
         </div>
 
-        {/* Concept chips */}
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
           {CHIPS.map((c) => (
             <button key={c} onClick={() => { setPrompt(c); generate(c); }} disabled={busy}
@@ -124,24 +106,22 @@ export default function DrawPage() {
       </div>
 
       {/* Stage */}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        {/* SVG illustration layer */}
-        <div style={{ position: 'absolute', inset: 0, display: showSvg ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'auto', background: '#fff' }}>
-          <div key={drawKey} ref={svgWrapRef} className="ak-draw"
-            style={{ width: '100%', maxWidth: 900 }}
-            dangerouslySetInnerHTML={{ __html: sanitizeSvg(svg) }} />
-        </div>
-        {/* Excalidraw / Mermaid canvas layer */}
-        <div style={{ position: 'absolute', inset: 0, display: showSvg ? 'none' : 'block' }}>
-          <Excalidraw excalidrawAPI={(a) => setApi(a)} />
-        </div>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#fff' }}>
+        {showSvg ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
+            <div key={drawKey} className="ak-draw" style={{ width: '100%', maxWidth: 900 }}
+              dangerouslySetInnerHTML={{ __html: sanitizeSvg(svg) }} />
+          </div>
+        ) : (
+          <Suspense fallback={<div style={{ padding: 24, fontFamily: FONT, color: 'var(--ak-text-muted)' }}>Loading canvas…</div>}>
+            <DrawCanvas payload={payload} />
+          </Suspense>
+        )}
       </div>
     </div>
   );
 }
 
-// Draw-on animation: every stroke path/line starts fully "un-drawn"
-// (dashoffset 1 on a normalised pathLength) and fills in, staggered.
 const DRAW_ON_CSS = `
 @keyframes akDrawOn { to { stroke-dashoffset: 0; } }
 @keyframes akFadeIn { from { opacity: 0 } to { opacity: 1 } }
