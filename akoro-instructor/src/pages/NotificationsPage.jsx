@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Check, CheckCheck, Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, BookOpen, Users, Swords, Calendar, MessageSquare, CheckSquare, Settings, Info, Video, DollarSign, Wallet, Star, Wrench, ShieldCheck } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiDelete } from '../services/api.js';
@@ -24,6 +24,14 @@ const TYPE_META = {
   streaming_disconnected:{ icon: Video,        color: MUTED,  label: 'Streaming disconnected' },
   task_complete:         { icon: CheckSquare,  color: GREEN,  label: 'Task complete'      },
   message:               { icon: MessageSquare,color: BLUE,   label: 'Message'            },
+  // Commerce
+  sale_new:              { icon: DollarSign,   color: GREEN,  label: 'New sale'           },
+  payout_completed:      { icon: Wallet,       color: GREEN,  label: 'Payout sent'        },
+  payout_failed:         { icon: Wallet,       color: RED,    label: 'Payout failed'      },
+  review_new:            { icon: Star,         color: AMBER,  label: 'New review'         },
+  tool_unlocked:         { icon: Wrench,       color: BLUE,   label: 'Tool unlocked'      },
+  course_approved:       { icon: ShieldCheck,  color: GREEN,  label: 'Course approved'    },
+  course_rejected:       { icon: BookOpen,     color: RED,    label: 'Course needs changes' },
   system:                { icon: Settings,     color: MUTED,  label: 'System'             },
 };
 

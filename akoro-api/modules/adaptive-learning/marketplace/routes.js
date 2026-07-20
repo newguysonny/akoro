@@ -31,6 +31,7 @@ import express from "express";
 import db from "../../../db.js";
 import { authenticateToken, requireRole } from "../../auth/routes.js";
 import { addPurchasedAgent } from "../student-state.js";
+import { notify } from "../../notifications/events.js";
 import { v4 as uuid } from "uuid";
 import {
   initializeTransaction,
@@ -562,6 +563,8 @@ export async function fulfillMarketplaceEvent(event) {
           global._io.to(`user:${row.instructor_id}`).emit("tool_unlocked", payload);
           global._io.to(`instructor:${row.instructor_id}`).emit("tool_unlocked", payload);
         }
+        // Persist to the notification bell (the live event above is transient).
+        notify.toolUnlocked({ instructorId: row.instructor_id, toolName: metadata.tool_name });
         console.log(`[Webhook] ✅ Tool unlocked: instructor=${row.instructor_id} tool=${metadata.tool_id}`);
       }
       return true;
@@ -601,6 +604,8 @@ export async function fulfillMarketplaceEvent(event) {
       });
     }
 
+    // Persist to the notification bell (the live event above is transient).
+    notify.agentUnlocked({ userId: studentId, agentName: metadata?.listing_title || "Teaching guide" });
     console.log(`[Webhook] ✅ Access granted: student=${studentId} agent=${agentId}`);
     return true;
   }

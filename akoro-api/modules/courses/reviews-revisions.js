@@ -17,6 +17,7 @@ import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { notify }                         from "../notifications/events.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -166,6 +167,13 @@ const handlers = {
       : 0;
 
     await db.from("courses").update({ rating: avgRating }).eq("id", courseId);
+
+    // Notify the instructor of a genuinely new review (not an edit).
+    if (!existing) {
+      const { data: course } = await db.from("courses").select("instructor_id, title").eq("id", courseId).single();
+      if (course?.instructor_id)
+        notify.newReview({ instructorId: course.instructor_id, courseTitle: course.title, rating });
+    }
 
     const status = existing ? 200 : 201;
     res.status(status).json({ success: true, data, avg_rating: avgRating });

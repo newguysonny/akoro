@@ -20,6 +20,7 @@ import { authenticateToken }              from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
 import { recordPaymentItems }             from "../webhooks/paymentAudit.js";
+import { notify }                          from "../notifications/events.js";
 
 // Build normalized payment_items rows from resolved cart line items.
 const toPaymentItems = (items) => items.map((i) => ({
@@ -565,6 +566,7 @@ const handlers = {
         }
       }
       await db.from("cart_items").delete().eq("user_id", userId);
+      notify.purchaseSuccess({ userId, itemTitle: `${checkoutItems.length} item${checkoutItems.length === 1 ? "" : "s"}`, amountNgn: 0 });
       return res200(res, { free: true, enrolled_count: checkoutItems.length, message: "Access granted to all free items" });
     }
 
@@ -667,7 +669,7 @@ const handlers = {
     if (cartListingIds.length) {
       const { data: listings } = await db
         .schema("edu").from("marketplace_listings")
-        .select("id, agent_id, price_kobo, currency").in("id", cartListingIds);
+        .select("id, agent_id, title, price_kobo, currency").in("id", cartListingIds);
       for (const listing of (listings ?? [])) {
         await grantAgentFromCart(userId, {
           listingId:  listing.id,
@@ -676,6 +678,7 @@ const handlers = {
           currency:   listing.currency ?? "NGN",
           paymentRef: payment?.provider_reference,
         });
+        notify.agentUnlocked({ userId, agentName: listing.title || "Teaching guide" });
       }
       await db.from("cart_items").delete().eq("user_id", userId).in("listing_id", cartListingIds);
     }
@@ -690,7 +693,7 @@ const handlers = {
 
       // Create earnings record per instructor (correct commission per course)
       const { data: course } = await db
-        .from("courses").select("instructor_id, currency").eq("id", courseId).single();
+        .from("courses").select("instructor_id, currency, title").eq("id", courseId).single();
 
       if (course?.instructor_id) {
         const split = {
@@ -713,6 +716,7 @@ const handlers = {
             status:             "pending",
           }, { onConflict: "payment_id,course_id" });
         } catch {}
+        notify.newSale({ instructorId: course.instructor_id, courseTitle: course.title, netNgn: split.net / 100 });
       }
     }
 
@@ -724,6 +728,9 @@ const handlers = {
 
     // Clear the cart
     await db.from("cart_items").delete().eq("user_id", userId).in("course_id", cartCourseIds);
+
+    // Notify the buyer their order is complete.
+    notify.purchaseSuccess({ userId, itemTitle: `${totalItems} item${totalItems === 1 ? "" : "s"}`, amountNgn: (payment?.amount_paid ?? 0) / 100 });
 
     console.log(`[cart] ✅ Cart checkout enrolled user=${userId} in ${cartCourseIds.length} courses`);
   },

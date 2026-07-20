@@ -6,13 +6,22 @@ import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 /* Emoji + accent per notification type (matches the learner app's emoji style) */
 const TYPE_META = {
   enrolled_in_course:  { emoji: '🎓', color: GREEN },
+  enrollment_new:      { emoji: '🎓', color: GREEN },
+  purchase_success:    { emoji: '🧾', color: GREEN },
+  order_processing:    { emoji: '⏳', color: BRAND },
+  purchase_refunded:   { emoji: '↩️', color: GOLD  },
+  agent_unlocked:      { emoji: '🤖', color: BRAND },
   session_scheduled:   { emoji: '📅', color: BRAND },
+  session_reminder:    { emoji: '⏰', color: BRAND },
+  session_started:     { emoji: '🔴', color: RED   },
+  session_cancelled:   { emoji: '🚫', color: RED   },
   session_rescheduled: { emoji: '🔄', color: GOLD  },
   battle_invite:       { emoji: '⚔️', color: '#A855F7' },
   battle_started:      { emoji: '⚔️', color: '#A855F7' },
   teacher_message:     { emoji: '💬', color: BRAND },
   task_complete:       { emoji: '✅', color: GREEN },
   decay_alert:         { emoji: '🧠', color: GOLD  },
+  review_new:          { emoji: '⭐', color: GOLD  },
   system:              { emoji: '🔔', color: '#9CA3AF' },
 };
 

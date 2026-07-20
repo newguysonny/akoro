@@ -20,6 +20,7 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { cartHandlers }                   from "./cart.js";
 import { recordPaymentItems, logPaymentEvent } from "../webhooks/paymentAudit.js";
+import { notify }                           from "../notifications/events.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -83,7 +84,7 @@ export async function fulfillPaymentsCharge(data) {
   await db.rpc("increment_course_students", { course_id_input: course_id });
 
   // ── Instructor earnings record (immutable audit trail) ────────────────
-  const { data: course }  = await db.from("courses").select("instructor_id, currency").eq("id", course_id).single();
+  const { data: course }  = await db.from("courses").select("instructor_id, currency, title").eq("id", course_id).single();
   const { data: payment } = await db.from("payments").select("amount_paid").eq("id", payment_id).single();
 
   if (course?.instructor_id && payment?.amount_paid) {
@@ -98,7 +99,12 @@ export async function fulfillPaymentsCharge(data) {
       currency:           course.currency ?? "NGN",
       status:             "pending",
     }, { onConflict: "payment_id" });
+    // Notify the instructor of the sale.
+    notify.newSale({ instructorId: course.instructor_id, courseTitle: course.title, netNgn: split.netAmount / 100 });
   }
+
+  // Notify the buyer that their purchase went through.
+  notify.purchaseSuccess({ userId: user_id, itemTitle: course?.title || "your course", amountNgn: (payment?.amount_paid ?? 0) / 100 });
 
   // Record coupon use
   if (coupon_id) {
@@ -199,6 +205,7 @@ const paymentHandlers = {
       } catch { /* history record is best-effort */ }
       // If this course was sitting in the cart, drop it — it's now owned.
       try { await db.from("cart_items").delete().eq("user_id", userId).eq("course_id", course_id); } catch {}
+      notify.enrolled({ userId, courseTitle: course.title });
       return res201(res, { free: true, enrollment });
     }
 
@@ -345,6 +352,7 @@ export async function performRefund(payment, { reason = null, byUserId = null, i
     eventType: "status_change", source: "refund", paymentId: payment.id,
     outcome: "refunded", detail: { from: "success", to: "refunded", reason: reason ?? null, by: byUserId, admin: isAdmin, is_cart: isCart },
   });
+  notify.refundProcessed({ userId: ownerId, itemTitle: isCart ? "your order" : "your course", amountNgn: (payment.amount_paid || 0) / 100 });
 
   // Revoke access for every item the payment covered.
   const courseIds  = isCart ? (meta.course_ids  || []) : (payment.course_id ? [payment.course_id] : []);

@@ -26,6 +26,7 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
 import { performRefund }                  from "./payments.js";
+import { notify }                         from "../notifications/events.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -425,9 +426,12 @@ const payoutHandlers = {
  */
 export async function fulfillTransferEvent(event, data) {
   if (event === "transfer.success") {
-    await db.from("payouts")
+    const { data: payout } = await db.from("payouts")
       .update({ status: "completed", completed_at: now(), provider_response: data })
-      .eq("provider_reference", data.transfer_code);
+      .eq("provider_reference", data.transfer_code)
+      .select("instructor_id, amount").maybeSingle();
+    if (payout?.instructor_id)
+      notify.payoutCompleted({ instructorId: payout.instructor_id, amountNgn: (payout.amount || 0) / 100 });
     console.log(`[payouts] ✅ Transfer complete  ref=${data.transfer_code}`);
     return true;
   }
@@ -436,7 +440,7 @@ export async function fulfillTransferEvent(event, data) {
     // Roll back earnings to pending so instructor can retry
     const { data: payout } = await db
       .from("payouts")
-      .select("id")
+      .select("id, instructor_id, amount")
       .eq("provider_reference", data.transfer_code)
       .single();
 
@@ -449,6 +453,7 @@ export async function fulfillTransferEvent(event, data) {
         .update({ status: "pending", payout_id: null })
         .eq("payout_id", payout.id);
 
+      notify.payoutFailed({ instructorId: payout.instructor_id, amountNgn: (payout.amount || 0) / 100, reason: data.reason ?? null });
       console.warn(`[payouts] ⚠️  Transfer ${event}  ref=${data.transfer_code}`);
     }
     return true;
