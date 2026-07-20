@@ -8,7 +8,8 @@ import crypto from "crypto";
 
 const PAYSTACK_BASE    = "https://api.paystack.co";
 const SECRET_KEY       = process.env.PAYSTACK_SECRET_KEY;
-const WEBHOOK_SECRET   = process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY;
+// Paystack signs webhooks with the account SECRET KEY — there is no separate
+// webhook secret. Sign/verify with the secret key only.
 
 if (!SECRET_KEY) {
   console.warn("[Paystack] PAYSTACK_SECRET_KEY not set — payments will fail.");
@@ -111,7 +112,7 @@ export async function verifyTransaction(reference) {
 export function validateWebhookSignature(rawBody, signature) {
   if (!signature) return false;
   const hash = crypto
-    .createHmac("sha512", WEBHOOK_SECRET)
+    .createHmac("sha512", SECRET_KEY || "")
     .update(rawBody)
     .digest("hex");
   return hash === signature;

@@ -105,6 +105,10 @@ export async function fulfillPaymentsCharge(data) {
     try { await db.rpc("increment_coupon_uses", { coupon_id_input: coupon_id }); } catch {}
   }
 
+  // Direct (non-cart) course purchase — if it was also in the cart, remove it so
+  // it doesn't linger there after being bought.
+  try { await db.from("cart_items").delete().eq("user_id", user_id).eq("course_id", course_id); } catch {}
+
   console.log(`[payments] ✅ Enrolled user=${user_id}  course=${course_id}  net=₦${(payment?.amount_paid ?? 0) / 100}`);
   return true;
 }
@@ -191,6 +195,8 @@ const paymentHandlers = {
           payment_provider: "free", status: "success", paid_at: now(),
         });
       } catch { /* history record is best-effort */ }
+      // If this course was sitting in the cart, drop it — it's now owned.
+      try { await db.from("cart_items").delete().eq("user_id", userId).eq("course_id", course_id); } catch {}
       return res201(res, { free: true, enrollment });
     }
 

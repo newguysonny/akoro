@@ -103,11 +103,26 @@ const getCartWithPrices = async (userId) => {
 
   if (error) throw new Error(error.message);
 
+  // Self-heal: drop any course the user already owns (e.g. bought directly from
+  // the course page while it was still sitting in the cart). This keeps the cart
+  // correct even before the purchase webhook has pruned it server-side.
+  const ownedCourseIds = new Set();
+  const cartCourseIds = (items ?? []).filter((i) => i.item_type === "course" && i.course_id).map((i) => i.course_id);
+  if (cartCourseIds.length) {
+    const { data: enrolled } = await db.from("enrollments")
+      .select("course_id").eq("user_id", userId).eq("status", "active").in("course_id", cartCourseIds);
+    (enrolled ?? []).forEach((e) => ownedCourseIds.add(e.course_id));
+    if (ownedCourseIds.size) {
+      try { await db.from("cart_items").delete().eq("user_id", userId).in("course_id", [...ownedCourseIds]); } catch {}
+    }
+  }
+  const visibleItems = (items ?? []).filter((i) => !(i.item_type === "course" && ownedCourseIds.has(i.course_id)));
+
   const nowDate = new Date();
   let subtotalKobo = 0;
 
   // Course line items.
-  const courseLines = (items ?? []).map((item) => {
+  const courseLines = visibleItems.map((item) => {
     if (item.item_type === "agent") return null;
     const course = item.courses;
     if (!course) return null;
@@ -137,7 +152,7 @@ const getCartWithPrices = async (userId) => {
   }).filter(Boolean);
 
   // Agent (teaching-guide) line items — resolved from edu.marketplace_listings.
-  const agentRows = (items ?? []).filter((i) => i.item_type === "agent" && i.listing_id);
+  const agentRows = visibleItems.filter((i) => i.item_type === "agent" && i.listing_id);
   let agentLines = [];
   if (agentRows.length) {
     const { data: listings } = await db

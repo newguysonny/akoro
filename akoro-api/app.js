@@ -58,6 +58,17 @@ const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const app        = express();
 const httpServer = createServer(app);
 
+// ─── Paystack webhook path ────────────────────────────────────────────────────
+// The full webhook URL lives in PAYSTACK_WEBHOOK_URL (matching the Paystack
+// dashboard). We mount on its path component so the route and the dashboard stay
+// in sync from one env var. Defaults to /api/webhooks/paystack when unset.
+const PAYSTACK_WEBHOOK_PATH = (() => {
+  const raw = process.env.PAYSTACK_WEBHOOK_URL;
+  if (!raw) return "/api/webhooks/paystack";
+  try { return new URL(raw).pathname || "/api/webhooks/paystack"; }
+  catch { return raw.startsWith("/") ? raw : "/api/webhooks/paystack"; }
+})();
+
 // ─── CORS origins ─────────────────────────────────────────────────────────────
 // Support comma-separated list: CORS_ORIGIN=https://akoro.app,https://instructor.akoro.app
 const allowedOrigins = config.server.corsOrigin === '*'
@@ -145,7 +156,7 @@ app.use(cookieParser());
 // a parsed object, .toString() yields "[object Object]", and every webhook is
 // rejected with "Invalid signature" (payments then never auto-grant agents).
 app.use("/api/adaptive/marketplace/webhook", express.raw({ type: "application/json" }));
-app.use("/api/webhooks/paystack",            express.raw({ type: "application/json" }));
+app.use(PAYSTACK_WEBHOOK_PATH,               express.raw({ type: "application/json" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
@@ -179,8 +190,10 @@ app.get("/ready", (_req, res) =>
 //   aiLimit       — AI operations  (10 req/min, by user or IP)
 // Unified Paystack webhook — verifies the signature once from the raw body and
 // dispatches to every fulfillment domain (course/cart, agent/tool, payouts).
-// This is the single URL configured in the Paystack dashboard.
-app.use("/api/webhooks/paystack", paystackWebhookRouter);
+// The mount path is derived from PAYSTACK_WEBHOOK_URL (its path component) so it
+// stays in sync with what's configured in the Paystack dashboard; it defaults
+// to /api/webhooks/paystack when the env var is unset.
+app.use(PAYSTACK_WEBHOOK_PATH, paystackWebhookRouter);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);

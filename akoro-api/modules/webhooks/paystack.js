@@ -12,8 +12,11 @@
  * mounted with express.raw() in app.js and hashes the buffer directly.
  *
  * Signing key: Paystack signs webhooks with the account SECRET KEY. There is no
- * separate "webhook secret" — PAYSTACK_WEBHOOK_SECRET, if set, must equal
- * PAYSTACK_SECRET_KEY. We hash with the secret key here.
+ * separate "webhook secret", so we hash with PAYSTACK_SECRET_KEY here.
+ *
+ * URL: the route path is derived in app.js from PAYSTACK_WEBHOOK_URL (its path
+ * component), so this endpoint and the Paystack dashboard stay in sync via one
+ * env var. Defaults to /api/webhooks/paystack.
  *
  * Dispatch is idempotent and cross-domain: for charge.success we hand the event
  * to BOTH the payments (course/cart) and marketplace (agent/tool) fulfillers —
