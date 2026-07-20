@@ -319,46 +319,53 @@ const paymentHandlers = {
     if (payment.user_id !== userId)      return res403(res, "Not authorised");
     if (payment.status !== "success")    return res400(res, `Cannot refund: status is ${payment.status}`);
 
-    const meta   = payment.provider_response || {};
-    const isCart = !!meta.is_cart_checkout;
-
-    // Refund window: per-course for a single purchase; a flat 30 days for a cart
-    // (one transaction spanning several items).
-    const windowDays = isCart ? 30 : (payment.courses?.refund_window_days ?? 30);
+    const windowDays = (payment.provider_response?.is_cart_checkout) ? 30 : (payment.courses?.refund_window_days ?? 30);
     const daysSince  = (Date.now() - new Date(payment.paid_at).getTime()) / 86_400_000;
     if (windowDays > 0 && daysSince > windowDays)
       return res400(res, `Refund window of ${windowDays} days has expired`);
 
-    await db.from("payments").update({ status: "refunded", refunded_at: now(), refund_reason: reason ?? null }).eq("id", payment.id);
-    await db.from("instructor_earnings").update({ status: "refunded" }).eq("payment_id", payment.id);
-    await logPaymentEvent({
-      eventType: "status_change", source: "refund", paymentId: payment.id,
-      outcome: "refunded", detail: { from: "success", to: "refunded", reason: reason ?? null, by: userId, is_cart: isCart },
-    });
-
-    // Revoke access for every item the payment covered.
-    const courseIds  = isCart ? (meta.course_ids  || []) : (payment.course_id ? [payment.course_id] : []);
-    const listingIds = isCart ? (meta.listing_ids || []) : [];
-
-    if (courseIds.length)
-      await db.from("enrollments").update({ status: "refunded" }).eq("user_id", userId).in("course_id", courseIds);
-
-    for (const listingId of listingIds) {
-      try {
-        const { data: listing } = await db.schema("edu").from("marketplace_listings").select("agent_id").eq("id", listingId).single();
-        await db.schema("edu").from("agent_purchases").update({ access_granted: false, paystack_status: "refunded" })
-          .eq("student_id", userId).eq("listing_id", listingId);
-        if (listing?.agent_id) {
-          const { data: prefs } = await db.schema("edu").from("user_agent_preferences").select("purchased_agents").eq("user_id", userId).single();
-          const kept = (prefs?.purchased_agents || []).filter((a) => a !== listing.agent_id);
-          await db.schema("edu").from("user_agent_preferences").update({ purchased_agents: kept }).eq("user_id", userId);
-        }
-      } catch { /* best-effort per item */ }
-    }
-
+    await performRefund(payment, { reason, byUserId: userId, isAdmin: false });
     res200(res, { message: "Refund processed" });
   }),
 };
+
+/**
+ * Execute a refund on an already-loaded payment: flip status, mark earnings
+ * refunded, revoke access for every covered item (cart-aware), and log the
+ * transition. Shared by the learner self-service refund and the admin refund.
+ */
+export async function performRefund(payment, { reason = null, byUserId = null, isAdmin = false } = {}) {
+  const meta    = payment.provider_response || {};
+  const isCart  = !!meta.is_cart_checkout;
+  const ownerId = payment.user_id;
+
+  await db.from("payments").update({ status: "refunded", refunded_at: now(), refund_reason: reason ?? null }).eq("id", payment.id);
+  await db.from("instructor_earnings").update({ status: "refunded" }).eq("payment_id", payment.id);
+  await logPaymentEvent({
+    eventType: "status_change", source: "refund", paymentId: payment.id,
+    outcome: "refunded", detail: { from: "success", to: "refunded", reason: reason ?? null, by: byUserId, admin: isAdmin, is_cart: isCart },
+  });
+
+  // Revoke access for every item the payment covered.
+  const courseIds  = isCart ? (meta.course_ids  || []) : (payment.course_id ? [payment.course_id] : []);
+  const listingIds = isCart ? (meta.listing_ids || []) : [];
+
+  if (courseIds.length)
+    await db.from("enrollments").update({ status: "refunded" }).eq("user_id", ownerId).in("course_id", courseIds);
+
+  for (const listingId of listingIds) {
+    try {
+      const { data: listing } = await db.schema("edu").from("marketplace_listings").select("agent_id").eq("id", listingId).single();
+      await db.schema("edu").from("agent_purchases").update({ access_granted: false, paystack_status: "refunded" })
+        .eq("student_id", ownerId).eq("listing_id", listingId);
+      if (listing?.agent_id) {
+        const { data: prefs } = await db.schema("edu").from("user_agent_preferences").select("purchased_agents").eq("user_id", ownerId).single();
+        const kept = (prefs?.purchased_agents || []).filter((a) => a !== listing.agent_id);
+        await db.schema("edu").from("user_agent_preferences").update({ purchased_agents: kept }).eq("user_id", ownerId);
+      }
+    } catch { /* best-effort per item */ }
+  }
+}
 
 // ─── Coupon handlers ──────────────────────────────────────────────────────────
 

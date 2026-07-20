@@ -25,6 +25,7 @@ import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
+import { performRefund }                  from "./payments.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -530,6 +531,94 @@ const adminHandlers = {
   }),
 
   /**
+   * GET /api/admin/payments
+   * All payments across the platform (admin), newest first, with buyer + course.
+   * Filters: status, email (buyer), limit.
+   */
+  paymentsList: asyncHandler(async (req, res) => {
+    const { status, email, limit = 200 } = req.query;
+    let q = db
+      .from("payments")
+      .select(`
+        id, amount_paid, currency, payment_provider, provider_reference, status,
+        paid_at, refunded_at, refund_reason, provider_response, created_at, updated_at,
+        courses ( id, title ),
+        users!payments_user_id_fkey ( id, full_name, email )
+      `)
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(limit) || 200, 500));
+
+    if (status && status !== "all") q = q.eq("status", status);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+
+    let rows = (data ?? []).map((p) => {
+      const meta = p.provider_response || {};
+      const isCart = !!meta.is_cart_checkout;
+      return {
+        id:            p.id,
+        created_at:    p.created_at,
+        updated_at:    p.updated_at,
+        paid_at:       p.paid_at,
+        user_name:     p.users?.full_name || null,
+        user_email:    p.users?.email || null,
+        course_title:  isCart ? `Cart · ${meta.item_count ?? (meta.course_ids?.length || 0) + (meta.listing_ids?.length || 0)} items` : (p.courses?.title || '—'),
+        is_cart:       isCart,
+        amount:        (p.amount_paid || 0) / 100,   // NGN
+        currency:      p.currency || 'NGN',
+        provider:      p.payment_provider || '—',
+        reference:     p.provider_reference || null,
+        status:        p.status,
+        refund_reason: p.refund_reason || null,
+      };
+    });
+
+    // Buyer-email filter (post-join, since it's on the related users row).
+    if (email) {
+      const needle = String(email).toLowerCase();
+      rows = rows.filter((r) => (r.user_email || '').toLowerCase().includes(needle));
+    }
+
+    res200(res, rows, { total: rows.length });
+  }),
+
+  /**
+   * GET /api/admin/payments/stats
+   * Platform payment totals for the dashboard cards.
+   */
+  paymentsStats: asyncHandler(async (req, res) => {
+    const { data, error } = await db.from("payments").select("amount_paid, status");
+    if (error) throw new Error(error.message);
+    const all = data ?? [];
+    const sum = (pred) => all.filter(pred).reduce((s, p) => s + (p.amount_paid || 0), 0) / 100;
+    res200(res, {
+      total_revenue:  sum((p) => p.status === "success"),
+      total_refunded: sum((p) => p.status === "refunded"),
+      total_success:  all.filter((p) => p.status === "success").length,
+      total_failed:   all.filter((p) => p.status === "failed").length,
+      total_pending:  all.filter((p) => p.status === "pending").length,
+      total_count:    all.length,
+    });
+  }),
+
+  /**
+   * PATCH /api/admin/payments/:paymentId/refund
+   * Admin refund — no ownership check, no refund-window limit.
+   */
+  refundPayment: asyncHandler(async (req, res) => {
+    const { data: payment } = await db
+      .from("payments")
+      .select("id, user_id, course_id, amount_paid, paid_at, status, provider_response")
+      .eq("id", req.params.paymentId).single();
+
+    if (!payment)                    return res.status(404).json({ success: false, message: "Payment not found" });
+    if (payment.status !== "success") return res.status(400).json({ success: false, message: `Cannot refund: status is ${payment.status}` });
+
+    await performRefund(payment, { reason: req.body?.reason ?? "Admin refund", byUserId: req.user.id, isAdmin: true });
+    res200(res, { message: "Refund processed" });
+  }),
+
+  /**
    * GET /api/admin/payments/:reference/trace
    * One-call payment forensics for support: stitches together the payment row,
    * its normalized line items, the full append-only event log, any matching
@@ -608,6 +697,9 @@ router.post ("/payouts/webhook",                                         payoutH
 // Admin
 router.get("/admin/earnings",                         authenticateToken, requireRole(["admin"]), adminHandlers.platformOverview);
 router.get("/admin/earnings/instructors",             authenticateToken, requireRole(["admin"]), adminHandlers.byInstructor);
-router.get("/admin/payments/:reference/trace",        authenticateToken, requireRole(["admin"]), adminHandlers.paymentTrace);
+router.get  ("/admin/payments",                       authenticateToken, requireRole(["admin"]), adminHandlers.paymentsList);
+router.get  ("/admin/payments/stats",                 authenticateToken, requireRole(["admin"]), adminHandlers.paymentsStats);
+router.patch("/admin/payments/:paymentId/refund",     authenticateToken, requireRole(["admin"]), adminHandlers.refundPayment);
+router.get  ("/admin/payments/:reference/trace",      authenticateToken, requireRole(["admin"]), adminHandlers.paymentTrace);
 
 export default router;
