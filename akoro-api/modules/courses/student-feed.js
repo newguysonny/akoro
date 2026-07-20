@@ -144,35 +144,51 @@ router.get("/sessions", authenticateToken, async (req, res) => {
     console.log(`[sessions] userId=${userId}`);
 
     // ── 1. Live / scheduled classes ──────────────────────────────────────────
-    const { data: participantRows, error: partErr } = await db
-      .from("session_participants")
-      .select("session_id")
-      .eq("user_id", userId);
-
-    console.log(`[sessions] participant rows=${participantRows?.length ?? 0} err=${partErr?.message ?? null}`);
+    // A student should see a session if they either (a) explicitly registered as
+    // a participant, OR (b) are enrolled in the course it belongs to. Live-class
+    // NOTIFICATIONS go to every enrolled student, so the tab must match that
+    // audience — otherwise an enrolled-but-unregistered student gets the alert
+    // but sees an empty tab.
+    const [{ data: participantRows, error: partErr }, { data: enrollRows, error: enrErr }] = await Promise.all([
+      db.from("session_participants").select("session_id").eq("user_id", userId),
+      db.from("enrollments").select("course_id").eq("user_id", userId).eq("status", "active"),
+    ]);
     if (partErr) throw new Error(partErr.message);
+    if (enrErr)  throw new Error(enrErr.message);
 
-    const sessionIds = (participantRows ?? []).map(r => r.session_id);
-    console.log(`[sessions] sessionIds=${JSON.stringify(sessionIds)}`);
+    const sessionIds       = (participantRows ?? []).map(r => r.session_id);
+    const enrolledCourseIds = (enrollRows ?? []).map(r => r.course_id);
+    console.log(`[sessions] sessionIds=${sessionIds.length} enrolledCourses=${enrolledCourseIds.length}`);
 
-    let liveSessions = [];
-    if (sessionIds.length > 0) {
-      const { data: sessionRows, error: sessErr } = await db
-        .from("live_sessions")
-        .select(`
-          id, title, description, topic, subject, status,
-          scheduled_start, join_url, platform,
-          courses ( id, title ),
-          users!live_sessions_instructor_id_fkey ( full_name, avatar_url )
-        `)
-        .in("id", sessionIds)
-        .in("status", ["scheduled", "live"])
-        .order("scheduled_start", { ascending: true });
+    const SESSION_SELECT = `
+      id, title, description, topic, subject, status,
+      scheduled_start, join_url, platform, course_id,
+      courses ( id, title ),
+      users!live_sessions_instructor_id_fkey ( full_name, avatar_url )
+    `;
 
-      console.log(`[sessions] live_sessions rows=${sessionRows?.length ?? 0} err=${sessErr?.message ?? null}`);
-      if (sessErr) throw new Error(sessErr.message);
-      liveSessions = (sessionRows ?? []).map(s => mapLiveSession(s, "registered"));
+    // Two queries (registered-by-id + enrolled-by-course) merged & de-duped —
+    // simpler and more reliable than a cross-column PostgREST .or().
+    const [byId, byCourse] = await Promise.all([
+      sessionIds.length
+        ? db.from("live_sessions").select(SESSION_SELECT).in("id", sessionIds).in("status", ["scheduled", "live"])
+        : Promise.resolve({ data: [] }),
+      enrolledCourseIds.length
+        ? db.from("live_sessions").select(SESSION_SELECT).in("course_id", enrolledCourseIds).in("status", ["scheduled", "live"])
+        : Promise.resolve({ data: [] }),
+    ]);
+    if (byId.error)     throw new Error(byId.error.message);
+    if (byCourse.error) throw new Error(byCourse.error.message);
+
+    const registeredIds = new Set(sessionIds);
+    const seen = new Map();
+    for (const s of [...(byId.data ?? []), ...(byCourse.data ?? [])]) {
+      if (!seen.has(s.id)) seen.set(s.id, s);
     }
+    const liveSessions = [...seen.values()]
+      .sort((a, b) => new Date(a.scheduled_start || 0) - new Date(b.scheduled_start || 0))
+      .map(s => mapLiveSession(s, registeredIds.has(s.id) ? "registered" : "enrolled"));
+    console.log(`[sessions] live_sessions merged=${liveSessions.length}`);
 
     // ── 2. Agent sessions from edu.adaptive_sessions ─────────────────────────
     const { data: agentRows, error: agentErr } = await db

@@ -254,6 +254,13 @@ export default function LearnerDashboard() {
             });
           }
         });
+
+        // Generic in-app notification (purchases, payouts, reviews, classes…) —
+        // bump the bell badge live so it doesn't need a refresh to appear.
+        socket.on("notification", n => {
+          setNotifUnread(u => (u || 0) + 1);
+          if (n?.title) setToast(`🔔 ${n.title}`);
+        });
       }
     } catch { /* socket.io not loaded — REST polling fallback */ }
 

@@ -386,7 +386,12 @@ export function setupWebSocket(io) {
     // token — the payload id is ignored.
     const joinStudentRoom = () => {
       const u = socket.data.user;
-      if (u) socket.join(`student:${u.id}`);
+      if (u) {
+        socket.join(`student:${u.id}`);
+        // Also join the generic user room so notifyUser() pushes (bell
+        // notifications: purchases, payouts, reviews, class alerts…) arrive live.
+        socket.join(`user:${u.id}`);
+      }
     };
     socket.on("subscribe-student",  joinStudentRoom);
     socket.on("join-student-room",  joinStudentRoom);

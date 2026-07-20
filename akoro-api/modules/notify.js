@@ -25,7 +25,7 @@ export async function notifyUser({ userId, type, title, content = null, relatedI
   try {
     const { data } = await db
       .from("notifications")
-      .insert({ user_id: userId, type, title, content, related_id: relatedId })
+      .insert({ user_id: userId, type, title, content, related_id: relatedId, link })
       .select("id, created_at")
       .single();
     row = data;

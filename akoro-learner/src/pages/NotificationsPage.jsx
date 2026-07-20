@@ -38,11 +38,11 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function NotifRow({ n, onMarkRead, onDelete }) {
+function NotifRow({ n, onMarkRead, onDelete, onOpen }) {
   const { emoji, color } = getMeta(n.type);
   return (
-    <div style={{
-      display: 'flex', gap: 12, padding: '13px 15px',
+    <div onClick={() => onOpen(n)} style={{
+      display: 'flex', gap: 12, padding: '13px 15px', cursor: 'pointer',
       background: n.is_read ? 'var(--ak-surface)' : '#F5F1FF',
       borderRadius: 14, border: `1px solid ${n.is_read ? 'var(--ak-border)' : '#DDD3FF'}`,
       alignItems: 'flex-start',
@@ -70,12 +70,12 @@ function NotifRow({ n, onMarkRead, onDelete }) {
         )}
         <div style={{ display: 'flex', gap: 12, marginTop: 7 }}>
           {!n.is_read && (
-            <button onClick={() => onMarkRead(n.id)}
+            <button onClick={(e) => { e.stopPropagation(); onMarkRead(n.id); }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: BRAND, fontSize: 11, fontWeight: 800, fontFamily: "'Nunito',sans-serif", padding: 0 }}>
               Mark read
             </button>
           )}
-          <button onClick={() => onDelete(n.id)}
+          <button onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 11, fontWeight: 800, fontFamily: "'Nunito',sans-serif", padding: 0 }}>
             Delete
           </button>
@@ -118,6 +118,12 @@ export default function NotificationsPage() {
     } catch (e) {
       alert(e?.message || 'Could not update push notifications.');
     } finally { setPushBusy(false); }
+  };
+
+  // Tapping a card marks it read and, if it carries a deep link, navigates there.
+  const openNotif = (n) => {
+    if (!n.is_read) markRead(n.id);
+    if (n.link) navigate(n.link);
   };
 
   const markRead = async (id) => {
@@ -225,7 +231,7 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(n => <NotifRow key={n.id} n={n} onMarkRead={markRead} onDelete={del} />)}
+            {displayed.map(n => <NotifRow key={n.id} n={n} onMarkRead={markRead} onDelete={del} onOpen={openNotif} />)}
           </div>
         )}
       </div>

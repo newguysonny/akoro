@@ -59,7 +59,8 @@
     "2026-user-avatar-emoji.sql",
     "2026-contact-messages.sql",
     "2026-payment-audit.sql",
-    "2026-web-push.sql"
+    "2026-web-push.sql",
+    "2026-notification-link.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

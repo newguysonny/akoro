@@ -60,13 +60,31 @@ export default defineConfig({
             },
           },
           {
-            // Read API (GET /api/*, any origin) → serve cache instantly, refresh
-            // in the background. Lets last-seen content render offline.
-            urlPattern: ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/'),
+            // Stable CATALOG reads (course/agent listings, rankings, public
+            // profiles) → StaleWhileRevalidate: instant render + offline browsing.
+            // Staleness here is harmless and refreshes in the background.
+            urlPattern: ({ url, request }) => request.method === 'GET' &&
+              /^\/api\/(courses|discover|ranking|profiles|adaptive\/marketplace\/listings|adaptive\/marketplace\/search)/.test(url.pathname),
             handler: 'StaleWhileRevalidate',
             options: {
+              cacheName: 'akoro-catalog',
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // PERSONAL / mutable reads (cart, notifications, enrolments, orders,
+            // payments, live sessions, purchases…) → NetworkFirst: always prefer
+            // fresh data when online so a change shows without a manual refresh;
+            // fall back to the last cached copy only when offline or the network
+            // is slow (3s). This is what keeps the UI live after add-to-cart etc.
+            urlPattern: ({ url, request }) => request.method === 'GET' &&
+              url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/'),
+            handler: 'NetworkFirst',
+            options: {
               cacheName: 'akoro-api',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 }, // 7 days
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
