@@ -1,49 +1,73 @@
 /**
- * draw.js — AI diagram generation (prototype).
+ * draw.js — AI diagram generation (prototype, multi-engine).
  *
- * POST /api/adaptive/draw  { prompt }  →  { mermaid, caption }
+ * POST /api/adaptive/draw  { prompt, mode }  →  { mode, svg | elements | mermaid, caption }
  *
- * Turns a learner's natural-language request into a Mermaid diagram. The
- * frontend renders it as editable Excalidraw shapes via mermaid-to-excalidraw.
- * Mermaid is used as the intermediate because the LLM is reliable at it and the
- * output stays editable (vs. asking for raw Excalidraw element JSON).
+ * Three engines so we can compare quality:
+ *   • svg        — a rich, teacher-style illustration (best visual fidelity;
+ *                  static image, not editable). This is the "chalkboard" look.
+ *   • excalidraw — editable hand-drawn shapes (boxes/arrows/text skeleton).
+ *   • mermaid    — structured flow/mind/sequence diagrams (most reliable, but
+ *                  only for structured content).
  */
 import { Router } from "express";
 import { llmComplete } from "../../lib/aiModel.js";
 
 const router = Router();
 
-const SYSTEM = `You are a diagramming assistant for a learning app. Given a student's request, produce ONE Mermaid diagram that clearly explains the concept.
+const SYSTEM = {
+  mermaid: `You are a diagramming assistant for a learning app. Given a student's request, output ONE Mermaid diagram (flowchart graph TD/LR, mindmap, sequenceDiagram, stateDiagram-v2, or timeline). Output ONLY valid Mermaid code — no prose, no code fences. Short node labels (2-5 words), 5-15 nodes, correct educational content.`,
 
-Rules:
-- Output ONLY valid Mermaid code. No prose, no markdown code fences, no explanation.
-- Choose the best diagram type for the concept: flowchart (graph TD/LR), mindmap, sequenceDiagram, stateDiagram-v2, erDiagram, or timeline.
-- Prefer flowchart 'graph TD' or 'mindmap' for general concepts and processes.
-- Keep node labels short (2-5 words). Use clear, correct, educational content.
-- Aim for 5-15 nodes — enough to be useful, not overwhelming.
-- Do not use unsupported syntax, HTML, or click handlers.`;
+  svg: `You are an expert educational illustrator that draws like a great teacher at a whiteboard. Given a concept, produce ONE self-contained SVG illustration that EXPLAINS it visually — not a flowchart.
 
-// Strip accidental markdown fences / stray prose the model may add.
-function cleanMermaid(text) {
-  let t = (text || "").trim();
-  const fence = t.match(/```(?:mermaid)?\s*([\s\S]*?)```/i);
-  if (fence) t = fence[1].trim();
-  return t;
+Requirements:
+- Output ONLY the <svg>...</svg> element. No prose, no markdown fences, no <script>.
+- Use viewBox="0 0 820 500". Set font-family="'Nunito', sans-serif".
+- DRAW THE ACTUAL THING: use shapes, curved <path> lines, arrows (via <marker>), gradients and colour to depict real objects (magnets, cells, forces, orbits, molecules, graphs…), not just labelled boxes.
+- Add a clear title, concise labels, a key formula/relationship if relevant, and one short caption or "key insight".
+- Use a clean, friendly palette (purples #7c3aed, teal #0d9488, amber #f59e0b, slate #334155). Keep it uncluttered and scientifically correct.
+- Give drawable stroke <path>/<line>/<circle> a pathLength="1" attribute so the client can animate them drawing on.`,
+
+  excalidraw: `You are a diagram generator that outputs Excalidraw skeleton elements. Given a concept, output ONLY a JSON array (no prose, no fences) of elements the app converts with convertToExcalidrawElements.
+
+Each element: { "type": "rectangle"|"ellipse"|"diamond"|"arrow"|"line"|"text", "x": number, "y": number, "width"?: number, "height"?: number, "text"?: string, "label"?: { "text": string }, "strokeColor"?: hex, "backgroundColor"?: hex }.
+Lay out a 800x500 space. Use arrows to connect shapes, labels for names, one text element for a key formula. 6-14 elements. Keep labels short and content correct.`,
+};
+
+function stripFences(t, tag) {
+  let s = (t || "").trim();
+  const fence = s.match(/```(?:[a-z]+)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  if (tag === "svg") {
+    const m = s.match(/<svg[\s\S]*<\/svg>/i);
+    if (m) s = m[0];
+  }
+  return s;
 }
 
 router.post("/", async (req, res) => {
   try {
     const prompt = String(req.body?.prompt || "").trim();
+    const mode = ["svg", "excalidraw", "mermaid"].includes(req.body?.mode) ? req.body.mode : "svg";
     if (!prompt) return res.status(400).json({ success: false, message: "prompt is required" });
     if (prompt.length > 1000) return res.status(400).json({ success: false, message: "prompt too long" });
 
-    const raw = await llmComplete(`Create a diagram for: ${prompt}`, {
-      system: SYSTEM, maxTokens: 1200, temperature: 0.4,
+    const raw = await llmComplete(`Illustrate this concept for a student: ${prompt}`, {
+      system: SYSTEM[mode],
+      maxTokens: mode === "svg" ? 3000 : 1400,
+      temperature: 0.5,
     });
-    const mermaid = cleanMermaid(raw);
-    if (!mermaid) return res.status(502).json({ success: false, message: "Could not generate a diagram — try rephrasing." });
+    const out = stripFences(raw, mode);
+    if (!out) return res.status(502).json({ success: false, message: "Empty result — try rephrasing." });
 
-    res.json({ success: true, data: { mermaid, caption: prompt } });
+    if (mode === "svg") return res.json({ success: true, data: { mode, svg: out, caption: prompt } });
+    if (mode === "mermaid") return res.json({ success: true, data: { mode, mermaid: out, caption: prompt } });
+
+    // excalidraw
+    let elements;
+    try { elements = JSON.parse(out); } catch { return res.status(502).json({ success: false, message: "Could not parse diagram." }); }
+    if (!Array.isArray(elements)) return res.status(502).json({ success: false, message: "Unexpected diagram format." });
+    return res.json({ success: true, data: { mode, elements, caption: prompt } });
   } catch (err) {
     console.error("[draw] generation failed:", err?.message || err);
     res.status(500).json({ success: false, message: "Diagram generation failed" });
