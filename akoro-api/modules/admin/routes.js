@@ -27,6 +27,7 @@ import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { notify }                         from "../notifications/events.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -231,6 +232,12 @@ const setSchoolStatus = (status) => asyncHandler(async (req, res) => {
     .maybeSingle();
   if (error) throw error;
   if (!data) return err404(res, "School not found");
+
+  // Notify the school admin of the verification decision.
+  if (data.admin?.id) {
+    if (status === "verified") notify.schoolVerified({ userId: data.admin.id, schoolName: data.name });
+    else if (status === "rejected") notify.schoolRejected({ userId: data.admin.id, schoolName: data.name });
+  }
   ok(res, data);
 });
 
@@ -276,6 +283,14 @@ router.patch("/courses/:id",
       .maybeSingle();
     if (error) throw error;
     if (!data) return err404(res, "Course not found");
+
+    // Notify the instructor of a moderation decision.
+    if (data.instructor?.id) {
+      if (patch.is_published === true || patch.status === "approved" || patch.status === "published")
+        notify.courseApproved({ instructorId: data.instructor.id, courseTitle: data.title });
+      else if (patch.status === "rejected" || patch.is_published === false)
+        notify.courseRejected({ instructorId: data.instructor.id, courseTitle: data.title, reason: req.body.reason });
+    }
     ok(res, data);
   })
 );

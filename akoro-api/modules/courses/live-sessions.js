@@ -39,6 +39,7 @@ import { Router }                          from "express";
 import { body, param, query, validationResult } from "express-validator";
 import db                                  from "../../db.js";
 import { authenticateToken, requireRole }  from "../auth/routes.js";
+import { notify }                          from "../notifications/events.js";
 import { createMeeting, endMeeting }       from "./meeting-integration.js";
 
 // ─── § HELPERS ────────────────────────────────────────────────────────────────
@@ -330,13 +331,25 @@ const sessionHandlers = {
       .update({ status: "cancelled", updated_at: now() })
       .eq("id", sessionId);
 
-    // Notify participants
-    const io = req.app.get("io");
+    // Notify participants — live socket to anyone in the room…
+    const io = req.app.get("io") || global.io || global._io;
     io?.to(`session:${sessionId}`).emit("session-cancelled", {
       sessionId,
       title: session.title,
       message: "This session has been cancelled",
     });
+
+    // …and a persistent bell notification for every enrolled student.
+    try {
+      if (session.course_id) {
+        const { data: enrolled } = await db
+          .from("enrollments").select("user_id")
+          .eq("course_id", session.course_id).eq("status", "active");
+        for (const { user_id } of (enrolled ?? [])) {
+          notify.sessionCancelled({ userId: user_id, sessionTitle: session.title, relatedId: sessionId });
+        }
+      }
+    } catch (e) { console.warn("[live-sessions] cancel notify failed:", e.message); }
 
     res200(res, { message: "Session cancelled" });
   }),
