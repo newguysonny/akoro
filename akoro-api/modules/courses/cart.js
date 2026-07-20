@@ -19,6 +19,17 @@ import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
+import { recordPaymentItems }             from "../webhooks/paymentAudit.js";
+
+// Build normalized payment_items rows from resolved cart line items.
+const toPaymentItems = (items) => items.map((i) => ({
+  item_type:       i.item_type,
+  course_id:       i.course_id,
+  listing_id:      i.listing_id,
+  title:           i.title,
+  unit_price_kobo: i.price_kobo,
+  currency:        i.currency ?? "NGN",
+}));
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -536,11 +547,12 @@ const handlers = {
       const freeListingIds = checkoutItems.filter((i) => i.item_type === "agent").map((i) => i.listing_id);
       // Record a zero-amount success payment so the free order still appears in
       // the learner's order history.
-      await db.from("payments").insert({
+      const { data: freePayment } = await db.from("payments").insert({
         user_id: userId, course_id: freeCourseIds[0] ?? null, amount_paid: 0, currency: "NGN",
         payment_provider: "free", status: "success", paid_at: new Date().toISOString(),
         provider_response: { is_cart_checkout: true, course_ids: freeCourseIds, listing_ids: freeListingIds, item_count: checkoutItems.length, free: true },
-      });
+      }).select("id").single();
+      if (freePayment?.id) await recordPaymentItems(freePayment.id, toPaymentItems(checkoutItems));
       for (const item of checkoutItems) {
         if (item.item_type === "agent") {
           await grantAgentFromCart(userId, { listingId: item.listing_id, agentId: item.agent_id, amountKobo: 0, currency: item.currency });
@@ -587,6 +599,10 @@ const handlers = {
       .single();
 
     if (payErr) throw new Error(payErr.message);
+
+    // Snapshot line items now (at init) so the order's contents are on record
+    // even if the payment never completes.
+    await recordPaymentItems(payment.id, toPaymentItems(checkoutItems));
 
     // Paystack transaction
     const { data: psData } = await axios.post(

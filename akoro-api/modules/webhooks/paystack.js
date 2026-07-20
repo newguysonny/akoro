@@ -29,6 +29,7 @@ import crypto from "crypto";
 import { fulfillPaymentsCharge } from "../courses/payments.js";
 import { fulfillMarketplaceEvent } from "../adaptive-learning/marketplace/routes.js";
 import { fulfillTransferEvent } from "../courses/payouts.js";
+import { logPaymentEvent } from "./paymentAudit.js";
 
 const router = Router();
 
@@ -39,38 +40,65 @@ router.post("/", async (req, res) => {
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
 
     const hash = crypto.createHmac("sha512", secret).update(raw).digest("hex");
-    if (hash !== req.headers["x-paystack-signature"]) {
+    const signatureValid = hash === req.headers["x-paystack-signature"];
+
+    // Log the raw event first — even a bad-signature attempt is worth a durable
+    // record. We can't trust the body if the signature is invalid, so keep it in
+    // `detail` only and don't act on it.
+    let event = null;
+    try { event = JSON.parse(raw.toString("utf8")); } catch { /* non-JSON body */ }
+    const type      = event?.event ?? "unparseable";
+    const data      = event?.data ?? {};
+    const reference = data?.reference ?? data?.transfer_code ?? null;
+
+    if (!signatureValid) {
+      await logPaymentEvent({
+        eventType: type, reference, source: "paystack_webhook",
+        signatureValid: false, outcome: "ignored",
+        detail: { reason: "invalid_signature", body: raw.toString("utf8").slice(0, 2000) },
+      });
       console.warn("[paystack-webhook] Invalid signature — rejected");
       return res.status(400).json({ success: false, message: "Invalid signature" });
     }
 
-    const event = JSON.parse(raw.toString("utf8"));
-    const { event: type, data } = event;
-    console.log(`[paystack-webhook] ${type}  ref=${data?.reference ?? data?.transfer_code ?? "—"}`);
+    console.log(`[paystack-webhook] ${type}  ref=${reference ?? "—"}`);
+    const paymentId = data?.metadata?.payment_id ?? null;
+    await logPaymentEvent({
+      eventType: type, reference, paymentId, source: "paystack_webhook",
+      signatureValid: true, detail: { metadata: data?.metadata ?? null, amount: data?.amount, status: data?.status },
+    });
 
     if (type === "charge.success") {
       // Fan out to every charge domain; each is idempotent and no-ops when the
       // metadata isn't its own. Run sequentially so one failing domain surfaces
       // in logs without masking the others.
-      let handled = false;
+      let handled = false, errored = false;
       try { handled = (await fulfillPaymentsCharge(data)) || handled; }
-      catch (e) { console.error("[paystack-webhook] payments fulfillment failed:", e); }
+      catch (e) { errored = true; console.error("[paystack-webhook] payments fulfillment failed:", e); }
       try { handled = (await fulfillMarketplaceEvent(event)) || handled; }
-      catch (e) { console.error("[paystack-webhook] marketplace fulfillment failed:", e); }
+      catch (e) { errored = true; console.error("[paystack-webhook] marketplace fulfillment failed:", e); }
 
       if (!handled) console.warn("[paystack-webhook] charge.success matched no domain:", data?.metadata);
+      await logPaymentEvent({
+        eventType: "charge.fulfillment", reference, paymentId, source: "paystack_webhook",
+        matched: handled, outcome: errored ? "error" : (handled ? "fulfilled" : "no_match"),
+      });
       return res.status(200).json({ received: true });
     }
 
     if (type === "refund.processed") {
-      try { await fulfillMarketplaceEvent(event); }
-      catch (e) { console.error("[paystack-webhook] refund fulfillment failed:", e); }
+      let outcome = "ignored";
+      try { outcome = (await fulfillMarketplaceEvent(event)) ? "fulfilled" : "no_match"; }
+      catch (e) { outcome = "error"; console.error("[paystack-webhook] refund fulfillment failed:", e); }
+      await logPaymentEvent({ eventType: "refund.fulfillment", reference, source: "refund", outcome });
       return res.status(200).json({ received: true });
     }
 
     if (type?.startsWith("transfer.")) {
-      try { await fulfillTransferEvent(type, data); }
-      catch (e) { console.error("[paystack-webhook] transfer fulfillment failed:", e); }
+      let outcome = "ignored";
+      try { outcome = (await fulfillTransferEvent(type, data)) ? "fulfilled" : "no_match"; }
+      catch (e) { outcome = "error"; console.error("[paystack-webhook] transfer fulfillment failed:", e); }
+      await logPaymentEvent({ eventType: `${type}.fulfillment`, reference, source: "paystack_webhook", outcome });
       return res.status(200).json({ received: true });
     }
 
@@ -78,6 +106,7 @@ router.post("/", async (req, res) => {
     return res.status(200).json({ received: true });
   } catch (err) {
     console.error("[paystack-webhook] Error:", err);
+    await logPaymentEvent({ eventType: "webhook_error", source: "system", outcome: "error", detail: { message: err?.message } });
     // 200 avoids Paystack retry storms on our own bugs; the error is logged.
     return res.status(200).json({ received: true });
   }

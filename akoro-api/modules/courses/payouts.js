@@ -24,6 +24,7 @@ import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
+import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -527,6 +528,61 @@ const adminHandlers = {
 
     res200(res, Object.values(grouped).sort((a, b) => b.gross_ngn - a.gross_ngn));
   }),
+
+  /**
+   * GET /api/admin/payments/:reference/trace
+   * One-call payment forensics for support: stitches together the payment row,
+   * its normalized line items, the full append-only event log, any matching
+   * agent-guide purchase, and a LIVE Paystack verification of the reference.
+   * This is the "what actually happened to this order?" view.
+   */
+  paymentTrace: asyncHandler(async (req, res) => {
+    const reference = req.params.reference;
+
+    // Payment ledger row (by provider_reference).
+    const { data: payment } = await db
+      .from("payments")
+      .select("*, courses ( id, title ), users!payments_user_id_fkey ( id, full_name, email )")
+      .eq("provider_reference", reference)
+      .maybeSingle();
+
+    // Normalized line items (if we have the payment).
+    let items = [];
+    if (payment?.id) {
+      const { data } = await db.from("payment_items").select("*").eq("payment_id", payment.id);
+      items = data ?? [];
+    }
+
+    // Full event timeline — match by reference OR the resolved payment id.
+    let eventsQuery = db.from("payment_events").select("*").order("created_at", { ascending: true });
+    eventsQuery = payment?.id
+      ? eventsQuery.or(`reference.eq.${reference},payment_id.eq.${payment.id}`)
+      : eventsQuery.eq("reference", reference);
+    const { data: events } = await eventsQuery;
+
+    // Matching agent-guide purchase (marketplace lives in the edu schema).
+    const { data: agentPurchase } = await db
+      .schema("edu").from("agent_purchases")
+      .select("id, student_id, agent_id, listing_id, amount_kobo, currency, paystack_status, access_granted, purchased_at")
+      .eq("paystack_ref", reference)
+      .maybeSingle();
+
+    // Live Paystack truth — re-query the reference every time so support sees the
+    // provider's current view, independent of our DB.
+    let paystack = null;
+    try { paystack = await verifyTransaction(reference); }
+    catch (e) { paystack = { error: e?.message || "verify failed" }; }
+
+    res200(res, {
+      reference,
+      payment:        payment ?? null,
+      items,
+      agent_purchase: agentPurchase ?? null,
+      events:         events ?? [],
+      paystack,       // { status, amount, currency, email, paid_at, metadata } or { error }
+      reconciled:     !!(payment && paystack && payment.status === "success" && paystack.status === "success"),
+    });
+  }),
 };
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -552,5 +608,6 @@ router.post ("/payouts/webhook",                                         payoutH
 // Admin
 router.get("/admin/earnings",                         authenticateToken, requireRole(["admin"]), adminHandlers.platformOverview);
 router.get("/admin/earnings/instructors",             authenticateToken, requireRole(["admin"]), adminHandlers.byInstructor);
+router.get("/admin/payments/:reference/trace",        authenticateToken, requireRole(["admin"]), adminHandlers.paymentTrace);
 
 export default router;

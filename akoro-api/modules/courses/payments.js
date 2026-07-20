@@ -19,6 +19,7 @@ import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { businessConfig }                 from "../../config/index.js";
 import { cartHandlers }                   from "./cart.js";
+import { recordPaymentItems, logPaymentEvent } from "../webhooks/paymentAudit.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -190,10 +191,11 @@ const paymentHandlers = {
       await db.rpc("increment_course_students", { course_id_input: course_id });
       // Record a zero-amount success payment so the free course shows in history.
       try {
-        await db.from("payments").insert({
+        const { data: freePayment } = await db.from("payments").insert({
           user_id: userId, course_id, amount_paid: 0, currency: course.currency ?? "NGN",
           payment_provider: "free", status: "success", paid_at: now(),
-        });
+        }).select("id").single();
+        if (freePayment?.id) await recordPaymentItems(freePayment.id, [{ item_type: "course", course_id, title: course.title, unit_price_kobo: 0, currency: course.currency ?? "NGN" }]);
       } catch { /* history record is best-effort */ }
       // If this course was sitting in the cart, drop it — it's now owned.
       try { await db.from("cart_items").delete().eq("user_id", userId).eq("course_id", course_id); } catch {}
@@ -234,6 +236,9 @@ const paymentHandlers = {
         instructor_net:     split.netAmount,
       },
     }).select().single();
+
+    // Snapshot the single line item at init so the order is on record.
+    await recordPaymentItems(payment.id, [{ item_type: "course", course_id, title: course.title, unit_price_kobo: finalKobo, currency: course.currency ?? "NGN" }]);
 
     const { data: psData } = await axios.post(
       "https://api.paystack.co/transaction/initialize",
@@ -326,6 +331,10 @@ const paymentHandlers = {
 
     await db.from("payments").update({ status: "refunded", refunded_at: now(), refund_reason: reason ?? null }).eq("id", payment.id);
     await db.from("instructor_earnings").update({ status: "refunded" }).eq("payment_id", payment.id);
+    await logPaymentEvent({
+      eventType: "status_change", source: "refund", paymentId: payment.id,
+      outcome: "refunded", detail: { from: "success", to: "refunded", reason: reason ?? null, by: userId, is_cart: isCart },
+    });
 
     // Revoke access for every item the payment covered.
     const courseIds  = isCart ? (meta.course_ids  || []) : (payment.course_id ? [payment.course_id] : []);
