@@ -9,6 +9,11 @@ const QUEUEABLE_POST = ['/api/notifications/mark-read', '/api/profiles/me/teache
 const QUEUEABLE_PATCH = ['/api/profiles/me', '/api/profiles/me/notifications'];
 
 export default defineConfig({
+  // @excalidraw/excalidraw 0.17.x reads process.env.IS_PREACT at import time;
+  // Vite doesn't polyfill process in the browser, so define it (false = React).
+  define: {
+    'process.env.IS_PREACT': JSON.stringify('false'),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -41,6 +46,17 @@ export default defineConfig({
           '**/AboutPage-*.js', '**/ContactPage-*.js', '**/CareersPage-*.js',
           '**/BlogPage-*.js', '**/BlogPostPage-*.js', '**/PartnersPage-*.js',
           '**/PrivacyPolicyPage-*.js', '**/TermsOfServicePage-*.js', '**/FDEAdminPage-*.js',
+        ],
+        // Belt-and-braces: drop any heavy lazy chunk (>400 KB) from the
+        // first-install precache regardless of its hashed name — e.g. the AI
+        // drawing page's Excalidraw + Mermaid bundles. They're code-split and
+        // runtime-cached on first use instead, keeping the PWA install lean.
+        manifestTransforms: [
+          (entries) => {
+            const MAX = 400 * 1024;
+            const manifest = entries.filter((e) => (e.size ?? 0) <= MAX);
+            return { manifest, warnings: [] };
+          },
         ],
         // SPA: offline navigations fall back to the cached shell (except API paths).
         navigateFallback: '/index.html',
