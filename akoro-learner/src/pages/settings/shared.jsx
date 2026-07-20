@@ -50,12 +50,12 @@ function Icon({ name, size=16, color, style={} }) {
   return <i className={`ti ${name}`}
     style={{ fontSize:size, color:color||'inherit', lineHeight:1, ...style }}/>;
 }
-function Toggle({ on, onChange }) {
+function Toggle({ on, onChange, disabled }) {
   return (
-    <div onClick={onChange}
+    <div onClick={disabled ? undefined : onChange}
       style={{ width:42,height:23,borderRadius:12,position:'relative',
         background:on?BRAND:'var(--ak-toggle-off)',transition:'background .25s',
-        cursor:'pointer',flexShrink:0 }}>
+        cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.5:1,flexShrink:0 }}>
       <div style={{ position:'absolute',top:2.5,left:on?21:2.5,
         width:18,height:18,borderRadius:'50%',background:'#fff',
         transition:'left .25s',boxShadow:'0 1px 3px rgba(0,0,0,.2)' }}/>

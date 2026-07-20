@@ -1,8 +1,9 @@
 /**
  * Settings — User tab (profile, notifications, security, preferences).
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { pushSupported, getPushStatus, enablePush, disablePush } from '../../services/pushApi.js';
 import { useLang, LS_LANGUAGE } from '../../contexts/LanguageContext.jsx';
 import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
@@ -17,23 +18,53 @@ import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from '
 /* ─── Notification section ────────────────────────────────────── */
 function NotifSection({ notif, setNotif, onSaveNotif }) {
   const { t } = useLang();
+
+  // Real Web Push (PWA) state — the "push" row drives an actual browser
+  // subscription, not just a saved flag.
+  const [pushState, setPushState] = useState({ supported: false, subscribed: false, permission: 'default' });
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => { if (pushSupported()) getPushStatus().then(setPushState); }, []);
+
+  const togglePush = async () => {
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (pushState.subscribed) { await disablePush(); }
+      else { await enablePush(); }
+      const s = await getPushStatus();
+      setPushState(s);
+      const updated = { ...notif, push: s.subscribed };
+      setNotif(updated); onSaveNotif(updated);
+    } catch (e) {
+      alert(e?.message || 'Could not update push notifications.');
+    } finally { setPushBusy(false); }
+  };
+
   const toggle = (key) => {
+    if (key === 'push') return togglePush();
     const updated = { ...notif, [key]: !notif[key] };
     setNotif(updated);
     onSaveNotif(updated);
   };
-  const NotifRow = ({ icon,label,sub,field }) => (
-    <div style={{ ...rowBase }}>
+  const NotifRow = ({ icon,label,sub,field }) => {
+    const isPush = field === 'push';
+    const on = isPush ? pushState.subscribed : notif[field];
+    const pushSub = isPush && pushState.supported && pushState.permission === 'denied'
+      ? 'Blocked in your browser settings' : sub;
+    return (
+    <div style={{ ...rowBase, opacity: isPush && !pushState.supported ? 0.5 : 1 }}>
       <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
         <Icon name={icon} size={17} color="var(--ak-text-sub)"/>
       </span>
       <div style={{ flex:1 }}>
         <p style={{ fontSize:13.5,fontWeight:700,margin:0,color:'var(--ak-text)' }}>{label}</p>
-        {sub&&<p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>{sub}</p>}
+        {pushSub&&<p style={{ fontSize:11.5,color:'var(--ak-text-muted)',marginTop:2,margin:0 }}>{pushSub}</p>}
       </div>
-      <Toggle on={notif[field]} onChange={()=>toggle(field)}/>
+      <Toggle on={on} onChange={()=>toggle(field)}
+        disabled={isPush && (!pushState.supported || pushBusy || pushState.permission === 'denied')}/>
     </div>
-  );
+    );
+  };
   return (
     <>
       <Section title={t('settings.notif_channels')}>
