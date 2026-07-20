@@ -5,17 +5,27 @@
  * Excalidraw mounting successfully.
  *
  * Props:
- *   payload: { kind: 'elements', elements } | { kind: 'mermaid', mermaid } | null
+ *   payload:  { kind: 'elements', elements } | { kind: 'mermaid', mermaid } | null
+ *   sketch:   boolean — start blank with the freehand pen tool (touch/stylus).
+ *   onExporter: (fn) => void — receives an async () => dataUrlPng exporter so the
+ *               parent can grab the learner's drawing for the AI to read.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Excalidraw, convertToExcalidrawElements } from '@excalidraw/excalidraw';
+import { Excalidraw, convertToExcalidrawElements, exportToBlob } from '@excalidraw/excalidraw';
 import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
 
-export default function DrawCanvas({ payload }) {
+const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(r.result);
+  r.onerror = reject;
+  r.readAsDataURL(blob);
+});
+
+export default function DrawCanvas({ payload, sketch = false, onExporter }) {
   const [api, setApi] = useState(null);
 
   const render = useCallback(async () => {
-    if (!api || !payload) return;
+    if (!api || sketch || !payload) return;
     try {
       let elements = payload.elements;
       let files;
@@ -30,9 +40,26 @@ export default function DrawCanvas({ payload }) {
     } catch (e) {
       console.error('[DrawCanvas] render failed:', e);
     }
-  }, [api, payload]);
+  }, [api, payload, sketch]);
 
   useEffect(() => { render(); }, [render]);
+
+  // In sketch mode, start on the freehand pen and hand the parent an exporter.
+  useEffect(() => {
+    if (!api) return;
+    if (sketch) {
+      try { api.setActiveTool({ type: 'freedraw' }); } catch { /* ok */ }
+      onExporter?.(async () => {
+        const blob = await exportToBlob({
+          elements: api.getSceneElements(),
+          appState: { ...api.getAppState(), exportBackground: true, viewBackgroundColor: '#ffffff' },
+          files: api.getFiles(),
+          mimeType: 'image/png',
+        });
+        return blobToDataUrl(blob);
+      });
+    }
+  }, [api, sketch, onExporter]);
 
   return <Excalidraw excalidrawAPI={(a) => setApi(a)} />;
 }
