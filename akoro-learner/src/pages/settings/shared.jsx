@@ -138,12 +138,18 @@ function AvatarCircle({ photoUrl, emoji, color, size=60, onPhotoClick }) {
           ? <img src={photoUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
           : <span style={{ fontSize:size*0.43 }}>{emoji}</span>}
       </div>
-      <div style={{ position:'absolute',bottom:0,right:0,
-        width:20,height:20,borderRadius:'50%',background:color,
+      <div title="Edit photo" aria-label="Edit photo" style={{ position:'absolute',bottom:-2,right:-2,
+        width:22,height:22,borderRadius:'50%',background:color,
         border:'2px solid var(--ak-surface)',display:'flex',alignItems:'center',
-        justifyContent:'center',cursor:'pointer' }}
+        justifyContent:'center',cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,.25)' }}
         onClick={onPhotoClick}>
-        <Icon name="ti-pencil" size={9} color="#fff"/>
+        {/* Inline SVG pencil — renders regardless of whether the icon webfont
+            has loaded, so the "editable" affordance is always visible. */}
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+          stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
       </div>
     </div>
   );
