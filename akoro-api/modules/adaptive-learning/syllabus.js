@@ -99,11 +99,16 @@ export async function searchSyllabus(query, { subject = null, limit = 6 } = {}) 
   return data || [];
 }
 
-/** Prompt-ready context string agents can inject to ground their teaching. */
-export async function getSyllabusContext(query, opts = {}) {
-  const hits = await searchSyllabus(query, opts).catch(() => []);
+/**
+ * Prompt-ready context string agents inject to ground teaching. Only returns
+ * chunks above a similarity threshold, so an off-syllabus question injects
+ * nothing rather than forcing in weak matches.
+ */
+export async function getSyllabusContext(query, { minSimilarity = 0.3, ...opts } = {}) {
+  const hits = (await searchSyllabus(query, opts).catch(() => []))
+    .filter((h) => (h.similarity ?? 0) >= minSimilarity);
   if (!hits.length) return "";
-  return "Relevant WASSCE syllabus references:\n" +
+  return "Relevant exam syllabus (WAEC/JAMB/NECO) references — ground your explanation in these and name the topic where it fits:\n" +
     hits.map((h, i) => `${i + 1}. [${h.subject_slug} › ${h.topic_title}] ${h.content}`).join("\n\n");
 }
 

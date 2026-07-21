@@ -21,6 +21,7 @@ import db from "../../db.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
+import { getSyllabusContext } from "./syllabus.js";
 import {
   getOrCreateStudentAgent,
   getAgentGrowthHistory,
@@ -764,8 +765,14 @@ router.post("/tutor", async (req, res) => {
       .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
       .slice(-10);
 
+    // Ground the tutor in the uploaded exam syllabus when the question relates
+    // to it (semantic match; empty for off-syllabus questions).
+    const syllabusCtx = await getSyllabusContext(message.trim(), { limit: 5 }).catch(() => "");
+    const systemContent = tutorSystemPrompt({ agentName, role }) +
+      (syllabusCtx ? `\n\n${syllabusCtx}` : "");
+
     const messages = [
-      { role: "system", content: tutorSystemPrompt({ agentName, role }) },
+      { role: "system", content: systemContent },
       ...safeHistory,
       { role: "user", content: message.trim() },
     ];
@@ -831,7 +838,10 @@ router.post("/tutor", async (req, res) => {
 
 async function handleStudentChatWithTools(req, res, studentId, message, history, t0) {
   const agent  = await getOrCreateStudentAgent(studentId);
-  const chunks = await retrieveAgentKnowledge(agent.id, message, 4);
+  const [chunks, syllabusCtx] = await Promise.all([
+    retrieveAgentKnowledge(agent.id, message, 4),
+    getSyllabusContext(message, { limit: 4 }).catch(() => ""),
+  ]);
   const knowledgeCtx = chunks.length > 0
     ? "\n\n## Your learning history:\n" + chunks.map((c, i) =>
         `[${i+1}] (${c.chunk_type}, ${Math.round((c.confidence||0.5)*100)}%) ${c.topic}: ${c.content}`
@@ -842,6 +852,7 @@ async function handleStudentChatWithTools(req, res, studentId, message, history,
     `You are ${agent.name}, an AI learning agent at level ${agent.level} on Akoro Learning Platform.` +
     `\nYou have been taught across ${agent.total_sessions} sessions.` +
     knowledgeCtx +
+    (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
     `\n\nYou can also use tools to check the student's real progress, tasks, battles, and rankings.` +
     `\nAnswer from your knowledge when you can. Use tools when the student asks about their actual data.` +
     `\nIf you don't know something: "I haven't been taught about that yet — teach me!"`;
