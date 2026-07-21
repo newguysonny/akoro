@@ -58,6 +58,10 @@ CREATE INDEX IF NOT EXISTS idx_syllabus_chunks_embedding
   ON edu.syllabus_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- Semantic match, optionally scoped to one subject (p_subject_slug = NULL = all).
+-- Returns exam + subject name (join) for the tutor's "Aligned to JAMB" chips.
+-- DROP first: schema migrations re-run every deploy, and a return-type change
+-- can't be done via CREATE OR REPLACE — so drop then create for re-runnability.
+DROP FUNCTION IF EXISTS match_syllabus(vector, text, integer);
 CREATE OR REPLACE FUNCTION match_syllabus(
   p_query_embedding vector(1536),
   p_subject_slug    TEXT DEFAULT NULL,
@@ -66,17 +70,20 @@ CREATE OR REPLACE FUNCTION match_syllabus(
 RETURNS TABLE (
   id           UUID,
   subject_slug TEXT,
+  subject_name TEXT,
+  exam         TEXT,
   topic_title  TEXT,
   content      TEXT,
   similarity   FLOAT
 )
 LANGUAGE sql STABLE AS $$
-  SELECT id, subject_slug, topic_title, content,
-         1 - (embedding <=> p_query_embedding) AS similarity
-  FROM edu.syllabus_chunks
-  WHERE embedding IS NOT NULL
-    AND (p_subject_slug IS NULL OR subject_slug = p_subject_slug)
-  ORDER BY embedding <=> p_query_embedding
+  SELECT c.id, c.subject_slug, s.name AS subject_name, s.exam, c.topic_title, c.content,
+         1 - (c.embedding <=> p_query_embedding) AS similarity
+  FROM edu.syllabus_chunks c
+  JOIN edu.syllabus_subjects s ON s.id = c.subject_id
+  WHERE c.embedding IS NOT NULL
+    AND (p_subject_slug IS NULL OR c.subject_slug = p_subject_slug)
+  ORDER BY c.embedding <=> p_query_embedding
   LIMIT p_match_count;
 $$;
 
