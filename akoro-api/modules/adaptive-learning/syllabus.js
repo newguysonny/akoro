@@ -12,8 +12,11 @@
  * cosine, via the edu.syllabus_chunks ivfflat index + match_syllabus() RPC.
  */
 import { Router } from "express";
+import multer from "multer";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import db from "../../db.js";
-import { openai } from "../../lib/aiModel.js";
+import { openai, llmComplete } from "../../lib/aiModel.js";
+import { requireRole } from "../auth/routes.js";
 
 const slugify = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -115,8 +118,33 @@ export async function getSubjectOutline(subjectSlug) {
 
 export async function listSubjects() {
   const { data } = await db.schema("edu").from("syllabus_subjects")
-    .select("exam, name, slug, code").order("name");
-  return data || [];
+    .select("exam, name, slug, code, updated_at, syllabus_topics(count)").order("name");
+  return (data || []).map((s) => ({ ...s, topic_count: s.syllabus_topics?.[0]?.count ?? 0 }));
+}
+
+export async function deleteSubject(slug) {
+  await db.schema("edu").from("syllabus_subjects").delete().eq("slug", slugify(slug));
+}
+
+// Turn raw syllabus text (e.g. extracted from a PDF) into the ingest JSON.
+const EXTRACT_SYSTEM = `You convert an exam syllabus into structured JSON. Output ONLY valid JSON (no prose, no code fences) matching:
+{ "exam": "WASSCE"|"JAMB"|"NECO"|..., "name": string, "code"?: string, "aims"?: string,
+  "paper_structure"?: object,
+  "topics": [ { "title": string, "subtopics": [ { "title": string, "content"?: string, "objectives"?: string[] } ] } ] }
+Preserve the syllabus's real topics/subtopics and learning objectives faithfully. Do not invent content. Keep objectives as short bullet strings.`;
+
+export async function extractSyllabusFromText(rawText, hint = {}) {
+  const text = String(rawText || "").slice(0, 40000);
+  const raw = await llmComplete(
+    `${hint.exam ? `Exam: ${hint.exam}. ` : ""}${hint.name ? `Subject: ${hint.name}. ` : ""}Convert this syllabus text to JSON:\n\n${text}`,
+    { system: EXTRACT_SYSTEM, maxTokens: 4000, temperature: 0.2 }
+  );
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i); if (fence) s = fence[1].trim();
+  const doc = JSON.parse(s);
+  if (hint.exam) doc.exam = hint.exam;
+  if (hint.name && !doc.name) doc.name = hint.name;
+  return doc;
 }
 
 // ── Router (mounted at /api/adaptive/syllabus) ────────────────────────────────
@@ -142,4 +170,41 @@ syllabusRouter.get("/:slug/outline", async (req, res) => {
     if (!outline) return res.status(404).json({ success: false, message: "Subject not found" });
     res.json({ success: true, data: outline });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ── Admin: upload / ingest ────────────────────────────────────────────────────
+const adminOnly = requireRole(["admin"]);
+const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } }).single("file");
+
+// Manual form + CSV both resolve client-side to a full doc → ingest here.
+syllabusRouter.post("/ingest", adminOnly, async (req, res) => {
+  try {
+    const doc = req.body?.doc || req.body;
+    if (!doc?.name || !Array.isArray(doc?.topics)) return res.status(400).json({ success: false, message: "doc.name and doc.topics[] are required" });
+    const result = await ingestSubject(doc);
+    res.json({ success: true, data: result });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// PDF → extract text → LLM structure → ingest. Returns what was saved.
+syllabusRouter.post("/ingest-pdf", adminOnly, (req, res) => {
+  pdfUpload(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    try {
+      if (!req.file) return res.status(400).json({ success: false, message: "PDF file is required" });
+      const { text } = await pdfParse(req.file.buffer);
+      if (!text || text.trim().length < 50) return res.status(422).json({ success: false, message: "Could not read text from this PDF (is it scanned?)." });
+      const doc = await extractSyllabusFromText(text, { exam: req.body?.exam, name: req.body?.name });
+      const result = await ingestSubject(doc);
+      res.json({ success: true, data: { ...result, name: doc.name, exam: doc.exam, topics: doc.topics?.length ?? 0 } });
+    } catch (e) {
+      console.error("[syllabus/ingest-pdf]", e.message);
+      res.status(500).json({ success: false, message: e.message || "Extraction failed" });
+    }
+  });
+});
+
+syllabusRouter.delete("/:slug", adminOnly, async (req, res) => {
+  try { await deleteSubject(req.params.slug); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });

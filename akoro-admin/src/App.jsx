@@ -7,6 +7,7 @@ import UsersPage            from './pages/UsersPage.jsx';
 import InstructorsPage      from './pages/InstructorsPage.jsx';
 import SchoolsPage          from './pages/SchoolsPage.jsx';
 import CoursesPage          from './pages/CoursesPage.jsx';
+import SyllabusPage         from './pages/SyllabusPage.jsx';
 import BlogAdminPage        from './pages/BlogAdminPage.jsx';
 import BlogPostEditorPage   from './pages/BlogPostEditorPage.jsx';
 import CareersAdminPage     from './pages/CareersAdminPage.jsx';
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="/instructors"       element={<AdminRoute><InstructorsPage /></AdminRoute>} />
           <Route path="/schools"           element={<AdminRoute><SchoolsPage /></AdminRoute>} />
           <Route path="/courses"           element={<AdminRoute><CoursesPage /></AdminRoute>} />
+          <Route path="/syllabus"          element={<AdminRoute><SyllabusPage /></AdminRoute>} />
           <Route path="/content/blog"      element={<AdminRoute><BlogAdminPage /></AdminRoute>} />
           <Route path="/content/blog/new"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
           <Route path="/content/blog/:id"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
