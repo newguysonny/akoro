@@ -296,7 +296,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     try {
       finalReply = await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
         onDelta: appendDelta,
-        onDone: ({ reply })=>{ if(reply!=null){ ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:reply}:m)); } },
+        onDone: ({ reply, syllabus })=>{ ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),syllabus:syllabus||[]}:m)); },
       });
       if(!started){ // stream produced nothing — show fallback text
         finalReply=t('agent.fallback');
@@ -308,7 +308,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
         try {
           const data = await apiPost("/api/adaptive/chat/tutor", payload);
           finalReply = data.reply || data.response || t('agent.fallback');
-          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
+          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,syllabus:data.syllabus||[]}]);
         } catch {
           finalReply="";
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
@@ -397,6 +397,15 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
                   {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div>}
                   <div style={{ maxWidth:"78%" }}>
                     <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
+                    {!isMe&&msg.syllabus?.length>0&&(
+                      <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
+                        {msg.syllabus.map((s,i)=>(
+                          <span key={i} title={`${s.exam?s.exam+" ":""}${s.subject} — ${s.topic}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                            📘 {s.exam?`${s.exam} · `:""}{s.topic}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,textAlign:isMe?"right":"left" }}>{msg.time}</div>
                   </div>
                 </div>

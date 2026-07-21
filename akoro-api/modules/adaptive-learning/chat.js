@@ -21,7 +21,7 @@ import db from "../../db.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
-import { getSyllabusContext } from "./syllabus.js";
+import { getSyllabusContext, getSyllabusGrounding } from "./syllabus.js";
 import {
   getOrCreateStudentAgent,
   getAgentGrowthHistory,
@@ -766,8 +766,10 @@ router.post("/tutor", async (req, res) => {
       .slice(-10);
 
     // Ground the tutor in the uploaded exam syllabus when the question relates
-    // to it (semantic match; empty for off-syllabus questions).
-    const syllabusCtx = await getSyllabusContext(message.trim(), { limit: 5 }).catch(() => "");
+    // to it (semantic match; empty for off-syllabus questions). `refs` are the
+    // human-facing source chips shown under the reply.
+    const { context: syllabusCtx, refs: syllabusRefs } =
+      await getSyllabusGrounding(message.trim(), { limit: 5 }).catch(() => ({ context: "", refs: [] }));
     const systemContent = tutorSystemPrompt({ agentName, role }) +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "");
 
@@ -786,7 +788,7 @@ router.post("/tutor", async (req, res) => {
       });
       const reply = completion.choices?.[0]?.message?.content?.trim()
         || "I'm here to help with your studies — ask me anything about your subjects!";
-      return res.json({ success: true, reply, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+      return res.json({ success: true, reply, syllabus: syllabusRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
     }
 
     // ── Streaming path (SSE) ──────────────────────────────────────────────
@@ -814,7 +816,7 @@ router.post("/tutor", async (req, res) => {
         if (delta) { full += delta; send("delta", { text: delta }); }
       }
       if (!full.trim()) full = "I'm here to help with your studies — ask me anything about your subjects!";
-      send("done", { reply: full, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+      send("done", { reply: full, syllabus: syllabusRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
     } catch (streamErr) {
       console.error("[/chat/tutor stream]", streamErr);
       send("error", { error: streamErr.message });

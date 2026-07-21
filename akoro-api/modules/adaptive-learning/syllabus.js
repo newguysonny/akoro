@@ -104,12 +104,34 @@ export async function searchSyllabus(query, { subject = null, limit = 6 } = {}) 
  * chunks above a similarity threshold, so an off-syllabus question injects
  * nothing rather than forcing in weak matches.
  */
-export async function getSyllabusContext(query, { minSimilarity = 0.3, ...opts } = {}) {
+export async function getSyllabusContext(query, opts = {}) {
+  return (await getSyllabusGrounding(query, opts)).context;
+}
+
+/**
+ * Like getSyllabusContext but also returns the source references (exam, subject,
+ * topic) so the tutor can show the student a "Aligned to JAMB syllabus: <topic>"
+ * chip. Returns { context: string, refs: [{ exam, subject, topic }] }.
+ */
+export async function getSyllabusGrounding(query, { minSimilarity = 0.3, ...opts } = {}) {
   const hits = (await searchSyllabus(query, opts).catch(() => []))
     .filter((h) => (h.similarity ?? 0) >= minSimilarity);
-  if (!hits.length) return "";
-  return "Relevant exam syllabus (WAEC/JAMB/NECO) references — ground your explanation in these and name the topic where it fits:\n" +
-    hits.map((h, i) => `${i + 1}. [${h.subject_slug} › ${h.topic_title}] ${h.content}`).join("\n\n");
+  if (!hits.length) return { context: "", refs: [] };
+
+  const context = "Relevant exam syllabus (WAEC/JAMB/NECO) references — ground your explanation in these and name the topic where it fits:\n" +
+    hits.map((h, i) => `${i + 1}. [${h.exam || ""} ${h.subject_name || h.subject_slug} › ${h.topic_title}] ${h.content}`).join("\n\n");
+
+  // Deduped, human-facing source chips (top 3).
+  const seen = new Set();
+  const refs = [];
+  for (const h of hits) {
+    const key = `${h.exam}|${h.subject_slug}|${h.topic_title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push({ exam: h.exam || null, subject: h.subject_name || h.subject_slug, topic: h.topic_title });
+    if (refs.length >= 3) break;
+  }
+  return { context, refs };
 }
 
 /** Structured outline for a subject (topics → subtopics). */
