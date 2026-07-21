@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { BookMarked, Upload, FileText, Table2, PenLine, Trash2, Plus } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
+import SyllabusEditor from './syllabus/SyllabusEditor.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
 
@@ -71,6 +72,7 @@ export default function SyllabusPage() {
   const [method, setMethod] = useState('pdf');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
+  const [editSlug, setEditSlug] = useState(null);
 
   // form state
   const [exam, setExam] = useState('WASSCE');
@@ -159,13 +161,16 @@ export default function SyllabusPage() {
                     <BookMarked size={30} style={{ opacity: 0.4, marginBottom: 8 }} /><div>No syllabuses yet — add WAEC, JAMB or NECO to get started.</div>
                   </td></tr>
                 ) : subjects.map((s) => (
-                  <tr key={`${s.exam}-${s.slug}`}>
+                  <tr key={`${s.exam}-${s.slug}`} onClick={() => setEditSlug(s.slug)} style={{ cursor: 'pointer' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#FAF8F5'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = WHITE}>
                     <td style={TD}><span style={{ fontWeight: 700, fontSize: 11, padding: '2px 8px', borderRadius: 20, background: `${PURPLE}15`, color: PURPLE }}>{s.exam}</span></td>
                     <td style={{ ...TD, fontWeight: 700 }}>{s.name}</td>
                     <td style={{ ...TD, color: MUTED }}>{s.code || '—'}</td>
                     <td style={TD}>{s.topic_count ?? 0}</td>
-                    <td style={{ ...TD, textAlign: 'right' }}>
-                      <button onClick={() => remove(s.slug, s.name)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={16} /></button>
+                    <td style={{ ...TD, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: AMBER, fontSize: 12, fontWeight: 700, marginRight: 12 }}>Preview / edit</span>
+                      <button onClick={(e) => { e.stopPropagation(); remove(s.slug, s.name); }} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED, verticalAlign: 'middle' }}><Trash2 size={16} /></button>
                     </td>
                   </tr>
                 ))}
@@ -233,6 +238,10 @@ export default function SyllabusPage() {
           </Btn>
         </div>
       </Modal>
+
+      {editSlug && (
+        <SyllabusEditor slug={editSlug} show={show} onClose={() => setEditSlug(null)} onSaved={load} />
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
