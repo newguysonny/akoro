@@ -1,13 +1,15 @@
 -- =============================================================
--- seed-demo-jss11.sql  —  fully set up a management class for a demo student
+-- 2026-seed-demo-jss11.sql  —  demo group (auto-runs on deploy)
 --
--- Links stu.jss11@demo.akoro.app to a JSS 11 class in the mgmt (SIS) module and
--- gives it subjects, a period grid, a full Mon–Fri timetable, a weekly scheme of
--- work, and TODAY's classwork logs — so the after-school Assessment picker has
--- real "today's subjects & activities" to offer.
+-- Fully sets up a JSS 11 management class for the demo student
+-- stu.jss11@demo.akoro.app: section A, subjects, a period grid, a full Mon–Fri
+-- timetable, a weekly scheme of work, and TODAY's classwork logs — so the
+-- after-school Assessment picker always has real "today's subjects & activities".
 --
--- Idempotent: safe to re-run. Run in the Supabase SQL editor (or psql).
--- Change the email below to seed a different student.
+-- Runs last in the demo group (after the demo school + student are seeded).
+-- Idempotent and fail-safe: skips quietly if the user/school isn't present, so
+-- it's harmless in any environment. TODAY's classwork is rebuilt on each deploy
+-- so the demo always shows current-day activities.
 -- =============================================================
 DO $$
 DECLARE

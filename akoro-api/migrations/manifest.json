@@ -85,6 +85,7 @@
     "2026-seed-staff.sql",
     "2026-seed-doc-templates.sql",
     "2026-seed-site.sql",
-    "2026-seed-blog.sql"
+    "2026-seed-blog.sql",
+    "2026-seed-demo-jss11.sql"
   ]
 }
