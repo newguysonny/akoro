@@ -82,6 +82,7 @@ export default function SyllabusPage() {
   const [aims, setAims] = useState('');
   const [topicsText, setTopicsText] = useState('');
   const [file, setFile] = useState(null);
+  const [useVision, setUseVision] = useState(false);
 
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 4000); };
 
@@ -117,6 +118,7 @@ export default function SyllabusPage() {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('exam', exam);
+        fd.append('vision', useVision ? 'true' : 'false');
         if (name.trim()) fd.append('name', name.trim());
         const r = await fetch(`${API}/api/adaptive/syllabus/ingest-pdf`, {
           method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' }, body: fd,
@@ -124,7 +126,7 @@ export default function SyllabusPage() {
         const j = await r.json();
         if (j.code === 'scanned_pdf') { setNotice(j.message); setBusy(false); return; }
         if (!r.ok || !j.success) throw new Error(j.message || 'Extraction failed');
-        show(`Extracted “${j.data.name}” — ${j.data.topics} topics, ${j.data.subtopics} subtopics`);
+        show(`Extracted “${j.data.name}” — ${j.data.topics} topics, ${j.data.subtopics} subtopics${j.data.via === 'vision' ? ' (AI vision)' : ''}`);
       }
       setModal(false); reset(); load();
     } catch (e) { show(e.message || 'Upload failed', 'error'); }
@@ -230,6 +232,13 @@ export default function SyllabusPage() {
               Upload the official syllabus PDF. The text is extracted and structured by AI into topics, subtopics and objectives, then saved. <b>Text-based PDFs only</b> (scanned images won't extract).
             </div>
             <input type="file" accept="application/pdf,.pdf" onChange={(e) => { setFile(e.target.files?.[0] || null); setNotice(null); }} style={{ fontFamily: FONT, fontSize: 13 }} />
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, cursor: 'pointer', fontFamily: FONT }}>
+              <input type="checkbox" checked={useVision} onChange={(e) => setUseVision(e.target.checked)} style={{ marginTop: 2 }} />
+              <span style={{ fontSize: 12.5, color: INK }}>
+                <b>Use AI vision extraction</b>
+                <span style={{ color: MUTED }}> — reads the pages as images. Best for multi-column tables and scanned PDFs; slower and costs a few cents per subject. Leave off for simple text PDFs.</span>
+              </span>
+            </label>
             {notice && (
               <div style={{ marginTop: 12, padding: '11px 13px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, fontFamily: FONT }}>
                 <div style={{ fontWeight: 800, marginBottom: 3 }}>⚠️ This PDF looks scanned</div>

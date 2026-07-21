@@ -17,6 +17,9 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import db from "../../db.js";
 import { openai, llmComplete } from "../../lib/aiModel.js";
 import { requireRole } from "../auth/routes.js";
+import { renderPdfToImages } from "./pdfRender.js";
+
+const VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o";
 
 const slugify = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -156,6 +159,32 @@ export async function extractSyllabusFromText(rawText, hint = {}) {
   return doc;
 }
 
+// Vision path: rasterise the PDF pages and let a vision model read them —
+// including multi-column tables it can SEE (no column-flattening) — and read
+// scanned/image PDFs. Costs a few cents per subject; used on demand.
+export async function extractSyllabusViaVision(buffer, hint = {}) {
+  const { images, totalPages, rendered } = await renderPdfToImages(buffer, { maxPages: 15, scale: 2 });
+  if (!images.length) throw new Error("Could not render any pages from this PDF");
+
+  const content = [{
+    type: "text",
+    text: `${hint.exam ? `Exam: ${hint.exam}. ` : ""}${hint.name ? `Subject: ${hint.name}. ` : ""}These images are the pages of an exam syllabus. Read them carefully — the content is laid out as multi-column TABLES (Topic/Contents | Objectives); read each table row across its columns and keep each row's cells together. Convert everything to the JSON schema.`,
+  }];
+  for (const url of images) content.push({ type: "image_url", image_url: { url, detail: "high" } });
+
+  const resp = await openai.chat.completions.create({
+    model: VISION_MODEL, max_tokens: 4000, temperature: 0.2,
+    messages: [{ role: "system", content: EXTRACT_SYSTEM }, { role: "user", content }],
+  });
+  let s = (resp.choices?.[0]?.message?.content || "").trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i); if (fence) s = fence[1].trim();
+  const doc = JSON.parse(s);
+  if (hint.exam) doc.exam = hint.exam;
+  if (hint.name && !doc.name) doc.name = hint.name;
+  doc._vision = { totalPages, rendered };
+  return doc;
+}
+
 // ── Router (mounted at /api/adaptive/syllabus) ────────────────────────────────
 export const syllabusRouter = Router();
 
@@ -201,23 +230,34 @@ syllabusRouter.post("/ingest-pdf", adminOnly, (req, res) => {
     if (err) return res.status(400).json({ success: false, message: err.message });
     try {
       if (!req.file) return res.status(400).json({ success: false, message: "PDF file is required" });
+      const hint = { exam: req.body?.exam, name: req.body?.name };
+      const useVision = req.body?.vision === "true" || req.body?.vision === true;
+
+      // Vision path — renders pages to images so a vision model reads tables and
+      // scanned pages directly. Costs a few cents per subject; opt-in via toggle.
+      if (useVision) {
+        const doc = await extractSyllabusViaVision(req.file.buffer, hint);
+        const result = await ingestSubject(doc);
+        return res.json({ success: true, data: { ...result, name: doc.name, exam: doc.exam, topics: doc.topics?.length ?? 0, via: "vision", pages: doc._vision?.rendered } });
+      }
+
+      // Text path — fast + near-free, but can't read scanned PDFs or perfectly
+      // preserve multi-column tables.
       const parsed = await pdfParse(req.file.buffer);
       const text = parsed.text || "";
       const pages = parsed.numpages || 1;
       const clean = text.replace(/\s+/g, " ").trim();
       const perPage = clean.length / pages;
-      // A real text PDF yields hundreds of characters per page; a scanned
-      // (image-only) PDF yields almost none because it has no text layer.
       if (clean.length < 100 || perPage < 40) {
         return res.status(422).json({
           success: false, code: "scanned_pdf",
-          message: "This looks like a scanned (image) PDF — it has no readable text layer, so it can't be extracted yet. Please upload a text-based PDF (one where you can select/copy the text), or run it through an OCR tool first.",
+          message: "This looks like a scanned (image) PDF — it has no readable text layer. Turn on “AI vision extraction” to read it from the page images instead.",
           detail: { pages, chars: clean.length, chars_per_page: Math.round(perPage) },
         });
       }
-      const doc = await extractSyllabusFromText(text, { exam: req.body?.exam, name: req.body?.name });
+      const doc = await extractSyllabusFromText(text, hint);
       const result = await ingestSubject(doc);
-      res.json({ success: true, data: { ...result, name: doc.name, exam: doc.exam, topics: doc.topics?.length ?? 0 } });
+      res.json({ success: true, data: { ...result, name: doc.name, exam: doc.exam, topics: doc.topics?.length ?? 0, via: "text" } });
     } catch (e) {
       console.error("[syllabus/ingest-pdf]", e.message);
       res.status(500).json({ success: false, message: e.message || "Extraction failed" });
