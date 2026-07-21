@@ -8,12 +8,11 @@
  */
 import { createRequire } from "node:module";
 import path from "node:path";
-import { createCanvas } from "@napi-rs/canvas";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
+// @napi-rs/canvas (native binary) and pdfjs are imported LAZILY inside the
+// render function — not at module load — so a canvas/pdfjs load failure on the
+// host can never crash API startup. Only the vision-PDF feature would degrade.
 const require = createRequire(import.meta.url);
-// Resolve pdfjs's bundled standard fonts regardless of cwd.
-const STANDARD_FONTS = path.join(path.dirname(require.resolve("pdfjs-dist/package.json")), "standard_fonts") + path.sep;
 
 /**
  * @param {Buffer} buffer  PDF bytes
@@ -23,6 +22,13 @@ const STANDARD_FONTS = path.join(path.dirname(require.resolve("pdfjs-dist/packag
  * @returns {Promise<string[]>} array of PNG data URLs (one per page)
  */
 export async function renderPdfToImages(buffer, { maxPages = 15, scale = 2 } = {}) {
+  const [{ createCanvas }, { getDocument }] = await Promise.all([
+    import("@napi-rs/canvas"),
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+  ]);
+  // Resolve pdfjs's bundled standard fonts regardless of cwd.
+  const STANDARD_FONTS = path.join(path.dirname(require.resolve("pdfjs-dist/package.json")), "standard_fonts") + path.sep;
+
   const doc = await getDocument({
     data: new Uint8Array(buffer),
     standardFontDataUrl: STANDARD_FONTS,
