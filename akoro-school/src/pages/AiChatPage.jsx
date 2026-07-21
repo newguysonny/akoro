@@ -5,7 +5,8 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
+import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import { API, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
@@ -56,14 +57,31 @@ export default function AiChatPage() {
   const [ocrError, setOcrError]       = useState('');
   const [attachFile, setAttachFile]   = useState(null);
   const [voiceMode, setVoiceMode]     = useState(false);
+  const [assessOpen, setAssessOpen]   = useState(false);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
   const openAttach = (type) => {
     setAttachMenu(false);
     if (type === 'voice') { setVoiceMode(true); return; }
+    if (type === 'assessment') { setAssessOpen(true); return; }
     setAttachType(type); setAttachModal(true); setOcrText(''); setOcrError(''); setAttachFile(null);
   };
+
+  // Launch a proctored assessment on the chosen subject/topic. The proctored
+  // exam room reuses the platform assessment gateway (start_assessment).
+  const startAssessment = useCallback((opt) => {
+    setAssessOpen(false);
+    const objectives = (opt.syllabus || []).map((s) => s.topic).filter(Boolean);
+    // The proctored room is launched via a global handler the app mounts; until
+    // the room is wired into this app, surface the selection in the chat so the
+    // sync is visible and testable.
+    if (typeof window !== 'undefined' && window.__akoroStartAssessment) {
+      window.__akoroStartAssessment({ topic: opt.topic || opt.subject, subject: opt.subject, objectives });
+    } else {
+      setMessages((p) => [...p, { from: 'agent', text: `Starting a proctored assessment on **${opt.subject} — ${opt.topic || 'revision'}**. Keep your face in frame and stay alone.` }]);
+    }
+  }, []);
 
   const handleOcrUploaded = useCallback(async ({ id }) => {
     setOcrRunning(true); setOcrError('');
@@ -85,6 +103,7 @@ export default function AiChatPage() {
     { type: 'file', icon: <Upload size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
     { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
     { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
+    ...(isStudent ? [{ type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' }] : []),
   ];
 
   // A finished voice exchange (from Deepgram's ConversationText events) gets
@@ -150,6 +169,7 @@ export default function AiChatPage() {
         </button>
       </header>
 
+      {assessOpen && <AssessmentPicker onClose={() => setAssessOpen(false)} onStart={startAssessment} />}
       {voiceMode ? (
         <VoiceChatPanel onClose={() => setVoiceMode(false)} onExchange={handleVoiceExchange} />
       ) : (
