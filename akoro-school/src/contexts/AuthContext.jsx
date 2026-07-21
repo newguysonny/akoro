@@ -47,6 +47,10 @@ export function AuthProvider({ children }) {
   const [booting, setBooting] = useState(() => {
     try { return new URLSearchParams(window.location.search).has('ai'); } catch { return false; }
   });
+  // True when an AI-chat hand-off was attempted but no session resulted (e.g. the
+  // cross-site cookie didn't stick) — the AI chat shows a clear retry screen
+  // instead of a silent bounce to /signin.
+  const [handoffError, setHandoffError] = useState(false);
   const [error,   setError]   = useState(null);
 
   const isAuthenticated = !!user;
@@ -150,7 +154,8 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ token: handoff }),
       })
         .then((r) => (r.ok ? loadMe() : false))
-        .catch(() => false)
+        .then((ok) => { if (!ok) setHandoffError(true); })
+        .catch(() => setHandoffError(true))
         .finally(() => {
           params.delete('ai');
           const q = params.toString();
@@ -172,7 +177,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, error, isAuthenticated, booting,
+      user, loading, error, isAuthenticated, booting, handoffError,
       login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
