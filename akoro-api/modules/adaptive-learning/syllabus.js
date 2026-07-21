@@ -192,8 +192,20 @@ syllabusRouter.post("/ingest-pdf", adminOnly, (req, res) => {
     if (err) return res.status(400).json({ success: false, message: err.message });
     try {
       if (!req.file) return res.status(400).json({ success: false, message: "PDF file is required" });
-      const { text } = await pdfParse(req.file.buffer);
-      if (!text || text.trim().length < 50) return res.status(422).json({ success: false, message: "Could not read text from this PDF (is it scanned?)." });
+      const parsed = await pdfParse(req.file.buffer);
+      const text = parsed.text || "";
+      const pages = parsed.numpages || 1;
+      const clean = text.replace(/\s+/g, " ").trim();
+      const perPage = clean.length / pages;
+      // A real text PDF yields hundreds of characters per page; a scanned
+      // (image-only) PDF yields almost none because it has no text layer.
+      if (clean.length < 100 || perPage < 40) {
+        return res.status(422).json({
+          success: false, code: "scanned_pdf",
+          message: "This looks like a scanned (image) PDF — it has no readable text layer, so it can't be extracted yet. Please upload a text-based PDF (one where you can select/copy the text), or run it through an OCR tool first.",
+          detail: { pages, chars: clean.length, chars_per_page: Math.round(perPage) },
+        });
+      }
       const doc = await extractSyllabusFromText(text, { exam: req.body?.exam, name: req.body?.name });
       const result = await ingestSubject(doc);
       res.json({ success: true, data: { ...result, name: doc.name, exam: doc.exam, topics: doc.topics?.length ?? 0 } });

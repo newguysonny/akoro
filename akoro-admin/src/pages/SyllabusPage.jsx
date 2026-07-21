@@ -73,6 +73,7 @@ export default function SyllabusPage() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [editSlug, setEditSlug] = useState(null);
+  const [notice, setNotice] = useState(null);   // inline warning (e.g. scanned PDF)
 
   // form state
   const [exam, setExam] = useState('WASSCE');
@@ -98,7 +99,7 @@ export default function SyllabusPage() {
   };
 
   const submit = async () => {
-    setBusy(true);
+    setBusy(true); setNotice(null);
     try {
       if (method === 'manual') {
         if (!name.trim()) throw new Error('Subject name is required');
@@ -121,6 +122,7 @@ export default function SyllabusPage() {
           method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' }, body: fd,
         });
         const j = await r.json();
+        if (j.code === 'scanned_pdf') { setNotice(j.message); setBusy(false); return; }
         if (!r.ok || !j.success) throw new Error(j.message || 'Extraction failed');
         show(`Extracted “${j.data.name}” — ${j.data.topics} topics, ${j.data.subtopics} subtopics`);
       }
@@ -184,7 +186,7 @@ export default function SyllabusPage() {
         {/* method tabs */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {METHODS.map((m) => (
-            <button key={m.k} onClick={() => setMethod(m.k)}
+            <button key={m.k} onClick={() => { setMethod(m.k); setNotice(null); }}
               style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 700, border: `1.5px solid ${method === m.k ? AMBER : BORDER}`, background: method === m.k ? `${AMBER}12` : WHITE, color: method === m.k ? AMBER : MUTED }}>
               <m.icon size={15} />{m.label}
             </button>
@@ -227,7 +229,13 @@ export default function SyllabusPage() {
             <div style={{ fontSize: 12.5, color: MUTED, margin: '4px 0 10px', fontFamily: FONT, lineHeight: 1.6 }}>
               Upload the official syllabus PDF. The text is extracted and structured by AI into topics, subtopics and objectives, then saved. <b>Text-based PDFs only</b> (scanned images won't extract).
             </div>
-            <input type="file" accept="application/pdf,.pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ fontFamily: FONT, fontSize: 13 }} />
+            <input type="file" accept="application/pdf,.pdf" onChange={(e) => { setFile(e.target.files?.[0] || null); setNotice(null); }} style={{ fontFamily: FONT, fontSize: 13 }} />
+            {notice && (
+              <div style={{ marginTop: 12, padding: '11px 13px', borderRadius: 10, background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E', fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, fontFamily: FONT }}>
+                <div style={{ fontWeight: 800, marginBottom: 3 }}>⚠️ This PDF looks scanned</div>
+                {notice}
+              </div>
+            )}
           </>
         )}
 
