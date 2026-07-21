@@ -2,8 +2,11 @@
 -- 2026-syllabus-match-v2.sql
 -- Extend match_syllabus() to also return the exam + subject name (via join),
 -- so the tutor can show the student a "Aligned to JAMB syllabus: <topic>" chip.
--- CREATE OR REPLACE — idempotent, re-runs safely on every deploy.
+-- Idempotent, re-runs safely on every deploy. The return type changed (added
+-- columns), which CREATE OR REPLACE cannot do — so DROP the old function first.
 -- =============================================================
+
+DROP FUNCTION IF EXISTS match_syllabus(vector, text, integer);
 
 CREATE OR REPLACE FUNCTION match_syllabus(
   p_query_embedding vector(1536),
