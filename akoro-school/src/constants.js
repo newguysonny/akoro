@@ -8,6 +8,8 @@ export const WHITE  = "#FFFFFF";
 export const GREEN  = "#10B981";
 export const RED    = "#EF4444";
 export const PURPLE = "#7C3AED";
+export const BRAND  = "#6C3BFF";   // used by the proctored assessment room
+export const GOLD   = "#F59E0B";
 export const BLUE   = "#3B82F6";
 export const FONT   = "'DM Sans', sans-serif";
 

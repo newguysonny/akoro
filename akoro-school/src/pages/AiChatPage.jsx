@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
+import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import { API, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
@@ -58,6 +59,7 @@ export default function AiChatPage() {
   const [attachFile, setAttachFile]   = useState(null);
   const [voiceMode, setVoiceMode]     = useState(false);
   const [assessOpen, setAssessOpen]   = useState(false);
+  const [assessment, setAssessment]   = useState(null);  // active proctored exam
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
@@ -73,14 +75,7 @@ export default function AiChatPage() {
   const startAssessment = useCallback((opt) => {
     setAssessOpen(false);
     const objectives = (opt.syllabus || []).map((s) => s.topic).filter(Boolean);
-    // The proctored room is launched via a global handler the app mounts; until
-    // the room is wired into this app, surface the selection in the chat so the
-    // sync is visible and testable.
-    if (typeof window !== 'undefined' && window.__akoroStartAssessment) {
-      window.__akoroStartAssessment({ topic: opt.topic || opt.subject, subject: opt.subject, objectives });
-    } else {
-      setMessages((p) => [...p, { from: 'agent', text: `Starting a proctored assessment on **${opt.subject} — ${opt.topic || 'revision'}**. Keep your face in frame and stay alone.` }]);
-    }
+    setAssessment({ topic: opt.topic || opt.subject, subject: opt.subject, objectives });
   }, []);
 
   const handleOcrUploaded = useCallback(async ({ id }) => {
@@ -170,6 +165,11 @@ export default function AiChatPage() {
       </header>
 
       {assessOpen && <AssessmentPicker onClose={() => setAssessOpen(false)} onStart={startAssessment} />}
+      {assessment && (
+        <AssessmentRoom
+          topic={assessment.topic} subject={assessment.subject} objectives={assessment.objectives}
+          studentId={user?.id} onClose={() => setAssessment(null)} />
+      )}
       {voiceMode ? (
         <VoiceChatPanel onClose={() => setVoiceMode(false)} onExchange={handleVoiceExchange} />
       ) : (
