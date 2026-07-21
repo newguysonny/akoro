@@ -27,6 +27,7 @@ import { startLiveStream, receiveChunk, endLiveStream } from "./training/agentTr
 import marketplaceRouter         from "./marketplace/routes.js";
 import chatRouter                from "./chat.js";
 import drawRouter                from "./draw.js";
+import { syllabusRouter }        from "./syllabus.js";
 import teachingSessionRouter     from "./teachingSession.js";
 import assessmentRouter          from "./assessmentRoutes.js";
 import { setupWebSocket }        from "./websocket.js";
@@ -68,6 +69,7 @@ router.use("/teaching",      authenticateToken, teachingSessionRouter);
 
 router.use("/chat",          authenticateToken, chatRouter);
 router.use("/draw",          authenticateToken, drawRouter);
+router.use("/syllabus",      authenticateToken, syllabusRouter);
 
 // Proctored assessment review (read-only): history + instructor review queue
 // GET /api/adaptive/assessments, /assessments/review, /assessments/:id

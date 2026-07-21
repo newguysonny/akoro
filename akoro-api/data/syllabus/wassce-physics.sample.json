@@ -1,0 +1,90 @@
+{
+  "exam": "WASSCE",
+  "name": "Physics",
+  "code": "PHY",
+  "source": "SAMPLE — replace with official WAEC syllabus content before production use",
+  "aims": "To enable candidates develop an understanding of physical concepts and principles, the ability to apply them, and skills in scientific measurement, observation and experimentation.",
+  "paper_structure": {
+    "papers": [
+      { "name": "Paper 1", "type": "Objective", "questions": 50, "duration_min": 75 },
+      { "name": "Paper 2", "type": "Essay / Theory", "duration_min": 120 },
+      { "name": "Paper 3", "type": "Practical / Alternative to Practical", "duration_min": 150 }
+    ]
+  },
+  "topics": [
+    {
+      "title": "Measurement and Units",
+      "subtopics": [
+        {
+          "title": "Fundamental and derived quantities",
+          "content": "Base SI quantities (length, mass, time, current, temperature, amount of substance, luminous intensity) and units; derived quantities and units.",
+          "objectives": [
+            "Distinguish fundamental from derived quantities",
+            "State SI units of common physical quantities",
+            "Derive units of derived quantities from base units"
+          ]
+        },
+        {
+          "title": "Measurement and errors",
+          "content": "Use of instruments (metre rule, vernier calliper, micrometer screw gauge); precision, accuracy and sources of error.",
+          "objectives": [
+            "Read length measurements to appropriate precision",
+            "Identify systematic and random errors",
+            "Estimate uncertainty in a measurement"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Motion",
+      "subtopics": [
+        {
+          "title": "Equations of uniformly accelerated motion",
+          "content": "Displacement, velocity, acceleration; the equations v = u + at, s = ut + ½at², v² = u² + 2as for motion in a straight line.",
+          "objectives": [
+            "Define displacement, velocity and acceleration",
+            "Apply the equations of motion to solve problems",
+            "Interpret velocity–time and displacement–time graphs"
+          ]
+        },
+        {
+          "title": "Newton's laws of motion",
+          "content": "The three laws of motion; inertia; momentum; force as rate of change of momentum; conservation of linear momentum.",
+          "objectives": [
+            "State and explain Newton's three laws of motion",
+            "Apply F = ma to solve problems",
+            "Apply the principle of conservation of momentum to collisions"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Waves",
+      "subtopics": [
+        {
+          "title": "Properties of waves",
+          "content": "Transverse and longitudinal waves; wavelength, frequency, period, amplitude, speed; the wave equation v = fλ.",
+          "objectives": [
+            "Distinguish transverse from longitudinal waves",
+            "Define wavelength, frequency, period and amplitude",
+            "Apply v = fλ to solve problems"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Electromagnetism",
+      "subtopics": [
+        {
+          "title": "Electromagnetic induction",
+          "content": "Magnetic flux; Faraday's law and Lenz's law; e.m.f. induced when magnetic flux linked with a conductor changes; a.c. generator and transformer principle.",
+          "objectives": [
+            "State Faraday's and Lenz's laws of electromagnetic induction",
+            "Explain how an e.m.f. is induced by changing magnetic flux",
+            "Describe the working principle of the a.c. generator and transformer"
+          ]
+        }
+      ]
+    }
+  ]
+}
