@@ -132,12 +132,15 @@ const EXTRACT_SYSTEM = `You convert an exam syllabus into structured JSON. Outpu
   "paper_structure"?: object,
   "topics": [ { "title": string, "subtopics": [ { "title": string, "content"?: string, "objectives"?: string[] } ] } ] }
 
-IMPORTANT — these syllabuses are usually laid out as TABLES, often several per page. A typical WAEC/JAMB/NECO row has columns like:  TOPIC | CONTENT/SUB-TOPIC | NOTES or OBJECTIVES ("candidates should be able to…").
-The text you receive was extracted from a PDF, so table rows and columns may be flattened, interleaved or slightly out of order. Reconstruct the intended table:
-- Map the first column to the topic, the middle column(s) to the subtopic title/content, and the "should be able to…" / notes column to objectives[].
-- Keep each row's cells together — do not mix content from different rows or different tables.
-- When a topic spans several rows, group those rows as subtopics under one topic.
-- Preserve the real content faithfully and completely; do NOT invent, summarise away, or drop rows. Keep objectives as short bullet strings.`;
+IMPORTANT — these syllabuses are laid out as TABLES with columns like:  TOPICS/CONTENTS/NOTES  |  OBJECTIVES ("Candidates should be able to…"). Often there are section headings (e.g. "SECTION I: NUMBER AND NUMERATION") grouping numbered topics, each with lettered sub-points (a),(b),(c).
+
+The text was extracted from a PDF, so the TWO COLUMNS are usually FLATTENED SEPARATELY: first the whole left column (all the topics/contents for a page or section), then the whole right column (all the "Candidates should be able to:" objective lists) as a separate block — NOT interleaved row by row. You must RE-PAIR them BY ORDER: the 1st "Candidates should be able to:" block belongs to the 1st topic, the 2nd to the 2nd, and so on.
+
+Rules:
+- Map a section heading to a topic; map each numbered item (with its (a),(b),(c) points as content) to a subtopic; map the matching "Candidates should be able to:" list to that subtopic's objectives[].
+- Re-pair the separated objectives column with its topics by order. If a topic clearly has no objectives block, leave objectives empty rather than borrowing another topic's.
+- Preserve content faithfully and COMPLETELY — do NOT invent, summarise away, drop items, or merge different topics. Keep objectives as short bullet strings.
+- Also capture the syllabus aims (general objectives) into "aims" and the paper/exam scheme into "paper_structure" when present.`;
 
 export async function extractSyllabusFromText(rawText, hint = {}) {
   const text = String(rawText || "").slice(0, 40000);
