@@ -131,7 +131,13 @@ const EXTRACT_SYSTEM = `You convert an exam syllabus into structured JSON. Outpu
 { "exam": "WASSCE"|"JAMB"|"NECO"|..., "name": string, "code"?: string, "aims"?: string,
   "paper_structure"?: object,
   "topics": [ { "title": string, "subtopics": [ { "title": string, "content"?: string, "objectives"?: string[] } ] } ] }
-Preserve the syllabus's real topics/subtopics and learning objectives faithfully. Do not invent content. Keep objectives as short bullet strings.`;
+
+IMPORTANT — these syllabuses are usually laid out as TABLES, often several per page. A typical WAEC/JAMB/NECO row has columns like:  TOPIC | CONTENT/SUB-TOPIC | NOTES or OBJECTIVES ("candidates should be able to…").
+The text you receive was extracted from a PDF, so table rows and columns may be flattened, interleaved or slightly out of order. Reconstruct the intended table:
+- Map the first column to the topic, the middle column(s) to the subtopic title/content, and the "should be able to…" / notes column to objectives[].
+- Keep each row's cells together — do not mix content from different rows or different tables.
+- When a topic spans several rows, group those rows as subtopics under one topic.
+- Preserve the real content faithfully and completely; do NOT invent, summarise away, or drop rows. Keep objectives as short bullet strings.`;
 
 export async function extractSyllabusFromText(rawText, hint = {}) {
   const text = String(rawText || "").slice(0, 40000);
