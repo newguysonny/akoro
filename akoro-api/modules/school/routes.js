@@ -1382,7 +1382,11 @@ router.post("/site/ai-login/exchange", async (req, res) => {
     if (!userId) return res.status(401).json({ success: false, message: "This sign-in link expired. Please sign in again." });
     const { data: user } = await db.from("users").select("*").eq("id", userId).maybeSingle();
     if (!user || user.deleted_at || !user.is_active) return res.status(403).json({ success: false, message: "Account unavailable." });
-    await issueTokenPair(res, user);
+    // Issue the SCHOOL-portal session cookie (akoro_access_school) — the school
+    // app reads with X-Akoro-Portal: school. Without the portal arg this
+    // defaulted to the student cookie, so the app never found its session and
+    // bounced to /signin.
+    await issueTokenPair(res, user, "school");
     res.json({ success: true });
   } catch (e) {
     console.error("[ai-login exchange]", e);
