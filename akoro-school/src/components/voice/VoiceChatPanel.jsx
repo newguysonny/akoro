@@ -79,7 +79,9 @@ export default function VoiceChatPanel({ onClose, onExchange }) {
     setError('');
     try {
       // 1. Mint a Deepgram agent token + role-aware prompt from our backend.
-      const res = await fetch(`${API}/api/voice/agent-token`, { method: 'POST', credentials: 'include' });
+      // X-Akoro-Portal must match the app's session cookie (akoro_access_school);
+      // without it authenticateToken looks for the student cookie → 401.
+      const res = await fetch(`${API}/api/voice/agent-token`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
       let cfg = {}; try { cfg = await res.json(); } catch { /* non-JSON (e.g. proxy error) */ }
       if (!res.ok || !cfg.access_token) throw new Error(cfg.error || `Voice chat couldn't start (${res.status}) — it may not be configured yet.`);
 
