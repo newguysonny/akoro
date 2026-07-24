@@ -68,6 +68,11 @@ export default function WebsiteTemplatesPage() {
     try { await apiDelete(`/api/admin/website-templates/${t.id}`); setList((l) => l.filter((x) => x.id !== t.id)); show('Deleted'); }
     catch (e) { show(e.message || 'Delete failed', 'error'); }
   };
+  // Copy a built-in code default into the DB so it can be edited / set default.
+  const importDefault = async (t) => {
+    try { await apiPost('/api/admin/website-templates/import-default', { id: t.id }); show(`“${t.name}” added to the platform`); load(); }
+    catch (e) { show(e.message || 'Could not add', 'error'); }
+  };
 
   const TH = { fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', padding: '10px 14px', textAlign: 'left', fontFamily: FONT };
   const TD = { fontSize: 13, color: INK, padding: '13px 14px', fontFamily: FONT, borderBottom: `1px solid ${BORDER}` };
@@ -98,19 +103,30 @@ export default function WebsiteTemplatesPage() {
                     <td style={{ ...TD, fontWeight: 700 }}>
                       {t.name}
                       {t.isDefault && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${AMBER}22`, color: '#B45309' }}>★ Default</span>}
+                      {t.builtIn && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${MUTED}18`, color: MUTED }}>Built-in</span>}
                       {t.multiPage && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${PURPLE}18`, color: PURPLE }}>{t.pageCount} pages</span>}
                     </td>
                     <td style={{ ...TD, color: MUTED, maxWidth: 320 }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description || '—'}</span></td>
                     <td style={TD}>
-                      <button onClick={() => togglePublished(t)} title={t.isPublished ? 'Published — click to hide' : 'Hidden — click to publish'}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: t.isPublished ? GREEN : MUTED }}>
-                        {t.isPublished ? <Eye size={13} /> : <EyeOff size={13} />}{t.isPublished ? 'Published' : 'Hidden'}
-                      </button>
+                      {t.builtIn ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: MUTED }}><Eye size={13} />In gallery</span>
+                      ) : (
+                        <button onClick={() => togglePublished(t)} title={t.isPublished ? 'Published — click to hide' : 'Hidden — click to publish'}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, color: t.isPublished ? GREEN : MUTED }}>
+                          {t.isPublished ? <Eye size={13} /> : <EyeOff size={13} />}{t.isPublished ? 'Published' : 'Hidden'}
+                        </button>
+                      )}
                     </td>
                     <td style={{ ...TD, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button onClick={() => openPreview(t)} title="Preview" style={{ background: 'none', border: 'none', cursor: 'pointer', color: PURPLE, marginRight: 12 }}><Monitor size={16} /></button>
-                      {!t.isDefault && <button onClick={() => setDefault(t)} title="Set as default" style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, marginRight: 12 }}><Star size={16} /></button>}
-                      <button onClick={() => remove(t)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={16} /></button>
+                      {t.builtIn ? (
+                        <button onClick={() => importDefault(t)} title="Add to platform (to edit or set as default)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN }}><Plus size={16} /></button>
+                      ) : (
+                        <>
+                          {!t.isDefault && <button onClick={() => setDefault(t)} title="Set as default" style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, marginRight: 12 }}><Star size={16} /></button>}
+                          <button onClick={() => remove(t)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={16} /></button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

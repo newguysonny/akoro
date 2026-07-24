@@ -8,6 +8,7 @@ import multer from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { assembleMultiPageFromZip, ensureResponsiveViewport } from "../school/templateZip.js";
+import { DEFAULT_TEMPLATES, getDefaultTemplate } from "../school/defaultTemplates/index.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -24,24 +25,70 @@ const shape = (t, withHtml = false) => ({
   updatedAt: t.updated_at,
 });
 
+// A built-in code default (DEFAULT_TEMPLATES) shaped like a list row. It's
+// read-only: schools already see it in the gallery, but it has no DB row, so
+// it can't be edited / set-default / deleted until "imported" into the table.
+const shapeDefault = (t) => ({
+  id: `default:${t.id}`, name: t.name, description: t.description || "",
+  hasHtml: !!(t.html && t.html.length), importPayload: t.importPayload || null,
+  thumbnailUrl: null,
+  multiPage: !!(t.importPayload && (t.importPayload.pages?.length || 0) > 1),
+  pageCount: t.importPayload?.pages?.length || 1,
+  isDefault: false, isPublished: true, sortOrder: 0, updatedAt: null,
+  builtIn: true,
+});
+
 // GET /api/admin/website-templates
+// Returns the DB-managed platform templates PLUS the built-in code defaults
+// (read-only) so the admin sees the full gallery schools can browse — not an
+// empty table when nothing has been added to the DB yet.
 router.get("/website-templates", adminOnly, async (_req, res) => {
   try {
     const { data, error } = await db.schema("edu").from("platform_website_templates")
       .select("id, name, description, import_payload, thumbnail_url, is_default, is_published, sort_order, updated_at, html")
       .order("is_default", { ascending: false }).order("sort_order").order("created_at", { ascending: false });
     if (error) throw error;
-    res.json({ success: true, data: (data || []).map((t) => shape(t)) });
+    const rows = (data || []).map((t) => shape(t));
+    const dbNames = new Set(rows.map((t) => t.name));
+    // Built-ins whose name isn't already overridden by a DB row.
+    const builtIns = DEFAULT_TEMPLATES.filter((t) => !dbNames.has(t.name)).map(shapeDefault);
+    res.json({ success: true, data: [...rows, ...builtIns] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/admin/website-templates/:id  (full row incl. html, for preview)
+// Handles both DB rows and built-in "default:<id>" entries.
 router.get("/website-templates/:id", adminOnly, async (req, res) => {
   try {
+    if (String(req.params.id).startsWith("default:")) {
+      const def = getDefaultTemplate(String(req.params.id).slice("default:".length));
+      if (!def) return res.status(404).json({ error: "Template not found" });
+      return res.json({ success: true, data: { ...shapeDefault(def), html: def.html || "" } });
+    }
     const { data, error } = await db.schema("edu").from("platform_website_templates").select("*").eq("id", req.params.id).maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: "Template not found" });
     res.json({ success: true, data: shape(data, true) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/website-templates/import-default  { id: "default:<id>" }
+// Copy a built-in default into the DB table so it becomes editable / can be
+// set as the default. Idempotent by name.
+router.post("/website-templates/import-default", adminOnly, async (req, res) => {
+  try {
+    const raw = String(req.body?.id || "");
+    const def = getDefaultTemplate(raw.startsWith("default:") ? raw.slice("default:".length) : raw);
+    if (!def) return res.status(404).json({ error: "Built-in template not found" });
+    const { data: existing } = await db.schema("edu").from("platform_website_templates")
+      .select("*").eq("name", def.name).maybeSingle();
+    if (existing) return res.json({ success: true, data: shape(existing), alreadyImported: true });
+    const { data, error } = await db.schema("edu").from("platform_website_templates").insert({
+      name: def.name, description: def.description || "", html: ensureResponsiveViewport(def.html || ""),
+      import_payload: def.importPayload || null, is_published: true,
+    }).select("*").single();
+    if (error) { if (error.code === "23505") return res.status(409).json({ error: "A template with that name already exists" }); throw error; }
+    res.status(201).json({ success: true, data: shape(data) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
