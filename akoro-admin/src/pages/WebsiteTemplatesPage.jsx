@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutTemplate, Plus, Trash2, Star, Upload, Code2, Eye, EyeOff } from 'lucide-react';
+import { LayoutTemplate, Plus, Trash2, Star, Upload, Code2, Eye, EyeOff, Monitor, X } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, API } from '../services/api.js';
@@ -15,6 +15,7 @@ export default function WebsiteTemplatesPage() {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
+  const [preview, setPreview] = useState(null);   // { name, html } | 'loading'
 
   const show = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 3500); };
 
@@ -46,6 +47,12 @@ export default function WebsiteTemplatesPage() {
       show('Template added'); setModal(false); reset(); load();
     } catch (e) { show(e.message || 'Could not add template', 'error'); }
     finally { setBusy(false); }
+  };
+
+  const openPreview = async (t) => {
+    setPreview('loading');
+    try { const r = await apiGet(`/api/admin/website-templates/${t.id}`); const d = r?.data ?? r; setPreview({ name: d.name, html: d.html || '' }); }
+    catch (e) { setPreview(null); show(e.message || 'Could not load preview', 'error'); }
   };
 
   const setDefault = async (t) => {
@@ -100,6 +107,7 @@ export default function WebsiteTemplatesPage() {
                       </button>
                     </td>
                     <td style={{ ...TD, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => openPreview(t)} title="Preview" style={{ background: 'none', border: 'none', cursor: 'pointer', color: PURPLE, marginRight: 12 }}><Monitor size={16} /></button>
                       {!t.isDefault && <button onClick={() => setDefault(t)} title="Set as default" style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER, marginRight: 12 }}><Star size={16} /></button>}
                       <button onClick={() => remove(t)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={16} /></button>
                     </td>
@@ -125,8 +133,8 @@ export default function WebsiteTemplatesPage() {
           <textarea value={html} onChange={(e) => setHtml(e.target.value)} rows={8} placeholder="Paste the full self-contained HTML…" style={{ ...inp, fontFamily: 'monospace', fontSize: 12, resize: 'vertical' }} />
         ) : (
           <>
-            <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 8, fontFamily: FONT }}>Upload a self-contained <b>.html</b> file (inline your CSS/JS/images).</div>
-            <input type="file" accept="text/html,.html,.htm" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ fontFamily: FONT, fontSize: 13 }} />
+            <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 8, fontFamily: FONT }}>Upload a self-contained <b>.html</b> file, or a <b>.zip</b> (CSS/JS/images are inlined into one HTML automatically).</div>
+            <input type="file" accept="text/html,.html,.htm,.zip,application/zip" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ fontFamily: FONT, fontSize: 13 }} />
           </>
         )}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
@@ -134,6 +142,20 @@ export default function WebsiteTemplatesPage() {
           <Btn variant="primary" onClick={create} disabled={busy}>{busy ? 'Saving…' : 'Add template'}</Btn>
         </div>
       </Modal>
+
+      {preview && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 4000, background: 'rgba(0,0,0,.6)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#1A1A2E', color: '#fff' }}>
+            <span style={{ fontSize: 14, fontWeight: 800, fontFamily: FONT }}>Preview{preview !== 'loading' && preview.name ? ` · ${preview.name}` : ''}</span>
+            <button onClick={() => setPreview(null)} style={{ background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
+          </div>
+          <div style={{ flex: 1, background: '#fff' }}>
+            {preview === 'loading'
+              ? <div style={{ padding: 40, fontFamily: FONT, color: MUTED }}>Loading preview…</div>
+              : <iframe title="template-preview" srcDoc={preview.html} sandbox="allow-same-origin allow-scripts allow-popups" style={{ width: '100%', height: '100%', border: 'none' }} />}
+          </div>
+        </div>
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>

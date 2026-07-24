@@ -7,13 +7,16 @@ import { Router } from "express";
 import multer from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { assembleTemplateFromZip } from "../school/templateZip.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }).single("file");
 
-const shape = (t) => ({
-  id: t.id, name: t.name, description: t.description, html: t.html,
+// List rows omit the (potentially large) html; preview fetches the full row.
+const shape = (t, withHtml = false) => ({
+  id: t.id, name: t.name, description: t.description,
+  ...(withHtml ? { html: t.html } : { hasHtml: !!(t.html && t.html.length) }),
   importPayload: t.import_payload || null, thumbnailUrl: t.thumbnail_url || null,
   isDefault: t.is_default, isPublished: t.is_published, sortOrder: t.sort_order,
   updatedAt: t.updated_at,
@@ -23,9 +26,20 @@ const shape = (t) => ({
 router.get("/website-templates", adminOnly, async (_req, res) => {
   try {
     const { data, error } = await db.schema("edu").from("platform_website_templates")
-      .select("*").order("is_default", { ascending: false }).order("sort_order").order("created_at", { ascending: false });
+      .select("id, name, description, import_payload, thumbnail_url, is_default, is_published, sort_order, updated_at, html")
+      .order("is_default", { ascending: false }).order("sort_order").order("created_at", { ascending: false });
     if (error) throw error;
-    res.json({ success: true, data: (data || []).map(shape) });
+    res.json({ success: true, data: (data || []).map((t) => shape(t)) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/admin/website-templates/:id  (full row incl. html, for preview)
+router.get("/website-templates/:id", adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await db.schema("edu").from("platform_website_templates").select("*").eq("id", req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Template not found" });
+    res.json({ success: true, data: shape(data, true) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -43,19 +57,31 @@ router.post("/website-templates", adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/admin/website-templates/upload  (multipart: file=.html, name, description)
+// POST /api/admin/website-templates/upload  (multipart: file=.html or .zip)
+// A .zip is inlined into one self-contained HTML (CSS/JS/images embedded); a
+// .html/.htm is stored as-is.
 router.post("/website-templates/upload", ...adminOnly, (req, res) => {
   upload(req, res, async (err) => {
     try {
       if (err) return res.status(400).json({ error: err.message });
-      if (!req.file) return res.status(400).json({ error: "Choose an .html file" });
+      if (!req.file) return res.status(400).json({ error: "Choose an .html or .zip file" });
       const fname = (req.file.originalname || "").toLowerCase();
-      if (!fname.endsWith(".html") && !fname.endsWith(".htm") && req.file.mimetype !== "text/html")
-        return res.status(400).json({ error: "Only .html files are supported here. Paste HTML for anything else." });
-      const html = req.file.buffer.toString("utf8");
-      const name = String(req.body?.name || "").trim() || req.file.originalname.replace(/\.(html?|HTML?)$/, "");
+      const isZip = /\.zip$/i.test(fname) || req.file.mimetype === "application/zip" || req.file.mimetype === "application/x-zip-compressed";
+      const isHtml = /\.html?$/i.test(fname) || req.file.mimetype === "text/html";
+      if (!isZip && !isHtml) return res.status(400).json({ error: "Upload an .html or .zip file (paste HTML for anything else)." });
+
+      let html, importPayload = null;
+      if (isZip) {
+        try { ({ html, importPayload = null } = assembleTemplateFromZip(req.file.buffer)); }
+        catch (e) { return res.status(400).json({ error: `Could not read that .zip: ${e.message}` }); }
+      } else {
+        html = req.file.buffer.toString("utf8");
+      }
+      if (!html?.trim()) return res.status(400).json({ error: "No HTML found in the upload." });
+
+      const name = String(req.body?.name || "").trim() || req.file.originalname.replace(/\.(zip|html?)$/i, "") || "Uploaded template";
       const { data, error } = await db.schema("edu").from("platform_website_templates").insert({
-        name, description: req.body?.description || "", html, is_published: true,
+        name, description: req.body?.description || "", html, import_payload: importPayload, is_published: true,
       }).select("*").single();
       if (error) { if (error.code === "23505") return res.status(409).json({ error: "A template with that name already exists" }); throw error; }
       res.status(201).json({ success: true, data: shape(data) });
