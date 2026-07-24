@@ -58,9 +58,13 @@ export default defineConfig({
             return { manifest, warnings: [] };
           },
         ],
-        // SPA: offline navigations fall back to the cached shell (except API paths).
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        // NOTE: no `navigateFallback` — we deliberately do NOT serve the HTML
+        // shell cache-first from the precache. That was the root cause of the
+        // post-deploy blank screen: a returning visitor got the OLD cached
+        // index.html pointing at deleted chunks. Instead the navigation runtime
+        // rule below serves the document NETWORK-FIRST, so online visitors
+        // always get a fresh, self-consistent shell; offline falls back to the
+        // last good copy. The Vercel SPA rewrite handles deep links.
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         // Activate a newly-deployed SW immediately instead of leaving it stuck
@@ -73,6 +77,21 @@ export default defineConfig({
         // chunkRetry escape hatch for anything loaded mid-swap.)
         skipWaiting: true,
         runtimeCaching: [
+          {
+            // HTML documents (SPA navigations) → NetworkFirst so a returning
+            // visitor always gets the freshly-deployed shell that references the
+            // current chunk hashes. Falls back to the last cached copy only when
+            // offline / the network stalls (3s). This is what prevents the
+            // white-screen-after-deploy: the shell is never served stale.
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'akoro-html',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 2 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             // Lazy-loaded JS/CSS chunks (incl. the excluded heavy ones) → cache
             // after first fetch so previously-used features work offline too.
