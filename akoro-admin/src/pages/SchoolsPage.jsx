@@ -27,7 +27,7 @@ export default function SchoolsPage() {
   const [schools,      setSchools]      = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('pending');   // approval queue first
+  const [statusFilter, setStatusFilter] = useState('all');   // show every school by default; pending queue is one click away
   const [busy,         setBusy]         = useState(null);
   const [confirmModal, setConfirmModal] = useState({ open: false, type: '', id: null, name: '' });
   const [toast,        setToast]        = useState(null);

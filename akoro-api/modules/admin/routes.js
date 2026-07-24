@@ -199,24 +199,43 @@ router.patch("/instructors/:id/suspend", adminOnly, asyncHandler(async (req, res
 // ── Schools ──────────────────────────────────────────────────────────────────
 // Verify schools that sign up before they go live (mirrors instructor verify).
 
+const SCHOOL_BASE_COLS =
+  "id,name,logo_url,website,address,phone,is_active,verification_status,verified_at,created_at,admin_user_id";
 const SCHOOL_COLS =
-  "id,name,logo_url,website,address,phone,is_active,verification_status,verified_at,created_at," +
-  "admin:users!school_profiles_admin_user_id_fkey(id,full_name,email)";
+  SCHOOL_BASE_COLS + ",admin:users!school_profiles_admin_user_id_fkey(id,full_name,email)";
+
+// Attach the admin user object by a separate lookup — used when the embedded
+// join can't be resolved by PostgREST (stale relationship cache), so the list
+// still renders instead of failing wholesale.
+async function stitchUsers(rows, fkKey, asKey) {
+  const ids = [...new Set(rows.map((r) => r[fkKey]).filter(Boolean))];
+  if (!ids.length) return rows.map((r) => ({ ...r, [asKey]: null }));
+  const { data: users } = await db.from("users").select("id,full_name,email").in("id", ids);
+  const byId = Object.fromEntries((users || []).map((u) => [u.id, u]));
+  return rows.map((r) => ({ ...r, [asKey]: byId[r[fkKey]] || null }));
+}
 
 router.get("/schools", adminOnly, asyncHandler(async (req, res) => {
   const { search = "", status = "", limit = 50, offset = 0 } = req.query;
   const lim = Math.min(Number(limit) || 50, 200);
   const off = Number(offset) || 0;
 
-  let q = db.from("school_profiles").select(SCHOOL_COLS, { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(off, off + lim - 1);
+  const build = (cols) => {
+    let q = db.from("school_profiles").select(cols, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(off, off + lim - 1);
+    if (["pending", "verified", "rejected"].includes(status)) q = q.eq("verification_status", status);
+    if (search) q = q.or(`name.ilike.%${search}%,website.ilike.%${search}%,address.ilike.%${search}%`);
+    return q;
+  };
 
-  if (["pending", "verified", "rejected"].includes(status)) q = q.eq("verification_status", status);
-  if (search) q = q.or(`name.ilike.%${search}%,website.ilike.%${search}%,address.ilike.%${search}%`);
-
-  const { data, count, error } = await q;
-  if (error) throw error;
+  let { data, count, error } = await build(SCHOOL_COLS);
+  if (error) {
+    // Embedded join failed — fall back to a plain select + manual stitch.
+    ({ data, count, error } = await build(SCHOOL_BASE_COLS));
+    if (error) throw error;
+    data = await stitchUsers(data || [], "admin_user_id", "admin");
+  }
   ok(res, data, { total: count, limit: lim, offset: off });
 }));
 
@@ -246,21 +265,29 @@ router.patch("/schools/:id/reject", adminOnly, setSchoolStatus("rejected"));
 
 // ── Courses ──────────────────────────────────────────────────────────────────
 
-const COURSE_COLS = "id,title,description,topic,subject,status,is_published,created_at,instructor:users!instructor_id(id,full_name,email)";
+const COURSE_BASE_COLS = "id,title,description,topic,subject,status,is_published,created_at,instructor_id";
+const COURSE_COLS = COURSE_BASE_COLS + ",instructor:users!instructor_id(id,full_name,email)";
 
 router.get("/courses", adminOnly, asyncHandler(async (req, res) => {
   const { search = "", limit = 50, offset = 0 } = req.query;
   const lim = Math.min(Number(limit) || 50, 200);
   const off = Number(offset) || 0;
 
-  let q = db.from("courses").select(COURSE_COLS, { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(off, off + lim - 1);
+  const build = (cols) => {
+    let q = db.from("courses").select(cols, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(off, off + lim - 1);
+    if (search) q = q.or(`title.ilike.%${search}%,topic.ilike.%${search}%,subject.ilike.%${search}%`);
+    return q;
+  };
 
-  if (search) q = q.or(`title.ilike.%${search}%,topic.ilike.%${search}%,subject.ilike.%${search}%`);
-
-  const { data, count, error } = await q;
-  if (error) throw error;
+  let { data, count, error } = await build(COURSE_COLS);
+  if (error) {
+    // Embedded join failed — fall back to a plain select + manual stitch.
+    ({ data, count, error } = await build(COURSE_BASE_COLS));
+    if (error) throw error;
+    data = await stitchUsers(data || [], "instructor_id", "instructor");
+  }
   ok(res, data, { total: count, limit: lim, offset: off });
 }));
 
