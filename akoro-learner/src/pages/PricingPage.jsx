@@ -25,7 +25,7 @@ const H = (size = 'clamp(26px,4.4vw,46px)') => ({ fontSize: size, fontWeight: 90
 const TIERS = [
   {
     id: 'starter', name: 'Starter', tag: 'Digital Presence', icon: Globe,
-    monthly: 45000, blurb: 'Get online with a school website and an AI assistant, for less than the cost of one developer invoice.',
+    monthly: 12000, blurb: 'Get online with a school website and an AI assistant, for less than the cost of one developer invoice.',
     cta: 'Start free pilot', highlight: false,
     features: [
       'Custom school website (drag-and-drop builder)',
@@ -38,7 +38,7 @@ const TIERS = [
   },
   {
     id: 'growth', name: 'Growth', tag: 'Parent & Student Engagement', icon: Users,
-    monthly: 99000, blurb: 'Turn your website into a 24/7 engagement engine: after-school revision, a 24/7 WhatsApp agent, and teacher tools.',
+    monthly: 30000, blurb: 'Turn your website into a 24/7 engagement engine: after-school revision, a 24/7 WhatsApp agent, and teacher tools.',
     cta: 'Start free pilot', highlight: true, badge: '⭐ Best value',
     features: [
       'Everything in Starter, plus:',
@@ -52,7 +52,7 @@ const TIERS = [
   },
   {
     id: 'pro', name: 'Pro', tag: 'Enrollment & Revenue Engine', icon: TrendingUp,
-    monthly: 280000, blurb: 'Win more enrolments and collect fees faster. One extra student pays for the whole year.',
+    monthly: 80000, blurb: 'Win more enrolments and collect fees faster. One extra student pays for the whole year.',
     cta: 'Talk to sales', highlight: false,
     features: [
       'Everything in Growth, plus:',
@@ -106,7 +106,7 @@ const TACTICS = [
 
 const FAQ = [
   ['Can we pay per term instead of monthly?', 'Yes. Most schools choose termly or annual billing to match fee-collection seasons. Annual gives you two months free and waives the setup fee.'],
-  ['Is there a setup fee?', 'A one-time onboarding fee of ₦100,000–₦200,000 applies to monthly plans and is fully waived when you pay annually. It covers website setup, agent configuration and staff training.'],
+  ['Is there a setup fee?', 'A one-time onboarding fee of ₦25,000–₦50,000 applies to monthly plans and is fully waived when you pay annually. It covers website setup, agent configuration and staff training.'],
   ['What does the free pilot include?', 'A 14-day pilot on your real school data (your website, your AI assistant, and the Growth agent suite) so you can show it to your team and parents before committing.'],
   ['Do parents need to download an app?', 'No. Parents chat with your school’s AI over WhatsApp or right on your website. It’s your school’s branded assistant, not a third-party app they’ll forget.'],
   ['Can we switch tiers later?', 'Anytime. Upgrade as you grow. Your website, data and agents carry over. No migration, no downtime.'],
@@ -218,7 +218,7 @@ export default function PricingPage() {
           })}
         </div>
         <p style={{ textAlign: 'center', fontSize: 13, color: MUTED, marginTop: 22 }}>
-          Prices in Naira, excluding VAT. A one-time setup fee (₦100k–₦200k) applies to monthly plans and is <strong style={{ color: INK }}>waived on annual billing</strong>.
+          Prices in Naira, excluding VAT. A one-time setup fee (₦25k–₦50k) applies to monthly plans and is <strong style={{ color: INK }}>waived on annual billing</strong>.
         </p>
       </section>
 
@@ -227,7 +227,7 @@ export default function PricingPage() {
         <div style={{ maxWidth: 960, margin: '0 auto', background: `linear-gradient(135deg,${B},${B2})`, borderRadius: 24, padding: 'clamp(28px,4vw,44px)', color: '#fff', textAlign: 'center', boxShadow: `0 20px 60px ${B}33` }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', opacity: .85, marginBottom: 12 }}>Most schools start here</div>
           <p style={{ fontSize: 'clamp(18px,2.6vw,26px)', fontWeight: 800, fontFamily: HEAD, lineHeight: 1.4, maxWidth: 720, margin: '0 auto' }}>
-            For <span style={{ color: '#FFD86E' }}>₦99,000/month</span>, get your own school website with a 24/7 AI assistant that
+            For <span style={{ color: '#FFD86E' }}>₦30,000/month</span>, get your own school website with a 24/7 AI assistant that
             revises with students after school, runs a 24/7 WhatsApp agent for parents, and writes your lesson plans.
           </p>
           <p style={{ fontSize: 15, opacity: .9, marginTop: 14 }}>One extra enrolled student pays for the whole year.</p>
