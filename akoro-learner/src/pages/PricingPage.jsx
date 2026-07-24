@@ -1,5 +1,5 @@
 /**
- * PricingPage — school-facing pricing for the Nigerian / African market.
+ * PricingPage: school-facing pricing for the Nigerian / African market.
  * Four tiers (Starter · Growth · Pro · Enterprise), a monthly/annual toggle
  * (annual = 2 months free), a per-student alternative, a feature matrix, the
  * local-market billing tactics, FAQ and conversion CTAs. Uses the shared
@@ -25,11 +25,11 @@ const H = (size = 'clamp(26px,4.4vw,46px)') => ({ fontSize: size, fontWeight: 90
 const TIERS = [
   {
     id: 'starter', name: 'Starter', tag: 'Digital Presence', icon: Globe,
-    monthly: 45000, blurb: 'Get online with a school website and an AI assistant — for less than the cost of one developer invoice.',
+    monthly: 45000, blurb: 'Get online with a school website and an AI assistant, for less than the cost of one developer invoice.',
     cta: 'Start free pilot', highlight: false,
     features: [
       'Custom school website (drag-and-drop builder)',
-      'Basic AI chat widget — answers FAQs 24/7',
+      'Basic AI chat widget that answers FAQs 24/7',
       'Free <slug>.akoro.name.ng subdomain',
       '1 admin account',
       'Mobile-ready, installable as an app (PWA)',
@@ -38,12 +38,12 @@ const TIERS = [
   },
   {
     id: 'growth', name: 'Growth', tag: 'Parent & Student Engagement', icon: Users,
-    monthly: 99000, blurb: 'Turn your website into a 24/7 engagement engine — after-school revision, parent answers on WhatsApp, and teacher tools.',
+    monthly: 99000, blurb: 'Turn your website into a 24/7 engagement engine: after-school revision, parent answers on WhatsApp, and teacher tools.',
     cta: 'Start free pilot', highlight: true, badge: '⭐ Best value',
     features: [
       'Everything in Starter, plus:',
-      'AI Assessment Agent — students revise & get graded',
-      'Parent Portal Agent — attendance, fees & announcements',
+      'AI Assessment Agent: students revise & get graded',
+      'Parent Portal Agent: attendance, fees & announcements',
       'Teacher lesson-plan generator (5 subjects / month)',
       'WhatsApp & SMS integration for parents',
       'Up to 5 teacher accounts',
@@ -56,7 +56,7 @@ const TIERS = [
     cta: 'Talk to sales', highlight: false,
     features: [
       'Everything in Growth, plus:',
-      'AI Admissions Counselor — leads, tours & follow-ups',
+      'AI Admissions Counselor: leads, tours & follow-ups',
       'Auto-blog + social content generator',
       'Fee collection in chat (Paystack / Flutterwave)',
       'Smart attendance & retention alerts',
@@ -71,7 +71,7 @@ const TIERS = [
     cta: 'Contact us', highlight: false,
     features: [
       'Everything in Pro, plus:',
-      'White-label — rebrand the platform as your own',
+      'White-label: rebrand the platform as your own',
       'Multi-school dashboard & central oversight',
       'Custom AI training per school',
       'Dedicated success manager & support',
@@ -88,7 +88,7 @@ const MATRIX = [
   ['AI Assessment Agent (revision)', false, true, true, true],
   ['Parent Portal (attendance · fees)', false, true, true, true],
   ['WhatsApp / SMS to parents', false, true, true, true],
-  ['Teacher lesson-plan generator', '—', '5 / mo', 'Unlimited', 'Unlimited'],
+  ['Teacher lesson-plan generator', false, '5 / mo', 'Unlimited', 'Unlimited'],
   ['AI Admissions Counselor', false, false, true, true],
   ['Fee collection in chat', false, false, true, true],
   ['Auto blog + social content', false, false, true, true],
@@ -101,15 +101,15 @@ const TACTICS = [
   { icon: CalendarDays, title: 'Annual billing, 2 months free', desc: 'Pay yearly and align with your Sept & Jan fee-collection seasons. Best value, and the setup fee is waived.' },
   { icon: BadgePercent, title: 'Per-student option', desc: 'Prefer to think per head? Ask for our ₦300–₦500 / student / year plan instead of a flat monthly fee.' },
   { icon: CreditCard, title: 'Auto-debit via Paystack', desc: 'Set-and-forget monthly or termly auto-debit. No cheques, no chasing, no “the payment is coming”.' },
-  { icon: Zap, title: 'Free 14-day pilot', desc: 'Run it on your real school data first. Nigerian schools trust what they can see — so see it before you pay.' },
+  { icon: Zap, title: 'Free 14-day pilot', desc: 'Run it on your real school data first. Nigerian schools trust what they can see, so see it before you pay.' },
 ];
 
 const FAQ = [
   ['Can we pay per term instead of monthly?', 'Yes. Most schools choose termly or annual billing to match fee-collection seasons. Annual gives you two months free and waives the setup fee.'],
   ['Is there a setup fee?', 'A one-time onboarding fee of ₦100,000–₦200,000 applies to monthly plans and is fully waived when you pay annually. It covers website setup, agent configuration and staff training.'],
-  ['What does the free pilot include?', 'A 14-day pilot on your real school data — your website, your AI assistant, and the Growth agent suite — so you can show it to your team and parents before committing.'],
+  ['What does the free pilot include?', 'A 14-day pilot on your real school data (your website, your AI assistant, and the Growth agent suite) so you can show it to your team and parents before committing.'],
   ['Do parents need to download an app?', 'No. Parents chat with your school’s AI over WhatsApp or right on your website. It’s your school’s branded assistant, not a third-party app they’ll forget.'],
-  ['Can we switch tiers later?', 'Anytime. Upgrade as you grow — your website, data and agents carry over. No migration, no downtime.'],
+  ['Can we switch tiers later?', 'Anytime. Upgrade as you grow. Your website, data and agents carry over. No migration, no downtime.'],
   ['Do you support Flutterwave as well as Paystack?', 'Yes. Pro and Enterprise support both Paystack and Flutterwave for in-chat fee collection.'],
 ];
 
@@ -142,7 +142,7 @@ export default function PricingPage() {
       <section style={{ background: `linear-gradient(180deg,${TINT},#fff)`, padding: 'clamp(48px,7vw,88px) 20px 32px', textAlign: 'center' }}>
         <div style={{ maxWidth: 780, margin: '0 auto' }}>
           <div style={{ ...EYEBROW, marginBottom: 14 }}>Pricing for African schools</div>
-          <h1 style={H()}>Your school’s website, AI assistant & operations — in one price.</h1>
+          <h1 style={H()}>Your school’s website, AI assistant & operations, in one price.</h1>
           <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: MUTED, lineHeight: 1.65, maxWidth: 620, margin: '18px auto 0' }}>
             Priced for Nigerian purchasing power and cash-flow. Pay termly or annually,
             start with a free 14-day pilot on your real data, and grow as you enrol.
@@ -317,7 +317,7 @@ export default function PricingPage() {
           <Sparkles size={26} color="#FFD86E" style={{ marginBottom: 14 }} />
           <h2 style={{ ...H('clamp(22px,3.4vw,36px)'), color: '#fff' }}>See it on your school’s data first</h2>
           <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,.75)', lineHeight: 1.65, maxWidth: 540, margin: '14px auto 0' }}>
-            Start a free 14-day pilot — no card, no setup fee. If it doesn’t win over your team and your parents, walk away.
+            Start a free 14-day pilot. No card, no setup fee. If it doesn’t win over your team and your parents, walk away.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 }}>
             <Btn v="primary" sz="lg" onClick={() => navigate('/signup')}>Start free pilot <ArrowRight size={16} /></Btn>

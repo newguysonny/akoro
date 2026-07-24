@@ -1,5 +1,5 @@
 /**
- * ComparisonPage — "Why Akoro" competitive comparison for school buyers.
+ * ComparisonPage: "Why Akoro" competitive comparison for school buyers.
  * Positions Akoro against website builders, EdTech apps and school-management
  * software, with a head-to-head matrix, differentiator cards, an all-in-one
  * story and CTAs. Uses the shared marketing chrome (SiteNav / SiteFooter).
@@ -41,18 +41,18 @@ const ROWS = [
 const COMPARE = [
   {
     icon: Globe, them: 'Generic website builders (Wix, local developers)',
-    themLine: 'A pretty page that just sits there — and a developer invoice every time you need a change.',
-    us: 'Website + AI agent + school operations in one — that answers parents and revises with students, not just a brochure.',
+    themLine: 'A pretty page that just sits there, and a developer invoice every time you need a change.',
+    us: 'Website + AI agent + school operations in one, that answers parents and revises with students, not just a brochure.',
   },
   {
     icon: GraduationCap, them: 'EdTech apps (uLesson, Gradely)',
     themLine: 'A third-party app with someone else’s brand that parents download once and forget.',
-    us: 'Your school’s own branded AI, living on your website and WhatsApp — reinforcing your name every day.',
+    us: 'Your school’s own branded AI, living on your website and WhatsApp, reinforcing your name every day.',
   },
   {
     icon: LayoutGrid, them: 'School management software (SAFSMS, QuickSchools)',
-    themLine: 'Good at record-keeping behind the scenes — but invisible to prospective parents.',
-    us: 'We don’t just manage — we market your school and engage parents 24/7, then hand off records too.',
+    themLine: 'Good at record-keeping behind the scenes, but invisible to prospective parents.',
+    us: 'We don’t just manage. We market your school and engage parents 24/7, then hand off records too.',
   },
 ];
 
@@ -73,10 +73,10 @@ export default function ComparisonPage() {
       <section style={{ background: `linear-gradient(180deg,${TINT},#fff)`, padding: 'clamp(48px,7vw,88px) 20px 40px', textAlign: 'center' }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <div style={{ ...EYEBROW, marginBottom: 14 }}>Why Akoro</div>
-          <h1 style={H()}>Not a website. Not an app. Your school’s whole online presence — with a brain.</h1>
+          <h1 style={H()}>Not a website. Not an app. Your school’s whole online presence, with a brain.</h1>
           <p style={{ fontSize: 'clamp(15px,2vw,18px)', color: MUTED, lineHeight: 1.65, maxWidth: 640, margin: '18px auto 0' }}>
             Most tools do one thing. Akoro combines your website, a 24/7 AI assistant, parent engagement,
-            admissions and fee collection — built and priced for African schools.
+            admissions and fee collection, built and priced for African schools.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 }}>
             <Btn v="primary" sz="lg" onClick={() => navigate('/signup')}>Start free pilot <ArrowRight size={16} /></Btn>
@@ -126,7 +126,7 @@ export default function ComparisonPage() {
         <div style={{ maxWidth: 1040, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', margin: '20px 0 32px' }}>
             <div style={{ ...EYEBROW, marginBottom: 10 }}>How we’re different</div>
-            <h2 style={H('clamp(22px,3.2vw,34px)')}>What each option gives you — and what it doesn’t</h2>
+            <h2 style={H('clamp(22px,3.2vw,34px)')}>What each option gives you, and what it doesn’t</h2>
           </div>
           <div style={{ display: 'grid', gap: 18, gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))' }}>
             {COMPARE.map((c) => (
@@ -155,7 +155,7 @@ export default function ComparisonPage() {
           <div style={{ ...EYEBROW, marginBottom: 12 }}>One platform</div>
           <h2 style={H('clamp(22px,3.4vw,36px)')}>Replace three vendors with one</h2>
           <p style={{ fontSize: 15.5, color: MUTED, lineHeight: 1.65, maxWidth: 620, margin: '16px auto 34px' }}>
-            Stop paying a web developer, an EdTech subscription and a records system separately —
+            Stop paying a web developer, an EdTech subscription and a records system separately,
             and stop stitching them together. Akoro is one login for all of it.
           </p>
           <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', maxWidth: 720, margin: '0 auto' }}>
@@ -181,7 +181,7 @@ export default function ComparisonPage() {
           <Sparkles size={26} color="#FFD86E" style={{ marginBottom: 14 }} />
           <h2 style={{ ...H('clamp(22px,3.4vw,36px)'), color: '#fff' }}>See why schools switch to Akoro</h2>
           <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,.85)', lineHeight: 1.65, maxWidth: 540, margin: '14px auto 0' }}>
-            Start a free 14-day pilot on your real school data — website, AI assistant and parent tools included.
+            Start a free 14-day pilot on your real school data. Website, AI assistant and parent tools included.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 }}>
             <Btn v="outline" sz="lg" onClick={() => navigate('/signup')} style={{ background: '#fff', border: 'none', color: B }}>Start free pilot <ArrowRight size={16} /></Btn>
