@@ -98,6 +98,7 @@ export default function WebsiteTemplatesPage() {
                     <td style={{ ...TD, fontWeight: 700 }}>
                       {t.name}
                       {t.isDefault && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${AMBER}22`, color: '#B45309' }}>★ Default</span>}
+                      {t.multiPage && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: `${PURPLE}18`, color: PURPLE }}>{t.pageCount} pages</span>}
                     </td>
                     <td style={{ ...TD, color: MUTED, maxWidth: 320 }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description || '—'}</span></td>
                     <td style={TD}>

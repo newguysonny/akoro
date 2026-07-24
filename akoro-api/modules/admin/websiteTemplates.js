@@ -7,7 +7,7 @@ import { Router } from "express";
 import multer from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { assembleTemplateFromZip } from "../school/templateZip.js";
+import { assembleMultiPageFromZip } from "../school/templateZip.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -18,6 +18,8 @@ const shape = (t, withHtml = false) => ({
   id: t.id, name: t.name, description: t.description,
   ...(withHtml ? { html: t.html } : { hasHtml: !!(t.html && t.html.length) }),
   importPayload: t.import_payload || null, thumbnailUrl: t.thumbnail_url || null,
+  multiPage: !!(t.import_payload && (t.import_payload.pages?.length || 0) > 1),
+  pageCount: t.import_payload?.pages?.length || 1,
   isDefault: t.is_default, isPublished: t.is_published, sortOrder: t.sort_order,
   updatedAt: t.updated_at,
 });
@@ -72,8 +74,12 @@ router.post("/website-templates/upload", ...adminOnly, (req, res) => {
 
       let html, importPayload = null;
       if (isZip) {
-        try { ({ html, importPayload = null } = assembleTemplateFromZip(req.file.buffer)); }
+        // Multi-page: every .html → a page, plus a nav menu with inter-page
+        // links rewritten to slugs. Single-page zips yield one page + html.
+        try { ({ html, importPayload = null } = assembleMultiPageFromZip(req.file.buffer)); }
         catch (e) { return res.status(400).json({ error: `Could not read that .zip: ${e.message}` }); }
+        // A one-page zip needs no import payload (nothing to link).
+        if (importPayload && (importPayload.pages?.length || 0) <= 1) importPayload = null;
       } else {
         html = req.file.buffer.toString("utf8");
       }
