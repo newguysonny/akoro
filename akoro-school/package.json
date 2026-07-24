@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:chat": "vite build --config vite.chat.config.js",
     "preview": "vite preview"
   },
   "dependencies": {
