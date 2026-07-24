@@ -173,10 +173,13 @@ router.get("/dashboard/login-trends", adminOnly, asyncHandler(async (req, res) =
 // COURSE DETAILS
 // ═══════════════════════════════════════════════════════════════════════════
 
+// The catalogue is the teacher-agent marketplace (edu.marketplace_listings),
+// not the legacy public.courses table. Categories = distinct listing subjects.
+const listings = () => db.schema("edu").from("marketplace_listings");
+
 // GET /courses/categories  — must be defined BEFORE /courses/:id
 router.get("/courses/categories", adminOnly, asyncHandler(async (req, res) => {
-  const { data, error } = await db
-    .from("courses")
+  const { data, error } = await listings()
     .select("subject")
     .not("subject", "is", null);
 
@@ -186,47 +189,42 @@ router.get("/courses/categories", adminOnly, asyncHandler(async (req, res) => {
   ok(res, categories);
 }));
 
-// GET /courses/:id
+// GET /courses/:id  — listing detail. The accordion renders modules→lessons, so
+// we surface the topics covered as a single "Topics covered" module.
 router.get("/courses/:id", adminOnly, asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  // Course + instructor
-  const { data: course, error: ce } = await db
-    .from("courses")
-    .select(
-      "id,title,description,topic,subject,status,is_published,created_at,updated_at," +
-      "instructor:users!instructor_id(full_name,email)"
-    )
+  const { data: l, error: ce } = await listings()
+    .select("id,title,description,subject,topics_covered,preview_topics,price_kobo,is_active,total_students,total_sessions,teacher_id,teacher_name,style_summary,created_at,updated_at")
     .eq("id", id)
     .maybeSingle();
 
   if (ce) throw ce;
-  if (!course) return err404(res, "Course not found");
+  if (!l) return err404(res, "Course not found");
 
-  // Modules
-  const { data: modules, error: me } = await db
-    .from("course_modules")
-    .select("id,title,order_index")
-    .eq("course_id", id)
-    .order("order_index", { ascending: true });
+  const topics = (l.topics_covered && l.topics_covered.length ? l.topics_covered : l.preview_topics) || [];
+  const modules = topics.length
+    ? [{ id: "topics", title: "Topics covered", lessons: topics.map((t, i) => ({ id: `t${i}`, title: t })) }]
+    : [];
 
-  if (me) throw me;
-
-  // Lessons for each module (parallel)
-  const modulesWithLessons = await Promise.all(
-    (modules ?? []).map(async (mod) => {
-      const { data: lessons, error: le } = await db
-        .from("lessons")
-        .select("id,title,lesson_type,duration_seconds,order_index")
-        .eq("module_id", mod.id)
-        .order("order_index", { ascending: true });
-
-      if (le) throw le;
-      return { ...mod, lessons: lessons ?? [] };
-    })
-  );
-
-  ok(res, { ...course, modules: modulesWithLessons });
+  ok(res, {
+    id: l.id,
+    title: l.title,
+    description: l.description,
+    subject: l.subject,
+    topic: l.subject,
+    status: l.is_active ? "published" : "archived",
+    is_published: !!l.is_active,
+    price: (l.price_kobo ?? 0) / 100,
+    enrolled_count: l.total_students ?? 0,
+    total_sessions: l.total_sessions ?? 0,
+    instructor: { id: l.teacher_id, full_name: l.teacher_name || null },
+    instructor_name: l.teacher_name || null,
+    style_summary: l.style_summary || null,
+    created_at: l.created_at,
+    updated_at: l.updated_at,
+    modules,
+  });
 }));
 
 // POST /courses/:id/modules

@@ -212,7 +212,7 @@ export default function CoursesPage() {
                       {(c.enrolled_count ?? c.students_enrolled ?? 0).toLocaleString()}
                     </td>
                     <td style={{ ...TD, fontWeight: 600 }}>
-                      {c.price != null ? `$${Number(c.price).toFixed(2)}` : '—'}
+                      {c.price != null ? `₦${Number(c.price).toLocaleString('en-NG')}` : '—'}
                     </td>
                     <td style={TD}><StatusPill status={statusVal(c)} /></td>
                     <td style={{ ...TD, color: MUTED }}>{fmtDate(c.created_at)}</td>
@@ -264,11 +264,11 @@ export default function CoursesPage() {
           Set the price for <strong style={{ color: INK }}>{pricingModal.title}</strong>
         </p>
         <Inp
-          label="Price (USD)"
+          label="Price (₦)"
           type="number"
           min="0"
-          step="0.01"
-          placeholder="e.g. 29.99"
+          step="100"
+          placeholder="e.g. 5000"
           value={pricingModal.price}
           onChange={e => setPricingModal(prev => ({ ...prev, price: e.target.value }))}
         />

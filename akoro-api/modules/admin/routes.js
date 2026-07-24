@@ -264,31 +264,49 @@ router.patch("/schools/:id/verify", adminOnly, setSchoolStatus("verified"));
 router.patch("/schools/:id/reject", adminOnly, setSchoolStatus("rejected"));
 
 // ── Courses ──────────────────────────────────────────────────────────────────
+// The platform's catalogue is the teacher-agent marketplace (edu.marketplace_
+// listings), NOT the legacy public.courses table (which the app never writes
+// to). Admin "Courses" therefore reads/moderates marketplace listings, mapped
+// to the shape the admin UI expects (instructor / enrolled / price / status).
 
-const COURSE_BASE_COLS = "id,title,description,topic,subject,status,is_published,created_at,instructor_id";
-const COURSE_COLS = COURSE_BASE_COLS + ",instructor:users!instructor_id(id,full_name,email)";
+const listings = () => db.schema("edu").from("marketplace_listings");
+const LISTING_COLS =
+  "id,title,description,subject,topics_covered,price_kobo,is_active,total_students,total_sessions,teacher_id,teacher_name,created_at,updated_at";
+
+// Map a marketplace listing → the admin course row shape.
+const mapListing = (l) => ({
+  id: l.id,
+  title: l.title,
+  description: l.description,
+  subject: l.subject,
+  topic: l.subject,
+  instructor_id: l.teacher_id,
+  instructor_name: l.teacher_name || null,
+  instructor: { id: l.teacher_id, full_name: l.teacher_name || null },
+  enrolled_count: l.total_students ?? 0,
+  total_sessions: l.total_sessions ?? 0,
+  price: (l.price_kobo ?? 0) / 100,
+  status: l.is_active ? "published" : "archived",
+  is_published: !!l.is_active,
+  created_at: l.created_at,
+  updated_at: l.updated_at,
+});
 
 router.get("/courses", adminOnly, asyncHandler(async (req, res) => {
-  const { search = "", limit = 50, offset = 0 } = req.query;
+  const { search = "", status = "", limit = 50, offset = 0 } = req.query;
   const lim = Math.min(Number(limit) || 50, 200);
   const off = Number(offset) || 0;
 
-  const build = (cols) => {
-    let q = db.from("courses").select(cols, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(off, off + lim - 1);
-    if (search) q = q.or(`title.ilike.%${search}%,topic.ilike.%${search}%,subject.ilike.%${search}%`);
-    return q;
-  };
+  let q = listings().select(LISTING_COLS, { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(off, off + lim - 1);
+  if (status === "published") q = q.eq("is_active", true);
+  else if (status === "archived" || status === "draft") q = q.eq("is_active", false);
+  if (search) q = q.or(`title.ilike.%${search}%,subject.ilike.%${search}%,description.ilike.%${search}%`);
 
-  let { data, count, error } = await build(COURSE_COLS);
-  if (error) {
-    // Embedded join failed — fall back to a plain select + manual stitch.
-    ({ data, count, error } = await build(COURSE_BASE_COLS));
-    if (error) throw error;
-    data = await stitchUsers(data || [], "instructor_id", "instructor");
-  }
-  ok(res, data, { total: count, limit: lim, offset: off });
+  const { data, count, error } = await q;
+  if (error) throw error;
+  ok(res, (data || []).map(mapListing), { total: count, limit: lim, offset: off });
 }));
 
 router.patch("/courses/:id",
@@ -297,33 +315,35 @@ router.patch("/courses/:id",
   body("is_published").optional().isBoolean(),
   asyncHandler(async (req, res) => {
     if (!validate(req, res)) return;
-    const allowed = ["status", "is_published", "title", "description"];
-    const patch = Object.fromEntries(
-      Object.entries(req.body).filter(([k]) => allowed.includes(k))
-    );
+    const patch = {};
+    if (req.body.title != null) patch.title = req.body.title;
+    if (req.body.description != null) patch.description = req.body.description;
+    if (req.body.price != null && !Number.isNaN(Number(req.body.price)))
+      patch.price_kobo = Math.round(Number(req.body.price) * 100);
+    if (req.body.is_published != null) patch.is_active = !!req.body.is_published;
+    else if (req.body.status != null)
+      patch.is_active = ["published", "approved", "live", "active"].includes(req.body.status);
     if (!Object.keys(patch).length) return err400(res, "No valid fields to update");
 
-    const { data, error } = await db.from("courses")
+    const { data, error } = await listings()
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", req.params.id)
-      .select(COURSE_COLS)
+      .select(LISTING_COLS)
       .maybeSingle();
     if (error) throw error;
     if (!data) return err404(res, "Course not found");
 
     // Notify the instructor of a moderation decision.
-    if (data.instructor?.id) {
-      if (patch.is_published === true || patch.status === "approved" || patch.status === "published")
-        notify.courseApproved({ instructorId: data.instructor.id, courseTitle: data.title });
-      else if (patch.status === "rejected" || patch.is_published === false)
-        notify.courseRejected({ instructorId: data.instructor.id, courseTitle: data.title, reason: req.body.reason });
+    if (data.teacher_id) {
+      if (patch.is_active === true) notify.courseApproved({ instructorId: data.teacher_id, courseTitle: data.title });
+      else if (patch.is_active === false) notify.courseRejected({ instructorId: data.teacher_id, courseTitle: data.title, reason: req.body.reason });
     }
-    ok(res, data);
+    ok(res, mapListing(data));
   })
 );
 
 router.delete("/courses/:id", adminOnly, asyncHandler(async (req, res) => {
-  const { error } = await db.from("courses").delete().eq("id", req.params.id);
+  const { error } = await listings().delete().eq("id", req.params.id);
   if (error) throw error;
   ok(res, { deleted: true });
 }));
