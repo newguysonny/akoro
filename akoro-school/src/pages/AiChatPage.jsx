@@ -107,13 +107,33 @@ export default function AiChatPage() {
     setMessages((p) => [...p, { from: role === 'assistant' ? 'agent' : 'me', text: content }]);
   }, []);
 
+  // Route the school website they came from → the concierge resolves the school.
+  const siteHost = useRef(undefined);
+  if (siteHost.current === undefined) {
+    try { const o = sessionStorage.getItem(SITE_KEY); siteHost.current = o ? new URL(o).hostname : ''; } catch { siteHost.current = ''; }
+  }
+  // Decision cache: 'parent' → concierge (fees/child/calendar); 'tutor' → study tutor.
+  const lane = useRef(undefined);
+
   const ask = useCallback(async (body) => {
     if (!body || busy) return;
     setBusy(true);
     const next = [...messages, { from: 'me', text: body }];
     setMessages(next);
+    const history = next.map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text })).slice(-8);
     try {
-      const history = next.map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text })).slice(-8);
+      // Parents get the concierge; try it until we learn the caller isn't a parent.
+      if (lane.current !== 'tutor') {
+        try {
+          const c = await apiPost('/api/school/ai/concierge', { host: siteHost.current, message: body, history });
+          if (c.role === 'parent' && c.reply != null) {
+            lane.current = 'parent';
+            setMessages((p) => [...p, { from: 'agent', text: c.reply }]);
+            return;
+          }
+          lane.current = 'tutor';   // not a parent — study tutor from here on
+        } catch { lane.current = 'tutor'; }
+      }
       const data = await apiPost('/api/adaptive/chat/tutor', {
         message: body, history, agentName: 'Akoro', role: isStudent ? 'student' : 'instructor',
       });
