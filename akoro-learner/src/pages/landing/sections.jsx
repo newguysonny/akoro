@@ -460,6 +460,7 @@ function Outcomes() {
 
 /* ══════════════ PRICING ══════════════ */
 function Pricing() {
+  const navigate = useNavigate();
   const [yearly, setYearly]   = useState(false);
   const [tab, setTab]          = useState('individual');
 
@@ -596,6 +597,14 @@ function Pricing() {
           <div style={{ marginTop: 24, textAlign: 'center', padding: '16px 20px', borderRadius: 16, background: '#fff', border: '1px solid #EDE8E1', fontSize: 14, color: '#6B6B80' }}>
             <Shield size={14} style={{ display: 'inline', marginRight: 6, color: B }}/><strong style={{ color: '#1A1A2E' }}>30-day money-back guarantee</strong> — if Akoro doesn't improve your scores, we'll refund every penny.{' '}
             <span style={{ color: B, cursor: 'pointer', textDecoration: 'underline' }}>Financial aid available</span> for students in need.
+          </div>
+        </Reveal>
+
+        <Reveal>
+          <div style={{ marginTop: 16, textAlign: 'center' }}>
+            <button onClick={() => navigate('/pricing')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14.5, fontWeight: 700, color: B }}>
+              Running a school? See school website & AI plans →
+            </button>
           </div>
         </Reveal>
       </div>

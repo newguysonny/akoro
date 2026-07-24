@@ -55,11 +55,10 @@ const ChromeStyles = () => (
 function Drawer({ open, onClose, onNavLink }) {
   const navigate = useNavigate();
   const nav = [
-    { icon: BookOpen,      label: 'Courses',      id: '#courses' },
-    { icon: Zap,           label: 'Features',     id: '#features' },
+    { icon: BookOpen,      label: 'Features',     id: '#features' },
     { icon: Map,           label: 'How It Works', id: '#how-it-works' },
-    { icon: TrendingUp,    label: 'Outcomes',     id: '#outcomes' },
-    { icon: DollarSign,    label: 'Pricing',      id: '#pricing' },
+    { icon: TrendingUp,    label: 'Why Akoro',    to: '/compare' },
+    { icon: DollarSign,    label: 'Pricing',      to: '/pricing' },
     { icon: Users,         label: 'Instructors',  id: '#instructors' },
     { icon: MessageSquare, label: 'FAQ',          id: '#faq' },
   ];
@@ -75,8 +74,8 @@ function Drawer({ open, onClose, onNavLink }) {
           <button onClick={onClose} style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#F5F3EE', border: 'none', cursor: 'pointer', color: '#6B6B80' }}><X size={16}/></button>
         </div>
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-          {nav.map(({ icon: Icon, label, id }) => (
-            <button key={label} onClick={() => { onClose(); onNavLink(id); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: '#6B6B80', textAlign: 'left', transition: 'all .18s', fontFamily: 'inherit' }}
+          {nav.map(({ icon: Icon, label, id, to }) => (
+            <button key={label} onClick={() => { onClose(); to ? navigate(to) : onNavLink(id); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: 500, color: '#6B6B80', textAlign: 'left', transition: 'all .18s', fontFamily: 'inherit' }}
               onMouseEnter={e => { e.currentTarget.style.background = '#F5F3EE'; e.currentTarget.style.color = '#1A1A2E'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6B6B80'; }}>
               <Icon size={15}/>{label}
@@ -118,8 +117,8 @@ export function SiteNav() {
   const navLinks = [
     { label: 'Features',     id: '#features' },
     { label: 'How it Works', id: '#how-it-works' },
-    { label: 'Outcomes',     id: '#outcomes' },
-    { label: 'Pricing',      id: '#pricing' },
+    { label: 'Why Akoro',    to: '/compare' },
+    { label: 'Pricing',      to: '/pricing' },
     { label: 'FAQ',          id: '#faq' },
   ];
 
@@ -133,7 +132,7 @@ export function SiteNav() {
         </div>
         <nav className="sc-nav-links" style={{ gap: 4, alignItems: 'center' }}>
           {navLinks.map(l => (
-            <button key={l.label} onClick={() => goSection(l.id)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#6B6B80', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", transition: 'all .2s' }}
+            <button key={l.label} onClick={() => l.to ? navigate(l.to) : goSection(l.id)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#6B6B80', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", transition: 'all .2s' }}
               onMouseEnter={e => { e.currentTarget.style.color = '#1A1A2E'; e.currentTarget.style.background = '#F5F2EC'; }}
               onMouseLeave={e => { e.currentTarget.style.color = '#6B6B80'; e.currentTarget.style.background = 'transparent'; }}>
               {l.label}
@@ -340,8 +339,8 @@ export function SiteFooter() {
   const navigate = useNavigate();
   const go = (href) => { if (href.startsWith('/')) navigate(href); };
   const cols = [
-    { title: 'Product',     links: [['How it works','/student-info'],['For students','/student-info'],['For instructors','/instructor-info'],['Browse courses','/signup'],['Agent Battles','/student-info']] },
-    { title: 'For Schools', links: [['Schools overview','/school-info'],['Pilot programme','/school-info'],['Data & privacy','/privacy'],['Talk to sales','/contact'],['Become a partner','/partners']] },
+    { title: 'Product',     links: [['How it works','/student-info'],['For students','/student-info'],['For instructors','/instructor-info'],['Pricing','/pricing'],['Browse courses','/signup']] },
+    { title: 'For Schools', links: [['Schools overview','/school-info'],['Pricing','/pricing'],['Why Akoro','/compare'],['Pilot programme','/school-info'],['Talk to sales','/contact'],['Become a partner','/partners']] },
     { title: 'Company',     links: [['About Us','/about'],['Blog','/blog'],['Careers','/careers'],['Press','/contact'],['Contact','/contact'],['Partners','/partners'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
   ];
   const socials = [

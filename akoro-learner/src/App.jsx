@@ -29,6 +29,8 @@ const DrawPage           = lazyWithRetry(() => import('./pages/DrawPage.jsx'));
 const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx'));
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
 const AboutPage          = lazyWithRetry(() => import('./pages/AboutPage.jsx'));
+const PricingPage        = lazyWithRetry(() => import('./pages/PricingPage.jsx'));
+const ComparisonPage     = lazyWithRetry(() => import('./pages/ComparisonPage.jsx'));
 const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx'));
 const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
 const BlogPage           = lazyWithRetry(() => import('./pages/BlogPage.jsx'));
@@ -114,6 +116,8 @@ function AppRoutes() {
       <Route path="/school-info"    element={<SchoolInfoPage />}/>
         
         
+      <Route path="/pricing"  element={<PricingPage />}/>
+      <Route path="/compare"  element={<ComparisonPage />}/>
       <Route path="/about"    element={<AboutPage />}/>
       <Route path="/contact"  element={<ContactPage />}/>
       <Route path="/careers"  element={<CareersPage />}/>
