@@ -1025,7 +1025,7 @@ function aiChatWidgetHtml(apiOrigin) {
   var root=document.getElementById('ak-ai-root'); if(!root) return;
   var css='#ak-ai-btn{position:fixed;right:22px;bottom:22px;z-index:2147483000;width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#E07A2C,#D4651E);box-shadow:0 8px 24px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;transition:transform .15s}#ak-ai-btn:hover{transform:scale(1.06)}#ak-ai-ovl{position:fixed;inset:0;z-index:2147483001;background:rgba(10,10,14,.55);display:none;align-items:center;justify-content:center;padding:18px}#ak-ai-ovl.open{display:flex}#ak-ai-card{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:26px 24px;font-family:Inter,system-ui,sans-serif;box-shadow:0 24px 60px rgba(0,0,0,.35)}#ak-ai-card h3{margin:0 0 4px;font-size:18px;font-weight:800;color:#1A1A2E}#ak-ai-card p{margin:0 0 14px;font-size:12.5px;color:#6B6B80;line-height:1.55}.ak-ai-roles{display:flex;gap:6px;margin-bottom:14px}.ak-ai-roles button{flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid #E5E5EA;background:#fff;font-size:12px;font-weight:700;color:#6B6B80;cursor:pointer;font-family:inherit}.ak-ai-roles button.on{border-color:#E07A2C;background:#FDF3EB;color:#B45A16}.ak-ai-in{width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1.5px solid #E5E5EA;font-size:13.5px;margin-bottom:10px;font-family:inherit;outline:none}.ak-ai-in:focus{border-color:#E07A2C}#ak-ai-err{display:none;font-size:12px;color:#DC3545;margin:-2px 0 10px}#ak-ai-go{width:100%;padding:12px;border-radius:11px;border:none;background:linear-gradient(135deg,#E07A2C,#D4651E);color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}#ak-ai-x{float:right;border:none;background:none;font-size:18px;color:#9A9AA5;cursor:pointer;margin:-6px -6px 0 0}';
   var st=document.createElement('style');st.textContent=css;document.head.appendChild(st);
-  root.innerHTML='<button id="ak-ai-btn" aria-label="AI Chat" title="AI Chat"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg></button><div id="ak-ai-ovl"><div id="ak-ai-card"><button id="ak-ai-x" aria-label="Close">×</button><h3>AI Study Assistant</h3><p>Sign in to chat with your school’s AI assistant.</p><div class="ak-ai-roles"><button data-r="student" class="on">Student</button><button data-r="teacher">Teacher</button><button data-r="admin">Admin</button></div><input class="ak-ai-in" id="ak-ai-em" type="email" placeholder="Email" autocomplete="email"/><input class="ak-ai-in" id="ak-ai-pw" type="password" placeholder="Password" autocomplete="current-password"/><div id="ak-ai-err"></div><button id="ak-ai-go">Sign in → AI Chat</button></div></div>';
+  root.innerHTML='<button id="ak-ai-btn" aria-label="AI Chat" title="AI Chat"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg></button><div id="ak-ai-ovl"><div id="ak-ai-card"><button id="ak-ai-x" aria-label="Close">×</button><h3>AI Study Assistant</h3><p>Sign in to chat with your school’s AI assistant.</p><div class="ak-ai-roles"><button data-r="student" class="on">Student</button><button data-r="parent">Parent</button><button data-r="teacher">Teacher</button><button data-r="admin">Admin</button></div><input class="ak-ai-in" id="ak-ai-em" type="email" placeholder="Email" autocomplete="email"/><input class="ak-ai-in" id="ak-ai-pw" type="password" placeholder="Password" autocomplete="current-password"/><div id="ak-ai-err"></div><button id="ak-ai-go">Sign in → AI Chat</button><div class="ak-ai-guest">Just have questions? <a id="ak-ai-guest-link" href="#">Ask as a guest →</a></div></div></div>';
   var ovl=document.getElementById('ak-ai-ovl');
   function open(){ovl.classList.add('open');}
   function close(){ovl.classList.remove('open');}
@@ -1054,6 +1054,8 @@ function aiChatWidgetHtml(apiOrigin) {
       })
       .catch(function(){err.textContent='Could not reach the server. Please try again.';err.style.display='block';btn.disabled=false;btn.textContent='Sign in → AI Chat';});
   });
+  var gl=document.getElementById('ak-ai-guest-link');
+  if(gl){gl.addEventListener('click',function(e){e.preventDefault();window.location.href='${SCHOOL_PORTAL_URL}/ai-guest?host='+encodeURIComponent(location.hostname);});}
   if(/^\\/ai-chat\\/?$/.test(window.location.pathname)) open();
 })();</script>`;
 }
@@ -1318,7 +1320,7 @@ router.get("/site/by-host", async (req, res) => {
 // widget can tell the visitor exactly what went wrong. On success it issues
 // the shared session cookie and every role opens the SAME school AI chat
 // (the school portal's /chat).
-const roleLabel = { admin: "an admin", teacher: "a teacher", student: "a student" };
+const roleLabel = { admin: "an admin", teacher: "a teacher", student: "a student", parent: "a parent" };
 router.post("/site/ai-login", async (req, res) => {
   try {
     const { host, email, password, role: wantRole } = req.body || {};
@@ -1348,8 +1350,15 @@ router.post("/site/ai-login", async (req, res) => {
         if (cs) actualRole = "student";
       }
     }
+    // Parent: their email is a guardian on a student in this school.
     if (!actualRole) {
-      return res.status(403).json({ success: false, code: "not_member", message: `This account isn't a student, teacher or admin at ${school.name}. Only members of the school can use its AI assistant.` });
+      const { data: kid } = await db.schema("mgmt").from("students").select("id")
+        .eq("school_id", school.id).eq("status", "active")
+        .ilike("guardian_email", String(email || "").toLowerCase().trim()).limit(1).maybeSingle();
+      if (kid) actualRole = "parent";
+    }
+    if (!actualRole) {
+      return res.status(403).json({ success: false, code: "not_member", message: `This account isn't a student, teacher, admin or parent at ${school.name}. Only members of the school can use its AI assistant.` });
     }
 
     // If they picked a tab that doesn't match their membership, say so.
