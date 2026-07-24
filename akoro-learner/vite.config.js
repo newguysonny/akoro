@@ -63,6 +63,15 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
+        // Activate a newly-deployed SW immediately instead of leaving it stuck
+        // in "waiting" behind the old one. Without this, a tab opened before a
+        // deploy keeps being served the OLD cached index.html (which points at
+        // deleted chunks) forever → the blank white screen that only cleared on
+        // the raw *.vercel.app origin. With skipWaiting + clientsClaim the fresh
+        // shell takes over on the next navigation, so reloads recover on their
+        // own. (No forced reload — the running page keeps its JS; pair with the
+        // chunkRetry escape hatch for anything loaded mid-swap.)
+        skipWaiting: true,
         runtimeCaching: [
           {
             // Lazy-loaded JS/CSS chunks (incl. the excluded heavy ones) → cache
