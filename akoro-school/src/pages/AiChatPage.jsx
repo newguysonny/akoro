@@ -111,9 +111,13 @@ export default function AiChatPage() {
   }, []);
 
   const ATTACH_ITEMS = [
-    { type: 'ocr', icon: <Camera size={15} color={GREEN} />,   label: 'Photo / Image OCR', desc: 'Scan & extract text' },
-    { type: 'file', icon: <Upload size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
-    { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
+    // OCR / file / document uploads are for students only — teachers and parents
+    // don't need them.
+    ...(isStudent ? [
+      { type: 'ocr', icon: <Camera size={15} color={GREEN} />,   label: 'Photo / Image OCR', desc: 'Scan & extract text' },
+      { type: 'file', icon: <Upload size={15} color={PURPLE} />, label: 'Upload file',        desc: 'PDF, Word, Excel…' },
+      { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
+    ] : []),
     { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
     ...(isStudent ? [{ type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' }] : []),
     ...(isTeacher ? [
