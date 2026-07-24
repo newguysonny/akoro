@@ -13,11 +13,13 @@
  */
 import { Router } from "express";
 import db from "../../db.js";
-import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { authenticateToken } from "../auth/routes.js";
+import { openai, OPENAI_MODEL, llmComplete } from "../../lib/aiModel.js";
+import { authenticateToken, requireRole } from "../auth/routes.js";
 import { resolveSchoolByHost } from "./tenant.js";
+import { getSyllabusContext } from "../adaptive-learning/syllabus.js";
 
 const router = Router();
+const TEACHER_ROLES = ["instructor", "teacher", "admin"];
 const lc = (s) => String(s || "").toLowerCase().trim();
 
 // ── Determine the caller's role within a school ───────────────────────────────
@@ -172,6 +174,55 @@ router.post("/ai/concierge", authenticateToken, async (req, res) => {
     const out = await conciergeChat({ role, school, user, message: message.trim(), history });
     res.json({ success: true, role, ...out });
   } catch (e) { console.error("[concierge]", e); res.status(500).json({ error: "Something went wrong." }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 3 — Teacher lesson tools (lesson plan · worksheet · quiz)
+// ═══════════════════════════════════════════════════════════════════════════
+const LESSON_SYSTEM = {
+  lesson_plan: `You are an expert teacher's assistant. Produce a clear, classroom-ready LESSON PLAN in Markdown with: Topic, Class, Duration, Learning Objectives (bullet list), Materials, Introduction/Starter, Main Activities (step-by-step), Differentiation (support + challenge), Assessment/Check for understanding, and Plenary/Summary. Be practical and age-appropriate.`,
+  worksheet: `You are an expert teacher's assistant. Produce a student WORKSHEET in Markdown: a short intro, then 8–12 progressively harder questions (mix of recall, application and one challenge), clearly numbered. Add an "Answer Key" section at the end. Age-appropriate.`,
+  quiz: `You are an expert teacher's assistant. Produce a QUIZ in Markdown: 10 multiple-choice questions (A–D) on the topic, then an "Answers" section listing the correct option per question. Keep questions clear and unambiguous.`,
+};
+router.post("/ai/lesson", authenticateToken, requireRole(TEACHER_ROLES), async (req, res) => {
+  try {
+    const type = ["lesson_plan", "worksheet", "quiz"].includes(req.body?.type) ? req.body.type : "lesson_plan";
+    const topic = String(req.body?.topic || "").trim();
+    const subject = String(req.body?.subject || "").trim();
+    const className = String(req.body?.class || req.body?.className || "").trim();
+    if (!topic) return res.status(400).json({ error: "topic is required" });
+
+    // Ground in the exam syllabus where relevant.
+    const syllabus = await getSyllabusContext(`${subject} ${topic}`.trim(), { limit: 3 }).catch(() => "");
+    const prompt = `Create a ${type.replace("_", " ")} for:\nSubject: ${subject || "General"}\nClass: ${className || "Secondary"}\nTopic: ${topic}` +
+      (syllabus ? `\n\nAlign with these syllabus references where relevant:\n${syllabus}` : "");
+    const content = await llmComplete(prompt, { system: LESSON_SYSTEM[type], maxTokens: 1800, temperature: 0.5 });
+    res.json({ success: true, data: { type, topic, subject, content } });
+  } catch (e) { console.error("[ai/lesson]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 4 — Website builder auto-content (newsletter · recap · social · event)
+// ═══════════════════════════════════════════════════════════════════════════
+const CONTENT_SYSTEM = {
+  newsletter: `You write warm, professional school NEWSLETTERS in Markdown: a friendly headline, 3–4 short sections (highlights, upcoming events, a note from the school), and a closing. Community-facing and positive.`,
+  event_recap: `You write an upbeat EVENT RECAP / news post in Markdown for a school website: a catchy title, 2–3 short paragraphs celebrating what happened, and a closing line. SEO-friendly, warm.`,
+  social_post: `You write short, engaging SOCIAL MEDIA posts (Instagram/Facebook) for a school. Return 2–3 caption options, each 2–4 lines with a few relevant hashtags. Friendly and shareable.`,
+  event_page: `You write an EVENT LANDING PAGE in Markdown: an exciting title, a short hero blurb, "What to expect" bullets, date/time/venue placeholders, and a clear call-to-action to register. Concise and inviting.`,
+};
+router.post("/ai/website-content", authenticateToken, requireRole(TEACHER_ROLES), async (req, res) => {
+  try {
+    const type = ["newsletter", "event_recap", "social_post", "event_page"].includes(req.body?.type) ? req.body.type : "newsletter";
+    const brief = String(req.body?.brief || req.body?.prompt || "").trim();
+    if (!brief) return res.status(400).json({ error: "Tell me what it's about" });
+
+    const { data: school } = await db.from("school_profiles").select("name, description").eq("id", req.body?.schoolId || "00000000-0000-0000-0000-000000000000").maybeSingle();
+    const schoolName = school?.name || "our school";
+    const content = await llmComplete(`School: ${schoolName}.\nWrite the ${type.replace("_", " ")} about: ${brief}`, {
+      system: CONTENT_SYSTEM[type], maxTokens: 1200, temperature: 0.7,
+    });
+    res.json({ success: true, data: { type, content } });
+  } catch (e) { console.error("[ai/website-content]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
 });
 
 export default router;

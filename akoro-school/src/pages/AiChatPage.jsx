@@ -8,6 +8,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
+import TeacherToolSheet from './ai-chat/TeacherToolSheet.jsx';
 import { API, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
@@ -21,6 +22,7 @@ const SITE_KEY = 'akoro_ai_return';
 export default function AiChatPage() {
   const { user } = useAuth();
   const isStudent = user?.role === 'student';
+  const isTeacher = ['instructor', 'teacher', 'admin'].includes(user?.role);
 
   // Remember the school website that opened this chat so "Sign out" returns
   // there instead of the portal's /signin. The referrer is captured once on
@@ -60,6 +62,7 @@ export default function AiChatPage() {
   const [voiceMode, setVoiceMode]     = useState(false);
   const [assessOpen, setAssessOpen]   = useState(false);
   const [assessment, setAssessment]   = useState(null);  // active proctored exam
+  const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | null
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
@@ -67,6 +70,7 @@ export default function AiChatPage() {
     setAttachMenu(false);
     if (type === 'voice') { setVoiceMode(true); return; }
     if (type === 'assessment') { setAssessOpen(true); return; }
+    if (type === 'lesson' || type === 'website') { setTeacherTool(type); return; }
     setAttachType(type); setAttachModal(true); setOcrText(''); setOcrError(''); setAttachFile(null);
   };
 
@@ -99,6 +103,10 @@ export default function AiChatPage() {
     { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
     { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
     ...(isStudent ? [{ type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' }] : []),
+    ...(isTeacher ? [
+      { type: 'lesson',  icon: <FileText size={15} color={PURPLE} />, label: 'Lesson tools',    desc: 'Lesson plan · worksheet · quiz' },
+      { type: 'website', icon: <FileText size={15} color={GREEN} />,  label: 'Website content', desc: 'Newsletter · recap · social · event' },
+    ] : []),
   ];
 
   // A finished voice exchange (from Deepgram's ConversationText events) gets
@@ -185,6 +193,10 @@ export default function AiChatPage() {
       </header>
 
       {assessOpen && <AssessmentPicker onClose={() => setAssessOpen(false)} onStart={startAssessment} />}
+      {teacherTool && (
+        <TeacherToolSheet kind={teacherTool} onClose={() => setTeacherTool(null)}
+          onInsert={(text) => setMessages((p) => [...p, { from: 'agent', text }])} />
+      )}
       {assessment && (
         <AssessmentRoom
           topic={assessment.topic} subject={assessment.subject} objectives={assessment.objectives}
