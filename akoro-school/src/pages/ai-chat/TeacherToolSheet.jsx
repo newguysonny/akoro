@@ -5,7 +5,7 @@
  * Generates content the teacher can drop into the chat or copy into the builder.
  */
 import { useState } from 'react';
-import { X, Sparkles, Copy, Check, MessageSquarePlus } from 'lucide-react';
+import { X, Sparkles, Copy, Check, MessageSquarePlus, Globe } from 'lucide-react';
 import { apiPost } from '../../services/api.js';
 
 const FONT = "'Nunito', sans-serif";
@@ -23,7 +23,7 @@ const WEB_TYPES = [
   { k: 'event_page',  label: '📅 Event page' },
 ];
 
-export default function TeacherToolSheet({ kind, onClose, onInsert }) {
+export default function TeacherToolSheet({ kind, host, onClose, onInsert }) {
   const isLesson = kind === 'lesson';
   const types = isLesson ? LESSON_TYPES : WEB_TYPES;
   const [type, setType] = useState(types[0].k);
@@ -31,10 +31,14 @@ export default function TeacherToolSheet({ kind, onClose, onInsert }) {
   const [subject, setSubject] = useState('');
   const [klass, setKlass] = useState('');
   const [brief, setBrief] = useState('');
+  const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [out, setOut] = useState('');
   const [copied, setCopied] = useState(false);
+  const [published, setPublished] = useState(null);
+  // Social posts aren't website pages; everything else can be published as one.
+  const canPublish = !isLesson && type !== 'social_post';
 
   const generate = async () => {
     setBusy(true); setError(null); setOut('');
@@ -53,6 +57,16 @@ export default function TeacherToolSheet({ kind, onClose, onInsert }) {
   };
 
   const copy = async () => { try { await navigator.clipboard.writeText(out); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} };
+
+  const publish = async () => {
+    setBusy(true); setError(null);
+    try {
+      const pageTitle = title.trim() || brief.trim().slice(0, 60) || 'New page';
+      const d = await apiPost('/api/school/ai/publish-page', { host, title: pageTitle, content: out, status: 'draft' });
+      setPublished((d?.data ?? d) || { title: pageTitle });
+    } catch (e) { setError(e?.message || 'Could not publish.'); }
+    finally { setBusy(false); }
+  };
 
   const inp = { width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13, fontFamily: FONT, color: INK, background: '#fff', boxSizing: 'border-box' };
 
@@ -85,7 +99,10 @@ export default function TeacherToolSheet({ kind, onClose, onInsert }) {
               </div>
             </div>
           ) : (
-            <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3} placeholder="What's it about? e.g. “Recap of our Inter-house Sports day — Blue house won”" style={{ ...inp, marginBottom: 12, resize: 'vertical' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {canPublish && <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Page title (for the website)" style={inp} />}
+              <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3} placeholder="What's it about? e.g. “Recap of our Inter-house Sports day — Blue house won”" style={{ ...inp, resize: 'vertical' }} />
+            </div>
           )}
 
           <button onClick={generate} disabled={busy} style={{ width: '100%', background: busy ? '#C9BEFF' : BRAND, color: '#fff', border: 'none', borderRadius: 12, padding: '12px', fontSize: 14, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
@@ -100,12 +117,21 @@ export default function TeacherToolSheet({ kind, onClose, onInsert }) {
                 <button onClick={copy} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 800, color: INK, cursor: 'pointer', fontFamily: FONT }}>
                   {copied ? <Check size={14} color="#10B981" /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}
                 </button>
-                {onInsert && (
+                {canPublish ? (
+                  <button onClick={publish} disabled={busy} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: BRAND, border: 'none', borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 800, color: '#fff', cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
+                    <Globe size={14} />{busy ? 'Publishing…' : 'Publish to website'}
+                  </button>
+                ) : onInsert && (
                   <button onClick={() => { onInsert(out); onClose(); }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: BRAND, border: 'none', borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 800, color: '#fff', cursor: 'pointer', fontFamily: FONT }}>
                     <MessageSquarePlus size={14} />Add to chat
                   </button>
                 )}
               </div>
+              {published && (
+                <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#065F46', fontSize: 12.5, fontWeight: 700 }}>
+                  ✓ Saved as a draft page “{published.title}” — open <b>Website Builder</b> to review and publish it.
+                </div>
+              )}
             </div>
           )}
         </div>

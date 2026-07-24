@@ -225,4 +225,38 @@ router.post("/ai/website-content", authenticateToken, requireRole(TEACHER_ROLES)
   } catch (e) { console.error("[ai/website-content]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
 });
 
+// ── Caller's role in the school (for menu gating in the chat) ─────────────────
+router.get("/ai/context", authenticateToken, async (req, res) => {
+  try {
+    const school = await resolveSchoolByHost(req.query.host);
+    if (!school) return res.json({ success: true, role: null });
+    const { data: user } = await db.from("users").select("id, email, full_name").eq("id", req.user.id).maybeSingle();
+    const role = await roleInSchool(user, school);
+    res.json({ success: true, role, schoolName: school.name });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Publish generated website content as a school site page (draft) ───────────
+const slugify = (s) => String(s || "page").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "page";
+router.post("/ai/publish-page", authenticateToken, requireRole(TEACHER_ROLES), async (req, res) => {
+  try {
+    const school = await resolveSchoolByHost(req.body?.host);
+    if (!school) return res.status(404).json({ error: "School not found." });
+    const { data: user } = await db.from("users").select("id, email").eq("id", req.user.id).maybeSingle();
+    const role = await roleInSchool(user, school);
+    if (!["teacher", "admin"].includes(role)) return res.status(403).json({ error: "Only school staff can publish pages." });
+
+    const title = String(req.body?.title || "").trim() || "Untitled";
+    const content = String(req.body?.content || "").trim();
+    const status = req.body?.status === "published" ? "published" : "draft";
+    if (!content) return res.status(400).json({ error: "Nothing to publish." });
+
+    const slug = `${slugify(title)}-${Date.now().toString(36).slice(-4)}`;
+    const { data, error } = await db.schema("mgmt").from("site_pages")
+      .insert({ school_id: school.id, title, slug, content, status }).select("id, title, slug, status").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, data });
+  } catch (e) { console.error("[ai/publish-page]", e); res.status(500).json({ error: e.message }); }
+});
+
 export default router;

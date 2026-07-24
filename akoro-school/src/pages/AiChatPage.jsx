@@ -9,7 +9,7 @@ import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import TeacherToolSheet from './ai-chat/TeacherToolSheet.jsx';
-import { API, apiPost } from '../services/api.js';
+import { API, apiGet, apiPost } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
@@ -21,8 +21,12 @@ const SITE_KEY = 'akoro_ai_return';
 
 export default function AiChatPage() {
   const { user } = useAuth();
-  const isStudent = user?.role === 'student';
-  const isTeacher = ['instructor', 'teacher', 'admin'].includes(user?.role);
+  // The caller's REAL role in this school (student vs parent vs teacher/admin) —
+  // resolved server-side so a parent (whose account role is 'student') doesn't
+  // get the student's Assessment option, etc.
+  const [schoolRole, setSchoolRole] = useState(null);
+  const isStudent = schoolRole === 'student';
+  const isTeacher = schoolRole === 'teacher' || schoolRole === 'admin';
 
   // Remember the school website that opened this chat so "Sign out" returns
   // there instead of the portal's /signin. The referrer is captured once on
@@ -65,6 +69,15 @@ export default function AiChatPage() {
   const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | null
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
+
+  // Resolve the caller's role within the school they came from.
+  useEffect(() => {
+    let host = '';
+    try { const o = sessionStorage.getItem(SITE_KEY); host = o ? new URL(o).hostname : ''; } catch { /* ignore */ }
+    apiGet(`/api/school/ai/context?host=${encodeURIComponent(host)}`)
+      .then((r) => setSchoolRole((r?.data ?? r)?.role || null))
+      .catch(() => setSchoolRole(null));
+  }, []);
 
   const openAttach = (type) => {
     setAttachMenu(false);
@@ -194,7 +207,7 @@ export default function AiChatPage() {
 
       {assessOpen && <AssessmentPicker onClose={() => setAssessOpen(false)} onStart={startAssessment} />}
       {teacherTool && (
-        <TeacherToolSheet kind={teacherTool} onClose={() => setTeacherTool(null)}
+        <TeacherToolSheet kind={teacherTool} host={siteHost.current} onClose={() => setTeacherTool(null)}
           onInsert={(text) => setMessages((p) => [...p, { from: 'agent', text }])} />
       )}
       {assessment && (
