@@ -1,3 +1,7 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "buildCommand": "bash scripts/build-with-chat.sh",
+  "rewrites": [
+    { "source": "/ai-chat/:path*", "destination": "/ai-chat/chat.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
