@@ -50,7 +50,7 @@ export function MediaPage() {
     try {
       const fd = new FormData();
       files.forEach((f) => fd.append('files', f));
-      const r = await fetch(`${API}/api/school/mgmt/site-media/upload`, { method: 'POST', credentials: 'include', body: fd });
+      const r = await fetch(`${API}/api/school/mgmt/site-media/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Upload failed');
       showToast(`Uploaded ${data.data?.length || files.length} file(s) ✓`);

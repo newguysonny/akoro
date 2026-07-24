@@ -69,7 +69,7 @@ export default function OnboardingPage() {
       const addressLine = [street.trim(), city.trim(), lga.trim(), state.trim(), country].filter(Boolean).join(', ');
       const res = await fetch(`${API}/api/profiles/me`, {
         method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
         body: JSON.stringify({
           fullName: schoolName.trim(), schoolName: schoolName.trim(), country,
           teachingGuide: agentName.trim() || undefined, guideEmoji: agentEmoji,
@@ -78,11 +78,11 @@ export default function OnboardingPage() {
       });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.message || 'Could not save your setup'); }
 
-      const existing = await fetch(`${API}/api/school`, { credentials: 'include' });
+      const existing = await fetch(`${API}/api/school`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
       if (!existing.ok) {
         await fetch(`${API}/api/profiles/schools`, {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
           body: JSON.stringify({
             name: schoolName.trim(), phone: phone.trim() || undefined,
             country, state: state.trim() || undefined, lga: lga.trim() || undefined, city: city.trim() || undefined,

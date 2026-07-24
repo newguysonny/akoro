@@ -87,7 +87,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
   });
 
   useEffect(() => {
-    const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true });
+    const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true, auth: { portal: "school" } });
     wsRef.current = ws;
 
     // Mobile connections flap: on every (re)connect, re-bind the live session

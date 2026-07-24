@@ -41,7 +41,7 @@ export default function ResetPasswordPage() {
     try {
       const res = await fetch(`${API}/api/auth/reset-password`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
         body:    JSON.stringify({ token, password }),
       });
       const json = await res.json().catch(() => ({}));

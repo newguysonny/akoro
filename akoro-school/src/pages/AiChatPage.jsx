@@ -43,7 +43,7 @@ export default function AiChatPage() {
   // Log out, then send the user back to the school website homepage they came
   // from (falls back to the portal sign-in if we don't know the origin).
   const logout = useCallback(async () => {
-    try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' }); } catch { /* ignore */ }
+    try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } }); } catch { /* ignore */ }
     try { localStorage.removeItem('akoro_user'); } catch { /* ignore */ }
     let dest = '/signin';
     try { dest = sessionStorage.getItem(SITE_KEY) || dest; } catch { /* ignore */ }

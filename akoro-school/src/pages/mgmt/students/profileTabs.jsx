@@ -91,7 +91,7 @@ function DocumentsTab({ studentId, showToast }) {
     try {
       const fd = new FormData();
       Array.from(files).forEach((f) => fd.append('files', f));
-      const r = await fetch(`${API}${BASE}/students/${studentId}/documents/upload`, { method: 'POST', credentials: 'include', body: fd });
+      const r = await fetch(`${API}${BASE}/students/${studentId}/documents/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Upload failed');
       showToast('Uploaded ✓'); load();

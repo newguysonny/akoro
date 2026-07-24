@@ -149,7 +149,7 @@ export function StudentAdmissionPage() {
           const ext = (photo.name.split('.').pop() || 'jpg');
           const named = new File([photo], `${form.admission_no}.${ext}`, { type: photo.type });
           const fd = new FormData(); fd.append('files', named);
-          await fetch(`${API}${BASE}/students/bulk-photos`, { method: 'POST', credentials: 'include', body: fd });
+          await fetch(`${API}${BASE}/students/bulk-photos`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
         } catch { /* non-fatal */ }
       }
 
@@ -165,7 +165,7 @@ export function StudentAdmissionPage() {
       for (const d of documents) {
         if (!d.file || !d.title.trim()) continue;
         const fd = new FormData(); fd.append('files', d.file); fd.append('title', d.title.trim());
-        try { await fetch(`${API}${BASE}/students/${id}/documents/upload`, { method: 'POST', credentials: 'include', body: fd }); }
+        try { await fetch(`${API}${BASE}/students/${id}/documents/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd }); }
         catch { /* non-fatal */ }
       }
 

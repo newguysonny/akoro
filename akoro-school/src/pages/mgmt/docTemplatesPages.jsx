@@ -25,7 +25,7 @@ const catPill = (v) => { const c = catColor[v] || MUTED2; return <span style={{ 
 
 // Open rendered HTML in a new printable window.
 const openHtml = (html) => { const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); } };
-const fetchText = (path) => fetch(`${API}${path}`, { credentials: 'include' }).then((r) => r.ok ? r.text() : '').catch(() => '');
+const fetchText = (path) => fetch(`${API}${path}`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } }).then((r) => r.ok ? r.text() : '').catch(() => '');
 
 // A live snapshot of a template — its rendered HTML scaled into the card.
 function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {

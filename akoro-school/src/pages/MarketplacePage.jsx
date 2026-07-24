@@ -201,7 +201,7 @@ export default function MarketplacePage() {
 
   const deleteTemplate = async (id) => {
     setTemplates((prev) => prev.filter((t) => t.id !== id));
-    try { await fetch(`${API}/api/instructor/tools/templates/${id}`, { method: 'DELETE', credentials: 'include' }); }
+    try { await fetch(`${API}/api/instructor/tools/templates/${id}`, { method: 'DELETE', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } }); }
     catch { /* ignore */ }
   };
 

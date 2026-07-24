@@ -18,7 +18,7 @@ const BASE = '/api/school/mgmt';
 
 /* ── shared helpers ────────────────────────────────────────────────────── */
 async function downloadFromApi(path, filename) {
-  const r = await fetch(`${API}${path}`, { credentials: 'include' });
+  const r = await fetch(`${API}${path}`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
   if (!r.ok) throw new Error('Download failed');
   const blob = await r.blob();
   const url = URL.createObjectURL(blob);
@@ -294,7 +294,7 @@ export function BulkPhotoUploadPage() {
     try {
       const fd = new FormData();
       files.forEach((f) => fd.append('files', f));
-      const r = await fetch(`${API}${BASE}/students/bulk-photos`, { method: 'POST', credentials: 'include', body: fd });
+      const r = await fetch(`${API}${BASE}/students/bulk-photos`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Upload failed');
       setResultQuick(data);
@@ -309,7 +309,7 @@ export function BulkPhotoUploadPage() {
     try {
       const fd = new FormData();
       fd.append('file', zipFile);
-      const r = await fetch(`${API}${BASE}/students/bulk-photos-zip`, { method: 'POST', credentials: 'include', body: fd });
+      const r = await fetch(`${API}${BASE}/students/bulk-photos-zip`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Upload failed');
       setResultZip(data);
@@ -403,7 +403,7 @@ export function BulkDocumentUploadPage() {
     try {
       const fd = new FormData();
       fd.append('file', zipFile);
-      const r = await fetch(`${API}${BASE}/students/bulk-docs-zip`, { method: 'POST', credentials: 'include', body: fd });
+      const r = await fetch(`${API}${BASE}/students/bulk-docs-zip`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Upload failed');
       setResult(data);

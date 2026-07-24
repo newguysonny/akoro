@@ -14,7 +14,7 @@
 import { API } from './api.js';
 
 const jget = (path) =>
-  fetch(`${API}${path}`, { credentials: 'include' }).then(async (r) => {
+  fetch(`${API}${path}`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } }).then(async (r) => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || j.message || `GET ${path} -> ${r.status}`);
     return j;
@@ -23,7 +23,7 @@ const jget = (path) =>
 const jpost = (path, body) =>
   fetch(`${API}${path}`, {
     method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
     body: JSON.stringify(body || {}),
   }).then(async (r) => {
     const j = await r.json().catch(() => ({}));
@@ -44,7 +44,7 @@ export function uploadTraining({ file, teacherId, agentId, subject, sessionTitle
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${API}/api/adaptive/training/upload`);
-    xhr.withCredentials = true; // send HttpOnly auth cookie
+    xhr.withCredentials = true; xhr.setRequestHeader('X-Akoro-Portal', 'school'); // send HttpOnly auth cookie
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };

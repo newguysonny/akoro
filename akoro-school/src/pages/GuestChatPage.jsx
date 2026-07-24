@@ -29,7 +29,7 @@ export default function GuestChatPage() {
     try {
       const history = next.map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text })).slice(-8);
       const r = await fetch(`${API}/api/school/site/guest-chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
         body: JSON.stringify({ host, message: q, history }),
       });
       const d = await r.json();

@@ -268,7 +268,7 @@ export function UploadTemplatePage() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('name', file.name.replace(/\.(zip|html?|txt)$/i, ''));
-      const r = await fetch(`${API}/api/school/website/templates/upload`, { method: 'POST', credentials: 'include', body: fd });
+      const r = await fetch(`${API}/api/school/website/templates/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Upload failed');
       showToast('Template installed ✓');

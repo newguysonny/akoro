@@ -14,7 +14,7 @@ import { API } from './api.js';
 const POST = (path, body) =>
   fetch(`${API}${path}`, {
     method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
     body: JSON.stringify(body),
   }).then(async r => {
     const j = await r.json().catch(() => ({}));
@@ -59,7 +59,7 @@ function putWithProgress(url, file, onProgress) {
  */
 export async function pollOcr(fileId, { tries = 20, intervalMs = 1500 } = {}) {
   for (let i = 0; i < tries; i++) {
-    const r = await fetch(`${API}/api/tasks/files/${fileId}`, { credentials: 'include' });
+    const r = await fetch(`${API}/api/tasks/files/${fileId}`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
     if (r.ok) {
       const j = await r.json();
       if (j.ocrReady && j.ocrText) return j.ocrText;
