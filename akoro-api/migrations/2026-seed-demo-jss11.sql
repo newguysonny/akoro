@@ -6,20 +6,29 @@
 -- timetable, a weekly scheme of work, and TODAY's classwork logs — so the
 -- after-school Assessment picker always has real "today's subjects & activities".
 --
+-- Also seeds a PARENT for the parent-concierge demo:
+--   parent.jss11@demo.akoro.app  /  Parent2026   (guardian of the student)
+-- plus sample termly fees (₦70,000 owed − ₦20,000 paid = ₦50,000 outstanding).
+--
 -- Runs last in the demo group (after the demo school + student are seeded).
 -- Idempotent and fail-safe: skips quietly if the user/school isn't present, so
 -- it's harmless in any environment. TODAY's classwork is rebuilt on each deploy
 -- so the demo always shows current-day activities.
 -- =============================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 DO $$
 DECLARE
-  v_email  text := 'stu.jss11@demo.akoro.app';
+  v_email        text := 'stu.jss11@demo.akoro.app';
+  v_parent_email text := 'parent.jss11@demo.akoro.app';   -- password: Parent2026
   v_user   uuid;
+  v_parent uuid;
+  v_stud   uuid;
   v_school uuid;
   v_class  uuid;
   v_sec    uuid;
   v_math uuid; v_eng uuid; v_bio uuid; v_phy uuid; v_chem uuid; v_geo uuid;
   p1 uuid; p2 uuid; p3 uuid; p4 uuid; p5 uuid;
+  v_fg uuid; v_ft_tui uuid; v_ft_pta uuid; v_ft_lunch uuid;
 BEGIN
   -- 1. Resolve the user. Skip quietly if absent (safe to run anywhere).
   SELECT id INTO v_user FROM public.users WHERE lower(email) = lower(v_email);
@@ -89,13 +98,44 @@ BEGIN
     (v_school,v_class,v_eng, CURRENT_DATE,'Comprehension and summary writing','Read a passage and wrote a one-paragraph summary.'),
     (v_school,v_class,v_bio, CURRENT_DATE,'The cell and its structure','Labelled plant and animal cells; discussed organelle functions.');
 
-  -- 9. Link the student to the mgmt roster (idempotent by user_id).
+  -- 9. Parent account (login: parent.jss11@demo.akoro.app / Parent2026).
+  INSERT INTO public.users (email, username, password_hash, full_name, role, is_active)
+  VALUES (v_parent_email, 'parent_jss11',
+          extensions.crypt('Parent2026', extensions.gen_salt('bf')), 'Demo Parent', 'student', true)
+  ON CONFLICT (email) DO UPDATE
+    SET password_hash = extensions.crypt('Parent2026', extensions.gen_salt('bf')), is_active = true
+  RETURNING id INTO v_parent;
+
+  -- 10. Link the student to the mgmt roster + set the guardian to the parent.
   IF EXISTS (SELECT 1 FROM mgmt.students WHERE user_id = v_user) THEN
-    UPDATE mgmt.students SET school_id=v_school, class_id=v_class, section_id=v_sec, status='active' WHERE user_id=v_user;
+    UPDATE mgmt.students SET school_id=v_school, class_id=v_class, section_id=v_sec, status='active',
+           guardian_name='Demo Parent', guardian_email=v_parent_email
+      WHERE user_id=v_user RETURNING id INTO v_stud;
   ELSE
-    INSERT INTO mgmt.students (school_id, admission_no, first_name, last_name, class_id, section_id, user_id, status)
-    VALUES (v_school, 'JSS11-001', 'Demo', 'JSS11 Student', v_class, v_sec, v_user, 'active');
+    INSERT INTO mgmt.students (school_id, admission_no, first_name, last_name, class_id, section_id, user_id, status, guardian_name, guardian_email)
+    VALUES (v_school, 'JSS11-001', 'Demo', 'JSS11 Student', v_class, v_sec, v_user, 'active', 'Demo Parent', v_parent_email)
+    RETURNING id INTO v_stud;
   END IF;
 
-  RAISE NOTICE 'Seeded JSS 11 for % (school %, class %)', v_email, v_school, v_class;
+  -- 11. Sample fees → outstanding balance (owed 70,000 − paid 20,000 = 50,000).
+  INSERT INTO mgmt.fee_groups (school_id, name, description) VALUES (v_school,'School Fees','Termly fees')
+    ON CONFLICT (school_id, name) DO UPDATE SET description=EXCLUDED.description RETURNING id INTO v_fg;
+  INSERT INTO mgmt.fee_types (school_id, group_id, name, code, default_amount) VALUES (v_school,v_fg,'Tuition (First Term)','TUI',50000)
+    ON CONFLICT (school_id, name) DO UPDATE SET default_amount=EXCLUDED.default_amount RETURNING id INTO v_ft_tui;
+  INSERT INTO mgmt.fee_types (school_id, group_id, name, code, default_amount) VALUES (v_school,v_fg,'PTA Levy','PTA',5000)
+    ON CONFLICT (school_id, name) DO UPDATE SET default_amount=EXCLUDED.default_amount RETURNING id INTO v_ft_pta;
+  INSERT INTO mgmt.fee_types (school_id, group_id, name, code, default_amount) VALUES (v_school,v_fg,'Lunch (Term)','LUN',15000)
+    ON CONFLICT (school_id, name) DO UPDATE SET default_amount=EXCLUDED.default_amount RETURNING id INTO v_ft_lunch;
+
+  -- Rebuild this class/student's assignments + the demo payment cleanly.
+  DELETE FROM mgmt.fee_assignments WHERE school_id=v_school AND (class_id=v_class OR student_id=v_stud);
+  INSERT INTO mgmt.fee_assignments (school_id, fee_type_id, class_id, amount, due_date) VALUES
+    (v_school, v_ft_tui,   v_class, 50000, CURRENT_DATE + 14),
+    (v_school, v_ft_pta,   v_class,  5000, CURRENT_DATE + 14),
+    (v_school, v_ft_lunch, v_class, 15000, CURRENT_DATE + 14);
+  DELETE FROM mgmt.fee_payments WHERE student_id=v_stud AND note='demo-seed';
+  INSERT INTO mgmt.fee_payments (school_id, student_id, amount, method, reference, note, paid_on)
+    VALUES (v_school, v_stud, 20000, 'online', 'DEMO-PART-PAY', 'demo-seed', CURRENT_DATE);
+
+  RAISE NOTICE 'Seeded JSS 11 + parent % for % (school %)', v_parent_email, v_email, v_school;
 END $$;
