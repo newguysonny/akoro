@@ -27,7 +27,7 @@ const ROWS = [
   ['Branded school website', YES, YES, NO, PART],
   ['Your own 24/7 AI assistant', YES, NO, NO, NO],
   ['After-school AI revision for students', YES, NO, PART, NO],
-  ['Parent answers on WhatsApp', YES, NO, NO, PART],
+  ['24/7 WhatsApp agent', YES, NO, NO, PART],
   ['AI admissions & lead capture', YES, NO, NO, NO],
   ['Fee collection in chat', YES, NO, NO, PART],
   ['Teacher lesson-plan generator', YES, NO, PART, NO],

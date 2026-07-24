@@ -38,14 +38,14 @@ const TIERS = [
   },
   {
     id: 'growth', name: 'Growth', tag: 'Parent & Student Engagement', icon: Users,
-    monthly: 99000, blurb: 'Turn your website into a 24/7 engagement engine: after-school revision, parent answers on WhatsApp, and teacher tools.',
+    monthly: 99000, blurb: 'Turn your website into a 24/7 engagement engine: after-school revision, a 24/7 WhatsApp agent, and teacher tools.',
     cta: 'Start free pilot', highlight: true, badge: '⭐ Best value',
     features: [
       'Everything in Starter, plus:',
       'AI Assessment Agent: students revise & get graded',
       'Parent Portal Agent: attendance, fees & announcements',
       'Teacher lesson-plan generator (5 subjects / month)',
-      'WhatsApp & SMS integration for parents',
+      '24/7 WhatsApp agent for parents (+ SMS)',
       'Up to 5 teacher accounts',
     ],
     best: 'Established primary & secondary schools, 200–800 students.',
@@ -87,7 +87,7 @@ const MATRIX = [
   ['AI FAQ chat widget', true, true, true, true],
   ['AI Assessment Agent (revision)', false, true, true, true],
   ['Parent Portal (attendance · fees)', false, true, true, true],
-  ['WhatsApp / SMS to parents', false, true, true, true],
+  ['24/7 WhatsApp agent (+ SMS)', false, true, true, true],
   ['Teacher lesson-plan generator', false, '5 / mo', 'Unlimited', 'Unlimited'],
   ['AI Admissions Counselor', false, false, true, true],
   ['Fee collection in chat', false, false, true, true],
@@ -228,7 +228,7 @@ export default function PricingPage() {
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', opacity: .85, marginBottom: 12 }}>Most schools start here</div>
           <p style={{ fontSize: 'clamp(18px,2.6vw,26px)', fontWeight: 800, fontFamily: HEAD, lineHeight: 1.4, maxWidth: 720, margin: '0 auto' }}>
             For <span style={{ color: '#FFD86E' }}>₦99,000/month</span>, get your own school website with a 24/7 AI assistant that
-            revises with students after school, answers parents on WhatsApp, and writes your lesson plans.
+            revises with students after school, runs a 24/7 WhatsApp agent for parents, and writes your lesson plans.
           </p>
           <p style={{ fontSize: 15, opacity: .9, marginTop: 14 }}>One extra enrolled student pays for the whole year.</p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 }}>
