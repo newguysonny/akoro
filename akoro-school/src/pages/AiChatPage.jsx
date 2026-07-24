@@ -19,6 +19,18 @@ const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — 
 
 const SITE_KEY = 'akoro_ai_return';
 
+// The school website host that opened this chat. When the chat is proxied on
+// the portal, that's the cross-origin referrer we cached in SITE_KEY. When the
+// chat is served UNDER the school's own domain (same-origin build), there is no
+// cross-origin referrer — the host is simply this page's own hostname.
+function resolveHost() {
+  try {
+    const o = sessionStorage.getItem(SITE_KEY);
+    if (o) return new URL(o).hostname;
+  } catch { /* ignore */ }
+  try { return window.location.hostname || ''; } catch { return ''; }
+}
+
 export default function AiChatPage() {
   const { user } = useAuth();
   // The caller's REAL role in this school (student vs parent vs teacher/admin) —
@@ -40,12 +52,14 @@ export default function AiChatPage() {
     } catch { /* ignore */ }
   }, []);
 
-  // Log out, then send the user back to the school website homepage they came
-  // from (falls back to the portal sign-in if we don't know the origin).
+  // Log out, then send the user back to the school website homepage. When the
+  // chat is served UNDER the school's own domain (same-origin build) there is
+  // no cross-origin referrer to remember, so we default to this origin's
+  // homepage ("/") rather than "/signin" (which doesn't exist on the site).
   const logout = useCallback(async () => {
     try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } }); } catch { /* ignore */ }
     try { localStorage.removeItem('akoro_user'); } catch { /* ignore */ }
-    let dest = '/signin';
+    let dest = '/';
     try { dest = sessionStorage.getItem(SITE_KEY) || dest; } catch { /* ignore */ }
     window.location.href = dest;
   }, []);
@@ -72,9 +86,7 @@ export default function AiChatPage() {
 
   // Resolve the caller's role within the school they came from.
   useEffect(() => {
-    let host = '';
-    try { const o = sessionStorage.getItem(SITE_KEY); host = o ? new URL(o).hostname : ''; } catch { /* ignore */ }
-    apiGet(`/api/school/ai/context?host=${encodeURIComponent(host)}`)
+    apiGet(`/api/school/ai/context?host=${encodeURIComponent(resolveHost())}`)
       .then((r) => setSchoolRole((r?.data ?? r)?.role || null))
       .catch(() => setSchoolRole(null));
   }, []);
@@ -134,9 +146,7 @@ export default function AiChatPage() {
 
   // Route the school website they came from → the concierge resolves the school.
   const siteHost = useRef(undefined);
-  if (siteHost.current === undefined) {
-    try { const o = sessionStorage.getItem(SITE_KEY); siteHost.current = o ? new URL(o).hostname : ''; } catch { siteHost.current = ''; }
-  }
+  if (siteHost.current === undefined) siteHost.current = resolveHost();
   // Decision cache: 'parent' → concierge (fees/child/calendar); 'tutor' → study tutor.
   const lane = useRef(undefined);
 
