@@ -1482,20 +1482,35 @@ router.get("/website/templates", authenticateToken, async (req, res) => {
     if (!school) return;
     const { data } = await db.schema("edu").from("school_website_templates").select("id, name, description, is_active, updated_at, import_payload").eq("school_id", school.id).order("updated_at", { ascending: false });
     const own = (data || []).map((t) => ({ id: t.id, name: t.name, description: t.description, active: t.is_active, updatedAt: t.updated_at, importable: !!t.import_payload }));
-    // Shared gallery: append the default templates every school can use.
+    // Shared gallery: admin-managed platform templates + the built-in defaults.
     const ownNames = new Set(own.map((t) => t.name));
+    const { data: plat } = await db.schema("edu").from("platform_website_templates")
+      .select("id, name, description, is_default, import_payload").eq("is_published", true)
+      .order("is_default", { ascending: false }).order("sort_order");
+    const platform = (plat || [])
+      .filter((t) => !ownNames.has(t.name))
+      .map((t) => ({ id: `platform:${t.id}`, name: t.name, description: t.description, active: false, updatedAt: null, importable: !!(t.import_payload && (t.import_payload.pages?.length || t.import_payload.menu?.length)), isDefault: true, recommended: t.is_default }));
+    const platNames = new Set((plat || []).map((t) => t.name));
     const defaults = DEFAULT_TEMPLATES
-      .filter((t) => !ownNames.has(t.name)) // hide a default once the school has installed it
+      .filter((t) => !ownNames.has(t.name) && !platNames.has(t.name)) // hide once installed or overridden
       .map((t) => ({ id: `default:${t.id}`, name: t.name, description: t.description, active: false, updatedAt: null, importable: !!(t.importPayload && (t.importPayload.pages?.length || t.importPayload.menu?.length)), isDefault: true }));
-    res.json({ success: true, data: [...own, ...defaults] });
+    res.json({ success: true, data: [...own, ...platform, ...defaults] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Clone a default template into the school's own templates (idempotent by name)
 // and return the school-owned id. Non-default ids pass through unchanged.
 async function ensureSchoolTemplate(school, id) {
-  if (!String(id).startsWith("default:")) return id;
-  const def = getDefaultTemplate(String(id).slice("default:".length));
+  let def = null;
+  if (String(id).startsWith("default:")) {
+    def = getDefaultTemplate(String(id).slice("default:".length));
+  } else if (String(id).startsWith("platform:")) {
+    const { data } = await db.schema("edu").from("platform_website_templates")
+      .select("name, description, html, import_payload").eq("id", String(id).slice("platform:".length)).maybeSingle();
+    if (data) def = { name: data.name, description: data.description, html: data.html, importPayload: data.import_payload || null };
+  } else {
+    return id; // already a school-owned template id
+  }
   if (!def) return null;
   const { data: existing } = await db.schema("edu").from("school_website_templates")
     .select("id").eq("school_id", school.id).eq("name", def.name).maybeSingle();
@@ -1516,6 +1531,12 @@ router.get("/website/templates/:id", authenticateToken, async (req, res) => {
       const def = getDefaultTemplate(String(req.params.id).slice("default:".length));
       if (!def) return res.status(404).json({ error: "Template not found" });
       return res.json({ success: true, data: { id: req.params.id, name: def.name, description: def.description, html: def.html, active: false, isDefault: true } });
+    }
+    if (String(req.params.id).startsWith("platform:")) {
+      const { data: p } = await db.schema("edu").from("platform_website_templates")
+        .select("name, description, html").eq("id", String(req.params.id).slice("platform:".length)).maybeSingle();
+      if (!p) return res.status(404).json({ error: "Template not found" });
+      return res.json({ success: true, data: { id: req.params.id, name: p.name, description: p.description, html: p.html, active: false, isDefault: true } });
     }
     const { data } = await db.schema("edu").from("school_website_templates").select("*").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
     if (!data) return res.status(404).json({ error: "Template not found" });

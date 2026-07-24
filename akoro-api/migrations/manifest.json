@@ -62,7 +62,8 @@
     "2026-web-push.sql",
     "2026-notification-link.sql",
     "2026-syllabus.sql",
-    "2026-syllabus-match-v2.sql"
+    "2026-syllabus-match-v2.sql",
+    "2026-platform-website-templates.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
