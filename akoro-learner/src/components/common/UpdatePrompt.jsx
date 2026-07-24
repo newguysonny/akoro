@@ -23,6 +23,20 @@ export default function UpdatePrompt() {
     updateSW.current = registerSW({
       immediate: true,
       onNeedRefresh() { setSecs(COUNTDOWN); setShow(true); },
+      // Proactively poll for a new deploy so the banner fires BEFORE the user
+      // navigates into a stale (deleted) route chunk and white-screens. Checks
+      // shortly after load, every few minutes, and whenever the tab refocuses.
+      onRegisteredSW(_url, registration) {
+        if (!registration) return;
+        const check = () => { registration.update().catch(() => {}); };
+        setTimeout(check, 5000);
+        const id = setInterval(check, 5 * 60 * 1000);
+        const onVis = () => { if (document.visibilityState === 'visible') check(); };
+        document.addEventListener('visibilitychange', onVis);
+        window.addEventListener('focus', check);
+        // (Listeners live for the app's lifetime — the prompt is always mounted.)
+        void id;
+      },
     });
   }, []);
 
