@@ -20,6 +20,22 @@ const ext = (p) => (p.split(".").pop() || "").toLowerCase();
 const isExternal = (u) => /^(https?:)?\/\//i.test(u) || /^(data|mailto|tel|#|\{\{)/.test(u);
 const dirname = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 
+const RESP_VIEWPORT = '<meta name="viewport" content="width=device-width, initial-scale=1">';
+
+// Guarantee a served template is responsive on phones: normalise a non-responsive
+// viewport meta, or inject one when it's missing (the cause of "desktop layout on
+// mobile"). Only touches the <meta viewport> — never the design itself.
+export function ensureResponsiveViewport(html) {
+  if (!html) return html;
+  if (/<meta[^>]+name\s*=\s*["']?viewport["']?[^>]*>/i.test(html)) {
+    return html.replace(/<meta[^>]+name\s*=\s*["']?viewport["']?[^>]*>/i,
+      (tag) => (/width\s*=\s*device-width/i.test(tag) ? tag : RESP_VIEWPORT));
+  }
+  if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1\n${RESP_VIEWPORT}`);
+  if (/<html[^>]*>/i.test(html)) return html.replace(/(<html[^>]*>)/i, `$1\n<head>${RESP_VIEWPORT}</head>`);
+  return RESP_VIEWPORT + html;
+}
+
 const slugForEntry = (entryName) => {
   const base = (entryName.split("/").pop() || "").replace(/\.html?$/i, "");
   if (/^index$/i.test(base)) return "home";
@@ -62,7 +78,7 @@ function inlinePage(rawHtml, baseDir, entries) {
     const e = find(ref); if (!e || !MIME[ext(e.entryName)]) return m;
     return `${attr}="${dataUri(e)}"`;
   });
-  return inlineCssUrls(html);
+  return ensureResponsiveViewport(inlineCssUrls(html));
 }
 
 function readZip(buffer) {

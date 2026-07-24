@@ -29,7 +29,7 @@ import {
 } from "../adaptive-learning/marketplace/paystackService.js";
 import multerLib from "multer";
 import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext } from "./siteRenderer.js";
-import { assembleTemplateFromZip } from "./templateZip.js";
+import { assembleTemplateFromZip, ensureResponsiveViewport } from "./templateZip.js";
 import { ensureBucket, uploadZipToStorage, removeTemplateAssets } from "./templateStorage.js";
 import { DEFAULT_TEMPLATES, getDefaultTemplate } from "./defaultTemplates/index.js";
 import {
@@ -1553,7 +1553,7 @@ router.post("/website/templates", authenticateToken, requireRole(SCHOOL_ROLES), 
     const { name, description = "", html = "" } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "name is required" });
     const { data, error } = await db.schema("edu").from("school_website_templates")
-      .insert({ school_id: school.id, name: name.trim(), description, html }).select("*").single();
+      .insert({ school_id: school.id, name: name.trim(), description, html: ensureResponsiveViewport(html) }).select("*").single();
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, data: { id: data.id, name: data.name, description: data.description, html: data.html, active: data.is_active, updatedAt: data.updated_at } });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1604,7 +1604,7 @@ router.post("/website/templates/upload", authenticateToken, requireRole(SCHOOL_R
           return res.status(400).json({ error: `Could not read the zip: ${zipErr.message}` });
         }
       }
-      await db.schema("edu").from("school_website_templates").update({ html, import_payload: importPayload }).eq("id", created.id);
+      await db.schema("edu").from("school_website_templates").update({ html: ensureResponsiveViewport(html), import_payload: importPayload }).eq("id", created.id);
       res.status(201).json({ success: true, data: { id: created.id, name, active: false, importable: !!importPayload }, hosting });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -1619,7 +1619,7 @@ router.put("/website/templates/:id", authenticateToken, requireRole(SCHOOL_ROLES
     const patch = { updated_at: new Date() };
     if (req.body.name !== undefined) patch.name = req.body.name;
     if (req.body.description !== undefined) patch.description = req.body.description;
-    if (req.body.html !== undefined) patch.html = req.body.html;
+    if (req.body.html !== undefined) patch.html = ensureResponsiveViewport(req.body.html);
     const { data, error } = await db.schema("edu").from("school_website_templates")
       .update(patch).eq("id", req.params.id).eq("school_id", school.id).select("*").single();
     if (error) throw new Error(error.message);

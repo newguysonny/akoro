@@ -7,7 +7,7 @@ import { Router } from "express";
 import multer from "multer";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { assembleMultiPageFromZip } from "../school/templateZip.js";
+import { assembleMultiPageFromZip, ensureResponsiveViewport } from "../school/templateZip.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -51,7 +51,7 @@ router.post("/website-templates", adminOnly, async (req, res) => {
     const name = String(req.body?.name || "").trim();
     if (!name) return res.status(400).json({ error: "name is required" });
     const { data, error } = await db.schema("edu").from("platform_website_templates").insert({
-      name, description: req.body?.description || "", html: req.body?.html || "",
+      name, description: req.body?.description || "", html: ensureResponsiveViewport(req.body?.html || ""),
       import_payload: req.body?.importPayload || null, is_published: req.body?.isPublished !== false,
     }).select("*").single();
     if (error) { if (error.code === "23505") return res.status(409).json({ error: "A template with that name already exists" }); throw error; }
@@ -81,7 +81,7 @@ router.post("/website-templates/upload", ...adminOnly, (req, res) => {
         // A one-page zip needs no import payload (nothing to link).
         if (importPayload && (importPayload.pages?.length || 0) <= 1) importPayload = null;
       } else {
-        html = req.file.buffer.toString("utf8");
+        html = ensureResponsiveViewport(req.file.buffer.toString("utf8"));
       }
       if (!html?.trim()) return res.status(400).json({ error: "No HTML found in the upload." });
 
