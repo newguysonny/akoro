@@ -80,8 +80,8 @@ export default function VoiceChatPanel({ onClose, onExchange }) {
     try {
       // 1. Mint a Deepgram agent token + role-aware prompt from our backend.
       const res = await fetch(`${API}/api/voice/agent-token`, { method: 'POST', credentials: 'include' });
-      const cfg = await res.json();
-      if (!res.ok || !cfg.access_token) throw new Error(cfg.error || 'Could not start voice chat');
+      let cfg = {}; try { cfg = await res.json(); } catch { /* non-JSON (e.g. proxy error) */ }
+      if (!res.ok || !cfg.access_token) throw new Error(cfg.error || `Voice chat couldn't start (${res.status}) — it may not be configured yet.`);
 
       // 2. Open the mic.
       const stream = await navigator.mediaDevices.getUserMedia({
