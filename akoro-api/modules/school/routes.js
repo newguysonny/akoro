@@ -1371,11 +1371,20 @@ router.post("/site/ai-login", async (req, res) => {
       return res.status(403).json({ success: false, code: "twofa", message: "This account uses two-factor authentication. Please sign in on the portal instead." });
     }
 
-    // Redirect to the school portal's AI chat, carrying a short-lived hand-off
-    // token: the portal exchanges it for a session on its OWN origin, so the
-    // login survives even when third-party cookies are partitioned/blocked.
+    // Redirect to the AI chat, carrying a short-lived hand-off token that the
+    // destination exchanges for a session on its own origin (survives cross-site
+    // cookie blocking).
+    //
+    // Chat host: defaults to the portal (SCHOOL_PORTAL_URL). When the chat is
+    // served UNDER the school's own website domain (a dedicated /ai-chat build
+    // proxied by the tenant deployment), set SCHOOL_CHAT_SAME_DOMAIN=true and the
+    // redirect stays on the school's domain instead of the platform app.
     const handoff = signHandoff(user.id);
-    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${SCHOOL_PORTAL_URL}/ai-chat?ai=${encodeURIComponent(handoff)}` });
+    const cleanHost = String(host || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    const chatBase = (process.env.SCHOOL_CHAT_SAME_DOMAIN === "true" && cleanHost)
+      ? `https://${cleanHost}`
+      : SCHOOL_PORTAL_URL;
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${chatBase}/ai-chat?ai=${encodeURIComponent(handoff)}` });
   } catch (e) {
     console.error("[ai-login]", e);
     res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });
