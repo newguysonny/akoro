@@ -305,7 +305,7 @@ function Leaf({ item, collapsed }) {
   if (item.to && item.to !== '#') {
     return (
       <NavLink to={item.to} end={item.to === '/'} title={collapsed ? item.label : undefined}
-        style={({ isActive }) => ({ ...base, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', fontWeight: isActive ? 600 : 400, borderLeft: !collapsed && isActive ? `3px solid ${AMBER}` : '3px solid transparent' })}>
+        style={({ isActive }) => ({ ...base, color: isActive ? WHITE : MUTED2, background: isActive ? `${AMBER}22` : 'transparent', fontWeight: isActive ? 600 : 400 })}>
         <item.icon size={18} />{!collapsed && <span>{item.label}</span>}
       </NavLink>
     );
