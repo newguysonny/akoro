@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords, GraduationCap } from 'lucide-react';
+import { Users, BookOpen, Plus, Eye, Clock, Video, Bot, ChevronRight, Zap, Wallet, Layers, Flame, CheckCircle2, Swords, GraduationCap, Facebook, Instagram, Twitter, Music2, Share2 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Toast, Skeleton, Modal, Inp } from '../../components/Primitives.jsx';
 import { useStatsAPI } from '../../hooks/useStatsAPI.js';
@@ -30,6 +30,14 @@ const STREAM_META = {
   teams:   { label: 'MS Teams',    color: '#6264A7' },
   youtube: { label: 'YouTube Live', color: '#FF0000' },
 };
+
+const SOCIAL_META = {
+  facebook:  { label: 'Facebook',    color: '#1877F2', Icon: Facebook },
+  instagram: { label: 'Instagram',   color: '#E4405F', Icon: Instagram },
+  twitter:   { label: 'X (Twitter)', color: '#0F1419', Icon: Twitter },
+  tiktok:    { label: 'TikTok',      color: '#010101', Icon: Music2 },
+};
+const SOCIAL_KEYS = ['facebook', 'instagram', 'twitter', 'tiktok'];
 
 const MOCK_PROFILE = {
   agentName: 'Prof. Aria',
@@ -292,4 +300,131 @@ function StreamingPanel({ onToast }) {
 }
 
 
-export { MOCK_STATS, STREAM_META, MOCK_PROFILE, MOCK_SESSIONS, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel };
+/* ── Social platforms panel (credential storage) ─────────────────────── */
+function SocialPanel({ onToast }) {
+  const [state, setState] = useState(null);         // null = loading
+  const [busy, setBusy] = useState(null);
+  const [connectFor, setConnectFor] = useState(null); // platform key for the credentials modal
+  const [form, setForm] = useState({ profileUrl: '', accessToken: '', apiKey: '', apiSecret: '', accountId: '' });
+
+  const resetForm = () => setForm({ profileUrl: '', accessToken: '', apiKey: '', apiSecret: '', accountId: '' });
+
+  const load = useCallback(async () => {
+    const res = await apiGet('/api/instructor/social');
+    const rows = res?.data ?? [];
+    const map = Object.fromEntries(rows.map((r) => [r.platform, r]));
+    setState(SOCIAL_KEYS.map((p) => ({
+      platform:    p,
+      connected:   !!map[p]?.connected,
+      profile_url: map[p]?.profile_url ?? null,
+    })));
+  }, []);
+
+  useEffect(() => {
+    load().catch(() => setState(SOCIAL_KEYS.map((p) => ({ platform: p, connected: false }))));
+  }, [load]);
+
+  const disconnect = async (p) => {
+    setBusy(p.platform);
+    setState((ps) => ps.map((x) => x.platform === p.platform ? { ...x, connected: false } : x));
+    try {
+      await apiDelete(`/api/instructor/social/${p.platform}`);
+      onToast?.(`${SOCIAL_META[p.platform]?.label} disconnected`, 'info');
+    } catch {
+      onToast?.('Could not update account', 'error');
+      load();
+    } finally { setBusy(null); }
+  };
+
+  const submit = async () => {
+    const platform = connectFor;
+    setBusy(platform);
+    try {
+      await apiPost('/api/instructor/social/connect', {
+        platform,
+        profileUrl:  form.profileUrl.trim() || null,
+        accessToken: form.accessToken.trim() || null,
+        apiKey:      form.apiKey.trim() || null,
+        apiSecret:   form.apiSecret.trim() || null,
+        accountId:   form.accountId.trim() || null,
+      });
+      setState((ps) => ps.map((x) => x.platform === platform
+        ? { ...x, connected: true, profile_url: form.profileUrl.trim() || null } : x));
+      onToast?.(`${SOCIAL_META[platform]?.label} connected`, 'success');
+      setConnectFor(null); resetForm();
+    } catch {
+      onToast?.('Could not save credentials', 'error');
+    } finally { setBusy(null); }
+  };
+
+  const hasInput = form.profileUrl.trim() || form.accessToken.trim() || form.apiKey.trim();
+
+  return (
+    <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: '20px', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <Share2 size={16} color={AMBER} />
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: INK, margin: 0 }}>Social Platforms</h3>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {state === null
+          ? [0, 1, 2].map((i) => <Skeleton key={i} height={44} />)
+          : state.map((p) => {
+            const meta = SOCIAL_META[p.platform] ?? { label: p.platform, color: MUTED, Icon: Share2 };
+            const Icon = meta.Icon;
+            return (
+              <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon size={15} color={meta.color} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{meta.label}</div>
+                  <div style={{ fontSize: 10.5, color: p.connected ? GREEN : MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {p.connected && <CheckCircle2 size={10} />}{p.connected ? 'Connected' : 'Not connected'}
+                  </div>
+                </div>
+                {p.connected ? (
+                  <Btn size="sm" variant="ghost" disabled={busy === p.platform} onClick={() => disconnect(p)} style={{ color: MUTED }}>
+                    {busy === p.platform ? '…' : 'Disconnect'}
+                  </Btn>
+                ) : (
+                  <Btn size="sm" variant="outline" onClick={() => { resetForm(); setConnectFor(p.platform); }}>Connect</Btn>
+                )}
+              </div>
+            );
+          })}
+      </div>
+
+      <Modal open={!!connectFor} onClose={() => { setConnectFor(null); resetForm(); }}
+        title={`Connect ${SOCIAL_META[connectFor]?.label ?? ''}`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontSize: 12.5, color: MUTED, margin: 0, fontFamily: FONT, lineHeight: 1.5 }}>
+            Store your {SOCIAL_META[connectFor]?.label ?? 'account'} credentials so the school can post and generate
+            content later. Fill in what you have — everything is optional and stored securely.
+          </p>
+          <Inp label={connectFor === 'facebook' ? 'Page URL' : 'Profile URL'} value={form.profileUrl}
+            onChange={(e) => setForm((f) => ({ ...f, profileUrl: e.target.value }))}
+            placeholder={
+              connectFor === 'facebook'  ? 'https://facebook.com/yourschool'
+              : connectFor === 'instagram' ? 'https://instagram.com/yourschool'
+              : connectFor === 'twitter'   ? 'https://x.com/yourschool'
+              : 'https://tiktok.com/@yourschool'
+            } />
+          <Inp label="Access token" value={form.accessToken}
+            onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))} placeholder="Paste access token" />
+          <Inp label={connectFor === 'facebook' || connectFor === 'instagram' ? 'App ID (optional)' : 'API key (optional)'} value={form.apiKey}
+            onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))} placeholder="Optional" />
+          <Inp label="API secret (optional)" value={form.apiSecret}
+            onChange={(e) => setForm((f) => ({ ...f, apiSecret: e.target.value }))} placeholder="Optional" />
+          <Inp label={connectFor === 'facebook' ? 'Page ID (optional)' : 'Account ID (optional)'} value={form.accountId}
+            onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))} placeholder="Optional" />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Btn variant="secondary" onClick={() => { setConnectFor(null); resetForm(); }}>Cancel</Btn>
+            <Btn onClick={submit} disabled={busy === connectFor || !hasInput}>{busy === connectFor ? 'Saving…' : 'Save credentials'}</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+export { MOCK_STATS, STREAM_META, SOCIAL_META, MOCK_PROFILE, MOCK_SESSIONS, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel, SocialPanel };

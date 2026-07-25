@@ -1524,6 +1524,107 @@ const disconnectStreaming = asyncHandler(async (req, res) => {
   }
 });
 
+// ─── § SOCIAL PLATFORMS ───────────────────────────────────────────────────────
+// Stored credentials for the school's social accounts (used later for posting /
+// content auto-generation). Kept in user_settings.settings.social_platforms,
+// mirroring streaming_platforms. Tokens/secrets are NEVER returned to the client.
+
+const SOCIAL_PLATFORMS = ["facebook", "instagram", "twitter", "tiktok"];
+
+const getSocial = asyncHandler(async (req, res) => {
+  try {
+    const { data: settings } = await db
+      .from("user_settings")
+      .select("settings")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    const stored = settings?.settings?.social_platforms ?? {};
+    const platforms = SOCIAL_PLATFORMS.map((p) => {
+      const s = stored[p] ?? {};
+      return {
+        platform:        p,
+        connected:       !!s.connected,
+        profile_url:     s.profile_url ?? null,
+        account_id:      s.account_id ?? null,
+        has_credentials: !!(s.access_token || s.api_key),
+        connected_at:    s.connected_at ?? null,
+      };
+    });
+
+    ok(res, platforms);
+  } catch (e) { err500(res, e); }
+});
+
+const connectSocial = asyncHandler(async (req, res) => {
+  try {
+    const { platform, profileUrl, accessToken, apiKey, apiSecret, accountId } = req.body;
+
+    if (!platform) return err400(res, "platform is required");
+    if (!SOCIAL_PLATFORMS.includes(platform))
+      return err400(res, `platform must be one of: ${SOCIAL_PLATFORMS.join(", ")}`);
+
+    const { data: existing } = await db
+      .from("user_settings")
+      .select("settings")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+
+    const currentSettings = existing?.settings ?? {};
+    const socialPlatforms = currentSettings.social_platforms ?? {};
+    const prev = socialPlatforms[platform] ?? {};
+
+    socialPlatforms[platform] = {
+      ...prev,   // preserve existing creds on re-connect (only overwrite provided fields)
+      connected:     true,
+      profile_url:   profileUrl  ?? prev.profile_url  ?? null,
+      access_token:  accessToken ?? prev.access_token ?? null,
+      api_key:       apiKey      ?? prev.api_key       ?? null,
+      api_secret:    apiSecret   ?? prev.api_secret    ?? null,
+      account_id:    accountId   ?? prev.account_id    ?? null,
+      connected_at:  now(),
+    };
+
+    const newSettings = { ...currentSettings, social_platforms: socialPlatforms };
+
+    const { error } = await db
+      .from("user_settings")
+      .upsert({ user_id: req.user.id, settings: newSettings, updated_at: now() }, { onConflict: "user_id" });
+    if (error) throw new Error(error.message);
+
+    notify(req.user.id, { type: "social_connected", title: `${platform} connected`, content: "Social account connected" });
+    ok(res, { platform, connected: true, profile_url: profileUrl ?? null });
+  } catch (e) { err500(res, e); }
+});
+
+const disconnectSocial = asyncHandler(async (req, res) => {
+  try {
+    const { platform } = req.params;
+    if (!SOCIAL_PLATFORMS.includes(platform))
+      return err400(res, `platform must be one of: ${SOCIAL_PLATFORMS.join(", ")}`);
+
+    const { data: existing } = await db
+      .from("user_settings")
+      .select("settings")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+    if (!existing) return err404(res, "No settings found");
+
+    const currentSettings = existing.settings ?? {};
+    const socialPlatforms = currentSettings.social_platforms ?? {};
+    delete socialPlatforms[platform];
+
+    const { error } = await db
+      .from("user_settings")
+      .update({ settings: { ...currentSettings, social_platforms: socialPlatforms }, updated_at: now() })
+      .eq("user_id", req.user.id);
+    if (error) throw new Error(error.message);
+
+    notify(req.user.id, { type: "social_disconnected", title: `${platform} disconnected`, content: "Social account disconnected" });
+    ok(res, { platform, connected: false, message: `${platform} disconnected` });
+  } catch (e) { err500(res, e); }
+});
+
 // ─── § ROUTER ─────────────────────────────────────────────────────────────────
 
 const router = Router();
@@ -1593,6 +1694,11 @@ router.delete("/battles/:id", deleteBattle);
 router.get   ("/streaming",              getStreaming);
 router.post  ("/streaming/connect",      connectStreaming);
 router.delete("/streaming/:platform",    disconnectStreaming);
+
+// Social platforms (Facebook / Instagram / X / TikTok credential storage)
+router.get   ("/social",                 getSocial);
+router.post  ("/social/connect",         connectSocial);
+router.delete("/social/:platform",       disconnectSocial);
 
 // ── Document templates ──────────────────────────────────────────────────────
 // Instructors' own document/form templates + the shared default gallery

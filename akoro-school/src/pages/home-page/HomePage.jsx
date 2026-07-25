@@ -13,7 +13,7 @@ import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
 
 /* ── Mock fallback data (matches backend snake_case shape) ──────────── */
-import { MOCK_STATS, STREAM_META, MOCK_PROFILE, MOCK_SESSIONS, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel } from './parts.jsx';
+import { MOCK_STATS, STREAM_META, SOCIAL_META, MOCK_PROFILE, MOCK_SESSIONS, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel, SocialPanel } from './parts.jsx';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -224,6 +224,9 @@ export default function HomePage() {
 
             {/* Streaming platforms */}
             <StreamingPanel onToast={showToast} />
+
+            {/* Social platforms */}
+            <SocialPanel onToast={showToast} />
           </div>
         </div>
       </div>
