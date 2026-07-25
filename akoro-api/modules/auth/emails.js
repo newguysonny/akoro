@@ -8,8 +8,9 @@
 const EMAIL_FROM = process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
 
 // Public base that serves the app's static logo assets (akoro-learner/public).
-// Override with EMAIL_ASSET_BASE if the logo is hosted elsewhere.
-const ASSET_BASE = (process.env.EMAIL_ASSET_BASE || process.env.PUBLIC_SITE_URL || "https://akoro.app").replace(/\/+$/, "");
+// Uses the frontend URL (FRONTEND_URL) since that deployment serves /logo/*;
+// override with EMAIL_ASSET_BASE if the logo is hosted elsewhere.
+const ASSET_BASE = (process.env.EMAIL_ASSET_BASE || process.env.FRONTEND_URL || "https://akoro.app").replace(/\/+$/, "");
 const LOGO_URL   = `${ASSET_BASE}/logo/akoro-dark-180.png`; // the app icon (same mark used in-app)
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
