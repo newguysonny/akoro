@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PenLine, Megaphone, Sparkles, Share2, SlidersHorizontal, BookOpen,
-  Facebook, Instagram, Twitter, Music2, Loader2, Copy, Check, CheckCircle2, ChevronRight,
+  Facebook, Instagram, Twitter, Music2, Loader2, Copy, Check, CheckCircle2, ChevronRight, Send, X, Clock,
 } from 'lucide-react';
 import { Btn, Inp } from '../../components/Primitives.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
@@ -32,6 +32,93 @@ const CHANNELS = [
   { key: 'twitter',   label: 'X (Twitter)', color: '#0F1419', Icon: Twitter },
   { key: 'tiktok',    label: 'TikTok',      color: '#010101', Icon: Music2 },
 ];
+
+const fmtDateTime = (iso) => {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  catch { return ''; }
+};
+
+/* ── AI post pill + channel picker ───────────────────────────────────── */
+function PostModal({ creation, onClose, onPosted, onToast }) {
+  const [channels, setChannels] = useState(null);   // connected channel keys
+  const [sel, setSel] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    apiGet('/api/instructor/social')
+      .then((r) => setChannels((r?.data ?? []).filter((x) => x.connected).map((x) => x.platform)))
+      .catch(() => setChannels([]));
+  }, []);
+
+  const post = async () => {
+    const picked = Object.keys(sel).filter((k) => sel[k]);
+    if (!picked.length) { onToast?.('Pick at least one channel'); return; }
+    setBusy(true);
+    try {
+      const r = await apiPost(`/api/school/content/creations/${creation.id}/post`, { channels: picked });
+      const results = r?.data?.results || {};
+      const okCount = Object.values(results).filter((x) => x.ok).length;
+      onPosted?.(r?.data?.creation);
+      onToast?.(okCount ? `Posted to ${okCount} channel${okCount > 1 ? 's' : ''} ✓` : 'Marked as posted');
+      onClose();
+    } catch (e) { onToast?.(e.message || 'Could not post'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3200, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>AI Post</span>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+        </div>
+        <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 14px' }}>Choose where to publish this content.</p>
+        {channels === null ? (
+          <div style={{ color: MUTED2, fontSize: 13, padding: '10px 0' }}>Loading channels…</div>
+        ) : channels.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>No channels connected yet. Connect one from <b>External Channels</b> first.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {CHANNELS.filter((c) => channels.includes(c.key)).map((c) => (
+              <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!sel[c.key]} onChange={(e) => setSel((s) => ({ ...s, [c.key]: e.target.checked }))} />
+                <c.Icon size={16} color={c.color} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{c.label}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+          <button onClick={post} disabled={busy || !channels?.length} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !channels?.length ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !channels?.length ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !channels?.length ? 'default' : 'pointer', fontFamily: FONT }}>
+            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}{busy ? 'Posting…' : 'Post now'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AiPostPill({ creation, onUpdated, onToast, size = 'md' }) {
+  const [open, setOpen] = useState(false);
+  const posted = !!(creation?.posted_at || (creation?.posted_channels || []).length);
+  const pad = size === 'sm' ? '3px 9px' : '6px 12px';
+  const fs = size === 'sm' ? 10.5 : 12;
+  if (!creation?.id) return null;
+  return (
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); if (!posted) setOpen(true); }}
+        title={posted ? `Posted${(creation.posted_channels || []).length ? ' · ' + creation.posted_channels.join(', ') : ''}` : 'Post with AI'}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: pad, borderRadius: 999, border: 'none', cursor: posted ? 'default' : 'pointer', fontFamily: FONT, fontSize: fs, fontWeight: 800,
+          background: posted ? `${GREEN}15` : `${AMBER}15`, color: posted ? GREEN : AMBER }}>
+        {posted ? <Check size={size === 'sm' ? 11 : 13} /> : <Sparkles size={size === 'sm' ? 11 : 13} />}{posted ? 'Posted' : 'AI post'}
+      </button>
+      {open && <PostModal creation={creation} onClose={() => setOpen(false)} onPosted={onUpdated} onToast={onToast} />}
+    </>
+  );
+}
 
 const QUICK_GUIDE = {
   blog: [
@@ -93,6 +180,7 @@ const BLOG_LABEL = Object.fromEntries(BLOG_TYPES.map((b) => [b.v, b.l]));
 
 function GeneratorPanel({ kind, onToast }) {
   const cfg = GEN_CONFIG[kind];
+  const navigate = useNavigate();
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState('');
   const [audience, setAudience] = useState('');
@@ -103,6 +191,8 @@ function GeneratorPanel({ kind, onToast }) {
   const [result, setResult] = useState('');
   const [copied, setCopied] = useState(false);
   const [past, setPast] = useState(null);
+  const [lastCreation, setLastCreation] = useState(null);
+  const [success, setSuccess] = useState(false);
 
   const loadPast = useCallback(() => {
     apiGet(`/api/school/content/creations?kind=${kind}`).then((r) => setPast(r?.data || [])).catch(() => setPast([]));
@@ -119,10 +209,14 @@ function GeneratorPanel({ kind, onToast }) {
         blogType: kind === 'blog' ? blogType : null, extra: extra.trim() || null,
       });
       setResult(res?.data?.content || '');
+      setLastCreation(res?.data?.creation || null);
+      setSuccess(true);
       loadPast();
     } catch (e) { onToast?.(e.message || 'Could not generate'); }
     finally { setBusy(false); }
   };
+
+  const KIND_NOUN = { blog: 'blog post', social: 'social post', activity: 'activity' }[kind];
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* ignore */ }
@@ -185,9 +279,12 @@ function GeneratorPanel({ kind, onToast }) {
         <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: LIGHT, borderBottom: `1px solid ${BORDER}` }}>
             <span style={{ fontSize: 12, fontWeight: 800, color: INK, fontFamily: FONT }}>Result</span>
-            <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : MUTED, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
-              {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}
-            </button>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+              {lastCreation && <AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); loadPast(); }} onToast={onToast} size="sm" />}
+              <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : MUTED, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
+                {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
           </div>
           <pre style={{ margin: 0, padding: '14px 16px', fontSize: 13, lineHeight: 1.6, color: INK, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result}</pre>
         </div>
@@ -199,17 +296,39 @@ function GeneratorPanel({ kind, onToast }) {
           <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 10 }}>{cfg.pastLabel}</div>
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6, scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}>
             {past.map((c) => (
-              <button key={c.id} onClick={() => { setResult(c.content); }} title="Open"
-                style={{ flex: '0 0 auto', width: 210, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
+              <div key={c.id} onClick={() => navigate(`/content/creation/${c.id}`)} title="Open"
+                style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
-                {c.subtype && kind === 'blog' && <span style={{ alignSelf: 'flex-start', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: BLUE, background: `${BLUE}12`, borderRadius: 20, padding: '2px 8px' }}>{BLOG_LABEL[c.subtype] || c.subtype}</span>}
-                {c.subtype && kind === 'social' && <span style={{ alignSelf: 'flex-start', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: PURPLE, background: `${PURPLE}12`, borderRadius: 20, padding: '2px 8px' }}>{c.subtype}</span>}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  {c.subtype && kind === 'blog' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: BLUE, background: `${BLUE}12`, borderRadius: 20, padding: '2px 8px' }}>{BLOG_LABEL[c.subtype] || c.subtype}</span>}
+                  {c.subtype && kind === 'social' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: PURPLE, background: `${PURPLE}12`, borderRadius: 20, padding: '2px 8px' }}>{c.subtype}</span>}
+                  {(!c.subtype || kind === 'activity') && <span />}
+                  <AiPostPill creation={c} onUpdated={() => loadPast()} onToast={onToast} size="sm" />
+                </div>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.topic || 'Untitled'}</div>
-                <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 140)}</div>
-                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto' }}>{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
-              </button>
+                <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 120)}</div>
+                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{fmtDateTime(c.created_at)}</div>
+              </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Success modal */}
+      {success && (
+        <div onClick={() => setSuccess(false)} style={{ position: 'fixed', inset: 0, zIndex: 3100, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 380, background: WHITE, borderRadius: 18, padding: '26px 24px', fontFamily: FONT, textAlign: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: `${GREEN}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+              <CheckCircle2 size={28} color={GREEN} />
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: INK, marginBottom: 6 }}>Your {KIND_NOUN} is ready</div>
+            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 20px', lineHeight: 1.55 }}>It’s been added to your {cfg.pastLabel.toLowerCase()}. Post it now or open the full view.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              {lastCreation && <div style={{ display: 'flex', justifyContent: 'center' }}><AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); loadPast(); }} onToast={onToast} /></div>}
+              <button onClick={() => { setSuccess(false); if (lastCreation) navigate(`/content/creation/${lastCreation.id}`); }} style={{ padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Open full view</button>
+              <button onClick={() => setSuccess(false)} style={{ padding: '9px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Close</button>
+            </div>
           </div>
         </div>
       )}
@@ -294,6 +413,7 @@ function ExternalChannelsPanel({ onToast }) {
 }
 
 export {
-  TABS, EXTERNAL, SETTINGS_TAB, VALID_TABS, NO_SAVE_TABS, CHANNELS,
+  TABS, EXTERNAL, SETTINGS_TAB, VALID_TABS, NO_SAVE_TABS, CHANNELS, BLOG_LABEL,
   QUICK_GUIDE, QuickGuide, GeneratorPanel, ContentSettingsPanel, ExternalChannelsPanel,
+  AiPostPill, fmtDateTime,
 };

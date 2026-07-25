@@ -702,15 +702,18 @@ router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), a
     });
 
     // Save it so the generator can show a "past creations" row.
+    const CREATION_COLS = "id, kind, subtype, topic, content, created_at, posted_at, posted_channels";
     let creation = null;
     const { data: saved } = await db.schema("edu").from("content_creations")
       .insert({ school_id: school.id, created_by: req.user.id, kind, subtype, topic, content })
-      .select("id, kind, subtype, topic, content, created_at").maybeSingle();
+      .select(CREATION_COLS).maybeSingle();
     creation = saved || null;
 
     res.json({ success: true, data: { kind, subtype, topic, content, creation } });
   } catch (e) { console.error("[content/generate]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
 });
+
+const CREATION_COLS = "id, kind, subtype, topic, content, created_at, posted_at, posted_channels";
 
 // GET /api/school/content/creations?kind=blog|social|activity — recent outputs.
 router.get("/content/creations", authenticateToken, async (req, res) => {
@@ -718,13 +721,83 @@ router.get("/content/creations", authenticateToken, async (req, res) => {
     const school = await getMySchool(req, res);
     if (!school) return;
     let q = db.schema("edu").from("content_creations")
-      .select("id, kind, subtype, topic, content, created_at")
+      .select(CREATION_COLS)
       .eq("school_id", school.id).order("created_at", { ascending: false }).limit(30);
     if (["blog", "social", "activity"].includes(req.query.kind)) q = q.eq("kind", req.query.kind);
     const { data, error } = await q;
     if (error) throw error;
     res.json({ success: true, data: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/school/content/creations/:id — one creation (for the detail page).
+router.get("/content/creations/:id", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data, error } = await db.schema("edu").from("content_creations")
+      .select(CREATION_COLS).eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Best-effort text publish to a connected channel using the caller's stored
+// social credentials. Text-only: Facebook (Page feed) and X post directly;
+// Instagram/TikTok need media, so they're recorded as posted (manual finish).
+async function publishToChannel(platform, creds, text) {
+  if (!creds?.connected) return { ok: false, reason: "not_connected" };
+  const token = creds.access_token;
+  try {
+    if (platform === "facebook") {
+      if (!token || !creds.account_id) return { ok: false, reason: "missing_page_token" };
+      const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(creds.account_id)}/feed`;
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, access_token: token }) });
+      const j = await r.json().catch(() => ({}));
+      return r.ok ? { ok: true, id: j.id } : { ok: false, reason: j.error?.message || "post_failed" };
+    }
+    if (platform === "twitter") {
+      if (!token) return { ok: false, reason: "missing_token" };
+      const r = await fetch("https://api.twitter.com/2/tweets", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 280) }) });
+      const j = await r.json().catch(() => ({}));
+      return r.ok ? { ok: true, id: j.data?.id } : { ok: false, reason: j.detail || j.title || "post_failed" };
+    }
+    // instagram / tiktok are media-first — mark as posted for manual finishing.
+    return { ok: true, manual: true };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+
+// POST /api/school/content/creations/:id/post  { channels: [...] }
+router.post("/content/creations/:id/post", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: creation } = await db.schema("edu").from("content_creations")
+      .select(CREATION_COLS).eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+    if (!creation) return res.status(404).json({ error: "Not found" });
+
+    const channels = Array.isArray(req.body?.channels) ? req.body.channels.filter((c) => ["facebook", "instagram", "twitter", "tiktok"].includes(c)) : [];
+    if (!channels.length) return res.status(400).json({ error: "Pick at least one channel to post to." });
+
+    const { data: us } = await db.from("user_settings").select("settings").eq("user_id", req.user.id).maybeSingle();
+    const social = us?.settings?.social_platforms ?? {};
+
+    const results = {};
+    const posted = new Set(creation.posted_channels || []);
+    for (const ch of channels) {
+      const r = await publishToChannel(ch, social[ch], creation.content || "");
+      results[ch] = r;
+      if (r.ok) posted.add(ch);
+    }
+
+    const postedArr = [...posted];
+    const { data: updated } = await db.schema("edu").from("content_creations")
+      .update({ posted_channels: postedArr, posted_at: postedArr.length ? new Date().toISOString() : creation.posted_at })
+      .eq("id", creation.id).select(CREATION_COLS).maybeSingle();
+
+    res.json({ success: true, data: { creation: updated || creation, results } });
+  } catch (e) { console.error("[content/post]", e); res.status(500).json({ error: "Could not post. Try again." }); }
 });
 
 // DELETE /api/school/content/creations/:id
