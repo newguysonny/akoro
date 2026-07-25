@@ -7,6 +7,11 @@
 
 const EMAIL_FROM = process.env.RESEND_FROM_EMAIL || "noreply@akoro.app";
 
+// Public base that serves the app's static logo assets (akoro-learner/public).
+// Override with EMAIL_ASSET_BASE if the logo is hosted elsewhere.
+const ASSET_BASE = (process.env.EMAIL_ASSET_BASE || process.env.PUBLIC_SITE_URL || "https://akoro.app").replace(/\/+$/, "");
+const LOGO_URL   = `${ASSET_BASE}/logo/akoro-dark-180.png`; // the app icon (same mark used in-app)
+
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const AMBER   = "#E8884A";
 const INK     = "#17161C"; // headings
@@ -39,8 +44,9 @@ ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;c
       <!-- Brand -->
       <tr><td style="padding:4px 4px 20px;">
         <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-          <td style="background:${AMBER};border-radius:9px;width:30px;height:30px;text-align:center;vertical-align:middle;">
-            <span style="font-size:16px;font-weight:800;color:#fff;line-height:30px;font-family:${FONT};">A</span>
+          <td style="vertical-align:middle;">
+            <img src="${LOGO_URL}" width="30" height="30" alt="Akoro"
+                 style="display:block;border-radius:8px;width:30px;height:30px;" />
           </td>
           <td style="padding-left:10px;vertical-align:middle;">
             <span style="font-size:16px;font-weight:700;color:${INK};letter-spacing:-.01em;">Akoro</span>
