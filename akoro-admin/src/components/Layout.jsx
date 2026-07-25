@@ -177,11 +177,11 @@ function useUnreadMessages() {
 
 export function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
-  const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
   const unread = useUnreadMessages();
   const { pathname } = useLocation();
-  // Icon-only when the user collapses it (hamburger) OR at tablet width.
-  const iconOnly = collapsed || compact;
+  // Driven purely by the hamburger (like the school & instructor apps) so the
+  // toggle always works — no viewport media query overriding it.
+  const iconOnly = collapsed;
 
   // Which group holds the current route (so it auto-expands on load / nav).
   const activeGroup = NAV_GROUPS.find((g) => g.children?.some((c) => c.to === pathname))?.label;
