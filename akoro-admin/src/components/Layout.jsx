@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -21,28 +21,46 @@ function useMediaQuery(query) {
   return matches;
 }
 
-const NAV = [
-  { to: '/',                 icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/analytics',        icon: BarChart2,       label: 'Analytics' },
-  { to: '/users',            icon: Users,           label: 'Users' },
-  { to: '/instructors',      icon: GraduationCap,   label: 'Instructors' },
-  { to: '/schools',          icon: Building2,       label: 'Schools' },
-  { to: '/courses',          icon: BookOpen,        label: 'Courses' },
-  { to: '/agents',           icon: Bot,             label: 'Agents' },
-  { to: '/syllabus',         icon: BookMarked,      label: 'Syllabus' },
-  { to: '/website-templates',icon: LayoutTemplate,  label: 'Web Templates' },
-  { to: '/payments',         icon: CreditCard,      label: 'Payments' },
-  { to: '/payouts',          icon: DollarSign,      label: 'Payouts' },
-  { to: '/reviews',          icon: Star,            label: 'Reviews' },
-  { to: '/coupons',          icon: Tag,             label: 'Coupons' },
-  { to: '/reports',          icon: FileBarChart,    label: 'Reports' },
-  { to: '/content/blog',     icon: FileText,        label: 'Blog' },
-  { to: '/content/careers',  icon: Briefcase,       label: 'Careers' },
-  { to: '/messages',         icon: Inbox,           label: 'Messages' },
-  { to: '/marketing',        icon: Megaphone,       label: 'Marketing' },
-  { to: '/notifications',    icon: Bell,            label: 'Notifications' },
-  { to: '/settings',         icon: Settings,        label: 'Settings' },
+/* Grouped, expandable nav (desktop). Top-level entries with `to` are single
+   links; entries with `children` are collapsible groups. The tablet-compact
+   sidebar and the mobile bottom bar use the flattened list (NAV) below. */
+const NAV_GROUPS = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { label: 'Insights', icon: BarChart2, children: [
+    { to: '/analytics', icon: BarChart2,    label: 'Analytics' },
+    { to: '/reports',   icon: FileBarChart, label: 'Reports' },
+  ] },
+  { label: 'People', icon: Users, children: [
+    { to: '/users',       icon: Users,         label: 'Users' },
+    { to: '/instructors', icon: GraduationCap, label: 'Instructors' },
+    { to: '/schools',     icon: Building2,      label: 'Schools' },
+    { to: '/agents',      icon: Bot,            label: 'Agents' },
+  ] },
+  { label: 'Catalog', icon: BookOpen, children: [
+    { to: '/courses',           icon: BookOpen,       label: 'Courses' },
+    { to: '/syllabus',          icon: BookMarked,     label: 'Syllabus' },
+    { to: '/website-templates', icon: LayoutTemplate, label: 'Web Templates' },
+  ] },
+  { label: 'Finance', icon: CreditCard, children: [
+    { to: '/payments', icon: CreditCard, label: 'Payments' },
+    { to: '/payouts',  icon: DollarSign, label: 'Payouts' },
+    { to: '/coupons',  icon: Tag,        label: 'Coupons' },
+  ] },
+  { label: 'Engagement', icon: Megaphone, children: [
+    { to: '/reviews',       icon: Star,      label: 'Reviews' },
+    { to: '/marketing',     icon: Megaphone, label: 'Marketing' },
+    { to: '/messages',      icon: Inbox,     label: 'Messages' },
+    { to: '/notifications', icon: Bell,      label: 'Notifications' },
+  ] },
+  { label: 'Content', icon: FileText, children: [
+    { to: '/content/blog',    icon: FileText,  label: 'Blog' },
+    { to: '/content/careers', icon: Briefcase, label: 'Careers' },
+  ] },
+  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
+
+// Flattened destinations (compact sidebar + mobile bottom bar).
+const NAV = NAV_GROUPS.flatMap((g) => (g.children ? g.children : [g]));
 
 function Badge({ count, style }) {
   if (!count) return null;
@@ -87,6 +105,61 @@ function NavItem({ to, icon: Icon, label, compact, badge = 0 }) {
   );
 }
 
+/* Indented child link inside an expandable group (desktop, expanded width). */
+function ChildLink({ to, label, badge = 0 }) {
+  return (
+    <NavLink
+      to={to}
+      style={({ isActive }) => ({
+        display: 'flex', alignItems: 'center', gap: 9,
+        padding: '7px 10px', borderRadius: 8,
+        textDecoration: 'none', fontFamily: FONT, fontSize: 12.5,
+        fontWeight: isActive ? 600 : 400,
+        color: isActive ? WHITE : MUTED2,
+        background: isActive ? `${AMBER}1F` : 'transparent',
+        transition: 'all .15s',
+      })}
+    >
+      <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+      <span style={{ flex: 1 }}>{label}</span>
+      <Badge count={badge} />
+    </NavLink>
+  );
+}
+
+/* Expandable group header + its children (desktop, expanded width). */
+function Group({ item, open, onToggle, unread }) {
+  const hasMessages = item.children.some((c) => c.to === '/messages');
+  return (
+    <div style={{ margin: '2px 0' }}>
+      <button
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, width: 'calc(100% - 16px)',
+          padding: '10px 16px', margin: '0 8px', borderRadius: 10, border: 'none', cursor: 'pointer',
+          fontFamily: FONT, fontSize: 14, textAlign: 'left',
+          background: open ? 'rgba(255,255,255,.04)' : 'transparent',
+          color: open ? WHITE : MUTED2, transition: 'all .15s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = WHITE; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = open ? WHITE : MUTED2; }}
+      >
+        <item.icon size={18} />
+        <span style={{ flex: 1 }}>{item.label}</span>
+        {!open && hasMessages && <Badge count={unread} />}
+        <ChevronDown size={14} style={{ transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none', flexShrink: 0 }} />
+      </button>
+      {open && (
+        <div style={{ margin: '2px 8px 6px', paddingLeft: 22, borderLeft: '1px solid rgba(255,255,255,.08)' }}>
+          {item.children.map((c) => (
+            <ChildLink key={c.to} to={c.to} label={c.label} badge={c.to === '/messages' ? unread : 0} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Poll the unread contact-message count for the Messages nav badge.
 function useUnreadMessages() {
   const [unread, setUnread] = useState(0);
@@ -106,6 +179,13 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
   const unread = useUnreadMessages();
+  const { pathname } = useLocation();
+
+  // Which group holds the current route (so it auto-expands on load / nav).
+  const activeGroup = NAV_GROUPS.find((g) => g.children?.some((c) => c.to === pathname))?.label;
+  const [open, setOpen] = useState({});
+  useEffect(() => { if (activeGroup) setOpen((o) => ({ ...o, [activeGroup]: true })); }, [activeGroup]);
+  const toggle = (label) => setOpen((o) => ({ ...o, [label]: !o[label] }));
 
   return (
     <aside style={{
@@ -133,9 +213,15 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Nav */}
+      {/* Nav — expandable groups on desktop, flat icon list when compact */}
       <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {NAV.map(item => <NavItem key={item.to} {...item} compact={compact} badge={item.to === '/messages' ? unread : 0} />)}
+        {compact
+          ? NAV.map(item => <NavItem key={item.to} {...item} compact badge={item.to === '/messages' ? unread : 0} />)
+          : NAV_GROUPS.map(item => (
+              item.children
+                ? <Group key={item.label} item={item} open={!!open[item.label]} onToggle={() => toggle(item.label)} unread={unread} />
+                : <NavItem key={item.to} {...item} badge={item.to === '/messages' ? unread : 0} />
+            ))}
       </nav>
 
       {/* User */}
