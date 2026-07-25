@@ -1,7 +1,7 @@
 /**
  * SettingsBillingPage — constants + child components.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, SlidersHorizontal, Clock, ShieldCheck, Plug, Facebook, Send,
@@ -9,10 +9,10 @@ import {
   Settings2, Warehouse, Hash, MapPin, Fingerprint, UserCog, GraduationCap,
   AlertTriangle, Eye, EyeOff, RefreshCw, Check, Languages, Moon, Palette,
   Key, Lock, PauseCircle, Trash2, HelpCircle, Bug, MessageCircle, FileText,
-  ChevronRight, Globe, Loader2,
+  ChevronRight, Globe, Loader2, CreditCard, X,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
-import { apiGet, apiPut, apiPost } from '../../services/api.js';
+import { apiGet, apiPut, apiPost, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, RED, FONT } from '../../constants.js';
 import { COUNTRIES as GEO_COUNTRIES, NG_STATES } from '../../data/locations.js';
 
@@ -35,6 +35,7 @@ const TABS = [
   { key: 'about',        label: 'About',             icon: Info },
 ];
 const EXTERNAL = [
+  { key: 'billing',       label: 'Billing & Plan', icon: CreditCard, external: true, to: '/settings-subscription' },
   { key: 'social',        label: 'Social Media',  icon: Facebook, external: true, to: '/settings-social-media' },
   { key: 'telegram',      label: 'Telegram Bot',  icon: Send,     external: true, to: '/settings-telegram' },
   { key: 'domain',        label: 'Domain',        icon: Globe,    external: true, to: '/settings-domain' },
@@ -102,15 +103,37 @@ function Banner({ tone = 'warn', children }) {
     </div>
   );
 }
-function UploadTile({ label, preview }) {
+function UploadTile({ label, preview, kind, onUploaded, onToast }) {
+  const ref = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('kind', kind);
+      const r = await fetch(`${API}/api/school/settings/profile/upload`, {
+        method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd,
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.error || 'Upload failed');
+      onUploaded?.(j.data.url);
+      onToast?.('Uploaded ✓');
+    } catch (err) { onToast?.(err.message || 'Upload failed'); }
+    finally { setBusy(false); }
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, fontFamily: FONT }}>{label}</span>
       <div style={{ width: 96, height: 96, borderRadius: 12, border: `1.5px dashed ${BORDER}`, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        {preview || <Upload size={20} color={MUTED2} />}
+        {busy ? <Loader2 size={20} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /> : (preview || <Upload size={20} color={MUTED2} />)}
       </div>
-      <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-        <Upload size={12} /> Browse
+      <input ref={ref} type="file" accept="image/*" onChange={pick} style={{ display: 'none' }} />
+      <button onClick={() => ref.current?.click()} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>
+        <Upload size={12} /> {busy ? 'Uploading…' : 'Browse'}
       </button>
     </div>
   );
@@ -148,10 +171,12 @@ function Row({ icon: Icon, label, sublabel, right, onClick, danger, last }) {
 }
 
 /* ── School Profile panel (controlled) ───────────────────────────── */
-function SchoolProfilePanel({ value, onChange }) {
+function SchoolProfilePanel({ value, onChange, onToast }) {
   const set = (k) => (e) => onChange({ ...value, [k]: e.target.value });
-  const ngStates = value.country === 'Nigeria' ? Object.keys(NG_STATES) : [];
-  const lgaOptions = value.country === 'Nigeria' ? (NG_STATES[value.state] || []) : [];
+  // Tolerate legacy defaults like "Nigeria (+234)" so the State/LGA dropdowns work.
+  const isNigeria = /^nigeria\b/i.test(value.country || '');
+  const ngStates = isNigeria ? Object.keys(NG_STATES) : [];
+  const lgaOptions = isNigeria ? (NG_STATES[value.state] || []) : [];
   const levels = Array.isArray(value.educationLevels) ? value.educationLevels : [];
   const toggleLevel = (l) => onChange({ ...value, educationLevels: levels.includes(l) ? levels.filter((x) => x !== l) : [...levels, l] });
   return (
@@ -218,9 +243,9 @@ function SchoolProfilePanel({ value, onChange }) {
 
       <SectionHeader color={AMBER} icon={Sparkles} title="Branding & Appearance" />
       <div style={{ display: 'flex', gap: 36, flexWrap: 'wrap' }}>
-        <UploadTile label="School Logo" preview={value.logoUrl ? <img src={value.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null} />
-        <UploadTile label="Favicon (.ico, .png)" preview={value.faviconUrl ? <img src={value.faviconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null} />
-        <UploadTile label="Principal Signature" preview={value.signatureUrl ? <img src={value.signatureUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : null} />
+        <UploadTile label="School Logo" kind="logo" onToast={onToast} onUploaded={(url) => onChange({ ...value, logoUrl: url })} preview={value.logoUrl ? <img src={value.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null} />
+        <UploadTile label="Favicon (.ico, .png)" kind="favicon" onToast={onToast} onUploaded={(url) => onChange({ ...value, faviconUrl: url })} preview={value.faviconUrl ? <img src={value.faviconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null} />
+        <UploadTile label="Principal Signature" kind="signature" onToast={onToast} onUploaded={(url) => onChange({ ...value, signatureUrl: url })} preview={value.signatureUrl ? <img src={value.signatureUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> : null} />
       </div>
     </div>
   );
@@ -400,22 +425,47 @@ function AttendancePanel({ value, onChange }) {
 }
 
 /* ── Security panel (controlled) ─────────────────────────────────── */
-function SecurityPanel({ value, onChange }) {
+function ChangePasswordModal({ onClose, onToast }) {
+  const [cur, setCur] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (next.length < 8) { onToast?.('New password must be at least 8 characters'); return; }
+    if (next !== confirm) { onToast?.('Passwords don’t match'); return; }
+    setBusy(true);
+    try {
+      await apiPost('/api/auth/change-password', { currentPassword: cur, newPassword: next });
+      onToast?.('Password changed ✓'); onClose();
+    } catch (e) { onToast?.(e.message || 'Could not change password'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 400, background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>Change Password</span>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} placeholder="Current password" style={inputStyle} />
+          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="New password (min 8 chars)" style={inputStyle} />
+          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirm new password" style={inputStyle} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+          <button onClick={submit} disabled={busy || !cur || !next} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !cur || !next ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !cur || !next ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !cur || !next ? 'default' : 'pointer', fontFamily: FONT }}>{busy ? 'Saving…' : 'Update'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SecurityPanel({ value, onChange, onToast }) {
   const v = value || {};
+  const [pwOpen, setPwOpen] = useState(false);
   return (
     <div>
-      <SectionHeader color={BLUE} icon={UserCog} title="Admin Account Security" />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 18px', marginBottom: 24, flexWrap: 'wrap' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', background: `${BLUE}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <UserCog size={18} color={BLUE} />
-        </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <p style={{ fontSize: 13.5, fontWeight: 800, color: INK, margin: '0 0 3px', fontFamily: FONT }}>Administrator Password & Profile</p>
-          <p style={{ fontSize: 12, color: MUTED, margin: 0, fontFamily: FONT }}>Update your personal login password, profile picture, and account details.</p>
-        </div>
-        <button style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: BLUE, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>Manage My Account</button>
-      </div>
-
       <SectionHeader color="#F59E0B" icon={AlertTriangle} title="Portal Status (Maintenance Mode)" />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>Enable Maintenance Mode</span>
@@ -425,14 +475,12 @@ function SecurityPanel({ value, onChange }) {
         When active, <b style={{ color: INK }}>Students and Parents</b> will be blocked from accessing the portal and mobile app. Staff and Admins still have access to the panel.
       </p>
 
-      <SectionHeader color={AMBER} icon={ShieldCheck} title="Privacy & Security" />
+      <SectionHeader color={AMBER} icon={ShieldCheck} title="Account Security" />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={Key}         label="Change Password" sublabel="Update your account password"     onClick={() => {}} />
-        <Row icon={ShieldCheck} label="Two-Factor Auth"  sublabel="Add an extra layer of security"    onClick={() => {}} />
-        <Row icon={Lock}        label="Active Sessions"  sublabel="View and revoke active sessions"   onClick={() => {}} />
-        <Row icon={PauseCircle} label="Deactivate Account" sublabel="Temporarily disable your account" onClick={() => {}} danger />
-        <Row icon={Trash2}      label="Delete Account"   sublabel="Permanently remove all your data"  onClick={() => {}} danger last />
+        <Row icon={Key} label="Change Password" sublabel="Update your admin login password" onClick={() => setPwOpen(true)} last />
       </div>
+
+      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} onToast={onToast} />}
     </div>
   );
 }
@@ -476,9 +524,9 @@ function HelpSupportPanel() {
     <div>
       <SectionHeader color={BLUE} icon={HelpCircle} title="Help & Support" />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={HelpCircle}    label="Help Centre"  sublabel="Browse guides and FAQs"       onClick={() => {}} />
-        <Row icon={Bug}           label="Report a Bug" sublabel="Something not working right?"  onClick={() => {}} />
-        <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => {}} last />
+        <Row icon={HelpCircle}    label="Help Centre"  sublabel="Browse guides and FAQs"       onClick={() => window.open('https://akoro.app/contact', '_blank', 'noopener')} />
+        <Row icon={Bug}           label="Report a Bug" sublabel="Something not working right?"  onClick={() => { window.location.href = 'mailto:support@akoro.app?subject=Bug%20report%20(School%20app)'; }} />
+        <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => { window.location.href = 'mailto:support@akoro.app?subject=School%20support'; }} last />
       </div>
     </div>
   );
@@ -490,8 +538,8 @@ function AboutPanel() {
     <div>
       <SectionHeader color={AMBER} icon={Info} title="About" />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={FileText} label="Terms of Service" onClick={() => {}} />
-        <Row icon={FileText} label="Privacy Policy"   onClick={() => {}} />
+        <Row icon={FileText} label="Terms of Service" onClick={() => window.open('https://akoro.app/terms', '_blank', 'noopener')} />
+        <Row icon={FileText} label="Privacy Policy"   onClick={() => window.open('https://akoro.app/privacy', '_blank', 'noopener')} />
         <Row icon={Info}     label="App Version"       last right={<span style={{ fontSize: 13, color: MUTED2, fontFamily: FONT }}>1.0.0</span>} />
       </div>
     </div>

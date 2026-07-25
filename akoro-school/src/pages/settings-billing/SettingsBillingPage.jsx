@@ -125,10 +125,10 @@ export default function SettingsBillingPage() {
             </div>
           ) : (
             <>
-              {tab === 'profile'      && <SchoolProfilePanel value={profile} onChange={setProfile} />}
+              {tab === 'profile'      && <SchoolProfilePanel value={profile} onChange={setProfile} onToast={showToast} />}
               {tab === 'formats'      && <SystemFormatsPanel formats={formats} onFormatsChange={setFormats} personalisation={personalisation} onPersonalisationChange={setPersonalisation} />}
               {tab === 'attendance'   && <AttendancePanel value={attendance} onChange={setAttendance} />}
-              {tab === 'security'     && <SecurityPanel value={security} onChange={setSecurity} />}
+              {tab === 'security'     && <SecurityPanel value={security} onChange={setSecurity} onToast={showToast} />}
               {tab === 'integrations' && <IntegrationsPanel apiKey={integrations.biometricApiKey} onRegenerate={regenerateKey} regenerating={regenerating} />}
               {tab === 'help'         && <HelpSupportPanel />}
               {tab === 'about'        && <AboutPanel />}

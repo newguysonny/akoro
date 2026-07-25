@@ -618,6 +618,34 @@ router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), as
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/school/settings/profile/upload ─────────────────────────────────
+// Upload a branding image (logo / favicon / principal signature) → storage →
+// set the matching school_profiles column. multipart field: "file", body: kind.
+const brandingUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } }).single("file");
+const BRANDING_COLUMN = { logo: "logo_url", favicon: "favicon_url", signature: "principal_signature_url" };
+router.post("/settings/profile/upload", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  brandingUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const col = BRANDING_COLUMN[req.body?.kind];
+      if (!col) return res.status(400).json({ error: "kind must be logo, favicon or signature" });
+      const f = req.file;
+      if (!f) return res.status(400).json({ error: "Choose an image" });
+      if (!/^image\//.test(f.mimetype || "")) return res.status(400).json({ error: "Upload an image file (PNG, JPG, SVG…)" });
+
+      await ensureBucket();
+      const safe = (f.originalname || "img").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const dest = `schools/${school.id}/branding/${req.body.kind}-${Date.now()}-${safe}`;
+      const url = await uploadPublicFile(dest, f.buffer, f.mimetype || "application/octet-stream");
+      const { error } = await db.from("school_profiles").update({ [col]: url, updated_at: new Date().toISOString() }).eq("id", school.id);
+      if (error) throw new Error(error.message);
+      res.status(201).json({ success: true, data: { kind: req.body.kind, url } });
+    } catch (e) { console.error("[settings/profile/upload]", e.message); res.status(500).json({ error: "Upload failed. Try again." }); }
+  });
+});
+
 // ── PUT /api/school/settings/:category ───────────────────────────────────────
 // category ∈ system-formats | attendance | security | integrations | personalisation | notification-prefs
 const SETTINGS_CATEGORY_COLUMN = {
