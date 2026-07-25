@@ -283,6 +283,7 @@ const NAV_SECTIONS = [
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
   ]},
   { section: 'COMMUNICATION', items: [
+    { label: 'Content', icon: Megaphone, to: '/content' },
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
   ]},
   { section: 'ACCOUNT', items: [

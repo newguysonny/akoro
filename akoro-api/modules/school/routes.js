@@ -32,6 +32,7 @@ import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocumen
 import { assembleTemplateFromZip, ensureResponsiveViewport } from "./templateZip.js";
 import { ensureBucket, uploadZipToStorage, removeTemplateAssets } from "./templateStorage.js";
 import { DEFAULT_TEMPLATES, getDefaultTemplate } from "./defaultTemplates/index.js";
+import { llmComplete } from "../../lib/aiModel.js";
 import {
   vercelConfigured, addDomainToProject, getProjectDomain,
   verifyProjectDomain, getDomainConfig, removeDomainFromProject, buildDnsRecords,
@@ -578,6 +579,7 @@ router.get("/settings", authenticateToken, async (req, res) => {
         notificationPrefs: settings?.notification_prefs ?? {},
         modules:           settings?.modules ?? {},
         backupSchedule:    settings?.backup_schedule ?? { autoBackup: true, frequency: 'daily', retentionDays: 30 },
+        content:           settings?.content ?? {},
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -627,6 +629,7 @@ const SETTINGS_CATEGORY_COLUMN = {
   "notification-prefs":   "notification_prefs",
   "modules":              "modules",
   "backup":               "backup_schedule",
+  "content":              "content",
 };
 router.put("/settings/:category", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
@@ -643,6 +646,50 @@ router.put("/settings/:category", authenticateToken, requireRole(SCHOOL_ROLES), 
     if (error) throw new Error(error.message);
     res.json({ success: true, data: data[column] });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/school/content/generate ────────────────────────────────────────
+// Content hub generators: blog posts, social posts and student activities.
+// Grounds each in the school's saved content preferences (brand voice, etc.).
+const CONTENT_GEN_SYSTEM = {
+  blog: `You are a school's content writer. Produce a complete BLOG POST in Markdown: an SEO-friendly title, a short intro, 3–5 sections with headers, and a warm closing. Community-facing, positive and informative.`,
+  social: `You write short, engaging SOCIAL MEDIA posts for a school. Return 3 distinct caption options, each 2–4 lines with a few relevant hashtags and an emoji or two. Friendly and shareable. Tailor tone to the target platform.`,
+  activity: `You are an experienced teacher. Design a student ACTIVITY / lesson idea in Markdown: a title, objective, materials, step-by-step instructions, a differentiation tip, and an assessment idea. Age-appropriate and practical.`,
+};
+router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const kind = ["blog", "social", "activity"].includes(req.body?.kind) ? req.body.kind : "blog";
+    const topic = String(req.body?.topic || "").trim();
+    if (!topic) return res.status(400).json({ error: "Tell me what it's about" });
+
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const settings = await getPortalSettings(school.id);
+    const prefs = settings?.content ?? {};
+
+    const tone     = String(req.body?.tone || prefs.tone || "warm and professional").trim();
+    const platform = String(req.body?.platform || "").trim();
+    const audience = String(req.body?.audience || "").trim();
+    const extra    = String(req.body?.extra || "").trim();
+
+    const brief = [
+      `School: ${school.name || "our school"}.`,
+      prefs.voice ? `Brand voice: ${prefs.voice}.` : "",
+      `Tone: ${tone}.`,
+      platform ? `Target platform: ${platform}.` : "",
+      audience ? `Audience: ${audience}.` : "",
+      `Topic: ${topic}.`,
+      extra ? `Extra instructions: ${extra}.` : "",
+      kind === "social" && prefs.hashtags ? `Include these hashtags where natural: ${prefs.hashtags}.` : "",
+    ].filter(Boolean).join("\n");
+
+    const content = await llmComplete(brief, {
+      system: CONTENT_GEN_SYSTEM[kind],
+      maxTokens: kind === "social" ? 700 : 1600,
+      temperature: 0.7,
+    });
+    res.json({ success: true, data: { kind, topic, content } });
+  } catch (e) { console.error("[content/generate]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
 });
 
 // ── POST /api/school/settings/integrations/regenerate-key ───────────────────
