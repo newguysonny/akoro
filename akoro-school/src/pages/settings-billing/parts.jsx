@@ -25,6 +25,11 @@ const BOARDING_TYPES   = ['Day only', 'Boarding only', 'Day & Boarding'];
 const STUDENT_BANDS    = ['1 – 100', '101 – 300', '301 – 600', '601 – 1,000', '1,000+'];
 
 /* ── Tab config ──────────────────────────────────────────────────── */
+// Public marketing site (Terms / Privacy / Contact live there) + support email,
+// from env so they're not hard-coded to akoro.app.
+const SITE_URL = (import.meta.env.VITE_LEARNER_URL || 'https://akoro.app').replace(/\/$/, '');
+const SUPPORT_EMAIL = import.meta.env.VITE_SUPPORT_EMAIL || 'support@akoro.app';
+
 const TABS = [
   { key: 'profile',      label: 'School Profile',    icon: Building2 },
   { key: 'formats',      label: 'System & Formats',  icon: SlidersHorizontal },
@@ -524,9 +529,9 @@ function HelpSupportPanel() {
     <div>
       <SectionHeader color={BLUE} icon={HelpCircle} title="Help & Support" />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={HelpCircle}    label="Help Centre"  sublabel="Browse guides and FAQs"       onClick={() => window.open('https://akoro.app/contact', '_blank', 'noopener')} />
-        <Row icon={Bug}           label="Report a Bug" sublabel="Something not working right?"  onClick={() => { window.location.href = 'mailto:support@akoro.app?subject=Bug%20report%20(School%20app)'; }} />
-        <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => { window.location.href = 'mailto:support@akoro.app?subject=School%20support'; }} last />
+        <Row icon={HelpCircle}    label="Help Centre"  sublabel="Browse guides and FAQs"       onClick={() => window.open(`${SITE_URL}/contact`, '_blank', 'noopener')} />
+        <Row icon={Bug}           label="Report a Bug" sublabel="Something not working right?"  onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=Bug%20report%20(School%20app)`; }} />
+        <Row icon={MessageCircle} label="Contact Us"   sublabel="Talk to the Akoro team"        onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}?subject=School%20support`; }} last />
       </div>
     </div>
   );
@@ -538,8 +543,8 @@ function AboutPanel() {
     <div>
       <SectionHeader color={AMBER} icon={Info} title="About" />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <Row icon={FileText} label="Terms of Service" onClick={() => window.open('https://akoro.app/terms', '_blank', 'noopener')} />
-        <Row icon={FileText} label="Privacy Policy"   onClick={() => window.open('https://akoro.app/privacy', '_blank', 'noopener')} />
+        <Row icon={FileText} label="Terms of Service" onClick={() => window.open(`${SITE_URL}/terms`, '_blank', 'noopener')} />
+        <Row icon={FileText} label="Privacy Policy"   onClick={() => window.open(`${SITE_URL}/privacy`, '_blank', 'noopener')} />
         <Row icon={Info}     label="App Version"       last right={<span style={{ fontSize: 13, color: MUTED2, fontFamily: FONT }}>1.0.0</span>} />
       </div>
     </div>
