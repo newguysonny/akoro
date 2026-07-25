@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  FileText, Plus, Sparkles, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award,
+  FileText, Plus, Sparkles, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award, Upload,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
@@ -55,8 +55,27 @@ export function DocumentTemplatesPage() {
   const [certs, setCerts] = useState([]);
   const [cat, setCat] = useState('');
   const [gen, setGen] = useState(null);       // template being generated
+  const [upload, setUpload] = useState(false);  // upload-a-file modal
+  const [upName, setUpName] = useState('');
+  const [upCat, setUpCat] = useState('form');
+  const [upFile, setUpFile] = useState(null);
+  const [upBusy, setUpBusy] = useState(false);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const closeUpload = () => { setUpload(false); setUpFile(null); setUpName(''); setUpCat('form'); };
+  const doUpload = async () => {
+    if (!upFile) { showToast('Choose an .html file'); return; }
+    setUpBusy(true);
+    try {
+      const body = await upFile.text();
+      if (!body.trim()) throw new Error('That file is empty');
+      const name = upName.trim() || upFile.name.replace(/\.(html?|htm)$/i, '') || 'Uploaded template';
+      await apiPost(`${BASE}/document-templates`, { name, category: upCat, body, page_size: 'A4', orientation: 'portrait' });
+      showToast('Template uploaded ✓'); closeUpload(); load();
+    } catch (e) { showToast(e.message || 'Upload failed'); }
+    finally { setUpBusy(false); }
+  };
 
   const load = useCallback(() => {
     apiGet(`${BASE}/document-templates`).then((r) => setDocs(r.data || [])).catch(() => setDocs([]));
@@ -104,6 +123,7 @@ export function DocumentTemplatesPage() {
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
           <button onClick={() => setGen({ pick: true })} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BLUE}55`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Generate</button>
+          <button onClick={() => setUpload(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Upload size={14} /> Upload</button>
           <button onClick={() => navigate('/mgmt/document-templates/new')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Plus size={15} /> New Template</button>
         </div>
       </div>
@@ -140,6 +160,33 @@ export function DocumentTemplatesPage() {
       )}
 
       {gen && <GenerateModal seed={gen} allDocs={docs || []} allCerts={certs} onClose={() => setGen(null)} showToast={showToast} onDone={load} />}
+
+      {upload && (
+        <div onClick={closeUpload} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 460, background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>Upload Template</span>
+              <button onClick={closeUpload} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+            </div>
+            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 14px', lineHeight: 1.5 }}>Upload a self-contained <b>.html</b> file to turn it into a printable document template.</p>
+            <label style={{ fontSize: 12, fontWeight: 700, color: MUTED, display: 'block', margin: '0 0 5px' }}>Template name</label>
+            <input value={upName} onChange={(e) => setUpName(e.target.value)} placeholder="Defaults to the file name" style={{ ...inputStyle, marginBottom: 12 }} />
+            <label style={{ fontSize: 12, fontWeight: 700, color: MUTED, display: 'block', margin: '0 0 5px' }}>Category</label>
+            <select value={upCat} onChange={(e) => setUpCat(e.target.value)} style={{ ...inputStyle, marginBottom: 12 }}>
+              {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <label style={{ fontSize: 12, fontWeight: 700, color: MUTED, display: 'block', margin: '0 0 5px' }}>File (.html)</label>
+            <input type="file" accept="text/html,.html,.htm" onChange={(e) => { const f = e.target.files?.[0] || null; setUpFile(f); if (f && !upName.trim()) setUpName(f.name.replace(/\.(html?|htm)$/i, '')); }} style={{ fontFamily: FONT, fontSize: 13 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+              <button onClick={closeUpload} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              <button onClick={doUpload} disabled={upBusy || !upFile} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: upBusy || !upFile ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: upBusy || !upFile ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: upBusy || !upFile ? 'default' : 'pointer', fontFamily: FONT }}>
+                {upBusy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Upload size={14} />}{upBusy ? 'Uploading…' : 'Upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );

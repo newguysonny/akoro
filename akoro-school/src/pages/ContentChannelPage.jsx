@@ -57,7 +57,9 @@ export default function ContentChannelPage() {
     return <PageLayout title="Channel"><p style={{ fontFamily: FONT, color: MUTED }}>Unknown channel.</p></PageLayout>;
   }
 
-  const startOAuth = () => { window.location.href = `${API}/api/school/social/auth/${platform}`; };
+  // ?portal=school lets the API read the school session cookie (a full-page
+  // navigation to the OAuth endpoint can't send the X-Akoro-Portal header).
+  const startOAuth = () => { window.location.href = `${API}/api/school/social/auth/${platform}?portal=school`; };
 
   const saveManual = async () => {
     setBusy(true);

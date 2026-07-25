@@ -197,8 +197,10 @@ function StreamingPanel({ onToast }) {
     load().catch(() => setState(PLATFORM_KEYS.map((p) => ({ platform: p, connected: false, method: null }))));
   }, [load, onToast]);
 
-  // Full-page redirect to the provider's consent screen.
-  const startOAuth = (platform) => { window.location.href = `${API}/api/meeting/auth/${platform}`; };
+  // Full-page redirect to the provider's consent screen. The ?portal=school
+  // lets the API pick the school session cookie (a navigation can't send the
+  // X-Akoro-Portal header).
+  const startOAuth = (platform) => { window.location.href = `${API}/api/meeting/auth/${platform}?portal=school`; };
 
   const disconnect = async (p) => {
     setBusy(p.platform);

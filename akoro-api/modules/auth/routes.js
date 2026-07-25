@@ -210,8 +210,12 @@ const IS_PROD = process.env.NODE_ENV === "production";
 // The portal is declared by the app via the X-Akoro-Portal header (and, for the
 // Google redirect which carries no header, via the OAuth `state`).
 const PORTAL_IDS = ["student", "instructor", "admin", "school"];
+// The portal is normally declared via the X-Akoro-Portal header. Full-page
+// navigations (OAuth "Connect" redirects, file links) can't set headers, so we
+// also accept a ?portal= query param — it only selects which scoped cookie to
+// read; the token inside is still validated, so it can't be used to escalate.
 const portalOf = (req) => {
-  const p = req?.headers?.["x-akoro-portal"];
+  const p = req?.headers?.["x-akoro-portal"] || req?.query?.portal;
   return PORTAL_IDS.includes(p) ? p : "student";
 };
 const accessCookieName  = (portal) => `akoro_access_${PORTAL_IDS.includes(portal) ? portal : "student"}`;
