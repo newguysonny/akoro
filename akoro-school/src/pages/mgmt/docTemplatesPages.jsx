@@ -71,7 +71,20 @@ export function DocumentTemplatesPage() {
     return [...d, ...c].filter((t) => !cat || t.category === cat);
   }, [docs, certs, cat]);
 
-  const view = (t) => window.open(`${API}${BASE}/document-templates/${encodeURIComponent(t.id)}/html?sample=1`, '_blank', 'noopener');
+  // Open the rendered template in a new tab. We can't point window.open at the
+  // API URL directly: that navigation can't send the X-Akoro-Portal header the
+  // API needs to read the school session cookie, so it 401s ("Access token
+  // required"). Instead open a blank tab synchronously (keeps the click gesture
+  // so it isn't popup-blocked) and fill it from an authenticated fetch.
+  const view = (t) => {
+    const w = window.open('', '_blank');
+    fetchText(`${BASE}/document-templates/${encodeURIComponent(t.id)}/html?sample=1`)
+      .then((html) => {
+        if (!w) return;
+        if (html) { w.document.write(html); w.document.close(); }
+        else { w.close(); showToast('Could not load template'); }
+      });
+  };
   const remove = async (t) => {
     if (!window.confirm(`Delete "${t.name}"?`)) return;
     try { await apiDelete(`${BASE}/${t.kind === 'cert' ? 'certificate-templates' : 'document-templates'}/${t.id}`); showToast('Deleted'); load(); }
