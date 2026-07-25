@@ -1440,6 +1440,10 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOr
   // Website" button) renders it even while unpublished, with a notice banner.
   if (!website.enabled && !preview) return { status: 404, html: "<h1>This school website is not published yet.</h1>" };
 
+  // Maintenance Mode (Settings → Privacy & Security) shows a banner on the site.
+  const portalSettings = await getPortalSettings(school.id).catch(() => null);
+  const maintenance = !!portalSettings?.security?.maintenanceMode;
+
   const addBanner = (raw) => {
     // Full documents skip the theme chrome, so Appearance's tracking scripts
     // and custom CSS are injected here — they apply to template pages too.
@@ -1457,6 +1461,11 @@ async function renderSchoolSiteHtml(school, { preview = false, path = "/", apiOr
     if (website.ai_chat_enabled) {
       const w = aiChatWidgetHtml(apiOrigin);
       html = html.includes("</body>") ? html.replace("</body>", `${w}\n</body>`) : html + w;
+    }
+    // Maintenance banner on the live public site.
+    if (maintenance) {
+      const mb = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#B45309;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">🛠️ This website is undergoing scheduled maintenance — some information may be temporarily unavailable.</div>`;
+      html = html.includes("</body>") ? html.replace("</body>", `${mb}</body>`) : html + mb;
     }
     if (!(preview && !website.enabled)) return html;
     const banner = `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1A1A2E;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)">👁️ Preview mode — this website is not published yet. Turn it on in Website Settings to go live.</div>`;

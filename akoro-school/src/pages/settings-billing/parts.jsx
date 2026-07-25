@@ -466,13 +466,13 @@ function SecurityPanel({ value, onChange, onToast }) {
   const [pwOpen, setPwOpen] = useState(false);
   return (
     <div>
-      <SectionHeader color="#F59E0B" icon={AlertTriangle} title="Portal Status (Maintenance Mode)" />
+      <SectionHeader color="#F59E0B" icon={AlertTriangle} title="Website Maintenance Mode" />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: INK, fontFamily: FONT }}>Enable Maintenance Mode</span>
         <Toggle on={!!v.maintenanceMode} onChange={(on) => onChange({ ...v, maintenanceMode: on })} />
       </div>
       <p style={{ fontSize: 12, color: MUTED, margin: '0 0 26px', fontFamily: FONT, lineHeight: 1.6 }}>
-        When active, <b style={{ color: INK }}>Students and Parents</b> will be blocked from accessing the portal and mobile app. Staff and Admins still have access to the panel.
+        When active, a <b style={{ color: INK }}>maintenance banner</b> is shown across your public school website so visitors know some information may be temporarily unavailable. Your admin panel is unaffected.
       </p>
 
       <SectionHeader color={AMBER} icon={ShieldCheck} title="Account Security" />
