@@ -78,10 +78,18 @@ const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 10, bord
 
 /* ── Generator panel (blog / social / activity) ──────────────────────── */
 const GEN_CONFIG = {
-  blog:     { title: 'Blog Post Generator',  topicLabel: 'What should the post be about?', topicPh: 'e.g. Our new science lab and what students are building' },
-  social:   { title: 'Social Post Generator', topicLabel: 'What are you announcing?',       topicPh: 'e.g. Open day this Saturday, 10am' },
-  activity: { title: 'Activities Creator',    topicLabel: 'Topic or learning goal',          topicPh: 'e.g. Introduce fractions to JSS1' },
+  blog:     { title: 'Blog Post Generator',  topicLabel: 'What should the post be about?', topicPh: 'e.g. Our new science lab and what students are building', pastLabel: 'Past blogs' },
+  social:   { title: 'Social Post Generator', topicLabel: 'What are you announcing?',       topicPh: 'e.g. Open day this Saturday, 10am', pastLabel: 'Past posts' },
+  activity: { title: 'Activities Creator',    topicLabel: 'Topic or learning goal',          topicPh: 'e.g. Introduce fractions to JSS1', pastLabel: 'Past activities' },
 };
+const BLOG_TYPES = [
+  { v: 'newsletter',   l: 'Newsletter' },
+  { v: 'event_recap',  l: 'Event recap' },
+  { v: 'achievement',  l: 'Achievement highlight' },
+  { v: 'announcement', l: 'Announcement' },
+  { v: 'general',      l: 'General post' },
+];
+const BLOG_LABEL = Object.fromEntries(BLOG_TYPES.map((b) => [b.v, b.l]));
 
 function GeneratorPanel({ kind, onToast }) {
   const cfg = GEN_CONFIG[kind];
@@ -89,10 +97,17 @@ function GeneratorPanel({ kind, onToast }) {
   const [tone, setTone] = useState('');
   const [audience, setAudience] = useState('');
   const [platform, setPlatform] = useState('');
+  const [blogType, setBlogType] = useState('newsletter');
   const [extra, setExtra] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
   const [copied, setCopied] = useState(false);
+  const [past, setPast] = useState(null);
+
+  const loadPast = useCallback(() => {
+    apiGet(`/api/school/content/creations?kind=${kind}`).then((r) => setPast(r?.data || [])).catch(() => setPast([]));
+  }, [kind]);
+  useEffect(() => { loadPast(); }, [loadPast]);
 
   const generate = async () => {
     if (!topic.trim()) { onToast?.('Tell me what it’s about'); return; }
@@ -100,9 +115,11 @@ function GeneratorPanel({ kind, onToast }) {
     try {
       const res = await apiPost('/api/school/content/generate', {
         kind, topic: topic.trim(), tone: tone.trim() || null,
-        audience: audience.trim() || null, platform: platform || null, extra: extra.trim() || null,
+        audience: audience.trim() || null, platform: platform || null,
+        blogType: kind === 'blog' ? blogType : null, extra: extra.trim() || null,
       });
       setResult(res?.data?.content || '');
+      loadPast();
     } catch (e) { onToast?.(e.message || 'Could not generate'); }
     finally { setBusy(false); }
   };
@@ -125,6 +142,14 @@ function GeneratorPanel({ kind, onToast }) {
           <textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={2} placeholder={cfg.topicPh} style={{ ...inputStyle, resize: 'vertical' }} />
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {kind === 'blog' && (
+            <div style={{ flex: 1, minWidth: 150 }}>
+              <label style={lbl}>Blog type</label>
+              <select value={blogType} onChange={(e) => setBlogType(e.target.value)} style={inputStyle}>
+                {BLOG_TYPES.map((b) => <option key={b.v} value={b.v}>{b.l}</option>)}
+              </select>
+            </div>
+          )}
           {kind === 'social' && (
             <div style={{ flex: 1, minWidth: 150 }}>
               <label style={lbl}>Platform</label>
@@ -165,6 +190,27 @@ function GeneratorPanel({ kind, onToast }) {
             </button>
           </div>
           <pre style={{ margin: 0, padding: '14px 16px', fontSize: 13, lineHeight: 1.6, color: INK, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result}</pre>
+        </div>
+      )}
+
+      {/* Past creations — swipeable single row */}
+      {past && past.length > 0 && (
+        <div style={{ marginTop: 24, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 10 }}>{cfg.pastLabel}</div>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6, scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}>
+            {past.map((c) => (
+              <button key={c.id} onClick={() => { setResult(c.content); }} title="Open"
+                style={{ flex: '0 0 auto', width: 210, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
+                {c.subtype && kind === 'blog' && <span style={{ alignSelf: 'flex-start', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: BLUE, background: `${BLUE}12`, borderRadius: 20, padding: '2px 8px' }}>{BLOG_LABEL[c.subtype] || c.subtype}</span>}
+                {c.subtype && kind === 'social' && <span style={{ alignSelf: 'flex-start', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: PURPLE, background: `${PURPLE}12`, borderRadius: 20, padding: '2px 8px' }}>{c.subtype}</span>}
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.topic || 'Untitled'}</div>
+                <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 140)}</div>
+                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto' }}>{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

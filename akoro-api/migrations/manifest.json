@@ -65,7 +65,8 @@
     "2026-syllabus-match-v2.sql",
     "2026-platform-website-templates.sql",
     "2026-template-responsive-viewport.sql",
-    "2026-content-settings.sql"
+    "2026-content-settings.sql",
+    "2026-content-creations.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

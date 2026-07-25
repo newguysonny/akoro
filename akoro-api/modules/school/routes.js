@@ -652,10 +652,19 @@ router.put("/settings/:category", authenticateToken, requireRole(SCHOOL_ROLES), 
 // Content hub generators: blog posts, social posts and student activities.
 // Grounds each in the school's saved content preferences (brand voice, etc.).
 const CONTENT_GEN_SYSTEM = {
-  blog: `You are a school's content writer. Produce a complete BLOG POST in Markdown: an SEO-friendly title, a short intro, 3–5 sections with headers, and a warm closing. Community-facing, positive and informative.`,
   social: `You write short, engaging SOCIAL MEDIA posts for a school. Return 3 distinct caption options, each 2–4 lines with a few relevant hashtags and an emoji or two. Friendly and shareable. Tailor tone to the target platform.`,
   activity: `You are an experienced teacher. Design a student ACTIVITY / lesson idea in Markdown: a title, objective, materials, step-by-step instructions, a differentiation tip, and an assessment idea. Age-appropriate and practical.`,
 };
+// Blog sub-types — each is an SEO-friendly Markdown post with its own angle.
+const BLOG_SYSTEM = {
+  newsletter:  `You write a warm weekly school NEWSLETTER in Markdown: a friendly headline, 3–4 short sections (highlights, upcoming events, a note from the school) and a closing. Community-facing, SEO-friendly and positive.`,
+  event_recap: `You write an upbeat EVENT RECAP blog post in Markdown for a school website: a catchy SEO title, 2–3 short paragraphs celebrating what happened, a pull-quote, and a closing line. Warm and shareable.`,
+  achievement: `You write an ACHIEVEMENT HIGHLIGHT blog post in Markdown celebrating a school's success (results, awards, sports, competitions): an SEO title, an intro, the highlights with specifics, a congratulatory quote, and a proud closing.`,
+  announcement:`You write a clear school ANNOUNCEMENT blog post in Markdown: an SEO title, the key information up front (what/when/where/who), any action parents need to take, and a friendly closing.`,
+  general:     `You are a school's content writer. Produce a complete BLOG POST in Markdown: an SEO-friendly title, a short intro, 3–5 sections with headers, and a warm closing. Community-facing, positive and informative.`,
+};
+const BLOG_TYPES = Object.keys(BLOG_SYSTEM);
+
 router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
   try {
     const kind = ["blog", "social", "activity"].includes(req.body?.kind) ? req.body.kind : "blog";
@@ -671,7 +680,10 @@ router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), a
     const platform = String(req.body?.platform || "").trim();
     const audience = String(req.body?.audience || "").trim();
     const extra    = String(req.body?.extra || "").trim();
+    const blogType = BLOG_TYPES.includes(req.body?.blogType) ? req.body.blogType : "general";
+    const subtype  = kind === "blog" ? blogType : (platform || null);
 
+    const system = kind === "blog" ? BLOG_SYSTEM[blogType] : CONTENT_GEN_SYSTEM[kind];
     const brief = [
       `School: ${school.name || "our school"}.`,
       prefs.voice ? `Brand voice: ${prefs.voice}.` : "",
@@ -684,12 +696,47 @@ router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), a
     ].filter(Boolean).join("\n");
 
     const content = await llmComplete(brief, {
-      system: CONTENT_GEN_SYSTEM[kind],
+      system,
       maxTokens: kind === "social" ? 700 : 1600,
       temperature: 0.7,
     });
-    res.json({ success: true, data: { kind, topic, content } });
+
+    // Save it so the generator can show a "past creations" row.
+    let creation = null;
+    const { data: saved } = await db.schema("edu").from("content_creations")
+      .insert({ school_id: school.id, created_by: req.user.id, kind, subtype, topic, content })
+      .select("id, kind, subtype, topic, content, created_at").maybeSingle();
+    creation = saved || null;
+
+    res.json({ success: true, data: { kind, subtype, topic, content, creation } });
   } catch (e) { console.error("[content/generate]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
+});
+
+// GET /api/school/content/creations?kind=blog|social|activity — recent outputs.
+router.get("/content/creations", authenticateToken, async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    let q = db.schema("edu").from("content_creations")
+      .select("id, kind, subtype, topic, content, created_at")
+      .eq("school_id", school.id).order("created_at", { ascending: false }).limit(30);
+    if (["blog", "social", "activity"].includes(req.query.kind)) q = q.eq("kind", req.query.kind);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/school/content/creations/:id
+router.delete("/content/creations/:id", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { error } = await db.schema("edu").from("content_creations").delete()
+      .eq("id", req.params.id).eq("school_id", school.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── POST /api/school/settings/integrations/regenerate-key ───────────────────

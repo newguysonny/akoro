@@ -23,6 +23,8 @@ import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { ensureBucket, uploadPublicFile } from "./templateStorage.js";
 import { renderDocument } from "./documentRenderer.js";
+import { openai } from "../../lib/aiModel.js";
+import { renderPdfToImages } from "../adaptive-learning/pdfRender.js";
 import { DEFAULT_DOC_TEMPLATES, getDefaultDoc } from "./defaultDocs/index.js";
 import { PERIOD_DEFS, TEACH_PERIOD_NAMES, TEMPLATE_SUBJECTS, JUNIOR_GRID, SENIOR_GRID } from "./timetableTemplate.js";
 
@@ -882,6 +884,66 @@ router.get("/students/:id/exams/:examId", authenticateToken, async (req, res) =>
 
 // ── Documents: upload one or more files directly against this student ─────
 const studentDocUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } }).array("files", 20);
+
+// ── Build a document template from a sample (photo / scan / PDF) via vision ───
+const tplFileUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }).single("file");
+const TPL_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4o";
+const TPL_VISION_SYSTEM = `You convert a photographed or scanned document into a clean, self-contained, PRINTABLE HTML template.
+Rules:
+- Return ONLY valid HTML (inline CSS, sized for A4). No markdown, no code fences, no commentary.
+- Faithfully reproduce the layout, headings, tables, sections, borders and overall structure you see.
+- Replace the specific/variable VALUES (person names, dates, ID numbers, marks, amounts, addresses, signatures) with mustache placeholders like {{student_name}}, {{date}}, {{class}}, {{score}} — infer sensible field names. Keep fixed labels and headings as-is.
+- Keep it clean and professional; use a system font stack. Do not invent content that isn't in the document.`;
+
+router.post("/document-templates/build-from-file", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  tplFileUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const f = req.file;
+      if (!f) return res.status(400).json({ error: "Upload a document image or PDF" });
+
+      const name = (f.originalname || "").toLowerCase();
+      const isPdf = f.mimetype === "application/pdf" || /\.pdf$/i.test(name);
+      const isImg = /^image\//.test(f.mimetype || "") || /\.(png|jpe?g|webp|gif|heic)$/i.test(name);
+
+      let images = [];
+      if (isPdf) {
+        const r = await renderPdfToImages(f.buffer, { maxPages: 3, scale: 2 }).catch(() => ({ images: [] }));
+        images = r.images || [];
+      } else if (isImg) {
+        images = [`data:${f.mimetype || "image/png"};base64,${f.buffer.toString("base64")}`];
+      } else {
+        return res.status(400).json({ error: "Upload a photo/scan (PNG, JPG) or a PDF of the document." });
+      }
+      if (!images.length) return res.status(400).json({ error: "Couldn't read that file. Try a clearer photo or a PDF." });
+
+      const userContent = [{ type: "text", text: "Recreate this document as a reusable printable HTML template following the rules." }];
+      for (const url of images) userContent.push({ type: "image_url", image_url: { url, detail: "high" } });
+
+      const resp = await openai.chat.completions.create({
+        model: TPL_VISION_MODEL, max_tokens: 3200, temperature: 0.2,
+        messages: [{ role: "system", content: TPL_VISION_SYSTEM }, { role: "user", content: userContent }],
+      });
+      let html = (resp.choices?.[0]?.message?.content || "").trim();
+      const fence = html.match(/```(?:html)?\s*([\s\S]*?)```/i);
+      if (fence) html = fence[1].trim();
+      if (!html) return res.status(502).json({ error: "Could not build a template from that document. Try again." });
+
+      const tplName = (req.body?.name || "").trim() || (f.originalname || "Template").replace(/\.[^.]+$/, "") || "Template";
+      const category = req.body?.category || "other";
+      const { data, error } = await M().from("document_templates")
+        .insert({ school_id: school.id, name: tplName, category, body: html, page_size: "A4", orientation: "portrait" })
+        .select("id, name, category").single();
+      if (error) throw new Error(error.message);
+      res.status(201).json({ success: true, data });
+    } catch (e) {
+      console.error("[document-templates/build-from-file]", e.message);
+      res.status(500).json({ error: "Could not build the template. Try again." });
+    }
+  });
+});
 router.post("/students/:id/documents/upload", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
   studentDocUpload(req, res, async (uploadErr) => {
     try {
