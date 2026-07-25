@@ -215,7 +215,7 @@ const BLOG_TYPES = [
 ];
 const BLOG_LABEL = Object.fromEntries(BLOG_TYPES.map((b) => [b.v, b.l]));
 
-function GeneratorPanel({ kind, onToast }) {
+function GeneratorPanel({ kind, onToast, onGenerated }) {
   const cfg = GEN_CONFIG[kind];
   const navigate = useNavigate();
   const [topic, setTopic] = useState('');
@@ -227,14 +227,8 @@ function GeneratorPanel({ kind, onToast }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
   const [copied, setCopied] = useState(false);
-  const [past, setPast] = useState(null);
   const [lastCreation, setLastCreation] = useState(null);
   const [success, setSuccess] = useState(false);
-
-  const loadPast = useCallback(() => {
-    apiGet(`/api/school/content/creations?kind=${kind}`).then((r) => setPast(r?.data || [])).catch(() => setPast([]));
-  }, [kind]);
-  useEffect(() => { loadPast(); }, [loadPast]);
 
   const generate = async () => {
     if (!topic.trim()) { onToast?.('Tell me what it’s about'); return; }
@@ -248,7 +242,7 @@ function GeneratorPanel({ kind, onToast }) {
       setResult(res?.data?.content || '');
       setLastCreation(res?.data?.creation || null);
       setSuccess(true);
-      loadPast();
+      onGenerated?.();   // ask the page to refresh the Past creations section
     } catch (e) { onToast?.(e.message || 'Could not generate'); }
     finally { setBusy(false); }
   };
@@ -317,38 +311,13 @@ function GeneratorPanel({ kind, onToast }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: LIGHT, borderBottom: `1px solid ${BORDER}` }}>
             <span style={{ fontSize: 12, fontWeight: 800, color: INK, fontFamily: FONT }}>Result</span>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-              {lastCreation && <AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); loadPast(); }} onToast={onToast} size="sm" />}
+              {lastCreation && <AiPostPill creation={lastCreation} onUpdated={(c) => { setLastCreation(c); onGenerated?.(); }} onToast={onToast} size="sm" />}
               <button onClick={copy} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: copied ? GREEN : MUTED, fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
                 {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy'}
               </button>
             </div>
           </div>
           <pre style={{ margin: 0, padding: '14px 16px', fontSize: 13, lineHeight: 1.6, color: INK, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result}</pre>
-        </div>
-      )}
-
-      {/* Past creations — swipeable single row */}
-      {past && past.length > 0 && (
-        <div style={{ marginTop: 24, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, fontFamily: FONT, marginBottom: 10 }}>{cfg.pastLabel}</div>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6, scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}>
-            {past.map((c) => (
-              <div key={c.id} onClick={() => navigate(`/content/creation/${c.id}`)} title="Open"
-                style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                  {c.subtype && kind === 'blog' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: BLUE, background: `${BLUE}12`, borderRadius: 20, padding: '2px 8px' }}>{BLOG_LABEL[c.subtype] || c.subtype}</span>}
-                  {c.subtype && kind === 'social' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: PURPLE, background: `${PURPLE}12`, borderRadius: 20, padding: '2px 8px' }}>{c.subtype}</span>}
-                  {(!c.subtype || kind === 'activity') && <span />}
-                  <AiPostPill creation={c} onUpdated={() => loadPast()} onToast={onToast} size="sm" />
-                </div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.topic || 'Untitled'}</div>
-                <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 120)}</div>
-                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{fmtDateTime(c.created_at)}</div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -449,8 +418,53 @@ function ExternalChannelsPanel({ onToast }) {
   );
 }
 
+/* ── Past creations — own full-width section (swipeable single row) ────── */
+const PAST_LABEL = { blog: 'Past blogs', social: 'Past posts', activity: 'Past activities' };
+function PastCreations({ kind, refreshKey, onToast }) {
+  const navigate = useNavigate();
+  const [past, setPast] = useState(null);
+
+  const load = useCallback(() => {
+    apiGet(`/api/school/content/creations?kind=${kind}`).then((r) => setPast(r?.data || [])).catch(() => setPast([]));
+  }, [kind]);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  if (past && past.length === 0) return null; // nothing yet — hide the section
+
+  return (
+    <div style={{ marginTop: 22, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>{PAST_LABEL[kind] || 'Past creations'}</div>
+        <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT }}>swipe →</div>
+      </div>
+      {past === null ? (
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map((i) => <div key={i} style={{ flex: '0 0 214px', height: 92, borderRadius: 12, background: LIGHT }} />)}</div>
+      ) : (
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}>
+          {past.map((c) => (
+            <div key={c.id} onClick={() => navigate(`/content/creation/${c.id}`)} title="Open"
+              style={{ flex: '0 0 auto', width: 214, scrollSnapAlign: 'start', textAlign: 'left', cursor: 'pointer', background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 6 }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = AMBER; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                {c.subtype && kind === 'blog' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: BLUE, background: `${BLUE}12`, borderRadius: 20, padding: '2px 8px' }}>{BLOG_LABEL[c.subtype] || c.subtype}</span>}
+                {c.subtype && kind === 'social' && <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: PURPLE, background: `${PURPLE}12`, borderRadius: 20, padding: '2px 8px' }}>{c.subtype}</span>}
+                {(!c.subtype || kind === 'activity') && <span />}
+                <AiPostPill creation={c} onUpdated={() => load()} onToast={onToast} size="sm" />
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.topic || 'Untitled'}</div>
+              <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{(c.content || '').replace(/[#*_`>]/g, '').slice(0, 120)}</div>
+              <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{fmtDateTime(c.created_at)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export {
   TABS, EXTERNAL, SETTINGS_TAB, VALID_TABS, NO_SAVE_TABS, CHANNELS, BLOG_LABEL,
   QUICK_GUIDE, QuickGuide, GeneratorPanel, ContentSettingsPanel, ExternalChannelsPanel,
-  AiPostPill, fmtDateTime,
+  AiPostPill, PastCreations, fmtDateTime,
 };

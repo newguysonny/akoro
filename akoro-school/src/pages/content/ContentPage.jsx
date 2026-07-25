@@ -12,7 +12,7 @@ import { apiGet, apiPut } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, BLUE, FONT } from '../../constants.js';
 import {
   TABS, EXTERNAL, SETTINGS_TAB, VALID_TABS, NO_SAVE_TABS,
-  QuickGuide, GeneratorPanel, ContentSettingsPanel, ExternalChannelsPanel,
+  QuickGuide, GeneratorPanel, ContentSettingsPanel, ExternalChannelsPanel, PastCreations,
 } from './parts.jsx';
 
 export default function ContentPage() {
@@ -21,7 +21,9 @@ export default function ContentPage() {
   const [tab, setTab] = useState(initialTab);
   const [settings, setSettings] = useState({});
   const [saving, setSaving] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);   // bump to reload Past creations
   const [toast, setToast] = useState('');
+  const isGenerator = ['blog', 'social', 'activity'].includes(tab);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
@@ -75,9 +77,9 @@ export default function ContentPage() {
 
         {/* Right content card */}
         <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
-          {tab === 'blog'     && <GeneratorPanel kind="blog" onToast={showToast} />}
-          {tab === 'social'   && <GeneratorPanel kind="social" onToast={showToast} />}
-          {tab === 'activity' && <GeneratorPanel kind="activity" onToast={showToast} />}
+          {tab === 'blog'     && <GeneratorPanel kind="blog" onToast={showToast} onGenerated={() => setRefreshKey((k) => k + 1)} />}
+          {tab === 'social'   && <GeneratorPanel kind="social" onToast={showToast} onGenerated={() => setRefreshKey((k) => k + 1)} />}
+          {tab === 'activity' && <GeneratorPanel kind="activity" onToast={showToast} onGenerated={() => setRefreshKey((k) => k + 1)} />}
           {tab === 'channels' && <ExternalChannelsPanel onToast={showToast} />}
           {tab === 'settings' && <ContentSettingsPanel value={settings} onChange={setSettings} />}
 
@@ -90,6 +92,9 @@ export default function ContentPage() {
           )}
         </section>
       </div>
+
+      {/* Past creations — its own full-width section below both columns */}
+      {isGenerator && <PastCreations kind={tab} refreshKey={refreshKey} onToast={showToast} />}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
