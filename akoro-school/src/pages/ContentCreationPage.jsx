@@ -3,12 +3,12 @@
  * activity), opened from the past-creations row. Shows the full content, when it
  * was created, an AI-post pill (post directly / shows "Posted"), and copy.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Copy, Check, Clock, Loader2 } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Clock, Loader2, ImagePlus, Trash2, Film } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { apiGet } from '../services/api.js';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, FONT } from '../constants.js';
+import { apiGet, apiDelete, API } from '../services/api.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, RED, FONT } from '../constants.js';
 import { AiPostPill, BLOG_LABEL, fmtDateTime } from './content/parts.jsx';
 
 const KIND_TITLE = { blog: 'Blog Post', social: 'Social Post', activity: 'Activity' };
@@ -31,6 +31,30 @@ export default function ContentCreationPage() {
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(c?.content || ''); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* ignore */ }
+  };
+
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const onPickMedia = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch(`${API}/api/school/content/creations/${id}/media`, {
+        method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd,
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.error || 'Upload failed');
+      setC(j.data); showToast('Media attached ✓');
+    } catch (err) { showToast(err.message || 'Upload failed'); }
+    finally { setUploading(false); }
+  };
+  const removeMedia = async () => {
+    try { const r = await apiDelete(`/api/school/content/creations/${id}/media`); setC(r?.data || { ...c, media_url: null, media_type: null }); showToast('Media removed'); }
+    catch (err) { showToast(err.message || 'Could not remove'); }
   };
 
   const subtypeBadge = () => {
@@ -68,6 +92,26 @@ export default function ContentCreationPage() {
                 {c.posted_at && <span style={{ color: GREEN, fontWeight: 700, marginLeft: 8 }}>· Posted {(c.posted_channels || []).length ? `to ${c.posted_channels.join(', ')}` : ''}</span>}
               </div>
             </div>
+            {/* Media attachment */}
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 10, fontFamily: FONT }}>Media {c.media_url ? '' : '(needed for Instagram / TikTok)'}</div>
+              {c.media_url ? (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+                  {c.media_type === 'video'
+                    ? <video src={c.media_url} controls style={{ width: 200, borderRadius: 10, border: `1px solid ${BORDER}` }} />
+                    : <img src={c.media_url} alt="attachment" style={{ width: 160, borderRadius: 10, border: `1px solid ${BORDER}` }} />}
+                  <button onClick={removeMedia} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${RED}44`, background: `${RED}0C`, color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Trash2 size={14} /> Remove</button>
+                </div>
+              ) : (
+                <>
+                  <input ref={fileRef} type="file" accept="image/*,video/*" onChange={onPickMedia} style={{ display: 'none' }} />
+                  <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: uploading ? 'default' : 'pointer', fontFamily: FONT }}>
+                    {uploading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <ImagePlus size={15} />}{uploading ? 'Uploading…' : 'Attach image or video'}
+                  </button>
+                </>
+              )}
+            </div>
+
             <pre style={{ margin: 0, padding: '18px 20px', fontSize: 13.5, lineHeight: 1.7, color: INK, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: LIGHT }}>{c.content}</pre>
           </div>
         )}

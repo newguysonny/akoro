@@ -30,7 +30,7 @@ import {
 import multerLib from "multer";
 import { renderMiniTemplate, renderThemePage, renderSitePage, renderThemeDocument, buildContext } from "./siteRenderer.js";
 import { assembleTemplateFromZip, ensureResponsiveViewport } from "./templateZip.js";
-import { ensureBucket, uploadZipToStorage, removeTemplateAssets } from "./templateStorage.js";
+import { ensureBucket, uploadZipToStorage, removeTemplateAssets, uploadPublicFile } from "./templateStorage.js";
 import { DEFAULT_TEMPLATES, getDefaultTemplate } from "./defaultTemplates/index.js";
 import { llmComplete } from "../../lib/aiModel.js";
 import {
@@ -702,7 +702,7 @@ router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), a
     });
 
     // Save it so the generator can show a "past creations" row.
-    const CREATION_COLS = "id, kind, subtype, topic, content, created_at, posted_at, posted_channels";
+    const CREATION_COLS = "id, kind, subtype, topic, content, created_at, posted_at, posted_channels, media_url, media_type";
     let creation = null;
     const { data: saved } = await db.schema("edu").from("content_creations")
       .insert({ school_id: school.id, created_by: req.user.id, kind, subtype, topic, content })
@@ -713,7 +713,7 @@ router.post("/content/generate", authenticateToken, requireRole(SCHOOL_ROLES), a
   } catch (e) { console.error("[content/generate]", e); res.status(500).json({ error: "Could not generate that. Try again." }); }
 });
 
-const CREATION_COLS = "id, kind, subtype, topic, content, created_at, posted_at, posted_channels";
+const CREATION_COLS = "id, kind, subtype, topic, content, created_at, posted_at, posted_channels, media_url, media_type";
 
 // GET /api/school/content/creations?kind=blog|social|activity — recent outputs.
 router.get("/content/creations", authenticateToken, async (req, res) => {
@@ -743,28 +743,69 @@ router.get("/content/creations/:id", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Best-effort text publish to a connected channel using the caller's stored
-// social credentials. Text-only: Facebook (Page feed) and X post directly;
-// Instagram/TikTok need media, so they're recorded as posted (manual finish).
-async function publishToChannel(platform, creds, text) {
+// Best-effort publish to a connected channel using the caller's stored social
+// credentials and (optionally) an attached media URL.
+//  - Facebook: photo post if an image is attached, else a text feed post.
+//  - Instagram: real 2-step publish (needs an image + IG business account id).
+//  - X: text tweet (media on X needs OAuth1 upload — not attached here).
+//  - TikTok: video publish is a multi-step upload flow — recorded for manual finish.
+async function publishToChannel(platform, creds, text, media) {
   if (!creds?.connected) return { ok: false, reason: "not_connected" };
   const token = creds.access_token;
+  const isImage = media?.url && media.type === "image";
   try {
     if (platform === "facebook") {
       if (!token || !creds.account_id) return { ok: false, reason: "missing_page_token" };
-      const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(creds.account_id)}/feed`;
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, access_token: token }) });
+      if (isImage) {
+        const r = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(creds.account_id)}/photos`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: media.url, caption: text, access_token: token }),
+        });
+        const j = await r.json().catch(() => ({}));
+        return r.ok ? { ok: true, id: j.post_id || j.id } : { ok: false, reason: j.error?.message || "post_failed" };
+      }
+      const r = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(creds.account_id)}/feed`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, access_token: token }),
+      });
       const j = await r.json().catch(() => ({}));
       return r.ok ? { ok: true, id: j.id } : { ok: false, reason: j.error?.message || "post_failed" };
     }
+
+    if (platform === "instagram") {
+      if (!token || !creds.account_id) return { ok: false, reason: "missing_ig_account" };
+      if (!isImage) return { ok: false, reason: "needs_image" };
+      // 1) create a media container, 2) publish it.
+      const c = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(creds.account_id)}/media`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url: media.url, caption: text, access_token: token }),
+      });
+      const cj = await c.json().catch(() => ({}));
+      if (!c.ok || !cj.id) return { ok: false, reason: cj.error?.message || "container_failed" };
+      const p = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(creds.account_id)}/media_publish`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creation_id: cj.id, access_token: token }),
+      });
+      const pj = await p.json().catch(() => ({}));
+      return p.ok ? { ok: true, id: pj.id } : { ok: false, reason: pj.error?.message || "publish_failed" };
+    }
+
     if (platform === "twitter") {
       if (!token) return { ok: false, reason: "missing_token" };
-      const r = await fetch("https://api.twitter.com/2/tweets", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 280) }) });
+      const r = await fetch("https://api.twitter.com/2/tweets", {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 280) }),
+      });
       const j = await r.json().catch(() => ({}));
-      return r.ok ? { ok: true, id: j.data?.id } : { ok: false, reason: j.detail || j.title || "post_failed" };
+      return r.ok ? { ok: true, id: j.data?.id, note: media?.url ? "media not attached on X" : undefined } : { ok: false, reason: j.detail || j.title || "post_failed" };
     }
-    // instagram / tiktok are media-first — mark as posted for manual finishing.
-    return { ok: true, manual: true };
+
+    if (platform === "tiktok") {
+      if (media?.type !== "video") return { ok: false, reason: "needs_video" };
+      return { ok: true, manual: true, note: "TikTok video publish must be finished in the TikTok app" };
+    }
+
+    return { ok: false, reason: "unsupported" };
   } catch (e) { return { ok: false, reason: e.message }; }
 }
 
@@ -783,10 +824,11 @@ router.post("/content/creations/:id/post", authenticateToken, requireRole(SCHOOL
     const { data: us } = await db.from("user_settings").select("settings").eq("user_id", req.user.id).maybeSingle();
     const social = us?.settings?.social_platforms ?? {};
 
+    const media = creation.media_url ? { url: creation.media_url, type: creation.media_type || "image" } : null;
     const results = {};
     const posted = new Set(creation.posted_channels || []);
     for (const ch of channels) {
-      const r = await publishToChannel(ch, social[ch], creation.content || "");
+      const r = await publishToChannel(ch, social[ch], creation.content || "", media);
       results[ch] = r;
       if (r.ok) posted.add(ch);
     }
@@ -798,6 +840,51 @@ router.post("/content/creations/:id/post", authenticateToken, requireRole(SCHOOL
 
     res.json({ success: true, data: { creation: updated || creation, results } });
   } catch (e) { console.error("[content/post]", e); res.status(500).json({ error: "Could not post. Try again." }); }
+});
+
+// POST /api/school/content/creations/:id/media — attach an image/video (used
+// when posting, required for Instagram/TikTok). multipart field: "file".
+const contentMediaUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } }).single("file");
+router.post("/content/creations/:id/media", authenticateToken, requireRole(SCHOOL_ROLES), (req, res) => {
+  contentMediaUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const { data: creation } = await db.schema("edu").from("content_creations")
+        .select("id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle();
+      if (!creation) return res.status(404).json({ error: "Not found" });
+
+      const f = req.file;
+      if (!f) return res.status(400).json({ error: "Choose an image or video" });
+      const mime = f.mimetype || "";
+      const mediaType = /^video\//.test(mime) ? "video" : /^image\//.test(mime) ? "image" : null;
+      if (!mediaType) return res.status(400).json({ error: "Upload an image or video file" });
+
+      await ensureBucket();
+      const safe = (f.originalname || "media").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const dest = `content/${school.id}/${creation.id}-${Date.now()}-${safe}`;
+      const url = await uploadPublicFile(dest, f.buffer, mime || "application/octet-stream");
+
+      const { data, error } = await db.schema("edu").from("content_creations")
+        .update({ media_url: url, media_type: mediaType }).eq("id", creation.id).select(CREATION_COLS).maybeSingle();
+      if (error) throw error;
+      res.status(201).json({ success: true, data });
+    } catch (e) { console.error("[content/media]", e.message); res.status(500).json({ error: "Could not upload media. Try again." }); }
+  });
+});
+
+// DELETE /api/school/content/creations/:id/media — remove the attachment.
+router.delete("/content/creations/:id/media", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data, error } = await db.schema("edu").from("content_creations")
+      .update({ media_url: null, media_type: null }).eq("id", req.params.id).eq("school_id", school.id).select(CREATION_COLS).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // DELETE /api/school/content/creations/:id

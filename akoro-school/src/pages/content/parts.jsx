@@ -40,10 +40,17 @@ const fmtDateTime = (iso) => {
 };
 
 /* ── AI post pill + channel picker ───────────────────────────────────── */
+const REASON_LABEL = {
+  not_connected: 'Not connected', missing_page_token: 'Missing Page token/ID', missing_ig_account: 'Missing IG business account',
+  missing_token: 'Missing access token', needs_image: 'Attach an image first', needs_video: 'Attach a video first',
+  container_failed: 'Instagram rejected the image', publish_failed: 'Publish failed', post_failed: 'Post failed', unsupported: 'Not supported',
+};
+
 function PostModal({ creation, onClose, onPosted, onToast }) {
   const [channels, setChannels] = useState(null);   // connected channel keys
   const [sel, setSel] = useState({});
   const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState(null);     // per-channel outcome
 
   useEffect(() => {
     apiGet('/api/instructor/social')
@@ -57,11 +64,11 @@ function PostModal({ creation, onClose, onPosted, onToast }) {
     setBusy(true);
     try {
       const r = await apiPost(`/api/school/content/creations/${creation.id}/post`, { channels: picked });
-      const results = r?.data?.results || {};
-      const okCount = Object.values(results).filter((x) => x.ok).length;
+      const res = r?.data?.results || {};
+      setResults(res);
       onPosted?.(r?.data?.creation);
-      onToast?.(okCount ? `Posted to ${okCount} channel${okCount > 1 ? 's' : ''} ✓` : 'Marked as posted');
-      onClose();
+      const okCount = Object.values(res).filter((x) => x.ok).length;
+      onToast?.(okCount ? `Posted to ${okCount} channel${okCount > 1 ? 's' : ''} ✓` : 'Couldn’t post — see details');
     } catch (e) { onToast?.(e.message || 'Could not post'); }
     finally { setBusy(false); }
   };
@@ -73,28 +80,58 @@ function PostModal({ creation, onClose, onPosted, onToast }) {
           <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>AI Post</span>
           <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
         </div>
-        <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 14px' }}>Choose where to publish this content.</p>
-        {channels === null ? (
-          <div style={{ color: MUTED2, fontSize: 13, padding: '10px 0' }}>Loading channels…</div>
-        ) : channels.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>No channels connected yet. Connect one from <b>External Channels</b> first.</div>
+        {results ? (
+          <>
+            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 12px' }}>Results by channel:</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {Object.entries(results).map(([k, r]) => {
+                const c = CHANNELS.find((x) => x.key === k) || { label: k, color: MUTED, Icon: Send };
+                return (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+                    <c.Icon size={16} color={c.color} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: INK, flex: 1 }}>{c.label}</span>
+                    {r.ok
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: GREEN }}><Check size={13} />{r.manual ? 'Ready' : 'Posted'}</span>
+                      : <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>{REASON_LABEL[r.reason] || r.reason || 'Failed'}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+              <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Done</button>
+            </div>
+          </>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {CHANNELS.filter((c) => channels.includes(c.key)).map((c) => (
-              <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={!!sel[c.key]} onChange={(e) => setSel((s) => ({ ...s, [c.key]: e.target.checked }))} />
-                <c.Icon size={16} color={c.color} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{c.label}</span>
-              </label>
-            ))}
-          </div>
+          <>
+            <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 14px' }}>Choose where to publish this content.</p>
+            {channels === null ? (
+              <div style={{ color: MUTED2, fontSize: 13, padding: '10px 0' }}>Loading channels…</div>
+            ) : channels.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>No channels connected yet. Connect one from <b>External Channels</b> first.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {CHANNELS.filter((c) => channels.includes(c.key)).map((c) => {
+                  const needsMedia = (c.key === 'instagram' || c.key === 'tiktok');
+                  const hasMedia = !!creation?.media_url;
+                  return (
+                    <label key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!sel[c.key]} onChange={(e) => setSel((s) => ({ ...s, [c.key]: e.target.checked }))} />
+                      <c.Icon size={16} color={c.color} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: INK, flex: 1 }}>{c.label}</span>
+                      {needsMedia && !hasMedia && <span style={{ fontSize: 10, fontWeight: 700, color: '#B45309', background: '#FEF3C7', borderRadius: 20, padding: '2px 7px' }}>needs media</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+              <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              <button onClick={post} disabled={busy || !channels?.length} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !channels?.length ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !channels?.length ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !channels?.length ? 'default' : 'pointer', fontFamily: FONT }}>
+                {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}{busy ? 'Posting…' : 'Post now'}
+              </button>
+            </div>
+          </>
         )}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
-          <button onClick={post} disabled={busy || !channels?.length} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !channels?.length ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !channels?.length ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !channels?.length ? 'default' : 'pointer', fontFamily: FONT }}>
-            {busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Send size={13} />}{busy ? 'Posting…' : 'Post now'}
-          </button>
-        </div>
       </div>
     </div>
   );

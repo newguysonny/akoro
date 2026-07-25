@@ -67,7 +67,8 @@
     "2026-template-responsive-viewport.sql",
     "2026-content-settings.sql",
     "2026-content-creations.sql",
-    "2026-content-posted.sql"
+    "2026-content-posted.sql",
+    "2026-content-media.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
