@@ -437,8 +437,9 @@ export function Sidebar({ collapsed }) {
         </div>
       )}
 
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
+      {/* Nav — min-height:0 lets this flex child scroll internally instead of
+          growing to its content height and pushing the account row off-screen. */}
+      <nav style={{ flex: 1, minHeight: 0, padding: '8px 0', overflowY: 'auto', scrollbarWidth: 'thin' }}>
         {sections.map((sec) => (
           <div key={sec.section} style={{ marginBottom: 6 }}>
             {!collapsed && <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 1.2, color: 'rgba(255,255,255,.35)', padding: '10px 20px 4px', fontFamily: FONT }}>{sec.section}</div>}
