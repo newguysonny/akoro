@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -175,11 +175,13 @@ function useUnreadMessages() {
   return unread;
 }
 
-export function Sidebar() {
+export function Sidebar({ collapsed = false }) {
   const { user, logout } = useAuth();
   const compact = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
   const unread = useUnreadMessages();
   const { pathname } = useLocation();
+  // Icon-only when the user collapses it (hamburger) OR at tablet width.
+  const iconOnly = collapsed || compact;
 
   // Which group holds the current route (so it auto-expands on load / nav).
   const activeGroup = NAV_GROUPS.find((g) => g.children?.some((c) => c.to === pathname))?.label;
@@ -189,22 +191,22 @@ export function Sidebar() {
 
   return (
     <aside style={{
-      width: compact ? 72 : 240, flexShrink: 0, background: INK,
+      width: iconOnly ? 72 : 240, flexShrink: 0, background: INK,
       display: 'flex', flexDirection: 'column',
       height: '100vh', overflow: 'hidden',
       transition: 'width .15s',
     }}>
       {/* Logo */}
       <div style={{
-        padding: compact ? '24px 0 16px' : '24px 20px 16px',
+        padding: iconOnly ? '24px 0 16px' : '24px 20px 16px',
         borderBottom: `1px solid rgba(255,255,255,.07)`,
       }}>
         <div style={{
           display: 'flex', alignItems: 'center',
-          justifyContent: compact ? 'center' : 'flex-start', gap: 10,
+          justifyContent: iconOnly ? 'center' : 'flex-start', gap: 10,
         }}>
           <AkoroLogo size={36} radius={10} />
-          {!compact && (
+          {!iconOnly && (
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: WHITE, fontFamily: FONT }}>Akoro</div>
               <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT }}>Admin Portal</div>
@@ -213,9 +215,9 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Nav — expandable groups on desktop, flat icon list when compact */}
+      {/* Nav — expandable groups when open, flat icon list when collapsed */}
       <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {compact
+        {iconOnly
           ? NAV.map(item => <NavItem key={item.to} {...item} compact badge={item.to === '/messages' ? unread : 0} />)
           : NAV_GROUPS.map(item => (
               item.children
@@ -227,8 +229,8 @@ export function Sidebar() {
       {/* User */}
       <div style={{
         padding: '16px', borderTop: `1px solid rgba(255,255,255,.07)`,
-        display: 'flex', flexDirection: compact ? 'column' : 'row',
-        alignItems: 'center', gap: compact ? 12 : 10,
+        display: 'flex', flexDirection: iconOnly ? 'column' : 'row',
+        alignItems: 'center', gap: iconOnly ? 12 : 10,
       }}>
         <div style={{
           width: 36, height: 36, borderRadius: '50%',
@@ -236,10 +238,10 @@ export function Sidebar() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 14, fontWeight: 700, color: WHITE, flexShrink: 0,
         }}
-        title={compact ? (user?.fullName || user?.email || '') : undefined}>
+        title={iconOnly ? (user?.fullName || user?.email || '') : undefined}>
           {(user?.fullName || user?.email || 'T')[0].toUpperCase()}
         </div>
-        {!compact && (
+        {!iconOnly && (
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: WHITE, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user?.fullName || 'Admin'}
@@ -261,7 +263,7 @@ export function Sidebar() {
         </button>
       </div>
       {/* Legal links */}
-      {!compact && (
+      {!iconOnly && (
         <div style={{ padding: '10px 20px 14px', display: 'flex', gap: 12 }}>
           <a href="/privacy" style={{ fontSize: 10, color: MUTED2, textDecoration: 'none', fontFamily: FONT, transition: 'color .15s' }}
             onMouseEnter={e => e.target.style.color = '#fff'}
@@ -325,7 +327,7 @@ function BellButton() {
   );
 }
 
-export function TopBar({ title, subtitle, action }) {
+export function TopBar({ title, subtitle, action, onToggleSidebar }) {
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 10,
@@ -334,9 +336,18 @@ export function TopBar({ title, subtitle, action }) {
       padding: '16px 28px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     }}>
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
-        {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {onToggleSidebar && (
+          <button onClick={onToggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar"
+            className="sidebar-toggle"
+            style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 10, padding: '8px', cursor: 'pointer', color: INK, display: 'flex', alignItems: 'center' }}>
+            <Menu size={17} />
+          </button>
+        )}
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: INK, margin: 0, fontFamily: FONT }}>{title}</h1>
+          {subtitle && <p style={{ fontSize: 13, color: MUTED, margin: '2px 0 0', fontFamily: FONT }}>{subtitle}</p>}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         {action}
@@ -380,12 +391,24 @@ export function BottomNav() {
   );
 }
 
+const COLLAPSE_KEY = 'akoro_admin_sidebar_collapsed';
+
 export function PageLayout({ children, title, subtitle, action }) {
+  // User-controlled collapse (hamburger), remembered across page loads.
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
+  });
+  const toggleSidebar = () => setCollapsed((c) => {
+    const next = !c;
+    try { localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+      <Sidebar collapsed={collapsed} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <TopBar title={title} subtitle={subtitle} action={action} />
+        <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={toggleSidebar} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           {children}
         </main>

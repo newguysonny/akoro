@@ -99,6 +99,7 @@ export default function GlobalStyles() {
       @media (max-width: 768px) {
         .sidebar { display: none; }
         .main-content { padding-bottom: 80px; }
+        .sidebar-toggle { display: none !important; }
       }
     `}</style>
   );
