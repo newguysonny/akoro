@@ -58,9 +58,6 @@ function NavItem({ to, icon: Icon, label, compact }) {
         background: isActive ? `${AMBER}22` : 'transparent',
         fontFamily: FONT, fontSize: 14, fontWeight: isActive ? 600 : 400,
         transition: 'all .15s',
-        borderLeft: compact
-          ? '3px solid transparent'
-          : (isActive ? `3px solid ${AMBER}` : '3px solid transparent'),
       })}
     >
       <Icon size={18} />

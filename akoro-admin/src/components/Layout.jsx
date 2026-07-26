@@ -90,9 +90,6 @@ function NavItem({ to, icon: Icon, label, compact, badge = 0 }) {
         background: isActive ? `${AMBER}22` : 'transparent',
         fontFamily: FONT, fontSize: 14, fontWeight: isActive ? 600 : 400,
         transition: 'all .15s', position: 'relative',
-        borderLeft: compact
-          ? '3px solid transparent'
-          : (isActive ? `3px solid ${AMBER}` : '3px solid transparent'),
       })}
     >
       <span style={{ position: 'relative', display: 'flex' }}>

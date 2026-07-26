@@ -709,15 +709,16 @@ cron.schedule("0 */6 * * *", async () => {
 
 const router = Router();
 
-// OAuth flows — instructor only
-router.get   ("/auth/:provider",            authenticateToken, requireRole(["instructor", "admin"]), meetingHandlers.oauthRedirect);
+// OAuth flows — instructors AND schools (both connect streaming platforms).
+const MEETING_ROLES = ["instructor", "admin", "school", "school_admin", "teacher"];
+router.get   ("/auth/:provider",            authenticateToken, requireRole(MEETING_ROLES), meetingHandlers.oauthRedirect);
 // No authenticateToken: the provider's redirect won't carry our session cookie.
 // Identity comes from the signed `state` param verified inside the handler.
 router.get   ("/auth/callback/:provider",   meetingHandlers.oauthCallback);
 
 // Meeting management
-router.post  ("/schedule",                  authenticateToken, requireRole(["instructor", "admin"]), meetingHandlers.schedule);
-router.delete("/disconnect/:provider",      authenticateToken, requireRole(["instructor", "admin"]), meetingHandlers.disconnect);
+router.post  ("/schedule",                  authenticateToken, requireRole(MEETING_ROLES), meetingHandlers.schedule);
+router.delete("/disconnect/:provider",      authenticateToken, requireRole(MEETING_ROLES), meetingHandlers.disconnect);
 router.get   ("/status",                    authenticateToken, meetingHandlers.status);
 
 export default router;

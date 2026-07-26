@@ -190,7 +190,9 @@ function StreamingPanel({ onToast }) {
   }, [load, onToast]);
 
   // Full-page redirect to the provider's consent screen.
-  const startOAuth = (platform) => { window.location.href = `${API}/api/meeting/auth/${platform}`; };
+  // ?portal=instructor lets the API pick the instructor session cookie (a
+  // full-page navigation to the OAuth endpoint can't send the X-Akoro-Portal header).
+  const startOAuth = (platform) => { window.location.href = `${API}/api/meeting/auth/${platform}?portal=instructor`; };
 
   const disconnect = async (p) => {
     setBusy(p.platform);

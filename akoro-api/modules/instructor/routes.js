@@ -1631,6 +1631,18 @@ const router = Router();
 
 // All routes require authentication and instructor/admin role
 router.use(authenticateToken);
+
+// Streaming + social credential storage is shared with the SCHOOL portal, so it
+// must accept school roles too. Registered BEFORE the instructor/admin gate
+// below (these only read/write the caller's own user_settings — safe).
+const CRED_ROLES = ["instructor", "admin", "school", "school_admin", "teacher"];
+router.get   ("/streaming",           requireRole(CRED_ROLES), getStreaming);
+router.post  ("/streaming/connect",   requireRole(CRED_ROLES), connectStreaming);
+router.delete("/streaming/:platform", requireRole(CRED_ROLES), disconnectStreaming);
+router.get   ("/social",              requireRole(CRED_ROLES), getSocial);
+router.post  ("/social/connect",      requireRole(CRED_ROLES), connectSocial);
+router.delete("/social/:platform",    requireRole(CRED_ROLES), disconnectSocial);
+
 router.use(requireRole(["instructor", "admin"]));
 
 // Stats
@@ -1689,16 +1701,6 @@ router.get   ("/battles",     listBattles);
 router.post  ("/battles",     createBattle);
 router.patch ("/battles/:id", updateBattle);
 router.delete("/battles/:id", deleteBattle);
-
-// Streaming platforms
-router.get   ("/streaming",              getStreaming);
-router.post  ("/streaming/connect",      connectStreaming);
-router.delete("/streaming/:platform",    disconnectStreaming);
-
-// Social platforms (Facebook / Instagram / X / TikTok credential storage)
-router.get   ("/social",                 getSocial);
-router.post  ("/social/connect",         connectSocial);
-router.delete("/social/:platform",       disconnectSocial);
 
 // ── Document templates ──────────────────────────────────────────────────────
 // Instructors' own document/form templates + the shared default gallery

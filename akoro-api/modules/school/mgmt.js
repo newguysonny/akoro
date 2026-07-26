@@ -32,6 +32,18 @@ const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
 const M = () => db.schema("mgmt");
 
+// Extract {{placeholder}} tokens from a document-template body into the
+// {key,label} shape the Generate form expects, so uploaded / AI-built templates
+// have fillable fields instead of rendering as-is.
+function extractDocVariables(html) {
+  const seen = new Set(); const out = [];
+  String(html || "").replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, k) => {
+    if (!seen.has(k)) { seen.add(k); out.push({ key: k, label: k.replace(/[_.-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim() }); }
+    return _;
+  });
+  return out;
+}
+
 async function getMySchool(req, res) {
   // School admins own a school directly.
   const { data: owned } = await db.from("school_profiles").select("id, name")
@@ -934,7 +946,7 @@ router.post("/document-templates/build-from-file", authenticateToken, requireRol
       const tplName = (req.body?.name || "").trim() || (f.originalname || "Template").replace(/\.[^.]+$/, "") || "Template";
       const category = req.body?.category || "other";
       const { data, error } = await M().from("document_templates")
-        .insert({ school_id: school.id, name: tplName, category, body: html, page_size: "A4", orientation: "portrait" })
+        .insert({ school_id: school.id, name: tplName, category, body: html, page_size: "A4", orientation: "portrait", variables: extractDocVariables(html) })
         .select("id, name, category").single();
       if (error) throw new Error(error.message);
       res.status(201).json({ success: true, data });
@@ -2344,6 +2356,8 @@ router.post("/:resource", authenticateToken, requireMgmtWrite, async (req, res) 
     }
     // Stamp teacher provenance so instructors can filter to their own students.
     if (req.params.resource === "students" && req.user.role === "instructor") body.created_by = req.user.id;
+    // Document templates: auto-derive fillable fields from the body's {{tokens}}.
+    if (req.params.resource === "document-templates" && body.body && (!Array.isArray(body.variables) || !body.variables.length)) body.variables = extractDocVariables(body.body);
     const { data, error } = await M().from(cfg.table).insert({ ...body, school_id: school.id }).select("*").single();
     if (error) {
       if (error.code === "23505") return res.status(409).json({ error: "A record with those unique values already exists" });
@@ -2362,6 +2376,8 @@ router.put("/:resource/:id", authenticateToken, requireMgmtWrite, async (req, re
     if (!school) return;
     const body = cleanBody(cfg, req.body);
     if (!Object.keys(body).length) return res.status(400).json({ error: "No valid fields to update" });
+    // Keep document-template fillable fields in sync when the body changes.
+    if (req.params.resource === "document-templates" && body.body !== undefined && (!Array.isArray(body.variables) || !body.variables.length)) body.variables = extractDocVariables(body.body);
     const { data, error } = await M().from(cfg.table).update(body)
       .eq("id", req.params.id).eq("school_id", school.id).select("*").single();
     if (error) {
