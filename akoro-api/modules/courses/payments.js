@@ -54,9 +54,16 @@ export async function fulfillPaymentsCharge(data) {
   const { payment_id, course_id, user_id, coupon_id, is_cart_checkout, cart_course_ids, cart_listing_ids } = data?.metadata ?? {};
   if (!payment_id || !user_id) return false;
 
-  // Update payment
-  await db.from("payments").update({ status: "success", paid_at: now(), provider_response: data })
-    .eq("id", payment_id).eq("status", "pending");
+  // Atomically flip pending → success and ONLY proceed if this call won the
+  // flip. Without this gate every Paystack retry (and the webhook-vs-verify
+  // race) re-ran enrollment/earnings/counter/notify — resurrecting refunded
+  // purchases and double-counting students/coupon uses. 0 rows updated means
+  // it was already fulfilled (or refunded): idempotent no-op.
+  const { data: won } = await db.from("payments")
+    .update({ status: "success", paid_at: now(), provider_response: data })
+    .eq("id", payment_id).eq("status", "pending")
+    .select("id").maybeSingle();
+  if (!won) return true;
 
   // Cart checkout — a single payment covers many items (courses and/or agent
   // teaching-guides). Fulfil the whole cart (previously the webhook enrolled

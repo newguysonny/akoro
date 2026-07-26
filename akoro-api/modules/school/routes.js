@@ -574,7 +574,9 @@ router.get("/settings", authenticateToken, async (req, res) => {
         systemFormats:     settings?.system_formats ?? {},
         attendance:        settings?.attendance ?? {},
         security:          settings?.security ?? {},
-        integrations:      settings?.integrations ?? {},
+        // Mask the biometric API key on load — the full key is only returned
+        // once, at generation time (regenerate-key), not on every settings read.
+        integrations:      (() => { const i = { ...(settings?.integrations ?? {}) }; if (i.biometricApiKey) i.biometricApiKey = `${String(i.biometricApiKey).slice(0, 10)}…${String(i.biometricApiKey).slice(-4)}`; return i; })(),
         personalisation:   settings?.personalisation ?? {},
         notificationPrefs: settings?.notification_prefs ?? {},
         modules:           settings?.modules ?? {},
@@ -633,7 +635,8 @@ router.post("/settings/profile/upload", authenticateToken, requireRole(SCHOOL_RO
       if (!col) return res.status(400).json({ error: "kind must be logo, favicon or signature" });
       const f = req.file;
       if (!f) return res.status(400).json({ error: "Choose an image" });
-      if (!/^image\//.test(f.mimetype || "")) return res.status(400).json({ error: "Upload an image file (PNG, JPG, SVG…)" });
+      // Raster images only — SVG/HTML would be stored XSS on the public site.
+      if (!/^image\/(png|jpe?g|webp|gif|x-icon|vnd\.microsoft\.icon)$/i.test(f.mimetype || "")) return res.status(400).json({ error: "Upload a PNG, JPG, WEBP, GIF or ICO image." });
 
       await ensureBucket();
       const safe = (f.originalname || "img").replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -886,8 +889,9 @@ router.post("/content/creations/:id/media", authenticateToken, requireRole(SCHOO
       const f = req.file;
       if (!f) return res.status(400).json({ error: "Choose an image or video" });
       const mime = f.mimetype || "";
-      const mediaType = /^video\//.test(mime) ? "video" : /^image\//.test(mime) ? "image" : null;
-      if (!mediaType) return res.status(400).json({ error: "Upload an image or video file" });
+      // Raster images / video only — reject SVG/HTML (stored-XSS risk).
+      const mediaType = /^video\//.test(mime) ? "video" : /^image\/(png|jpe?g|webp|gif)$/i.test(mime) ? "image" : null;
+      if (!mediaType) return res.status(400).json({ error: "Upload a PNG/JPG/WEBP/GIF image or a video." });
 
       await ensureBucket();
       const safe = (f.originalname || "media").replace(/[^a-zA-Z0-9._-]/g, "_");

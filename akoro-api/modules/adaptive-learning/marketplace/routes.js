@@ -84,19 +84,11 @@ async function grantAgentAccess(studentId, agentId, purchaseId) {
 }
 
 async function incrementListingStudents(listingId) {
-  await db.rpc("increment_listing_students", { p_listing_id: listingId });
-  // Fallback if RPC not created:
-  const { data } = await db
-    .schema("edu").from("marketplace_listings")
-    .select("total_students")
-    .eq("id", listingId)
-    .single();
-  if (data) {
-    await db
-      .schema("edu").from("marketplace_listings")
-      .update({ total_students: (data.total_students || 0) + 1, updated_at: new Date() })
-      .eq("id", listingId);
-  }
+  // Atomic increment only. (Previously a read-modify-write "fallback" ran AFTER
+  // the RPC on every call — double-incrementing, and a lost-update under
+  // concurrent purchases.)
+  const { error } = await db.rpc("increment_listing_students", { p_listing_id: listingId });
+  if (error) console.error("[marketplace] increment_listing_students failed:", error.message);
 }
 
 // =============================================================

@@ -2140,6 +2140,11 @@ router.post("/learning-resources/upload", authenticateToken, requireRole(MGMT_RO
       if (!school) return;
       const f = req.file;
       if (!f) return res.status(400).json({ error: "Choose a file to upload" });
+      // Block active content (served from a public origin → stored XSS).
+      const name = (f.originalname || "").toLowerCase();
+      if (/svg|html?|xml|javascript|xhtml/i.test(f.mimetype || "") || /\.(svg|html?|xhtml|js|xml)$/i.test(name)) {
+        return res.status(400).json({ error: "That file type isn't allowed. Upload a document, PDF, image or video." });
+      }
       await ensureBucket();
       const safe = (f.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
       const dest = `materials/${school.id}/${Date.now()}-${safe}`;
@@ -2306,6 +2311,17 @@ router.post("/attendance/mark", authenticateToken, requireRole(MGMT_ROLES), asyn
 
 /* ═══════════════════════ Generic CRUD ════════════════════════════════════ */
 
+// Never expose credential secrets over the generic list; financial columns are
+// admin-only (teachers resolve through getMySchool too, so a role gate matters).
+const ALWAYS_SECRET_COLS = ["password_hash", "student_password_hash", "parent_password_hash", "pin", "result_pin", "two_factor_secret", "access_token", "refresh_token"];
+const ADMIN_ONLY_COLS = ["monthly_salary", "salary", "bank_account_no", "bank_name", "account_number", "account_no"];
+function sanitizeMgmtRow(row, isAdmin) {
+  const out = { ...row };
+  for (const k of ALWAYS_SECRET_COLS) delete out[k];
+  if (!isAdmin) for (const k of ADMIN_ONLY_COLS) delete out[k];
+  return out;
+}
+
 router.get("/:resource", authenticateToken, async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
@@ -2321,7 +2337,9 @@ router.get("/:resource", authenticateToken, async (req, res) => {
     }
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    res.json({ success: true, data: await attachRefs(cfg, data || [], school.id) });
+    const isAdmin = ["school", "school_admin", "admin"].includes(req.user.role);
+    const withRefs = await attachRefs(cfg, data || [], school.id);
+    res.json({ success: true, data: withRefs.map((r) => sanitizeMgmtRow(r, isAdmin)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

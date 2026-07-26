@@ -222,7 +222,8 @@ const blogWriteValidators = [
 router.post("/admin/blog/upload", ...adminOnly, upload.single("file"),
   asyncHandler(async (req, res) => {
     if (!req.file) return res400(res, "No file provided");
-    if (!/^image\//.test(req.file.mimetype || "")) return res400(res, "Only image files are allowed");
+    // Raster images only — SVG/HTML would be stored XSS on the public blog.
+    if (!/^image\/(png|jpe?g|webp|gif)$/i.test(req.file.mimetype || "")) return res400(res, "Upload a PNG, JPG, WEBP or GIF image.");
     await ensureBucket().catch(() => {});
     const ext = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
     const path = `blog/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;

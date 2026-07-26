@@ -947,7 +947,9 @@ router.patch("/me", authenticateToken, [
   if (teachingGuide  !== undefined) patch.teaching_guide   = teachingGuide;
   if (guideEmoji     !== undefined) patch.guide_emoji      = guideEmoji;
   if (subjects       !== undefined) patch.subjects         = subjects;
-  if (twoFactorEnabled !== undefined) patch.two_factor_enabled = twoFactorEnabled;
+  // two_factor_enabled is intentionally NOT settable here — it can only be
+  // toggled via the code-verified /2fa/enable and /2fa/disable routes, so a
+  // session holder can't silently disable 2FA without a TOTP code.
   if (onboardingCompleted !== undefined) patch.onboarding_completed = onboardingCompleted;
   patch.updated_at = new Date().toISOString();
 
