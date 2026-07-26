@@ -46,6 +46,10 @@ export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
   const zip = new AdmZip(buffer);
   const entries = zip.getEntries().filter((e) => !e.isDirectory);
   if (!entries.length) throw new Error("The zip is empty.");
+  // Zip-bomb guard: cap entry count and total decompressed size.
+  if (entries.length > 300) throw new Error("That zip has too many files.");
+  const totalBytes = entries.reduce((s, e) => s + (e.header?.size || 0), 0);
+  if (totalBytes > 80 * 1024 * 1024) throw new Error("That zip expands too large (80MB limit).");
   const htmls = entries.filter((e) => /\.html?$/i.test(e.entryName));
   if (!htmls.length) throw new Error("No .html file found in the zip.");
   const main = htmls.find((e) => /(^|\/)index\.html?$/i.test(e.entryName))
@@ -57,9 +61,12 @@ export async function uploadZipToStorage(buffer, { schoolId, templateId }) {
 
   // Upload all files except the main HTML, preserving structure.
   const urlByRel = {};
+  // Reject any entry that escapes the destination folder (path traversal).
+  const safeRel = (p) => p && !p.startsWith("/") && !p.split("/").some((seg) => seg === ".." || seg === "");
   for (const e of entries) {
     if (e === main) continue;
     const relPath = rel(e.entryName);
+    if (!safeRel(relPath)) throw new Error(`Unsafe path in zip: ${e.entryName}`);
     const dest = `${folder}/${relPath}`;
     const { error } = await db.storage.from(BUCKET).upload(dest, e.getData(), { contentType: mimeOf(relPath), upsert: true });
     if (error) throw new Error(`Upload failed for ${relPath}: ${error.message}`);

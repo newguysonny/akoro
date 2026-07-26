@@ -2505,7 +2505,10 @@ async function getUserEmail(userId) {
 // ── GET /api/school/subscription/verify/:reference ─────────────────────────────
 router.get("/subscription/verify/:reference", authenticateToken, async (req, res) => {
   try {
-    const { data: payment } = await db.schema("edu").from("school_subscription_payments").select("*").eq("paystack_ref", req.params.reference).maybeSingle();
+    // Scope to the caller's own school — no verifying another school's payment.
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { data: payment } = await db.schema("edu").from("school_subscription_payments").select("*").eq("paystack_ref", req.params.reference).eq("school_id", school.id).maybeSingle();
     if (!payment) return res.status(404).json({ error: "Payment not found" });
     if (payment.status === "paid") return res.json({ success: true, activated: true, alreadyProcessed: true });
 

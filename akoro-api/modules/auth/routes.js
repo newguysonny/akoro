@@ -827,33 +827,44 @@ router.get ("/me",       authenticateToken, authHandlers.me);
 // Two-factor authentication
 router.post("/2fa/login",   strictLimit, authHandlers.twoFactorLogin);
 router.post("/2fa/setup",   authenticateToken, authHandlers.twoFactorSetup);
-router.post("/2fa/enable",  authenticateToken, authHandlers.twoFactorEnable);
-router.post("/2fa/disable", authenticateToken, authHandlers.twoFactorDisable);
+router.post("/2fa/enable",  strictLimit, authenticateToken, authHandlers.twoFactorEnable);
+router.post("/2fa/disable", strictLimit, authenticateToken, authHandlers.twoFactorDisable);
 
 router.post("/change-password", authenticateToken, authHandlers.changePassword);
 
 // Google OAuth
 // ?portal=instructor | admin  →  signals which portal the login came from
 const PORTALS = ["instructor", "admin", "student", "school"];
+// state = "<portal>.<nonce>"; the nonce is mirrored in an httpOnly cookie and
+// re-checked on callback so an attacker can't stitch a victim's browser to the
+// attacker's Google identity (login CSRF).
+const parseState = (s) => { const [portal, nonce] = String(s || "").split("."); return { portal: PORTALS.includes(portal) ? portal : "student", nonce: nonce || "" }; };
 router.get("/google", (req, res, next) => {
   const portal = PORTALS.includes(req.query.portal) ? req.query.portal : "student";
+  const nonce = randomUUID();
+  res.cookie("oauth_state", nonce, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 10 * 60 * 1000, path: "/" });
   passport.authenticate("google", {
     scope:   ["profile", "email"],
     session: false,
-    state:   portal,           // carried through to callback
+    state:   `${portal}.${nonce}`,   // carried through to callback
   })(req, res, next);
 });
 
 router.get("/google/callback",
   (req, res, next) => {
-    // Determine which frontend to redirect failures to based on state
-    const portal = PORTALS.includes(req.query.state) ? req.query.state : "student";
+    const { portal, nonce } = parseState(req.query.state);
+    // Verify the CSRF nonce against the cookie set at /google.
+    if (!nonce || nonce !== req.cookies?.oauth_state) {
+      res.clearCookie("oauth_state", { path: "/" });
+      return res.redirect(`${portalUrl(portal)}/signin?error=google_failed`);
+    }
+    res.clearCookie("oauth_state", { path: "/" });
     const failUrl = `${portalUrl(portal)}/signin?error=google_failed`;
     passport.authenticate("google", { session: false, failureRedirect: failUrl })(req, res, next);
   },
   asyncHandler(async (req, res) => {
     const user   = req.user;
-    const portal = PORTALS.includes(req.query.state) ? req.query.state : "student";
+    const { portal } = parseState(req.query.state);
 
     // Role enforcement per portal
     if (portal === "instructor" && user.role !== "instructor" && user.role !== "admin") {

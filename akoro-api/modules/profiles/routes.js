@@ -537,6 +537,7 @@ const schoolHandlers = {
           classroom_students ( id ) )
       `)
       .eq("id", req.params.schoolId)
+      .eq("admin_user_id", req.user.id)   // owner-scoped: no cross-tenant reads
       .single();
 
     if (error || !data) return res404(res, "School not found");
@@ -735,6 +736,10 @@ const schoolHandlers = {
    * GET /api/profiles/schools/:schoolId/classrooms
    */
   listClassrooms: asyncHandler(async (req, res) => {
+    // Owner-scoped: only the school's admin can list its classrooms.
+    const { data: sch } = await db.from("school_profiles").select("id")
+      .eq("id", req.params.schoolId).eq("admin_user_id", req.user.id).maybeSingle();
+    if (!sch) return res404(res, "School not found");
     const { data, error } = await db
       .from("classrooms")
       .select(`
