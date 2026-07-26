@@ -2117,6 +2117,26 @@ router.post("/academics/seed-sample", authenticateToken, requireRole(MGMT_ROLES)
   } catch (e) { console.error("[academics/seed-sample]", e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /learning-resources/upload  — attach a file to a teaching material ────
+// multipart field: "file". Returns the public URL to store on the material.
+const materialUpload = multerLib({ storage: multerLib.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } }).single("file");
+router.post("/learning-resources/upload", authenticateToken, requireRole(MGMT_ROLES), (req, res) => {
+  materialUpload(req, res, async (uploadErr) => {
+    try {
+      if (uploadErr) return res.status(400).json({ error: uploadErr.message });
+      const school = await getMySchool(req, res);
+      if (!school) return;
+      const f = req.file;
+      if (!f) return res.status(400).json({ error: "Choose a file to upload" });
+      await ensureBucket();
+      const safe = (f.originalname || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const dest = `materials/${school.id}/${Date.now()}-${safe}`;
+      const url = await uploadPublicFile(dest, f.buffer, f.mimetype || "application/octet-stream");
+      res.status(201).json({ success: true, data: { url, filename: f.originalname || safe } });
+    } catch (e) { console.error("[learning-resources/upload]", e.message); res.status(500).json({ error: "Upload failed. Try again." }); }
+  });
+});
+
 // ── Weekly Forecast: header + cells for a class/week ──────────────────────
 // GET /forecast?class_id=&section_id=&week_start=YYYY-MM-DD
 // Returns { week, cells } (week is null if none saved yet). The subject per

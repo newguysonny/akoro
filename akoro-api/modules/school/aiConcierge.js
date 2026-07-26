@@ -61,6 +61,7 @@ const PARENT_TOOLS = [
   { type: "function", function: { name: "get_child_summary", description: "Get a child's class, recent topics taught, and fee status.", parameters: { type: "object", properties: { child_name: { type: "string" } } } } },
   { type: "function", function: { name: "get_fee_balance", description: "Get the outstanding fee balance for a child (or all children).", parameters: { type: "object", properties: { child_name: { type: "string" } } } } },
   { type: "function", function: { name: "get_calendar", description: "Upcoming school events, holidays and meetings.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "get_teaching_materials", description: "List the teaching materials/resources (notes, worksheets, videos, links) for a child's class, optionally filtered by subject.", parameters: { type: "object", properties: { child_name: { type: "string" }, subject: { type: "string" } } } } },
   { type: "function", function: { name: "get_payment_link", description: "Get the link for the parent to pay outstanding fees online.", parameters: { type: "object", properties: {} } } },
 ];
 
@@ -113,6 +114,16 @@ async function runTool(name, args, ctx) {
           .select("title, event_type, starts_on, ends_on").eq("school_id", school.id).gte("starts_on", today).order("starts_on").limit(8);
         return { events: (ev || []).map((e) => ({ title: e.title, type: e.event_type, date: e.starts_on })) };
       }
+      if (name === "get_teaching_materials") {
+        const c = pick(args.child_name); if (!c) return { note: "Couldn't find that child." };
+        let mq = db.schema("mgmt").from("learning_resources")
+          .select("title, resource_type, url, note, subjects(name)")
+          .eq("school_id", school.id).eq("class_id", c.class_id).order("created_at", { ascending: false }).limit(40);
+        const { data: mats } = await mq;
+        let list = (mats || []).map((m) => ({ title: m.title, subject: m.subjects?.name || null, type: m.resource_type, link: m.url || null, note: m.note || null }));
+        if (args.subject) list = list.filter((m) => lc(m.subject || "").includes(lc(args.subject)));
+        return { child: `${c.first_name} ${c.last_name}`, class: c.classes?.name, count: list.length, materials: list };
+      }
       if (name === "get_payment_link") {
         const host = school.host || `${school.slug}.akoro.name.ng`;
         return { url: `https://${host}/pay`, note: "Open this link to pay outstanding fees online." };
@@ -127,7 +138,7 @@ async function conciergeChat({ role, school, user, message, history }) {
   const tools = role === "guest" ? GUEST_TOOLS : role === "parent" ? PARENT_TOOLS : [];
   const persona = {
     guest: `You are the admissions assistant for ${school.name}. Warmly help prospective families: answer questions about the school, programmes, tuition and admissions using get_school_info, offer to book a campus tour, and capture their contact details for follow-up. Be encouraging and concise; never invent fees or policies you can't confirm — offer to have the school follow up instead.`,
-    parent: `You are the parent assistant for ${school.name}, helping ${user?.full_name || "a parent"}. Use the tools to answer about THEIR children only — progress, fees and school calendar. Be warm, clear and reassuring. For fee payments, give the payment link.`,
+    parent: `You are the parent assistant for ${school.name}, helping ${user?.full_name || "a parent"}. Use the tools to answer about THEIR children only — progress, fees, school calendar, and teaching materials/resources for their child's subjects. When sharing materials, list them clearly with any links. Be warm, clear and reassuring. For fee payments, give the payment link.`,
   }[role] || `You are the assistant for ${school.name}.`;
 
   const messages = [{ role: "system", content: persona }, ...(history || []).slice(-8), { role: "user", content: message }];

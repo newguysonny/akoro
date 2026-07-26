@@ -3,12 +3,12 @@
  * Config pages via ResourcePage; Dashboard, Class Timetable and Promote
  * Students are custom.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2, Sparkles, FileText, Video, Link2, ExternalLink, Plus, Pencil, Trash2, FolderOpen } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
-import { apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
+import { apiGet, apiPost, apiPut, apiDelete, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
 
 const BASE = '/api/school/mgmt';
@@ -785,11 +785,30 @@ export function TeachingMaterialsPage() {
   const [classSubjectIds, setClassSubjectIds] = useState(null);
   const [materials, setMaterials] = useState(null);   // null = not loaded
   const [busy, setBusy] = useState(false);
-  const [modal, setModal] = useState(null);           // { id?, title, resource_type, url, note }
+  const [modal, setModal] = useState(null);           // { id?, title, resource_type, url, note, fileName }
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
   const className = ctx.classes.find((c) => c.id === classId)?.name || '';
   const classSections = ctx.sections.filter((s) => s.class_id === classId);
+
+  const uploadFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch(`${API}${BASE}/learning-resources/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.error || 'Upload failed');
+      setModal((m) => ({ ...m, url: j.data.url, fileName: j.data.filename, resource_type: 'document', title: m.title?.trim() ? m.title : j.data.filename }));
+      showToast('File attached ✓');
+    } catch (err) { showToast(err.message || 'Upload failed'); }
+    finally { setUploading(false); }
+  };
 
   // Subjects to offer: those assigned to the class if any, else all subjects.
   useEffect(() => {
@@ -905,7 +924,14 @@ export function TeachingMaterialsPage() {
               <select value={modal.resource_type || 'document'} onChange={(e) => setModal((m) => ({ ...m, resource_type: e.target.value }))} style={ctrl}>
                 {Object.entries(MAT_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
-              <input value={modal.url || ''} onChange={(e) => setModal((m) => ({ ...m, url: e.target.value }))} placeholder="Link / URL (optional)" style={inputStyle} />
+              <input value={modal.url || ''} onChange={(e) => setModal((m) => ({ ...m, url: e.target.value, fileName: undefined }))} placeholder="Link / URL (optional)" style={inputStyle} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input ref={fileRef} type="file" onChange={uploadFile} style={{ display: 'none' }} />
+                <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: uploading ? 'default' : 'pointer', fontFamily: FONT }}>
+                  {uploading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <FileText size={14} />} {uploading ? 'Uploading…' : 'Upload file'}
+                </button>
+                {modal.fileName && <span style={{ fontSize: 12, color: GREEN, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={13} /> {modal.fileName}</span>}
+              </div>
               <textarea value={modal.note || ''} onChange={(e) => setModal((m) => ({ ...m, note: e.target.value }))} rows={3} placeholder="Note / description (optional)" style={{ ...inputStyle, resize: 'vertical' }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
