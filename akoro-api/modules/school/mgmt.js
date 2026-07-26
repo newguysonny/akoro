@@ -2226,6 +2226,25 @@ router.get("/:resource", authenticateToken, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Keep the denormalised class/section "teacher" display field (shown on the
+// Classes & Sections lists) in sync with the authoritative class_teachers
+// assignment table, so assignments made on the Assign Class Teacher page show
+// up there. Whole-class assignment (section_id null) → classes.teacher;
+// section-level → sections.teacher.
+async function syncTeacherDisplay(schoolId, classId, sectionId) {
+  if (!classId) return;
+  let q = M().from("class_teachers").select("teacher_id").eq("school_id", schoolId).eq("class_id", classId);
+  q = sectionId ? q.eq("section_id", sectionId) : q.is("section_id", null);
+  const { data: ct } = await q.order("created_at", { ascending: true }).limit(1).maybeSingle();
+  let name = null;
+  if (ct?.teacher_id) {
+    const { data: u } = await db.from("users").select("full_name, email").eq("id", ct.teacher_id).maybeSingle();
+    name = u?.full_name || u?.email || null;
+  }
+  if (sectionId) await M().from("sections").update({ teacher: name }).eq("id", sectionId).eq("school_id", schoolId);
+  else await M().from("classes").update({ teacher: name }).eq("id", classId).eq("school_id", schoolId);
+}
+
 router.post("/:resource", authenticateToken, requireMgmtWrite, async (req, res) => {
   try {
     const cfg = RESOURCES[req.params.resource];
@@ -2243,6 +2262,7 @@ router.post("/:resource", authenticateToken, requireMgmtWrite, async (req, res) 
       if (error.code === "23505") return res.status(409).json({ error: "A record with those unique values already exists" });
       throw new Error(error.message);
     }
+    if (req.params.resource === "class-teachers") await syncTeacherDisplay(school.id, data.class_id, data.section_id || null).catch(() => {});
     res.status(201).json({ success: true, data: (await attachRefs(cfg, [data], school.id))[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2271,8 +2291,14 @@ router.delete("/:resource/:id", authenticateToken, requireMgmtWrite, async (req,
     if (!cfg) return res.status(404).json({ error: "Unknown resource" });
     const school = await getMySchool(req, res);
     if (!school) return;
+    // For class-teacher removals, remember which class/section to re-sync after.
+    let ctRow = null;
+    if (req.params.resource === "class-teachers") {
+      ({ data: ctRow } = await M().from("class_teachers").select("class_id, section_id").eq("id", req.params.id).eq("school_id", school.id).maybeSingle());
+    }
     const { error } = await M().from(cfg.table).delete().eq("id", req.params.id).eq("school_id", school.id);
     if (error) throw new Error(error.message);
+    if (ctRow) await syncTeacherDisplay(school.id, ctRow.class_id, ctRow.section_id || null).catch(() => {});
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

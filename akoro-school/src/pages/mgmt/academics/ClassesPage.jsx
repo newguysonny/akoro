@@ -41,6 +41,7 @@ function ClassFormModal({ initial, levels, defaultLevelId, onClose, onSave }) {
       </select>
       <label style={lbl}>Class Teacher</label>
       <input value={form.teacher || ''} onChange={set('teacher')} placeholder="Teacher's name" style={inputStyle} />
+      <div style={{ fontSize: 11, color: MUTED2, margin: '4px 0 0', fontFamily: FONT }}>Tip: assign a teacher account via <b>Academics → Assign Class Teacher</b> and it fills this in automatically.</div>
       <label style={lbl}>Status</label>
       <select value={form.status} onChange={set('status')} style={inputStyle}>{GENERIC_STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
       <button onClick={() => canSave && onSave(form)} disabled={!canSave} style={{ width: '100%', marginTop: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 10, border: 'none', background: !canSave ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: !canSave ? '#9CA3AF' : WHITE, fontSize: 13.5, fontWeight: 800, cursor: !canSave ? 'default' : 'pointer', fontFamily: FONT }}>

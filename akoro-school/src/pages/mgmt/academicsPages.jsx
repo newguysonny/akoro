@@ -182,12 +182,18 @@ export function ClassTimetablePage() {
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
-  useEffect(() => {
-    apiGet(`${BASE}/classes`).then((r) => setClasses(r.data || [])).catch(() => {});
-    apiGet(`${BASE}/sections`).then((r) => setSections(r.data || [])).catch(() => {});
+  // Periods + subjects can be created server-side by "Load starter template",
+  // so keep them in a reloadable callback (not a one-shot mount effect).
+  const loadRefData = useCallback(() => {
     apiGet(`${BASE}/periods`).then((r) => setPeriods(r.data || [])).catch(() => {});
     apiGet(`${BASE}/subjects`).then((r) => setSubjects(r.data || [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    apiGet(`${BASE}/classes`).then((r) => setClasses(r.data || [])).catch(() => {});
+    apiGet(`${BASE}/sections`).then((r) => setSections(r.data || [])).catch(() => {});
+    loadRefData();
+  }, [loadRefData]);
 
   const loadSlots = useCallback(() => {
     if (!classId) { setSlots([]); setMeta(null); return; }
@@ -244,8 +250,11 @@ export function ClassTimetablePage() {
     setBusy(true);
     try {
       const res = await apiPost(`${BASE}/timetable/load-template`, { class_id: classId, section_id: sectionId || '', replace });
-      showToast(`Loaded ${res.variant} template — ${res.created} lessons placed ✓`);
+      // The template can create school-wide periods + subjects, so refresh those
+      // (otherwise the new grid columns don't render) before reloading the slots.
+      loadRefData();
       loadSlots();
+      showToast(res.created ? `Loaded ${res.variant} template — ${res.created} lessons placed ✓` : 'No lessons were placed — add class periods first, then try again.');
     } catch (e) {
       // Class already has a timetable → confirm replace.
       if ((e.message || '').toLowerCase().includes('already has')) {
