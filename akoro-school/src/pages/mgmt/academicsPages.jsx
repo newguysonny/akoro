@@ -278,9 +278,12 @@ export function ClassTimetablePage() {
   return (
     <PageLayout title="Class Timetable" subtitle="Printed weekly timetable per class">
       <style>{`@media print {
+        @page { size: landscape; margin: 8mm; }
         body * { visibility: hidden !important; }
         #tt-print, #tt-print * { visibility: visible !important; }
         #tt-print { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
+        /* Fit the grid to the landscape page instead of overflowing the right edge. */
+        #tt-print table { min-width: 0 !important; width: 100% !important; }
         .tt-controls, .tt-noprint { display: none !important; }
       }`}</style>
       <div className="tt-controls" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -311,7 +314,7 @@ export function ClassTimetablePage() {
 
           {/* Grid */}
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820, tableLayout: 'fixed' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1180, tableLayout: 'fixed' }}>
               <thead>
                 <tr>
                   <th style={ttTh}>TIME<br />DAY</th>
@@ -343,11 +346,11 @@ export function ClassTimetablePage() {
                       const code = codeOf(slot?.subject_id);
                       const alt = codeOf(slot?.alt_subject_id);
                       return (
-                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${INK}`, padding: '6px 3px', textAlign: 'center', cursor: 'pointer', height: 44, background: code ? WHITE : `${LIGHT}` }}>
+                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${INK}`, padding: '8px 7px', textAlign: 'center', cursor: 'pointer', height: 54, background: code ? WHITE : `${LIGHT}` }}>
                           {code ? (
-                            <div style={{ fontSize: 12, fontWeight: 800, color: INK, lineHeight: 1.15 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, lineHeight: 1.3 }}>
                               {code}
-                              {alt && <><div style={{ fontSize: 9, fontWeight: 600, color: MUTED2, fontStyle: 'italic' }}>or</div><div>{alt}</div></>}
+                              {alt && <><div style={{ fontSize: 9.5, fontWeight: 600, color: MUTED2, fontStyle: 'italic' }}>or</div><div>{alt}</div></>}
                             </div>
                           ) : <span style={{ color: MUTED2, fontSize: 13 }}>+</span>}
                         </td>
@@ -417,7 +420,7 @@ export function ClassTimetablePage() {
   );
 }
 
-const ttTh = { border: `1px solid ${INK}`, padding: '5px 3px', fontSize: 10, fontWeight: 800, color: INK, textAlign: 'center', background: LIGHT, lineHeight: 1.2 };
+const ttTh = { border: `1px solid ${INK}`, padding: '7px 5px', fontSize: 10.5, fontWeight: 800, color: INK, textAlign: 'center', background: LIGHT, lineHeight: 1.35 };
 const ttDay = { border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 11.5, fontWeight: 900, color: INK, textAlign: 'center', background: LIGHT, whiteSpace: 'nowrap' };
 
 function FooterField({ label, value, onChange, type = 'text' }) {
