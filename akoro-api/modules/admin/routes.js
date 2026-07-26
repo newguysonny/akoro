@@ -84,7 +84,7 @@ router.get("/users", adminOnly, asyncHandler(async (req, res) => {
     .range(off, off + lim - 1);
 
   if (role) q = q.eq("role", role);
-  if (search) q = q.or(`email.ilike.%${search}%,full_name.ilike.%${search}%,username.ilike.%${search}%`);
+  if (search) { const s = String(search).replace(/[,()%*:\\]/g, " "); q = q.or(`email.ilike.%${s}%,full_name.ilike.%${s}%,username.ilike.%${s}%`); }
 
   const { data, count, error } = await q;
   if (error) throw error;
@@ -164,7 +164,7 @@ router.get("/instructors", adminOnly, asyncHandler(async (req, res) => {
 
   if (status === "active")    q = q.eq("is_active", true);
   if (status === "suspended") q = q.eq("is_active", false);
-  if (search) q = q.or(`email.ilike.%${search}%,full_name.ilike.%${search}%,username.ilike.%${search}%`);
+  if (search) { const s = String(search).replace(/[,()%*:\\]/g, " "); q = q.or(`email.ilike.%${s}%,full_name.ilike.%${s}%,username.ilike.%${s}%`); }
 
   const { data, count, error } = await q;
   if (error) throw error;
@@ -225,7 +225,7 @@ router.get("/schools", adminOnly, asyncHandler(async (req, res) => {
       .order("created_at", { ascending: false })
       .range(off, off + lim - 1);
     if (["pending", "verified", "rejected"].includes(status)) q = q.eq("verification_status", status);
-    if (search) q = q.or(`name.ilike.%${search}%,website.ilike.%${search}%,address.ilike.%${search}%`);
+    if (search) { const s = String(search).replace(/[,()%*:\\]/g, " "); q = q.or(`name.ilike.%${s}%,website.ilike.%${s}%,address.ilike.%${s}%`); }
     return q;
   };
 
@@ -302,7 +302,7 @@ router.get("/courses", adminOnly, asyncHandler(async (req, res) => {
     .range(off, off + lim - 1);
   if (status === "published") q = q.eq("is_active", true);
   else if (status === "archived" || status === "draft") q = q.eq("is_active", false);
-  if (search) q = q.or(`title.ilike.%${search}%,subject.ilike.%${search}%,description.ilike.%${search}%`);
+  if (search) { const s = String(search).replace(/[,()%*:\\]/g, " "); q = q.or(`title.ilike.%${s}%,subject.ilike.%${s}%,description.ilike.%${s}%`); }
 
   const { data, count, error } = await q;
   if (error) throw error;

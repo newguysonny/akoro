@@ -76,7 +76,7 @@ router.get("/blog/posts", asyncHandler(async (req, res) => {
     .eq("status", "published");
 
   if (category && category !== "All") q = q.eq("category", category);
-  if (search) q = q.or(`title.ilike.%${search}%,excerpt.ilike.%${search}%`);
+  if (search) { const s = String(search).replace(/[,()%*:\\]/g, " "); q = q.or(`title.ilike.%${s}%,excerpt.ilike.%${s}%`); }
 
   q = q.order("published_at", { ascending: false }).range(offset, offset + limit - 1);
 

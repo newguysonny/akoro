@@ -69,6 +69,7 @@ const searchCourses = async ({ q, courseType, subject, level, minPrice, maxPrice
   }
 
   // Fallback: basic ilike search
+  const qs = String(q || "").replace(/[,()%*:\\]/g, " ");  // neuter PostgREST filter metacharacters
   let query = db
     .from("courses")
     .select(`
@@ -78,7 +79,7 @@ const searchCourses = async ({ q, courseType, subject, level, minPrice, maxPrice
       users!courses_instructor_id_fkey ( id, full_name, avatar_url )
     `)
     .eq("is_published", true)
-    .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+    .or(`title.ilike.%${qs}%,description.ilike.%${qs}%`)
     .order("rating", { ascending: false })
     .range(Number(offset), Number(offset) + Number(limit) - 1);
 

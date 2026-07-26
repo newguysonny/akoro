@@ -40,6 +40,7 @@ import {
 import mgmtRouter from "./mgmt.js";
 import publicPortalRouter from "./publicPortal.js";
 import { resolveSchoolByHost, getSchoolGateway, SITE_BASE_DOMAIN, SITE_BASE_DOMAINS } from "./tenant.js";
+import { strictLimit } from "../../middleware/security.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -206,9 +207,15 @@ router.post("/teacher-requests/:teacherId", authenticateToken, requireRole(SCHOO
     const decision = req.body?.decision;
     if (!["approve", "reject"].includes(decision)) return res.status(400).json({ error: "decision must be approve or reject" });
     const status = decision === "approve" ? "approved" : "rejected";
-    const { error } = await db.from("school_teachers").update({ status, decided_at: new Date(), decided_by: req.user.id })
-      .eq("school_id", school.id).eq("teacher_id", req.params.teacherId);
+    // Gate on an actual PENDING request from this teacher for THIS school, and
+    // check it matched — otherwise a school could "approve" an arbitrary
+    // teacher id and absorb that teacher's unowned classrooms (BOLA).
+    const { data: updated, error } = await db.from("school_teachers")
+      .update({ status, decided_at: new Date(), decided_by: req.user.id })
+      .eq("school_id", school.id).eq("teacher_id", req.params.teacherId).eq("status", "pending")
+      .select("teacher_id").maybeSingle();
     if (error) throw new Error(error.message);
+    if (!updated) return res.status(404).json({ error: "No pending request from this teacher." });
     if (status === "approved") await db.from("classrooms").update({ school_id: school.id }).eq("teacher_id", req.params.teacherId).is("school_id", null);
 
     // Notify the teacher of the decision.
@@ -1616,17 +1623,20 @@ router.get("/site/by-host", async (req, res) => {
 // the shared session cookie and every role opens the SAME school AI chat
 // (the school portal's /chat).
 const roleLabel = { admin: "an admin", teacher: "a teacher", student: "a student", parent: "a parent" };
-router.post("/site/ai-login", async (req, res) => {
+router.post("/site/ai-login", strictLimit, async (req, res) => {
   try {
     const { host, email, password, role: wantRole } = req.body || {};
     const school = await resolveSchoolByHost(host);
     if (!school) return res.status(404).json({ success: false, code: "no_school", message: "This website isn't connected to a school yet." });
 
     const { data: user } = await db.from("users").select("*").eq("email", String(email || "").toLowerCase().trim()).maybeSingle();
-    if (!user) return res.status(401).json({ success: false, code: "no_user", message: "No Akoro account uses that email. Check the address or ask your school to add you." });
+    // Single generic message for both unknown-email and wrong-password so this
+    // public endpoint can't be used to enumerate which emails have accounts.
+    const badCreds = () => res.status(401).json({ success: false, code: "bad_credentials", message: "Incorrect email or password." });
+    if (!user) { await bcrypt.compare(String(password || ""), "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidin"); return badCreds(); }
 
     const ok = await bcrypt.compare(String(password || ""), user.password_hash || "");
-    if (!ok) return res.status(401).json({ success: false, code: "bad_password", message: "Incorrect password. Please try again." });
+    if (!ok) return badCreds();
 
     if (user.deleted_at) return res.status(403).json({ success: false, code: "inactive", message: "This account has been deleted." });
     if (!user.is_active)  return res.status(403).json({ success: false, code: "inactive", message: "This account is deactivated. Sign in on the portal to reactivate it." });
@@ -1645,12 +1655,13 @@ router.post("/site/ai-login", async (req, res) => {
         if (cs) actualRole = "student";
       }
     }
-    // Parent: their email is a guardian on a student in this school.
+    // Parent: their email is a guardian on a student in this school. Verify the
+    // match EXACTLY (ilike can over-match on _/% metacharacters in an email).
     if (!actualRole) {
-      const { data: kid } = await db.schema("mgmt").from("students").select("id")
-        .eq("school_id", school.id).eq("status", "active")
-        .ilike("guardian_email", String(email || "").toLowerCase().trim()).limit(1).maybeSingle();
-      if (kid) actualRole = "parent";
+      const target = String(user.email || email || "").toLowerCase().trim();
+      const { data: kids } = await db.schema("mgmt").from("students").select("id, guardian_email")
+        .eq("school_id", school.id).eq("status", "active").ilike("guardian_email", target).limit(10);
+      if ((kids || []).some((k) => String(k.guardian_email || "").toLowerCase().trim() === target && target)) actualRole = "parent";
     }
     if (!actualRole) {
       return res.status(403).json({ success: false, code: "not_member", message: `This account isn't a student, teacher, admin or parent at ${school.name}. Only members of the school can use its AI assistant.` });

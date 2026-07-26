@@ -23,6 +23,12 @@ const TEACHER_ROLES = ["instructor", "teacher", "admin"];
 const lc = (s) => String(s || "").toLowerCase().trim();
 
 // ── Determine the caller's role within a school ───────────────────────────────
+// Exact, case-insensitive email compare. ilike is used for the indexed DB
+// lookup, but the guardian match is then verified EXACTLY here — an email
+// containing LIKE metacharacters (_ / %) must not broaden the match to other
+// families' children.
+const emailMatches = (a, b) => lc(a || "") === lc(b || "") && !!lc(a || "");
+
 async function roleInSchool(user, school) {
   if (!user || !school) return null;
   if (user.id === school.admin_user_id) return "admin";
@@ -30,9 +36,9 @@ async function roleInSchool(user, school) {
     .eq("school_id", school.id).eq("teacher_id", user.id).maybeSingle();
   if (t) return "teacher";
   // Parent: their email is a guardian on a student in this school.
-  const { data: kid } = await db.schema("mgmt").from("students").select("id")
-    .eq("school_id", school.id).eq("status", "active").ilike("guardian_email", lc(user.email)).limit(1).maybeSingle();
-  if (kid) return "parent";
+  const { data: kids } = await db.schema("mgmt").from("students").select("id, guardian_email")
+    .eq("school_id", school.id).eq("status", "active").ilike("guardian_email", lc(user.email)).limit(10);
+  if ((kids || []).some((k) => emailMatches(k.guardian_email, user.email))) return "parent";
   return "student"; // members reach the study tutor; role guard is server-side
 }
 
@@ -85,9 +91,10 @@ async function runTool(name, args, ctx) {
     // Parent tools — scoped strictly to this parent's children.
     if (PARENT_TOOLS.some((t) => t.function.name === name)) {
       const { data: kids } = await db.schema("mgmt").from("students")
-        .select("id, first_name, last_name, class_id, section_id, classes(name)")
+        .select("id, first_name, last_name, class_id, section_id, guardian_email, classes(name)")
         .eq("school_id", school.id).eq("status", "active").ilike("guardian_email", lc(user.email));
-      const children = kids || [];
+      // Verify the guardian email matches EXACTLY (ilike can over-match on _/%).
+      const children = (kids || []).filter((k) => emailMatches(k.guardian_email, user.email));
       if (!children.length) return { children: [], note: "No child records linked to your email at this school." };
       const pick = (nm) => nm ? children.find((c) => lc(`${c.first_name} ${c.last_name}`).includes(lc(nm)) || lc(c.first_name) === lc(nm)) : children[0];
 

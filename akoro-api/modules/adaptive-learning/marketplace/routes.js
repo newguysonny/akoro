@@ -164,11 +164,12 @@ router.get("/search", async (req, res) => {
   try {
     const { q, subject, limit = 20 } = req.query;
     if (!q) return res.status(400).json({ error: "q is required" });
+    const qs = String(q).replace(/[,()%*:\\]/g, " ");  // neuter PostgREST filter metacharacters
 
     let query = db
       .schema("edu").from("marketplace_summary")
       .select("*")
-      .or(`title.ilike.%${q}%,description.ilike.%${q}%,subject.ilike.%${q}%`)
+      .or(`title.ilike.%${qs}%,description.ilike.%${qs}%,subject.ilike.%${qs}%`)
       .limit(Number(limit));
 
     if (subject) query = query.eq("subject", subject);
