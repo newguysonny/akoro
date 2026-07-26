@@ -355,11 +355,11 @@ export function ClassTimetablePage() {
                       const code = codeOf(slot?.subject_id);
                       const alt = codeOf(slot?.alt_subject_id);
                       return (
-                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${INK}`, padding: '8px 7px', textAlign: 'center', cursor: 'pointer', height: 54, background: code ? WHITE : `${LIGHT}` }}>
+                        <td key={p.id} onClick={() => openCell(d.n, p)} style={{ border: `1px solid ${INK}`, padding: '8px 6px', textAlign: 'center', cursor: 'pointer', height: 54, background: code ? WHITE : `${LIGHT}` }}>
                           {code ? (
-                            <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, lineHeight: 1.3 }}>
+                            <div style={{ fontSize: 12, fontWeight: 800, color: INK, lineHeight: 1.25, wordBreak: 'break-word', overflowWrap: 'anywhere', hyphens: 'auto' }}>
                               {code}
-                              {alt && <><div style={{ fontSize: 9.5, fontWeight: 600, color: MUTED2, fontStyle: 'italic' }}>or</div><div>{alt}</div></>}
+                              {alt && <><div style={{ fontSize: 9.5, fontWeight: 600, color: MUTED2, fontStyle: 'italic' }}>or</div><div style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{alt}</div></>}
                             </div>
                           ) : <span style={{ color: MUTED2, fontSize: 13 }}>+</span>}
                         </td>
