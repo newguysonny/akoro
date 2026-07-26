@@ -168,13 +168,6 @@ function HowItWorks() {
           </div>
         )}
 
-        <div style={{ textAlign: 'center', marginTop: 18 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: '#9490A0', cursor: 'pointer', fontWeight: 600 }}>
-            <input type="checkbox" checked={slow} onChange={toggleSlow} style={{ accentColor: B, cursor: 'pointer' }} />
-            Slow-motion morph ×6
-          </label>
-        </div>
-
         <Reveal>
           <ProTip />
         </Reveal>
