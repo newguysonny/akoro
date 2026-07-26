@@ -609,7 +609,7 @@ export function WeeklyForecastPage() {
 
   return (
     <PageLayout title="Weekly Forecast" subtitle="What will be taught each day — follows the class timetable">
-      <style>{`@media print { body * { visibility: hidden !important; } #wf-print, #wf-print * { visibility: visible !important; } #wf-print { position: absolute; left:0; top:0; width:100%; } .wf-noprint { display:none !important; } }`}</style>
+      <style>{`@media print { @page { size: landscape; margin: 8mm; } body * { visibility: hidden !important; } #wf-print, #wf-print * { visibility: visible !important; } #wf-print { position: absolute; left:0; top:0; width:100%; } #wf-print table { min-width: 0 !important; width: 100% !important; } .wf-noprint { display:none !important; } }`}</style>
       <div className="wf-noprint" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
         <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(''); }} style={{ ...inputStyle, width: 160, cursor: 'pointer' }}>
           <option value="">— class —</option>{ctx.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -634,7 +634,7 @@ export function WeeklyForecastPage() {
             </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 860, tableLayout: 'fixed' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1180, tableLayout: 'fixed' }}>
               <thead>
                 <tr>
                   <th style={ttTh}>DAY \ TIME</th>
@@ -653,8 +653,8 @@ export function WeeklyForecastPage() {
                       }
                       const subj = ctx.subjectLabel(d.n, p.id);
                       return (
-                        <td key={p.id} style={{ border: `1px solid ${INK}`, padding: 4, verticalAlign: 'top' }}>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: subj ? BLUE : MUTED2, marginBottom: 2 }}>{subj || '—'}</div>
+                        <td key={p.id} style={{ border: `1px solid ${INK}`, padding: '5px 6px', verticalAlign: 'top' }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: subj ? BLUE : MUTED2, marginBottom: 2, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{subj || '—'}</div>
                           <textarea value={cellMap[`${d.n}_${p.id}`] || ''} onChange={(e) => setCell(d.n, p.id, e.target.value)} placeholder="…" rows={2}
                             style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 11, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.3 }} />
                         </td>
@@ -752,7 +752,7 @@ export function DailySchedulePage() {
                       <td colSpan={2} style={{ border: `1px solid ${INK}`, padding: '6px 10px', background: bg, color: fg, fontWeight: 900, fontSize: 12, letterSpacing: .5 }}>{SPECIAL_LABEL[p.type] || p.name}</td>
                     ) : (
                       <>
-                        <td style={{ border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 12, fontWeight: 800, color: subj ? BLUE : MUTED2 }}>{subj || '—'}</td>
+                        <td style={{ border: `1px solid ${INK}`, padding: '6px 8px', fontSize: 12, fontWeight: 800, color: subj ? BLUE : MUTED2, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{subj || '—'}</td>
                         <td style={{ border: `1px solid ${INK}`, padding: 4 }}>
                           <textarea value={cellMap[p.id] || ''} onChange={(e) => setCellMap((m) => ({ ...m, [p.id]: e.target.value }))} placeholder="…" rows={1}
                             style={{ width: '100%', border: 'none', outline: 'none', resize: 'vertical', fontSize: 12, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.35 }} />
