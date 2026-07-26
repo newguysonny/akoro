@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck, ArrowLeft, Plus, Trash2, Save, Loader2, Lock, Users, X, Check,
+  ShieldCheck, Plus, Trash2, Save, Loader2, Lock, Users, X, Check,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -184,9 +185,7 @@ export default function RolesPermissionsPage() {
   return (
     <PageLayout title="Roles & Permissions" subtitle="Control what each staff role can see and do">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/settings-billing')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Settings
-        </button>
+        <BackButton onClick={() => navigate('/settings-billing')} label="Back to Settings" />
         <button onClick={() => setEditing({})} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <Plus size={14} /> New Role
         </button>

@@ -5,8 +5,9 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Facebook, Instagram, Twitter, Music2, CheckCircle2, Loader2, BookOpen, Link2 } from 'lucide-react';
+import { Facebook, Instagram, Twitter, Music2, CheckCircle2, Loader2, BookOpen, Link2 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { Btn, Inp } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
@@ -90,9 +91,7 @@ export default function ContentChannelPage() {
   return (
     <PageLayout title={meta.label} subtitle="Connect this channel to publish content later">
       <div style={{ maxWidth: 640 }}>
-        <button onClick={() => navigate('/content?tab=channels')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, fontWeight: 600, fontFamily: FONT, marginBottom: 16 }}>
-          <ArrowLeft size={15} /> Back to channels
-        </button>
+        <BackButton onClick={() => navigate('/content?tab=channels')} label="Back to channels" />
 
         <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>

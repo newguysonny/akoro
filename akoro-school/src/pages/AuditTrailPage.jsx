@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  History, ArrowLeft, Loader2, Plus, Pencil, Trash2, RefreshCw,
+  History, Loader2, Plus, Pencil, Trash2, RefreshCw,
   User, Clock, Filter, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -86,9 +87,7 @@ export default function AuditTrailPage() {
   return (
     <PageLayout title="Audit Trail" subtitle="Every change made to your school's settings">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/settings-billing')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Settings
-        </button>
+        <BackButton onClick={() => navigate('/settings-billing')} label="Back to Settings" />
       </div>
 
       <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>

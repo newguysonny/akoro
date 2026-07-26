@@ -7,9 +7,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   GraduationCap, Search, Eye, Pencil, Trash2, Copy, Printer, Columns, Sheet, Download,
-  FileText, Loader2, CheckSquare, ArrowLeft,
+  FileText, Loader2, CheckSquare,
 } from 'lucide-react';
 import { PageLayout } from '../../../components/Layout.jsx';
+import BackButton from '../../../components/BackButton.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
@@ -144,7 +145,7 @@ export function ClassesPage() {
         <button onClick={() => { setEditingRow(null); setModal('form'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <GraduationCap size={15} /> Add Class
         </button>
-        {activeLevel && <button onClick={() => navigate('/mgmt/academic-levels')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><ArrowLeft size={14} /> Back to Levels</button>}
+        {activeLevel && <BackButton onClick={() => navigate('/mgmt/academic-levels')} label="Back to Levels" />}
         <select value={levelId} onChange={(e) => navigate(e.target.value ? `/mgmt/classes?level=${e.target.value}` : '/mgmt/classes')} style={{ ...selStyle, minWidth: 170 }}>
           <option value="">All Academic Levels</option>{levels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>

@@ -6,10 +6,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Upload, Download, FileUp, Image as ImageIcon, ArrowLeft, Loader2, CheckCircle2,
+  Upload, Download, FileUp, Image as ImageIcon, Loader2, CheckCircle2,
   XCircle, Info, ChevronDown, ChevronUp, FileArchive, History, Server, Users,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
+import BackButton from '../../components/BackButton.jsx';
 import { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
@@ -171,14 +172,6 @@ function ImportHistory({ kind, reloadKey }) {
   );
 }
 
-function BackButton({ navigate }) {
-  return (
-    <button onClick={() => navigate('/mgmt/students')} style={quickBtn(INK)}>
-      <ArrowLeft size={13} /> Back to Students
-    </button>
-  );
-}
-
 /* ═══════════════════════════════════════════════════════════════════════
    1. Bulk Student Upload (CSV of student records)
    ═══════════════════════════════════════════════════════════════════════ */
@@ -225,7 +218,7 @@ export function BulkStudentUploadPage() {
 
       <Card icon={Info} title="Quick Actions" color={BLUE}>
         <button onClick={() => downloadFromApi(`${BASE}/bulk/students/template.csv`, 'students_template.csv')} style={quickBtn(BLUE)}><Download size={13} /> Download CSV Template</button>
-        <BackButton navigate={navigate} />
+        <BackButton onClick={() => navigate('/mgmt/students')} label="Back to Students" />
       </Card>
 
       <Card icon={Server} title="Server Limits" color={MUTED2}>
@@ -347,7 +340,7 @@ export function BulkPhotoUploadPage() {
       <Card icon={Info} title="Quick Actions" color={GREEN}>
         <button onClick={() => downloadFromApi(`${BASE}/bulk/photos/template.csv`, 'photo_mapping_template.csv')} style={quickBtn(BLUE)}><Download size={13} /> Download CSV Template</button>
         <button onClick={() => downloadFromApi(`${BASE}/bulk/photos/sample.zip`, 'photos_sample.zip')} style={quickBtn(GREEN)}><FileArchive size={13} /> Download Sample ZIP</button>
-        <BackButton navigate={navigate} />
+        <BackButton onClick={() => navigate('/mgmt/students')} label="Back to Students" />
       </Card>
 
       <Card icon={Server} title="Server Limits" color={MUTED2}>
@@ -429,7 +422,7 @@ export function BulkDocumentUploadPage() {
       <Card icon={Info} title="Quick Actions" color={BLUE}>
         <button onClick={() => downloadFromApi(`${BASE}/bulk/docs/template.csv`, 'document_mapping_template.csv')} style={quickBtn(BLUE)}><Download size={13} /> Download CSV Template</button>
         <button onClick={() => downloadFromApi(`${BASE}/bulk/docs/sample.zip`, 'documents_sample.zip')} style={quickBtn(GREEN)}><FileArchive size={13} /> Download Sample ZIP</button>
-        <BackButton navigate={navigate} />
+        <BackButton onClick={() => navigate('/mgmt/students')} label="Back to Students" />
       </Card>
 
       <Card icon={Server} title="Server Limits" color={MUTED2}>

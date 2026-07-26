@@ -12,13 +12,14 @@
  */
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Crown, GraduationCap, ClipboardList, HeartHandshake, Users, ArrowLeft,
+  Crown, GraduationCap, ClipboardList, HeartHandshake, Users,
   LogOut, ChevronRight, Briefcase, Calculator, Headphones, Shield, Sparkles,
   Bus, UtensilsCrossed, Wrench, Stethoscope, Monitor, BookOpen,
   Library, Megaphone, BedDouble,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import ResourcePage from '../components/mgmt/ResourcePage.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -162,7 +163,7 @@ export function StaffGroupPage() {
   if (!section || !group) {
     return (
       <PageLayout title="Not found" subtitle="">
-        <button onClick={() => navigate('/staff/academic')} style={backBtn}><ArrowLeft size={14} /> Back</button>
+        <BackButton onClick={() => navigate('/staff/academic')} label="Back" />
         <p style={{ marginTop: 16, color: MUTED, fontFamily: FONT }}>That staff group doesn’t exist.</p>
       </PageLayout>
     );
@@ -182,9 +183,7 @@ export function StaffGroupPage() {
   return (
     <PageLayout title={group.name} subtitle={`${section.label} · manage staff in this group`}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button onClick={() => navigate(section.path)} style={backBtn}>
-          <ArrowLeft size={14} /> Back to {section.label}
-        </button>
+        <BackButton onClick={() => navigate(section.path)} label={`Back to ${section.label}`} />
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  DatabaseBackup, ArrowLeft, Plus, Download, Trash2, RefreshCw, Clock,
+  DatabaseBackup, Plus, Download, Trash2, RefreshCw, Clock,
   CheckCircle2, XCircle, Loader2, Info, Save, HardDrive,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPost, apiDelete, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -86,9 +87,7 @@ export default function BackupManagementPage() {
   return (
     <PageLayout title="Backup Management" subtitle="Snapshot and restore your school's data">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/settings-billing')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Settings
-        </button>
+        <BackButton onClick={() => navigate('/settings-billing')} label="Back to Settings" />
         <button onClick={createBackup} disabled={creating} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: creating ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: creating ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: creating ? 'default' : 'pointer', fontFamily: FONT }}>
           {creating ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} Create Backup
         </button>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, ArrowLeft, Info, Save, Loader2 } from 'lucide-react';
+import { CreditCard, Info, Save, Loader2 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -92,9 +93,7 @@ export default function PaymentGatewayPage() {
   return (
     <PageLayout title="Payment Gateway Settings" subtitle="Let parents pay school fees online">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 18 }}>
-        <button onClick={() => navigate('/settings-billing')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Settings
-        </button>
+        <BackButton onClick={() => navigate('/settings-billing')} label="Back to Settings" />
       </div>
 
       {loading ? (

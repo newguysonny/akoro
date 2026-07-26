@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Plus, CheckCircle2, Pencil, Trash2, UploadCloud, Loader2, FileCode2,
+  Plus, CheckCircle2, Pencil, Trash2, UploadCloud, Loader2, FileCode2,
   X, Globe, LayoutList,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -113,7 +114,7 @@ export default function WebsiteTemplatesPage() {
   return (
     <PageLayout title="Templates" subtitle="Installed website templates for your school">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/settings-website')} style={backBtn}><ArrowLeft size={14} /> Back to Website</button>
+        <BackButton onClick={() => navigate('/settings-website')} label="Back to Website" />
         <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 22, height: 22, padding: '0 7px', borderRadius: 11, background: LIGHT, border: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 800, color: MUTED }}>{templates.length}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
           {mode === 'template' && <button onClick={useTheme} style={outlineBtn}>Switch to Theme mode</button>}
@@ -209,7 +210,7 @@ export function AddTemplatePage() {
   return (
     <PageLayout title="Add Templates" subtitle="Start from blank or upload a template">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/settings-website/templates')} style={backBtn}><ArrowLeft size={14} /> Back to Templates</button>
+        <BackButton onClick={() => navigate('/settings-website/templates')} label="Back to Templates" />
         <button onClick={() => navigate('/settings-website/templates/upload')} style={{ ...outlineBtn, marginLeft: 'auto' }}><UploadCloud size={15} /> Upload Template</button>
       </div>
 
@@ -279,7 +280,7 @@ export function UploadTemplatePage() {
   return (
     <PageLayout title="Add Templates" subtitle="Upload Template">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/settings-website/templates/add')} style={backBtn}><ArrowLeft size={14} /> Back</button>
+        <BackButton onClick={() => navigate('/settings-website/templates/add')} label="Back" />
       </div>
 
       <p style={{ textAlign: 'center', color: MUTED, fontSize: 13.5, fontFamily: FONT, marginBottom: 18 }}>

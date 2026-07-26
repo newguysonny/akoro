@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
-  Settings2, ArrowLeft, Save, CheckCircle2, Wand2, Terminal, Code2, Eye,
+  Settings2, Save, CheckCircle2, Wand2, Terminal, Code2, Eye,
   ChevronDown, ChevronUp, Monitor, Tablet, Smartphone, RefreshCw, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPut } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, FONT } from '../constants.js';
 
@@ -84,9 +85,7 @@ export default function WebsiteTemplateEditorPage() {
   return (
     <PageLayout title={`Edit Template: ${name}`} subtitle="Full HTML template editor">
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 18 }}>
-        <button onClick={() => navigate('/settings-website/templates')} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: LIGHT, color: MUTED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Templates
-        </button>
+        <BackButton onClick={() => navigate('/settings-website/templates')} label="Back to Templates" />
       </div>
 
       {/* Settings card */}

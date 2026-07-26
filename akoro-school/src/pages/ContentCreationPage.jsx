@@ -5,8 +5,9 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Copy, Check, Clock, Loader2, ImagePlus, Trash2, Film } from 'lucide-react';
+import { Copy, Check, Clock, Loader2, ImagePlus, Trash2, Film } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, RED, FONT } from '../constants.js';
 import { AiPostPill, BLOG_LABEL, fmtDateTime } from './content/parts.jsx';
@@ -68,9 +69,7 @@ export default function ContentCreationPage() {
   return (
     <PageLayout title={KIND_TITLE[c?.kind] || 'Creation'} subtitle="View and publish your generated content">
       <div style={{ maxWidth: 760 }}>
-        <button onClick={() => navigate(-1)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, fontWeight: 600, fontFamily: FONT, marginBottom: 16 }}>
-          <ArrowLeft size={15} /> Back
-        </button>
+        <BackButton onClick={() => navigate(-1)} label="Back" />
 
         {notFound ? (
           <div style={{ fontFamily: FONT, color: MUTED }}>This creation was not found.</div>

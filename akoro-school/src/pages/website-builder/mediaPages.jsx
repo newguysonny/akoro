@@ -4,11 +4,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Plus, Pencil, Trash2, RotateCcw, ArrowLeft, Save, Loader2, FileText, X,
+  Plus, Pencil, Trash2, RotateCcw, Save, Loader2, FileText, X,
   ChevronUp, ChevronDown, Link2, Menu as MenuIcon, Image as ImageIcon, UploadCloud,
   Sparkles, Type, LayoutGrid, Minus, Code, GripVertical,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
+import BackButton from '../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, RED, FONT } from '../../constants.js';
@@ -184,7 +185,7 @@ export function MediaEditorPage() {
   return (
     <PageLayout title={isNew ? 'Add New Media' : 'Edit Media'} subtitle="Website Builder · Media Library">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/website-builder/media')} style={backBtn}><ArrowLeft size={14} /> Back to Media</button>
+        <BackButton onClick={() => navigate('/website-builder/media')} label="Back to Media" />
         <button onClick={save} disabled={saving || loading} style={{ ...addBtn, background: saving ? '#E5E7EB' : addBtn.background, color: saving ? '#9CA3AF' : WHITE }}>
           {saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} {saving ? 'Saving…' : 'Save Media'}
         </button>

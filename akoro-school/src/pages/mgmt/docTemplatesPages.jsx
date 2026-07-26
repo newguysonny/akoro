@@ -7,9 +7,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  FileText, Plus, Sparkles, Eye, Pencil, Trash2, Printer, Loader2, ArrowLeft, Save, X, Award, Upload,
+  FileText, Plus, Sparkles, Eye, Pencil, Trash2, Printer, Loader2, Save, X, Award, Upload,
 } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
+import BackButton from '../../components/BackButton.jsx';
 import { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
@@ -330,7 +331,7 @@ export function DocumentTemplateEditorPage() {
   return (
     <PageLayout title={isNew ? 'New Template' : 'Edit Template'} subtitle="Document Templates">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/mgmt/document-templates')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><ArrowLeft size={14} /> Back</button>
+        <BackButton onClick={() => navigate('/mgmt/document-templates')} label="Back" />
         <button onClick={save} disabled={saving || loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 20px', borderRadius: 9, border: 'none', background: saving ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: saving ? '#9CA3AF' : WHITE, fontSize: 13, fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: FONT }}>{saving ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save Template</button>
       </div>
 

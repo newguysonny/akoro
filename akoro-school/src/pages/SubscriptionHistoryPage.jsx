@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, CreditCard as PayIcon, FileText } from 'lucide-react';
+import { Loader2, CreditCard as PayIcon, FileText } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -52,9 +53,7 @@ export default function SubscriptionHistoryPage() {
   return (
     <PageLayout title="Payment History" subtitle="Your subscription payment records">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 18 }}>
-        <button onClick={() => navigate('/settings-subscription')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Subscription
-        </button>
+        <BackButton onClick={() => navigate('/settings-subscription')} label="Back to Subscription" />
       </div>
 
       <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' }}>

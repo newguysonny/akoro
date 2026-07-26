@@ -7,9 +7,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Rows3, Users, Search, Eye, Pencil, Trash2, Copy, Printer, Columns, Sheet, Download,
-  FileText, Loader2, CheckSquare, ArrowLeft,
+  FileText, Loader2, CheckSquare,
 } from 'lucide-react';
 import { PageLayout } from '../../../components/Layout.jsx';
+import BackButton from '../../../components/BackButton.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
@@ -152,7 +153,7 @@ export function SectionsPage() {
         <button onClick={() => { setEditingRow(null); setModal('form'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <Rows3 size={15} /> Add Class Section
         </button>
-        <button onClick={backToClasses} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><ArrowLeft size={14} /> Back to Classes</button>
+        <BackButton onClick={backToClasses} label="Back to Classes" />
         <button onClick={() => navigate(`/mgmt/students?class_id=${classId}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 9, border: `1.5px solid ${BLUE}44`, background: `${BLUE}0C`, color: BLUE, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Users size={14} /> View All Students in {activeClass?.name}</button>
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={selStyle}>
           <option value="">All Statuses</option>{GENERIC_STATUS_OPTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}

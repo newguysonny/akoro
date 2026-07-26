@@ -5,13 +5,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
-  Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
+  Eye, Pencil, Trash2, UserPlus, Search, Phone, Mail, MapPin, Droplet,
   Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
   FileUp, Upload, Sheet, Download, CheckSquare, FileText,
   FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
   ClipboardList, ThumbsUp, ThumbsDown, Plus,
 } from 'lucide-react';
 import { PageLayout } from '../../../components/Layout.jsx';
+import BackButton from '../../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
@@ -23,9 +24,7 @@ function RecordFormShell({ title, color, icon: Icon, backTo, onSave, busy, child
   return (
     <PageLayout title={title}>
       <div style={{ maxWidth: 640 }}>
-        <button onClick={() => navigate(backTo)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', color: MUTED, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer', marginBottom: 14, padding: 0 }}>
-          <ArrowLeft size={14} /> Back to Profile
-        </button>
+        <BackButton onClick={() => navigate(backTo)} label="Back to Profile" />
         <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${color}`, borderRadius: 12, padding: '20px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
             {Icon && <Icon size={18} color={color} />}

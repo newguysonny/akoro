@@ -6,13 +6,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Users, UserCheck, UserX, Home, Tags, ShieldAlert, Loader2, Save, ClipboardCheck,
-  Eye, Pencil, Trash2, UserPlus, Search, ArrowLeft, Phone, Mail, MapPin, Droplet,
+  Eye, Pencil, Trash2, UserPlus, Search, Phone, Mail, MapPin, Droplet,
   Cake, CreditCard, ShieldCheck, CircleDot, X, Copy, Printer, Columns, Image,
   FileUp, Upload, Sheet, Download, CheckSquare, FileText,
   FolderOpen, Key, HeartPulse, Bus, Bed, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, RefreshCw,
   ClipboardList, ThumbsUp, ThumbsDown, Plus,
 } from 'lucide-react';
 import { PageLayout } from '../../../components/Layout.jsx';
+import BackButton from '../../../components/BackButton.jsx';
 import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
@@ -97,9 +98,7 @@ export function StudentProfilePage() {
   return (
     <PageLayout title={fullName(data)} subtitle={`Admission No: ${data.admission_no}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/mgmt/students')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Student List
-        </button>
+        <BackButton onClick={() => navigate('/mgmt/students')} label="Back to Student List" />
         {tab === 'profile' && (editing ? (
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { setEditing(false); setForm(data); }} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>

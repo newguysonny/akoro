@@ -5,8 +5,9 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Clock3, Search, Eye, Pencil, Trash2, Loader2, CheckSquare, ArrowLeft, Plus } from 'lucide-react';
+import { Clock3, Search, Eye, Pencil, Trash2, Loader2, CheckSquare, Plus } from 'lucide-react';
 import { PageLayout } from '../../../components/Layout.jsx';
+import BackButton from '../../../components/BackButton.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
@@ -141,7 +142,7 @@ export function ManagePeriodsPage() {
         <button onClick={() => { setEditingRow(null); setModal('form'); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
           <Plus size={15} /> Add Period
         </button>
-        <button onClick={() => navigate('/mgmt/periods')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><ArrowLeft size={14} /> Back to Classes</button>
+        <BackButton onClick={() => navigate('/mgmt/periods')} label="Back to Classes" />
         <div style={{ position: 'relative', marginLeft: 'auto', minWidth: 200 }}>
           <Search size={15} color={MUTED2} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search period, type…" style={{ ...inputStyle, paddingLeft: 34 }} />

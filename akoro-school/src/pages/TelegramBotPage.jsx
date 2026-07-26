@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Send, ArrowLeft, SlidersHorizontal, CheckCircle2, Info, Bell, AlertTriangle, Loader2,
+  Send, SlidersHorizontal, CheckCircle2, Info, Bell, AlertTriangle, Loader2,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
+import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiPut, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
 
@@ -98,9 +99,7 @@ export default function TelegramBotPage() {
   return (
     <PageLayout title="Telegram Bot Monitoring" subtitle="Get real-time school alerts sent to Telegram">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 18 }}>
-        <button onClick={() => navigate('/settings-notifications')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-          <ArrowLeft size={14} /> Back to Notifications
-        </button>
+        <BackButton onClick={() => navigate('/settings-notifications')} label="Back to Notifications" />
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
