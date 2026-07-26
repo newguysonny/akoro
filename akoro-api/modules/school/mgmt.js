@@ -223,7 +223,7 @@ const RESOURCES = {
   // Study Center
   "syllabus-items": { table: "syllabus_items", fields: ["class_id","subject_id","term","topic","description","status"], required: ["topic"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","subject_id","status"] },
   "classwork-logs": { table: "classwork_logs", fields: ["class_id","subject_id","teacher_id","log_date","topic","notes"], required: ["topic"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"], teacher_id: ["users","full_name","public"] }, filters: ["class_id","subject_id"], orderBy: "log_date", asc: false },
-  "learning-resources": { table: "learning_resources", fields: ["title","class_id","subject_id","resource_type","url","note"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","resource_type"] },
+  "learning-resources": { table: "learning_resources", fields: ["title","class_id","section_id","subject_id","resource_type","url","note"], required: ["title"], refs: { class_id: ["classes","name"], section_id: ["sections","name"], subject_id: ["subjects","name"] }, filters: ["class_id","section_id","subject_id","resource_type"] },
   "homework-assignments": { table: "homework_assignments", fields: ["class_id","subject_id","title","description","due_on","status"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["class_id","status"] },
   "live-classes": { table: "live_classes", fields: ["title","class_id","subject_id","platform","meeting_url","starts_at","status"], required: ["title"], refs: { class_id: ["classes","name"], subject_id: ["subjects","name"] }, filters: ["status"] },
 
@@ -1978,76 +1978,143 @@ router.post("/students/:id/assign-fee-groups", authenticateToken, requireRole(SC
 // Body: { class_id, section_id?, variant?: 'junior'|'senior', replace?: bool }
 // Seeds the 14 periods + subjects (if missing) and fills the class grid.
 // Without replace, refuses (409) if the class already has slots.
+// Seed periods + subjects + a starter timetable for a class. Reused by both
+// "Load starter template" and the sample-class seeder. Returns the subject-id
+// map so callers can attach scheme-of-work / materials to the same subjects.
+async function seedStarterTimetable(school, { class_id, section_id = null, replace = false, variant } = {}) {
+  const { data: cls } = await M().from("classes").select("name").eq("id", class_id).eq("school_id", school.id).maybeSingle();
+  if (!cls) return { error: "Class not found", status: 404 };
+  const v = variant || (/^(jss|grade|primary|basic|junior)/i.test(cls.name) ? "junior" : "senior");
+  const grid = v === "senior" ? SENIOR_GRID : JUNIOR_GRID;
+
+  let sq = M().from("timetable_slots").select("id").eq("school_id", school.id).eq("class_id", class_id);
+  sq = section_id ? sq.eq("section_id", section_id) : sq.is("section_id", null);
+  const { data: existing } = await sq;
+  if (existing?.length && !replace) return { exists: true, count: existing.length, variant: v, created: 0, subjIdByCode: {} };
+  if (existing?.length && replace) {
+    let dq = M().from("timetable_slots").delete().eq("school_id", school.id).eq("class_id", class_id);
+    dq = section_id ? dq.eq("section_id", section_id) : dq.is("section_id", null);
+    await dq;
+  }
+
+  // Ensure template subjects exist (match by name — school_id+name is unique).
+  const { data: existingSubs } = await M().from("subjects").select("id, name, code").eq("school_id", school.id);
+  const byName = new Map((existingSubs || []).map((s) => [s.name.toLowerCase(), s]));
+  const byCode = new Map((existingSubs || []).filter((s) => s.code).map((s) => [s.code, s]));
+  for (const [name, code] of TEMPLATE_SUBJECTS) {
+    const ex = byName.get(name.toLowerCase());
+    if (ex && ex.code !== code && !byCode.has(code)) { await M().from("subjects").update({ code }).eq("id", ex.id); byCode.set(code, ex); ex.code = code; }
+  }
+  const toAdd = TEMPLATE_SUBJECTS
+    .filter(([name, code]) => !byName.has(name.toLowerCase()) && !byCode.has(code))
+    .map(([name, code, type]) => ({ school_id: school.id, name, code, subject_type: type }));
+  if (toAdd.length) await M().from("subjects").insert(toAdd);
+  const codes = TEMPLATE_SUBJECTS.map((s) => s[1]);
+  const { data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes);
+  const subjIdByCode = Object.fromEntries((subs || []).map((s) => [s.code, s.id]));
+
+  // Ensure the periods (by name) and map name → id.
+  let { data: pers } = await M().from("periods").select("id, name").eq("school_id", school.id).in("name", PERIOD_DEFS.map((p) => p.name));
+  const havePer = new Set((pers || []).map((p) => p.name));
+  const addPer = PERIOD_DEFS.filter((p) => !havePer.has(p.name)).map((p) => ({ school_id: school.id, ...p }));
+  if (addPer.length) { await M().from("periods").insert(addPer); ({ data: pers } = await M().from("periods").select("id, name").eq("school_id", school.id).in("name", PERIOD_DEFS.map((p) => p.name))); }
+  const perIdByName = Object.fromEntries((pers || []).map((p) => [p.name, p.id]));
+
+  const rows = [];
+  grid.forEach((day, di) => {
+    day.forEach((cell, ci) => {
+      const [code, alt] = Array.isArray(cell) ? cell : [cell, null];
+      const period_id = perIdByName[TEACH_PERIOD_NAMES[ci]];
+      const subject_id = subjIdByCode[code];
+      if (!period_id || !subject_id) return;
+      rows.push({ school_id: school.id, class_id, section_id, day_of_week: di + 1, period_id, subject_id, alt_subject_id: alt ? (subjIdByCode[alt] || null) : null });
+    });
+  });
+  if (rows.length) {
+    const { error } = await M().from("timetable_slots").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+  return { variant: v, created: rows.length, subjIdByCode };
+}
+
 router.post("/timetable/load-template", authenticateToken, requireRole(MGMT_ROLES), async (req, res) => {
   try {
     const school = await getMySchool(req, res);
     if (!school) return;
-    const { class_id, section_id = null, replace = false } = req.body;
+    const { class_id, section_id = null, replace = false, variant } = req.body;
+    if (!class_id) return res.status(400).json({ error: "class_id is required" });
+    const r = await seedStarterTimetable(school, { class_id, section_id, replace, variant });
+    if (r.error) return res.status(r.status || 400).json({ error: r.error });
+    if (r.exists) return res.status(409).json({ error: "This class already has a timetable.", code: "exists", count: r.count });
+    res.json({ success: true, variant: r.variant, created: r.created });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /academics/seed-sample  { class_id, section_id? } ────────────────────
+// One-click sample data for a class: periods + subjects + timetable, plus a
+// 3-term scheme of work and teaching materials for the core subjects. Idempotent
+// enough for demos (timetable is replaced; scheme/materials skip if present).
+const SAMPLE_CORE = [
+  { code: "MTH",     topics: ["Number & Numeration", "Basic Operations", "Fractions & Decimals", "Algebraic Expressions", "Geometry & Shapes", "Statistics & Data"] },
+  { code: "ENG",     topics: ["Reading Comprehension", "Parts of Speech", "Essay Writing", "Oral English & Phonics", "Summary Writing", "Literature Appreciation"] },
+  { code: "INT/SCI", topics: ["Living & Non-living Things", "Matter & Its States", "Energy & Forces", "The Human Body", "Environment & Ecosystems", "Simple Machines"] },
+  { code: "SST",     topics: ["Family & Community", "Culture & Values", "Map Reading", "Government & Civics", "Nigeria & Its People", "National Symbols"] },
+];
+const SAMPLE_TERMS = ["First Term", "Second Term", "Third Term"];
+router.post("/academics/seed-sample", authenticateToken, requireRole(MGMT_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const { class_id, section_id = null } = req.body;
     if (!class_id) return res.status(400).json({ error: "class_id is required" });
 
-    // Choose grid: explicit variant, else infer from class name (JSS→junior).
-    const { data: cls } = await M().from("classes").select("name").eq("id", class_id).eq("school_id", school.id).maybeSingle();
-    if (!cls) return res.status(404).json({ error: "Class not found" });
-    const variant = req.body.variant || (/^(jss|grade|primary|basic|junior)/i.test(cls.name) ? "junior" : "senior");
-    const grid = variant === "senior" ? SENIOR_GRID : JUNIOR_GRID;
+    // 1) periods + subjects + timetable (replace so the demo is consistent).
+    const tt = await seedStarterTimetable(school, { class_id, section_id, replace: true });
+    if (tt.error) return res.status(tt.status || 400).json({ error: tt.error });
+    const subjIdByCode = tt.subjIdByCode || {};
 
-    // Existing slots guard.
-    let sq = M().from("timetable_slots").select("id").eq("school_id", school.id).eq("class_id", class_id);
-    sq = section_id ? sq.eq("section_id", section_id) : sq.is("section_id", null);
-    const { data: existing } = await sq;
-    if (existing?.length && !replace) {
-      return res.status(409).json({ error: "This class already has a timetable.", code: "exists", count: existing.length });
-    }
-    if (existing?.length && replace) {
-      let dq = M().from("timetable_slots").delete().eq("school_id", school.id).eq("class_id", class_id);
-      dq = section_id ? dq.eq("section_id", section_id) : dq.is("section_id", null);
-      await dq;
-    }
+    const summary = { timetable: tt.created, subjects_assigned: 0, scheme: 0, materials: 0 };
 
-    // Ensure the template subjects exist, reconciling with any that a school
-    // already has. The unique key is (school_id, name), so we must match by
-    // name — never blindly insert by code (that hits the name-unique
-    // constraint, e.g. an existing Mathematics/MTH vs template Mathematics/MATHS).
-    const { data: existingSubs } = await M().from("subjects").select("id, name, code").eq("school_id", school.id);
-    const byName = new Map((existingSubs || []).map((s) => [s.name.toLowerCase(), s]));
-    const byCode = new Map((existingSubs || []).filter((s) => s.code).map((s) => [s.code, s]));
-    for (const [name, code] of TEMPLATE_SUBJECTS) {
-      const ex = byName.get(name.toLowerCase());
-      if (ex && ex.code !== code && !byCode.has(code)) { await M().from("subjects").update({ code }).eq("id", ex.id); byCode.set(code, ex); ex.code = code; }
-    }
-    const toAdd = TEMPLATE_SUBJECTS
-      .filter(([name, code]) => !byName.has(name.toLowerCase()) && !byCode.has(code))
-      .map(([name, code, type]) => ({ school_id: school.id, name, code, subject_type: type }));
-    if (toAdd.length) await M().from("subjects").insert(toAdd);
-    const codes = TEMPLATE_SUBJECTS.map((s) => s[1]);
-    const { data: subs } = await M().from("subjects").select("id, code").eq("school_id", school.id).in("code", codes);
-    const subjIdByCode = Object.fromEntries((subs || []).map((s) => [s.code, s.id]));
+    for (const core of SAMPLE_CORE) {
+      const subjectId = subjIdByCode[core.code];
+      if (!subjectId) continue;
 
-    // Ensure the 14 periods (by name) and map name → id.
-    let { data: pers } = await M().from("periods").select("id, name").eq("school_id", school.id).in("name", PERIOD_DEFS.map((p) => p.name));
-    const havePer = new Set((pers || []).map((p) => p.name));
-    const addPer = PERIOD_DEFS.filter((p) => !havePer.has(p.name)).map((p) => ({ school_id: school.id, ...p }));
-    if (addPer.length) { await M().from("periods").insert(addPer); ({ data: pers } = await M().from("periods").select("id, name").eq("school_id", school.id).in("name", PERIOD_DEFS.map((p) => p.name))); }
-    const perIdByName = Object.fromEntries((pers || []).map((p) => [p.name, p.id]));
+      // 2) assign the subject to the class (idempotent via unique class+subject).
+      const { error: csErr } = await M().from("class_subjects").insert({ school_id: school.id, class_id, subject_id: subjectId, is_elective: false });
+      if (!csErr) summary.subjects_assigned += 1;
 
-    // Build the slot rows from the grid.
-    const rows = [];
-    grid.forEach((day, di) => {
-      day.forEach((cell, ci) => {
-        const [code, alt] = Array.isArray(cell) ? cell : [cell, null];
-        const period_id = perIdByName[TEACH_PERIOD_NAMES[ci]];
-        const subject_id = subjIdByCode[code];
-        if (!period_id || !subject_id) return;
-        rows.push({ school_id: school.id, class_id, section_id, day_of_week: di + 1, period_id, subject_id, alt_subject_id: alt ? (subjIdByCode[alt] || null) : null });
-      });
-    });
-    if (rows.length) {
-      const { error } = await M().from("timetable_slots").insert(rows);
-      if (error) throw new Error(error.message);
+      // 3) scheme of work — 2 weeks per term across 3 terms.
+      const { data: haveScheme } = await M().from("scheme_of_work").select("id").eq("school_id", school.id).eq("class_id", class_id).eq("subject_id", subjectId).limit(1);
+      if (!haveScheme?.length) {
+        const rows = [];
+        SAMPLE_TERMS.forEach((term, ti) => {
+          for (let w = 0; w < 2; w++) {
+            const topic = core.topics[(ti * 2 + w) % core.topics.length];
+            rows.push({ school_id: school.id, class_id, subject_id: subjectId, term, week: `Week ${w + 1}`, topic,
+              objectives: `Students should be able to understand and apply the key ideas of ${topic.toLowerCase()}.`,
+              activities: "Guided discussion, worked examples, group work and a short class exercise.",
+              resources: "Course textbook, worksheets and the teaching materials for this subject.",
+              status: "planned" });
+          }
+        });
+        if (rows.length) { const { error } = await M().from("scheme_of_work").insert(rows); if (!error) summary.scheme += rows.length; }
+      }
+
+      // 4) teaching materials — a note, a document link and a video per subject.
+      const { data: haveMat } = await M().from("learning_resources").select("id").eq("school_id", school.id).eq("class_id", class_id).eq("subject_id", subjectId).limit(1);
+      if (!haveMat?.length) {
+        const first = core.topics[0];
+        const mats = [
+          { title: `${first} — Lesson Notes`, resource_type: "document", url: "", note: `Comprehensive notes covering ${first.toLowerCase()}.` },
+          { title: `${first} — Worksheet (PDF)`, resource_type: "link", url: "https://example.com/worksheet.pdf", note: "Practice questions with answers." },
+          { title: `${first} — Video Lesson`, resource_type: "video", url: "https://www.youtube.com/results?search_query=" + encodeURIComponent(first), note: "Introductory video lesson." },
+        ].map((m) => ({ school_id: school.id, class_id, subject_id: subjectId, ...m }));
+        const { error } = await M().from("learning_resources").insert(mats); if (!error) summary.materials += mats.length;
+      }
     }
 
-    res.json({ success: true, variant, created: rows.length });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ success: true, data: summary });
+  } catch (e) { console.error("[academics/seed-sample]", e.message); res.status(500).json({ error: e.message }); }
 });
 
 // ── Weekly Forecast: header + cells for a class/week ──────────────────────

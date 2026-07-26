@@ -68,7 +68,8 @@
     "2026-content-settings.sql",
     "2026-content-creations.sql",
     "2026-content-posted.sql",
-    "2026-content-media.sql"
+    "2026-content-media.sql",
+    "2026-learning-resources-section.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

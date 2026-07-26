@@ -85,6 +85,7 @@ const NAV_SECTIONS = [
       { label: 'Class Timetable', to: '/mgmt/class-timetable' },
       { label: 'Weekly Forecast', to: '/mgmt/weekly-forecast' },
       { label: 'Daily Schedule', to: '/mgmt/daily-schedule' },
+      { label: 'Teaching Materials', to: '/mgmt/teaching-materials' },
       { label: 'Promote Students', to: '/mgmt/promote-students' },
     ] },
     { label: 'Front Office', icon: DoorOpen, moduleKey: 'front_office', children: [

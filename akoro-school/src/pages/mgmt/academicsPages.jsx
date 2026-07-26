@@ -4,7 +4,7 @@
  * Students are custom.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2, Sparkles } from 'lucide-react';
+import { CalendarRange, School, Rows3, BookOpen, Clock3, Grid3x3, Loader2, Save, X, ArrowRightLeft, Printer, CheckCircle2, Sparkles, FileText, Video, Link2, ExternalLink, Plus, Pencil, Trash2, FolderOpen } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import StatCards from '../../components/mgmt/StatCards.jsx';
@@ -766,6 +766,156 @@ export function DailySchedulePage() {
           </table>
         </div>
       )}
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+    </PageLayout>
+  );
+}
+
+/* ── Teaching Materials (per class · section · subject) ──────────────── */
+const MAT_META = {
+  document: { label: 'Document', color: BLUE,   Icon: FileText },
+  video:    { label: 'Video',    color: RED,    Icon: Video },
+  link:     { label: 'Link',     color: PURPLE, Icon: Link2 },
+};
+export function TeachingMaterialsPage() {
+  const [classId, setClassId] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const ctx = useTimetableContext(classId, sectionId);
+  const [classSubjectIds, setClassSubjectIds] = useState(null);
+  const [materials, setMaterials] = useState(null);   // null = not loaded
+  const [busy, setBusy] = useState(false);
+  const [modal, setModal] = useState(null);           // { id?, title, resource_type, url, note }
+  const [toast, setToast] = useState('');
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+  const className = ctx.classes.find((c) => c.id === classId)?.name || '';
+  const classSections = ctx.sections.filter((s) => s.class_id === classId);
+
+  // Subjects to offer: those assigned to the class if any, else all subjects.
+  useEffect(() => {
+    if (!classId) { setClassSubjectIds(null); return; }
+    apiGet(`${BASE}/class-subjects?class_id=${classId}`).then((r) => setClassSubjectIds((r.data || []).map((x) => x.subject_id))).catch(() => setClassSubjectIds([]));
+  }, [classId]);
+  const subjectOptions = (classSubjectIds && classSubjectIds.length) ? ctx.subjects.filter((s) => classSubjectIds.includes(s.id)) : ctx.subjects;
+
+  const loadMaterials = useCallback(() => {
+    if (!classId || !subjectId) { setMaterials(null); return; }
+    const p = new URLSearchParams({ class_id: classId, subject_id: subjectId });
+    if (sectionId) p.set('section_id', sectionId);
+    apiGet(`${BASE}/learning-resources?${p}`).then((r) => setMaterials(r.data || [])).catch(() => setMaterials([]));
+  }, [classId, subjectId, sectionId]);
+  useEffect(() => { loadMaterials(); }, [loadMaterials]);
+
+  const seedSample = async () => {
+    if (!classId) { showToast('Pick a class first'); return; }
+    setBusy(true);
+    try {
+      const r = await apiPost(`${BASE}/academics/seed-sample`, { class_id: classId, section_id: sectionId || '' });
+      const d = r.data || {};
+      showToast(`Sample data added ✓ — ${d.materials || 0} materials, ${d.scheme || 0} scheme rows, ${d.timetable || 0} lessons`);
+      apiGet(`${BASE}/class-subjects?class_id=${classId}`).then((rr) => setClassSubjectIds((rr.data || []).map((x) => x.subject_id))).catch(() => {});
+      loadMaterials();
+    } catch (e) { showToast(e.message || 'Could not seed'); } finally { setBusy(false); }
+  };
+
+  const saveMaterial = async () => {
+    const m = modal;
+    if (!m.title?.trim()) { showToast('Title is required'); return; }
+    setBusy(true);
+    try {
+      const body = { title: m.title.trim(), class_id: classId, section_id: sectionId || null, subject_id: subjectId || null, resource_type: m.resource_type || 'document', url: m.url?.trim() || null, note: m.note?.trim() || null };
+      if (m.id) await apiPut(`${BASE}/learning-resources/${m.id}`, body);
+      else await apiPost(`${BASE}/learning-resources`, body);
+      showToast('Saved ✓'); setModal(null); loadMaterials();
+    } catch (e) { showToast(e.message || 'Could not save'); } finally { setBusy(false); }
+  };
+  const removeMaterial = async (r) => {
+    if (!window.confirm(`Delete “${r.title}”?`)) return;
+    try { await apiDelete(`${BASE}/learning-resources/${r.id}`); showToast('Deleted'); loadMaterials(); }
+    catch (e) { showToast(e.message || 'Could not delete'); }
+  };
+
+  const ctrl = { ...inputStyle, cursor: 'pointer' };
+
+  return (
+    <PageLayout title="Teaching Materials" subtitle="Resources and materials per class, section and subject">
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+        <select value={classId} onChange={(e) => { setClassId(e.target.value); setSectionId(''); setSubjectId(''); }} style={{ ...ctrl, width: 150 }}>
+          <option value="">— class —</option>{ctx.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} disabled={!classSections.length} style={{ ...ctrl, width: 140, opacity: classSections.length ? 1 : 0.6 }}>
+          <option value="">All sections</option>{classSections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} disabled={!classId} style={{ ...ctrl, width: 170, opacity: classId ? 1 : 0.6 }}>
+          <option value="">— subject —</option>{subjectOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {classId && <button onClick={seedSample} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={14} />} Load sample data</button>}
+        {classId && subjectId && <button onClick={() => setModal({ resource_type: 'document' })} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Plus size={15} /> Add material</button>}
+      </div>
+
+      {!classId || !subjectId ? (
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+          <FolderOpen size={30} style={{ opacity: .4, marginBottom: 8 }} /><div>Pick a class and subject to see its teaching materials.</div>
+        </div>
+      ) : materials === null ? (
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2 }}><Loader2 size={22} style={{ animation: 'spin .8s linear infinite' }} /></div>
+      ) : materials.length === 0 ? (
+        <div style={{ padding: 40, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT, background: WHITE, border: `1.5px dashed ${BORDER}`, borderRadius: 14 }}>
+          <FolderOpen size={30} style={{ opacity: .4, marginBottom: 8 }} />
+          <div>No materials yet for {className} · {ctx.subjects.find((s) => s.id === subjectId)?.name}.</div>
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button onClick={() => setModal({ resource_type: 'document' })} style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Add material</button>
+            <button onClick={seedSample} disabled={busy} style={{ padding: '8px 14px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Load sample data</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+          {materials.map((m) => {
+            const meta = MAT_META[m.resource_type] || MAT_META.document;
+            return (
+              <div key={m.id} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontFamily: FONT }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: `${meta.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><meta.Icon size={17} color={meta.color} /></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: INK, wordBreak: 'break-word' }}>{m.title}</div>
+                    <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .4, color: meta.color, background: `${meta.color}12`, borderRadius: 20, padding: '2px 8px' }}>{meta.label}</span>
+                  </div>
+                </div>
+                {m.note && <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{m.note}</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 'auto', paddingTop: 4 }}>
+                  {m.url && <a href={m.url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: BLUE, textDecoration: 'none' }}><ExternalLink size={12} /> Open</a>}
+                  <button onClick={() => setModal({ id: m.id, title: m.title, resource_type: m.resource_type, url: m.url || '', note: m.note || '' })} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><Pencil size={14} /></button>
+                  <button onClick={() => removeMaterial(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={14} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {modal && (
+        <div onClick={() => setModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, background: WHITE, borderRadius: 16, padding: '20px 22px', fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: INK }}>{modal.id ? 'Edit material' : 'Add material'}</span>
+              <button onClick={() => setModal(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input value={modal.title || ''} onChange={(e) => setModal((m) => ({ ...m, title: e.target.value }))} placeholder="Title" style={inputStyle} />
+              <select value={modal.resource_type || 'document'} onChange={(e) => setModal((m) => ({ ...m, resource_type: e.target.value }))} style={ctrl}>
+                {Object.entries(MAT_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <input value={modal.url || ''} onChange={(e) => setModal((m) => ({ ...m, url: e.target.value }))} placeholder="Link / URL (optional)" style={inputStyle} />
+              <textarea value={modal.note || ''} onChange={(e) => setModal((m) => ({ ...m, note: e.target.value }))} rows={3} placeholder="Note / description (optional)" style={{ ...inputStyle, resize: 'vertical' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+              <button onClick={() => setModal(null)} style={{ padding: '9px 16px', borderRadius: 9, border: `1.5px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              <button onClick={saveMaterial} disabled={busy || !modal.title?.trim()} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: busy || !modal.title?.trim() ? '#E5E7EB' : `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: busy || !modal.title?.trim() ? '#9CA3AF' : WHITE, fontSize: 12.5, fontWeight: 800, cursor: busy || !modal.title?.trim() ? 'default' : 'pointer', fontFamily: FONT }}>{busy ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
     </PageLayout>
   );
