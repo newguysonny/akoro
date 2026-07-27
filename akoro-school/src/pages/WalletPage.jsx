@@ -3,6 +3,7 @@
  * (for school admins) allocating coins to students.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon, Send } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { inputStyle } from '../components/mgmt/ResourcePage.jsx';
@@ -36,15 +37,10 @@ export default function WalletPage() {
     }
   }, [load]);
 
-  const topUp = async () => {
+  const navigate = useNavigate();
+  const topUp = () => {
     if (!coins || coins < 1) return showToast('Enter a coin amount');
-    setBusy(true);
-    try {
-      const r = await apiPost('/api/wallet/topup/init', { coins: Number(coins), target });
-      if (r.data?.authorization_url) window.location.href = r.data.authorization_url;
-      else showToast('Could not start payment');
-    } catch (e) { showToast(e.message || 'Top-up failed'); }
-    finally { setBusy(false); }
+    navigate('/purchase', { state: { type: 'topup', coins: Number(coins), target, title: `${Number(coins).toLocaleString()} coins`, subtitle: `${target === 'school' ? 'School' : 'My'} wallet top-up`, amountNaira: nairaFor(Number(coins)) } });
   };
 
   const schoolAcc = data?.accounts?.find((a) => a.kind === 'school');
@@ -79,7 +75,7 @@ export default function WalletPage() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="number" min="1" value={coins} onChange={(e) => setCoins(e.target.value)} style={{ ...inputStyle, width: 160 }} />
           {nairaFor(coins) != null && <span style={{ fontSize: 12.5, color: MUTED }}>≈ ₦{fmt(nairaFor(coins))}</span>}
-          <button onClick={topUp} disabled={busy} style={primaryBtn}>{busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} Pay with Paystack</button>
+          <button onClick={topUp} style={primaryBtn}><Plus size={14} /> Continue to checkout</button>
         </div>
         {pricing && (
           <div style={{ marginTop: 14, fontSize: 12, color: MUTED2 }}>

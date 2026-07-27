@@ -20,6 +20,7 @@ import ChatPage     from './pages/ChatPage.jsx';
 import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
 import SettingsPage       from './pages/SettingsPage.jsx';
 import WalletPage         from './pages/WalletPage.jsx';
+import PurchaseCheckoutPage from './pages/PurchaseCheckoutPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import MarketplacePage     from './pages/MarketplacePage.jsx';
 import AppCenterPage       from './pages/AppCenterPage.jsx';
@@ -104,6 +105,7 @@ function AppRoutes() {
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
+      <Route path="/purchase" element={<ProtectedRoute><PurchaseCheckoutPage /></ProtectedRoute>} />
       <Route path="/documents"     element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
       <Route path="/documents/new" element={<ProtectedRoute><DocumentEditorPage /></ProtectedRoute>} />
       <Route path="/documents/:id" element={<ProtectedRoute><DocumentEditorPage /></ProtectedRoute>} />

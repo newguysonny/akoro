@@ -3,6 +3,7 @@
  * Every AI feature (agent tasks, AI chat, generators) draws from this balance.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
@@ -33,16 +34,11 @@ export default function WalletPage() {
     }
   }, [load]);
 
+  const navigate = useNavigate();
   const nairaFor = (c) => pricing ? Math.round(c * (pricing.coinPriceNaira || 0)) : null;
-  const topUp = async () => {
+  const topUp = () => {
     if (!coins || coins < 1) return showToast('Enter a coin amount');
-    setBusy(true);
-    try {
-      const r = await apiPost('/api/wallet/topup/init', { coins: Number(coins), target: 'user' });
-      if (r.data?.authorization_url) window.location.href = r.data.authorization_url;
-      else showToast('Could not start payment');
-    } catch (e) { showToast(e.message || 'Top-up failed'); }
-    finally { setBusy(false); }
+    navigate('/purchase', { state: { type: 'topup', coins: Number(coins), target: 'user', title: `${Number(coins).toLocaleString()} coins`, subtitle: 'Wallet top-up', amountNaira: nairaFor(Number(coins)) } });
   };
 
   const recent = data?.recent || [];
@@ -66,7 +62,7 @@ export default function WalletPage() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="number" min="1" value={coins} onChange={(e) => setCoins(e.target.value)} style={inp} />
           {nairaFor(coins) != null && <span style={{ fontSize: 12.5, color: MUTED }}>≈ ₦{fmt(nairaFor(coins))}</span>}
-          <button onClick={topUp} disabled={busy} style={primaryBtn}>{busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Plus size={14} />} Pay with Paystack</button>
+          <button onClick={topUp} style={primaryBtn}><Plus size={14} /> Continue to checkout</button>
         </div>
         {pricing && <div style={{ marginTop: 12, fontSize: 12, color: MUTED2 }}>Example: {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins}`).join(' · ')} coins</div>}
       </div>
