@@ -2241,11 +2241,15 @@ router.post("/forecast/generate", authenticateToken, requireRole(MGMT_ROLES), as
     // Try the exact section first, then fall back to any of the class's slots
     // (mirrors the forecast page, which unions across sections). Dedup by
     // (day, period) so a class-wide forecast has one activity per cell.
-    const selectSlots = async (q) => (await q.select("day_of_week, period_id, subject_id, alt_subject_id")).data || [];
-    const baseQ = () => M().from("timetable_slots").eq("school_id", school.id).eq("class_id", b.class_id);
+    // .eq() is only available AFTER .select() (PostgrestFilterBuilder), so the
+    // base query must start from .select().
+    const baseQ = () => M().from("timetable_slots")
+      .select("day_of_week, period_id, subject_id, alt_subject_id")
+      .eq("school_id", school.id).eq("class_id", b.class_id);
+    const fetchRows = async (q) => (await q).data || [];
     let raw = [];
-    if (section_id) raw = await selectSlots(baseQ().eq("section_id", section_id));
-    if (!raw.length) raw = await selectSlots(baseQ());   // fall back to all sections / class-wide
+    if (section_id) raw = await fetchRows(baseQ().eq("section_id", section_id));
+    if (!raw.length) raw = await fetchRows(baseQ());   // fall back to all sections / class-wide
     if (!raw.length) return res.status(409).json({ error: "This class has no timetable yet. Build the timetable first.", code: "no_timetable" });
     const seen = new Set();
     const slots = raw.filter((s) => {
