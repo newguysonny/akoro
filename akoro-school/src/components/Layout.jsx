@@ -4,7 +4,7 @@ import AkoroLogo from './common/AkoroLogo.jsx';
 import {
   LayoutDashboard, Banknote, Landmark, Users, GraduationCap, DoorOpen,
   ClipboardList, Layers, Laptop, UserCog, UserCheck, CalendarClock, NotebookPen,
-  ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone,
+  ClipboardCheck, QrCode, ShieldCheck, BookOpenCheck, Award, Megaphone, Coins,
   Library, Package, Bus, BedDouble, LifeBuoy, Boxes, BarChart3, CreditCard,
   LayoutGrid, MessageSquare, LogOut, Bell, ChevronDown, Menu, Search,
   User, ShieldQuestion,
@@ -289,6 +289,7 @@ const NAV_SECTIONS = [
     { label: 'Comms Wallet', icon: MessageSquare, to: '#' },
   ]},
   { section: 'ACCOUNT', items: [
+    { label: 'Wallet & AI Credits', icon: Coins, to: '/wallet' },
     { label: 'My Profile', icon: User, to: '/profile' },
     { label: 'Help & Support', icon: ShieldQuestion, to: '/settings-billing?tab=help' },
   ]},

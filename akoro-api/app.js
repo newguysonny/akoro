@@ -35,6 +35,7 @@ import db, { checkDb }           from "./db.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
 import authModule, { authenticateSocket } from "./modules/auth/routes.js";
+import walletModule from "./modules/wallet/routes.js";
 import coursesModule              from "./modules/courses/index.js";
 import rankingModule              from "./modules/ranking/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
@@ -217,6 +218,7 @@ app.use("/api/auth",     authModule);           // auth router applies strictLim
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);
 app.use("/api/profiles", standardLimit, profilesModule);
+app.use("/api/wallet",   standardLimit, walletModule);
 app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);

@@ -13,6 +13,7 @@ import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 import { bullRedisOptions }                        from "../../lib/redisOptions.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { hasCoins, chargeForAI, InsufficientCoins } from "../../lib/coins.js";
 
 const MAX_TOOL_ITERATIONS = 20;
 const MODEL               = OPENAI_MODEL;
@@ -34,6 +35,19 @@ export const taskWorker = new Worker("task-runner", async (job) => {
   await deliverProgress(task, `Starting run #${runNumber}...`);
 
   try {
+    // Hard-block before spending: the task's creator (teacher/school/user) must
+    // have coins in their own or their school's wallet.
+    const payer = task.creator_id;
+    if (payer) {
+      const { ok, total } = await hasCoins(payer, 1);
+      if (!ok) {
+        await TaskRunDB.update(run.id, { status: "failed" });
+        await deliverError(task, run, "Insufficient coin balance — top up to run AI tasks.");
+        await TaskDB.updateStatus(taskId, "failed");
+        return;
+      }
+    }
+
     const ctx          = await buildContext(task);
     const tools        = await getToolsForTask(task);
     // OpenAI function-calling tool schema.
@@ -62,6 +76,13 @@ export const taskWorker = new Worker("task-runner", async (job) => {
         ...(toolDefs.length ? { tools: toolDefs } : {}),
         messages,
       });
+
+      // Meter this iteration against the task owner's wallet (best-effort — a
+      // billing hiccup must not drop a completed run's output).
+      if (payer && response?.usage) {
+        await chargeForAI({ userId: payer, feature: "agent_task", model: MODEL, usage: response.usage, ref: task.id })
+          .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] task charge failed:", e.message); });
+      }
 
       const msg    = response.choices?.[0]?.message ?? { role: "assistant", content: "" };
       const finish = response.choices?.[0]?.finish_reason;

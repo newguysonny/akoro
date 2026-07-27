@@ -70,7 +70,8 @@
     "2026-content-posted.sql",
     "2026-content-media.sql",
     "2026-learning-resources-section.sql",
-    "2026-academic-calendar.sql"
+    "2026-academic-calendar.sql",
+    "2026-coin-wallet.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

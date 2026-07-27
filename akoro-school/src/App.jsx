@@ -28,6 +28,7 @@ import { AcademicStaffPage, NonAcademicStaffPage, StaffGroupPage } from './pages
 import TeacherRequestsPage from './pages/TeacherRequestsPage.jsx';
 import SocialMediaPage     from './pages/SocialMediaPage.jsx';
 import ContentPage         from './pages/content/ContentPage.jsx';
+import WalletPage          from './pages/WalletPage.jsx';
 import ContentChannelPage  from './pages/ContentChannelPage.jsx';
 import ContentCreationPage from './pages/ContentCreationPage.jsx';
 import TelegramBotPage     from './pages/TelegramBotPage.jsx';
@@ -266,6 +267,7 @@ function AppRoutes() {
       <Route path="/settings-billing" element={<ProtectedRoute><SettingsBillingPage /></ProtectedRoute>} />
       <Route path="/settings-social-media" element={<ProtectedRoute><SocialMediaPage /></ProtectedRoute>} />
       <Route path="/content" element={<ProtectedRoute anyRole><ContentPage /></ProtectedRoute>} />
+      <Route path="/wallet" element={<ProtectedRoute anyRole><WalletPage /></ProtectedRoute>} />
       <Route path="/content/channel/:platform" element={<ProtectedRoute anyRole><ContentChannelPage /></ProtectedRoute>} />
       <Route path="/content/creation/:id" element={<ProtectedRoute anyRole><ContentCreationPage /></ProtectedRoute>} />
       <Route path="/settings-telegram" element={<ProtectedRoute><TelegramBotPage /></ProtectedRoute>} />
