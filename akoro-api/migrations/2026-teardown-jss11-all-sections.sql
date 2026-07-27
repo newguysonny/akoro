@@ -9,15 +9,17 @@
 --     (section A is the demo seed's — left intact so the demo keeps working)
 --   • the full week-by-week scheme of work seeded for the JSS 11 class
 --     (2026-seed-jss11-scheme.sql)
+--   • the seeded weekly forecast for the JSS 11 class
+--     (2026-seed-jss11-forecast.sql)
 --
 -- Run once by hand with your DB URL:
 --   MIGRATION_DATABASE_URL=postgres://…:5432/postgres \
 --     psql "$MIGRATION_DATABASE_URL" -f migrations/2026-teardown-jss11-all-sections.sql
 --
--- IMPORTANT: also delete BOTH 2026-seed-jss11-all-sections.sql and
--- 2026-seed-jss11-scheme.sql from the "demo" array in manifest.json (and
--- delete the files), otherwise the next deploy re-seeds them. This teardown
--- is idempotent and safe to run more than once.
+-- IMPORTANT: also delete the three seed files from the "demo" array in
+-- manifest.json (and delete the files) — 2026-seed-jss11-all-sections.sql,
+-- 2026-seed-jss11-scheme.sql and 2026-seed-jss11-forecast.sql — otherwise the
+-- next deploy re-seeds them. This teardown is idempotent and safe to re-run.
 -- =============================================================
 DO $$
 DECLARE
@@ -58,6 +60,10 @@ BEGIN
   -- 3. Full week-by-week scheme of work seeded for this class
   --    (2026-seed-jss11-scheme.sql). Class-scoped, so remove it all.
   DELETE FROM mgmt.scheme_of_work WHERE class_id = v_class;
+
+  -- 4. Weekly forecast seeded for this class (2026-seed-jss11-forecast.sql).
+  --    Cells cascade from the week header.
+  DELETE FROM mgmt.forecast_weeks WHERE class_id = v_class;
 
   -- Optional TOTAL wipe (uncomment to also remove the class-level extras this
   -- seed added — only do this if the demo student no longer needs them):

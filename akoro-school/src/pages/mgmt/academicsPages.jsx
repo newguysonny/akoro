@@ -14,6 +14,8 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURP
 const BASE = '/api/school/mgmt';
 const TEACHER_OPTS = { url: '/api/school/instructors', labelFn: (r) => r.full_name || r.email };
 const DAYS = [{ n: 1, label: 'Mon' }, { n: 2, label: 'Tue' }, { n: 3, label: 'Wed' }, { n: 4, label: 'Thu' }, { n: 5, label: 'Fri' }];
+const TERM_OPTIONS = ['First Term', 'Second Term', 'Third Term'];
+const WEEK_OPTIONS = Array.from({ length: 14 }, (_, i) => `Week ${i + 1}`);
 
 /* ── Academic Dashboard ──────────────────────────────────────────── */
 export function AcademicDashboardPage() {
@@ -574,6 +576,9 @@ export function WeeklyForecastPage() {
   const [preparedBy, setPreparedBy] = useState('');
   const [cellMap, setCellMap] = useState({});   // `${day}_${pid}` → activity
   const [busy, setBusy] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+  const [term, setTerm] = useState('First Term');
+  const [wk, setWk] = useState('Week 1');
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
   const className = ctx.classes.find((c) => c.id === classId)?.name || '';
@@ -607,6 +612,21 @@ export function WeeklyForecastPage() {
     finally { setBusy(false); }
   };
 
+  // Mirror the scheme of work onto the timetable: fill each period with that
+  // subject's topic for the chosen term + week (a one-line highlight).
+  const generate = async () => {
+    setGenBusy(true);
+    try {
+      const r = await apiPost(`${BASE}/forecast/generate`, {
+        class_id: classId, section_id: sectionId || '', week_start: weekStart,
+        week_end: addDays(weekStart, 4), term, week: wk, overwrite: true,
+      });
+      await loadForecast();
+      showToast(`Filled ${r.filled ?? 0} period${(r.filled ?? 0) === 1 ? '' : 's'} from ${term} · ${wk} ✓`);
+    } catch (e) { showToast(e.message || 'Could not generate'); }
+    finally { setGenBusy(false); }
+  };
+
   return (
     <PageLayout title="Weekly Forecast" subtitle="What will be taught each day — follows the class timetable">
       <style>{`@media print { @page { size: landscape; margin: 8mm; } body * { visibility: hidden !important; } #wf-print, #wf-print * { visibility: visible !important; } #wf-print { position: absolute; left:0; top:0; width:100%; } #wf-print table { min-width: 0 !important; width: 100% !important; } .wf-noprint { display:none !important; } }`}</style>
@@ -618,6 +638,16 @@ export function WeeklyForecastPage() {
           <option value="">All sections</option>{ctx.sections.filter((s) => s.class_id === classId).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <input type="date" value={weekStart} onChange={(e) => setWeekStart(mondayOf(e.target.value))} style={{ ...inputStyle, width: 160 }} title="Any day — snaps to that week's Monday" />
+        {classId && <>
+          <span style={{ width: 1, alignSelf: 'stretch', background: BORDER, margin: '0 2px' }} />
+          <select value={term} onChange={(e) => setTerm(e.target.value)} style={{ ...inputStyle, width: 130, cursor: 'pointer' }} title="Scheme term to pull topics from">
+            {TERM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={wk} onChange={(e) => setWk(e.target.value)} style={{ ...inputStyle, width: 104, cursor: 'pointer' }} title="Scheme week to pull topics from">
+            {WEEK_OPTIONS.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+          <button onClick={generate} disabled={genBusy} title="Fill every period with its subject's scheme-of-work topic for the chosen term & week" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${AMBER}66`, background: `${AMBER}0C`, color: '#B45309', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{genBusy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Sparkles size={14} />} Generate from scheme</button>
+        </>}
         {classId && <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={13} />} Save</button>}
         {classId && <button onClick={() => window.print()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Printer size={14} /> Print</button>}
       </div>

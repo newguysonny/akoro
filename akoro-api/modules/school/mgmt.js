@@ -2217,6 +2217,91 @@ router.post("/forecast/save", authenticateToken, requireRole(MGMT_ROLES), async 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /forecast/generate — mirror the scheme of work onto the timetable ──
+// Body: { class_id, section_id?, week_start, term, week, week_end?, overwrite? }
+// Fills every teaching period's activity with THAT subject's scheme-of-work
+// topic for the given term + week — a one-line highlight, not the full plan.
+// So the forecast reads straight off the timetable + scheme: what each subject
+// covers in each period, across the whole week. `overwrite` (default true)
+// rebuilds the week's cells; pass false to only fill blanks.
+router.post("/forecast/generate", authenticateToken, requireRole(MGMT_ROLES), async (req, res) => {
+  try {
+    const school = await getMySchool(req, res);
+    if (!school) return;
+    const b = req.body || {};
+    if (!b.class_id || !b.week_start || !b.term || !b.week) {
+      return res.status(400).json({ error: "class_id, week_start, term and week are required" });
+    }
+    const section_id = b.section_id || null;
+    const overwrite  = b.overwrite !== false;
+
+    // 1) Timetable slots for this class/section → (day, period, subject).
+    let tq = M().from("timetable_slots")
+      .select("day_of_week, period_id, subject_id, alt_subject_id")
+      .eq("school_id", school.id).eq("class_id", b.class_id);
+    tq = section_id ? tq.eq("section_id", section_id) : tq.is("section_id", null);
+    const { data: slots } = await tq;
+    if (!slots?.length) return res.status(409).json({ error: "This class has no timetable for that section yet.", code: "no_timetable" });
+
+    // 2) Scheme-of-work topics for the chosen term + week → subject_id → topic.
+    const { data: scheme } = await M().from("scheme_of_work")
+      .select("subject_id, topic")
+      .eq("school_id", school.id).eq("class_id", b.class_id)
+      .eq("term", b.term).eq("week", b.week);
+    const topicBySubject = Object.fromEntries((scheme || []).map((s) => [s.subject_id, s.topic]));
+    if (!Object.keys(topicBySubject).length) {
+      return res.status(409).json({ error: `No scheme of work for ${b.term} · ${b.week}. Add topics first.`, code: "no_scheme" });
+    }
+
+    // 3) Upsert the week header (default the theme to the term · week label).
+    let wq = M().from("forecast_weeks").select("id, theme").eq("school_id", school.id).eq("class_id", b.class_id).eq("week_start", b.week_start);
+    wq = section_id ? wq.eq("section_id", section_id) : wq.is("section_id", null);
+    let { data: week } = await wq.maybeSingle();
+    const header = {
+      week_end: b.week_end || null,
+      theme: (week?.theme?.trim() || `${b.term} · ${b.week}`),
+      updated_at: new Date(),
+    };
+    if (week) {
+      await M().from("forecast_weeks").update(header).eq("id", week.id);
+    } else {
+      const { data: created, error } = await M().from("forecast_weeks")
+        .insert({ school_id: school.id, class_id: b.class_id, section_id, week_start: b.week_start, ...header })
+        .select("id").single();
+      if (error) throw new Error(error.message);
+      week = created;
+    }
+
+    // 4) Build one highlight per teaching slot: the subject's topic (plus the
+    //    alt subject's topic when the period is shared).
+    const rows = [];
+    for (const s of slots) {
+      const t   = topicBySubject[s.subject_id];
+      const alt = s.alt_subject_id ? topicBySubject[s.alt_subject_id] : null;
+      const activity = alt ? `${t || "—"} / ${alt}` : t;
+      if (!activity) continue;   // no topic for this subject this week — leave blank
+      rows.push({ day_of_week: s.day_of_week, period_id: s.period_id, activity });
+    }
+
+    // 5) Write the cells. Overwrite → rebuild the week; else only fill blanks.
+    if (overwrite) await M().from("forecast_cells").delete().eq("week_id", week.id);
+    let filled = 0;
+    for (const r of rows) {
+      const { data: ex } = await M().from("forecast_cells").select("id, activity")
+        .eq("week_id", week.id).eq("day_of_week", r.day_of_week).eq("period_id", r.period_id).maybeSingle();
+      if (ex) {
+        if (!overwrite && ex.activity?.trim()) continue;   // keep manual entry
+        await M().from("forecast_cells").update({ activity: r.activity }).eq("id", ex.id);
+      } else {
+        await M().from("forecast_cells").insert({ school_id: school.id, week_id: week.id, ...r });
+      }
+      filled++;
+    }
+
+    res.json({ success: true, weekId: week.id, filled, term: b.term, week: b.week });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── A teacher's own weekly timetable ──────────────────────────────────────
 // Derives the caller's periods from the subjects they teach
 // (class_subjects.teacher_id / class_teachers), plus any slot assigned to them

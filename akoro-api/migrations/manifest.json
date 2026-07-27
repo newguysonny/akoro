@@ -95,6 +95,7 @@
     "2026-seed-blog.sql",
     "2026-seed-demo-jss11.sql",
     "2026-seed-jss11-all-sections.sql",
-    "2026-seed-jss11-scheme.sql"
+    "2026-seed-jss11-scheme.sql",
+    "2026-seed-jss11-forecast.sql"
   ]
 }
