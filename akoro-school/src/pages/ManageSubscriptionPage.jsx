@@ -38,14 +38,10 @@ export default function ManageSubscriptionPage() {
     } else { load(); }
   }, [load, params]);
 
-  const checkout = async (planKey, cycle) => {
-    setBusyKey(`${planKey}-${cycle}`);
-    try {
-      const res = await apiPost('/api/school/subscription/checkout', { planKey, cycle });
-      if (res?.authorization_url) { window.location.href = res.authorization_url; return; }
-      if (res?.free) { showToast(res.message || 'Plan activated ✓'); await load(); }
-    } catch (e) { showToast(e.message || 'Checkout failed'); }
-    finally { setBusyKey(null); }
+  // Review on the checkout page before Paystack opens.
+  const checkout = (planKey, cycle, plan) => {
+    const amountNaira = cycle === 'yearly' ? plan?.priceYearly : plan?.priceMonthly;
+    navigate('/purchase', { state: { title: `${plan?.name || 'Subscription'} — ${cycle === 'yearly' ? 'Yearly' : 'Monthly'}`, subtitle: 'School subscription', amountNaira, initPath: '/api/school/subscription/checkout', initBody: { planKey, cycle } } });
   };
 
   const statusColor = { active: GREEN, trial: BLUE, expired: RED, cancelled: MUTED2 };
@@ -107,10 +103,10 @@ export default function ManageSubscriptionPage() {
                     <p style={{ fontSize: 14, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>{p.name} <span style={{ fontWeight: 600, color: MUTED2, fontSize: 12 }}>(Up to {p.maxStudents} students)</span></p>
                     <p style={{ fontSize: 12, color: MUTED, margin: '0 0 12px', lineHeight: 1.55, fontFamily: FONT }}>{p.description}</p>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <button onClick={() => checkout(p.key, 'monthly')} disabled={busyKey === `${p.key}-monthly`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${BLUE}`, background: WHITE, color: BLUE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                      <button onClick={() => checkout(p.key, "monthly", p)} disabled={busyKey === `${p.key}-monthly`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${BLUE}`, background: WHITE, color: BLUE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
                         {busyKey === `${p.key}-monthly` ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : null} Pay Monthly - {naira(p.priceMonthly)}
                       </button>
-                      <button onClick={() => checkout(p.key, 'yearly')} disabled={busyKey === `${p.key}-yearly`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: AMBER, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                      <button onClick={() => checkout(p.key, "yearly", p)} disabled={busyKey === `${p.key}-yearly`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: AMBER, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
                         {busyKey === `${p.key}-yearly` ? <Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> : null} Pay Yearly - {naira(p.priceYearly)}
                       </button>
                     </div>

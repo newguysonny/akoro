@@ -40,7 +40,7 @@ export default function WalletPage() {
   const navigate = useNavigate();
   const topUp = () => {
     if (!coins || coins < 1) return showToast('Enter a coin amount');
-    navigate('/purchase', { state: { type: 'topup', coins: Number(coins), target, title: `${Number(coins).toLocaleString()} coins`, subtitle: `${target === 'school' ? 'School' : 'My'} wallet top-up`, amountNaira: nairaFor(Number(coins)) } });
+    navigate('/purchase', { state: { title: `${Number(coins).toLocaleString()} coins`, subtitle: `${target === 'school' ? 'School' : 'My'} wallet top-up`, amountNaira: nairaFor(Number(coins)), coins: Number(coins), initPath: '/api/wallet/topup/init', initBody: { coins: Number(coins), target } } });
   };
 
   const schoolAcc = data?.accounts?.find((a) => a.kind === 'school');

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen, Clock,
   FileText, UserCircle, Grid3x3, PieChart, PenTool, AlertTriangle, ArrowLeftRight, TrendingUp,
@@ -145,6 +146,7 @@ function AppCard({ item, busy, onBuy }) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function AppsCenterPage() {
+  const navigate = useNavigate();
   const [tools, setTools]     = useState([]);
   const [assets, setAssets]   = useState([]);
   const [mgmt, setMgmt]       = useState([]);
@@ -180,10 +182,14 @@ export default function AppsCenterPage() {
   }, [load]);
 
   const buy = async (item) => {
+    // Paid → review on the checkout page; free → unlock directly.
+    if (item.price !== 0) {
+      navigate('/purchase', { state: { title: item.name, subtitle: 'App / tool unlock', amountNaira: item.price, initPath: '/api/instructor/tools/checkout', initBody: { toolId: item.id } } });
+      return;
+    }
     setBusyId(item.id);
     try {
       const res = await apiPost('/api/instructor/tools/checkout', { toolId: item.id });
-      if (res?.authorization_url) { window.location.href = res.authorization_url; return; }
       if (res?.owned) { showToast('Unlocked ✓'); await load(); }
       else showToast(res?.error || 'Could not unlock');
     } catch (e) { showToast(e.message || 'Checkout failed'); }

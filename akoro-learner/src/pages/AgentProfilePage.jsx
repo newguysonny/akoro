@@ -69,15 +69,10 @@ export default function AgentProfilePage() {
     apiGet(`${MKT}/my-agents/${STUDENT_ID}`).then((d) => setOwned((d.purchasedAgents || []).some((a) => a.agentId === full.agent_id))).catch(() => {});
   }, [full?.agent_id]);
 
-  const purchase = async () => {
-    setBusy(true);
-    try {
-      const d = await apiPost(`${MKT}/checkout`, { studentId: STUDENT_ID, listingId: full.id });
-      if (d.authorization_url) { window.location.href = d.authorization_url; return; }
-      setOwned(true); setToast({ msg: d.message || `${full.title} unlocked!`, color: GREEN });
-    } catch (e) {
-      setToast({ msg: String(e.message || '').includes('409') ? t('discovery.already_own') : t('discovery.checkout_failed'), color: RED });
-    } finally { setBusy(false); }
+  // Review on the shared checkout page (guide mode) before Paystack opens.
+  const purchase = () => {
+    navigate('/checkout', { state: { mode: 'agent', returnTo: `/agent/${full.id}`,
+      listing: { id: full.id, title: full.title, price_ngn: Math.round((full.price_kobo || 0) / 100), is_free: full.is_free } } });
   };
   const addToCart = async () => {
     if (inCart(full.id)) { navigate('/cart'); return; }

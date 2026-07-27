@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost } from '../services/api.js';
@@ -69,6 +70,7 @@ function AppCard({ item, busy, onBuy }) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function AppCenterPage() {
+  const navigate = useNavigate();
   const [tools, setTools]   = useState([]);
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -102,10 +104,14 @@ export default function AppCenterPage() {
   }, [load]);
 
   const buy = async (item) => {
+    // Paid → review on the checkout page; free → unlock directly.
+    if (item.price !== 0) {
+      navigate('/purchase', { state: { title: item.name, subtitle: 'App / tool unlock', amountNaira: item.price, initPath: '/api/instructor/tools/checkout', initBody: { toolId: item.id } } });
+      return;
+    }
     setBusyId(item.id);
     try {
       const res = await apiPost('/api/instructor/tools/checkout', { toolId: item.id });
-      if (res?.authorization_url) { window.location.href = res.authorization_url; return; }
       if (res?.owned) { showToast('Unlocked ✓'); await load(); }
       else showToast(res?.error || 'Could not unlock');
     } catch (e) { showToast(e.message || 'Checkout failed'); }

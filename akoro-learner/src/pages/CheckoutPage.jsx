@@ -29,7 +29,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const st = location.state || {};
-  const mode = st.mode === 'course' || st.mode === 'topup' ? st.mode : 'cart';
+  const mode = ['course', 'topup', 'agent'].includes(st.mode) ? st.mode : 'cart';
   const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate(mode === 'cart' ? '/cart' : '/app'); };
   const [params] = useSearchParams();
   const payStatus = params.get('payment');   // cart return only
@@ -44,11 +44,15 @@ export default function CheckoutPage() {
   } else if (mode === 'topup') {
     items = [{ key: 'topup', title: `${Number(st.coins || 0).toLocaleString()} coins`, badge: 'Top-up', price_ngn: st.amountNaira, is_free: false }];
     subtotalNgn = st.amountNaira || 0; isFree = false; headerCount = 0;
+  } else if (mode === 'agent') {
+    const g = st.listing || {};
+    items = [{ key: g.id, title: g.title, badge: 'Guide', price_ngn: g.price_ngn, is_free: !!g.is_free }];
+    subtotalNgn = g.is_free ? 0 : (g.price_ngn || 0); isFree = !!g.is_free; headerCount = 0;
   } else {
     items = (cart.items || []).map((i) => ({ key: i.cart_item_id, title: i.title, badge: i.item_type === 'agent' ? 'Guide' : i.course_type === 'video' ? 'Video' : 'Live', price_ngn: i.price_ngn, is_free: i.is_free }));
     subtotalNgn = cart.subtotal_ngn; isFree = (cart.subtotal_kobo || 0) === 0; headerCount = cartCount;
   }
-  const canCoupon = mode !== 'topup';   // top-ups have no coupons
+  const canCoupon = mode === 'cart' || mode === 'course';   // top-ups & guides have no coupons
 
   const [method, setMethod]     = useState('any');
   const [code, setCode]         = useState('');
@@ -165,6 +169,12 @@ export default function CheckoutPage() {
         const res = await apiPost('/api/wallet/topup/init', { coins: st.coins, target: st.target || 'user' });
         const d = res?.data ?? res;
         if (d?.authorization_url) { window.location.href = d.authorization_url; return; }
+        setToast({ msg: 'Could not start payment', color: RED });
+      } else if (mode === 'agent') {
+        const res = await apiPost('/api/adaptive/marketplace/checkout', { listingId: st.listing.id });
+        const d = res?.data ?? res;
+        if (d?.authorization_url) { window.location.href = d.authorization_url; return; }
+        if (d?.free || d?.success) { setToast({ msg: `${st.listing.title} unlocked! 🎉`, color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
         setToast({ msg: 'Could not start payment', color: RED });
       } else {
         const res = await checkoutCart({ coupon_code: coupon?.coupon_code, method: isFree ? undefined : method });

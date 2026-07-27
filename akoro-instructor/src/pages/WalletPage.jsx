@@ -38,7 +38,7 @@ export default function WalletPage() {
   const nairaFor = (c) => pricing ? Math.round(c * (pricing.coinPriceNaira || 0)) : null;
   const topUp = () => {
     if (!coins || coins < 1) return showToast('Enter a coin amount');
-    navigate('/purchase', { state: { type: 'topup', coins: Number(coins), target: 'user', title: `${Number(coins).toLocaleString()} coins`, subtitle: 'Wallet top-up', amountNaira: nairaFor(Number(coins)) } });
+    navigate('/purchase', { state: { title: `${Number(coins).toLocaleString()} coins`, subtitle: 'Wallet top-up', amountNaira: nairaFor(Number(coins)), coins: Number(coins), initPath: '/api/wallet/topup/init', initBody: { coins: Number(coins), target: 'user' } } });
   };
 
   const recent = data?.recent || [];

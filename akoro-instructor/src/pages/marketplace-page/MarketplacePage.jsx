@@ -5,12 +5,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Check, Lock, Loader2, Plus, Trash2, Upload, FileText } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPost, API } from '../../services/api.js';
+import { useNavigate } from 'react-router-dom';
 import { uploadAndOcr } from '../../services/uploadApi.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, GREEN, RED, FONT } from '../../constants.js';
 
 import { BRAND, FONTF, naira, TEMPLATE_TARGETS, CreateTemplateModal, ViewTemplateModal, ItemCard } from './parts.jsx';
 
 export default function MarketplacePage() {
+  const navigate = useNavigate();
   const [tab, setTab]       = useState('tools');
   const [tools, setTools]   = useState([]);
   const [assets, setAssets] = useState([]);
@@ -66,13 +68,14 @@ export default function MarketplacePage() {
   }, [load, loadTemplates]);
 
   const buy = async (item) => {
+    // Paid → review on the checkout page; free → unlock directly.
+    if (item.price !== 0) {
+      navigate('/purchase', { state: { title: item.name, subtitle: 'Tool / asset unlock', amountNaira: item.price, initPath: '/api/instructor/tools/checkout', initBody: { toolId: item.id } } });
+      return;
+    }
     setBusyId(item.id);
     try {
       const res = await apiPost('/api/instructor/tools/checkout', { toolId: item.id });
-      if (res?.authorization_url) {
-        window.location.href = res.authorization_url;   // redirect to Paystack
-        return;
-      }
       if (res?.owned) { showToast('Unlocked ✓'); await load(); }
       else showToast(res?.error || 'Could not unlock');
     } catch (e) {
