@@ -93,7 +93,13 @@ export function AuthProvider({ children }) {
   const refresh = useCallback(async () => {
     try {
       const { data } = await authFetch('/api/auth/refresh', {});
-      if (data?.user) saveUser(data.user);
+      if (data?.user) {
+        const prev = getStoredUser();
+        const next = (prev?.onboardingCompleted && data.user.onboardingCompleted === false)
+          ? { ...data.user, onboardingCompleted: true }
+          : data.user;
+        saveUser(next);
+      }
       return true;
     } catch { clearUser(); return false; }
   }, [saveUser, clearUser]);
@@ -116,12 +122,33 @@ export function AuthProvider({ children }) {
     if (userObj) saveUser(userObj);
   }, [saveUser]);
 
-  // Verify session on mount
+  // Verify session on mount.
+  //
+  // The 15-min access token can expire while the user is off-site (e.g. on a
+  // provider's OAuth consent screen while connecting a streaming platform).
+  // On return, /me responds 401/403 with no `data`. We must try a refresh
+  // (the refresh cookie is still valid) BEFORE clearing — otherwise the user
+  // is spuriously logged out and lands on "Access token required" / onboarding
+  // despite having a live session.
   useEffect(() => {
-    if (!getStoredUser()) return;
+    const stored = getStoredUser();
+    if (!stored) return;
     fetch(`${API}/api/auth/me`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'instructor' } })
       .then(r => r.json())
-      .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
+      .then(({ data }) => {
+        if (data?.id) {
+          // Never regress an already-onboarded account back into the
+          // onboarding gate on a routine re-verify (e.g. a NULL column).
+          if (stored.onboardingCompleted && data.onboardingCompleted === false) {
+            data = { ...data, onboardingCompleted: true };
+          }
+          saveUser(data);
+        } else {
+          // Access token likely expired — recover via the refresh cookie
+          // instead of logging the user out.
+          refresh();
+        }
+      })
       .catch(() => refresh());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
