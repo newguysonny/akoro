@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { isChunkError, recoverFromStaleChunk } from '../../utils/chunkRetry.js';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -6,19 +7,31 @@ const RED   = '#EF4444';
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError:false, error:null, errorInfo:null };
+    this.state = { hasError:false, error:null, errorInfo:null, recovering:false };
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError:true, error };
+    // A stale-chunk error after a deploy isn't a real crash — recover silently
+    // (reload onto the fresh shell) instead of showing the error page.
+    return { hasError:true, error, recovering: isChunkError(error) };
   }
 
   componentDidCatch(error, errorInfo) {
+    if (isChunkError(error)) { recoverFromStaleChunk(); return; }
     console.error('[Akoro ErrorBoundary]', error, errorInfo);
     this.setState({ errorInfo });
   }
 
   render() {
+    if (this.state.recovering) {
+      return (
+        <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, background:'var(--ak-bg,#0B0818)', fontFamily:"'Nunito',sans-serif" }}>
+          <div style={{ width:34, height:34, borderRadius:'50%', border:`3px solid ${BRAND}40`, borderTopColor:BRAND, animation:'ak-eb-spin .7s linear infinite' }} />
+          <div style={{ fontSize:14, fontWeight:800, color:'var(--ak-text,#fff)' }}>Updating to the latest version…</div>
+          <style>{'@keyframes ak-eb-spin{to{transform:rotate(360deg)}}'}</style>
+        </div>
+      );
+    }
     if (!this.state.hasError) return this.props.children;
 
     return (

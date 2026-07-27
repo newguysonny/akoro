@@ -14,9 +14,28 @@
  */
 const KEY = 'akoro_chunk_reloaded';
 
+// True for the "stale chunk after deploy" family of errors (dynamic import /
+// preload failures), regardless of browser wording.
+export function isChunkError(err) {
+  const msg = String(err?.message || err || '');
+  return /dynamically imported module|Importing a module script failed|Loading chunk|ChunkLoadError|Failed to fetch|preload/i.test(msg);
+}
+
+// Escape the stale SW-cached shell (once, guarded) then reload — shared by
+// lazyWithRetry, the ErrorBoundary, and the global vite:preloadError net.
+export async function recoverFromStaleChunk() {
+  let retried = false;
+  try { retried = window.sessionStorage?.getItem(KEY) === '1'; } catch { /* ignore */ }
+  if (retried) return false;   // already tried this session — let the error surface
+  try { window.sessionStorage?.setItem(KEY, '1'); } catch { /* ignore */ }
+  await escapeStaleShell();
+  window.location.reload();
+  return true;
+}
+
 // Force the browser off the stale, service-worker-cached app shell so the
 // next navigation loads the freshly-deployed index.html (and its new chunks).
-async function escapeStaleShell() {
+export async function escapeStaleShell() {
   try {
     if (!('serviceWorker' in navigator)) return;
     const regs = await navigator.serviceWorker.getRegistrations();
@@ -48,18 +67,10 @@ export async function retryImport(factory) {
     try { window.sessionStorage?.removeItem(KEY); } catch { /* private mode */ }
     return mod;
   } catch (err) {
-    let retried = false;
-    try { retried = window.sessionStorage?.getItem(KEY) === '1'; } catch { /* ignore */ }
-    if (!retried) {
-      try { window.sessionStorage?.setItem(KEY, '1'); } catch { /* ignore */ }
-      // Escape the stale SW-cached shell, THEN reload — otherwise the reload is
-      // served the same old index.html and hits the same missing chunk again.
-      await escapeStaleShell();
-      window.location.reload();
-      // Hold the render until the reload takes effect so React never surfaces
-      // the error to the user.
-      return new Promise(() => {});
-    }
+    // Escape the stale SW-cached shell + reload (guarded once per session).
+    // Hold the render until the reload takes effect so React never surfaces the
+    // error to the user.
+    if (await recoverFromStaleChunk()) return new Promise(() => {});
     throw err;   // already retried — surface the real error
   }
 }

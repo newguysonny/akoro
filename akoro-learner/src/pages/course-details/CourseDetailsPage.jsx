@@ -81,8 +81,9 @@ export default function CourseDetailsPage() {
     const isFree = view.course.is_free || view.course.priceLabel === 'Free';
 
     if (!isFree) {
+      // view.course.price is already in NAIRA (the /full API divides kobo/100).
       navigate('/checkout', { state: { mode: 'course', returnTo: `/course/${slug}`,
-        course: { id: cid, title: view.course.title, price_ngn: Math.round(Number(view.course.price || 0) / 100), course_type: view.type } } });
+        course: { id: cid, title: view.course.title, price_ngn: Number(view.course.price || 0), course_type: view.type } } });
       return;
     }
 

@@ -3,7 +3,14 @@ import ReactDOM from 'react-dom/client';
 import { io } from 'socket.io-client';
 import App from './App.jsx';
 import { API, initOfflineSync } from './services/api.js';
+import { isChunkError, recoverFromStaleChunk } from './utils/chunkRetry.js';
 import './index.css';
+
+// Global net for stale-chunk failures after a deploy — covers dynamic imports
+// that don't go through a React lazy boundary (Vite fires vite:preloadError;
+// unhandled rejections catch the rest). Recovery is guarded to reload once.
+window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); recoverFromStaleChunk(); });
+window.addEventListener('unhandledrejection', (e) => { if (isChunkError(e?.reason)) recoverFromStaleChunk(); });
 
 /**
  * Multi-tenant guard — the Vercel wildcard (*.akoro.name.ng) can land here.

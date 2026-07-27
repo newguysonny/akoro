@@ -46,8 +46,11 @@ const router = express.Router();
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 async function getUserEmail(userId) {
-  const { data } = await db.auth.admin.getUserById(userId);
-  return data?.user?.email || null;
+  // Akoro users live in public.users (custom JWT auth) — NOT Supabase Auth.
+  // The old db.auth.admin.getUserById() always returned null here, so paid
+  // guide checkout failed with "email required for payment".
+  const { data } = await db.from("users").select("email").eq("id", userId).maybeSingle();
+  return data?.email || null;
 }
 
 async function grantAgentAccess(studentId, agentId, purchaseId) {
