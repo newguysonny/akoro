@@ -14,6 +14,18 @@ _Last dependency audit: 2026-07-27._
 These are **configuration**, not code — the code supports them, but a wrong prod
 value is exploitable.
 
+> **How to know these are green:** run the automated gate with your production
+> env loaded — it checks every item below and exits non-zero if any blocker fails:
+> ```
+> cd akoro-api && NODE_ENV=production npm run preflight
+> # add a live probe once deployed:
+> npm run preflight -- --url=https://api.yourdomain.com
+> ```
+> ✅ = passed, ⚠️ = advisory (won't fail the gate), ❌ = blocker. Wire
+> `npm run preflight` into your release/pre-deploy step so a red config can't ship.
+> The live probe additionally confirms HTTPS, that a protected route returns 401,
+> helmet headers, and that CORS won't reflect a foreign origin.
+
 - [ ] **CORS is an explicit allowlist, never `*`.** Set `CORS_ORIGIN` to your real
       domains (comma-separated). `*` + `credentials: true` is unsafe and
       browser-blocked. The app already allows apex/www/any subdomain of the base

@@ -11,7 +11,8 @@
     "db:migrate": "node scripts/apply-migrations.mjs --group=schema",
     "db:seed:demo": "node scripts/apply-migrations.mjs --group=demo",
     "db:deploy": "node scripts/apply-migrations.mjs --group=all",
-    "smoke:instructor": "node scripts/smoke-instructor.mjs"
+    "smoke:instructor": "node scripts/smoke-instructor.mjs",
+    "preflight": "node scripts/preflight-security.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
