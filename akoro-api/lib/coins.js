@@ -98,8 +98,17 @@ export async function chargeForAI({ userId, feature, model, usage = {}, ref = nu
   const tokensIn  = usage.prompt_tokens ?? 0;
   const tokensOut = usage.completion_tokens ?? 0;
   const cost = usdCost(model, tokensIn, tokensOut);
-  const accounts = await payerAccountsForUser(userId);
+  return debitCoins({ userId, coins, feature, model, tokensIn, tokensOut, cost, ref });
+}
 
+/**
+ * Debit an explicit coin amount across the user's own → school accounts, with
+ * rollback and a hard InsufficientCoins error. Used by chargeForAI (chat) and
+ * by voice metering (audio, priced per minute / per character).
+ */
+export async function debitCoins({ userId, coins, feature, model = null, tokensIn = null, tokensOut = null, cost = null, ref = null }) {
+  if (!coins || coins < 1) return { charged: 0, applied: [] };
+  const accounts = await payerAccountsForUser(userId);
   let remaining = coins;
   const applied = [];
   for (const acc of accounts) {
@@ -114,7 +123,6 @@ export async function chargeForAI({ userId, feature, model, usage = {}, ref = nu
     applied.push({ account: acc.id, kind: acc.kind, took: take, balanceAfter: newBal });
   }
   if (remaining > 0) {
-    // Roll back partial debits so a failed charge never silently eats coins.
     for (const a of applied) {
       await db.rpc("coin_credit", { p_account: a.account, p_amount: a.took, p_type: "refund", p_meta: { feature: `${feature}:rollback`, ref } }).catch(() => {});
     }

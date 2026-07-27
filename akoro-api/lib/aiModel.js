@@ -40,19 +40,39 @@ async function meteredCreate(params = {}) {
   const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref })
     .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
-  // Streamed calls yield an async iterator with no top-level `usage`. We can't
-  // read exact tokens without consuming the stream, so charge an ESTIMATE from
-  // the prompt size + expected output. (Approximate but never free.)
+  // Streamed calls: ask OpenAI for exact usage in a final chunk, then tee it
+  // out of the stream and charge when iteration completes. Falls back to an
+  // estimate if no usage chunk arrives (e.g. early abort).
   if (userId && clean.stream) {
-    const promptTokens = estimateTokens(clean.messages);
-    const outTokens = Math.min(clean.max_tokens || 700, 700);
-    charge({ prompt_tokens: promptTokens, completion_tokens: outTokens });
-    return rawClient.chat.completions.create(clean);
+    const source = await rawClient.chat.completions.create({
+      ...clean,
+      stream_options: { include_usage: true, ...(clean.stream_options || {}) },
+    });
+    const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
+    return meterStreamUsage(source, (usage) => charge(usage || fallback));
   }
 
   const res = await rawClient.chat.completions.create(clean);
   if (userId && res?.usage) charge(res.usage);
   return res;
+}
+
+// Passthrough async iterable that captures the stream's final usage chunk and
+// charges once iteration ends. Forwards `.controller` for barge-in/abort.
+function meterStreamUsage(source, onDone) {
+  let usage = null;
+  const gen = (async function* () {
+    try {
+      for await (const chunk of source) {
+        if (chunk?.usage) usage = chunk.usage;   // final include_usage chunk
+        yield chunk;
+      }
+    } finally {
+      try { onDone(usage); } catch { /* billing must not break the stream */ }
+    }
+  })();
+  if (source && source.controller) gen.controller = source.controller;
+  return gen;
 }
 
 // Rough token estimate for streamed prompts (~4 chars/token).

@@ -16,12 +16,27 @@ import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
 import { tutorSystemPrompt } from "../adaptive-learning/chat.js";
+import { hasCoins, debitCoins, InsufficientCoins } from "../../lib/coins.js";
+import { estimateAudioMinutes, coinsForSttMinutes, coinsForTtsChars } from "../../lib/aiPricing.js";
 
 const router  = Router();
 const openai  = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const VALID_VOICES = ["alloy","echo","fable","onyx","nova","shimmer"];
+
+// Hard-block voice AI when the wallet is empty (402 → the client prompts a top-up).
+async function ensureVoiceCoins(req, res) {
+  const { ok } = await hasCoins(req.user.id, 1);
+  if (!ok) { res.status(402).json({ error: "Insufficient coin balance", code: "INSUFFICIENT_COINS" }); return false; }
+  return true;
+}
+// Fire-and-forget debit so a billing hiccup never fails the voice response.
+function chargeVoice(userId, feature, model, coins) {
+  debitCoins({ userId, coins, feature, model }).catch((e) => {
+    if (!(e instanceof InsufficientCoins)) console.warn("[coins] voice charge failed:", e.message);
+  });
+}
 
 /* ══════════════════════════════════════════════════════════════
    POST /api/voice/transcribe
@@ -32,9 +47,11 @@ const VALID_VOICES = ["alloy","echo","fable","onyx","nova","shimmer"];
 router.post("/transcribe", authenticateToken, upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No audio file provided" });
+    if (!(await ensureVoiceCoins(req, res))) return;
     const language = req.body.language || "en";
 
     let transcript, words, duration;
+    const model = hasDeepgram() ? "deepgram" : "whisper-1";
     if (hasDeepgram()) {
       ({ transcript, words, duration } = await transcribeBufferDeepgram(req.file.buffer, { language }));
     } else {
@@ -50,6 +67,8 @@ router.post("/transcribe", authenticateToken, upload.single("audio"), async (req
       duration   = result.duration ?? 0;
     }
 
+    const minutes = duration > 0 ? duration / 60 : estimateAudioMinutes(req.file.buffer.length);
+    chargeVoice(req.user.id, "voice_stt", model, coinsForSttMinutes(model, minutes));
     res.json({ success: true, transcript, confidence: transcript ? 1 : 0, words, duration });
 
   } catch (err) {
@@ -69,17 +88,20 @@ router.post("/speak", authenticateToken, async (req, res) => {
   try {
     const { text, voice, speed = 1.0 } = req.body;
     if (!text) return res.status(400).json({ error: "text required" });
+    if (!(await ensureVoiceCoins(req, res))) return;
 
     // Default to alloy if voice is not set or invalid
     const ttsVoice = VALID_VOICES.includes(voice) ? voice : "alloy";
+    const input = text.slice(0, 4096);   // OpenAI TTS limit
 
     const mp3 = await openai.audio.speech.create({
       model:  "tts-1",
       voice:  ttsVoice,
-      input:  text.slice(0, 4096),    // OpenAI TTS limit
+      input,
       speed:  Math.min(2.0, Math.max(0.25, speed)),
     });
 
+    chargeVoice(req.user.id, "voice_tts", "tts-1", coinsForTtsChars("tts-1", input.length));
     const buffer = Buffer.from(await mp3.arrayBuffer());
 
     res.setHeader("Content-Type", "audio/mpeg");
@@ -104,9 +126,11 @@ router.post("/speak", authenticateToken, async (req, res) => {
 router.post("/reply", authenticateToken, upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No audio file provided" });
+    if (!(await ensureVoiceCoins(req, res))) return;
 
     // STT — Deepgram (falls back to OpenAI Whisper if no key)
     let transcript;
+    const model = hasDeepgram() ? "deepgram" : "whisper-1";
     if (hasDeepgram()) {
       ({ transcript } = await transcribeBufferDeepgram(req.file.buffer));
     } else {
@@ -117,6 +141,7 @@ router.post("/reply", authenticateToken, upload.single("audio"), async (req, res
       });
       transcript = result.text?.trim() || "";
     }
+    chargeVoice(req.user.id, "voice_stt", model, coinsForSttMinutes(model, estimateAudioMinutes(req.file.buffer.length)));
     if (!transcript) return res.json({ success: true, transcript: "", text: "" });
 
     res.json({ success: true, transcript, text: transcript });

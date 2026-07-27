@@ -47,6 +47,28 @@ export function coinsForResponseUsage(model, usage = {}) {
   return coinsForUsage(model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0);
 }
 
+// ── Audio (voice) pricing ─────────────────────────────────────────────────────
+// STT priced per minute of audio; TTS priced per character of input.
+const STT_USD_PER_MIN = { "whisper-1": 0.006, "deepgram": 0.0043 };
+const TTS_USD_PER_1K_CHARS = { "tts-1": 0.015, "tts-1-hd": 0.030 };   // $15 / 1M chars
+const AUDIO_BYTES_PER_SEC = num(process.env.AUDIO_BYTES_PER_SEC, 3000); // est. for compressed voice
+
+/** Estimate audio minutes from a buffer size when duration is unknown (Whisper). */
+export function estimateAudioMinutes(bytes) {
+  return Math.max(0.05, (Number(bytes || 0) / AUDIO_BYTES_PER_SEC) / 60);
+}
+/** Coins to debit for speech-to-text of `minutes` on `model`. */
+export function coinsForSttMinutes(model, minutes) {
+  const rate = STT_USD_PER_MIN[model] ?? STT_USD_PER_MIN["whisper-1"];
+  return Math.max(1, Math.ceil((minutes * rate * AI_MARKUP) / COIN_USD));
+}
+/** Coins to debit for text-to-speech of `chars` on `model`. */
+export function coinsForTtsChars(model, chars) {
+  const rate = TTS_USD_PER_1K_CHARS[model] ?? TTS_USD_PER_1K_CHARS["tts-1"];
+  const cost = (Number(chars || 0) / 1000) * rate;
+  return Math.max(1, Math.ceil((cost * AI_MARKUP) / COIN_USD));
+}
+
 /** ₦ (kobo) to charge for buying `coins`. Paystack works in kobo. */
 export function coinsToKobo(coins) {
   return Math.round(coins * COIN_USD * USD_NGN * 100);
