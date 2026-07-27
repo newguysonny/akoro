@@ -324,7 +324,12 @@ async function _appendBlocks(state, newBlocks) {
 
 async function _completeRecord(state, summary, snap) {
   if (!state.dbId) return;
-  await db.schema("edu").from("assessment_sessions").update({
+  // DB-level idempotency guard: the in-memory `state.completed` flag is
+  // per-process, so two API instances (or a reconnect landing on a different
+  // replica) could each try to finalize the same session. Gate the write on the
+  // row still being open — only one conditional UPDATE flips a row out of
+  // active/abandoned, so a second finalize is a no-op instead of a double record.
+  const { data: won } = await db.schema("edu").from("assessment_sessions").update({
     status:             summary.verdict === "terminated" ? "terminated" : "completed",
     assessment_score:   summary.assessmentScore,
     cheat_probability:  snap.peakProbability,
@@ -334,7 +339,8 @@ async function _completeRecord(state, summary, snap) {
     proctoring_signals: snap,
     completed_at:       new Date().toISOString(),
     updated_at:         new Date().toISOString(),
-  }).eq("id", state.dbId);
+  }).eq("id", state.dbId).in("status", ["active", "abandoned"]).select("id").maybeSingle();
+  if (!won) console.warn(`[assessment complete] session ${state.dbId} already finalized — skipping duplicate write`);
 }
 
 async function _markStatus(state, status) {
