@@ -7,14 +7,17 @@
 --   • all per-section teaching materials tagged '[seed:jss11-allsec]'
 --   • timetable slots for every JSS 11 section EXCEPT 'A'
 --     (section A is the demo seed's — left intact so the demo keeps working)
+--   • the full week-by-week scheme of work seeded for the JSS 11 class
+--     (2026-seed-jss11-scheme.sql)
 --
 -- Run once by hand with your DB URL:
 --   MIGRATION_DATABASE_URL=postgres://…:5432/postgres \
 --     psql "$MIGRATION_DATABASE_URL" -f migrations/2026-teardown-jss11-all-sections.sql
 --
--- IMPORTANT: also delete 2026-seed-jss11-all-sections.sql from the "demo"
--- array in manifest.json (and delete the file), otherwise the next deploy
--- re-seeds it. This teardown is idempotent and safe to run more than once.
+-- IMPORTANT: also delete BOTH 2026-seed-jss11-all-sections.sql and
+-- 2026-seed-jss11-scheme.sql from the "demo" array in manifest.json (and
+-- delete the files), otherwise the next deploy re-seeds them. This teardown
+-- is idempotent and safe to run more than once.
 -- =============================================================
 DO $$
 DECLARE
@@ -52,10 +55,14 @@ BEGIN
       );
   GET DIAGNOSTICS v_slots = ROW_COUNT;
 
+  -- 3. Full week-by-week scheme of work seeded for this class
+  --    (2026-seed-jss11-scheme.sql). Class-scoped, so remove it all.
+  DELETE FROM mgmt.scheme_of_work WHERE class_id = v_class;
+
   -- Optional TOTAL wipe (uncomment to also remove the class-level extras this
   -- seed added — only do this if the demo student no longer needs them):
   -- DELETE FROM mgmt.class_subjects WHERE class_id = v_class;
   -- DELETE FROM mgmt.timetable_slots WHERE class_id = v_class;   -- also removes section A
 
-  RAISE NOTICE 'Torn down JSS 11 full-section seed: % material(s), % timetable slot(s).', v_mats, v_slots;
+  RAISE NOTICE 'Torn down JSS 11 full-section seed: % material(s), % timetable slot(s), scheme cleared.', v_mats, v_slots;
 END $$;
