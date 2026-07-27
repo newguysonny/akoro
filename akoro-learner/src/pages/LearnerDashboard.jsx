@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
+import { useWallet } from '../hooks/useWallet.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import { useCart } from '../contexts/CartContext.jsx';
@@ -39,6 +40,7 @@ export default function LearnerDashboard() {
   const location = useLocation();
   const { t } = useLang();
   const { count: cartCount } = useCart();
+  const { balance: coinBalance } = useWallet();
 
   // Top-level tab is mirrored in the URL (?tab=…) so the browser Back/Forward
   // buttons move between tabs instead of jumping straight out to the landing
@@ -434,6 +436,11 @@ export default function LearnerDashboard() {
               </div>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+              <button onClick={()=>navigate("/wallet")} title="Coin balance"
+                style={{ display:"flex",alignItems:"center",gap:5,background:"#FFF7E6",border:"1px solid #FFE2A8",borderRadius:100,height:34,padding:"0 12px",cursor:"pointer" }}>
+                <span style={{ fontSize:14,lineHeight:1 }}>🪙</span>
+                <span style={{ fontSize:12.5,fontWeight:900,color:"#B45309" }}>{(coinBalance||0).toLocaleString()}</span>
+              </button>
               <button onClick={()=>navigate("/cart")} title="Cart"
                 style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>

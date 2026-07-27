@@ -3,6 +3,7 @@
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useWallet } from '../../hooks/useWallet.js';
 import { pushSupported, getPushStatus, enablePush, disablePush } from '../../services/pushApi.js';
 import { useLang, LS_LANGUAGE } from '../../contexts/LanguageContext.jsx';
 import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
@@ -110,6 +111,7 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
 function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent, guides = [], guideMap = {}, onLogout, accentColor, onSetMode, onSetAccent, onSetLanguage }) {
   const { t } = useLang();
   const navigate = useNavigate();
+  const { balance: coinBalance } = useWallet();
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
@@ -262,6 +264,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
 
       <Section title={t('settings.plan_usage')}>
+        <Row icon="ti-coin" label="Credit Balance" value={`${(coinBalance||0).toLocaleString()} coins`}
+          sub="Top up & view AI usage" onClick={()=>navigate('/wallet')}/>
         <Row icon="ti-star" label={t('settings.current_plan')} value={profile.plan||'Free'}/>
         <div style={rowBase}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
