@@ -29,6 +29,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { randomUUID }                 from "crypto";
 import { createHash }                 from "crypto";
 import db                             from "../../db.js";
+import { runWithAiContext, featureForRequest } from "../../lib/aiContext.js";
 import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 import { generateSecret, otpauthURL, verifyTOTP } from "./totp.js";
 import {
@@ -414,7 +415,9 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     req.user    = { id: user.id, email: user.email, username: user.username, fullName: user.full_name, avatarUrl: user.avatar_url, role: user.role, onboardingCompleted: user.onboarding_completed ?? false };
     req.tokenJti = decoded.jti;
     req.tokenExp = decoded.exp;
-    next();
+    // Run the rest of the request inside the AI-metering context so any AI call
+    // it makes is billed to this user's wallet (see lib/aiModel.js).
+    return runWithAiContext({ userId: user.id, feature: featureForRequest(req) }, () => next());
   } catch {
     return res401(res, "Could not load user");
   }

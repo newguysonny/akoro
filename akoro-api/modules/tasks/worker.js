@@ -13,7 +13,7 @@ import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 import { bullRedisOptions }                        from "../../lib/redisOptions.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { hasCoins, chargeForAI, InsufficientCoins } from "../../lib/coins.js";
+import { hasCoins } from "../../lib/coins.js";
 
 const MAX_TOOL_ITERATIONS = 20;
 const MODEL               = OPENAI_MODEL;
@@ -75,15 +75,12 @@ export const taskWorker = new Worker("task-runner", async (job) => {
         model: MODEL, max_tokens: 4096,
         ...(toolDefs.length ? { tools: toolDefs } : {}),
         messages,
+        // Background job (no request context) — name the payer explicitly so the
+        // metered client bills each iteration to the task owner's wallet.
+        __userId: payer, __feature: "agent_task", __ref: task.id,
       });
 
-      // Meter this iteration against the task owner's wallet (best-effort — a
-      // billing hiccup must not drop a completed run's output).
-      if (payer && response?.usage) {
-        await chargeForAI({ userId: payer, feature: "agent_task", model: MODEL, usage: response.usage, ref: task.id })
-          .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] task charge failed:", e.message); });
-      }
-
+      // (Billing happens inside the metered client via __userId above.)
       const msg    = response.choices?.[0]?.message ?? { role: "assistant", content: "" };
       const finish = response.choices?.[0]?.finish_reason;
       agentSteps.push({ role: "assistant", content: msg.content ?? null, toolCalls: msg.tool_calls ?? null, finishReason: finish, iteration: iterations });

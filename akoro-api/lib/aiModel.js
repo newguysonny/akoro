@@ -9,29 +9,73 @@
  */
 import OpenAI from "openai";
 import { hasCoins, chargeForAI, InsufficientCoins } from "./coins.js";
+import { aiContext } from "./aiContext.js";
 
 export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-export const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export { InsufficientCoins };
 
+const rawClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 /**
- * meteredChat — a coin-metered wrapper around openai.chat.completions.create.
- * Pass { userId, feature } to hard-block on empty balance and debit the coin
- * wallet by the completion's real token usage × markup. Without a userId it
- * behaves like a plain call (internal/system usage). Returns the full response.
+ * Metered chat completion. The acting user comes from (in order): explicit
+ * __userId on the params, else the AsyncLocalStorage request context. When a
+ * user is resolved we HARD-BLOCK on an empty balance and debit the wallet by
+ * the completion's real token usage × markup. No user (system/cron) → plain
+ * call, unbilled. Charging is centralised HERE so no call site double-charges.
  */
-export async function meteredChat({ userId, feature = "ai", ...params }) {
+async function meteredCreate(params = {}) {
+  const store   = aiContext.getStore() || {};
+  const userId  = params.__userId  ?? store.userId  ?? null;
+  const feature = params.__feature ?? store.feature ?? "ai";
+  const ref     = params.__ref     ?? null;
+  const clean = { ...params };
+  delete clean.__userId; delete clean.__feature; delete clean.__ref;
+
   if (userId) {
     const { ok, total } = await hasCoins(userId, 1);
     if (!ok) throw new InsufficientCoins(1, total);
   }
-  const res = await openai.chat.completions.create(params);
-  if (userId && res?.usage) {
-    await chargeForAI({ userId, feature, model: params.model || OPENAI_MODEL, usage: res.usage })
-      .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
+
+  const model = clean.model || OPENAI_MODEL;
+  const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref })
+    .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
+
+  // Streamed calls yield an async iterator with no top-level `usage`. We can't
+  // read exact tokens without consuming the stream, so charge an ESTIMATE from
+  // the prompt size + expected output. (Approximate but never free.)
+  if (userId && clean.stream) {
+    const promptTokens = estimateTokens(clean.messages);
+    const outTokens = Math.min(clean.max_tokens || 700, 700);
+    charge({ prompt_tokens: promptTokens, completion_tokens: outTokens });
+    return rawClient.chat.completions.create(clean);
   }
+
+  const res = await rawClient.chat.completions.create(clean);
+  if (userId && res?.usage) charge(res.usage);
   return res;
+}
+
+// Rough token estimate for streamed prompts (~4 chars/token).
+function estimateTokens(messages) {
+  try {
+    const text = (messages || []).map((m) => typeof m.content === "string" ? m.content : JSON.stringify(m.content || "")).join(" ");
+    return Math.max(1, Math.ceil(text.length / 4));
+  } catch { return 500; }
+}
+
+// Proxy the client so `openai.chat.completions.create(...)` is metered
+// everywhere it's already used, while embeddings/audio/etc. pass through.
+export const openai = new Proxy(rawClient, {
+  get(target, prop) {
+    if (prop === "chat") return { completions: { create: meteredCreate } };
+    const v = target[prop];
+    return typeof v === "function" ? v.bind(target) : v;
+  },
+});
+
+/** Convenience wrapper for background jobs that must name the payer explicitly. */
+export async function meteredChat({ userId, feature = "ai", ref = null, ...params }) {
+  return meteredCreate({ ...params, __userId: userId, __feature: feature, __ref: ref });
 }
 
 /**

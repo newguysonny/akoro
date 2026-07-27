@@ -18,6 +18,7 @@ const NAV = [
   { to: '/marketplace', icon: Store,       label: 'Tools & Assets' },
   { to: '/library',  icon: Library,       label: 'Library' },
   { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },
+  { to: '/wallet',   icon: Wallet,        label: 'Wallet & Credits' },
   { to: '/profile',  icon: UserCircle,    label: 'Profile' },
   { to: '/settings', icon: Settings,      label: 'Settings' },
 ];

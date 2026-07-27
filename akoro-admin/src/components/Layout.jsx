@@ -56,6 +56,7 @@ const NAV_GROUPS = [
     { to: '/content/blog',    icon: FileText,  label: 'Blog' },
     { to: '/content/careers', icon: Briefcase, label: 'Careers' },
   ] },
+  { to: '/wallet', icon: CreditCard, label: 'Wallet & Credits' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
