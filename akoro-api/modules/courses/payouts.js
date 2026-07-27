@@ -291,19 +291,26 @@ const payoutHandlers = {
   request: asyncHandler(async (req, res) => {
     const instructorId = req.user.id;
 
-    // Fetch pending earnings
-    const { data: pendingEarnings, error: earningsErr } = await db
+    // Atomically CLAIM the pending earnings (pending → processing) so two
+    // concurrent payout requests can't both grab the same earnings and issue
+    // two Paystack transfers for the same money. Only the rows THIS call flips
+    // are ours; every failure path reverts them to pending.
+    const { data: claimed, error: earningsErr } = await db
       .from("instructor_earnings")
-      .select("id, net_amount, currency")
+      .update({ status: "processing" })
       .eq("instructor_id", instructorId)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id, net_amount, currency");
 
     if (earningsErr) throw new Error(earningsErr.message);
-    if (!pendingEarnings?.length) return res400(res, "No pending earnings to pay out");
+    if (!claimed?.length) return res400(res, "No pending earnings to pay out");
 
-    const totalKobo = pendingEarnings.reduce((s, e) => s + e.net_amount, 0);
+    const earningIds = claimed.map((e) => e.id);
+    const revert = () => db.from("instructor_earnings").update({ status: "pending" }).in("id", earningIds);
+    const totalKobo = claimed.reduce((s, e) => s + e.net_amount, 0);
 
     if (totalKobo < businessConfig.payoutMinimumKobo) {
+      await revert();
       return res400(res, `Minimum payout is ₦${businessConfig.payoutMinimumKobo / 100}. Current balance: ₦${totalKobo / 100}`);
     }
 
@@ -314,7 +321,7 @@ const payoutHandlers = {
       .eq("instructor_id", instructorId)
       .single();
 
-    if (!bankDetails) return res400(res, "Please add your bank details before requesting a payout");
+    if (!bankDetails) { await revert(); return res400(res, "Please add your bank details before requesting a payout"); }
 
     // Create payout record first (so we have an ID for the Paystack reference)
     const { data: payout, error: payoutErr } = await db
@@ -326,13 +333,13 @@ const payoutHandlers = {
         bank_code:      bankDetails.bank_code,
         account_number: bankDetails.account_number,
         account_name:   bankDetails.account_name,
-        earnings_count: pendingEarnings.length,
+        earnings_count: claimed.length,
         status:         "processing",
       })
       .select()
       .single();
 
-    if (payoutErr) throw new Error(payoutErr.message);
+    if (payoutErr) { await revert(); throw new Error(payoutErr.message); }
 
     // Create Paystack Transfer Recipient
     let recipientCode;
@@ -351,6 +358,7 @@ const payoutHandlers = {
       recipientCode = recipient.data.recipient_code;
     } catch (e) {
       await db.from("payouts").update({ status: "failed", failure_reason: e.message }).eq("id", payout.id);
+      await revert();
       return res400(res, `Could not create transfer recipient: ${e.message}`);
     }
 
@@ -363,7 +371,7 @@ const payoutHandlers = {
           source:    "balance",
           amount:    totalKobo,
           recipient: recipientCode,
-          reason:    `Piabam instructor payout — ${pendingEarnings.length} sales`,
+          reason:    `Piabam instructor payout — ${claimed.length} sales`,
           reference: `akoro_payout_${payout.id}`,
         },
         { headers: { Authorization: `Bearer ${PAYSTACK_KEY()}`, "Content-Type": "application/json" } }
@@ -371,6 +379,7 @@ const payoutHandlers = {
       transferReference = transfer.data.transfer_code;
     } catch (e) {
       await db.from("payouts").update({ status: "failed", failure_reason: e.message }).eq("id", payout.id);
+      await revert();
       return res400(res, `Transfer failed: ${e.message}`);
     }
 
@@ -380,8 +389,7 @@ const payoutHandlers = {
       processed_at:       now(),
     }).eq("id", payout.id);
 
-    // Mark earnings as paid and link to payout
-    const earningIds = pendingEarnings.map((e) => e.id);
+    // Mark the claimed earnings paid and link to the payout.
     await db.from("instructor_earnings")
       .update({ status: "paid", payout_id: payout.id })
       .in("id", earningIds);
@@ -391,7 +399,7 @@ const payoutHandlers = {
     res201(res, {
       payout_id:         payout.id,
       amount_ngn:        totalKobo / 100,
-      earnings_included: pendingEarnings.length,
+      earnings_included: claimed.length,
       transfer_reference: transferReference,
       status:            "processing",
       account_name:      bankDetails.account_name,

@@ -73,6 +73,12 @@ let failed = 0;
 
 try {
   await client.connect();
+  // Serialize concurrent deploys/replicas: a session-level advisory lock so two
+  // overlapping migration runs can't apply the same DDL simultaneously (which
+  // could deadlock or leave a partially-applied group). The lock is released on
+  // disconnect in the finally block.
+  console.log("Acquiring migration advisory lock…");
+  await client.query("SELECT pg_advisory_lock(727274)");
   console.log(`Connected. Applying ${files.length} migration(s) [${groups.join(", ")}]...\n`);
 
   for (const file of files) {

@@ -250,14 +250,27 @@ export const ensureValidToken = async (userId, provider) => {
     throw new Error(`${provider} token still expired after waiting for refresh lock.`);
   }
 
+  // Track the refresh token we actually used, so a failure only disconnects the
+  // integration when that token is still the current one (see catch).
+  let usedRefreshToken = tokens.refresh_token;
   try {
+    // Double-checked locking: another instance may have refreshed while we were
+    // acquiring the lock. Re-read and bail out if the token is now valid — this
+    // avoids a second refresh that would consume an already-rotated token.
+    const fresh = await getTokens(userId, provider);
+    if (new Date(fresh.expires_at).getTime() > Date.now() + 5 * 60 * 1000) {
+      return fresh.access_token;
+    }
+    usedRefreshToken = fresh.refresh_token || tokens.refresh_token;
+
     console.log(`[tokens] 🔄 Refreshing ${provider} tokens for user ${userId}`);
     const { tokenUrl, clientId, clientSecret, redirectUri } = providerConfig(provider);
 
     const response = await axios.post(tokenUrl, null, {
+      timeout: 10000,   // must complete within LOCK_TTL_MS so the lock can't expire mid-refresh
       params: {
         grant_type:    "refresh_token",
-        refresh_token: tokens.refresh_token,
+        refresh_token: usedRefreshToken,
         client_id:     clientId,
         client_secret: clientSecret,
         redirect_uri:  redirectUri,
@@ -269,7 +282,7 @@ export const ensureValidToken = async (userId, provider) => {
 
     await saveTokens(userId, provider, {
       access_token,
-      refresh_token: refresh_token ?? tokens.refresh_token,
+      refresh_token: refresh_token ?? usedRefreshToken,
       expires_at:    newExpiresAt,
     });
 
@@ -280,7 +293,12 @@ export const ensureValidToken = async (userId, provider) => {
     console.error(`[tokens] ❌ Refresh failed for ${provider} (user ${userId}):`, msg);
 
     if (err.response?.data?.error === "invalid_grant") {
-      await markTokenInactive(userId, provider, msg);
+      // Only disconnect if the stored refresh token is still the one that
+      // failed — otherwise another instance already rotated it successfully.
+      const current = await getTokens(userId, provider).catch(() => null);
+      if (!current || current.refresh_token === usedRefreshToken) {
+        await markTokenInactive(userId, provider, msg);
+      }
     }
     throw new Error(`Unable to refresh ${provider} token. Please reconnect via /api/meeting/auth/${provider}`);
 
