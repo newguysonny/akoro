@@ -143,27 +143,200 @@ const CAL_TYPE_OPTS = [
   { value: 'ptm', label: 'Parent–Teacher Meeting' },
   { value: 'event', label: 'Event / Other' },
 ];
+const CAL_TYPE_COLOR = {
+  resumption: GREEN, vacation: AMBER, holiday: RED, midterm: PURPLE,
+  exam: BLUE, ptm: '#0EA5E9', event: MUTED2,
+};
+const CAL_TYPE_LABEL = Object.fromEntries(CAL_TYPE_OPTS.map((o) => [o.value, o.label]));
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DOW_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const fmtDay = (iso) => { try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return iso; } };
+// 42-cell (6×7) grid starting on the Monday on/before the 1st of the month.
+function monthGrid(year, month) {
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() + 6) % 7;          // 0 = Monday
+  const start = new Date(year, month, 1 - lead);
+  return Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+}
+
+const BLANK_ENTRY = { title: '', term: 'First Term', event_type: 'event', starts_on: '', ends_on: '', session_id: '', notes: '' };
+
 export function AcademicCalendarPage() {
-  return <ResourcePage title="Academic Calendar" subtitle="Key dates for each term — resumption, breaks, exams and events" resource="academic-calendar"
-    columns={[
-      { key: 'starts_on', label: 'Date' }, { key: 'ends_on', label: 'Ends' },
-      { key: 'term', label: 'Term' }, { key: 'event_type', label: 'Type' },
-      { key: 'title', label: 'Title' }, { key: 'session_name', label: 'Session' },
-    ]}
-    fields={[
-      { key: 'title', label: 'Title', required: true, placeholder: 'First Term Begins' },
-      { key: 'term', label: 'Term', type: 'select', options: CAL_TERM_OPTS, default: 'First Term' },
-      { key: 'event_type', label: 'Type', type: 'select', options: CAL_TYPE_OPTS, default: 'event' },
-      { key: 'starts_on', label: 'Date', type: 'date', required: true },
-      { key: 'ends_on', label: 'End Date (optional)', type: 'date' },
-      { key: 'session_id', label: 'Academic Session (optional)', type: 'select', optionsFrom: { resource: 'academic-sessions' } },
-      { key: 'notes', label: 'Notes', type: 'textarea' },
-    ]}
-    listFilters={[
-      { key: 'term', label: 'Term', options: CAL_TERM_OPTS },
-      { key: 'event_type', label: 'Type', options: CAL_TYPE_OPTS },
-      { key: 'session_id', label: 'Session', optionsFrom: { resource: 'academic-sessions' } },
-    ]} createLabel="New Calendar Entry" />;
+  const [view, setView] = useState('calendar');       // 'calendar' | 'list'
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+  const [entries, setEntries] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [editing, setEditing] = useState(null);        // entry object or BLANK_ENTRY (with id when editing)
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState('');
+  const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
+
+  const load = useCallback(() => {
+    apiGet(`${BASE}/academic-calendar`).then((r) => setEntries(r.data || [])).catch(() => setEntries([]));
+  }, []);
+  useEffect(() => { load(); apiGet(`${BASE}/academic-sessions`).then((r) => setSessions(r.data || [])).catch(() => {}); }, [load]);
+
+  // Map each in-range day ISO → events covering it (multi-day events repeat).
+  const grid = monthGrid(year, month);
+  const eventsOn = (iso) => entries.filter((e) => {
+    const s = e.starts_on; const en = e.ends_on || e.starts_on;
+    return s && iso >= s && iso <= en;
+  });
+
+  const openNew = (iso) => setEditing({ ...BLANK_ENTRY, starts_on: iso || toISO(new Date(year, month, 1)) });
+  const openEdit = (e) => setEditing({ ...e, session_id: e.session_id || '', ends_on: e.ends_on || '', notes: e.notes || '' });
+
+  const save = async () => {
+    const e = editing;
+    if (!e.title?.trim() || !e.starts_on) { showToast('Title and date are required'); return; }
+    setBusy(true);
+    try {
+      const body = {
+        title: e.title.trim(), term: e.term, event_type: e.event_type,
+        starts_on: e.starts_on, ends_on: e.ends_on || null,
+        session_id: e.session_id || null, notes: e.notes || null,
+      };
+      if (e.id) await apiPut(`${BASE}/academic-calendar/${e.id}`, body);
+      else      await apiPost(`${BASE}/academic-calendar`, body);
+      setEditing(null); load(); showToast('Saved ✓');
+    } catch (err) { showToast(err.message || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    if (!editing?.id) return;
+    setBusy(true);
+    try { await apiDelete(`${BASE}/academic-calendar/${editing.id}`); setEditing(null); load(); showToast('Deleted'); }
+    catch (err) { showToast(err.message || 'Could not delete'); }
+    finally { setBusy(false); }
+  };
+
+  const step = (n) => { const d = new Date(year, month + n, 1); setYear(d.getFullYear()); setMonth(d.getMonth()); };
+  const sortedList = [...entries].sort((a, b) => (a.starts_on || '').localeCompare(b.starts_on || ''));
+  const toggleBtn = (v, label) => (
+    <button onClick={() => setView(v)} style={{ padding: '8px 14px', borderRadius: 9, border: `1px solid ${view === v ? AMBER : BORDER}`, background: view === v ? `${AMBER}12` : WHITE, color: view === v ? '#B45309' : INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{label}</button>
+  );
+
+  return (
+    <PageLayout title="Academic Calendar" subtitle="Key dates for each term — resumption, breaks, exams and events">
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        {toggleBtn('calendar', 'Calendar')}
+        {toggleBtn('list', 'List')}
+        <div style={{ flex: 1 }} />
+        {view === 'calendar' && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => step(-1)} style={navBtn}>‹</button>
+            <span style={{ minWidth: 150, textAlign: 'center', fontSize: 14, fontWeight: 800, color: INK }}>{MONTHS[month]} {year}</span>
+            <button onClick={() => step(1)} style={navBtn}>›</button>
+            <button onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }} style={{ ...navBtn, width: 'auto', padding: '0 12px', fontSize: 12, fontWeight: 700 }}>Today</button>
+          </div>
+        )}
+        <button onClick={() => openNew()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}><Plus size={14} /> New Entry</button>
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+        {CAL_TYPE_OPTS.map((o) => (
+          <span key={o.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUTED, fontFamily: FONT }}>
+            <span style={{ width: 11, height: 11, borderRadius: 3, background: CAL_TYPE_COLOR[o.value] }} /> {o.label}
+          </span>
+        ))}
+      </div>
+
+      {view === 'calendar' ? (
+        <div style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: LIGHT }}>
+            {DOW_SHORT.map((d) => <div key={d} style={{ padding: '9px 6px', textAlign: 'center', fontSize: 11.5, fontWeight: 800, color: MUTED2, fontFamily: FONT }}>{d}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            {grid.map((d, i) => {
+              const iso = toISO(d);
+              const inMonth = d.getMonth() === month;
+              const isToday = iso === toISO(today);
+              const evs = eventsOn(iso);
+              return (
+                <div key={i} onClick={() => openNew(iso)} title="Add entry on this day"
+                  style={{ minHeight: 92, borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: 5, background: inMonth ? WHITE : '#FafafA', cursor: 'pointer', opacity: inMonth ? 1 : 0.55 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: isToday ? WHITE : (inMonth ? INK : MUTED2), background: isToday ? AMBER : 'transparent', borderRadius: 999, minWidth: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 2 }}>
+                    {evs.slice(0, 3).map((e) => (
+                      <div key={e.id} onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} title={`${CAL_TYPE_LABEL[e.event_type] || e.event_type} · ${e.title}`}
+                        style={{ fontSize: 10.5, fontWeight: 700, color: WHITE, background: CAL_TYPE_COLOR[e.event_type] || MUTED2, borderRadius: 5, padding: '2px 5px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: FONT }}>{e.title}</div>
+                    ))}
+                    {evs.length > 3 && <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>+{evs.length - 3} more</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: WHITE, border: `1.5px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
+          {sortedList.length === 0 ? (
+            <div style={{ padding: 34, textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No calendar entries yet. Click “New Entry” to add one.</div>
+          ) : (
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: FONT }}>
+              <thead><tr>{['Date', 'Ends', 'Term', 'Type', 'Title', ''].map((h) => <th key={h} style={{ textAlign: 'left', padding: '10px 12px', fontSize: 11.5, fontWeight: 800, color: MUTED2, borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {sortedList.map((e) => (
+                  <tr key={e.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <td style={listTd}>{fmtDay(e.starts_on)}</td>
+                    <td style={listTd}>{e.ends_on ? fmtDay(e.ends_on) : '—'}</td>
+                    <td style={listTd}>{e.term || '—'}</td>
+                    <td style={listTd}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: CAL_TYPE_COLOR[e.event_type] || MUTED2 }} />{CAL_TYPE_LABEL[e.event_type] || e.event_type}</span></td>
+                    <td style={{ ...listTd, fontWeight: 700, color: INK }}>{e.title}</td>
+                    <td style={{ ...listTd, textAlign: 'right' }}><button onClick={() => openEdit(e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: AMBER }}><Pencil size={15} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <div onClick={() => !busy && setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998, padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: WHITE, borderRadius: 16, padding: 22, width: 'min(480px, 100%)', fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>{editing.id ? 'Edit Calendar Entry' : 'New Calendar Entry'}</div>
+              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED2 }}><X size={18} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Field label="Title"><input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="First Term Begins" style={inputStyle} /></Field>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Field label="Term" flex><select value={editing.term} onChange={(e) => setEditing({ ...editing, term: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>{CAL_TERM_OPTS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
+                <Field label="Type" flex><select value={editing.event_type} onChange={(e) => setEditing({ ...editing, event_type: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>{CAL_TYPE_OPTS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Field label="Date" flex><input type="date" value={editing.starts_on} onChange={(e) => setEditing({ ...editing, starts_on: e.target.value })} style={inputStyle} /></Field>
+                <Field label="End Date (optional)" flex><input type="date" value={editing.ends_on} onChange={(e) => setEditing({ ...editing, ends_on: e.target.value })} style={inputStyle} /></Field>
+              </div>
+              <Field label="Academic Session (optional)"><select value={editing.session_id} onChange={(e) => setEditing({ ...editing, session_id: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}><option value="">— none —</option>{sessions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+              <Field label="Notes"><textarea value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} rows={2} style={{ ...inputStyle, resize: 'vertical' }} /></Field>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
+              <button onClick={save} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>{busy ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />} Save</button>
+              {editing.id && <button onClick={remove} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 9, border: `1px solid ${RED}55`, background: `${RED}0C`, color: RED, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}><Trash2 size={14} /> Delete</button>}
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setEditing(null)} disabled={busy} style={{ padding: '10px 16px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999 }}>{toast}</div>}
+    </PageLayout>
+  );
+}
+const navBtn = { width: 32, height: 32, borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, color: INK, fontSize: 18, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: FONT };
+const listTd = { padding: '10px 12px', fontSize: 12.5, color: MUTED, verticalAlign: 'middle' };
+function Field({ label, flex, children }) {
+  return <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: flex ? 1 : undefined }}><span style={{ fontSize: 11.5, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>{label}</span>{children}</label>;
 }
 
 const ASSIGN_SUBJECT_FIELDS = (elective) => [
