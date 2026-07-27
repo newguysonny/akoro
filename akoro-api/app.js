@@ -29,6 +29,7 @@ import {
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
+import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { SITE_BASE_DOMAINS }       from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 
@@ -181,6 +182,24 @@ app.get("/health", async (_req, res) => {
 app.get("/ready", (_req, res) =>
   res.status(serverReady ? 200 : 503).json({ ready: serverReady, instance: config.instanceId })
 );
+
+// GET /internal/preflight — the SECURITY_CHECKLIST §1 config-blocker gate as an
+// endpoint (same checks as `npm run preflight`). A posture report is sensitive
+// (it names what's misconfigured), so it is NOT public: it requires the
+// x-internal-secret header (same guard as the worker-callback endpoints). In dev
+// (no INTERNAL_SECRET set) it's open for convenience. Returns 200 when all
+// blockers pass, 503 when any fail — so an uptime monitor / deploy step can gate.
+app.get("/internal/preflight", (req, res) => {
+  const secret = config.internalSecret;
+  const authorized = secret
+    ? req.headers["x-internal-secret"] === secret
+    : config.isDev;   // no secret configured → allow only in dev
+  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+  const result = runConfigChecks(process.env);
+  res.status(result.ok ? 200 : 503).json({
+    ready: result.ok, instance: config.instanceId, env: config.nodeEnv, ...result,
+  });
+});
 
 // ─── Module routes (with tiered rate limits) ─────────────────────────────────
 //   strictLimit   — login/register (5 req/15 min, by IP)

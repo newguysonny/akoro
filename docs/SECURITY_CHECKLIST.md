@@ -14,17 +14,30 @@ _Last dependency audit: 2026-07-27._
 These are **configuration**, not code — the code supports them, but a wrong prod
 value is exploitable.
 
-> **How to know these are green:** run the automated gate with your production
-> env loaded — it checks every item below and exits non-zero if any blocker fails:
+> **How to know these are green — two ways (same checks, shared code in
+> `lib/preflightChecks.js`):**
+>
+> **1. CLI gate** (pre-deploy step) — run with the prod env loaded; exits non-zero
+> if any blocker fails, so a red config can't ship:
 > ```
 > cd akoro-api && NODE_ENV=production npm run preflight
-> # add a live probe once deployed:
-> npm run preflight -- --url=https://api.yourdomain.com
+> npm run preflight -- --url=https://api.yourdomain.com   # + live probe once deployed
 > ```
-> ✅ = passed, ⚠️ = advisory (won't fail the gate), ❌ = blocker. Wire
-> `npm run preflight` into your release/pre-deploy step so a red config can't ship.
-> The live probe additionally confirms HTTPS, that a protected route returns 401,
-> helmet headers, and that CORS won't reflect a foreign origin.
+>
+> **2. Endpoint** (post-deploy / uptime monitor) — `GET /internal/preflight` runs
+> the same config checks on the *running* instance and returns `200` when all
+> blockers pass, `503` when any fail:
+> ```
+> curl -H "x-internal-secret: $INTERNAL_SECRET" https://api.yourdomain.com/internal/preflight
+> ```
+> It is **guarded** (requires the `x-internal-secret` header; open only in dev)
+> because a posture report names what's misconfigured — never expose it publicly,
+> and it never returns secret values. Point an uptime check at it to catch config
+> drift after launch.
+>
+> ✅ = passed, ⚠️ = advisory (won't fail the gate), ❌ = blocker. The CLI's live
+> probe additionally confirms HTTPS, that a protected route returns 401, helmet
+> headers, and that CORS won't reflect a foreign origin.
 
 - [ ] **CORS is an explicit allowlist, never `*`.** Set `CORS_ORIGIN` to your real
       domains (comma-separated). `*` + `credentials: true` is unsafe and
