@@ -34,8 +34,8 @@ export default function WalletPage() {
 
   const topUp = () => {
     if (!coins || coins < 1) return showToast('Enter a coin amount');
-    // Review on the checkout page before Paystack opens.
-    navigate('/purchase', { state: { type: 'topup', coins: Number(coins), target: 'user', title: `${Number(coins).toLocaleString()} coins`, subtitle: 'Wallet top-up', amountNaira: nairaFor(Number(coins)) } });
+    // Reuse the shared checkout page (top-up mode) before Paystack opens.
+    navigate('/checkout', { state: { mode: 'topup', coins: Number(coins), target: 'user', amountNaira: nairaFor(Number(coins)) } });
   };
 
   const recent = wallet?.recent || [];

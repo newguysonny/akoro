@@ -72,21 +72,21 @@ export default function CourseDetailsPage() {
 
   const view = data || mapCourse(null);
 
-  // Enrol / purchase. Free → immediate enrolment; paid → review on the checkout
-  // page first (which initiates Paystack only after the user confirms).
+  // Enrol / purchase. Free → immediate enrolment. Paid → straight to the shared
+  // checkout page (course mode) — NOT the cart — reusing its discount / payment
+  // method / order-summary UI.
   const enroll = async () => {
     const cid = view.course.id;
     if (!cid || enrolling) return;
-    const price = Number(view.course.price || 0);       // kobo
-    const isFree = view.course.is_free || price <= 0;
+    const isFree = view.course.is_free || view.course.priceLabel === 'Free';
+
     if (!isFree) {
-      navigate('/purchase', { state: {
-        type: 'course', payload: { course_id: cid },
-        title: view.course.title, subtitle: 'Course enrolment',
-        amountNaira: Math.round(price / 100), returnTo: `/course/${slug}`,
-      } });
+      navigate('/checkout', { state: { mode: 'course', returnTo: `/course/${slug}`,
+        course: { id: cid, title: view.course.title, price_ngn: Math.round(Number(view.course.price || 0) / 100), course_type: view.type } } });
       return;
     }
+
+    // Free course → immediate enrolment.
     setEnrolling(true);
     try {
       const r = await fetch(`${API}/api/payments/initiate`, {

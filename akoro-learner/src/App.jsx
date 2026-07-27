@@ -41,7 +41,6 @@ const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage
 const AgentProfilePage   = lazyWithRetry(() => import('./pages/AgentProfilePage.jsx'));
 const CartPage           = lazyWithRetry(() => import('./pages/CartPage.jsx'));
 const WalletPage         = lazyWithRetry(() => import('./pages/WalletPage.jsx'));
-const PurchaseCheckoutPage = lazyWithRetry(() => import('./pages/PurchaseCheckoutPage.jsx'));
 const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
 const OrderHistoryPage   = lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx'));
 const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
@@ -110,7 +109,6 @@ function AppRoutes() {
       <Route path="/agent/:id"  element={<ProtectedRoute><AgentProfilePage /></ProtectedRoute>}/>
       <Route path="/cart"       element={<ProtectedRoute><CartPage /></ProtectedRoute>}/>
       <Route path="/wallet"     element={<ProtectedRoute><WalletPage /></ProtectedRoute>}/>
-      <Route path="/purchase"   element={<ProtectedRoute><PurchaseCheckoutPage /></ProtectedRoute>}/>
       <Route path="/checkout"   element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>}/>
       <Route path="/orders"     element={<ProtectedRoute><OrderHistoryPage /></ProtectedRoute>}/>
       <Route path="/privacy"  element={<PrivacyPolicyPage />}/>

@@ -1,13 +1,17 @@
 /**
- * CheckoutPage — cart → checkout. Review the order, apply a coupon, pick a
- * payment method, then pay (one Paystack transaction for the whole cart, or a
- * direct grant when everything is free).
+ * CheckoutPage — one checkout UI for three sources:
+ *   • cart   (default)  — the whole cart, via checkoutCart()
+ *   • course (direct)   — a single course enrol, via /api/payments/initiate
+ *   • topup             — buy coins, via /api/wallet/topup/init
+ * Reached for course/topup with navigate('/checkout', { state: { mode, … } }).
+ * Same order-summary / coupon / payment-method / pay-bar components throughout.
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import { applyCoupon as applyCouponApi, checkoutCart, verifyCheckout } from '../services/cartApi.js';
+import { apiPost, API } from '../services/api.js';
 import Toast from '../components/common/Toast.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -24,58 +28,64 @@ const METHODS = [
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  // Pop real history if present; else fall back to the cart. Prevents the
-  // cart↔checkout back-loop.
-  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate('/cart'); };
+  const st = location.state || {};
+  const mode = st.mode === 'course' || st.mode === 'topup' ? st.mode : 'cart';
+  const goBack = () => { (location.key && location.key !== 'default') ? navigate(-1) : navigate(mode === 'cart' ? '/cart' : '/app'); };
   const [params] = useSearchParams();
-  const payStatus = params.get('payment');   // 'success' | 'failed' | 'cancelled' | null
-  const { cart, count, refresh } = useCart();
-  const items = cart.items || [];
-  const isFree = (cart.subtotal_kobo || 0) === 0;
+  const payStatus = params.get('payment');   // cart return only
+  const { cart, count: cartCount, refresh } = useCart();
+
+  // Normalize the order for whichever source we're checking out.
+  let items, subtotalNgn, isFree, headerCount;
+  if (mode === 'course') {
+    const c = st.course || {};
+    items = [{ key: c.id, title: c.title, badge: c.course_type === 'video' ? 'Video' : 'Live', price_ngn: c.price_ngn, is_free: false }];
+    subtotalNgn = c.price_ngn || 0; isFree = false; headerCount = 0;
+  } else if (mode === 'topup') {
+    items = [{ key: 'topup', title: `${Number(st.coins || 0).toLocaleString()} coins`, badge: 'Top-up', price_ngn: st.amountNaira, is_free: false }];
+    subtotalNgn = st.amountNaira || 0; isFree = false; headerCount = 0;
+  } else {
+    items = (cart.items || []).map((i) => ({ key: i.cart_item_id, title: i.title, badge: i.item_type === 'agent' ? 'Guide' : i.course_type === 'video' ? 'Video' : 'Live', price_ngn: i.price_ngn, is_free: i.is_free }));
+    subtotalNgn = cart.subtotal_ngn; isFree = (cart.subtotal_kobo || 0) === 0; headerCount = cartCount;
+  }
+  const canCoupon = mode !== 'topup';   // top-ups have no coupons
 
   const [method, setMethod]     = useState('any');
   const [code, setCode]         = useState('');
-  const [coupon, setCoupon]     = useState(null);   // { coupon_code, discount_ngn, final_ngn }
+  const [coupon, setCoupon]     = useState(null);   // { coupon_code, savings_ngn?, final_ngn? }
   const [applying, setApplying] = useState(false);
   const [busy, setBusy]         = useState(false);
   const [toast, setToast]       = useState(null);
-  const [verifyState, setVerifyState] = useState('checking');   // checking | done | pending
+  const [verifyState, setVerifyState] = useState('checking');
 
-  // Returned from Paystack — actively reconcile with the backend (safety net for
-  // a delayed/missed webhook), then refresh so the fulfilled cart clears.
+  // Cart return from Paystack — reconcile then refresh.
   useEffect(() => {
-    if (payStatus !== 'success') return;
+    if (mode !== 'cart' || payStatus !== 'success') return;
     const reference = params.get('reference') || params.get('trxref');
     let alive = true;
     (async () => {
       if (reference) {
-        try {
-          const d = await verifyCheckout(reference);
-          if (alive) setVerifyState(d?.fulfilled ? 'done' : 'pending');
-        } catch { if (alive) setVerifyState('pending'); }
-      } else {
-        if (alive) setVerifyState('done');   // no ref (e.g. free cart) — webhook/direct grant already ran
-      }
+        try { const d = await verifyCheckout(reference); if (alive) setVerifyState(d?.fulfilled ? 'done' : 'pending'); }
+        catch { if (alive) setVerifyState('pending'); }
+      } else if (alive) setVerifyState('done');
       refresh();
     })();
     return () => { alive = false; };
-  }, [payStatus, params, refresh]);
+  }, [mode, payStatus, params, refresh]);
 
-  // ── Post-payment return screens ────────────────────────────────────────────
-  if (payStatus === 'success') {
+  // ── Cart post-payment return screens ───────────────────────────────────────
+  if (mode === 'cart' && payStatus === 'success') {
     const boughtCount = Number(params.get('items')) || null;
     const paidNgn = params.get('amount') ? Number(params.get('amount')) / 100 : null;
     return (
-      <Shell onBack={goBack} count={count} title="Order confirmed">
+      <Shell onBack={goBack} count={headerCount} title="Order confirmed">
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={38} color={GREEN} /></div>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment successful 🎉</h1>
           <p style={{ fontSize: 14.5, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: 0 }}>
-            {verifyState === 'checking'
-              ? 'Confirming your payment…'
-              : verifyState === 'pending'
-                ? 'We’ve received your payment — your access unlocks automatically once it finishes confirming (this can take a moment for bank/USSD).'
-                : <>You now have access to {boughtCount ? `all ${boughtCount} item${boughtCount === 1 ? '' : 's'}` : 'everything you purchased'}. It’s ready in your sessions and library.</>}
+            {verifyState === 'checking' ? 'Confirming your payment…'
+              : verifyState === 'pending' ? 'We’ve received your payment — your access unlocks automatically once it finishes confirming (this can take a moment for bank/USSD).'
+              : <>You now have access to {boughtCount ? `all ${boughtCount} item${boughtCount === 1 ? '' : 's'}` : 'everything you purchased'}. It’s ready in your sessions and library.</>}
           </p>
           {paidNgn != null && (
             <div style={{ margin: '20px auto 0', maxWidth: 300, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '14px 16px', fontSize: 13.5, fontFamily: FONT }}>
@@ -89,9 +99,9 @@ export default function CheckoutPage() {
       </Shell>
     );
   }
-  if (payStatus && payStatus !== 'success') {
+  if (mode === 'cart' && payStatus && payStatus !== 'success') {
     return (
-      <Shell onBack={goBack} count={count} title="Payment not completed">
+      <Shell onBack={goBack} count={headerCount} title="Payment not completed">
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><XCircle size={38} color={RED} /></div>
           <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment not completed</h1>
@@ -104,7 +114,7 @@ export default function CheckoutPage() {
 
   if (!items.length) {
     return (
-      <Shell onBack={goBack} count={count}>
+      <Shell onBack={goBack} count={headerCount}>
         <div style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--ak-text-muted)' }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--ak-text)' }}>Nothing to check out</div>
           <button onClick={() => navigate('/app')} style={{ marginTop: 16, padding: '11px 22px', borderRadius: 12, border: 'none', background: BRAND, color: '#fff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Browse courses</button>
@@ -113,16 +123,22 @@ export default function CheckoutPage() {
     );
   }
 
-  const total = coupon ? coupon.final_ngn : cart.subtotal_ngn;
+  const total = coupon && coupon.final_ngn != null ? coupon.final_ngn : subtotalNgn;
 
   const apply = async () => {
     if (!code.trim()) return;
     setApplying(true);
     try {
-      const res = await applyCouponApi(code.trim());
-      const d = res?.data ?? res;
-      if (d?.valid) { setCoupon(d); setToast({ msg: `Coupon applied — you save ${ngn(d.savings_ngn)}`, color: GREEN }); }
-      else setToast({ msg: 'Coupon could not be applied', color: RED });
+      if (mode === 'cart') {
+        const res = await applyCouponApi(code.trim());
+        const d = res?.data ?? res;
+        if (d?.valid) { setCoupon(d); setToast({ msg: `Coupon applied — you save ${ngn(d.savings_ngn)}`, color: GREEN }); }
+        else setToast({ msg: 'Coupon could not be applied', color: RED });
+      } else {
+        // Course: validated server-side at payment; store and apply then.
+        setCoupon({ coupon_code: code.trim() });
+        setToast({ msg: 'Code added — the discount is applied at payment', color: GREEN });
+      }
     } catch (e) {
       setToast({ msg: e?.message || 'Invalid or expired coupon', color: RED });
     } finally { setApplying(false); }
@@ -132,11 +148,31 @@ export default function CheckoutPage() {
   const pay = async () => {
     setBusy(true);
     try {
-      const res = await checkoutCart({ coupon_code: coupon?.coupon_code, method: isFree ? undefined : method });
-      const d = res?.data ?? res;
-      if (d?.checkout_url) { window.location.href = d.checkout_url; return; }
-      if (d?.free) { setToast({ msg: d.message || 'Access granted! 🎉', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
-      setToast({ msg: 'Checkout started', color: GREEN }); await refresh();
+      if (mode === 'course') {
+        const r = await fetch(`${API}/api/payments/initiate`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
+          body: JSON.stringify({ course_id: st.course.id, coupon_code: coupon?.coupon_code }),
+        });
+        if (r.status === 401) { localStorage.setItem('akoro_redirect', st.returnTo || '/app'); navigate('/signin'); return; }
+        const d = await r.json().catch(() => ({}));
+        const body = d.data || d;
+        if (!r.ok) { setToast({ msg: d.message || body.message || 'Could not start payment', color: RED }); return; }
+        if (body.free) { setToast({ msg: 'Enrolled! 🎉', color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
+        if (body.checkout_url) { window.location.href = body.checkout_url; return; }
+        setToast({ msg: 'Payment started', color: GREEN });
+      } else if (mode === 'topup') {
+        const res = await apiPost('/api/wallet/topup/init', { coins: st.coins, target: st.target || 'user' });
+        const d = res?.data ?? res;
+        if (d?.authorization_url) { window.location.href = d.authorization_url; return; }
+        setToast({ msg: 'Could not start payment', color: RED });
+      } else {
+        const res = await checkoutCart({ coupon_code: coupon?.coupon_code, method: isFree ? undefined : method });
+        const d = res?.data ?? res;
+        if (d?.checkout_url) { window.location.href = d.checkout_url; return; }
+        if (d?.free) { setToast({ msg: d.message || 'Access granted! 🎉', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
+        setToast({ msg: 'Checkout started', color: GREEN }); await refresh();
+      }
     } catch (e) {
       setToast({ msg: e?.message || 'Checkout failed — please retry', color: RED });
     } finally { setBusy(false); }
@@ -144,19 +180,18 @@ export default function CheckoutPage() {
 
   const card = { background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 16, padding: 16, marginBottom: 14 };
   const h = { fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 };
+  const title = mode === 'topup' ? 'Top up' : 'Checkout';
 
   return (
-    <Shell onBack={goBack} count={count}>
+    <Shell onBack={goBack} count={headerCount} title={title}>
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '16px 18px 150px' }}>
         {/* Order summary */}
         <div style={card}>
           <div style={h}>Order summary</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {items.map((i) => (
-              <div key={i.cart_item_id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 9, fontWeight: 900, color: BRAND, background: `${BRAND}14`, padding: '2px 7px', borderRadius: 5, textTransform: 'uppercase', flexShrink: 0 }}>
-                  {i.item_type === 'agent' ? 'Guide' : i.course_type === 'video' ? 'Video' : 'Live'}
-                </span>
+              <div key={i.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 9, fontWeight: 900, color: BRAND, background: `${BRAND}14`, padding: '2px 7px', borderRadius: 5, textTransform: 'uppercase', flexShrink: 0 }}>{i.badge}</span>
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span>
                 <span style={{ fontSize: 13, fontWeight: 900, color: i.is_free ? GREEN : 'var(--ak-text)', flexShrink: 0 }}>{i.is_free ? 'Free' : ngn(i.price_ngn)}</span>
               </div>
@@ -165,12 +200,12 @@ export default function CheckoutPage() {
         </div>
 
         {/* Coupon */}
-        {!isFree && (
+        {canCoupon && !isFree && (
           <div style={card}>
             <div style={h}><Tag size={12} style={{ verticalAlign: -1 }} /> Discount code</div>
             {coupon ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: GREEN, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Check size={15} /> {coupon.coupon_code} · −{ngn(coupon.savings_ngn)}</span>
+                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: GREEN, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Check size={15} /> {coupon.coupon_code}{coupon.savings_ngn != null ? ` · −${ngn(coupon.savings_ngn)}` : ''}</span>
                 <button onClick={clearCoupon} style={{ background: 'none', border: 'none', color: RED, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>Remove</button>
               </div>
             ) : (
@@ -220,13 +255,13 @@ export default function CheckoutPage() {
       {/* Sticky pay bar */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)', padding: '14px 18px calc(14px + env(safe-area-inset-bottom,0px))' }}>
         <div style={{ maxWidth: 620, margin: '0 auto' }}>
-          {coupon && !isFree && (
+          {coupon && coupon.final_ngn != null && !isFree && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--ak-text-muted)', marginBottom: 4 }}>
-              <span>Subtotal</span><span>{ngn(cart.subtotal_ngn)}</span>
+              <span>Subtotal</span><span>{ngn(subtotalNgn)}</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 13, color: 'var(--ak-text-muted)', fontWeight: 700 }}>{isFree ? 'Total' : coupon ? 'Total after discount' : 'Total'}</span>
+            <span style={{ fontSize: 13, color: 'var(--ak-text-muted)', fontWeight: 700 }}>{isFree ? 'Total' : coupon?.final_ngn != null ? 'Total after discount' : 'Total'}</span>
             <span style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)' }}>{isFree ? 'Free' : ngn(total)}</span>
           </div>
           <button onClick={pay} disabled={busy} style={{ width: '100%', padding: '14px', borderRadius: 14, border: 'none', background: busy ? '#C7C2E0' : `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`, color: '#fff', fontSize: 15, fontWeight: 900, cursor: busy ? 'default' : 'pointer', fontFamily: FONT }}>

@@ -566,6 +566,7 @@ function mapCourse(api) {
       ratingCount: api.rating_count || '', students: api.total_students || 0, hours: api.total_hours || 0,
       instructor: api.instructor_name || DEFAULT_COURSE.instructor, updated: api.updated || '',
       description: api.description || '', priceLabel, priceOld: null, emoji: api.emoji || DEFAULT_COURSE.emoji,
+      price: Number(api.price || 0), is_free: isFree,   // raw kobo + flag for checkout
       schedule: Array.isArray(api.schedule) && api.schedule.length ? api.schedule : null,
       reviews: Array.isArray(api.reviews) && api.reviews.length ? api.reviews : null,
       teachers: Array.isArray(api.teachers) && api.teachers.length ? api.teachers : null,
