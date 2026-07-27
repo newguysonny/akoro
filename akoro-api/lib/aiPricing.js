@@ -30,21 +30,35 @@ const MODEL_PRICES = {
 };
 const DEFAULT_PRICE = MODEL_PRICES["gpt-4o-mini"];
 
-/** Real USD cost of a completion from its token usage. */
-export function usdCost(model, tokensIn = 0, tokensOut = 0) {
+// OpenAI bills cached prompt-prefix tokens at ~50% of the input rate (automatic
+// prompt caching kicks in for stable ≥1024-token prefixes — e.g. the tutor's
+// fixed system prompt). We price cached input at CACHED_INPUT_FACTOR so the
+// savings flow through to what the wallet is charged.
+const CACHED_INPUT_FACTOR = num(process.env.AI_CACHED_INPUT_FACTOR, 0.5);
+// Optional safety ceiling: max_tokens applied when a caller omits it (0 = off).
+export const AI_DEFAULT_MAX_TOKENS = Math.max(0, Math.round(num(process.env.AI_DEFAULT_MAX_TOKENS, 0)));
+
+/** Real USD cost of a completion; cachedIn tokens billed at the cached rate. */
+export function usdCost(model, tokensIn = 0, tokensOut = 0, cachedIn = 0) {
   const p = MODEL_PRICES[model] || DEFAULT_PRICE;
-  return (tokensIn / 1e6) * p.in + (tokensOut / 1e6) * p.out;
+  const freshIn = Math.max(0, tokensIn - cachedIn);
+  return (freshIn / 1e6) * p.in + (cachedIn / 1e6) * p.in * CACHED_INPUT_FACTOR + (tokensOut / 1e6) * p.out;
 }
 
 /** Coins to debit for a completion (real cost × markup, rounded up, min 1). */
-export function coinsForUsage(model, tokensIn = 0, tokensOut = 0) {
-  const cost = usdCost(model, tokensIn, tokensOut);
+export function coinsForUsage(model, tokensIn = 0, tokensOut = 0, cachedIn = 0) {
+  const cost = usdCost(model, tokensIn, tokensOut, cachedIn);
   return Math.max(1, Math.ceil((cost * AI_MARKUP) / COIN_USD));
 }
 
-/** Coins to debit given an OpenAI `response.usage` object. */
+/** Coins to debit given an OpenAI `response.usage` object (cache-aware). */
 export function coinsForResponseUsage(model, usage = {}) {
-  return coinsForUsage(model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0);
+  const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
+  return coinsForUsage(model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, cached);
+}
+/** Cached-token count from a usage object (for the ledger cost calc). */
+export function cachedTokensOf(usage = {}) {
+  return usage.prompt_tokens_details?.cached_tokens ?? 0;
 }
 
 // ── Audio (voice) pricing ─────────────────────────────────────────────────────

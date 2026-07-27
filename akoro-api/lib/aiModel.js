@@ -10,6 +10,7 @@
 import OpenAI from "openai";
 import { hasCoins, chargeForAI, InsufficientCoins } from "./coins.js";
 import { aiContext } from "./aiContext.js";
+import { AI_DEFAULT_MAX_TOKENS } from "./aiPricing.js";
 
 export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export { InsufficientCoins };
@@ -30,6 +31,10 @@ async function meteredCreate(params = {}) {
   const ref     = params.__ref     ?? null;
   const clean = { ...params };
   delete clean.__userId; delete clean.__feature; delete clean.__ref;
+  // Cost guardrail: bound output when a caller omits max_tokens (0 = off).
+  if (AI_DEFAULT_MAX_TOKENS > 0 && clean.max_tokens == null && clean.max_completion_tokens == null) {
+    clean.max_tokens = AI_DEFAULT_MAX_TOKENS;
+  }
 
   if (userId) {
     const { ok, total } = await hasCoins(userId, 1);

@@ -68,14 +68,19 @@ coins       = ceil( realCost × AI_MARKUP / COIN_USD ),  min 1
 
 Metering is centralised so new call sites are covered automatically:
 
-- **All chat completions** — `openai.chat.completions.create` is a metered proxy
-  (`lib/aiModel.js`). The acting user comes from an `AsyncLocalStorage` context
-  set in `authenticateToken`, so any AI call during an authenticated request
-  bills that user. Covers adaptive learning, concierge, generators, instructor
-  tools, battles, etc. — no per-site code.
+- **All chat completions + embeddings** — `openai.chat.completions.create` and
+  `openai.embeddings.create` go through a metered proxy (`lib/aiModel.js`). The
+  acting user comes from an `AsyncLocalStorage` context set in
+  `authenticateToken`, so any AI call during an authenticated request bills that
+  user. **All modules use this one client** (the adaptive-learning agents that
+  previously made their own `new OpenAI()` were rerouted) — covers the student
+  tutor, concierge, generators, instructor tools, battles, RAG, etc.
   - **Blocking calls** → exact tokens from `response.usage`.
   - **Streaming calls** → `stream_options.include_usage` + a teeing wrapper
     charge **exact** tokens on completion (estimate only on early abort).
+  - **Cached prompt tokens** (automatic OpenAI prompt caching) are billed at
+    `AI_CACHED_INPUT_FACTOR` (default 0.5×) — the tutor's stable system prompt
+    gets the discount automatically.
 - **Agent tasks** (background worker) — pre-checks balance, then bills each
   agent-loop iteration to the task owner via explicit `__userId`.
 - **Voice** — STT and TTS metered explicitly (own client + audio API), per
@@ -83,6 +88,17 @@ Metering is centralised so new call sites are covered automatically:
 
 **Not billed (by design):** system/cron calls with no acting user (e.g. the
 decay-engine), and any provider whose usage we can't attribute to a user.
+
+**Soft-overspend edge:** charges fire after the call returns, and the pre-check
+only requires ≥1 coin. A near-empty wallet can therefore complete **one** call
+that costs more than its balance before the next call is blocked — a few coins
+of slippage. A true hard cap needs a pre-authorization hold; accepted for MVP.
+
+**Admin tooling:** `GET /api/wallet/admin/overview` (platform totals, 7-day
+top-up/spend, spend-by-feature) and `POST /api/wallet/admin/grant` (grant with
+positive coins, adjust/deduct with negative) — admin role only, surfaced on the
+admin Wallet page. Low-balance is flagged in `GET /api/wallet` (`low`,
+`lowBalanceThreshold`) and shown as a red header chip in the learner app.
 
 ## 5. Tunable knobs (env)
 
@@ -93,6 +109,9 @@ decay-engine), and any provider whose usage we can't attribute to a user.
 | `USD_NGN_RATE` | 1600 | ₦ per $ for top-up pricing |
 | `COIN_WELCOME_GRANT` | 200 | Free coins on first account creation |
 | `AUDIO_BYTES_PER_SEC` | 3000 | STT minute estimate when duration is unknown |
+| `AI_CACHED_INPUT_FACTOR` | 0.5 | Price of cached prompt tokens vs. fresh input |
+| `AI_DEFAULT_MAX_TOKENS` | 0 (off) | Output ceiling applied when a caller omits max_tokens |
+| `COIN_LOW_BALANCE` | 100 | Coins below which the wallet flags `low` |
 | `OPENAI_MODEL` | gpt-4o-mini | Default model for the agent loops |
 
 ## 6. Rough economics (illustrative)

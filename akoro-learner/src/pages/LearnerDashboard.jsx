@@ -40,7 +40,7 @@ export default function LearnerDashboard() {
   const location = useLocation();
   const { t } = useLang();
   const { count: cartCount } = useCart();
-  const { balance: coinBalance } = useWallet();
+  const { balance: coinBalance, low: coinLow } = useWallet();
 
   // Top-level tab is mirrored in the URL (?tab=…) so the browser Back/Forward
   // buttons move between tabs instead of jumping straight out to the landing
@@ -436,10 +436,10 @@ export default function LearnerDashboard() {
               </div>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              <button onClick={()=>navigate("/wallet")} title="Coin balance"
-                style={{ display:"flex",alignItems:"center",gap:5,background:"#FFF7E6",border:"1px solid #FFE2A8",borderRadius:100,height:34,padding:"0 12px",cursor:"pointer" }}>
+              <button onClick={()=>navigate("/wallet")} title={coinLow?"Low balance — tap to top up":"Coin balance"}
+                style={{ display:"flex",alignItems:"center",gap:5,background:coinLow?"#FEECEC":"#FFF7E6",border:`1px solid ${coinLow?"#F5B5B5":"#FFE2A8"}`,borderRadius:100,height:34,padding:"0 12px",cursor:"pointer" }}>
                 <span style={{ fontSize:14,lineHeight:1 }}>🪙</span>
-                <span style={{ fontSize:12.5,fontWeight:900,color:"#B45309" }}>{(coinBalance||0).toLocaleString()}</span>
+                <span style={{ fontSize:12.5,fontWeight:900,color:coinLow?"#C0322B":"#B45309" }}>{(coinBalance||0).toLocaleString()}</span>
               </button>
               <button onClick={()=>navigate("/cart")} title="Cart"
                 style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>

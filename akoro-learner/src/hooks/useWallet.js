@@ -20,5 +20,5 @@ export function useWallet() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  return { wallet, balance: wallet?.balance ?? 0, loading, refresh };
+  return { wallet, balance: wallet?.balance ?? 0, low: !!wallet?.low, loading, refresh };
 }

@@ -24,6 +24,7 @@ import { initializeTransaction } from "../adaptive-learning/marketplace/paystack
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
+const LOW_BALANCE = Math.max(0, Number(process.env.COIN_LOW_BALANCE ?? 100));
 
 // Resolve the school this user administers (for school-wallet actions).
 async function mySchoolId(userId) {
@@ -55,6 +56,8 @@ router.get("/", authenticateToken, async (req, res) => {
         accounts: accounts.map((a) => ({ id: a.id, kind: a.kind, balance: a.balance })),
         recent: txns || [],
         coinValueUsd: COIN_USD,
+        lowBalanceThreshold: LOW_BALANCE,
+        low: (accounts.reduce((s, a) => s + Number(a.balance || 0), 0)) < LOW_BALANCE,
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -139,6 +142,37 @@ router.post("/allocate", authenticateToken, async (req, res) => {
     if (e instanceof InsufficientCoins) return res.status(402).json({ error: "Insufficient school balance", code: "INSUFFICIENT_COINS", needed: e.needed, balance: e.balance });
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Admin: platform coin overview (revenue/usage) ────────────────────────────
+router.get("/admin/overview", authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Admin only" });
+    const { data, error } = await db.rpc("coin_overview");
+    if (error) throw new Error(error.message);
+    res.json({ success: true, data: { ...data, coinValueUsd: COIN_USD } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admin: grant/adjust coins on any account  { owner_type, owner_id, coins } ──
+// Positive coins credit (grant); negative deduct (adjust).
+router.post("/admin/grant", authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Admin only" });
+    const { owner_type = "user", owner_id, coins, reason } = req.body || {};
+    const amount = Math.trunc(Number(coins));
+    if (!owner_id || !amount) return res.status(400).json({ error: "owner_id and a non-zero coins amount are required" });
+    if (!["user", "school"].includes(owner_type)) return res.status(400).json({ error: "owner_type must be user or school" });
+    const acc = await ensureAccount(owner_type, owner_id);
+    const meta = { feature: reason ? `admin:${reason}` : "admin_grant", by: req.user.id };
+    if (amount > 0) {
+      const { data: bal } = await db.rpc("coin_credit", { p_account: acc.id, p_amount: amount, p_type: "grant", p_meta: meta });
+      return res.json({ success: true, data: { balance: bal, granted: amount } });
+    }
+    const { data: bal } = await db.rpc("coin_debit", { p_account: acc.id, p_amount: -amount, p_type: "adjust", p_meta: meta });
+    if (bal == null) return res.status(402).json({ error: "Account balance too low to deduct that amount" });
+    res.json({ success: true, data: { balance: bal, adjusted: amount } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Webhook fulfillment — credit a coin top-up (idempotent by reference) ──────

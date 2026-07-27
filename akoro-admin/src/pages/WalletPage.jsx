@@ -54,6 +54,9 @@ export default function WalletPage() {
         <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4 }}>🪙 {fmt(data?.balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.9 }}>coins</span></div>
       </div>
 
+      <AdminOverview showToast={showToast} />
+
+
       <div style={card}>
         <div style={cardTitle}><Plus size={16} /> Top up</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -94,6 +97,69 @@ export default function WalletPage() {
       {toast && <div style={toastStyle}>{toast}</div>}
     </div>
     </PageLayout>
+  );
+}
+
+// Platform-wide coin analytics + a grant/adjust tool (admins only).
+function AdminOverview({ showToast }) {
+  const [o, setO] = useState(null);
+  const [notAdmin, setNotAdmin] = useState(false);
+  const [form, setForm] = useState({ owner_type: 'user', owner_id: '', coins: '', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const loadO = () => apiGet('/api/wallet/admin/overview').then((r) => setO(r.data)).catch(() => setNotAdmin(true));
+  useEffect(() => { loadO(); }, []);
+  if (notAdmin) return null;
+  const grant = async () => {
+    if (!form.owner_id || !Number(form.coins)) return showToast('Enter an account id and coin amount');
+    setBusy(true);
+    try { await apiPost('/api/wallet/admin/grant', { ...form, coins: Number(form.coins) }); showToast('Applied ✓'); setForm({ ...form, coins: '', reason: '' }); loadO(); }
+    catch (e) { showToast(e.message || 'Failed'); } finally { setBusy(false); }
+  };
+  const Stat = ({ label, value }) => (
+    <div style={{ flex: '1 1 130px', background: LIGHT, borderRadius: 10, padding: '12px 14px' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: MUTED2 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 900, color: INK, marginTop: 2 }}>{fmt(value)}</div>
+    </div>
+  );
+  return (
+    <div style={card}>
+      <div style={cardTitle}>Platform coins</div>
+      {!o ? <div style={{ color: MUTED2, fontSize: 13 }}>Loading…</div> : (
+        <>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+            <Stat label="Total balance" value={o.total_balance} />
+            <Stat label="Topped up (all)" value={o.total_topped_up} />
+            <Stat label="Spent (all)" value={o.total_spent} />
+            <Stat label="Spent · 7d" value={o.spent_7d} />
+            <Stat label="Accounts" value={o.accounts} />
+          </div>
+          {Array.isArray(o.spend_by_feature) && o.spend_by_feature.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: MUTED2, marginBottom: 6 }}>Spend by feature</div>
+              {o.spend_by_feature.slice(0, 8).map((f) => (
+                <div key={f.feature} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: MUTED, padding: '3px 0' }}>
+                  <span>{(f.feature || '').replace(/_/g, ' ')} <span style={{ color: MUTED2 }}>· {fmt(f.calls)} calls</span></span>
+                  <span style={{ fontWeight: 800, color: INK }}>{fmt(f.coins)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: INK, marginBottom: 8 }}>Grant / adjust coins</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select value={form.owner_type} onChange={(e) => setForm({ ...form, owner_type: e.target.value })} style={{ ...inp, width: 100 }}>
+                <option value="user">User</option><option value="school">School</option>
+              </select>
+              <input placeholder="account owner id (uuid)" value={form.owner_id} onChange={(e) => setForm({ ...form, owner_id: e.target.value })} style={{ ...inp, width: 260 }} />
+              <input type="number" placeholder="coins (± )" value={form.coins} onChange={(e) => setForm({ ...form, coins: e.target.value })} style={{ ...inp, width: 110 }} />
+              <input placeholder="reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} style={{ ...inp, width: 150 }} />
+              <button onClick={grant} disabled={busy} style={primaryBtn}>Apply</button>
+            </div>
+            <div style={{ fontSize: 11, color: MUTED2, marginTop: 6 }}>Positive coins grant credit; negative deducts. Reason is recorded in the ledger.</div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

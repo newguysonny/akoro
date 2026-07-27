@@ -10,7 +10,7 @@
  */
 
 import db from "../db.js";
-import { coinsForResponseUsage, usdCost, WELCOME_GRANT } from "./aiPricing.js";
+import { coinsForResponseUsage, usdCost, cachedTokensOf, WELCOME_GRANT } from "./aiPricing.js";
 
 export class InsufficientCoins extends Error {
   constructor(needed, balance) {
@@ -97,7 +97,7 @@ export async function chargeForAI({ userId, feature, model, usage = {}, ref = nu
   const coins = coinsForResponseUsage(model, usage);
   const tokensIn  = usage.prompt_tokens ?? 0;
   const tokensOut = usage.completion_tokens ?? 0;
-  const cost = usdCost(model, tokensIn, tokensOut);
+  const cost = usdCost(model, tokensIn, tokensOut, cachedTokensOf(usage));
   return debitCoins({ userId, coins, feature, model, tokensIn, tokensOut, cost, ref });
 }
 
