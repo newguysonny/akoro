@@ -83,11 +83,27 @@ function estimateTokens(messages) {
   } catch { return 500; }
 }
 
-// Proxy the client so `openai.chat.completions.create(...)` is metered
-// everywhere it's already used, while embeddings/audio/etc. pass through.
+// Metered embeddings — charged by prompt tokens (cheap, but counted).
+async function meteredEmbeddings(params = {}) {
+  const store   = aiContext.getStore() || {};
+  const userId  = params.__userId  ?? store.userId  ?? null;
+  const feature = params.__feature ?? store.feature ?? "embedding";
+  const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref;
+  const res = await rawClient.embeddings.create(clean);
+  if (userId && res?.usage) {
+    chargeForAI({ userId, feature, model: clean.model || "text-embedding-3-small", usage: { prompt_tokens: res.usage.prompt_tokens ?? res.usage.total_tokens ?? 0, completion_tokens: 0 } })
+      .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] embed charge failed:", e.message); });
+  }
+  return res;
+}
+
+// Proxy the client so `openai.chat.completions.create(...)` and
+// `openai.embeddings.create(...)` are metered everywhere they're used, while
+// audio/other endpoints pass through (voice meters itself).
 export const openai = new Proxy(rawClient, {
   get(target, prop) {
     if (prop === "chat") return { completions: { create: meteredCreate } };
+    if (prop === "embeddings") return { create: meteredEmbeddings };
     const v = target[prop];
     return typeof v === "function" ? v.bind(target) : v;
   },

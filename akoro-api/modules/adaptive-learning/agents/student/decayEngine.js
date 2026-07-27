@@ -12,14 +12,13 @@
 // =============================================================
 
 import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
 import { embed } from "./knowledge.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "../../../../lib/aiModel.js";
 
 // =============================================================
 // DECAY CONFIGURATION

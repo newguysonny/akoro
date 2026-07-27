@@ -6,10 +6,11 @@
  * Missing from original commit — recreated from usage patterns.
  */
 
-import OpenAI from "openai";
 import db     from "../../../db.js";
 
-export const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Re-export the coin-metered client so every orchestrator/agent that imports
+// `openai` from here is billed automatically (see lib/aiModel.js).
+export { openai } from "../../../lib/aiModel.js";
 
 export class BaseOrchestrator {
   constructor() {

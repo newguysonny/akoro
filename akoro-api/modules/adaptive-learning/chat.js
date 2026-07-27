@@ -14,9 +14,8 @@
 import express from "express";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
-import { OPENAI_MODEL } from "../../lib/aiModel.js";
+import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 const { Pool } = pkg;
-import OpenAI    from "openai";
 import db from "../../db.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
@@ -37,7 +36,6 @@ import { activeSessions } from "./websocket.js";
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
 const query      = (text, params) => pool.query(text, params);
-const openai     = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const PHASE_PLAN = [
   "Phase 1 → what do they know",

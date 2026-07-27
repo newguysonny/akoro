@@ -11,7 +11,6 @@
 // Just the student's own learning companion.
 // =============================================================
 
-import OpenAI from "openai";
 import {
   retrieveCombinedContext,
   saveAgentKnowledge,
@@ -19,7 +18,7 @@ import {
   embed,
 } from "./knowledge.js";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "../../../../lib/aiModel.js";
 
 export class StudentAgent {
   constructor({ agentId, studentId, teacherId = null, agentRecord }) {

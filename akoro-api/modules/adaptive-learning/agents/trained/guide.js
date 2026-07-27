@@ -4,10 +4,9 @@
 // All personality, phases, and tips driven from DB config.
 // =============================================================
 
-import OpenAI from "openai";
 import { buildGuidePrompt } from "../../training/agentPromptBuilder.js";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "../../../../lib/aiModel.js";
 
 export class TrainedGuide {
   constructor(config, teacherProfile) {

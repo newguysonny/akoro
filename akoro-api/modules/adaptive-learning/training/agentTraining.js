@@ -15,7 +15,7 @@
 import express from "express";
 import multer  from "multer";
 import db from "../../../db.js";
-import OpenAI, { toFile } from "openai";
+import { toFile } from "openai";
 import { v4 as uuid } from "uuid";
 import fs   from "fs";
 import path from "path";
@@ -24,7 +24,7 @@ import { createRealtimeTranscriber } from "../../voice/openaiRealtime.js";
 import { transcribeFileDeepgram, transcribeBufferDeepgram, hasDeepgram } from "../../voice/deepgram.js";
 
 const router   = express.Router();
-const openai   = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "../../../lib/aiModel.js";
 
 // ── Multer ────────────────────────────────────────────────────
 const UPLOAD_DIR = path.join("/tmp", "akoro-uploads");

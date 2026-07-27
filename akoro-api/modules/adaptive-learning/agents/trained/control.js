@@ -4,10 +4,9 @@
 // Boundary style, redirect tone all driven from DB config.
 // =============================================================
 
-import OpenAI from "openai";
 import { buildControlPrompt } from "../../training/agentPromptBuilder.js";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { openai } from "../../../../lib/aiModel.js";
 
 export class TrainedControl {
   constructor(config, teacherProfile) {
