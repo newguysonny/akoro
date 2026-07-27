@@ -52,6 +52,7 @@ import {
   AcademicDashboardPage, AcademicSessionsPage, AcademicLevelsPage, ClassesPage, SectionsPage, SectionTypesPage, SubjectsPage,
   AssignSubjectsPage, AssignElectivesPage, AssignClassTeacherPage, AssignTeacherSubjectsPage, ManagePeriodsPage,
   ClassTimetablePage, PromoteStudentsPage,
+  AcademicCalendarPage,
   CurriculumPage, SchemeOfWorkPage, SyllabusPage,
   WeeklyForecastPage, DailySchedulePage, TeachingMaterialsPage,
 } from './pages/mgmt/academicsPages.jsx';
@@ -299,6 +300,7 @@ function AppRoutes() {
       {/* Management — Academics */}
       <Route path="/mgmt/academic-dashboard"   element={<ProtectedRoute><AcademicDashboardPage /></ProtectedRoute>} />
       <Route path="/mgmt/academic-sessions"    element={<ProtectedRoute><AcademicSessionsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/academic-calendar"    element={<ProtectedRoute><AcademicCalendarPage /></ProtectedRoute>} />
       <Route path="/mgmt/academic-levels"      element={<ProtectedRoute><AcademicLevelsPage /></ProtectedRoute>} />
       <Route path="/mgmt/classes"              element={<ProtectedRoute><ClassesPage /></ProtectedRoute>} />
       <Route path="/mgmt/sections"             element={<ProtectedRoute><SectionsPage /></ProtectedRoute>} />

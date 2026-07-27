@@ -132,6 +132,40 @@ export function SyllabusPage() {
     ]} createLabel="New Syllabus" />;
 }
 
+// Academic Calendar — dated events per term (resumption, breaks, exams, PTMs…).
+const CAL_TERM_OPTS = [...TERM_OPTS, { value: 'Whole Session', label: 'Whole Session' }];
+const CAL_TYPE_OPTS = [
+  { value: 'resumption', label: 'Resumption' },
+  { value: 'vacation', label: 'Vacation / Term Ends' },
+  { value: 'holiday', label: 'Holiday' },
+  { value: 'midterm', label: 'Mid-term Break' },
+  { value: 'exam', label: 'Examination' },
+  { value: 'ptm', label: 'Parent–Teacher Meeting' },
+  { value: 'event', label: 'Event / Other' },
+];
+export function AcademicCalendarPage() {
+  return <ResourcePage title="Academic Calendar" subtitle="Key dates for each term — resumption, breaks, exams and events" resource="academic-calendar"
+    columns={[
+      { key: 'starts_on', label: 'Date' }, { key: 'ends_on', label: 'Ends' },
+      { key: 'term', label: 'Term' }, { key: 'event_type', label: 'Type' },
+      { key: 'title', label: 'Title' }, { key: 'session_name', label: 'Session' },
+    ]}
+    fields={[
+      { key: 'title', label: 'Title', required: true, placeholder: 'First Term Begins' },
+      { key: 'term', label: 'Term', type: 'select', options: CAL_TERM_OPTS, default: 'First Term' },
+      { key: 'event_type', label: 'Type', type: 'select', options: CAL_TYPE_OPTS, default: 'event' },
+      { key: 'starts_on', label: 'Date', type: 'date', required: true },
+      { key: 'ends_on', label: 'End Date (optional)', type: 'date' },
+      { key: 'session_id', label: 'Academic Session (optional)', type: 'select', optionsFrom: { resource: 'academic-sessions' } },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ]}
+    listFilters={[
+      { key: 'term', label: 'Term', options: CAL_TERM_OPTS },
+      { key: 'event_type', label: 'Type', options: CAL_TYPE_OPTS },
+      { key: 'session_id', label: 'Session', optionsFrom: { resource: 'academic-sessions' } },
+    ]} createLabel="New Calendar Entry" />;
+}
+
 const ASSIGN_SUBJECT_FIELDS = (elective) => [
   { key: 'class_id', label: 'Class', type: 'select', required: true, optionsFrom: { resource: 'classes' } },
   { key: 'subject_id', label: 'Subject', type: 'select', required: true, optionsFrom: { resource: 'subjects' } },

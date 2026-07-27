@@ -63,7 +63,7 @@ async function getMySchool(req, res) {
 // academics). School admins may write everything. Reads are school-scoped.
 const INSTRUCTOR_WRITABLE = new Set([
   "students", "student-attendance", "behavior-records", "student-categories", "student-houses",
-  "subjects", "classes", "sections", "periods", "academic-sessions", "academic-levels",
+  "subjects", "classes", "sections", "periods", "academic-sessions", "academic-levels", "academic-calendar",
   "timetable-slots", "timetable-meta", "curriculum", "subject-syllabus", "scheme-of-work",
 ]);
 function requireMgmtWrite(req, res, next) {
@@ -124,6 +124,7 @@ const RESOURCES = {
   // Academics
   "academic-sessions": { table: "academic_sessions", fields: ["name","starts_on","ends_on","is_active"], required: ["name"], orderBy: "starts_on", asc: false },
   "academic-levels": { table: "academic_levels", fields: ["code","name","sort_order","status"], required: ["name"], filters: ["status"], orderBy: "sort_order", asc: true },
+  "academic-calendar": { table: "academic_calendar", fields: ["session_id","term","title","event_type","starts_on","ends_on","notes"], required: ["title","starts_on"], refs: { session_id: ["academic_sessions","name"] }, filters: ["session_id","term","event_type"], orderBy: "starts_on", asc: true },
   "classes":  { table: "classes",  fields: ["name","sort_order","level_id","teacher","status"], required: ["name"], refs: { level_id: ["academic_levels","name"] }, filters: ["level_id","status"], orderBy: "sort_order", asc: true },
   "sections": { table: "sections", fields: ["class_id","name","teacher","capacity","status"], required: ["class_id","name"], refs: { class_id: ["classes","name"] }, filters: ["class_id","status"], orderBy: "name", asc: true },
   "subjects": { table: "subjects", fields: ["name","code","subject_type"], required: ["name"], orderBy: "name", asc: true },
@@ -2236,12 +2237,22 @@ router.post("/forecast/generate", authenticateToken, requireRole(MGMT_ROLES), as
     const overwrite  = b.overwrite !== false;
 
     // 1) Timetable slots for this class/section → (day, period, subject).
-    let tq = M().from("timetable_slots")
-      .select("day_of_week, period_id, subject_id, alt_subject_id")
-      .eq("school_id", school.id).eq("class_id", b.class_id);
-    tq = section_id ? tq.eq("section_id", section_id) : tq.is("section_id", null);
-    const { data: slots } = await tq;
-    if (!slots?.length) return res.status(409).json({ error: "This class has no timetable for that section yet.", code: "no_timetable" });
+    // Timetables may be stored per-section OR class-wide (section_id NULL).
+    // Try the exact section first, then fall back to any of the class's slots
+    // (mirrors the forecast page, which unions across sections). Dedup by
+    // (day, period) so a class-wide forecast has one activity per cell.
+    const selectSlots = async (q) => (await q.select("day_of_week, period_id, subject_id, alt_subject_id")).data || [];
+    const baseQ = () => M().from("timetable_slots").eq("school_id", school.id).eq("class_id", b.class_id);
+    let raw = [];
+    if (section_id) raw = await selectSlots(baseQ().eq("section_id", section_id));
+    if (!raw.length) raw = await selectSlots(baseQ());   // fall back to all sections / class-wide
+    if (!raw.length) return res.status(409).json({ error: "This class has no timetable yet. Build the timetable first.", code: "no_timetable" });
+    const seen = new Set();
+    const slots = raw.filter((s) => {
+      const k = `${s.day_of_week}_${s.period_id}`;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
 
     // 2) Scheme-of-work topics for the chosen term + week → subject_id → topic.
     const { data: scheme } = await M().from("scheme_of_work")
