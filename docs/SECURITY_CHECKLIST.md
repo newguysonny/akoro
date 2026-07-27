@@ -85,6 +85,34 @@ Ran `npm audit --omit=dev` across all services and remediated.
 
 ---
 
+## 3b. API endpoint security — standard best-practice coverage
+
+Cross-checked against common API-security guidance. All **already implemented**;
+listed here so it's on record and stays true for new endpoints.
+
+| Practice | Status | Where |
+|---|---|---|
+| Validate JWT signature, `exp`, `aud` on every request | ✅ | `authenticateToken` — also `alg` allow-list (rejects `none`), `iss`, `jti` deny-list, `force_logout_at` |
+| Authorize per-resource; prevent BOLA/IDOR | ✅ | Per-query owner scoping + `requireOwnership()` guard (logs `BOLA_ATTEMPT`, 404 on miss, 403 on mismatch) |
+| Tiered rate limits, keyed by **user** then IP, `429` + `X-RateLimit-*` headers | ✅ | `middleware/security.js`: `strictLimit`/`refreshLimit` (IP) for auth, `standardLimit`/`teachingLimit`/`aiLimit` (`userOrIpKey`); `standardHeaders:true` |
+| Input validation / schema enforcement | ✅ | Zod `validate(schema, source)` factory (422 on fail); `express-validator` rules on auth |
+| Mass-assignment protection (DTO / field allow-list) | ✅ | `cleanBody(cfg, body)` accepts only declared `fields`; security fields (e.g. `two_factor_enabled`) excluded from PATCH allow-lists |
+| Parameterized queries (no SQL string concat) | ✅ | Supabase/PostgREST throughout; `.or()`/`.ilike()` inputs sanitized |
+| Secure data exposure — never return hashes/tokens | ✅ | `safeUser`, `sanitizeMgmtRow` (`ALWAYS_SECRET_COLS`/`ADMIN_ONLY_COLS`), settings key masking |
+| Structured security logging, no secrets | ✅ | `securityLog` + `scrub()` redacts password/token/secret/authorization/cookie/jti/private_key/credit_card; `requestLogger` logs `HTTP_ERROR` for ≥400 |
+| Generic errors; no stack traces to clients | ✅ | Global handler → "Internal server error"; `stack` only when `config.isDev`; 404 → "Route not found" |
+| Security headers | ✅ | `helmet` |
+| CORS restricted to trusted origins | ✅ | Allow-list + subdomain-aware `corsOriginFn`; `credentials:true` (never `*` in prod — see §1) |
+
+**Gaps found (tracked in §4, not blockers):**
+- **No anomaly *alerting*.** Security events are logged but nothing watches them —
+  no alert on a spike in 401/403 (credential stuffing) or 404 (endpoint
+  enumeration). Wire the stderr `securityLog` stream into a log aggregator with
+  threshold alerts.
+- **Zod `validate()` not applied to every write endpoint.** The generic mgmt
+  resources rely on `cleanBody` allow-lists (stops mass assignment) rather than
+  full shape/type validation. Add schemas to high-value write paths over time.
+
 ## 4. Post-launch (tracked, non-blocking)
 
 - [ ] Add CSP headers on the frontends (helmet CSP is intentionally off for the API).
@@ -94,6 +122,11 @@ Ran `npm audit --omit=dev` across all services and remediated.
       (limits are currently per-instance by IP).
 - [ ] Add automated tests that lock in the security invariants (BOLA scoping,
       webhook idempotency, filter-injection sanitizing).
+- [ ] **Anomaly detection/alerting**: forward `securityLog` (stderr JSON) to a log
+      aggregator and alert on 401/403 spikes (credential stuffing) and bursts of
+      404s (endpoint enumeration).
+- [ ] **Broaden Zod schema validation** from auth to the remaining high-value
+      write endpoints (generic mgmt resources currently use `cleanBody` allow-lists).
 - [ ] Independent penetration test before large-scale onboarding / marketing —
       this remediation is code-level reasoning + dependency audit, not a pen-test.
 
