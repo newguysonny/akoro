@@ -24,7 +24,7 @@ function ringState(status, signals, proctor) {
 
 export default function VoiceExam({
   videoRef, canvasRef, status, signals, proctor, frameW, frameH,
-  blocks, progress, listening, interim, speaking, loading, disabled,
+  blocks, progress, lastAnswer, listening, interim, speaking, loading, disabled,
   onToggleListening, input, onInputChange, onSend, agentEmoji = '🎓',
 }) {
   const [showType, setShowType] = useState(false);
@@ -33,6 +33,8 @@ export default function VoiceExam({
   // Latest thing the assessor said (question / feedback / hint).
   const lastAgent = [...blocks].reverse().find(b => b && b.text && ['question', 'sergeant', 'hint'].includes(b.type));
   const caption = lastAgent?.text || (loading ? 'Thinking…' : 'Get ready for your first question…');
+  // Surface any error / proctor flag so a failure is never silent.
+  const flag = [...blocks].reverse().find(b => b && b.text && b.type === 'proctor-flag');
 
   const orbScale = speaking ? 1.08 : listening ? 1.04 : 1;
   const orbGlow  = speaking ? BRAND : listening ? GREEN : 'rgba(124,59,255,.5)';
@@ -83,6 +85,12 @@ export default function VoiceExam({
           <div style={{ fontSize: 16, fontWeight: 700, color: '#E2E8F0', lineHeight: 1.5 }}>{caption}</div>
           {listening && interim && (
             <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: GREEN, fontStyle: 'italic' }}>“{interim}”</div>
+          )}
+          {!listening && lastAnswer && (
+            <div style={{ marginTop: 12, fontSize: 13, fontWeight: 700, color: '#94A3B8' }}>You answered: <span style={{ color: '#CBD5E1' }}>“{lastAnswer}”</span></div>
+          )}
+          {flag && (
+            <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 700, color: '#FCA5A5', background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.25)', borderRadius: 10, padding: '8px 12px' }}>{flag.text}</div>
           )}
         </div>
       </div>

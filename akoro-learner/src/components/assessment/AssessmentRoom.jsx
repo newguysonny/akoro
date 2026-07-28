@@ -35,16 +35,22 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   const [refSaving, setRefSaving] = useState(false);
 
   const [voiceMode, setVoiceMode] = useState(false);
+  const [lastAnswer, setLastAnswer] = useState("");   // echo the just-sent answer
   const wsRef = useRef(null);
   const assessIdRef = useRef(null);
-  const spokenRef = useRef(0);   // index of last block spoken aloud
+  const pendingRef = useRef(null);   // answer awaiting a server turn (survives reconnects)
+  const spokenRef = useRef(0);       // index of last block spoken aloud
 
-  // Submit one answer (shared by text composer and voice transcript). The
-  // server echoes the user block back in assessment_turn, so we don't add it
-  // optimistically — just emit.
+  // Submit one answer (shared by text composer and voice transcript). We queue
+  // it so a socket reconnect (which drops the server-side binding) can re-send
+  // it after resume instead of silently losing it. The server echoes the user
+  // block back in assessment_turn, so we don't add it optimistically.
   const submitAnswer = (text) => {
     const t = (text || "").trim();
-    if (!t || !ready) return;
+    if (!t || !assessIdRef.current) return;   // no live session yet
+    pendingRef.current = t;
+    setLastAnswer(t);
+    setLoading(true);
     wsRef.current?.emit("assessment_message", { message: t });
   };
 
@@ -106,8 +112,14 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
     ws.on("assessment_typing", () => setLoading(true));
     ws.on("assessment_turn", d => {
       setLoading(false);
+      pendingRef.current = null;   // answer landed
       if (d.blocks?.length) setBlocks(prev => [...prev, ...d.blocks]);
       if (d.progress) setProgress(d.progress);
+    });
+    // A reconnect re-binds the socket to the live session; re-send any answer
+    // that was dropped mid-flight so the exam never stalls on a network blip.
+    ws.on("assessment_resumed", () => {
+      if (pendingRef.current) ws.emit("assessment_message", { message: pendingRef.current });
     });
     ws.on("assessment_summary", d => { setSummary(d); setPhase("summary"); setLoading(false); });
     ws.on("assessment_terminated", d => { setTerminated(d); });
@@ -147,7 +159,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   };
 
   const handleSend = () => {
-    if (!input.trim() || loading || !ready) return;
+    if (!input.trim() || loading || !assessIdRef.current) return;
     submitAnswer(input);
     setInput("");
   };
@@ -234,9 +246,9 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
       <VoiceExam
         videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
         proctor={proctor} frameW={FRAME_W} frameH={FRAME_H}
-        blocks={blocks} progress={progress}
+        blocks={blocks} progress={progress} lastAnswer={lastAnswer}
         listening={listening} interim={interim} speaking={speaking}
-        loading={loading} disabled={!ready || Boolean(terminated)}
+        loading={loading} disabled={!assessIdRef.current || Boolean(terminated)}
         onToggleListening={listening ? stopListening : startListening}
         input={input} onInputChange={setInput} onSend={handleSend} />
     </Shell>
