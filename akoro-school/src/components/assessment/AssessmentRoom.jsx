@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
-import { API } from '../../services/api.js';
+import { API, getPortal } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
 import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
@@ -100,7 +100,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
     // Declare the portal so the socket auth middleware picks the student
     // session cookie — voice STT/TTS require an authenticated socket
     // (socket.data.user), unlike the text Q&A which does not.
-    const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true, auth: { portal: "school" } });
+    const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true, auth: { portal: getPortal() } });
     wsRef.current = ws;
 
     // Mobile connections flap: on every (re)connect, re-bind the live session

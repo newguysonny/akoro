@@ -8,9 +8,24 @@
 
 export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
+// This build serves BOTH the school admin app AND the public student-facing
+// site AI chat (/ai-chat, /ai-guest). They must NOT share a session cookie —
+// a student signing into the site chat would otherwise clobber the admin's
+// akoro_access_school cookie. So the site chat uses its own portal ('site' →
+// akoro_access_site). Decided once at load from the entry path.
+function detectPortal() {
+  try {
+    const p = window.location.pathname || '';
+    if (p.startsWith('/ai-chat') || p.startsWith('/ai-guest')) return 'site';
+  } catch { /* ignore */ }
+  return 'school';
+}
+const PORTAL = detectPortal();
+export const getPortal = () => PORTAL;
+
 const BASE_OPTS = {
   credentials: 'include',                 // send HttpOnly auth cookies
-  headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
+  headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL },
 };
 
 export async function apiGet(path) {

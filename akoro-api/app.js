@@ -121,7 +121,7 @@ io.use(async (socket, next) => {
   // elsewhere the user's own wallet (student-first hybrid) is used.
   const portal = socket.handshake?.auth?.portal || socket.handshake?.query?.portal || null;
   socket.data.portal = portal;
-  socket.data.billTo = (["school", "school_admin"].includes(portal) && socket.data.user)
+  socket.data.billTo = (["school", "school_admin", "site"].includes(portal) && socket.data.user)
     ? await schoolBillTo(socket.data.user.id).catch(() => null)
     : null;
   next();

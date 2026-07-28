@@ -33,7 +33,7 @@ import { runWithAiContext, featureForRequest } from "../../lib/aiContext.js";
 import { schoolBillTo } from "../../lib/coins.js";
 
 // Portals where AI usage is funded by the SCHOOL, not the individual user.
-const SCHOOL_PORTALS = ["school", "school_admin"];
+const SCHOOL_PORTALS = ["school", "school_admin", "site"];
 import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 import { generateSecret, otpauthURL, verifyTOTP } from "./totp.js";
 import {
@@ -214,7 +214,7 @@ const IS_PROD = process.env.NODE_ENV === "production";
 // name per portal so each app holds an INDEPENDENT session in the same browser.
 // The portal is declared by the app via the X-Akoro-Portal header (and, for the
 // Google redirect which carries no header, via the OAuth `state`).
-const PORTAL_IDS = ["student", "instructor", "admin", "school"];
+const PORTAL_IDS = ["student", "instructor", "admin", "school", "site"];
 // The portal is normally declared via the X-Akoro-Portal header. Full-page
 // navigations (OAuth "Connect" redirects, file links) can't set headers, so we
 // also accept a ?portal= query param — it only selects which scoped cookie to

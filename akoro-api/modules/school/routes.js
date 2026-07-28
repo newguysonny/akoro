@@ -1710,7 +1710,7 @@ router.post("/site/ai-login/exchange", async (req, res) => {
     // app reads with X-Akoro-Portal: school. Without the portal arg this
     // defaulted to the student cookie, so the app never found its session and
     // bounced to /signin.
-    await issueTokenPair(res, user, "school");
+    await issueTokenPair(res, user, "site");
     res.json({ success: true });
   } catch (e) {
     console.error("[ai-login exchange]", e);

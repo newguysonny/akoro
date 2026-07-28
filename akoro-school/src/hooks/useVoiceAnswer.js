@@ -8,7 +8,7 @@
  * send.
  */
 import { useState, useRef, useCallback } from 'react';
-import { API } from '../services/api.js';
+import { API, getPortal } from '../services/api.js';
 
 function pickMime() {
   const opts = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
@@ -46,7 +46,7 @@ export function useVoiceAnswer({ onTranscript }) {
           const fd = new FormData();
           fd.append('audio', blob, `answer.${ext}`);
           const r = await fetch(`${API}/api/voice/transcribe`, {
-            method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' }, body: fd,
+            method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': getPortal() }, body: fd,
           });
           const d = await r.json().catch(() => ({}));
           if (r.status === 402) setMicError('Voice needs coins — top up, or type your answer.');
