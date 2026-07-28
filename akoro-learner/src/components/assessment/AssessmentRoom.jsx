@@ -5,6 +5,7 @@ import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
+import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
 import VoiceExam from './VoiceExam.jsx';
 import { XIcon } from '../common/Icons.jsx';
 
@@ -54,10 +55,14 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
     wsRef.current?.emit("assessment_message", { message: t });
   };
 
-  // Voice I/O over the same socket — auto-submits the spoken answer.
-  const { listening, interim, speaking, voiceError, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
+  // TTS (reads questions aloud) over the socket; STT via record→transcribe.
+  const { speaking, speak, stopSpeaking, primeAudio } = useVoiceSession({
     wsRef,
     ttsVoice: "alloy",
+    onTranscript: () => {},
+  });
+  // Reliable mic: record the answer, transcribe on tap-to-send, then submit.
+  const { recording, transcribing, micError, start: startListening, stop: stopListening } = useVoiceAnswer({
     onTranscript: (text) => submitAnswer(text),
   });
 
@@ -249,10 +254,10 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
       <VoiceExam
         videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
         proctor={proctor} frameW={FRAME_W} frameH={FRAME_H}
-        blocks={blocks} progress={progress} lastAnswer={lastAnswer} voiceError={voiceError}
-        listening={listening} interim={interim} speaking={speaking}
+        blocks={blocks} progress={progress} lastAnswer={lastAnswer} voiceError={micError}
+        listening={recording} interim="" transcribing={transcribing} speaking={speaking}
         loading={loading} disabled={!assessIdRef.current || Boolean(terminated)}
-        onToggleListening={listening ? stopListening : startListening}
+        onToggleListening={recording ? stopListening : () => { stopSpeaking(); startListening(); }}
         input={input} onInputChange={setInput} onSend={handleSend} />
     </Shell>
   );

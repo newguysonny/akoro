@@ -24,7 +24,7 @@ function ringState(status, signals, proctor) {
 
 export default function VoiceExam({
   videoRef, canvasRef, status, signals, proctor, frameW, frameH,
-  blocks, progress, lastAnswer, voiceError, listening, interim, speaking, loading, disabled,
+  blocks, progress, lastAnswer, voiceError, listening, interim, transcribing, speaking, loading, disabled,
   onToggleListening, input, onInputChange, onSend, agentEmoji = '🎓',
 }) {
   const [showType, setShowType] = useState(false);
@@ -79,8 +79,8 @@ export default function VoiceExam({
         </div>
 
         <div style={{ maxWidth: 460, textAlign: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: speaking ? BRAND : listening ? GREEN : '#64748B', marginBottom: 8 }}>
-            {speaking ? 'Assessor speaking' : listening ? 'Listening…' : loading ? 'Thinking…' : 'Tap the mic to answer'}
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: speaking ? BRAND : listening ? GREEN : transcribing ? AMBER : '#64748B', marginBottom: 8 }}>
+            {speaking ? 'Assessor speaking' : listening ? 'Listening… tap to send' : transcribing ? 'Transcribing…' : loading ? 'Thinking…' : 'Tap the mic to answer'}
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: '#E2E8F0', lineHeight: 1.5 }}>{caption}</div>
           {listening && interim && (
@@ -97,9 +97,9 @@ export default function VoiceExam({
 
       {/* Controls */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingBottom: 6 }}>
-        <button onClick={onToggleListening} disabled={disabled}
-          style={{ width: 76, height: 76, borderRadius: '50%', border: 'none', cursor: disabled ? 'default' : 'pointer',
-            background: listening ? GREEN : 'rgba(124,59,255,.16)', border: `2px solid ${listening ? GREEN : BRAND}`,
+        <button onClick={onToggleListening} disabled={disabled || transcribing}
+          style={{ width: 76, height: 76, borderRadius: '50%', border: `2px solid ${listening ? GREEN : BRAND}`, cursor: (disabled || transcribing) ? 'default' : 'pointer',
+            background: listening ? GREEN : 'rgba(124,59,255,.16)', opacity: transcribing ? 0.5 : 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: listening ? `0 0 26px ${GREEN}88` : 'none', transition: 'all .18s' }}>
           {listening ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 26 }}>
