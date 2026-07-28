@@ -871,11 +871,11 @@ export function WeeklyForecastPage() {
             </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 1180, tableLayout: 'fixed' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 60 + (ctx.cols.length * 150), tableLayout: 'fixed' }}>
               <thead>
                 <tr>
-                  <th style={ttTh}>DAY \ TIME</th>
-                  {ctx.cols.map((p) => <th key={p.id} style={{ ...ttTh, color: RED }}>{hhmm(p.starts_at)}<br />{hhmm(p.ends_at)}</th>)}
+                  <th style={{ ...ttTh, width: 58 }}>DAY \ TIME</th>
+                  {ctx.cols.map((p) => <th key={p.id} style={{ ...ttTh, color: RED, width: (p.type && p.type !== 'teaching') ? 34 : 150 }}>{hhmm(p.starts_at)}<br />{hhmm(p.ends_at)}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -890,10 +890,10 @@ export function WeeklyForecastPage() {
                       }
                       const subj = ctx.subjectLabel(d.n, p.id);
                       return (
-                        <td key={p.id} style={{ border: `1px solid ${INK}`, padding: '5px 6px', verticalAlign: 'top' }}>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: subj ? BLUE : MUTED2, marginBottom: 2, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{subj || '—'}</div>
-                          <textarea value={cellMap[`${d.n}_${p.id}`] || ''} onChange={(e) => setCell(d.n, p.id, e.target.value)} placeholder="…" rows={2}
-                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'none', fontSize: 11, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.3 }} />
+                        <td key={p.id} style={{ border: `1px solid ${INK}`, padding: '7px 9px', verticalAlign: 'top', minHeight: 62 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: subj ? BLUE : MUTED2, marginBottom: 4, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{subj || '—'}</div>
+                          <textarea value={cellMap[`${d.n}_${p.id}`] || ''} onChange={(e) => setCell(d.n, p.id, e.target.value)} placeholder="…" rows={3}
+                            style={{ width: '100%', border: 'none', outline: 'none', resize: 'vertical', minHeight: 44, fontSize: 12.5, color: INK, fontFamily: FONT, background: 'transparent', lineHeight: 1.4 }} />
                         </td>
                       );
                     })}
