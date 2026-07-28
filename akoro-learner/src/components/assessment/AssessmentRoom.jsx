@@ -5,8 +5,7 @@ import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
-import ProctorMonitor from './ProctorMonitor.jsx';
-import AssessmentChat from './AssessmentChat.jsx';
+import VoiceExam from './VoiceExam.jsx';
 import { XIcon } from '../common/Icons.jsx';
 
 /**
@@ -50,7 +49,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   };
 
   // Voice I/O over the same socket — auto-submits the spoken answer.
-  const { listening, interim, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
+  const { listening, interim, speaking, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
     wsRef,
     ttsVoice: "alloy",
     onTranscript: (text) => submitAnswer(text),
@@ -128,6 +127,11 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
 
   // ── Identity registration → start ──────────────────────────
   const registerAndStart = () => {
+    // This tap is the user gesture that unlocks TTS playback — prime it now and
+    // run the exam in voice-agent mode (questions read aloud automatically).
+    primeAudio();
+    setVoiceMode(true);
+    spokenRef.current = blocks.length;
     const img = captureReference();
     if (!img) { _beginExam(); return; }   // no camera — proceed without identity
     setRefSaving(true);
@@ -227,23 +231,14 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
           ⚠ {terminated.reason} This attempt has been flagged for review.
         </div>
       )}
-      <div style={{ display:"flex", gap:14, flexWrap:"wrap", alignItems:"flex-start", height:"100%" }}>
-        <div style={{ flex:"1 1 280px", maxWidth:360 }}>
-          <ProctorMonitor
-            videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
-            probability={proctor.probability} level={proctor.level} escalations={proctor.escalations}
-            frameW={FRAME_W} frameH={FRAME_H} />
-        </div>
-        <div style={{ flex:"2 1 380px", minWidth:300, height:"100%", minHeight:420,
-          background:"rgba(255,255,255,.02)", borderRadius:16, border:"1px solid rgba(255,255,255,.06)", overflow:"hidden" }}>
-          <AssessmentChat
-            blocks={blocks} input={input} onInputChange={setInput} onSend={handleSend}
-            loading={loading} disabled={!ready || Boolean(terminated)} progress={progress}
-            voiceMode={voiceMode} onToggleVoiceMode={toggleVoiceMode}
-            listening={listening} interim={interim}
-            onToggleListening={listening ? stopListening : startListening} />
-        </div>
-      </div>
+      <VoiceExam
+        videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
+        proctor={proctor} frameW={FRAME_W} frameH={FRAME_H}
+        blocks={blocks} progress={progress}
+        listening={listening} interim={interim} speaking={speaking}
+        loading={loading} disabled={!ready || Boolean(terminated)}
+        onToggleListening={listening ? stopListening : startListening}
+        input={input} onInputChange={setInput} onSend={handleSend} />
     </Shell>
   );
 }
