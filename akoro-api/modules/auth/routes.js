@@ -63,8 +63,13 @@ const portalUrl = (portal) =>
   : FRONTEND_URL;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 
-const ACCESS_TTL_SECS  = 15 * 60;        // 15 minutes
-const REFRESH_TTL_SECS = 7 * 24 * 3600;  // 7 days
+// Access token stays SHORT (stateless, can't be revoked until expiry) — a long
+// one is a security downgrade, not better UX. What actually keeps users signed
+// in is the REFRESH token: it's server-tracked/revocable, rotates on every use,
+// and re-extends, so an ACTIVE user never gets logged out. The refresh TTL is
+// therefore the "remember me for inactive users" window — default 30 days.
+const ACCESS_TTL_SECS  = Math.max(300,  parseInt(process.env.ACCESS_TTL_SECS  ?? String(15 * 60),        10)); // 15 min
+const REFRESH_TTL_SECS = Math.max(3600, parseInt(process.env.REFRESH_TTL_SECS ?? String(30 * 24 * 3600), 10)); // 30 days
 const ALLOWED_ALGS     = ["RS256"];       // whitelist — never HS256 / none
 
 // Fall back to HS256 with a secret in dev when no RSA keys provided
