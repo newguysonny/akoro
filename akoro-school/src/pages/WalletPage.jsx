@@ -49,22 +49,14 @@ export default function WalletPage() {
 
   return (
     <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance">
-      {/* Balance cards */}
+      {/* Single school balance — AI on the school website is funded here. */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 20 }}>
-        {schoolAcc && <BalanceCard label="School balance" balance={schoolAcc.balance} accent={AMBER} icon={WalletIcon} />}
-        {userAcc && <BalanceCard label="My balance" balance={userAcc.balance} accent={GREEN} icon={Coins} />}
+        <BalanceCard label="School balance" balance={(schoolAcc || userAcc)?.balance ?? data?.balance ?? 0} accent={AMBER} icon={WalletIcon} />
       </div>
 
-      {/* Top-up */}
+      {/* Top-up (always the school wallet) */}
       <div style={card}>
         <div style={cardTitle}><Plus size={16} /> Top up</div>
-        {schoolAcc && userAcc && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {[['school', 'School wallet'], ['user', 'My wallet']].map(([v, l]) => (
-              <button key={v} onClick={() => setTarget(v)} style={{ ...pill, ...(target === v ? pillOn : {}) }}>{l}</button>
-            ))}
-          </div>
-        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {COIN_PRESETS.map((c) => (
             <button key={c} onClick={() => setCoins(c)} style={{ ...pill, ...(Number(coins) === c ? pillOn : {}) }}>

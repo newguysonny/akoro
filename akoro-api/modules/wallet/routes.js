@@ -26,6 +26,19 @@ const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
 const LOW_BALANCE = Math.max(0, Number(process.env.COIN_LOW_BALANCE ?? 100));
 
+// Redirect a top-up back to the portal it was started from — not always the
+// learner app. Driven by the X-Akoro-Portal header each frontend sends.
+function walletFrontend(req) {
+  const portal = String(req.headers["x-akoro-portal"] || "").toLowerCase();
+  const byPortal = {
+    school:       process.env.SCHOOL_FRONTEND_URL,
+    school_admin: process.env.SCHOOL_FRONTEND_URL,
+    instructor:   process.env.INSTRUCTOR_FRONTEND_URL || process.env.INSTRUCTOR_URL || process.env.INSTRUCTOR_APP_URL,
+    admin:        process.env.ADMIN_FRONTEND_URL,
+  };
+  return byPortal[portal] || process.env.FRONTEND_URL || process.env.APP_URL || "";
+}
+
 // Resolve the school this user administers (for school-wallet actions).
 async function mySchoolId(userId) {
   const { data } = await db.from("school_profiles").select("id")
@@ -121,7 +134,7 @@ router.post("/topup/init", authenticateToken, async (req, res) => {
     const init = await initializeTransaction({
       email, amount_kobo: kobo, reference,
       metadata: { purpose: "coin_topup", owner_type: ownerType, owner_id: ownerId, coins, by: req.user.id },
-      callback_url: `${process.env.FRONTEND_URL || process.env.APP_URL || ""}/wallet?ref=${reference}`,
+      callback_url: `${walletFrontend(req)}/wallet?ref=${reference}`,
     });
     res.json({ success: true, data: { authorization_url: init.authorization_url, reference, coins, amountNaira: kobo / 100 } });
   } catch (e) { res.status(500).json({ error: e.message }); }

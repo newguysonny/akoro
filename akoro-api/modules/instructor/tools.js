@@ -350,7 +350,9 @@ router.post("/checkout", authenticateToken, requireRole(["instructor", "teacher"
       email,
       amount_kobo:  tool.price_kobo,
       reference,
-      callback_url: `${INSTRUCTOR_APP_URL}/marketplace?tool_ref=${reference}`,
+      // Return to the portal that started the purchase (school app buys tools
+      // too), not always the instructor app. Both apps read ?tool_ref on /marketplace.
+      callback_url: `${(String(req.headers["x-akoro-portal"] || "").toLowerCase().startsWith("school") ? (process.env.SCHOOL_FRONTEND_URL || INSTRUCTOR_APP_URL) : INSTRUCTOR_APP_URL)}/marketplace?tool_ref=${reference}`,
       metadata: { instructor_id: instructorId, tool_id: toolId, tool_name: tool.name, kind: "platform_tool" },
     });
 

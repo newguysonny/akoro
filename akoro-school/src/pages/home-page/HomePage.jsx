@@ -24,8 +24,16 @@ export default function HomePage() {
   const [stats,    setStats]    = useState(null);
   const [profile,  setProfile]  = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [coins,    setCoins]    = useState(null);   // school coin balance
   const [loading,  setLoading]  = useState(true);
   const [toast,    setToast]    = useState(null);
+
+  useEffect(() => {
+    apiGet('/api/wallet').then((r) => {
+      const school = (r.data?.accounts || []).find((a) => a.kind === 'school');
+      setCoins(school ? school.balance : (r.data?.balance ?? 0));
+    }).catch(() => setCoins(0));
+  }, []);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -89,6 +97,9 @@ export default function HomePage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 16, marginBottom: 28,
         }}>
+          <div onClick={() => navigate('/wallet')} style={{ cursor: 'pointer' }} title="View wallet & top up">
+            <StatCard icon={Wallet} label="Coin Balance" value={coins == null ? '—' : `🪙 ${coins.toLocaleString()}`} sub="tap to top up" color={AMBER} loading={coins == null} />
+          </div>
           <StatCard icon={Users}          label="Students"    value={(stats?.total_students ?? 0).toLocaleString()} sub="across the school" color={BLUE}   loading={loading} />
           <StatCard icon={GraduationCap}  label="Instructors" value={stats?.total_instructors ?? 0}                 sub="teaching staff"    color={AMBER}  loading={loading} />
           <StatCard icon={BookOpen}       label="Courses"     value={stats?.total_courses ?? 0}                     sub="published & draft" color={PURPLE} loading={loading} />
