@@ -18,6 +18,8 @@ import { useRef, useState, useCallback, useEffect } from "react";
 export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   const [listening, setListening] = useState(false);
   const [interim,   setInterim]   = useState("");
+  const [speaking,  setSpeaking]  = useState(false);   // agent TTS is playing
+  const [voiceError, setVoiceError] = useState("");    // surfaced STT/TTS error
 
   const captureRef  = useRef(null);   // { stop() }
   const readyRef    = useRef(false);  // server STT connection open
@@ -41,6 +43,8 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
     if (!audioRef.current) {
       const a = new Audio();
       a.playsInline = true;
+      a.addEventListener("ended", () => setSpeaking(false));
+      a.addEventListener("pause", () => { if (a.ended || !a.src) setSpeaking(false); });
       audioRef.current = a;
     }
     return audioRef.current;
@@ -55,6 +59,7 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   }, [ensureAudioEl]);
 
   const stopSpeaking = useCallback(() => {
+    setSpeaking(false);
     wsRef.current?.emit("stop_tts_stream");
     if (audioRef.current) {
       audioRef.current.pause();
@@ -88,12 +93,14 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
     }, { once: true });
 
     audio.play().catch(() => {});
+    setSpeaking(true);
     wsRef.current.emit("start_tts_stream", { text, voice: ttsVoice, seq });
   }, [wsRef, ttsVoice, stopSpeaking, ensureAudioEl]);
 
   /* ── Mic capture (PCM16 mono @24k — what the server expects) ─ */
   const startListening = useCallback(async () => {
     if (listening) return;
+    setVoiceError("");
     primeAudio();     // user gesture — unlock TTS playback for this session
     stopSpeaking();   // barge-in
     try {
@@ -173,7 +180,7 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
       setListening(false); setInterim("");
       if (transcript?.trim()) onTranscript?.(transcript.trim());
     };
-    const onVoiceErr = () => { setListening(false); setInterim(""); };
+    const onVoiceErr = (e) => { setListening(false); setInterim(""); setSpeaking(false); if (e?.message) setVoiceError(e.message); };
 
     const onChunk = ({ chunk, seq }) => {
       if (seq !== seqRef.current) return;
@@ -213,5 +220,5 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   // Cleanup on unmount.
   useEffect(() => () => { captureRef.current?.stop(); stopSpeaking(); }, [stopSpeaking]);
 
-  return { listening, interim, startListening, stopListening, speak, stopSpeaking, primeAudio };
+  return { listening, interim, speaking, voiceError, startListening, stopListening, speak, stopSpeaking, primeAudio };
 }

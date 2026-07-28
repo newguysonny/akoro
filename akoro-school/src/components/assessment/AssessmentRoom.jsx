@@ -5,8 +5,8 @@ import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 import { useProctoring } from '../../hooks/useProctoring.js';
 import { useVoiceSession } from '../../hooks/useVoiceSession.js';
-import ProctorMonitor from './ProctorMonitor.jsx';
-import AssessmentChat from './AssessmentChat.jsx';
+import { useVoiceAnswer } from '../../hooks/useVoiceAnswer.js';
+import VoiceExam from './VoiceExam.jsx';
 import { X as XIcon } from 'lucide-react';
 
 /**
@@ -37,23 +37,33 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
   const [refSaving, setRefSaving] = useState(false);
 
   const [voiceMode, setVoiceMode] = useState(false);
+  const [lastAnswer, setLastAnswer] = useState("");   // echo the just-sent answer
   const wsRef = useRef(null);
   const assessIdRef = useRef(null);
-  const spokenRef = useRef(0);   // index of last block spoken aloud
+  const pendingRef = useRef(null);   // answer awaiting a server turn (survives reconnects)
+  const spokenRef = useRef(0);       // index of last block spoken aloud
 
-  // Submit one answer (shared by text composer and voice transcript). The
-  // server echoes the user block back in assessment_turn, so we don't add it
-  // optimistically — just emit.
+  // Submit one answer (shared by text composer and voice transcript). We queue
+  // it so a socket reconnect (which drops the server-side binding) can re-send
+  // it after resume instead of silently losing it. The server echoes the user
+  // block back in assessment_turn, so we don't add it optimistically.
   const submitAnswer = (text) => {
     const t = (text || "").trim();
-    if (!t || !ready) return;
+    if (!t || !assessIdRef.current) return;   // no live session yet
+    pendingRef.current = t;
+    setLastAnswer(t);
+    setLoading(true);
     wsRef.current?.emit("assessment_message", { message: t });
   };
 
-  // Voice I/O over the same socket — auto-submits the spoken answer.
-  const { listening, interim, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
+  // TTS (reads questions aloud) over the socket; STT via record→transcribe.
+  const { speaking, speak, stopSpeaking, primeAudio } = useVoiceSession({
     wsRef,
     ttsVoice: "alloy",
+    onTranscript: () => {},
+  });
+  // Reliable mic: record the answer, transcribe on tap-to-send, then submit.
+  const { recording, transcribing, micError, start: startListening, stop: stopListening } = useVoiceAnswer({
     onTranscript: (text) => submitAnswer(text),
   });
 
@@ -87,6 +97,9 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
   });
 
   useEffect(() => {
+    // Declare the portal so the socket auth middleware picks the student
+    // session cookie — voice STT/TTS require an authenticated socket
+    // (socket.data.user), unlike the text Q&A which does not.
     const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true, auth: { portal: "school" } });
     wsRef.current = ws;
 
@@ -108,8 +121,14 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
     ws.on("assessment_typing", () => setLoading(true));
     ws.on("assessment_turn", d => {
       setLoading(false);
+      pendingRef.current = null;   // answer landed
       if (d.blocks?.length) setBlocks(prev => [...prev, ...d.blocks]);
       if (d.progress) setProgress(d.progress);
+    });
+    // A reconnect re-binds the socket to the live session; re-send any answer
+    // that was dropped mid-flight so the exam never stalls on a network blip.
+    ws.on("assessment_resumed", () => {
+      if (pendingRef.current) ws.emit("assessment_message", { message: pendingRef.current });
     });
     ws.on("assessment_summary", d => { setSummary(d); setPhase("summary"); setLoading(false); });
     ws.on("assessment_terminated", d => { setTerminated(d); });
@@ -129,6 +148,11 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
 
   // ── Identity registration → start ──────────────────────────
   const registerAndStart = () => {
+    // This tap is the user gesture that unlocks TTS playback — prime it now and
+    // run the exam in voice-agent mode (questions read aloud automatically).
+    primeAudio();
+    setVoiceMode(true);
+    spokenRef.current = blocks.length;
     const img = captureReference();
     if (!img) { _beginExam(); return; }   // no camera — proceed without identity
     setRefSaving(true);
@@ -144,7 +168,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
   };
 
   const handleSend = () => {
-    if (!input.trim() || loading || !ready) return;
+    if (!input.trim() || loading || !assessIdRef.current) return;
     submitAnswer(input);
     setInput("");
   };
@@ -228,23 +252,14 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, st
           ⚠ {terminated.reason} This attempt has been flagged for review.
         </div>
       )}
-      <div style={{ display:"flex", gap:14, flexWrap:"wrap", alignItems:"flex-start", height:"100%" }}>
-        <div style={{ flex:"1 1 280px", maxWidth:360 }}>
-          <ProctorMonitor
-            videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
-            probability={proctor.probability} level={proctor.level} escalations={proctor.escalations}
-            frameW={FRAME_W} frameH={FRAME_H} />
-        </div>
-        <div style={{ flex:"2 1 380px", minWidth:300, height:"100%", minHeight:420,
-          background:"rgba(255,255,255,.02)", borderRadius:16, border:"1px solid rgba(255,255,255,.06)", overflow:"hidden" }}>
-          <AssessmentChat
-            blocks={blocks} input={input} onInputChange={setInput} onSend={handleSend}
-            loading={loading} disabled={!ready || Boolean(terminated)} progress={progress}
-            voiceMode={voiceMode} onToggleVoiceMode={toggleVoiceMode}
-            listening={listening} interim={interim}
-            onToggleListening={listening ? stopListening : startListening} />
-        </div>
-      </div>
+      <VoiceExam
+        videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
+        proctor={proctor} frameW={FRAME_W} frameH={FRAME_H}
+        blocks={blocks} progress={progress} lastAnswer={lastAnswer} voiceError={micError}
+        listening={recording} interim="" transcribing={transcribing} speaking={speaking}
+        loading={loading} disabled={!assessIdRef.current || Boolean(terminated)}
+        onToggleListening={recording ? stopListening : () => { stopSpeaking(); startListening(); }}
+        input={input} onInputChange={setInput} onSend={handleSend} />
     </Shell>
   );
 }
@@ -254,7 +269,7 @@ function Shell({ children, onClose, title }) {
     <div style={{ position:"fixed", inset:0, zIndex:3000, background:"#080812",
       display:"flex", flexDirection:"column", fontFamily:"'Nunito',sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-        padding:"52px 14px 12px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
+        padding:"calc(env(safe-area-inset-top, 0px) + 12px) 14px 12px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
         <span style={{ fontSize:14, fontWeight:900, color:"#F1F5F9" }}>{title}</span>
         <div onClick={onClose} style={{ width:34, height:34, borderRadius:"50%", background:"rgba(255,255,255,.07)",
           display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
