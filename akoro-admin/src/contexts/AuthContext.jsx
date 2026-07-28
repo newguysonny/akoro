@@ -130,7 +130,9 @@ export function AuthProvider({ children }) {
     if (!getStoredUser()) { setInitializing(false); return; }
     fetch(`${API}/api/auth/me`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'admin' } })
       .then(r => r.json())
-      .then(({ data }) => { if (data?.id) saveUser(data); else clearUser(); })
+      // Expired access token → /me 401 with no data. Try the (30-day) refresh
+      // cookie BEFORE clearing, so an inactive user isn't logged out at 15 min.
+      .then(({ data }) => { if (data?.id) saveUser(data); else refresh(); })
       .catch(() => refresh())
       .finally(() => setInitializing(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
