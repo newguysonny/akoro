@@ -260,7 +260,7 @@ function Shell({ children, onClose, title }) {
     <div style={{ position:"fixed", inset:0, zIndex:3000, background:"#080812",
       display:"flex", flexDirection:"column", fontFamily:"'Nunito',sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-        padding:"52px 14px 12px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
+        padding:"calc(env(safe-area-inset-top, 0px) + 12px) 14px 12px", borderBottom:"1px solid rgba(255,255,255,.06)" }}>
         <span style={{ fontSize:14, fontWeight:900, color:"#F1F5F9" }}>{title}</span>
         <div onClick={onClose} style={{ width:34, height:34, borderRadius:"50%", background:"rgba(255,255,255,.07)",
           display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
