@@ -55,7 +55,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   };
 
   // Voice I/O over the same socket — auto-submits the spoken answer.
-  const { listening, interim, speaking, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
+  const { listening, interim, speaking, voiceError, startListening, stopListening, speak, stopSpeaking, primeAudio } = useVoiceSession({
     wsRef,
     ttsVoice: "alloy",
     onTranscript: (text) => submitAnswer(text),
@@ -91,7 +91,10 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   });
 
   useEffect(() => {
-    const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true });
+    // Declare the portal so the socket auth middleware picks the student
+    // session cookie — voice STT/TTS require an authenticated socket
+    // (socket.data.user), unlike the text Q&A which does not.
+    const ws = io(API, { transports: ["websocket", "polling"], withCredentials: true, auth: { portal: "student" } });
     wsRef.current = ws;
 
     // Mobile connections flap: on every (re)connect, re-bind the live session
@@ -246,7 +249,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
       <VoiceExam
         videoRef={videoRef} canvasRef={canvasRef} status={status} signals={signals}
         proctor={proctor} frameW={FRAME_W} frameH={FRAME_H}
-        blocks={blocks} progress={progress} lastAnswer={lastAnswer}
+        blocks={blocks} progress={progress} lastAnswer={lastAnswer} voiceError={voiceError}
         listening={listening} interim={interim} speaking={speaking}
         loading={loading} disabled={!assessIdRef.current || Boolean(terminated)}
         onToggleListening={listening ? stopListening : startListening}

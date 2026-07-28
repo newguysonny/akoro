@@ -24,7 +24,7 @@ function ringState(status, signals, proctor) {
 
 export default function VoiceExam({
   videoRef, canvasRef, status, signals, proctor, frameW, frameH,
-  blocks, progress, lastAnswer, listening, interim, speaking, loading, disabled,
+  blocks, progress, lastAnswer, voiceError, listening, interim, speaking, loading, disabled,
   onToggleListening, input, onInputChange, onSend, agentEmoji = '🎓',
 }) {
   const [showType, setShowType] = useState(false);
@@ -110,6 +110,7 @@ export default function VoiceExam({
           )}
         </button>
         <div style={{ fontSize: 12, color: '#64748B', fontWeight: 700 }}>{listening ? 'Tap to send your answer' : 'Hold a quiet space · stay in frame'}</div>
+        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}>🎙 {voiceError} — you can type your answer below instead.</div>}
 
         <button onClick={() => setShowType(s => !s)} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>
           {showType ? 'Hide typing' : 'Type instead'}
