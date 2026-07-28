@@ -30,7 +30,7 @@
 
 import OpenAI from "openai";
 import { createRealtimeTranscriber } from "./openaiRealtime.js";
-import { hasCoins, debitCoins, InsufficientCoins } from "../../lib/coins.js";
+import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
 import { coinsForTtsChars } from "../../lib/aiPricing.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -142,7 +142,8 @@ export function setupVoiceStreaming(io) {
       if (!text?.trim()) return;
       // Hard-block on empty balance; then charge per character of TTS input.
       const uid = socket.data.user.id;
-      const { ok } = await hasCoins(uid, 1);
+      const billTo = socket.data.billTo || null;   // school funds school-portal voice
+      const { ok } = await coinsAvailable({ userId: uid, billTo, min: 1 });
       if (!ok) return socket.emit("voice_error", { message: "Insufficient coin balance — top up to use voice.", code: "INSUFFICIENT_COINS" });
       const ttsVoice = VALID_VOICES.includes(voice) ? voice : "alloy";
       const input = text.slice(0, 4096);
@@ -150,7 +151,7 @@ export function setupVoiceStreaming(io) {
       ttsStreams.set(socket.id, controller);
 
       try {
-        debitCoins({ userId: uid, coins: coinsForTtsChars("tts-1", input.length), feature: "voice_tts", model: "tts-1" })
+        debitCoins({ userId: uid, coins: coinsForTtsChars("tts-1", input.length), feature: "voice_tts", model: "tts-1", billTo })
           .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] tts-stream charge failed:", e.message); });
         const response = await openai.audio.speech.create({
           model:           "tts-1",

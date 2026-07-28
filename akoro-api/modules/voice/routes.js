@@ -16,7 +16,8 @@ import multer            from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import { transcribeBufferDeepgram, hasDeepgram, grantAgentToken } from "./deepgram.js";
 import { tutorSystemPrompt } from "../adaptive-learning/chat.js";
-import { hasCoins, debitCoins, InsufficientCoins } from "../../lib/coins.js";
+import { coinsAvailable, debitCoins, InsufficientCoins } from "../../lib/coins.js";
+import { getAiBillTo } from "../../lib/aiContext.js";
 import { estimateAudioMinutes, coinsForSttMinutes, coinsForTtsChars } from "../../lib/aiPricing.js";
 
 const router  = Router();
@@ -25,15 +26,17 @@ const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25
 
 const VALID_VOICES = ["alloy","echo","fable","onyx","nova","shimmer"];
 
-// Hard-block voice AI when the wallet is empty (402 → the client prompts a top-up).
+// Hard-block voice AI when the funding wallet is empty (402 → prompt a top-up).
+// billTo (school portal → school account) comes from the AI context set in
+// authenticateToken; else the user's own hybrid wallet.
 async function ensureVoiceCoins(req, res) {
-  const { ok } = await hasCoins(req.user.id, 1);
+  const { ok } = await coinsAvailable({ userId: req.user.id, billTo: getAiBillTo(), min: 1 });
   if (!ok) { res.status(402).json({ error: "Insufficient coin balance", code: "INSUFFICIENT_COINS" }); return false; }
   return true;
 }
 // Fire-and-forget debit so a billing hiccup never fails the voice response.
 function chargeVoice(userId, feature, model, coins) {
-  debitCoins({ userId, coins, feature, model }).catch((e) => {
+  debitCoins({ userId, coins, feature, model, billTo: getAiBillTo() }).catch((e) => {
     if (!(e instanceof InsufficientCoins)) console.warn("[coins] voice charge failed:", e.message);
   });
 }

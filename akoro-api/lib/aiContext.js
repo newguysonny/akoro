@@ -13,6 +13,7 @@ export const aiContext = new AsyncLocalStorage();
 
 export const getAiUser    = () => aiContext.getStore()?.userId ?? null;
 export const getAiFeature = () => aiContext.getStore()?.feature ?? "ai";
+export const getAiBillTo  = () => aiContext.getStore()?.billTo ?? null;
 export const runWithAiContext = (store, fn) => aiContext.run(store, fn);
 
 // Coarse feature label from the request path (for the ledger).

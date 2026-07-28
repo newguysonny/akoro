@@ -19,6 +19,7 @@ import { SergeantProctor }   from "./agents/sargeant/proctor.js";
 import { TemporalScorer }    from "./proctoring/temporalScorer.js";
 import { analyzeFrame, proctorServiceEnabled } from "./proctoring/frameAnalyzer.js";
 import db                    from "../../db.js";
+import { runWithAiContext }  from "../../lib/aiContext.js";
 
 // sessionId → { proctor, scorer, referenceImage, dbId, blocks, cheatEvents, studentId, lastFrameTs }
 const assessments = new Map();
@@ -77,7 +78,10 @@ export function setupAssessmentGateway(io) {
         return socket.emit("assessment_error", { message: "studentId and topic required" });
       try {
         const proctor = new SergeantProctor({ topic, subject, objectives, questionCount, studentName: "candidate" });
-        const { opening, questions } = await proctor.generateQuestions();
+        // Meter the assessment LLM to the right wallet: school (billTo) on a
+        // school portal, else the student (hybrid). billTo/user come off the socket.
+        const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
+        const { opening, questions } = await runWithAiContext(billCtx, () => proctor.generateQuestions());
 
         const id = `assess_${studentId}_${Date.now()}`;
         const scorer = new TemporalScorer();
@@ -200,7 +204,8 @@ export function setupAssessmentGateway(io) {
       try {
         socket.emit("assessment_typing");
         const cheatProbability = state.scorer.score().probability;
-        const turn = await state.proctor.evaluateAnswer(message, { cheatProbability });
+        const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
+        const turn = await runWithAiContext(billCtx, () => state.proctor.evaluateAnswer(message, { cheatProbability }));
 
         const newBlocks = [
           { type: "user", text: message },
@@ -274,10 +279,11 @@ async function _finalize(state, socket, id, { forcedVerdict = null } = {}) {
   state.completed = true;
   try {
     const snap = state.scorer.snapshot();
-    const summary = await state.proctor.finalVerdict({
+    const billCtx = { userId: socket.data.user?.id, feature: "assessment", billTo: socket.data.billTo };
+    const summary = await runWithAiContext(billCtx, () => state.proctor.finalVerdict({
       cheatProbability: snap.peakProbability,
       cheatEvents:      state.cheatEvents,
-    });
+    }));
     if (forcedVerdict) summary.verdict = forcedVerdict;
 
     socket.emit("assessment_summary", {

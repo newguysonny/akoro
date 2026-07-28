@@ -64,6 +64,28 @@ export async function schoolIdForUser(userId) {
   return st?.school_id ?? null;
 }
 
+/**
+ * Which account should fund AI usage on a SCHOOL portal — the school itself.
+ * Prefers a school the user administers, else the school they belong to.
+ * Returns { ownerType:'school', ownerId } or null (no school → fall back to user).
+ */
+export async function schoolBillTo(userId) {
+  if (!userId) return null;
+  const { data: owned } = await db.from("school_profiles").select("id").eq("admin_user_id", userId).limit(1).maybeSingle();
+  const schoolId = owned?.id || (await schoolIdForUser(userId));
+  return schoolId ? { ownerType: "school", ownerId: schoolId } : null;
+}
+
+/** Balance available for a charge — a specific billTo account, or the user's hybrid. */
+export async function coinsAvailable({ userId, billTo = null, min = 1 }) {
+  if (billTo) {
+    const acc = await ensureAccount(billTo.ownerType, billTo.ownerId);
+    const total = Number(acc.balance || 0);
+    return { ok: total >= min, total };
+  }
+  return hasCoins(userId, min);
+}
+
 /** Ordered accounts to draw from for a user's AI usage (own, then school). */
 export async function payerAccountsForUser(userId) {
   const accounts = [];
@@ -93,12 +115,12 @@ export async function hasCoins(userId, minCoins = 1) {
  * Throws InsufficientCoins if the combined balance can't cover it.
  * Returns { charged, model, tokensIn, tokensOut, costUsd, balances }.
  */
-export async function chargeForAI({ userId, feature, model, usage = {}, ref = null }) {
+export async function chargeForAI({ userId, feature, model, usage = {}, ref = null, billTo = null }) {
   const coins = coinsForResponseUsage(model, usage);
   const tokensIn  = usage.prompt_tokens ?? 0;
   const tokensOut = usage.completion_tokens ?? 0;
   const cost = usdCost(model, tokensIn, tokensOut, cachedTokensOf(usage));
-  return debitCoins({ userId, coins, feature, model, tokensIn, tokensOut, cost, ref });
+  return debitCoins({ userId, coins, feature, model, tokensIn, tokensOut, cost, ref, billTo });
 }
 
 /**
@@ -106,8 +128,18 @@ export async function chargeForAI({ userId, feature, model, usage = {}, ref = nu
  * rollback and a hard InsufficientCoins error. Used by chargeForAI (chat) and
  * by voice metering (audio, priced per minute / per character).
  */
-export async function debitCoins({ userId, coins, feature, model = null, tokensIn = null, tokensOut = null, cost = null, ref = null }) {
+export async function debitCoins({ userId, coins, feature, model = null, tokensIn = null, tokensOut = null, cost = null, ref = null, billTo = null }) {
   if (!coins || coins < 1) return { charged: 0, applied: [] };
+  // billTo → charge that specific account directly (e.g. a school funding its
+  // students' usage), no student-then-school hybrid.
+  if (billTo) {
+    const acc = await ensureAccount(billTo.ownerType, billTo.ownerId);
+    const meta = { feature, model, tokens_in: tokensIn, tokens_out: tokensOut, cost, ref, by: userId };
+    const { data: newBal, error } = await db.rpc("coin_debit", { p_account: acc.id, p_amount: coins, p_type: "debit", p_meta: meta });
+    if (error) throw new Error(error.message);
+    if (newBal == null) throw new InsufficientCoins(coins, Number(acc.balance || 0));
+    return { charged: coins, model, tokensIn, tokensOut, costUsd: cost, applied: [{ account: acc.id, kind: billTo.ownerType, took: coins, balanceAfter: newBal }] };
+  }
   const accounts = await payerAccountsForUser(userId);
   let remaining = coins;
   const applied = [];

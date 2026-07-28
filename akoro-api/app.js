@@ -30,6 +30,7 @@ import {
 
 import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
+import { schoolBillTo }            from "./lib/coins.js";
 import { SITE_BASE_DOMAINS }       from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 
@@ -116,6 +117,13 @@ global.io = io;   // battle worker uses global.io
 // socket.data.user instead of trusting client-supplied ids.
 io.use(async (socket, next) => {
   socket.data.user = await authenticateSocket(socket);
+  // AI billing target: on a school portal the school funds usage (billTo);
+  // elsewhere the user's own wallet (student-first hybrid) is used.
+  const portal = socket.handshake?.auth?.portal || socket.handshake?.query?.portal || null;
+  socket.data.portal = portal;
+  socket.data.billTo = (["school", "school_admin"].includes(portal) && socket.data.user)
+    ? await schoolBillTo(socket.data.user.id).catch(() => null)
+    : null;
   next();
 });
 

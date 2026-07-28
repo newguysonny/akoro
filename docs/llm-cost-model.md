@@ -13,9 +13,18 @@
 - Balances are **integer coins**, held per **account** (`coin_accounts`): one per
   user, one per school. Every movement is an append-only row in
   `coin_transactions`.
-- **Hybrid funding:** an AI charge debits the user's **own** wallet first, then
-  their **school's** wallet for any remainder. Schools can also allocate coins to
-  students; standalone learners fund themselves.
+- **Who pays depends on the portal.**
+  - **School portal** (`X-Akoro-Portal: school`, or a socket with
+    `auth.portal:'school'`) — usage is **funded by the school account** directly
+    (`billTo`). So a student using the **school website** (incl. the proctored
+    assessment: questions, grading, TTS and answer transcription) is paid for by
+    the **school**, not the student.
+  - **Student portal** (learner app) — **hybrid**: the student's **own** wallet
+    first, then their school's for any remainder. Schools can also allocate coins
+    to students; standalone learners fund themselves.
+- The billing target is set once per request (`authenticateToken`) / per socket
+  (`io.use`) as an `AsyncLocalStorage` `billTo`, so every AI call in that
+  request/connection is charged to the right account automatically.
 - **Zero balance = hard block.** AI calls refuse before spending (HTTP `402` /
   socket `INSUFFICIENT_COINS`) and the UI prompts a top-up. No overdraft.
 

@@ -30,6 +30,10 @@ import { randomUUID }                 from "crypto";
 import { createHash }                 from "crypto";
 import db                             from "../../db.js";
 import { runWithAiContext, featureForRequest } from "../../lib/aiContext.js";
+import { schoolBillTo } from "../../lib/coins.js";
+
+// Portals where AI usage is funded by the SCHOOL, not the individual user.
+const SCHOOL_PORTALS = ["school", "school_admin"];
 import { strictLimit, refreshLimit }  from "../../middleware/security.js";
 import { generateSecret, otpauthURL, verifyTOTP } from "./totp.js";
 import {
@@ -416,8 +420,10 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     req.tokenJti = decoded.jti;
     req.tokenExp = decoded.exp;
     // Run the rest of the request inside the AI-metering context so any AI call
-    // it makes is billed to this user's wallet (see lib/aiModel.js).
-    return runWithAiContext({ userId: user.id, feature: featureForRequest(req) }, () => next());
+    // it makes is billed correctly. On a SCHOOL portal the school funds the
+    // usage (billTo); the student portal keeps the student-first hybrid.
+    const billTo = SCHOOL_PORTALS.includes(portalOf(req)) ? await schoolBillTo(user.id) : null;
+    return runWithAiContext({ userId: user.id, feature: featureForRequest(req), billTo }, () => next());
   } catch {
     return res401(res, "Could not load user");
   }

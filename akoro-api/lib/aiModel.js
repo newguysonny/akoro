@@ -8,7 +8,7 @@
  * OPENAI_MODEL; it defaults to the tutor-chat model.
  */
 import OpenAI from "openai";
-import { hasCoins, chargeForAI, InsufficientCoins } from "./coins.js";
+import { coinsAvailable, chargeForAI, InsufficientCoins } from "./coins.js";
 import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS } from "./aiPricing.js";
 
@@ -29,26 +29,28 @@ async function meteredCreate(params = {}) {
   const userId  = params.__userId  ?? store.userId  ?? null;
   const feature = params.__feature ?? store.feature ?? "ai";
   const ref     = params.__ref     ?? null;
+  const billTo  = params.__billTo  ?? store.billTo  ?? null;   // e.g. school funds it
   const clean = { ...params };
-  delete clean.__userId; delete clean.__feature; delete clean.__ref;
+  delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
   // Cost guardrail: bound output when a caller omits max_tokens (0 = off).
   if (AI_DEFAULT_MAX_TOKENS > 0 && clean.max_tokens == null && clean.max_completion_tokens == null) {
     clean.max_tokens = AI_DEFAULT_MAX_TOKENS;
   }
 
-  if (userId) {
-    const { ok, total } = await hasCoins(userId, 1);
+  const bills = Boolean(userId || billTo);
+  if (bills) {
+    const { ok, total } = await coinsAvailable({ userId, billTo, min: 1 });
     if (!ok) throw new InsufficientCoins(1, total);
   }
 
   const model = clean.model || OPENAI_MODEL;
-  const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref })
+  const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref, billTo })
     .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
   // Streamed calls: ask OpenAI for exact usage in a final chunk, then tee it
   // out of the stream and charge when iteration completes. Falls back to an
   // estimate if no usage chunk arrives (e.g. early abort).
-  if (userId && clean.stream) {
+  if (bills && clean.stream) {
     const source = await rawClient.chat.completions.create({
       ...clean,
       stream_options: { include_usage: true, ...(clean.stream_options || {}) },
@@ -58,7 +60,7 @@ async function meteredCreate(params = {}) {
   }
 
   const res = await rawClient.chat.completions.create(clean);
-  if (userId && res?.usage) charge(res.usage);
+  if (bills && res?.usage) charge(res.usage);
   return res;
 }
 
@@ -93,10 +95,11 @@ async function meteredEmbeddings(params = {}) {
   const store   = aiContext.getStore() || {};
   const userId  = params.__userId  ?? store.userId  ?? null;
   const feature = params.__feature ?? store.feature ?? "embedding";
-  const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref;
+  const billTo  = params.__billTo  ?? store.billTo  ?? null;
+  const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
   const res = await rawClient.embeddings.create(clean);
-  if (userId && res?.usage) {
-    chargeForAI({ userId, feature, model: clean.model || "text-embedding-3-small", usage: { prompt_tokens: res.usage.prompt_tokens ?? res.usage.total_tokens ?? 0, completion_tokens: 0 } })
+  if ((userId || billTo) && res?.usage) {
+    chargeForAI({ userId, feature, billTo, model: clean.model || "text-embedding-3-small", usage: { prompt_tokens: res.usage.prompt_tokens ?? res.usage.total_tokens ?? 0, completion_tokens: 0 } })
       .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] embed charge failed:", e.message); });
   }
   return res;
