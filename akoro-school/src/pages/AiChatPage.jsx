@@ -5,7 +5,7 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Sparkles, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import TeacherToolSheet from './ai-chat/TeacherToolSheet.jsx';
@@ -206,7 +206,7 @@ export default function AiChatPage() {
       {/* Header */}
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: WHITE, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div style={{ width: 40, height: 40, borderRadius: 11, background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Sparkles size={22} color={WHITE} />
+          <Bot size={22} color={WHITE} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>AI Study Assistant</div>
