@@ -8,8 +8,8 @@
  * anything at the application layer.
  */
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
-import { requireApiKey } from "./apiKeyAuth.js";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { requireApiKey, hashKey } from "./apiKeyAuth.js";
 import { vdb } from "./db.js";
 import { creditRedemption, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
 
@@ -25,10 +25,16 @@ const perKeyLimit = rateLimit({
   max: 300,   // generous for real redemption traffic; raise via env if needed
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
+  // Key on the API key itself. Two details that matter:
+  //  - hash it, so raw secrets never sit in the rate-limit store;
+  //  - fall back through ipKeyGenerator(), which normalises IPv6 to a /64
+  //    subnet. Returning a bare req.ip would let an IPv6 caller hop addresses
+  //    within their prefix to bypass the limit (ERR_ERL_KEY_GEN_IPV6).
+  keyGenerator: (req, res) => {
     const auth = req.headers["authorization"] || "";
     const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : null;
-    return bearer || req.headers["x-api-key"] || req.ip;
+    const raw = bearer || req.headers["x-api-key"];
+    return raw ? `k:${hashKey(raw)}` : ipKeyGenerator(req.ip);
   },
   message: { valid: false, reason: "rate_limited" },
 });
