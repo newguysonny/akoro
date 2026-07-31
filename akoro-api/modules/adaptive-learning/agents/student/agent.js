@@ -15,17 +15,19 @@ import {
   retrieveCombinedContext,
   saveAgentKnowledge,
   saveStudentKnowledge,
+  subjectMastery,
   embed,
 } from "./knowledge.js";
 
 import { openai } from "../../../../lib/aiModel.js";
 
 export class StudentAgent {
-  constructor({ agentId, studentId, teacherId = null, agentRecord }) {
+  constructor({ agentId, studentId, teacherId = null, agentRecord, subject = null }) {
     this.agentId    = agentId;
     this.studentId  = studentId;
     this.teacherId  = teacherId;  // null if no teacher training
     this.agentRecord = agentRecord;
+    this.subject     = subject;   // scopes how smart the agent ACTS (per subject)
 
     // Track what's learned this session (saved at end)
     this.sessionKnowledgeBuffer = [];
@@ -58,8 +60,17 @@ export class StudentAgent {
       `${h.role === "human_teacher" ? "Teacher" : "Student Agent"}: ${h.content}`
     ).join("\n");
 
-    const level  = this.agentRecord?.level || 1;
-    const sessions = this.agentRecord?.total_sessions || 0;
+    // Intelligence is scoped to THIS subject. The stored `level` is global, so
+    // an agent made expert by Biology would otherwise act expert in Chemistry
+    // it has never been taught. Fall back to the global level when we have no
+    // subject (or no subject knowledge yet).
+    const globalLevel = this.agentRecord?.level || 1;
+    const sessions    = this.agentRecord?.total_sessions || 0;
+    let level = globalLevel, mastery = null;
+    if (this.subject) {
+      mastery = await subjectMastery(this.agentId, this.subject).catch(() => null);
+      if (mastery) level = mastery.chunks > 0 ? mastery.level : 1;
+    }
 
     const systemPrompt = `You are a Student Agent learning about "${topic}".
 You are unique — you have your own accumulated knowledge from ${sessions} past learning sessions.
@@ -68,13 +79,14 @@ You are unique — you have your own accumulated knowledge from ${sessions} past
 Understanding: ${u}%
 Confusion: ${c}%
 Phase: ${phaseLabel}
-Agent level: ${level} (grows the more you are taught)
+Agent level in ${this.subject || "this subject"}: ${level} (grows the more you are taught in THIS subject)${mastery ? `
+Knowledge you hold in ${this.subject}: ${mastery.chunks} facts across ${mastery.topics} topic(s), avg confidence ${mastery.avgConfidence}%` : ""}
 
 ## Your accumulated knowledge context
 ${context.contextString || "No prior knowledge on this topic yet — start fresh and curious."}
 
 ## Your personality (evolves with level)
-${this._getPersonality(level, understanding, sessions)}
+${this._getPersonality(level, understanding, sessions, mastery)}
 
 ## Rules
 - You are the STUDENT — never explain things to the teacher
@@ -237,7 +249,15 @@ Return shouldSave: false if the exchange was just small talk or too vague.`,
   }
 
   // ── Agent personality evolves with level ──────────────────
-  _getPersonality(level, understanding, sessions) {
+  _getPersonality(level, understanding, sessions, mastery = null) {
+    // Brand new IN THIS SUBJECT — even a globally experienced agent must start
+    // as a curious beginner in a subject it has never been taught.
+    if (mastery && mastery.chunks === 0) {
+      return `You have never been taught ${this.subject || "this subject"} before.
+You know NOTHING about it yet — do not pretend otherwise. Be curious and eager,
+ask lots of basic questions, and admit plainly when you don't know something.
+(You may have learned other subjects, but that knowledge does not apply here.)`;
+    }
     if (sessions === 0) {
       return `You are brand new — curious and eager but know very little.
 Ask lots of basic questions. Show genuine wonder at new things.`;

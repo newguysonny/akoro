@@ -39,6 +39,7 @@ const MGMT_NAV = [
     { label: 'Subjects',        to: '/mgmt/subjects' },
     { label: 'Class Timetable', to: '/mgmt/timetable' },
     { label: 'Weekly Forecast', to: '/mgmt/weekly-forecast' },
+    { label: 'Review AI Lessons', to: '/lesson-review' },
     { label: 'Daily Schedule',  to: '/mgmt/daily-schedule' },
   ] },
 ];

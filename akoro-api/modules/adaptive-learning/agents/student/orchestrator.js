@@ -101,6 +101,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       studentId,
       teacherId,
       agentRecord,
+      subject:     this.subject,   // scope expressed intelligence to this subject
     });
 
     // Load initial state
