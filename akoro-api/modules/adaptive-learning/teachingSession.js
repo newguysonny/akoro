@@ -202,4 +202,76 @@ router.get("/sessions/:sessionId/history", authenticateToken, async (req, res) =
   }
 });
 
+/* ═══════════════════════════════════════════════════════════════
+   LESSON LADDER REVIEW  (teachers / school admins)
+   Async quality loop — reviewing NEVER blocks a learner. A pending
+   ladder is already being served; approving/editing it just improves
+   what every FUTURE learner on that topic receives.
+═══════════════════════════════════════════════════════════════ */
+const REVIEW_ROLES = ["instructor", "teacher", "school", "school_admin", "admin"];
+
+// Schools the caller may review for (admin of, or teaches at).
+async function reviewableSchoolIds(userId) {
+  const ids = new Set();
+  const { data: owned } = await db.from("school_profiles").select("id").eq("admin_user_id", userId);
+  (owned || []).forEach((s) => ids.add(s.id));
+  const { data: taught } = await db.from("school_teachers").select("school_id").eq("teacher_id", userId);
+  (taught || []).forEach((s) => s.school_id && ids.add(s.school_id));
+  return [...ids];
+}
+
+// GET /teaching/ladders?status=pending_review — the review queue.
+router.get("/ladders", authenticateToken, async (req, res) => {
+  try {
+    if (!REVIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not permitted" });
+    const schoolIds = await reviewableSchoolIds(req.user.id);
+    if (!schoolIds.length) return res.json({ success: true, ladders: [] });
+
+    const status = ["pending_review", "approved", "rejected"].includes(req.query.status)
+      ? req.query.status : "pending_review";
+    const { data, error } = await db.schema("edu").from("lesson_ladders")
+      .select("id, subject, topic, subtopics, objectives, provenance, refs, status, use_count, created_at")
+      .in("school_id", schoolIds).eq("status", status)
+      .order("use_count", { ascending: false }).order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    res.json({ success: true, ladders: data || [] });
+  } catch (err) {
+    console.error("[ladders list]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /teaching/ladders/:id — approve / reject, optionally with edits.
+// Body: { status: 'approved'|'rejected', subtopics?, objectives?, note? }
+router.patch("/ladders/:id", authenticateToken, async (req, res) => {
+  try {
+    if (!REVIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not permitted" });
+    const { status, subtopics, objectives, note } = req.body || {};
+    if (!["approved", "rejected"].includes(status))
+      return res.status(400).json({ error: "status must be approved or rejected" });
+
+    const schoolIds = await reviewableSchoolIds(req.user.id);
+    if (!schoolIds.length) return res.status(403).json({ error: "No school to review for" });
+
+    const patch = {
+      status, reviewed_by: req.user.id, reviewed_at: new Date().toISOString(),
+      review_note: note ?? null, updated_at: new Date().toISOString(),
+    };
+    // A teacher edit becomes the canonical ladder — and counts as their own plan.
+    if (Array.isArray(subtopics) && subtopics.length) { patch.subtopics = subtopics; patch.provenance = "scheme_of_work"; }
+    if (objectives && typeof objectives === "object") patch.objectives = objectives;
+
+    const { data, error } = await db.schema("edu").from("lesson_ladders")
+      .update(patch).eq("id", req.params.id).in("school_id", schoolIds)
+      .select("id, status").maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.status(404).json({ error: "Ladder not found" });
+    res.json({ success: true, ladder: data });
+  } catch (err) {
+    console.error("[ladders review]", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

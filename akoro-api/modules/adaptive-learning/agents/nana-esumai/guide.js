@@ -25,7 +25,7 @@ export class NaNaEsumai {
   constructor() { this.name = "NaNa Esumai"; }
 
   /* ── Generate subtopics for a topic ──────────────────────── */
-  async generateSubtopics(topic, subject) {
+  async generateSubtopics(topic, subject, groundingContext = "") {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.25,
       response_format: { type: "json_object" },
@@ -42,20 +42,26 @@ export class NaNaEsumai {
           `- Each must depend ONLY on the ones before it — never assume later knowledge.\n` +
           `- Keep titles concrete and specific (not "Introduction" or "Advanced concepts").\n` +
           `JSON only: { "subtopics": ["subtopic1", "subtopic2", ...] }` },
-        { role: "user",   content: `Topic: ${topic}\nSubject: ${subject}` },
+        { role: "user",   content:
+          (groundingContext
+            ? `${groundingContext}\n\nBuild the ladder STRICTLY from the syllabus references above — use their wording and scope. Do not introduce material they don't cover.\n\n`
+            : "") +
+          `Topic: ${topic}\nSubject: ${subject}` },
       ],
     });
     return JSON.parse(res.choices[0].message.content).subtopics || [];
   }
 
   /* ── Generate learning objectives per subtopic ───────────── */
-  async generateObjectives(subtopic, topic, subject) {
+  async generateObjectives(subtopic, topic, subject, groundingContext = "") {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: `Return 3 clear, measurable learning objectives for this subtopic.\nJSON only: { "objectives": ["By the end, the student can...", "..."] }` },
-        { role: "user",   content: `Subtopic: ${subtopic}\nTopic: ${topic}\nSubject: ${subject}` },
+        { role: "user",   content:
+          (groundingContext ? `${groundingContext}\n\nKeep the objectives within the scope of the syllabus references above.\n\n` : "") +
+          `Subtopic: ${subtopic}\nTopic: ${topic}\nSubject: ${subject}` },
       ],
     });
     return JSON.parse(res.choices[0].message.content).objectives || [];

@@ -21,6 +21,8 @@ import {
   getTopicsBySubject,
 } from "./agents/student/knowledge.js";
 import { decayEngine } from "./agents/student/decayEngine.js";
+import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
+import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
 import db from "../../db.js";
 
 export const activeSessions = new Map();
@@ -622,6 +624,23 @@ export function setupWebSocket(io) {
           },
         });
 
+        // Resolve the lesson ladder from the most trustworthy source available
+        // (school scheme of work → exam-syllabus grounding → AI). Cached per
+        // topic so a teacher review improves it for every future learner, and
+        // NEVER blocking: a pending-review ladder is served immediately.
+        let ladder = null;
+        try {
+          ladder = await resolveLadder({
+            studentId, topic, subject,
+            guide: orchestrator.guideOrchestrator?.guide || new NaNaEsumai(),
+          });
+          if (ladder?.subtopics?.length) {
+            orchestrator.session = orchestrator.session || {};
+            orchestrator.session.mustKnowParts = ladder.subtopics;
+            orchestrator.session.objectives    = ladder.objectives || {};
+          }
+        } catch (e) { console.warn("[resolveLadder]", e.message); }
+
         const init = await orchestrator.initialize(studentId, topic);
         const id   = `${mode}_${studentId}_${Date.now()}`;
 
@@ -651,6 +670,14 @@ export function setupWebSocket(io) {
           initialState:      init.initialState,
           decayPayload,
           historyBlocks,
+          // Provenance of the lesson plan, so the learner can see where it came
+          // from (school scheme of work / exam syllabus / AI-generated).
+          source: ladder ? {
+            provenance: ladder.provenance,
+            status:     ladder.status,
+            label:      provenanceLabel(ladder.provenance, ladder.status),
+            refs:       ladder.refs || [],
+          } : null,
           guideProfile: {
             name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
             emoji:       orchestrator.guideOrchestrator?.guide?.emoji || "🧠",
