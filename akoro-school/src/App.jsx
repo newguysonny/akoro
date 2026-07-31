@@ -30,6 +30,7 @@ import SocialMediaPage     from './pages/SocialMediaPage.jsx';
 import ContentPage         from './pages/content/ContentPage.jsx';
 import WalletPage          from './pages/WalletPage.jsx';
 import PurchaseCheckoutPage from './pages/PurchaseCheckoutPage.jsx';
+import LessonReviewPage from './pages/LessonReviewPage.jsx';
 import ContentChannelPage  from './pages/ContentChannelPage.jsx';
 import ContentCreationPage from './pages/ContentCreationPage.jsx';
 import TelegramBotPage     from './pages/TelegramBotPage.jsx';
@@ -270,6 +271,7 @@ function AppRoutes() {
       <Route path="/content" element={<ProtectedRoute anyRole><ContentPage /></ProtectedRoute>} />
       <Route path="/wallet" element={<ProtectedRoute anyRole><WalletPage /></ProtectedRoute>} />
       <Route path="/purchase" element={<ProtectedRoute anyRole><PurchaseCheckoutPage /></ProtectedRoute>} />
+      <Route path="/lesson-review" element={<ProtectedRoute><LessonReviewPage /></ProtectedRoute>} />
       <Route path="/content/channel/:platform" element={<ProtectedRoute anyRole><ContentChannelPage /></ProtectedRoute>} />
       <Route path="/content/creation/:id" element={<ProtectedRoute anyRole><ContentCreationPage /></ProtectedRoute>} />
       <Route path="/settings-telegram" element={<ProtectedRoute><TelegramBotPage /></ProtectedRoute>} />
