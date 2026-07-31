@@ -5,7 +5,7 @@ import BlockRenderer from '../sessions/BlockRenderer.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function SessionChatView({
-  blocks, loading, input, onInputChange, onSend,
+  blocks, loading, loadingNote = '', input, onInputChange, onSend,
   topic, subject, agentName, agentEmoji, mode,
   userTurns, onSummarize, showSummarize,
   recording, onToggleRecording, seconds,
@@ -137,7 +137,8 @@ function SessionChatView({
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>🧠</div>
             <div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",
               background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.08)",
-              display:"flex",gap:5,alignItems:"center" }}>
+              display:"flex",gap:8,alignItems:"center" }}>
+              {loadingNote && <span style={{ fontSize:12.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{loadingNote}</span>}
               {[0,.25,.5].map((d,i)=>(
                 <div key={i} style={{ width:6,height:6,borderRadius:"50%",background:sc,
                   animation:`bounce-dot .8s ease-in-out ${d}s infinite alternate` }}/>

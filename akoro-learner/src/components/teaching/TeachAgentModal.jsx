@@ -30,6 +30,7 @@ function TeachAgentModal({ session, config, onClose }) {
   // server responds — no REST, no fabricated content.
   const [blocks,     setBlocks]     = useState([]);
   const [initLoading, setInitLoading] = useState(true);
+  const [prepNote, setPrepNote] = useState('');   // shown while the lesson is being prepared
   const [input,      setInput]      = useState("");
   const [recording,  setRecording]  = useState(false);
   const [seconds,    setSeconds]    = useState(0);
@@ -191,11 +192,13 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("connect_error",  () => setConnState("reconnecting"));
       ws.io?.on?.("reconnect_attempt", () => setConnState("reconnecting"));
 
+      // Server acks immediately — show progress instead of a blank wait.
+      ws.on("session_preparing", d => setPrepNote(`Preparing your lesson on ${d.topic}…`));
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
         sessionIdRef.current = d.sessionId;
         setWsReady(true);
-        setInitLoading(false);
+        setInitLoading(false); setPrepNote('');
         const gName  = d.guideProfile?.name  || guideNm;
         const gEmoji = d.guideProfile?.emoji || guideEm;
         if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: gEmoji });
@@ -663,6 +666,7 @@ function TeachAgentModal({ session, config, onClose }) {
       <SessionChatView
         blocks={blocks}
         loading={loading || (initLoading && blocks.length === 0)}
+        loadingNote={initLoading && blocks.length === 0 ? prepNote : ''}
         input={input}
         onInputChange={setInput}
         onSend={handleSend}

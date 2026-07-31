@@ -567,6 +567,12 @@ export function setupWebSocket(io) {
       if (!studentId || !topic)
         return socket.emit("error", { message: "studentId and topic required" });
 
+      // Immediate ack so the client can paint the session shell (topic, guide,
+      // "preparing your lesson…") instead of staring at a blank screen while we
+      // resolve the ladder and build the opening. Purely additive — clients that
+      // don't listen for it are unaffected.
+      socket.emit("session_preparing", { topic, subject: subject || null, mode });
+
       try {
         const caller     = userId || studentId;
         let historyBlocks = [];

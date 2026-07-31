@@ -21,6 +21,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
   const [sessionId, setSessionId] = useState(null);
   const [blocks,    setBlocks]    = useState([]);
   const [initLoading, setInitLoading] = useState(true);
+  const [prepNote, setPrepNote] = useState('');   // shown while the lesson is being prepared
   const [input,     setInput]     = useState("");
   const [recording, setRecording] = useState(false);
   const [seconds,   setSeconds]   = useState(0);
@@ -88,11 +89,13 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       ws.io?.on?.("reconnect_attempt", () => setConnState("reconnecting"));
 
       // New unified event
+      // Server acks immediately — show progress instead of a blank wait.
+      ws.on("session_preparing", d => setPrepNote(`Preparing your lesson on ${d.topic}…`));
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
         sessionIdRef.current = d.sessionId;
         setWsReady(true);
-        setInitLoading(false);
+        setInitLoading(false); setPrepNote('');
         const gName  = d.guideProfile?.name  || "NaNa Esumai";
         const gEmoji = d.guideProfile?.emoji || "🧠";
         const opening = d.openingBlocks?.length
