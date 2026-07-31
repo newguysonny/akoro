@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { BRAND, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT } from '../../constants.js';
 
 export default function SigninPage() {
   const { login, loginWithGoogle, error, loading } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Google sign-in failures come back as ?error= on a full-page redirect, so
+  // they can't surface through the context's error state.
+  const urlError = params.get('error');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -23,7 +27,7 @@ export default function SigninPage() {
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required style={inp} />
         <label style={lbl}>Password</label>
         <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={inp} />
-        {error && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
+        {(error || urlError) && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error || (urlError === 'google_failed' ? 'Google sign-in failed. Please try again.' : urlError)}</div>}
         <button type="submit" disabled={loading} style={btn}>{loading ? 'Signing in…' : 'Sign in'}</button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0 12px' }}>
