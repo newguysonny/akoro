@@ -87,7 +87,6 @@ const NAV_SECTIONS = [
       { label: 'Weekly Forecast', to: '/mgmt/weekly-forecast' },
       { label: 'Daily Schedule', to: '/mgmt/daily-schedule' },
       { label: 'Teaching Materials', to: '/mgmt/teaching-materials' },
-      { label: 'Review AI Lessons', to: '/lesson-review' },
       { label: 'Promote Students', to: '/mgmt/promote-students' },
     ] },
     { label: 'Front Office', icon: DoorOpen, moduleKey: 'front_office', children: [
@@ -184,6 +183,7 @@ const NAV_SECTIONS = [
     { label: 'Battles', icon: Swords, to: '/battles' },
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
     { label: 'Assessments', icon: FileCheck, to: '/assessments' },
+    { label: 'Review AI Lessons', icon: BookOpenCheck, to: '/lesson-review' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
     { label: 'Tools & Assets', icon: Store, to: '/marketplace' },
     { label: 'Content Library', icon: Library, to: '/library' },
