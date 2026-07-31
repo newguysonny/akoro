@@ -9,7 +9,7 @@ import { vdb } from "./db.js";
 import { getBalance, debit, credit, transactions } from "./lib/wallet.js";
 import { priceForQuantity } from "./lib/pricing.js";
 import { generateCodes } from "./lib/codes.js";
-import { initializeTransaction } from "../adaptive-learning/marketplace/paystackService.js";
+import { initializeTransaction } from "./lib/paystack.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -106,7 +106,13 @@ router.post("/purchase", async (req, res) => {
     // 3) Generate + insert the codes. On failure, refund the debit and fail the batch.
     try {
       const codes = generateCodes(qty);
-      const rows = codes.map((code) => ({ code, batch_id: batch.id, startup_id: startup.id, agent_id: req.user.id, credits }));
+      const rows = codes.map((code) => ({
+        code, batch_id: batch.id, startup_id: startup.id, agent_id: req.user.id, credits,
+        // Snapshot what was actually paid for THIS code — settlement to the
+        // startup on redemption is computed from this, not the (possibly
+        // later-changed) startup rate.
+        paid_price_usd: unitPriceUsd,
+      }));
       const { error: cErr } = await vdb().from("codes").insert(rows);
       if (cErr) throw new Error(cErr.message);
       await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);

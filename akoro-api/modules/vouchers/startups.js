@@ -8,6 +8,8 @@ import { Router } from "express";
 import { authenticateToken } from "../auth/routes.js";
 import { vdb } from "./db.js";
 import { issueApiKey } from "./lib/apiKeys.js";
+import { getStartupBalance, debitWithdrawal, refundWithdrawal, startupTransactions, ensureStartupWallet, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
+import { createTransferRecipient, initiateTransfer } from "./lib/paystack.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -156,6 +158,96 @@ router.get("/:id/analytics", async (req, res) => {
       success: true,
       analytics: { totalCodes: totalCodes || 0, usedCodes: usedCodes || 0, activeApiKeys: activeKeys || 0, grossSalesUsd, creditsSold },
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/startups/:id/wallet — settlement balance + ledger.
+router.get("/:id/wallet", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const [balance, recent] = await Promise.all([getStartupBalance(startup.id), startupTransactions(startup.id, { limit: 30 })]);
+    res.json({ success: true, balance, platformFeePct: PLATFORM_FEE_PCT, recent });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/startups/:id/wallet/transactions
+router.get("/:id/wallet/transactions", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+    const offset = parseInt(req.query.offset ?? "0", 10);
+    const rows = await startupTransactions(startup.id, { limit, offset });
+    res.json({ success: true, transactions: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/vouchers/startups/:id/withdraw — payout via Paystack transfer.
+// Body: { amountUsd, bankCode, accountNumber, accountName? }
+// Claim-then-act with revert (same pattern as Akoro's instructor payouts): the
+// balance is debited FIRST (atomically, no overdraft), then the transfer is
+// attempted; any failure refunds the debit and marks the withdrawal failed.
+router.post("/:id/withdraw", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const amountUsd = Number(req.body?.amountUsd);
+    const { bankCode, accountNumber, accountName } = req.body || {};
+    if (!amountUsd || amountUsd <= 0) return res.status(400).json({ error: "amountUsd must be a positive number" });
+    if (!bankCode || !accountNumber) return res.status(400).json({ error: "bankCode and accountNumber are required" });
+
+    const ngnRate = Math.max(1, Number(process.env.USD_NGN_RATE || 1600));
+    const amountKobo = Math.round(amountUsd * ngnRate * 100);
+    if (amountKobo < 5000) return res.status(400).json({ error: "Minimum withdrawal is roughly $3 (₦5,000)" });
+
+    const wallet = await ensureStartupWallet(startup.id);
+    const { data: wd, error: wErr } = await vdb().from("withdrawals").insert({
+      startup_id: startup.id, wallet_id: wallet.id,
+      amount_usd: amountUsd, bank_code: bankCode, account_number: accountNumber, account_name: accountName || null,
+      status: "pending",
+    }).select("id, wallet_id").single();
+    if (wErr) throw new Error(wErr.message);
+
+    try {
+      await debitWithdrawal(startup.id, amountUsd, wd.id);
+    } catch (e) {
+      await vdb().from("withdrawals").update({ status: "failed", failure_reason: "insufficient_balance" }).eq("id", wd.id);
+      if (e.code === "INSUFFICIENT_BALANCE") return res.status(402).json({ error: "Insufficient balance", code: "INSUFFICIENT_BALANCE", needed: e.needed, balance: e.balance });
+      throw e;
+    }
+
+    try {
+      const recipient = await createTransferRecipient({ name: accountName || startup.name, accountNumber, bankCode });
+      const transfer = await initiateTransfer({
+        amount_kobo: amountKobo, recipientCode: recipient.recipientCode,
+        reason: `Akoro Vouchers settlement — ${startup.name}`, reference: `vwithdraw_${wd.id}`,
+      });
+      const status = transfer.status === "success" ? "paid" : "processing";
+      await vdb().from("withdrawals").update({
+        status, paystack_recipient_code: recipient.recipientCode, paystack_transfer_code: transfer.transferCode,
+        paid_at: status === "paid" ? new Date().toISOString() : null,
+      }).eq("id", wd.id);
+      res.status(201).json({ success: true, withdrawalId: wd.id, status, amountUsd });
+    } catch (e) {
+      // Transfer failed outright (not just pending) — refund and mark failed.
+      await refundWithdrawal(startup.id, amountUsd, wd.id).catch(() => {});
+      await vdb().from("withdrawals").update({ status: "failed", failure_reason: e.message }).eq("id", wd.id);
+      res.status(502).json({ error: `Payout failed: ${e.message}` });
+    }
+  } catch (e) {
+    console.error("[vouchers/withdraw]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/vouchers/startups/:id/withdrawals — history.
+router.get("/:id/withdrawals", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const { data } = await vdb().from("withdrawals").select("*").eq("startup_id", startup.id).order("created_at", { ascending: false }).limit(50);
+    res.json({ success: true, withdrawals: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

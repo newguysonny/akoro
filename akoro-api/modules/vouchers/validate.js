@@ -10,6 +10,7 @@
 import { Router } from "express";
 import { requireApiKey } from "./apiKeyAuth.js";
 import { vdb } from "./db.js";
+import { creditRedemption, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
 
 const router = Router();
 
@@ -61,6 +62,16 @@ router.post("/validate", requireApiKey, async (req, res) => {
       idempotency_key: idempotencyKey, ip_address: req.ip || null,
       user_agent: (req.headers["user-agent"] || "").slice(0, 500),
     }).select("id").maybeSingle();
+
+    // Settle: the startup earns for this REDEEMED code now, net of the
+    // platform fee. Idempotent per code, and never blocks the validate
+    // response — a settlement hiccup must not make a legit redemption fail.
+    vdb().from("codes").select("paid_price_usd").eq("id", won.id).maybeSingle()
+      .then(({ data: c }) => {
+        const paid = Number(c?.paid_price_usd || 0);
+        if (paid > 0) return creditRedemption(req.startup.id, +(paid * (1 - PLATFORM_FEE_PCT / 100)).toFixed(2), won.id);
+      })
+      .catch((e) => console.error("[vouchers] settlement credit failed for code", won.id, e.message));
 
     res.json({
       valid: true, credits: won.credits, currency: "USD",

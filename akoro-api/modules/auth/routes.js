@@ -55,6 +55,7 @@ const INSTRUCTOR_FRONTEND_URL = process.env.INSTRUCTOR_FRONTEND_URL  || "https:/
 const ADMIN_FRONTEND_URL      = process.env.ADMIN_FRONTEND_URL       || "https://admin.akoro.app";
 const SCHOOL_FRONTEND_URL     = process.env.SCHOOL_FRONTEND_URL      || "https://school.akoro.app";
 const AGENT_FRONTEND_URL      = process.env.AGENT_FRONTEND_URL       || "https://agent.akoro.app";
+const BUSINESS_FRONTEND_URL   = process.env.BUSINESS_FRONTEND_URL    || "https://business.akoro.app";
 
 // Map a portal name to its frontend base URL.
 const portalUrl = (portal) =>
@@ -62,6 +63,7 @@ const portalUrl = (portal) =>
   : portal === "admin"    ? ADMIN_FRONTEND_URL
   : portal === "school"   ? SCHOOL_FRONTEND_URL
   : portal === "agent"    ? AGENT_FRONTEND_URL
+  : portal === "business" ? BUSINESS_FRONTEND_URL
   : FRONTEND_URL;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 
@@ -221,7 +223,7 @@ const IS_PROD = process.env.NODE_ENV === "production";
 // name per portal so each app holds an INDEPENDENT session in the same browser.
 // The portal is declared by the app via the X-Akoro-Portal header (and, for the
 // Google redirect which carries no header, via the OAuth `state`).
-const PORTAL_IDS = ["student", "instructor", "admin", "school", "site", "agent"];
+const PORTAL_IDS = ["student", "instructor", "admin", "school", "site", "agent", "business"];
 // The portal is normally declared via the X-Akoro-Portal header. Full-page
 // navigations (OAuth "Connect" redirects, file links) can't set headers, so we
 // also accept a ?portal= query param — it only selects which scoped cookie to
