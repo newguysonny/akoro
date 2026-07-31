@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiPost } from '../services/api.js';
@@ -7,6 +8,7 @@ import { BRAND, ACCENT, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT } from '../
 export default function CreateStartupPage() {
   const { logout } = useAuth();
   const { refresh } = useStartup();
+  const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', credit_rate_usd: 0.1 });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -16,7 +18,12 @@ export default function CreateStartupPage() {
     setErr(''); setBusy(true);
     try {
       await apiPost('/api/vouchers/startups', form);
-      refresh();
+      // Await the refresh before navigating — startups was already fetched
+      // once as empty (that's why we're on this page), so a fire-and-forget
+      // refresh() leaves it stale for one render and PageLayout's
+      // needsOnboarding check bounces us straight back here.
+      await refresh();
+      navigate('/', { replace: true });
     } catch (e2) { setErr(e2.message || 'Could not register'); }
     finally { setBusy(false); }
   };

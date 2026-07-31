@@ -15,9 +15,12 @@ export function StartupProvider({ children }) {
   const [startups, setStartups] = useState(null);   // null = loading
   const [currentId, setCurrentIdState] = useState(() => localStorage.getItem(CURRENT_KEY) || null);
 
+  // Returns the promise so callers (e.g. CreateStartupPage) can `await` it
+  // before navigating — otherwise the caller races ahead of the state update
+  // and PageLayout's needsOnboarding check still sees the stale empty list.
   const refresh = useCallback(() => {
-    if (!isAuthenticated) { setStartups([]); return; }
-    apiGet('/api/vouchers/startups/mine').then((r) => {
+    if (!isAuthenticated) { setStartups([]); return Promise.resolve(); }
+    return apiGet('/api/vouchers/startups/mine').then((r) => {
       const list = r.startups || [];
       setStartups(list);
       if (!currentId || !list.some((s) => s.id === currentId)) {

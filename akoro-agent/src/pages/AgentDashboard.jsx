@@ -28,8 +28,9 @@ export default function AgentDashboard() {
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
   const loadWallet = useCallback(() => {
-    apiGet('/api/vouchers/wallet').then((r) => setBalance(r.balance)).catch(() => setBalance(0));
-  }, []);
+    apiGet('/api/vouchers/wallet').then((r) => setBalance(r.balance))
+      .catch((e) => { setBalance(0); showToast(e.message || 'Could not load your wallet balance'); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { loadWallet(); }, [loadWallet]);
 
   // Returning from a Paystack top-up.
@@ -70,7 +71,7 @@ export default function AgentDashboard() {
       <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 90 }}>
         {tab === 'market'   && <MarketplaceTab onToast={showToast} onBought={loadWallet} />}
         {tab === 'wallet'   && <WalletTab balance={balance} onRefresh={loadWallet} onToast={showToast} />}
-        {tab === 'codes'    && <CodesTab />}
+        {tab === 'codes'    && <CodesTab onToast={showToast} />}
         {tab === 'startups' && <StartupsTab onToast={showToast} />}
       </div>
 
@@ -179,7 +180,10 @@ function WalletTab({ balance, onRefresh, onToast }) {
   const [amount, setAmount] = useState(50);
   const [busy, setBusy] = useState(false);
   const [tx, setTx] = useState(null);
-  useEffect(() => { apiGet('/api/vouchers/wallet/transactions?limit=20').then((r) => setTx(r.transactions || [])).catch(() => setTx([])); }, [balance]);
+  useEffect(() => {
+    apiGet('/api/vouchers/wallet/transactions?limit=20').then((r) => setTx(r.transactions || []))
+      .catch((e) => { setTx([]); onToast(e.message || 'Could not load transaction history'); });
+  }, [balance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const topUp = async () => {
     if (!amount || amount <= 0) return onToast('Enter an amount');
@@ -227,12 +231,15 @@ const STATUS_FILTERS = [
   { key: 'active', label: 'Unsold/unused' },
   { key: 'used', label: 'Redeemed' },
 ];
-function CodesTab() {
+function CodesTab({ onToast }) {
   const [codes, setCodes] = useState(null);
   const [filter, setFilter] = useState('all');
   const [copiedId, setCopiedId] = useState(null);
 
-  useEffect(() => { apiGet('/api/vouchers/my-codes').then((r) => setCodes(r.codes || [])).catch(() => setCodes([])); }, []);
+  useEffect(() => {
+    apiGet('/api/vouchers/my-codes').then((r) => setCodes(r.codes || []))
+      .catch((e) => { setCodes([]); onToast(e.message || 'Could not load your codes'); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const copyCode = (c) => { navigator.clipboard?.writeText(c.code); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1800); };
   const shareCode = (c) => {
@@ -284,8 +291,9 @@ function StartupsTab({ onToast }) {
   const [keys, setKeys] = useState({});
   const [newKey, setNewKey] = useState(null);
 
-  const load = () => apiGet('/api/vouchers/startups/mine').then((r) => setStartups(r.startups || [])).catch(() => setStartups([]));
-  useEffect(() => { load(); }, []);
+  const load = () => apiGet('/api/vouchers/startups/mine').then((r) => setStartups(r.startups || []))
+    .catch((e) => { setStartups([]); onToast(e.message || 'Could not load your startups'); });
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const register = async () => {
     if (!form.name.trim() || !form.credit_rate_usd) return onToast('Name and a positive rate are required');
