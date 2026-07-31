@@ -8,6 +8,7 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
 import CreateStartupPage from './pages/CreateStartupPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ApiKeysPage from './pages/ApiKeysPage.jsx';
+import ApiKeyLogsPage from './pages/ApiKeyLogsPage.jsx';
 import DiscountTiersPage from './pages/DiscountTiersPage.jsx';
 import VouchersGeneratedPage from './pages/VouchersGeneratedPage.jsx';
 import WalletPage from './pages/WalletPage.jsx';
@@ -32,6 +33,7 @@ function AppRoutes() {
       <Route path="/"               element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/create-startup" element={<ProtectedRoute><CreateStartupPage /></ProtectedRoute>} />
       <Route path="/api-keys"       element={<ProtectedRoute><ApiKeysPage /></ProtectedRoute>} />
+      <Route path="/api-keys/:keyId/logs" element={<ProtectedRoute><ApiKeyLogsPage /></ProtectedRoute>} />
       <Route path="/discounts"      element={<ProtectedRoute><DiscountTiersPage /></ProtectedRoute>} />
       <Route path="/generated"      element={<ProtectedRoute><VouchersGeneratedPage /></ProtectedRoute>} />
       <Route path="/docs"           element={<ProtectedRoute><DocsPage /></ProtectedRoute>} />

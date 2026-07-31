@@ -34,6 +34,16 @@ const perKeyLimit = rateLimit({
 });
 router.use(perKeyLimit);
 
+// Best-effort per-key request log — powers a startup's "API key logs" view.
+function logApiCall(req, statusCode, reason) {
+  if (!req.startup) return;   // auth never resolved a startup — nothing to attribute the log to
+  vdb().from("api_key_logs").insert({
+    api_key_id: req.apiKeyId, startup_id: req.startup.id,
+    method: req.method, path: req.path, status_code: statusCode, reason: reason || null,
+    ip_address: req.ip || null,
+  }).then(() => {}, () => {});
+}
+
 // POST /api/vouchers/v1/validate
 // Auth: Authorization: Bearer sk_live_... (or x-api-key header)
 // Body: { voucher_code, customer_id?, idempotency_key? }
@@ -51,6 +61,7 @@ router.post("/validate", requireApiKey, async (req, res) => {
         .select("id, code_id").eq("startup_id", req.startup.id).eq("idempotency_key", idempotencyKey).maybeSingle();
       if (prior) {
         const { data: c } = await vdb().from("codes").select("credits, code").eq("id", prior.code_id).maybeSingle();
+        logApiCall(req, 200, "replay");
         return res.json({
           valid: true, credits: c?.credits ?? null, currency: "USD",
           transaction_id: prior.id, replay: true,
@@ -68,11 +79,13 @@ router.post("/validate", requireApiKey, async (req, res) => {
       // Distinguish WHY it failed for a useful error (read-only, no state change).
       const { data: existing } = await vdb().from("codes")
         .select("status, expires_at").eq("code", code).eq("startup_id", req.startup.id).maybeSingle();
-      if (!existing) return res.status(404).json({ valid: false, reason: "not_found" });
-      if (existing.status === "used")     return res.status(409).json({ valid: false, reason: "already_used" });
-      if (existing.status === "expired" || (existing.expires_at && new Date(existing.expires_at) < new Date()))
-        return res.status(410).json({ valid: false, reason: "expired" });
-      if (existing.status === "refunded") return res.status(410).json({ valid: false, reason: "refunded" });
+      if (!existing) { logApiCall(req, 404, "not_found"); return res.status(404).json({ valid: false, reason: "not_found" }); }
+      if (existing.status === "used")     { logApiCall(req, 409, "already_used"); return res.status(409).json({ valid: false, reason: "already_used" }); }
+      if (existing.status === "expired" || (existing.expires_at && new Date(existing.expires_at) < new Date())) {
+        logApiCall(req, 410, "expired"); return res.status(410).json({ valid: false, reason: "expired" });
+      }
+      if (existing.status === "refunded") { logApiCall(req, 410, "refunded"); return res.status(410).json({ valid: false, reason: "refunded" }); }
+      logApiCall(req, 409, "not_available");
       return res.status(409).json({ valid: false, reason: "not_available" });
     }
 
@@ -81,7 +94,9 @@ router.post("/validate", requireApiKey, async (req, res) => {
       code_id: won.id, startup_id: req.startup.id, customer_id: customerId,
       idempotency_key: idempotencyKey, ip_address: req.ip || null,
       user_agent: (req.headers["user-agent"] || "").slice(0, 500),
+      api_key_id: req.apiKeyId,
     }).select("id").maybeSingle();
+    logApiCall(req, 200, null);
 
     // Settle: the startup earns for this REDEEMED code now, net of the
     // platform fee. Idempotent per code, and never blocks the validate
@@ -99,6 +114,7 @@ router.post("/validate", requireApiKey, async (req, res) => {
     });
   } catch (e) {
     console.error("[vouchers/validate]", e.message);
+    logApiCall(req, 500, "server_error");
     res.status(500).json({ valid: false, reason: "server_error" });
   }
 });

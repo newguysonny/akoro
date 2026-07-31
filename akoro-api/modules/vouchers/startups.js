@@ -101,20 +101,62 @@ router.post("/:id/api-keys", async (req, res) => {
   const startup = await ownedStartup(req, res);
   if (!startup) return;
   try {
-    const key = await issueApiKey(startup.id, req.body?.label || null);
+    const key = await issueApiKey(startup.id, req.body?.label || null, req.user.id);
     res.status(201).json({ success: true, key });   // rawKey only ever appears in THIS response
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/vouchers/startups/:id/api-keys — list (never returns the raw key).
+// Enriched with created-by, tracking id, permissions (static — no scopes yet)
+// and this-calendar-month spend, mirroring a typical "API keys" table.
 router.get("/:id/api-keys", async (req, res) => {
   const startup = await ownedStartup(req, res);
   if (!startup) return;
   try {
-    const { data } = await vdb().from("api_keys")
-      .select("id, key_prefix, label, status, created_at, last_used_at")
+    const { data: keys } = await vdb().from("api_keys")
+      .select("id, key_prefix, label, status, created_at, last_used_at, created_by_user_id")
       .eq("startup_id", startup.id).order("created_at", { ascending: false });
-    res.json({ success: true, keys: data || [] });
+
+    const creatorIds = [...new Set((keys || []).map((k) => k.created_by_user_id).filter(Boolean))];
+    const creators = {};
+    if (creatorIds.length) {
+      const { data: users } = await db.from("users").select("id, full_name, email").in("id", creatorIds);
+      (users || []).forEach((u) => { creators[u.id] = u.full_name || u.email; });
+    }
+
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const { data: monthRedemptions } = await vdb().from("redemptions")
+      .select("api_key_id, codes(paid_price_usd)")
+      .eq("startup_id", startup.id).gte("redeemed_at", monthStart.toISOString());
+    const spendByKey = {};
+    (monthRedemptions || []).forEach((r) => {
+      if (!r.api_key_id) return;
+      spendByKey[r.api_key_id] = (spendByKey[r.api_key_id] || 0) + Number(r.codes?.paid_price_usd || 0);
+    });
+
+    const enriched = (keys || []).map((k) => ({
+      ...k,
+      name: k.label || "Untitled key",
+      tracking_id: `key_${k.id.replace(/-/g, "").slice(0, 12)}`,
+      created_by: creators[k.created_by_user_id] || "—",
+      permissions: "All",
+      monthly_spend_usd: +(spendByKey[k.id] || 0).toFixed(2),
+    }));
+    res.json({ success: true, keys: enriched });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/startups/:id/api-keys/:keyId/logs — per-key request log.
+router.get("/:id/api-keys/:keyId/logs", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+    const { data } = await vdb().from("api_key_logs")
+      .select("id, method, path, status_code, reason, ip_address, created_at")
+      .eq("startup_id", startup.id).eq("api_key_id", req.params.keyId)
+      .order("created_at", { ascending: false }).limit(limit);
+    res.json({ success: true, logs: data || [] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

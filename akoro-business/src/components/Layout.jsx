@@ -3,9 +3,9 @@
  * PageLayout pattern (Sidebar | TopBar+content), scaled down to this app's
  * page count.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
@@ -21,9 +21,64 @@ const NAV = [
   { to: '/settings',      icon: Settings,        label: 'Settings' },
 ];
 
+function BusinessSwitcher() {
+  const navigate = useNavigate();
+  const { startups, current, setCurrentId } = useStartup();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  if (!startups?.length) return null;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', padding: '14px 14px 6px' }}>
+      <button onClick={() => setOpen((o) => !o)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        padding: '9px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,.12)',
+        background: 'rgba(255,255,255,.05)', color: '#fff', fontSize: 12.5, fontWeight: 700,
+        fontFamily: FONT, cursor: 'pointer',
+      }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.name || 'Select business'}</span>
+        <ChevronsUpDown size={14} style={{ flexShrink: 0, opacity: .7 }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 14, right: 14, marginTop: 6, zIndex: 20,
+          background: '#1A1C22', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12,
+          boxShadow: '0 12px 28px rgba(0,0,0,.4)', padding: 6, fontFamily: FONT,
+        }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: .5, padding: '6px 8px' }}>Businesses</div>
+          {startups.map((s) => (
+            <button key={s.id} onClick={() => { setCurrentId(s.id); setOpen(false); }} style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              padding: '8px 9px', borderRadius: 8, border: 'none', background: s.id === current?.id ? 'rgba(255,255,255,.08)' : 'transparent',
+              color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+            }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+              {s.id === current?.id && <Check size={14} style={{ flexShrink: 0, color: ACCENT }} />}
+            </button>
+          ))}
+          <div style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '6px 2px' }} />
+          <button onClick={() => { setOpen(false); navigate('/create-startup'); }} style={dropdownActionBtn}>
+            <Plus size={14} /> Create new business
+          </button>
+          <button onClick={() => { setOpen(false); navigate('/settings'); }} style={dropdownActionBtn}>
+            <Settings2 size={14} /> Manage businesses
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Sidebar() {
   const { logout, user } = useAuth();
-  const { startups, current, setCurrentId } = useStartup();
   return (
     <div style={{ width: 232, flexShrink: 0, background: '#0F1115', display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <div style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 9, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
@@ -31,14 +86,7 @@ export function Sidebar() {
         <span style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>Akoro Business</span>
       </div>
 
-      {startups?.length > 0 && (
-        <div style={{ padding: '14px 14px 6px' }}>
-          <select value={current?.id || ''} onChange={(e) => setCurrentId(e.target.value)}
-            style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.05)', color: '#fff', fontSize: 12.5, fontWeight: 700, fontFamily: FONT }}>
-            {startups.map((s) => <option key={s.id} value={s.id} style={{ color: INK }}>{s.name}</option>)}
-          </select>
-        </div>
-      )}
+      <BusinessSwitcher />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
         {NAV.map(({ to, icon: Icon, label }) => (
@@ -63,6 +111,12 @@ export function Sidebar() {
     </div>
   );
 }
+
+const dropdownActionBtn = {
+  width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 9px', borderRadius: 8,
+  border: 'none', background: 'transparent', color: 'rgba(255,255,255,.75)', fontSize: 12.5, fontWeight: 600,
+  cursor: 'pointer', textAlign: 'left', fontFamily: FONT,
+};
 
 export function PageLayout({ title, subtitle, action, children }) {
   const { startups, loading } = useStartup();

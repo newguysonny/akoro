@@ -77,7 +77,8 @@
     "2026-marketplace-rpc.sql",
     "2026-lesson-ladders.sql",
     "2026-vouchers-module.sql",
-    "2026-vouchers-startup-wallet.sql"
+    "2026-vouchers-startup-wallet.sql",
+    "2026-vouchers-api-key-logs.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
