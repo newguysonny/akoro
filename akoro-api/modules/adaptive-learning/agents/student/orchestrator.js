@@ -126,6 +126,10 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     let mustKnow = [];
     if (this.sessionType === "decay_review" && this.decayPayload?.mustKnowParts?.length) {
       mustKnow = this.decayPayload.mustKnowParts;
+    } else if (this.presetMustKnow?.length) {
+      // Ladder already resolved (cached / scheme-of-work / grounded) — reuse it
+      // instead of paying for detectMustKnowParts again.
+      mustKnow = this.presetMustKnow;
     } else if (this.guideOrchestrator.guide?.detectMustKnowParts) {
       mustKnow = await this.guideOrchestrator.guide.detectMustKnowParts(topic);
     }

@@ -68,7 +68,12 @@ export class StudentAgent {
     const sessions    = this.agentRecord?.total_sessions || 0;
     let level = globalLevel, mastery = null;
     if (this.subject) {
-      mastery = await subjectMastery(this.agentId, this.subject).catch(() => null);
+      // Memoised for the session — this barely moves mid-session, and querying
+      // it on every message added a DB round-trip to time-to-first-token.
+      if (this._mastery === undefined) {
+        this._mastery = await subjectMastery(this.agentId, this.subject).catch(() => null);
+      }
+      mastery = this._mastery;
       if (mastery) level = mastery.chunks > 0 ? mastery.level : 1;
     }
 

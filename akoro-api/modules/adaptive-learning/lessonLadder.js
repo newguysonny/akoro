@@ -82,14 +82,15 @@ async function generated({ guide, subject, topic }) {
     ({ context, refs } = await getSyllabusGrounding(`${subject} ${topic}`.trim(), { limit: 5 }));
   } catch { /* grounding optional */ }
 
+  // Only the SUBTOPIC ladder is on the critical path — objectives aren't needed
+  // until a subtopic actually opens, and generating 5-6 of them up front added
+  // several seconds to session start (painful on slow connections). Generate
+  // them in the background and patch the cached row when they land.
   const subtopics  = await guide.generateSubtopics(topic, subject, context);
   const objectives = {};
-  await Promise.all(subtopics.map(async (st) => {
-    objectives[st] = await guide.generateObjectives(st, topic, subject, context);
-  }));
 
   return {
-    subtopics, objectives,
+    subtopics, objectives, deferObjectives: { guide, topic, subject, context },
     provenance: context ? "syllabus" : "ai",
     refs: refs || [],
     status: "pending_review",       // async teacher review — never blocks
@@ -143,6 +144,23 @@ export async function resolveLadder({ studentId, topic, subject, guide }) {
     ladderId = data?.id ?? null;
   } catch (e) {
     console.warn("[lesson_ladders cache]", e.message);
+  }
+
+  // Fill objectives in the background so the learner starts immediately.
+  if (built.deferObjectives) {
+    const { guide, topic: t, subject: sub, context } = built.deferObjectives;
+    (async () => {
+      const objectives = {};
+      await Promise.all(built.subtopics.map(async (st) => {
+        objectives[st] = await guide.generateObjectives(st, t, sub, context).catch(() => []);
+      }));
+      if (ladderId) {
+        await db.schema("edu").from("lesson_ladders")
+          .update({ objectives, updated_at: new Date().toISOString() })
+          .eq("id", ladderId);
+      }
+    })().catch((e) => console.warn("[lesson_ladders objectives]", e.message));
+    delete built.deferObjectives;
   }
 
   return { ...built, ladderId, cached: false };

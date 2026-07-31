@@ -635,9 +635,11 @@ export function setupWebSocket(io) {
             guide: orchestrator.guideOrchestrator?.guide || new NaNaEsumai(),
           });
           if (ladder?.subtopics?.length) {
+            // initialize() reads this instead of calling detectMustKnowParts —
+            // one LLM call saved per session start.
+            orchestrator.presetMustKnow = ladder.subtopics;
             orchestrator.session = orchestrator.session || {};
-            orchestrator.session.mustKnowParts = ladder.subtopics;
-            orchestrator.session.objectives    = ladder.objectives || {};
+            orchestrator.session.objectives = ladder.objectives || {};
           }
         } catch (e) { console.warn("[resolveLadder]", e.message); }
 
