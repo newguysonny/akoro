@@ -1,0 +1,11 @@
+export const BRAND = '#6C3BFF';
+export const GREEN  = '#10B981';
+export const RED    = '#EF4444';
+export const AMBER  = '#F59E0B';
+export const INK    = '#111827';
+export const MUTED  = '#6B7280';
+export const MUTED2 = '#9CA3AF';
+export const BORDER = '#E5E7EB';
+export const LIGHT  = '#F9FAFB';
+export const WHITE  = '#FFFFFF';
+export const FONT   = "'Nunito', sans-serif";
