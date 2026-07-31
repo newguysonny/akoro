@@ -1,0 +1,150 @@
+/**
+ * agent.js — the agent-facing surface (Akoro-authenticated): browse startups,
+ * top up wallet, buy voucher batches, view codes + purchase history.
+ */
+import { Router } from "express";
+import { randomUUID } from "crypto";
+import { authenticateToken } from "../auth/routes.js";
+import { vdb } from "./db.js";
+import { getBalance, debit, credit, transactions } from "./lib/wallet.js";
+import { priceForQuantity } from "./lib/pricing.js";
+import { generateCodes } from "./lib/codes.js";
+import { initializeTransaction } from "../adaptive-learning/marketplace/paystackService.js";
+
+const router = Router();
+router.use(authenticateToken);
+
+// GET /api/vouchers/marketplace — active startups an agent can buy from.
+router.get("/marketplace", async (req, res) => {
+  try {
+    const { data: startups } = await vdb().from("startups")
+      .select("id, name, slug, credit_rate_usd").eq("status", "active").order("name");
+    const ids = (startups || []).map((s) => s.id);
+    const { data: tiers } = ids.length
+      ? await vdb().from("discount_tiers").select("startup_id, min_credits, discount_pct").in("startup_id", ids).order("min_credits")
+      : { data: [] };
+    const byStartup = {};
+    (tiers || []).forEach((t) => { (byStartup[t.startup_id] ||= []).push(t); });
+    res.json({ success: true, startups: (startups || []).map((s) => ({ ...s, discountTiers: byStartup[s.id] || [] })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/wallet — my balance + recent transactions.
+router.get("/wallet", async (req, res) => {
+  try {
+    const [balance, recent] = await Promise.all([getBalance(req.user.id), transactions(req.user.id, { limit: 25 })]);
+    res.json({ success: true, balance, recent });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/wallet/transactions
+router.get("/wallet/transactions", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+    const offset = parseInt(req.query.offset ?? "0", 10);
+    const rows = await transactions(req.user.id, { limit, offset });
+    res.json({ success: true, transactions: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/vouchers/wallet/topup/init — Paystack top-up (fiat only, v1).
+router.post("/wallet/topup/init", async (req, res) => {
+  try {
+    const amountUsd = Number(req.body?.amountUsd);
+    if (!amountUsd || amountUsd <= 0) return res.status(400).json({ error: "amountUsd must be a positive number" });
+    const ngnRate = Math.max(1, Number(process.env.USD_NGN_RATE || 1600));
+    const kobo = Math.round(amountUsd * ngnRate * 100);
+    if (kobo < 100) return res.status(400).json({ error: "Top-up amount is too small" });
+
+    const reference = `vwallet_${randomUUID()}`;
+    const email = req.user.email || `user_${req.user.id}@akoro.app`;
+    const frontend = process.env.VOUCHERS_FRONTEND_URL || process.env.FRONTEND_URL || "";
+    const init = await initializeTransaction({
+      email, amount_kobo: kobo, reference,
+      metadata: { purpose: "voucher_wallet_topup", user_id: req.user.id, amount_usd: amountUsd },
+      callback_url: `${frontend}/wallet?ref=${reference}`,
+    });
+    res.json({ success: true, authorization_url: init.authorization_url, reference, amountUsd, amountNaira: kobo / 100 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/vouchers/purchase — buy N codes of a startup, paid from the wallet.
+// Body: { startupId, quantity, unitCredits }
+router.post("/purchase", async (req, res) => {
+  try {
+    const { startupId, quantity, unitCredits } = req.body || {};
+    const qty = Math.floor(Number(quantity));
+    const credits = Math.floor(Number(unitCredits));
+    if (!startupId || !qty || qty < 1 || !credits || credits < 1)
+      return res.status(400).json({ error: "startupId, a positive quantity and unitCredits are required" });
+    if (qty > 10000) return res.status(400).json({ error: "Max 10,000 codes per purchase" });
+
+    const { data: startup } = await vdb().from("startups").select("*").eq("id", startupId).eq("status", "active").maybeSingle();
+    if (!startup) return res.status(404).json({ error: "Startup not found or inactive" });
+
+    const totalCreditsRequested = qty * credits;   // bulk tiers key off TOTAL credits bought
+    const { unitPriceUsd, discountPct } = await priceForQuantity(startup, totalCreditsRequested);
+    const totalCostUsd = +(unitPriceUsd * qty).toFixed(2);
+
+    // 1) Claim the batch as "pending" first so a failed code-generation step
+    //    never leaves the agent charged with nothing to show for it.
+    const { data: batch, error: bErr } = await vdb().from("batches").insert({
+      startup_id: startup.id, agent_id: req.user.id, quantity: qty, unit_credits: credits,
+      unit_price_usd: unitPriceUsd, total_cost_usd: totalCostUsd, status: "pending",
+    }).select("id").single();
+    if (bErr) throw new Error(bErr.message);
+
+    // 2) Debit the wallet atomically. Insufficient funds → roll back the batch.
+    try {
+      await debit(req.user.id, totalCostUsd, { type: "purchase", ref: batch.id, meta: { startupId: startup.id, quantity: qty } });
+    } catch (e) {
+      await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
+      if (e.code === "INSUFFICIENT_FUNDS") return res.status(402).json({ error: "Insufficient wallet balance", code: "INSUFFICIENT_FUNDS", needed: e.needed, balance: e.balance });
+      throw e;
+    }
+
+    // 3) Generate + insert the codes. On failure, refund the debit and fail the batch.
+    try {
+      const codes = generateCodes(qty);
+      const rows = codes.map((code) => ({ code, batch_id: batch.id, startup_id: startup.id, agent_id: req.user.id, credits }));
+      const { error: cErr } = await vdb().from("codes").insert(rows);
+      if (cErr) throw new Error(cErr.message);
+      await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);
+      res.status(201).json({
+        success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
+        unitPriceUsd, discountPct, totalCostUsd, codes,
+      });
+    } catch (e) {
+      await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } }).catch(() => {});
+      await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
+      throw e;
+    }
+  } catch (e) {
+    console.error("[vouchers/purchase]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/vouchers/my-codes — codes I've bought, newest first.
+router.get("/my-codes", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "100", 10), 500);
+    let q = vdb().from("codes").select("id, code, credits, status, created_at, used_at, startups(name)")
+      .eq("agent_id", req.user.id).order("created_at", { ascending: false }).limit(limit);
+    if (req.query.status) q = q.eq("status", req.query.status);
+    if (req.query.batchId) q = q.eq("batch_id", req.query.batchId);
+    const { data } = await q;
+    res.json({ success: true, codes: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/batches — my purchase history.
+router.get("/batches", async (req, res) => {
+  try {
+    const { data } = await vdb().from("batches").select("*, startups(name)")
+      .eq("agent_id", req.user.id).order("created_at", { ascending: false }).limit(100);
+    res.json({ success: true, batches: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+export default router;

@@ -30,6 +30,7 @@ import { fulfillPaymentsCharge } from "../courses/payments.js";
 import { fulfillMarketplaceEvent } from "../adaptive-learning/marketplace/routes.js";
 import { fulfillTransferEvent } from "../courses/payouts.js";
 import { fulfillCoinTopup } from "../wallet/routes.js";
+import { fulfillVoucherWalletTopup } from "../vouchers/index.js";
 import { logPaymentEvent } from "./paymentAudit.js";
 
 const router = Router();
@@ -80,6 +81,8 @@ router.post("/", async (req, res) => {
       catch (e) { errored = true; console.error("[paystack-webhook] marketplace fulfillment failed:", e); }
       try { handled = (await fulfillCoinTopup(data)) || handled; }
       catch (e) { errored = true; console.error("[paystack-webhook] coin top-up fulfillment failed:", e); }
+      try { handled = (await fulfillVoucherWalletTopup(data)) || handled; }
+      catch (e) { errored = true; console.error("[paystack-webhook] voucher wallet fulfillment failed:", e); }
 
       if (!handled) console.warn("[paystack-webhook] charge.success matched no domain:", data?.metadata);
       await logPaymentEvent({
