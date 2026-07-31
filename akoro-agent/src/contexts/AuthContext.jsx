@@ -15,11 +15,18 @@ function getStoredUser() {
 }
 
 async function authFetch(path, body) {
-  const res = await fetch(`${API}${path}`, {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'agent' },
-    body: JSON.stringify(body),
-  });
+  let res;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'agent' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    // Network-level failure (DNS/TLS/CORS preflight) — surface the target so
+    // "Failed to fetch" is diagnosable instead of anonymous.
+    throw new Error(`Cannot reach the API at ${API}. Check VITE_API_URL and the backend's CORS_ORIGIN.`);
+  }
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || `${path} failed`);
   return json;
