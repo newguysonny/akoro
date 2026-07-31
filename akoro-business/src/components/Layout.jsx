@@ -68,7 +68,7 @@ function BusinessSwitcher() {
           <button onClick={() => { setOpen(false); navigate('/create-startup'); }} style={dropdownActionBtn}>
             <Plus size={14} /> Create new business
           </button>
-          <button onClick={() => { setOpen(false); navigate('/settings'); }} style={dropdownActionBtn}>
+          <button onClick={() => { setOpen(false); navigate('/manage-businesses'); }} style={dropdownActionBtn}>
             <Settings2 size={14} /> Manage businesses
           </button>
         </div>

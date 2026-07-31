@@ -33,6 +33,14 @@ router.post("/", async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ error: "name is required" });
     if (!rate || rate <= 0) return res.status(400).json({ error: "credit_rate_usd must be a positive number" });
 
+    // Guard against the double-submit that produced real duplicate rows in
+    // production (a stuck/retried onboarding form calling this repeatedly).
+    // Case-insensitive, scoped to this owner only — two different owners are
+    // still free to both register e.g. "Fluent AI".
+    const { data: dupe } = await vdb().from("startups").select("id")
+      .eq("owner_user_id", req.user.id).ilike("name", name.trim()).maybeSingle();
+    if (dupe) return res.status(409).json({ error: `You already have a business named "${name.trim()}"`, existingId: dupe.id });
+
     let slug = slugify(name);
     const { data: clash } = await vdb().from("startups").select("id").eq("slug", slug).maybeSingle();
     if (clash) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
@@ -71,6 +79,28 @@ router.patch("/:id", async (req, res) => {
     const { data, error } = await vdb().from("startups").update(patch).eq("id", startup.id).select("*").single();
     if (error) throw new Error(error.message);
     res.json({ success: true, startup: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/vouchers/startups/:id — for cleaning up duplicates/mistakes.
+// Only allowed when the startup has NEVER been used (no batches ever sold) —
+// once real money/vouchers have moved through it, use PATCH status=suspended
+// instead; deleting it would orphan codes agents already hold and destroy
+// settlement history.
+router.delete("/:id", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const { count } = await vdb().from("batches").select("id", { count: "exact", head: true }).eq("startup_id", startup.id);
+    if (count > 0) {
+      return res.status(409).json({ error: "This business has voucher history and can't be deleted — suspend it instead." });
+    }
+    await vdb().from("api_keys").delete().eq("startup_id", startup.id);
+    await vdb().from("discount_tiers").delete().eq("startup_id", startup.id);
+    await vdb().from("startup_wallets").delete().eq("startup_id", startup.id);
+    const { error } = await vdb().from("startups").delete().eq("id", startup.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
