@@ -92,12 +92,21 @@ export default function AgentDashboard() {
 /* ── Marketplace: browse startups, buy a batch of codes ─────────────────── */
 function MarketplaceTab({ onToast, onBought }) {
   const [startups, setStartups] = useState(null);
+  const [loadErr, setLoadErr] = useState('');
   const [picked, setPicked] = useState(null);
   const [qty, setQty] = useState(10);
   const [busy, setBusy] = useState(false);
   const [lastCodes, setLastCodes] = useState(null);
 
-  useEffect(() => { apiGet('/api/vouchers/marketplace').then((r) => setStartups(r.startups || [])).catch(() => setStartups([])); }, []);
+  useEffect(() => {
+    apiGet('/api/vouchers/marketplace')
+      .then((r) => setStartups(r.startups || []))
+      // Distinguish "the API told us there are zero startups" from "the
+      // request itself failed" — silently collapsing both into an empty
+      // list makes a real network/auth error look identical to an empty
+      // marketplace, which is exactly the bug that's hard to diagnose.
+      .catch((e) => { setLoadErr(e.message || 'Could not load the marketplace'); setStartups([]); });
+  }, []);
 
   const tierFor = (s, q) => {
     const applicable = (s.discountTiers || []).filter((t) => q * (picked?.unitCredits || 1) >= t.min_credits);
@@ -117,7 +126,7 @@ function MarketplaceTab({ onToast, onBought }) {
   };
 
   if (startups === null) return <Loading />;
-  if (!startups.length) return <Empty text="No startups are selling credit yet." />;
+  if (!startups.length) return <Empty text={loadErr ? `Couldn't load the marketplace — ${loadErr}` : 'No startups are selling credit yet.'} />;
 
   return (
     <div>
