@@ -852,7 +852,10 @@ router.post("/change-password", authenticateToken, authHandlers.changePassword);
 
 // Google OAuth
 // ?portal=instructor | admin  →  signals which portal the login came from
-const PORTALS = ["instructor", "admin", "student", "school"];
+// Portals that may start a Google sign-in. Must stay in sync with PORTAL_IDS —
+// a portal missing here silently degrades to "student", which would drop the
+// user's session into the learner cookie and bounce them to the learner app.
+const PORTALS = ["instructor", "admin", "student", "school", "agent", "business"];
 // state = "<portal>.<nonce>"; the nonce is mirrored in an httpOnly cookie and
 // re-checked on callback so an attacker can't stitch a victim's browser to the
 // attacker's Google identity (login CSRF).

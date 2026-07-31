@@ -7,6 +7,7 @@ import { API } from '../services/api.js';
 
 const AuthContext = createContext(null);
 const USER_KEY = 'akoro_business_user';
+const REDIRECT_KEY = 'akoro_business_redirect';
 
 function getStoredUser() {
   try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
@@ -59,6 +60,15 @@ export function AuthProvider({ children }) {
     } catch { clearUser(); return false; }
   }, [saveUser, clearUser]);
 
+  // Google sign-in is a full-page redirect (not a fetch) — the backend sets the
+  // business-scoped cookie and bounces back to /auth/callback with the user blob.
+  const loginWithGoogle = useCallback((redirectAfter = '/') => {
+    localStorage.setItem(REDIRECT_KEY, redirectAfter);
+    window.location.href = `${API}/api/auth/google?portal=business`;
+  }, []);
+
+  const restoreFromCallback = useCallback((userObj) => { if (userObj) saveUser(userObj); }, [saveUser]);
+
   const logout = useCallback(async () => {
     try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'business' } }); } catch { /* ignore */ }
     clearUser();
@@ -80,7 +90,7 @@ export function AuthProvider({ children }) {
   }, [isAuthenticated, refresh]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, isAuthenticated, login, register, logout, refresh, clearError: () => setError(null) }}>
+    <AuthContext.Provider value={{ user, loading, error, isAuthenticated, login, register, loginWithGoogle, restoreFromCallback, logout, refresh, clearError: () => setError(null) }}>
       {children}
     </AuthContext.Provider>
   );
@@ -91,3 +101,5 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
   return ctx;
 };
+
+export { REDIRECT_KEY };

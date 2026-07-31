@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { StartupProvider } from './contexts/StartupContext.jsx';
 import SigninPage from './pages/auth/SigninPage.jsx';
+import AuthCallback from './pages/auth/AuthCallback.jsx';
 import SignupPage from './pages/auth/SignupPage.jsx';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
@@ -40,6 +41,7 @@ function AppRoutes() {
       <Route path="/wallet"         element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       <Route path="/redemptions"    element={<ProtectedRoute><RedemptionsPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/auth/callback"  element={<AuthCallback />} />
       <Route path="/signin"         element={<GuestRoute><SigninPage /></GuestRoute>} />
       <Route path="/signup"         element={<GuestRoute><SignupPage /></GuestRoute>} />
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
