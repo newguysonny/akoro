@@ -56,6 +56,7 @@ function scheduleSessionReap(sessionId) {
 // (GET /sessions) and "Continue Teaching" (continuation mode) work for WS
 // sessions. The DB row id is stashed on the orchestrator as `dbSessionId`.
 async function createSessionRecord(orchestrator, { studentId, topic, subject, openingBlocks }) {
+  if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;   // already saved
   try {
     const { data, error } = await db.schema("edu").from("adaptive_sessions").insert({
       student_id:             studentId,
@@ -64,27 +65,45 @@ async function createSessionRecord(orchestrator, { studentId, topic, subject, op
       // the whole session row (which is what kept sessions off the list).
       topic:                  topic || "Untitled session",
       subject:                subject || "General",
-      subtopics:              JSON.stringify(orchestrator.session?.mustKnowParts || []),
-      objectives:             "{}",
+      // These columns are JSONB — send real arrays/objects. Sending
+      // JSON.stringify(...) stored a JSON *string* scalar ("[]") instead of an
+      // array, which then read back wrong downstream.
+      subtopics:              Array.isArray(orchestrator.session?.mustKnowParts) ? orchestrator.session.mustKnowParts : [],
+      objectives:             {},
       current_subtopic_idx:   0,
       current_phase:          "1",
       status:                 "active",
       started_at:             new Date().toISOString(),
       updated_at:             new Date().toISOString(),
-      session_history:        JSON.stringify([]),
-      objectives_covered:     "{}",
-      confidence_by_subtopic: "{}",
+      session_history:        [],
+      objectives_covered:     {},
+      confidence_by_subtopic: {},
       block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
     }).select("id").single();
     if (error) throw error;
     orchestrator.dbSessionId = data.id;
+    // Remember the identity so a later fallback save (cancel/disconnect before
+    // the row existed) can still persist the session.
+    orchestrator.sessionMeta = { studentId, topic, subject };
+    return data.id;
   } catch (e) {
-    console.warn("[adaptive_sessions create]", e.message);
+    // Loud: a failure here is why a session would never appear in the list.
+    console.error("[adaptive_sessions create] FAILED — session will not be listed:", e.message);
+    return null;
   }
 }
 
+// Ensure a DB row exists for this orchestrator — used by the cancel/disconnect
+// path so a session started but never "completed" is still saved.
+async function ensureSessionRecord(orchestrator) {
+  if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;
+  const meta = orchestrator?.sessionMeta;
+  if (!meta?.studentId) return null;
+  return createSessionRecord(orchestrator, { ...meta, openingBlocks: [] });
+}
+
 async function appendSessionBlocks(orchestrator, newBlocks) {
-  const id = orchestrator?.dbSessionId;
+  const id = orchestrator?.dbSessionId || await ensureSessionRecord(orchestrator);
   if (!id || !newBlocks?.length) return;
   try {
     const { data } = await db.schema("edu").from("adaptive_sessions")
@@ -640,6 +659,10 @@ export function setupWebSocket(io) {
           },
         });
 
+        // Stash identity FIRST so the cancel/disconnect path can still save the
+        // session even if this initial insert fails or hasn't finished yet.
+        orchestrator.sessionMeta = { studentId, topic, subject };
+
         // Persist in background — never blocks the session
         createSessionRecord(orchestrator, {
           studentId, topic, subject, openingBlocks: init.openingBlocks,
@@ -894,9 +917,16 @@ export function setupWebSocket(io) {
     // ── disconnect ────────────────────────────────────────────
     socket.on("disconnect", () => {
       const sid = socket.data?.sessionId;
-      // Keep the orchestrator alive through a grace window so a reconnecting
-      // client can resume it; reap it if no resume arrives.
-      if (sid && activeSessions.has(sid)) scheduleSessionReap(sid);
+      // A cancelled/closed session must still be saved: make sure the DB row
+      // exists (it stays `active`, so it lists as resumable) before we let the
+      // in-memory orchestrator go.
+      if (sid && activeSessions.has(sid)) {
+        ensureSessionRecord(activeSessions.get(sid))
+          .catch(e => console.warn("[adaptive_sessions persist-on-cancel]", e.message));
+        // Keep the orchestrator alive through a grace window so a reconnecting
+        // client can resume it; reap it if no resume arrives.
+        scheduleSessionReap(sid);
+      }
       console.log(`🔌 Disconnected: ${socket.id} (session: ${sid || "none"})`);
     });
   });

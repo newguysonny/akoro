@@ -30,7 +30,18 @@ export class NaNaEsumai {
       model: "gpt-4.1-mini", temperature: 0.25,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: `You are a curriculum expert.\nReturn 5-6 subtopics a student should understand for this topic in this subject.\nOrder them from foundational → advanced.\nJSON only: { "subtopics": ["subtopic1", "subtopic2", ...] }` },
+        { role: "system", content:
+          `You are a curriculum expert designing a SHORT, STRUCTURED lesson ladder.\n` +
+          `Break the topic into 5-6 bite-sized subtopics that build strictly from the ground up:\n` +
+          `  1. Start with the FOUNDATION — the prerequisite idea/vocabulary a complete beginner needs first.\n` +
+          `  2. Then the BASICS — the core rule or mechanism, in its simplest form.\n` +
+          `  3. Then build progressively: apply it, combine it, handle edge cases.\n` +
+          `  4. End with the most ADVANCED idea a learner at this level should reach.\n` +
+          `Rules:\n` +
+          `- Each subtopic must be teachable in one short lesson (5-10 minutes).\n` +
+          `- Each must depend ONLY on the ones before it — never assume later knowledge.\n` +
+          `- Keep titles concrete and specific (not "Introduction" or "Advanced concepts").\n` +
+          `JSON only: { "subtopics": ["subtopic1", "subtopic2", ...] }` },
         { role: "user",   content: `Topic: ${topic}\nSubject: ${subject}` },
       ],
     });
@@ -61,9 +72,14 @@ export class NaNaEsumai {
           `A human is about to teach ${agentName} ${agentEmoji} (their Student AI Agent) about "${subtopic}" (part of ${topic}, ${subject}).\n` +
           `This is subtopic ${subtopicIdx + 1} of ${totalSubtopics}.\n\n` +
           `Open the subtopic with:\n` +
-          `1. Brief warm welcome (1 sentence)\n` +
-          `2. The learning objectives (list them)\n` +
-          `3. Instruction to the human: "Start by sharing what you know about ${subtopic} with ${agentName}."\n\n` +
+          `1. A LESSON HOOK (1-2 sentences) — grab attention before any theory. Use one of:\n` +
+          `   a surprising fact, a "what would happen if…" question, a relatable everyday scenario,\n` +
+          `   or a puzzle the learner can't yet solve. Make them curious, don't explain yet.\n` +
+          `2. WHY IT MATTERS — one concrete REAL-WORLD application of "${subtopic}": where it shows up\n` +
+          `   in daily life, a job, technology, or the local community. Be specific, not generic.\n` +
+          `3. The learning objectives (list them).\n` +
+          `4. An INTERACTIVE opener to the human: "Start by sharing what you know about ${subtopic} with ${agentName}."\n` +
+          `   — and add one warm-up question they can answer from everyday experience.\n\n` +
           `Keep it concise and warm. Mention ${agentName}'s current confidence is low on this topic.` },
         { role: "user", content: `Objectives:\n${objList}` },
       ],
@@ -179,7 +195,7 @@ export class NaNaEsumai {
     const { topic, phase, currentSubtopic, humanMessage, studentResponse,
             understanding, confusion, history, mustKnowParts, mustKnowIndex } = params;
 
-    const systemPrompt = `You are NaNa Esumai, a gentle and encouraging teaching coach.\nYou watch a human teach their Student Agent and give short practical tips.\n\nTopic: "${topic}"\nPhase: ${phase}\nMust-know parts: ${JSON.stringify(mustKnowParts)}\nCurrent subtopic: ${currentSubtopic || "none"}\nUnderstanding: ${understanding}%\nConfusion: ${confusion}%\n\nYour style:\n- Warm, encouraging, uses friendly analogies\n- Always finds something positive before redirecting\n- Tip length: 1-2 sentences max\n- NEVER say: scaffold, socratic, metacognitive\n- If confusion > 50% OR misconception → isUrgent: true\n\nDecide:\n- nextAction: DIG_DEEPER | CLEAR_MISTAKE | NAME_IT | NEXT_SUBTOPIC | ONE_MORE_PUSH | USE_ANALOGY | GAP_CLOSED | TRIGGER_RECALL | CHALLENGE | MASTERY\n- nextPhase: PHASE_1 | PHASE_2 | PHASE_3 | PHASE_4 | MASTERY | null\n- nextMustKnowIndex: ${mustKnowIndex}\n- isUrgent: boolean\n\nReturn JSON only:\n{ "tip": "...", "nextAction": "...", "nextPhase": null, "nextMustKnowIndex": ${mustKnowIndex}, "isUrgent": false, "detectedMisconception": null }`;
+    const systemPrompt = `You are NaNa Esumai, a gentle and encouraging teaching coach.\nYou watch a human teach their Student Agent and give short practical tips.\n\nTopic: "${topic}"\nPhase: ${phase}\nMust-know parts: ${JSON.stringify(mustKnowParts)}\nCurrent subtopic: ${currentSubtopic || "none"}\nUnderstanding: ${understanding}%\nConfusion: ${confusion}%\n\nYour style:\n- Warm, encouraging, uses friendly analogies\n- Always finds something positive before redirecting\n- Tip length: 1-2 sentences max\n- NEVER say: scaffold, socratic, metacognitive\n- If confusion > 50% OR misconception → isUrgent: true\n\nMake it INTERACTIVE — rotate your tips across these moves instead of only explaining:\n- Suggest a REAL-WORLD example or where this shows up in everyday life\n- Suggest a concrete analogy or a quick "picture this…" hook\n- Suggest asking the agent a check question, or a "what if we changed X?" twist\n- Suggest a tiny worked example or a 10-second mini-challenge\nPrefer a suggestion the human can act on in their very next message.\n\nDecide:\n- nextAction: DIG_DEEPER | CLEAR_MISTAKE | NAME_IT | NEXT_SUBTOPIC | ONE_MORE_PUSH | USE_ANALOGY | GAP_CLOSED | TRIGGER_RECALL | CHALLENGE | MASTERY\n- nextPhase: PHASE_1 | PHASE_2 | PHASE_3 | PHASE_4 | MASTERY | null\n- nextMustKnowIndex: ${mustKnowIndex}\n- isUrgent: boolean\n\nReturn JSON only:\n{ "tip": "...", "nextAction": "...", "nextPhase": null, "nextMustKnowIndex": ${mustKnowIndex}, "isUrgent": false, "detectedMisconception": null }`;
 
     const messages = [
       { role: "system", content: systemPrompt },
