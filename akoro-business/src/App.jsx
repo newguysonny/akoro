@@ -3,10 +3,13 @@ import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { StartupProvider } from './contexts/StartupContext.jsx';
 import SigninPage from './pages/auth/SigninPage.jsx';
 import SignupPage from './pages/auth/SignupPage.jsx';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
 import CreateStartupPage from './pages/CreateStartupPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ApiKeysPage from './pages/ApiKeysPage.jsx';
 import DiscountTiersPage from './pages/DiscountTiersPage.jsx';
+import VouchersGeneratedPage from './pages/VouchersGeneratedPage.jsx';
 import WalletPage from './pages/WalletPage.jsx';
 import RedemptionsPage from './pages/RedemptionsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
@@ -29,11 +32,14 @@ function AppRoutes() {
       <Route path="/create-startup" element={<ProtectedRoute><CreateStartupPage /></ProtectedRoute>} />
       <Route path="/api-keys"       element={<ProtectedRoute><ApiKeysPage /></ProtectedRoute>} />
       <Route path="/discounts"      element={<ProtectedRoute><DiscountTiersPage /></ProtectedRoute>} />
+      <Route path="/generated"      element={<ProtectedRoute><VouchersGeneratedPage /></ProtectedRoute>} />
       <Route path="/wallet"         element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       <Route path="/redemptions"    element={<ProtectedRoute><RedemptionsPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/signin"         element={<GuestRoute><SigninPage /></GuestRoute>} />
       <Route path="/signup"         element={<GuestRoute><SignupPage /></GuestRoute>} />
+      <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+      <Route path="/reset-password"  element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
       <Route path="*"               element={<Navigate to="/" replace />} />
     </Routes>
   );

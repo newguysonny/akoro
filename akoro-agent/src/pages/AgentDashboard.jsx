@@ -213,23 +213,53 @@ function WalletTab({ balance, onRefresh, onToast }) {
 }
 
 /* ── My Codes ─────────────────────────────────────────────────────────────── */
+const STATUS_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Unsold/unused' },
+  { key: 'used', label: 'Redeemed' },
+];
 function CodesTab() {
   const [codes, setCodes] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [copiedId, setCopiedId] = useState(null);
+
   useEffect(() => { apiGet('/api/vouchers/my-codes').then((r) => setCodes(r.codes || [])).catch(() => setCodes([])); }, []);
+
+  const copyCode = (c) => { navigator.clipboard?.writeText(c.code); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1800); };
+  const shareCode = (c) => {
+    const text = `Here's your ${c.startups?.name || 'credit'} voucher code: ${c.code}\n(worth ${c.credits} credits) — redeem it in the app to top up your balance.`;
+    if (navigator.share) navigator.share({ text }).catch(() => {});
+    else { navigator.clipboard?.writeText(text); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1800); }
+  };
+
   if (codes === null) return <Loading />;
-  if (!codes.length) return <Empty text="You haven't bought any codes yet." />;
+  const filtered = filter === 'all' ? codes : codes.filter((c) => c.status === filter);
+
   return (
     <div>
       <h2 style={h2}>My Codes</h2>
-      {codes.map((c) => (
-        <div key={c.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: INK }}>{c.code}</code>
-            <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 3 }}>{c.startups?.name} · {c.credits} credits</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {STATUS_FILTERS.map((f) => (
+          <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...pill, ...(filter === f.key ? pillOn : {}) }}>{f.label}</button>
+        ))}
+      </div>
+      {filtered.length === 0 ? <Empty text="No codes in this view." /> : filtered.map((c) => (
+        <div key={c.id} style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: c.status === 'active' ? 10 : 0 }}>
+            <div>
+              <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: INK }}>{c.code}</code>
+              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 3 }}>{c.startups?.name} · {c.credits} credits</div>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 100,
+              color: c.status === 'active' ? GREEN : c.status === 'used' ? MUTED2 : RED,
+              background: c.status === 'active' ? `${GREEN}14` : c.status === 'used' ? `${MUTED2}14` : `${RED}14` }}>{c.status}</span>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 100,
-            color: c.status === 'active' ? GREEN : c.status === 'used' ? MUTED2 : RED,
-            background: c.status === 'active' ? `${GREEN}14` : c.status === 'used' ? `${MUTED2}14` : `${RED}14` }}>{c.status}</span>
+          {c.status === 'active' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => copyCode(c)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{copiedId === c.id ? 'Copied ✓' : 'Copy code'}</button>
+              <button onClick={() => shareCode(c)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Share to customer</button>
+            </div>
+          )}
         </div>
       ))}
     </div>

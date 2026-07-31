@@ -25,7 +25,10 @@ export default function SigninPage() {
         <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={inp} />
         {error && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
         <button type="submit" disabled={loading} style={btn}>{loading ? 'Signing in…' : 'Sign in'}</button>
-        <div style={{ textAlign: 'center', fontSize: 12.5, color: MUTED2, marginTop: 14 }}>
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <Link to="/forgot-password" style={{ fontSize: 12, color: MUTED2, textDecoration: 'none', fontWeight: 700 }}>Forgot password?</Link>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 12.5, color: MUTED2, marginTop: 10 }}>
           No account? <Link to="/signup" style={{ color: BRAND, fontWeight: 800, textDecoration: 'none' }}>Sign up</Link>
         </div>
       </form>

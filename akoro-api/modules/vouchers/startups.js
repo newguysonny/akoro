@@ -6,7 +6,7 @@
  */
 import { Router } from "express";
 import { authenticateToken } from "../auth/routes.js";
-import { vdb } from "./db.js";
+import db, { vdb } from "./db.js";
 import { issueApiKey } from "./lib/apiKeys.js";
 import { getStartupBalance, debitWithdrawal, refundWithdrawal, startupTransactions, ensureStartupWallet, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
 import { createTransferRecipient, initiateTransfer } from "./lib/paystack.js";
@@ -125,6 +125,50 @@ router.delete("/:id/api-keys/:keyId", async (req, res) => {
   try {
     await vdb().from("api_keys").update({ status: "revoked" }).eq("id", req.params.keyId).eq("startup_id", startup.id);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/startups/:id/batches — generation history: which agent
+// bought how many codes, when, at what price. The "who and how much" view.
+router.get("/:id/batches", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+    const { data: batches, error } = await vdb().from("batches")
+      .select("id, quantity, unit_credits, unit_price_usd, total_cost_usd, status, created_at, agent_id")
+      .eq("startup_id", startup.id).order("created_at", { ascending: false }).limit(limit);
+    if (error) throw new Error(error.message);
+
+    // Enrich with the agent's name/email (public.users — outside the vouchers
+    // schema, so a plain select rather than a PostgREST join).
+    const agentIds = [...new Set((batches || []).map((b) => b.agent_id))];
+    let agentsById = {};
+    if (agentIds.length) {
+      const { data: agents } = await db.from("users").select("id, full_name, email").in("id", agentIds);
+      agentsById = Object.fromEntries((agents || []).map((a) => [a.id, a]));
+    }
+    res.json({
+      success: true,
+      batches: (batches || []).map((b) => ({ ...b, agent: agentsById[b.agent_id] || null })),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/startups/:id/codes/lookup?code=XXXX-XXXX-XXXX — support
+// tool: find one code's full status/history (who bought it, is it redeemed).
+router.get("/:id/codes/lookup", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const code = String(req.query.code || "").trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: "code is required" });
+    const { data: row } = await vdb().from("codes")
+      .select("id, code, credits, status, created_at, used_at, used_by_customer_id, agent_id, paid_price_usd")
+      .eq("startup_id", startup.id).eq("code", code).maybeSingle();
+    if (!row) return res.status(404).json({ error: "No code matching that value for this startup" });
+    const { data: agent } = row.agent_id ? await db.from("users").select("id, full_name, email").eq("id", row.agent_id).maybeSingle() : { data: null };
+    res.json({ success: true, code: { ...row, agent } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

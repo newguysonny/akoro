@@ -969,9 +969,14 @@ router.post("/forgot-password", strictLimit,
         expires_at: expiresAt,
       });
 
-      // Determine which frontend sent the request (Referer header)
+      // Determine which frontend sent the request from its Referer host —
+      // matched against every configured portal URL, not just "instructor"
+      // (that substring check silently sent school/admin/agent/business users
+      // a learner-app reset link that 404'd).
       const referer = req.get("Referer") || "";
-      const base    = referer.includes("instructor") ? INSTRUCTOR_FRONTEND_URL : FRONTEND_URL;
+      const refererHost = (() => { try { return new URL(referer).host; } catch { return ""; } })();
+      const PORTAL_URLS = [FRONTEND_URL, INSTRUCTOR_FRONTEND_URL, ADMIN_FRONTEND_URL, SCHOOL_FRONTEND_URL, AGENT_FRONTEND_URL, BUSINESS_FRONTEND_URL];
+      const base = PORTAL_URLS.find((u) => { try { return new URL(u).host === refererHost; } catch { return false; } }) || FRONTEND_URL;
       const resetUrl = `${base}/reset-password?token=${rawToken}`;
 
       sendPasswordResetEmail({ to: user.email, name: user.full_name || user.username || "there", resetUrl })
