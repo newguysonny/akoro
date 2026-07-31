@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiPost } from '../services/api.js';
-import { BRAND, ACCENT, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT } from '../constants.js';
+import { BRAND, ACCENT, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT, CATEGORIES } from '../constants.js';
 
 export default function CreateStartupPage() {
   const { logout } = useAuth();
   const { refresh } = useStartup();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', credit_rate_usd: 0.1 });
+  const [form, setForm] = useState({ name: '', credit_rate_usd: 0.1, category: 'other', description: '', cover_image_url: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -44,6 +44,19 @@ export default function CreateStartupPage() {
           <span style={{ fontSize: 12.5, color: MUTED2 }}>per credit</span>
         </div>
         <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 6 }}>You set your own rate and can add bulk-purchase discount tiers later.</div>
+
+        <label style={lbl}>Category</label>
+        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inp}>
+          {Object.entries(CATEGORIES).map(([key, c]) => <option key={key} value={key}>{c.icon} {c.label}</option>)}
+        </select>
+
+        <label style={lbl}>Cover photo URL (optional)</label>
+        <input value={form.cover_image_url} onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })} style={inp} placeholder="https://..." />
+        <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 6 }}>Shown on your card in the agent marketplace — a 16:10 image works best.</div>
+
+        <label style={lbl}>Short pitch (optional)</label>
+        <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} maxLength={200}
+          style={{ ...inp, resize: 'vertical', fontFamily: FONT }} placeholder="One line agents will see in the marketplace" />
 
         {err && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, margin: '12px 0' }}>{err}</div>}
         <button type="submit" disabled={busy} style={btn}>{busy ? 'Creating…' : 'Create voucher program'}</button>

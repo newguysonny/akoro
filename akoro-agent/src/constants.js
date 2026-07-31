@@ -8,4 +8,17 @@ export const MUTED2 = '#9CA3AF';
 export const BORDER = '#E5E7EB';
 export const LIGHT  = '#F9FAFB';
 export const WHITE  = '#FFFFFF';
+export const GOLD   = '#F59E0B';
 export const FONT   = "'Nunito', sans-serif";
+
+// Matches akoro-api/modules/vouchers/startups.js CATEGORIES + the DB check
+// constraint in migrations/2026-vouchers-marketplace-media.sql.
+export const CATEGORIES = {
+  education:    { label: 'Education',    icon: '🎓', color: '#6C3BFF' },
+  fintech:      { label: 'Fintech',      icon: '💳', color: '#0EA5E9' },
+  gaming:       { label: 'Gaming',       icon: '🎮', color: '#EC4899' },
+  productivity: { label: 'Productivity', icon: '⚡', color: '#F59E0B' },
+  health:       { label: 'Health',       icon: '🩺', color: '#10B981' },
+  ecommerce:    { label: 'E-commerce',   icon: '🛍️', color: '#E8884A' },
+  other:        { label: 'Other',        icon: '🏢', color: '#6B7280' },
+};

@@ -14,18 +14,38 @@ import { initializeTransaction } from "./lib/paystack.js";
 const router = Router();
 router.use(authenticateToken);
 
-// GET /api/vouchers/marketplace — active startups an agent can buy from.
+// GET /api/vouchers/marketplace — active startups an agent can buy from,
+// enriched with discount tiers, popularity (codes sold / redeemed), and
+// "have I bought from them before" — the data the Discovery-style
+// marketplace rails (Recommended / Trending / New) sort and badge by.
 router.get("/marketplace", async (req, res) => {
   try {
     const { data: startups } = await vdb().from("startups")
-      .select("id, name, slug, credit_rate_usd").eq("status", "active").order("name");
+      .select("id, name, slug, credit_rate_usd, description, cover_image_url, category, created_at")
+      .eq("status", "active").order("name");
     const ids = (startups || []).map((s) => s.id);
-    const { data: tiers } = ids.length
-      ? await vdb().from("discount_tiers").select("startup_id, min_credits, discount_pct").in("startup_id", ids).order("min_credits")
-      : { data: [] };
-    const byStartup = {};
-    (tiers || []).forEach((t) => { (byStartup[t.startup_id] ||= []).push(t); });
-    res.json({ success: true, startups: (startups || []).map((s) => ({ ...s, discountTiers: byStartup[s.id] || [] })) });
+
+    const [{ data: tiers }, { data: batches }, { data: myBatches }] = await Promise.all([
+      ids.length ? vdb().from("discount_tiers").select("startup_id, min_credits, discount_pct").in("startup_id", ids).order("min_credits") : { data: [] },
+      ids.length ? vdb().from("batches").select("startup_id, quantity").eq("status", "paid").in("startup_id", ids) : { data: [] },
+      ids.length ? vdb().from("batches").select("startup_id").eq("agent_id", req.user.id).in("startup_id", ids) : { data: [] },
+    ]);
+
+    const tiersByStartup = {};
+    (tiers || []).forEach((t) => { (tiersByStartup[t.startup_id] ||= []).push(t); });
+    const soldByStartup = {};
+    (batches || []).forEach((b) => { soldByStartup[b.startup_id] = (soldByStartup[b.startup_id] || 0) + b.quantity; });
+    const boughtFrom = new Set((myBatches || []).map((b) => b.startup_id));
+
+    res.json({
+      success: true,
+      startups: (startups || []).map((s) => ({
+        ...s,
+        discountTiers: tiersByStartup[s.id] || [],
+        codesSold: soldByStartup[s.id] || 0,
+        boughtBefore: boughtFrom.has(s.id),
+      })),
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet, apiPost } from '../services/api.js';
+import MarketplaceDiscovery from '../components/MarketplaceDiscovery.jsx';
 import { BRAND, GREEN, RED, AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
 const NAV_ITEMS = [
@@ -69,7 +70,7 @@ export default function AgentDashboard() {
 
       {/* CONTENT */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 90 }}>
-        {tab === 'market'   && <MarketplaceTab onToast={showToast} onBought={loadWallet} />}
+        {tab === 'market'   && <MarketplaceDiscovery onToast={showToast} onBought={loadWallet} />}
         {tab === 'wallet'   && <WalletTab balance={balance} onRefresh={loadWallet} onToast={showToast} />}
         {tab === 'codes'    && <CodesTab onToast={showToast} />}
         {tab === 'startups' && <StartupsTab onToast={showToast} />}
@@ -86,90 +87,6 @@ export default function AgentDashboard() {
       </div>
 
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 18px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 999 }}>{toast}</div>}
-    </div>
-  );
-}
-
-/* ── Marketplace: browse startups, buy a batch of codes ─────────────────── */
-function MarketplaceTab({ onToast, onBought }) {
-  const [startups, setStartups] = useState(null);
-  const [loadErr, setLoadErr] = useState('');
-  const [picked, setPicked] = useState(null);
-  const [qty, setQty] = useState(10);
-  const [busy, setBusy] = useState(false);
-  const [lastCodes, setLastCodes] = useState(null);
-
-  useEffect(() => {
-    apiGet('/api/vouchers/marketplace')
-      .then((r) => setStartups(r.startups || []))
-      // Distinguish "the API told us there are zero startups" from "the
-      // request itself failed" — silently collapsing both into an empty
-      // list makes a real network/auth error look identical to an empty
-      // marketplace, which is exactly the bug that's hard to diagnose.
-      .catch((e) => { setLoadErr(e.message || 'Could not load the marketplace'); setStartups([]); });
-  }, []);
-
-  const tierFor = (s, q) => {
-    const applicable = (s.discountTiers || []).filter((t) => q * (picked?.unitCredits || 1) >= t.min_credits);
-    return applicable.sort((a, b) => b.min_credits - a.min_credits)[0];
-  };
-
-  const buy = async (s, unitCredits) => {
-    setBusy(true); setLastCodes(null);
-    try {
-      const r = await apiPost('/api/vouchers/purchase', { startupId: s.id, quantity: qty, unitCredits });
-      setLastCodes(r.codes || []);
-      onToast(`Bought ${r.quantity} codes · ${usd(r.totalCostUsd)}`);
-      onBought();
-    } catch (e) {
-      onToast(e.message?.includes('INSUFFICIENT') || e.status === 402 ? 'Insufficient wallet balance — top up first' : (e.message || 'Purchase failed'));
-    } finally { setBusy(false); }
-  };
-
-  if (startups === null) return <Loading />;
-  if (!startups.length) return <Empty text={loadErr ? `Couldn't load the marketplace — ${loadErr}` : 'No startups are selling credit yet.'} />;
-
-  return (
-    <div>
-      <h2 style={h2}>Marketplace</h2>
-      {startups.map((s) => (
-        <div key={s.id} style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>{s.name}</div>
-              <div style={{ fontSize: 12, color: MUTED }}>{usd(s.credit_rate_usd)} / credit</div>
-            </div>
-            <button onClick={() => setPicked(picked?.id === s.id ? null : { ...s, unitCredits: 100 })}
-              style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: picked?.id === s.id ? MUTED2 : BRAND, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
-              {picked?.id === s.id ? 'Close' : 'Buy'}
-            </button>
-          </div>
-          {s.discountTiers?.length > 0 && (
-            <div style={{ fontSize: 11, color: MUTED2, marginTop: 6 }}>
-              Bulk discounts: {s.discountTiers.map((t) => `${fmt(t.min_credits)}+ → −${t.discount_pct}%`).join(' · ')}
-            </div>
-          )}
-          {picked?.id === s.id && (
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${BORDER}` }}>
-              <label style={smallLbl}>Credits per code</label>
-              <input type="number" min="1" value={picked.unitCredits} onChange={(e) => setPicked({ ...picked, unitCredits: Number(e.target.value) })} style={inp} />
-              <label style={smallLbl}>Number of codes</label>
-              <input type="number" min="1" value={qty} onChange={(e) => setQty(Number(e.target.value))} style={inp} />
-              {(() => { const t = tierFor(s, qty); const unitPrice = s.credit_rate_usd * (1 - (t?.discount_pct || 0) / 100);
-                return <div style={{ fontSize: 12.5, color: MUTED, margin: '8px 0' }}>≈ {usd(unitPrice * qty)} total{t ? ` (−${t.discount_pct}% tier)` : ''}</div>; })()}
-              <button onClick={() => buy(s, picked.unitCredits)} disabled={busy} style={{ ...primaryBtn, width: '100%' }}>{busy ? 'Buying…' : 'Confirm purchase'}</button>
-            </div>
-          )}
-        </div>
-      ))}
-      {lastCodes && (
-        <div style={{ ...card, background: '#F0FDF4', border: `1px solid ${GREEN}55` }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: INK, marginBottom: 8 }}>Your new codes</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
-            {lastCodes.map((c) => <code key={c} style={{ fontSize: 12.5, fontFamily: 'monospace', color: INK }}>{c}</code>)}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

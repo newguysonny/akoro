@@ -17,6 +17,8 @@ router.use(authenticateToken);
 const slugify = (s) => String(s || "").toLowerCase().trim()
   .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || `startup-${Date.now()}`;
 
+const CATEGORIES = ["education", "fintech", "gaming", "productivity", "health", "ecommerce", "other"];
+
 // Ownership guard — only the startup's owner may manage it.
 async function ownedStartup(req, res) {
   const { data } = await vdb().from("startups").select("*").eq("id", req.params.id).maybeSingle();
@@ -28,10 +30,11 @@ async function ownedStartup(req, res) {
 // POST /api/vouchers/startups — register a new startup.
 router.post("/", async (req, res) => {
   try {
-    const { name, credit_rate_usd } = req.body || {};
+    const { name, credit_rate_usd, description, cover_image_url, category } = req.body || {};
     const rate = Number(credit_rate_usd);
     if (!name?.trim()) return res.status(400).json({ error: "name is required" });
     if (!rate || rate <= 0) return res.status(400).json({ error: "credit_rate_usd must be a positive number" });
+    if (category && !CATEGORIES.includes(category)) return res.status(400).json({ error: "Invalid category" });
 
     // Guard against the double-submit that produced real duplicate rows in
     // production (a stuck/retried onboarding form calling this repeatedly).
@@ -47,6 +50,8 @@ router.post("/", async (req, res) => {
 
     const { data, error } = await vdb().from("startups").insert({
       owner_user_id: req.user.id, name: name.trim(), slug, credit_rate_usd: rate,
+      description: description?.trim() || null, cover_image_url: cover_image_url?.trim() || null,
+      category: category || "other",
     }).select("*").single();
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, startup: data });
@@ -74,6 +79,12 @@ router.patch("/:id", async (req, res) => {
     }
     if (req.body.webhook_url !== undefined) patch.webhook_url = req.body.webhook_url || null;
     if (req.body.status && ["active", "suspended"].includes(req.body.status)) patch.status = req.body.status;
+    if (req.body.description !== undefined) patch.description = req.body.description?.trim() || null;
+    if (req.body.cover_image_url !== undefined) patch.cover_image_url = req.body.cover_image_url?.trim() || null;
+    if (req.body.category !== undefined) {
+      if (!CATEGORIES.includes(req.body.category)) return res.status(400).json({ error: "Invalid category" });
+      patch.category = req.body.category;
+    }
     if (!Object.keys(patch).length) return res.status(400).json({ error: "No valid fields" });
     patch.updated_at = new Date().toISOString();
     const { data, error } = await vdb().from("startups").update(patch).eq("id", startup.id).select("*").single();

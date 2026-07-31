@@ -4,24 +4,33 @@ import { PageLayout } from '../components/Layout.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiPatch } from '../services/api.js';
-import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
+import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT, CATEGORIES } from '../constants.js';
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const { current, refresh } = useStartup();
   const [rate, setRate] = useState('');
   const [webhook, setWebhook] = useState('');
+  const [category, setCategory] = useState('other');
+  const [description, setDescription] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    if (current) { setRate(current.credit_rate_usd); setWebhook(current.webhook_url || ''); }
+    if (current) {
+      setRate(current.credit_rate_usd); setWebhook(current.webhook_url || '');
+      setCategory(current.category || 'other'); setDescription(current.description || ''); setCoverUrl(current.cover_image_url || '');
+    }
   }, [current]);
 
   const save = async () => {
     setBusy(true);
     try {
-      await apiPatch(`/api/vouchers/startups/${current.id}`, { credit_rate_usd: Number(rate), webhook_url: webhook || null });
+      await apiPatch(`/api/vouchers/startups/${current.id}`, {
+        credit_rate_usd: Number(rate), webhook_url: webhook || null,
+        category, description: description || null, cover_image_url: coverUrl || null,
+      });
       setToast('Saved ✓'); refresh();
     } catch (e) { setToast(e.message || 'Could not save'); }
     finally { setBusy(false); setTimeout(() => setToast(''), 2500); }
@@ -45,6 +54,26 @@ export default function SettingsPage() {
           <input value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://yourapp.com/webhooks/akoro" style={inp} />
           <button onClick={save} disabled={busy} style={{ ...primaryBtn, marginTop: 12 }}><Save size={14} /> {busy ? 'Saving…' : 'Save changes'}</button>
           {toast && <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, color: INK }}>{toast}</div>}
+        </div>
+
+        <div style={card}>
+          <div style={cardTitle}>Marketplace listing</div>
+          <div style={{ fontSize: 11.5, color: MUTED2, marginTop: -6, marginBottom: 4 }}>How your business appears to agents browsing the marketplace.</div>
+          <label style={lbl}>Category</label>
+          <select value={category} onChange={(e) => setCategory(e.target.value)} style={inp}>
+            {Object.entries(CATEGORIES).map(([key, c]) => <option key={key} value={key}>{c.icon} {c.label}</option>)}
+          </select>
+          <label style={lbl}>Cover photo URL</label>
+          <input value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://..." style={inp} />
+          {coverUrl && (
+            <div style={{ marginTop: 8, width: '100%', aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+              <img src={coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            </div>
+          )}
+          <label style={lbl}>Short pitch</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={200}
+            style={{ ...inp, resize: 'vertical', fontFamily: FONT }} placeholder="One line agents will see in the marketplace" />
+          <button onClick={save} disabled={busy} style={{ ...primaryBtn, marginTop: 12 }}><Save size={14} /> {busy ? 'Saving…' : 'Save changes'}</button>
         </div>
       </div>
     </PageLayout>

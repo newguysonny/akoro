@@ -10,3 +10,15 @@ export const BORDER = '#E5E7EB';
 export const LIGHT  = '#F9FAFB';
 export const WHITE  = '#FFFFFF';
 export const FONT   = "'Nunito', sans-serif";
+
+// Matches akoro-api/modules/vouchers/startups.js CATEGORIES + the DB check
+// constraint in migrations/2026-vouchers-marketplace-media.sql.
+export const CATEGORIES = {
+  education:    { label: 'Education',    icon: '🎓' },
+  fintech:      { label: 'Fintech',      icon: '💳' },
+  gaming:       { label: 'Gaming',       icon: '🎮' },
+  productivity: { label: 'Productivity', icon: '⚡' },
+  health:       { label: 'Health',       icon: '🩺' },
+  ecommerce:    { label: 'E-commerce',   icon: '🛍️' },
+  other:        { label: 'Other',        icon: '🏢' },
+};
