@@ -5,7 +5,7 @@
  */
 import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
@@ -13,6 +13,7 @@ import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js
 const NAV = [
   { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/api-keys',      icon: KeyRound,        label: 'API Keys' },
+  { to: '/docs',          icon: FileText,        label: 'API Docs' },
   { to: '/discounts',     icon: Percent,         label: 'Discount Tiers' },
   { to: '/generated',     icon: Ticket,          label: 'Vouchers Generated' },
   { to: '/wallet',        icon: Wallet,          label: 'Balance & Withdraw' },

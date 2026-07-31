@@ -8,11 +8,31 @@
  * anything at the application layer.
  */
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { requireApiKey } from "./apiKeyAuth.js";
 import { vdb } from "./db.js";
 import { creditRedemption, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
 
 const router = Router();
+
+// Rate-limit PER API KEY, not per IP — the module-level limiter mounted in
+// app.js falls back to IP for these requests (there's no Akoro session), which
+// would put every startup calling from the same egress IP in one shared
+// bucket. Self-contained on purpose (this module owns its own rate-limiting
+// behavior, consistent with the decoupling goal).
+const perKeyLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,   // generous for real redemption traffic; raise via env if needed
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const auth = req.headers["authorization"] || "";
+    const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : null;
+    return bearer || req.headers["x-api-key"] || req.ip;
+  },
+  message: { valid: false, reason: "rate_limited" },
+});
+router.use(perKeyLimit);
 
 // POST /api/vouchers/v1/validate
 // Auth: Authorization: Bearer sk_live_... (or x-api-key header)
