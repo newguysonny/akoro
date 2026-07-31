@@ -91,4 +91,10 @@ BEGIN
   RETURN v_new;
 END $$;
 
+-- New tables since the module's initial grant — cover them explicitly too
+-- (belt-and-suspenders alongside the ALTER DEFAULT PRIVILEGES in the base migration).
+GRANT ALL ON ALL TABLES    IN SCHEMA vouchers TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA vouchers TO service_role;
+
+NOTIFY pgrst, 'reload config';
 NOTIFY pgrst, 'reload schema';

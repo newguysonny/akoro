@@ -14,6 +14,17 @@
 -- =============================================================
 CREATE SCHEMA IF NOT EXISTS vouchers;
 
+-- Expose + grants (self-hosted PostgREST path — same pattern as `mgmt`/`edu`).
+-- Without this, db.schema("vouchers") calls fail with PGRST106/"Invalid
+-- schema: vouchers" even though the schema and tables exist — PostgREST only
+-- serves schemas listed here, and the API role needs explicit grants.
+ALTER ROLE authenticator SET pgrst.db_schemas = 'public, content, edu, mgmt, vouchers, storage, graphql_public';
+GRANT USAGE ON SCHEMA vouchers TO authenticator, service_role, anon, authenticated;
+GRANT ALL ON ALL TABLES    IN SCHEMA vouchers TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA vouchers TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA vouchers GRANT ALL ON TABLES    TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA vouchers GRANT ALL ON SEQUENCES TO service_role;
+
 -- ── Startups (the businesses selling credit through agents) ───────────────────
 CREATE TABLE IF NOT EXISTS vouchers.startups (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -209,4 +220,10 @@ BEGIN
   RETURN;   -- no row → caller checks WHY (not found / already used / expired) separately
 END $$;
 
+-- Cover tables created by this migration (ALTER DEFAULT PRIVILEGES above only
+-- applies to tables created AFTER it ran, i.e. from here on — these came first).
+GRANT ALL ON ALL TABLES    IN SCHEMA vouchers TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA vouchers TO service_role;
+
+NOTIFY pgrst, 'reload config';
 NOTIFY pgrst, 'reload schema';

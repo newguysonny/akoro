@@ -24,4 +24,8 @@ CREATE TABLE IF NOT EXISTS vouchers.api_key_logs (
 CREATE INDEX IF NOT EXISTS idx_vouchers_api_key_logs_key     ON vouchers.api_key_logs (api_key_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_vouchers_api_key_logs_startup ON vouchers.api_key_logs (startup_id, created_at DESC);
 
+GRANT ALL ON ALL TABLES    IN SCHEMA vouchers TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA vouchers TO service_role;
+
+NOTIFY pgrst, 'reload config';
 NOTIFY pgrst, 'reload schema';
