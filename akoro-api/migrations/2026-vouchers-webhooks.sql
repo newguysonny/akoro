@@ -52,6 +52,25 @@ BEGIN
   RETURNING d.*;
 END $$;
 
+-- Reclaim rows stranded in 'sending' by a worker that crashed or was
+-- redeployed mid-delivery. Without this they'd sit there forever: the
+-- due-index only covers 'pending', so nothing would ever look at them again
+-- and the webhook would be silently, permanently lost.
+CREATE OR REPLACE FUNCTION vouchers.requeue_stuck_webhooks(p_stale_minutes INTEGER DEFAULT 10)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE v_count INTEGER;
+BEGIN
+  UPDATE vouchers.webhook_deliveries
+     SET status = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
+         last_error = COALESCE(last_error, 'Worker stopped mid-delivery; requeued'),
+         next_attempt_at = now(),
+         updated_at = now()
+   WHERE status = 'sending'
+     AND updated_at < now() - make_interval(mins => p_stale_minutes);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END $$;
+
 GRANT ALL ON ALL TABLES    IN SCHEMA vouchers TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA vouchers TO service_role;
 

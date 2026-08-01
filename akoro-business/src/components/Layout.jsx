@@ -132,14 +132,15 @@ const dropdownActionBtn = {
 };
 
 export function PageLayout({ title, subtitle, action, children }) {
-  const { startups, loading } = useStartup();
+  const { startups, loading, error } = useStartup();
   const navigate = useNavigate();
   // /manage-businesses stays reachable at zero businesses too — otherwise
   // deleting your only business (or a fresh account before creating one)
   // makes the one page that could show/create/delete businesses itself
   // unreachable, bouncing back to /create-startup before it can render.
   const EXEMPT_PATHS = ['/create-startup', '/manage-businesses'];
-  const needsOnboarding = !loading && startups && startups.length === 0 && !EXEMPT_PATHS.includes(window.location.pathname);
+  // `error` gates this too: a failed fetch must not look like "zero businesses".
+  const needsOnboarding = !loading && !error && startups && startups.length === 0 && !EXEMPT_PATHS.includes(window.location.pathname);
 
   useEffect(() => { if (needsOnboarding) navigate('/create-startup', { replace: true }); }, [needsOnboarding, navigate]);
   if (needsOnboarding) return null;

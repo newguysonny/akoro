@@ -14,12 +14,14 @@ export function StartupProvider({ children }) {
   const { isAuthenticated } = useAuth();
   const [startups, setStartups] = useState(null);   // null = loading
   const [currentId, setCurrentIdState] = useState(() => localStorage.getItem(CURRENT_KEY) || null);
+  const [error, setError] = useState(false);
 
   // Returns the promise so callers (e.g. CreateStartupPage) can `await` it
   // before navigating — otherwise the caller races ahead of the state update
   // and PageLayout's needsOnboarding check still sees the stale empty list.
   const refresh = useCallback(() => {
     if (!isAuthenticated) { setStartups([]); return Promise.resolve(); }
+    setError(false);
     return apiGet('/api/vouchers/startups/mine').then((r) => {
       const list = r.startups || [];
       setStartups(list);
@@ -28,7 +30,13 @@ export function StartupProvider({ children }) {
         setCurrentIdState(first);
         if (first) localStorage.setItem(CURRENT_KEY, first); else localStorage.removeItem(CURRENT_KEY);
       }
-    }).catch(() => setStartups([]));
+    }).catch(() => {
+      // Do NOT fall back to [] — PageLayout reads an empty list as "no
+      // businesses yet" and redirects to /create-startup, so an API outage
+      // would dump an established business owner into onboarding.
+      setError(true);
+      setStartups((prev) => prev ?? []);
+    });
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -37,7 +45,7 @@ export function StartupProvider({ children }) {
   const current = (startups || []).find((s) => s.id === currentId) || null;
 
   return (
-    <StartupContext.Provider value={{ startups, current, currentId, setCurrentId, loading: startups === null, refresh }}>
+    <StartupContext.Provider value={{ startups, current, currentId, setCurrentId, loading: startups === null, error, refresh }}>
       {children}
     </StartupContext.Provider>
   );

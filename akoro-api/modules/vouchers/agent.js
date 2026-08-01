@@ -99,15 +99,21 @@ router.post("/purchase", async (req, res) => {
     const { startupId, quantity, unitCredits } = req.body || {};
     const qty = Math.floor(Number(quantity));
     const credits = Math.floor(Number(unitCredits));
-    if (!startupId || !qty || qty < 1 || !credits || credits < 1)
+    // Number.isFinite rejects Infinity/NaN, which the bare `!x` idiom lets through.
+    if (!startupId || !Number.isFinite(qty) || qty < 1 || !Number.isFinite(credits) || credits < 1)
       return res.status(400).json({ error: "startupId, a positive quantity and unitCredits are required" });
     if (qty > 10000) return res.status(400).json({ error: "Max 10,000 codes per purchase" });
+    if (credits > 1000000) return res.status(400).json({ error: "Max 1,000,000 credits per code" });
 
     const { data: startup } = await vdb().from("startups").select("*").eq("id", startupId).eq("status", "active").maybeSingle();
     if (!startup) return res.status(404).json({ error: "Startup not found or inactive" });
 
     const totalCreditsRequested = qty * credits;   // bulk tiers key off TOTAL credits bought
-    const { unitPriceUsd, discountPct } = await priceForQuantity(startup, totalCreditsRequested);
+    // priceForQuantity returns a PER-CREDIT rate. The cost of one code is that
+    // rate × the credits that code carries — multiplying by qty alone would
+    // charge the same for a 1-credit code as a 1,000,000-credit one.
+    const { unitPriceUsd: perCreditUsd, discountPct } = await priceForQuantity(startup, totalCreditsRequested);
+    const unitPriceUsd = +(perCreditUsd * credits).toFixed(6);   // price per CODE
     const totalCostUsd = +(unitPriceUsd * qty).toFixed(2);
 
     // 1) Claim the batch as "pending" first so a failed code-generation step
