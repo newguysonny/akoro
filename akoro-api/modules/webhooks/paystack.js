@@ -31,6 +31,7 @@ import { fulfillMarketplaceEvent } from "../adaptive-learning/marketplace/routes
 import { fulfillTransferEvent } from "../courses/payouts.js";
 import { fulfillCoinTopup } from "../wallet/routes.js";
 import { fulfillVoucherWalletTopup } from "../vouchers/index.js";
+import { fulfillVoucherTransferEvent } from "../vouchers/transferEvents.js";
 import { logPaymentEvent } from "./paymentAudit.js";
 
 const router = Router();
@@ -102,7 +103,12 @@ router.post("/", async (req, res) => {
 
     if (type?.startsWith("transfer.")) {
       let outcome = "ignored";
-      try { outcome = (await fulfillTransferEvent(type, data)) ? "fulfilled" : "no_match"; }
+      // Try the voucher module first (it matches on its own transfer codes and
+      // returns false for anything it doesn't own), then instructor payouts.
+      try {
+        outcome = (await fulfillVoucherTransferEvent(type, data)) ? "fulfilled"
+                : (await fulfillTransferEvent(type, data)) ? "fulfilled" : "no_match";
+      }
       catch (e) { outcome = "error"; console.error("[paystack-webhook] transfer fulfillment failed:", e); }
       await logPaymentEvent({ eventType: `${type}.fulfillment`, reference, source: "paystack_webhook", outcome });
       return res.status(200).json({ received: true });

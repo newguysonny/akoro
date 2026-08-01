@@ -83,7 +83,8 @@
     "2026-vouchers-products.sql",
     "2026-vouchers-products-menu.sql",
     "2026-vouchers-webhooks.sql",
-    "2026-vouchers-integrity.sql"
+    "2026-vouchers-integrity.sql",
+    "2026-vouchers-preserve-history.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

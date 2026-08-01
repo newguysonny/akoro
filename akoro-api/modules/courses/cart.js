@@ -610,8 +610,22 @@ const handlers = {
         });
       }
 
-      await debitCoins({ userId, coins: coinsNeeded, feature: "cart_checkout", ref: `cart_${userId}_${Date.now()}` });
-      await grantEverything({ provider: "voucher", amountKobo: totalKobo, extraMeta: { method: "voucher", coins_spent: coinsNeeded } });
+      const spendRef = `cart_${userId}_${Date.now()}`;
+      await debitCoins({ userId, coins: coinsNeeded, feature: "cart_checkout", ref: spendRef });
+      try {
+        await grantEverything({ provider: "voucher", amountKobo: totalKobo, extraMeta: { method: "voucher", coins_spent: coinsNeeded } });
+      } catch (grantErr) {
+        // The coins are already gone. If granting access fails we must put
+        // them back, or the learner has paid and received nothing.
+        try {
+          await creditTopup({ ownerType: "user", ownerId: userId, coins: coinsNeeded, ref: `refund_${spendRef}`, by: userId });
+          console.error("[cart/voucher] grant failed, coins refunded:", grantErr.message);
+          return res.status(500).json({ success: false, message: "Could not complete your order — your coins were refunded. Please try again." });
+        } catch (refundErr) {
+          console.error(`[cart/voucher] ‼️ GRANT AND REFUND BOTH FAILED user=${userId} coins=${coinsNeeded} ref=${spendRef} — manual correction required:`, refundErr.message);
+          return res.status(500).json({ success: false, message: "Something went wrong completing your order. Our team has been notified — please contact support." });
+        }
+      }
       return res200(res, {
         free: true,   // reuse the frontend's "granted, no redirect" branch
         paid_with: "voucher", enrolled_count: checkoutItems.length,
