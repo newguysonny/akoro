@@ -164,6 +164,26 @@ export async function debitCoins({ userId, coins, feature, model = null, tokensI
   return { charged: coins, model, tokensIn, tokensOut, costUsd: cost, applied };
 }
 
+/**
+ * Refund a completed debit to the SAME accounts it came from.
+ *
+ * debitCoins can spread one charge across the user's own wallet and their
+ * school's. Refunding the total to the user account would leave the school
+ * short and the learner over — so replay the `applied` breakdown instead.
+ * Returns the number of accounts that could not be credited back.
+ */
+export async function refundCoins({ applied = [], feature, ref }) {
+  let failed = 0;
+  for (const a of applied) {
+    const { error } = await db.rpc("coin_credit", {
+      p_account: a.account, p_amount: a.took, p_type: "refund",
+      p_meta: { feature: `${feature}:refund`, ref },
+    });
+    if (error) { failed++; console.error(`[coins] refund failed account=${a.account} coins=${a.took} ref=${ref}:`, error.message); }
+  }
+  return failed;
+}
+
 /** Credit a top-up idempotently by its Paystack reference. */
 export async function creditTopup({ ownerType, ownerId, coins, ref, costUsd = null, by = null }) {
   const acc = await ensureAccount(ownerType, ownerId);

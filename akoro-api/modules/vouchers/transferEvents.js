@@ -20,11 +20,24 @@ import { refundWithdrawal } from "./lib/startupWallet.js";
  */
 export async function fulfillVoucherTransferEvent(event, data) {
   const transferCode = data?.transfer_code;
-  if (!transferCode) return false;
+  const reference = data?.reference;
 
-  const { data: wd } = await vdb().from("withdrawals")
-    .select("id, startup_id, amount_usd, status")
-    .eq("paystack_transfer_code", transferCode).maybeSingle();
+  // Match on OUR reference first (`vwithdraw_<id>`, set when initiating), not
+  // just the transfer code. The code is only persisted by a write that happens
+  // AFTER the transfer — if that write failed, matching on it alone would make
+  // the withdrawal permanently unreconcilable.
+  let wd = null;
+  if (typeof reference === "string" && reference.startsWith("vwithdraw_")) {
+    const id = reference.slice("vwithdraw_".length);
+    const { data } = await vdb().from("withdrawals")
+      .select("id, startup_id, amount_usd, status").eq("id", id).maybeSingle();
+    wd = data || null;
+  }
+  if (!wd && transferCode) {
+    const { data } = await vdb().from("withdrawals")
+      .select("id, startup_id, amount_usd, status").eq("paystack_transfer_code", transferCode).maybeSingle();
+    wd = data || null;
+  }
   if (!wd) return false;   // not ours — instructor payout or unrelated
 
   if (event === "transfer.success") {
@@ -52,8 +65,11 @@ export async function fulfillVoucherTransferEvent(event, data) {
       // Loud, not silent: the startup is currently short this amount and a
       // human needs to make it whole.
       console.error(`[vouchers/payouts] ‼️ REFUND FAILED for withdrawal ${wd.id} ($${wd.amount_usd}) — manual correction required:`, e.message);
+      // Put it back to `processing` so a redelivered webhook can retry the
+      // refund — leaving it `failed` makes the conditional claim above never
+      // match again, stranding the startup permanently short.
       await vdb().from("withdrawals")
-        .update({ failure_reason: `${event}; REFUND FAILED (${e.message}) — needs manual correction` })
+        .update({ status: "processing", failure_reason: `${event}; REFUND FAILED (${e.message}) — will retry; may need manual correction` })
         .eq("id", wd.id);
     }
     return true;

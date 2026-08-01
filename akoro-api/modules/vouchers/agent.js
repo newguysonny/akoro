@@ -135,6 +135,7 @@ router.post("/purchase", async (req, res) => {
     }
 
     // 3) Generate + insert the codes. On failure, refund the debit and fail the batch.
+    let issued;
     try {
       const codes = generateCodes(qty);
       const rows = codes.map((code) => ({
@@ -147,15 +148,24 @@ router.post("/purchase", async (req, res) => {
       const { error: cErr } = await vdb().from("codes").insert(rows);
       if (cErr) throw new Error(cErr.message);
       await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);
-      res.status(201).json({
-        success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
-        unitPriceUsd, discountPct, totalCostUsd, codes,
-      });
+      issued = codes;
     } catch (e) {
-      await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } }).catch(() => {});
+      try {
+        await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } });
+      } catch (refundErr) {
+        console.error(`[vouchers/purchase] ‼️ REFUND FAILED agent=${req.user.id} batch=${batch.id} $${totalCostUsd} — manual correction required:`, refundErr.message);
+      }
       await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
       throw e;
     }
+
+    // Responding OUTSIDE the try above: a throw here (or from res.json) must
+    // never trigger the refund path for a purchase that actually succeeded,
+    // nor double-send after serverError.
+    res.status(201).json({
+      success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
+      unitPriceUsd, discountPct, totalCostUsd, codes: issued,
+    });
   } catch (e) {
     console.error("[vouchers/purchase]", e.message);
     serverError(res, e, req);
@@ -202,6 +212,7 @@ router.post("/purchase-product", async (req, res) => {
       throw e;
     }
 
+    let issued;
     try {
       const codes = generateCodes(qty);
       const rows = codes.map((code) => ({
@@ -210,15 +221,21 @@ router.post("/purchase-product", async (req, res) => {
       const { error: cErr } = await vdb().from("codes").insert(rows);
       if (cErr) throw new Error(cErr.message);
       await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);
-      res.status(201).json({
-        success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
-        unitPriceUsd, totalCostUsd, codes, productName: product.name,
-      });
+      issued = codes;
     } catch (e) {
-      await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } }).catch(() => {});
+      try {
+        await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } });
+      } catch (refundErr) {
+        console.error(`[vouchers/purchase-product] ‼️ REFUND FAILED agent=${req.user.id} batch=${batch.id} $${totalCostUsd} — manual correction required:`, refundErr.message);
+      }
       await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
       throw e;
     }
+
+    res.status(201).json({
+      success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
+      unitPriceUsd, totalCostUsd, codes: issued, productName: product.name,
+    });
   } catch (e) {
     console.error("[vouchers/purchase-product]", e.message);
     serverError(res, e, req);
