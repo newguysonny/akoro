@@ -10,6 +10,8 @@ import db, { vdb } from "./db.js";
 import { issueApiKey } from "./lib/apiKeys.js";
 import { getStartupBalance, debitWithdrawal, refundWithdrawal, startupTransactions, ensureStartupWallet, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
 import { createTransferRecipient, initiateTransfer } from "./lib/paystack.js";
+import { enqueueWebhook, generateWebhookSecret } from "./lib/webhooks.js";
+import { drainWebhookQueue } from "./webhookWorker.js";
 
 const router = Router();
 router.use(authenticateToken);
@@ -220,6 +222,70 @@ router.delete("/:id/products/:productId", async (req, res) => {
     if (count > 0) return res.status(409).json({ error: "This product has order history — archive it instead of deleting." });
     const { error } = await vdb().from("voucher_products").delete().eq("id", req.params.productId).eq("startup_id", startup.id);
     if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+// GET /api/vouchers/startups/:id/webhooks — the signing secret + delivery log.
+router.get("/:id/webhooks", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+    const { data } = await vdb().from("webhook_deliveries")
+      .select("id, event, url, status, attempts, max_attempts, last_status_code, last_error, next_attempt_at, delivered_at, created_at")
+      .eq("startup_id", startup.id).order("created_at", { ascending: false }).limit(limit);
+    res.json({
+      success: true,
+      webhook_url: startup.webhook_url || null,
+      // Unlike an API key, the signing secret must stay retrievable — the
+      // receiver needs it to verify every future delivery, not just once.
+      webhook_secret: startup.webhook_secret || null,
+      deliveries: data || [],
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/vouchers/startups/:id/webhooks/rotate-secret
+router.post("/:id/webhooks/rotate-secret", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const secret = generateWebhookSecret();
+    await vdb().from("startups").update({ webhook_secret: secret }).eq("id", startup.id);
+    res.json({ success: true, webhook_secret: secret });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/vouchers/startups/:id/webhooks/test — send a sample event now.
+router.post("/:id/webhooks/test", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  if (!startup.webhook_url) return res.status(400).json({ error: "Set a webhook URL first (Settings)" });
+  try {
+    const id = await enqueueWebhook(startup.id, "webhook.test", {
+      message: "This is a test event from Akoro Vouchers.",
+      transaction_id: "test_00000000", credits: 100, customer_id: "test_customer",
+    });
+    // Deliver immediately rather than waiting for the next worker tick — a
+    // "Send test" button that appears to do nothing for a minute is useless.
+    drainWebhookQueue().catch(() => {});
+    res.json({ success: true, deliveryId: id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/vouchers/startups/:id/webhooks/:deliveryId/retry — requeue one.
+router.post("/:id/webhooks/:deliveryId/retry", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const { data, error } = await vdb().from("webhook_deliveries")
+      .update({ status: "pending", next_attempt_at: new Date().toISOString(), attempts: 0, last_error: null, updated_at: new Date().toISOString() })
+      .eq("id", req.params.deliveryId).eq("startup_id", startup.id).select("id").maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.status(404).json({ error: "Delivery not found" });
+    drainWebhookQueue().catch(() => {});
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

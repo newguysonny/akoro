@@ -81,7 +81,8 @@
     "2026-vouchers-api-key-logs.sql",
     "2026-vouchers-marketplace-media.sql",
     "2026-vouchers-products.sql",
-    "2026-vouchers-products-menu.sql"
+    "2026-vouchers-products-menu.sql",
+    "2026-vouchers-webhooks.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

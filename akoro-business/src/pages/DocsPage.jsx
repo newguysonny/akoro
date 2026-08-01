@@ -292,6 +292,78 @@ app.post("/redeem", requireLogin, async (req, res) => {
           </p>
         </Section>
 
+        {/* Webhooks */}
+        <Section title="Webhooks">
+          <p style={p}>
+            Set a webhook URL in <strong>Settings</strong> and we'll POST to it every time one of
+            your vouchers is redeemed. Useful when redemption happens somewhere you don't control
+            the request — an agent redeeming on a customer's behalf, say — so your backend still
+            hears about it. The <code style={ic}>/v1/validate</code> response stays the source of
+            truth; the webhook is a notification, not a replacement.
+          </p>
+
+          <div style={sub}>Payload</div>
+          <CodeBlock id="whpayload" copied={copied} onCopy={onCopy}>{`POST https://your-app.com/webhooks/akoro
+X-Akoro-Event: voucher.redeemed
+X-Akoro-Delivery: 3f9a...            // unique per delivery — dedupe on this
+X-Akoro-Signature: t=1735689600,v1=5d41402abc4b2a76...
+
+{
+  "event": "voucher.redeemed",
+  "created_at": "2026-08-01T09:20:00.000Z",
+  "data": {
+    "transaction_id": "9c2f4a1e-...",
+    "voucher_code": "X9K7-MQPL-3R9T",
+    "credits": 100,
+    "customer_id": "cust_456",
+    "redeemed_at": "2026-08-01T09:20:00.000Z"
+  }
+}`}</CodeBlock>
+
+          <div style={sub}>Verify the signature — do not skip this</div>
+          <p style={p}>
+            Your webhook URL is a public endpoint. Without verification anyone who learns it can post
+            fake redemptions and mint free credit. We sign <code style={ic}>&lt;timestamp&gt;.&lt;raw body&gt;</code>
+            with HMAC-SHA256 keyed on your signing secret (Webhooks page). Signing the timestamp too
+            is what stops an attacker replaying a genuine payload they captured.
+          </p>
+          <CodeBlock id="whverify" copied={copied} onCopy={onCopy}>{`import crypto from "crypto";
+
+// IMPORTANT: verify against the RAW body, before any JSON parsing —
+// re-serialising changes the bytes and the signature won't match.
+app.post("/webhooks/akoro", express.raw({ type: "application/json" }), (req, res) => {
+  const raw = req.body.toString("utf8");
+  const [tPart, vPart] = (req.get("X-Akoro-Signature") || "").split(",");
+  const t  = Number((tPart || "").split("=")[1]);
+  const v1 = (vPart || "").split("=")[1] || "";
+
+  // Reject anything older than 5 minutes — blocks replay of a captured payload.
+  if (!t || Math.abs(Date.now() / 1000 - t) > 300) return res.sendStatus(400);
+
+  const expected = crypto.createHmac("sha256", process.env.AKORO_WEBHOOK_SECRET)
+    .update(\`\${t}.\${raw}\`).digest("hex");
+
+  const a = Buffer.from(expected, "hex"), b = Buffer.from(v1, "hex");
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.sendStatus(401);
+
+  const { event, data } = JSON.parse(raw);
+  if (event === "voucher.redeemed") {
+    // Dedupe on X-Akoro-Delivery or data.transaction_id — retries WILL happen.
+    creditCustomerOnce(data.customer_id, data.credits, data.transaction_id);
+  }
+  res.sendStatus(200);   // 2xx = delivered; anything else is retried
+});`}</CodeBlock>
+
+          <div style={sub}>Retries</div>
+          <p style={p}>
+            Any non-2xx response (or a timeout past 8s) is retried up to 6 times with backoff —
+            roughly 1m, 5m, 25m, 2h, then 6h. Every attempt, its status code and error are visible on
+            the <strong>Webhooks</strong> page, where you can also replay a delivery or fire a test
+            event. Because retries exist, <strong>your handler must be idempotent</strong> — dedupe
+            on <code style={ic}>X-Akoro-Delivery</code> or <code style={ic}>transaction_id</code>.
+          </p>
+        </Section>
+
         {/* Redemptions feed */}
         <Section title="GET /v1/redemptions">
           <p style={p}>Your own redemption history, for reconciliation. Same auth as validate.</p>
