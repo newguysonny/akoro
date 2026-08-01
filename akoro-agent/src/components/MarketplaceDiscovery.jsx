@@ -9,6 +9,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { apiGet, apiPost } from '../services/api.js';
+import { useCart } from '../contexts/CartContext.jsx';
 import { BRAND, GREEN, GOLD, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT, CATEGORIES } from '../constants.js';
 
 const usd = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -173,6 +174,7 @@ function ModeTab({ active, onClick, label }) {
  * name + description, billing-period tag, price — tap to expand a
  * quantity stepper + confirm, right where the item is. */
 function ProductsMenu({ startup, onBought, onToast, onClose }) {
+  const { addItem } = useCart();
   const [selected, setSelected] = useState(null);
   const [qty, setQty] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -188,6 +190,16 @@ function ProductsMenu({ startup, onBought, onToast, onClose }) {
     } catch (e) {
       onToast(e.message?.includes('INSUFFICIENT') || e.status === 402 ? 'Insufficient wallet balance — top up first' : (e.message || 'Purchase failed'));
     } finally { setBusy(false); }
+  };
+
+  const addToCart = (p) => {
+    addItem({
+      type: 'product', startupId: startup.id, startupName: startup.name, coverImageUrl: startup.cover_image_url, category: startup.category,
+      productId: p.id, productName: p.name, imageUrl: p.image_url, billingPeriod: p.billing_period,
+      unitCredits: p.credits, unitPriceUsd: p.price_usd, minOrderQty: p.min_order_qty, quantity: qty,
+    });
+    onToast(`Added ${p.name} to cart`);
+    setSelected(null);
   };
 
   return (
@@ -224,9 +236,14 @@ function ProductsMenu({ startup, onBought, onToast, onClose }) {
                 <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>Total</span>
                 <span style={{ fontSize: 18, fontWeight: 900, color: INK }}>{usd(p.price_usd * (qty || 0))}</span>
               </div>
-              <button onClick={buy} disabled={busy || !qty || qty < p.min_order_qty} style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
-                {busy ? 'Buying…' : 'Confirm purchase'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => addToCart(p)} disabled={!qty || qty < p.min_order_qty} style={{ flex: 1, padding: 13, borderRadius: 12, border: `1.5px solid ${BRAND}`, background: WHITE, color: BRAND, fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+                  Add to cart
+                </button>
+                <button onClick={buy} disabled={busy || !qty || qty < p.min_order_qty} style={{ flex: 1, padding: 13, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+                  {busy ? 'Buying…' : 'Buy now'}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -236,6 +253,7 @@ function ProductsMenu({ startup, onBought, onToast, onClose }) {
 }
 
 function CustomPurchase({ startup, onBought, onToast, onClose }) {
+  const { addItem } = useCart();
   const [unitCredits, setUnitCredits] = useState(100);
   const [qty, setQty] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -276,9 +294,15 @@ function CustomPurchase({ startup, onBought, onToast, onClose }) {
         <span style={{ fontSize: 19, fontWeight: 900, color: INK }}>{usd(unitPrice * qty)}</span>
       </div>
 
-      <button onClick={buy} disabled={busy} style={{ width: '100%', padding: 14, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
-        {busy ? 'Buying…' : 'Confirm purchase'}
-      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => { addItem({ type: 'custom', startupId: startup.id, startupName: startup.name, coverImageUrl: startup.cover_image_url, category: startup.category, unitCredits, unitPriceUsd: unitPrice, discountPct: tier?.discount_pct || 0, quantity: qty }); onToast('Added to cart'); }}
+          style={{ flex: 1, padding: 14, borderRadius: 13, border: `1.5px solid ${BRAND}`, background: WHITE, color: BRAND, fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+          Add to cart
+        </button>
+        <button onClick={buy} disabled={busy} style={{ flex: 1, padding: 14, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+          {busy ? 'Buying…' : 'Buy now'}
+        </button>
+      </div>
     </div>
   );
 }

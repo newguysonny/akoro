@@ -6,8 +6,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useCart } from '../contexts/CartContext.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import MarketplaceDiscovery from '../components/MarketplaceDiscovery.jsx';
+import CartPage from '../components/CartPage.jsx';
 import { BRAND, GREEN, RED, AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
 const NAV_ITEMS = [
@@ -23,8 +25,10 @@ const usd = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractio
 export default function AgentDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { count: cartCount } = useCart();
   const [tab, setTab] = useState('market');
   const [balance, setBalance] = useState(null);
+  const [cartOpen, setCartOpen] = useState(false);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
@@ -63,6 +67,12 @@ export default function AgentDashboard() {
             <span style={{ fontSize: 13 }}>🪙</span>
             <span style={{ fontSize: 12.5, fontWeight: 900, color: '#B45309' }}>{balance == null ? '…' : usd(balance)}</span>
           </button>
+          <button onClick={() => setCartOpen(true)} title="Cart" style={{ position: 'relative', width: 34, height: 34, borderRadius: '50%', background: '#F3F4F6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>
+            🛒
+            {cartCount > 0 && (
+              <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 8, background: BRAND, color: '#fff', fontSize: 9.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{cartCount}</span>
+            )}
+          </button>
           <button onClick={logout} title="Sign out"
             style={{ width: 34, height: 34, borderRadius: '50%', background: '#F3F4F6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⎋</button>
         </div>
@@ -85,6 +95,8 @@ export default function AgentDashboard() {
           </button>
         ))}
       </div>
+
+      {cartOpen && <CartPage onClose={() => setCartOpen(false)} onBought={loadWallet} onToast={showToast} />}
 
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 18px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 999 }}>{toast}</div>}
     </div>
