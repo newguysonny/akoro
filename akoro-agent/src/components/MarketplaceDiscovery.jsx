@@ -107,31 +107,15 @@ function Chip({ active, onClick, icon, label, color = BRAND }) {
   );
 }
 
-/* ── Purchase sheet — swipe-up bottom sheet, opened from a card tap ─── */
+/* ── Purchase sheet — swipe-up bottom sheet, opened from a card tap ───
+ * Two ways to buy: pick one of the business's fixed-price products
+ * (gift-card-style denominations), or a custom credits × quantity amount
+ * priced off the base rate + bulk discount tiers. Both are always
+ * available — a product list doesn't replace the custom option. */
 function PurchaseSheet({ startup, onClose, onBought, onToast }) {
-  const [unitCredits, setUnitCredits] = useState(100);
-  const [qty, setQty] = useState(10);
-  const [busy, setBusy] = useState(false);
-
-  const tierFor = (q) => {
-    const applicable = (startup.discountTiers || []).filter((t) => q * unitCredits >= t.min_credits);
-    return applicable.sort((a, b) => b.min_credits - a.min_credits)[0];
-  };
-  const tier = tierFor(qty);
-  const unitPrice = startup.credit_rate_usd * (1 - (tier?.discount_pct || 0) / 100);
+  const hasProducts = (startup.products || []).length > 0;
+  const [mode, setMode] = useState(hasProducts ? 'products' : 'custom');
   const cat = catInfo(startup.category);
-
-  const buy = async () => {
-    setBusy(true);
-    try {
-      const r = await apiPost('/api/vouchers/purchase', { startupId: startup.id, quantity: qty, unitCredits });
-      onToast(`Bought ${r.quantity} codes · ${usd(r.totalCostUsd)}`);
-      onBought();
-      onClose();
-    } catch (e) {
-      onToast(e.message?.includes('INSUFFICIENT') || e.status === 402 ? 'Insufficient wallet balance — top up first' : (e.message || 'Purchase failed'));
-    } finally { setBusy(false); }
-  };
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -156,27 +140,126 @@ function PurchaseSheet({ startup, onClose, onBought, onToast }) {
 
           {startup.description && <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.5, margin: '0 0 16px' }}>{startup.description}</p>}
 
-          {startup.discountTiers?.length > 0 && (
-            <div style={{ fontSize: 11.5, color: MUTED2, background: LIGHT, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
-              Bulk discounts: {startup.discountTiers.map((t) => `${fmt(t.min_credits)}+ → −${t.discount_pct}%`).join(' · ')}
+          {hasProducts && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <ModeTab active={mode === 'products'} onClick={() => setMode('products')} label="Voucher packs" />
+              <ModeTab active={mode === 'custom'} onClick={() => setMode('custom')} label="Custom amount" />
             </div>
           )}
 
-          <label style={lbl}>Credits per code</label>
-          <input type="number" min="1" value={unitCredits} onChange={(e) => setUnitCredits(Number(e.target.value))} style={inp} />
-          <label style={lbl}>Number of codes</label>
-          <input type="number" min="1" value={qty} onChange={(e) => setQty(Number(e.target.value))} style={inp} />
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0' }}>
-            <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>Total{tier ? ` (−${tier.discount_pct}% tier)` : ''}</span>
-            <span style={{ fontSize: 19, fontWeight: 900, color: INK }}>{usd(unitPrice * qty)}</span>
-          </div>
-
-          <button onClick={buy} disabled={busy} style={{ width: '100%', padding: 14, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
-            {busy ? 'Buying…' : 'Confirm purchase'}
-          </button>
+          {mode === 'products'
+            ? <ProductsPurchase startup={startup} onBought={onBought} onToast={onToast} onClose={onClose} />
+            : <CustomPurchase startup={startup} onBought={onBought} onToast={onToast} onClose={onClose} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ModeTab({ active, onClick, label }) {
+  return (
+    <button onClick={onClick} style={{
+      flex: 1, padding: '9px 0', borderRadius: 10, border: active ? `1.5px solid ${BRAND}` : `1.5px solid ${BORDER}`,
+      background: active ? `${BRAND}12` : WHITE, cursor: 'pointer', fontFamily: FONT,
+      fontSize: 12.5, fontWeight: 800, color: active ? BRAND : MUTED,
+    }}>{label}</button>
+  );
+}
+
+function ProductsPurchase({ startup, onBought, onToast, onClose }) {
+  const [selected, setSelected] = useState(null);
+  const [qty, setQty] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const pick = (p) => { setSelected(p); setQty(p.min_order_qty); };
+
+  const buy = async () => {
+    setBusy(true);
+    try {
+      const r = await apiPost('/api/vouchers/purchase-product', { startupId: startup.id, productId: selected.id, quantity: qty });
+      onToast(`Bought ${r.quantity} × ${r.productName} · ${usd(r.totalCostUsd)}`);
+      onBought(); onClose();
+    } catch (e) {
+      onToast(e.message?.includes('INSUFFICIENT') || e.status === 402 ? 'Insufficient wallet balance — top up first' : (e.message || 'Purchase failed'));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      {(startup.products || []).map((p) => (
+        <div key={p.id} style={{ border: `1px solid ${selected?.id === p.id ? BRAND : BORDER}`, borderRadius: 12, padding: 14, marginBottom: 10, cursor: 'pointer' }}
+          onClick={() => pick(selected?.id === p.id ? null : p)}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: INK }}>{p.name}</div>
+              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 2 }}>{fmt(p.credits)} credits · min. order {p.min_order_qty}</div>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>{usd(p.price_usd)}</div>
+          </div>
+
+          {selected?.id === p.id && (
+            <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+              <label style={lbl}>Quantity (min. {p.min_order_qty})</label>
+              <input type="number" min={p.min_order_qty} value={qty} onChange={(e) => setQty(Number(e.target.value))} style={inp} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0' }}>
+                <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>Total</span>
+                <span style={{ fontSize: 18, fontWeight: 900, color: INK }}>{usd(p.price_usd * (qty || 0))}</span>
+              </div>
+              <button onClick={buy} disabled={busy || !qty || qty < p.min_order_qty} style={{ width: '100%', padding: 13, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+                {busy ? 'Buying…' : 'Confirm purchase'}
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CustomPurchase({ startup, onBought, onToast, onClose }) {
+  const [unitCredits, setUnitCredits] = useState(100);
+  const [qty, setQty] = useState(10);
+  const [busy, setBusy] = useState(false);
+
+  const tierFor = (q) => {
+    const applicable = (startup.discountTiers || []).filter((t) => q * unitCredits >= t.min_credits);
+    return applicable.sort((a, b) => b.min_credits - a.min_credits)[0];
+  };
+  const tier = tierFor(qty);
+  const unitPrice = startup.credit_rate_usd * (1 - (tier?.discount_pct || 0) / 100);
+
+  const buy = async () => {
+    setBusy(true);
+    try {
+      const r = await apiPost('/api/vouchers/purchase', { startupId: startup.id, quantity: qty, unitCredits });
+      onToast(`Bought ${r.quantity} codes · ${usd(r.totalCostUsd)}`);
+      onBought(); onClose();
+    } catch (e) {
+      onToast(e.message?.includes('INSUFFICIENT') || e.status === 402 ? 'Insufficient wallet balance — top up first' : (e.message || 'Purchase failed'));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      {startup.discountTiers?.length > 0 && (
+        <div style={{ fontSize: 11.5, color: MUTED2, background: LIGHT, borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
+          Bulk discounts: {startup.discountTiers.map((t) => `${fmt(t.min_credits)}+ → −${t.discount_pct}%`).join(' · ')}
+        </div>
+      )}
+
+      <label style={lbl}>Credits per code</label>
+      <input type="number" min="1" value={unitCredits} onChange={(e) => setUnitCredits(Number(e.target.value))} style={inp} />
+      <label style={lbl}>Number of codes</label>
+      <input type="number" min="1" value={qty} onChange={(e) => setQty(Number(e.target.value))} style={inp} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '14px 0' }}>
+        <span style={{ fontSize: 12.5, color: MUTED, fontWeight: 700 }}>Total{tier ? ` (−${tier.discount_pct}% tier)` : ''}</span>
+        <span style={{ fontSize: 19, fontWeight: 900, color: INK }}>{usd(unitPrice * qty)}</span>
+      </div>
+
+      <button onClick={buy} disabled={busy} style={{ width: '100%', padding: 14, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+        {busy ? 'Buying…' : 'Confirm purchase'}
+      </button>
     </div>
   );
 }

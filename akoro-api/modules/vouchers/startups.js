@@ -137,6 +137,81 @@ router.post("/:id/discount-tiers", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Voucher products — fixed-denomination SKUs (e.g. "₦1,000 Voucher") ───────
+// Distinct from credit_rate_usd + discount_tiers (custom-amount pricing):
+// each product has its OWN price and minimum order quantity, independent of
+// the startup's base rate.
+function validProductBody(body) {
+  const name = String(body?.name || "").trim();
+  const credits = Math.floor(Number(body?.credits));
+  const priceUsd = Number(body?.price_usd);
+  const minOrderQty = body?.min_order_qty != null ? Math.floor(Number(body.min_order_qty)) : 1;
+  if (!name) return "name is required";
+  if (!credits || credits < 1) return "credits must be a positive integer";
+  if (!priceUsd || priceUsd <= 0) return "price_usd must be a positive number";
+  if (!minOrderQty || minOrderQty < 1) return "min_order_qty must be a positive integer";
+  return { name, credits, price_usd: priceUsd, min_order_qty: minOrderQty };
+}
+
+// POST /api/vouchers/startups/:id/products — create a voucher product.
+router.post("/:id/products", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const parsed = validProductBody(req.body);
+    if (typeof parsed === "string") return res.status(400).json({ error: parsed });
+    const { data, error } = await vdb().from("voucher_products").insert({ startup_id: startup.id, ...parsed }).select("*").single();
+    if (error) throw new Error(error.message);
+    res.status(201).json({ success: true, product: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/vouchers/startups/:id/products — list (owner sees archived too).
+router.get("/:id/products", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const { data } = await vdb().from("voucher_products").select("*").eq("startup_id", startup.id).order("created_at", { ascending: false });
+    res.json({ success: true, products: data || [] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/vouchers/startups/:id/products/:productId — edit or archive.
+router.patch("/:id/products/:productId", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const patch = {};
+    if (req.body.name !== undefined) { const n = String(req.body.name).trim(); if (!n) return res.status(400).json({ error: "name cannot be empty" }); patch.name = n; }
+    if (req.body.credits !== undefined) { const c = Math.floor(Number(req.body.credits)); if (!c || c < 1) return res.status(400).json({ error: "credits must be a positive integer" }); patch.credits = c; }
+    if (req.body.price_usd !== undefined) { const p = Number(req.body.price_usd); if (!p || p <= 0) return res.status(400).json({ error: "price_usd must be a positive number" }); patch.price_usd = p; }
+    if (req.body.min_order_qty !== undefined) { const m = Math.floor(Number(req.body.min_order_qty)); if (!m || m < 1) return res.status(400).json({ error: "min_order_qty must be a positive integer" }); patch.min_order_qty = m; }
+    if (req.body.status && ["active", "archived"].includes(req.body.status)) patch.status = req.body.status;
+    if (!Object.keys(patch).length) return res.status(400).json({ error: "No valid fields" });
+    patch.updated_at = new Date().toISOString();
+    const { data, error } = await vdb().from("voucher_products").update(patch).eq("id", req.params.productId).eq("startup_id", startup.id).select("*").single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, product: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/vouchers/startups/:id/products/:productId — only if no order
+// has ever used it (same conservative rule as deleting a startup itself);
+// otherwise archive it via PATCH status=archived so it drops off the
+// marketplace without breaking the history of orders that reference it.
+router.delete("/:id/products/:productId", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const { count } = await vdb().from("batches").select("id", { count: "exact", head: true })
+      .eq("startup_id", startup.id).eq("product_id", req.params.productId);
+    if (count > 0) return res.status(409).json({ error: "This product has order history — archive it instead of deleting." });
+    const { error } = await vdb().from("voucher_products").delete().eq("id", req.params.productId).eq("startup_id", startup.id);
+    if (error) throw new Error(error.message);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/vouchers/startups/:id/api-keys — mint a new key (shown once).
 router.post("/:id/api-keys", async (req, res) => {
   const startup = await ownedStartup(req, res);

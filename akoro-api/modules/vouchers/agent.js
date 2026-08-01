@@ -25,14 +25,17 @@ router.get("/marketplace", async (req, res) => {
       .eq("status", "active").order("name");
     const ids = (startups || []).map((s) => s.id);
 
-    const [{ data: tiers }, { data: batches }, { data: myBatches }] = await Promise.all([
+    const [{ data: tiers }, { data: products }, { data: batches }, { data: myBatches }] = await Promise.all([
       ids.length ? vdb().from("discount_tiers").select("startup_id, min_credits, discount_pct").in("startup_id", ids).order("min_credits") : { data: [] },
+      ids.length ? vdb().from("voucher_products").select("*").eq("status", "active").in("startup_id", ids).order("price_usd") : { data: [] },
       ids.length ? vdb().from("batches").select("startup_id, quantity").eq("status", "paid").in("startup_id", ids) : { data: [] },
       ids.length ? vdb().from("batches").select("startup_id").eq("agent_id", req.user.id).in("startup_id", ids) : { data: [] },
     ]);
 
     const tiersByStartup = {};
     (tiers || []).forEach((t) => { (tiersByStartup[t.startup_id] ||= []).push(t); });
+    const productsByStartup = {};
+    (products || []).forEach((p) => { (productsByStartup[p.startup_id] ||= []).push(p); });
     const soldByStartup = {};
     (batches || []).forEach((b) => { soldByStartup[b.startup_id] = (soldByStartup[b.startup_id] || 0) + b.quantity; });
     const boughtFrom = new Set((myBatches || []).map((b) => b.startup_id));
@@ -42,6 +45,7 @@ router.get("/marketplace", async (req, res) => {
       startups: (startups || []).map((s) => ({
         ...s,
         discountTiers: tiersByStartup[s.id] || [],
+        products: productsByStartup[s.id] || [],
         codesSold: soldByStartup[s.id] || 0,
         boughtBefore: boughtFrom.has(s.id),
       })),
@@ -147,6 +151,69 @@ router.post("/purchase", async (req, res) => {
     }
   } catch (e) {
     console.error("[vouchers/purchase]", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/vouchers/purchase-product — buy N units of a fixed-denomination
+// voucher product (e.g. "₦1,000 Voucher"). Same claim→debit→generate→
+// rollback shape as /purchase, but price/credits come from the product,
+// not from the startup's base rate/discount tiers, and quantity is gated
+// by the product's own minimum order.
+// Body: { startupId, productId, quantity }
+router.post("/purchase-product", async (req, res) => {
+  try {
+    const { startupId, productId, quantity } = req.body || {};
+    const qty = Math.floor(Number(quantity));
+    if (!startupId || !productId || !qty || qty < 1)
+      return res.status(400).json({ error: "startupId, productId and a positive quantity are required" });
+    if (qty > 10000) return res.status(400).json({ error: "Max 10,000 codes per purchase" });
+
+    const { data: startup } = await vdb().from("startups").select("*").eq("id", startupId).eq("status", "active").maybeSingle();
+    if (!startup) return res.status(404).json({ error: "Startup not found or inactive" });
+
+    const { data: product } = await vdb().from("voucher_products").select("*")
+      .eq("id", productId).eq("startup_id", startupId).eq("status", "active").maybeSingle();
+    if (!product) return res.status(404).json({ error: "Voucher product not found or no longer available" });
+    if (qty < product.min_order_qty) return res.status(400).json({ error: `Minimum order for "${product.name}" is ${product.min_order_qty}` });
+
+    const unitPriceUsd = Number(product.price_usd);
+    const credits = product.credits;
+    const totalCostUsd = +(unitPriceUsd * qty).toFixed(2);
+
+    const { data: batch, error: bErr } = await vdb().from("batches").insert({
+      startup_id: startup.id, agent_id: req.user.id, quantity: qty, unit_credits: credits,
+      unit_price_usd: unitPriceUsd, total_cost_usd: totalCostUsd, status: "pending", product_id: product.id,
+    }).select("id").single();
+    if (bErr) throw new Error(bErr.message);
+
+    try {
+      await debit(req.user.id, totalCostUsd, { type: "purchase", ref: batch.id, meta: { startupId: startup.id, productId: product.id, quantity: qty } });
+    } catch (e) {
+      await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
+      if (e.code === "INSUFFICIENT_FUNDS") return res.status(402).json({ error: "Insufficient wallet balance", code: "INSUFFICIENT_FUNDS", needed: e.needed, balance: e.balance });
+      throw e;
+    }
+
+    try {
+      const codes = generateCodes(qty);
+      const rows = codes.map((code) => ({
+        code, batch_id: batch.id, startup_id: startup.id, agent_id: req.user.id, credits, paid_price_usd: unitPriceUsd,
+      }));
+      const { error: cErr } = await vdb().from("codes").insert(rows);
+      if (cErr) throw new Error(cErr.message);
+      await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);
+      res.status(201).json({
+        success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
+        unitPriceUsd, totalCostUsd, codes, productName: product.name,
+      });
+    } catch (e) {
+      await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } }).catch(() => {});
+      await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
+      throw e;
+    }
+  } catch (e) {
+    console.error("[vouchers/purchase-product]", e.message);
     res.status(500).json({ error: e.message });
   }
 });
