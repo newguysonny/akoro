@@ -12,5 +12,9 @@ export const removeAgentFromCart  = (listingId) => apiDelete(`/api/cart/listing/
 export const clearCart            = () => apiDelete('/api/cart');
 export const applyCoupon          = (coupon_code) => apiPost('/api/cart/apply-coupon', { coupon_code });
 export const verifyCheckout       = (reference) => apiGet(`/api/cart/verify/${encodeURIComponent(reference)}`).then((r) => r.data ?? r);
-export const checkoutCart         = ({ coupon_code, method } = {}) =>
-  apiPost('/api/cart/checkout', { ...(coupon_code ? { coupon_code } : {}), ...(method ? { method } : {}) });
+export const checkoutCart         = ({ coupon_code, method, voucher_code } = {}) =>
+  apiPost('/api/cart/checkout', {
+    ...(coupon_code ? { coupon_code } : {}),
+    ...(method ? { method } : {}),
+    ...(voucher_code ? { voucher_code } : {}),
+  });

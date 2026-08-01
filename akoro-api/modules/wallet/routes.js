@@ -21,6 +21,7 @@ import {
   coinsToKobo, nairaToCoins, coinsToUsd, coinsForUsage,
 } from "../../lib/aiPricing.js";
 import { initializeTransaction } from "../adaptive-learning/marketplace/paystackService.js";
+import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -138,6 +139,33 @@ router.post("/topup/init", authenticateToken, async (req, res) => {
     });
     res.json({ success: true, data: { authorization_url: init.authorization_url, reference, coins, amountNaira: kobo / 100 } });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/wallet/redeem-voucher  { code } ─────────────────────────────────
+// Top up with a voucher code bought from an agent. The code is redeemed
+// server-side against the voucher API (the secret key never leaves the
+// backend); 1 voucher credit = 1 coin.
+router.post("/redeem-voucher", authenticateToken, async (req, res) => {
+  const code = String(req.body?.code || "").trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: "Enter a voucher code" });
+  if (!voucherRedeemConfigured()) return res.status(503).json({ error: "Voucher redemption isn't configured on this server" });
+
+  try {
+    const { credits, transactionId } = await redeemVoucher({ code, customerId: req.user.id });
+    if (credits < 1) return res.status(400).json({ error: "That voucher carries no credits" });
+
+    // Idempotent on the voucher's own transaction id, so a retried request
+    // (or a double-tap) can never credit the same voucher twice.
+    const { balance } = await creditTopup({
+      ownerType: "user", ownerId: req.user.id, coins: credits,
+      ref: `voucher_${transactionId}`, by: req.user.id,
+    });
+    res.json({ success: true, data: { coins: credits, balance } });
+  } catch (e) {
+    if (e instanceof VoucherError) return res.status(e.status === 429 ? 429 : 400).json({ error: e.message, reason: e.reason });
+    console.error("[wallet/redeem-voucher]", e.message);
+    res.status(500).json({ error: "Could not redeem that code — please try again" });
+  }
 });
 
 // ── POST /api/wallet/allocate  { student_user_id, coins } (school admins) ─────
