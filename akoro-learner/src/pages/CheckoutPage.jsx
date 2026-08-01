@@ -57,6 +57,10 @@ export default function CheckoutPage() {
 
   const [method, setMethod]     = useState('any');
   const [voucherCode, setVoucherCode] = useState('');
+  // pay() only implements the voucher path for a CART checkout. Offering it
+  // for a single course / top-up / agent purchase let the user pick it, type
+  // a code, and get silently sent to Paystack with the code ignored.
+  const availableMethods = mode === 'cart' ? METHODS : METHODS.filter((m) => m.key !== 'voucher');
   const [code, setCode]         = useState('');
   const [coupon, setCoupon]     = useState(null);   // { coupon_code, savings_ngn?, final_ngn? }
   const [applying, setApplying] = useState(false);
@@ -242,7 +246,7 @@ export default function CheckoutPage() {
           <div style={card}>
             <div style={h}>Payment method</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {METHODS.map((m) => {
+              {availableMethods.map((m) => {
                 const on = method === m.key;
                 const Icon = m.icon;
                 return (
