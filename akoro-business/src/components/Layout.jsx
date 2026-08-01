@@ -34,7 +34,12 @@ function BusinessSwitcher() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  if (!startups?.length) return null;
+  // Always render — even with zero businesses. Previously this returned
+  // null when the list was empty, which meant a fresh account (or one
+  // whose only business was just deleted) landed on /create-startup with
+  // NO sidebar at all and no way to reach "Manage businesses" to see or
+  // delete anything.
+  const hasStartups = (startups?.length || 0) > 0;
 
   return (
     <div ref={ref} style={{ position: 'relative', padding: '14px 14px 6px' }}>
@@ -54,18 +59,24 @@ function BusinessSwitcher() {
           background: '#1A1C22', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12,
           boxShadow: '0 12px 28px rgba(0,0,0,.4)', padding: 6, fontFamily: FONT,
         }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: .5, padding: '6px 8px' }}>Businesses</div>
-          {startups.map((s) => (
-            <button key={s.id} onClick={() => { setCurrentId(s.id); setOpen(false); }} style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-              padding: '8px 9px', borderRadius: 8, border: 'none', background: s.id === current?.id ? 'rgba(255,255,255,.08)' : 'transparent',
-              color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
-            }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
-              {s.id === current?.id && <Check size={14} style={{ flexShrink: 0, color: ACCENT }} />}
-            </button>
-          ))}
-          <div style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '6px 2px' }} />
+          {hasStartups ? (
+            <>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: .5, padding: '6px 8px' }}>Businesses</div>
+              {startups.map((s) => (
+                <button key={s.id} onClick={() => { setCurrentId(s.id); setOpen(false); }} style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  padding: '8px 9px', borderRadius: 8, border: 'none', background: s.id === current?.id ? 'rgba(255,255,255,.08)' : 'transparent',
+                  color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textAlign: 'left',
+                }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                  {s.id === current?.id && <Check size={14} style={{ flexShrink: 0, color: ACCENT }} />}
+                </button>
+              ))}
+              <div style={{ height: 1, background: 'rgba(255,255,255,.08)', margin: '6px 2px' }} />
+            </>
+          ) : (
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.5)', padding: '6px 8px 10px' }}>No businesses yet.</div>
+          )}
           <button onClick={() => { setOpen(false); navigate('/create-startup'); }} style={dropdownActionBtn}>
             <Plus size={14} /> Create new business
           </button>
@@ -122,7 +133,12 @@ const dropdownActionBtn = {
 export function PageLayout({ title, subtitle, action, children }) {
   const { startups, loading } = useStartup();
   const navigate = useNavigate();
-  const needsOnboarding = !loading && startups && startups.length === 0 && window.location.pathname !== '/create-startup';
+  // /manage-businesses stays reachable at zero businesses too — otherwise
+  // deleting your only business (or a fresh account before creating one)
+  // makes the one page that could show/create/delete businesses itself
+  // unreachable, bouncing back to /create-startup before it can render.
+  const EXEMPT_PATHS = ['/create-startup', '/manage-businesses'];
+  const needsOnboarding = !loading && startups && startups.length === 0 && !EXEMPT_PATHS.includes(window.location.pathname);
 
   useEffect(() => { if (needsOnboarding) navigate('/create-startup', { replace: true }); }, [needsOnboarding, navigate]);
   if (needsOnboarding) return null;

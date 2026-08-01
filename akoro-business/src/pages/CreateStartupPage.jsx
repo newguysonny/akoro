@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiPost } from '../services/api.js';
@@ -60,6 +60,11 @@ export default function CreateStartupPage() {
 
         {err && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, margin: '12px 0' }}>{err}</div>}
         <button type="submit" disabled={busy} style={btn}>{busy ? 'Creating…' : 'Create voucher program'}</button>
+
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <Link to="/manage-businesses" style={{ fontSize: 12, color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>Already have a business? Manage businesses</Link>
+        </div>
+
         <button type="button" onClick={logout} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 11, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Sign out</button>
       </form>
     </div>
