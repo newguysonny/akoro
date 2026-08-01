@@ -111,6 +111,7 @@
     "2026-seed-jss11-forecast.sql",
     "2026-seed-voucher-demo.sql",
     "2026-seed-voucher-demo-2.sql",
-    "2026-seed-voucher-products.sql"
+    "2026-seed-voucher-products.sql",
+    "2026-seed-voucher-media.sql"
   ]
 }
