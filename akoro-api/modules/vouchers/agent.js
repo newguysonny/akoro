@@ -164,12 +164,27 @@ router.get("/my-codes", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/vouchers/batches — my purchase history.
+// GET /api/vouchers/batches — my purchase history, one row per bulk order.
+// Each batch is enriched with a redemption breakdown (active/used/expired
+// counts) so the agent app can show "3/10 redeemed" on the order card
+// without a second round-trip per batch.
 router.get("/batches", async (req, res) => {
   try {
-    const { data } = await vdb().from("batches").select("*, startups(name)")
+    const { data: batches } = await vdb().from("batches").select("*, startups(name, category, cover_image_url)")
       .eq("agent_id", req.user.id).order("created_at", { ascending: false }).limit(100);
-    res.json({ success: true, batches: data || [] });
+    const ids = (batches || []).map((b) => b.id);
+    const { data: codes } = ids.length
+      ? await vdb().from("codes").select("batch_id, status").in("batch_id", ids)
+      : { data: [] };
+    const counts = {};
+    (codes || []).forEach((c) => {
+      const bucket = (counts[c.batch_id] ||= { active: 0, used: 0, expired: 0, refunded: 0 });
+      bucket[c.status] = (bucket[c.status] || 0) + 1;
+    });
+    res.json({
+      success: true,
+      batches: (batches || []).map((b) => ({ ...b, codeCounts: counts[b.id] || { active: 0, used: 0, expired: 0, refunded: 0 } })),
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

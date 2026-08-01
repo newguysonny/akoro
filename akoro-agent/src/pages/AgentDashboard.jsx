@@ -143,58 +143,116 @@ function WalletTab({ balance, onRefresh, onToast }) {
 }
 
 /* ── My Codes ─────────────────────────────────────────────────────────────── */
-const STATUS_FILTERS = [
+// One order (batch) can be 50 codes — listing them one after another buried
+// the order in noise. Group by batch instead: an order card with a
+// redemption breakdown, tap to open a sheet listing every code in it.
+function CodesTab({ onToast }) {
+  const [batches, setBatches] = useState(null);
+  const [opened, setOpened] = useState(null);
+
+  useEffect(() => {
+    apiGet('/api/vouchers/batches').then((r) => setBatches(r.batches || []))
+      .catch((e) => { setBatches([]); onToast(e.message || 'Could not load your orders'); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (batches === null) return <Loading />;
+
+  return (
+    <div>
+      <h2 style={h2}>My Codes</h2>
+      {batches.length === 0 ? <Empty text="No orders yet — buy vouchers from the Marketplace tab." /> : batches.map((b) => (
+        <button key={b.id} onClick={() => setOpened(b)} style={{ ...card, width: '100%', textAlign: 'left', cursor: 'pointer', display: 'block', fontFamily: FONT }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: INK }}>{b.startups?.name || 'Unknown business'}</div>
+              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 2 }}>{new Date(b.created_at).toLocaleDateString()} · {b.quantity} codes × {fmt(b.unit_credits)} credits</div>
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 100,
+              color: b.status === 'paid' ? GREEN : b.status === 'failed' ? RED : MUTED2,
+              background: b.status === 'paid' ? `${GREEN}14` : b.status === 'failed' ? `${RED}14` : `${MUTED2}14` }}>{b.status}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${BORDER}` }}>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{usd(b.total_cost_usd)}</span>
+            <BatchProgress counts={b.codeCounts} total={b.quantity} />
+          </div>
+        </button>
+      ))}
+      {opened && <OrderSheet batch={opened} onClose={() => setOpened(null)} onToast={onToast} />}
+    </div>
+  );
+}
+
+function BatchProgress({ counts, total }) {
+  const used = counts?.used || 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ width: 60, height: 5, borderRadius: 3, background: BORDER, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${total ? (used / total) * 100 : 0}%`, background: GREEN, borderRadius: 3 }} />
+      </div>
+      <span style={{ fontSize: 11, fontWeight: 700, color: MUTED2 }}>{used}/{total} redeemed</span>
+    </div>
+  );
+}
+
+const BATCH_STATUS_FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'active', label: 'Unsold/unused' },
   { key: 'used', label: 'Redeemed' },
 ];
-function CodesTab({ onToast }) {
+function OrderSheet({ batch, onClose, onToast }) {
   const [codes, setCodes] = useState(null);
   const [filter, setFilter] = useState('all');
   const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
-    apiGet('/api/vouchers/my-codes').then((r) => setCodes(r.codes || []))
-      .catch((e) => { setCodes([]); onToast(e.message || 'Could not load your codes'); });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    apiGet(`/api/vouchers/my-codes?batchId=${batch.id}`).then((r) => setCodes(r.codes || []))
+      .catch((e) => { setCodes([]); onToast(e.message || 'Could not load these codes'); });
+  }, [batch.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const copyCode = (c) => { navigator.clipboard?.writeText(c.code); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1800); };
   const shareCode = (c) => {
-    const text = `Here's your ${c.startups?.name || 'credit'} voucher code: ${c.code}\n(worth ${c.credits} credits) — redeem it in the app to top up your balance.`;
+    const text = `Here's your ${batch.startups?.name || 'credit'} voucher code: ${c.code}\n(worth ${c.credits} credits) — redeem it in the app to top up your balance.`;
     if (navigator.share) navigator.share({ text }).catch(() => {});
     else { navigator.clipboard?.writeText(text); setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1800); }
   };
 
-  if (codes === null) return <Loading />;
-  const filtered = filter === 'all' ? codes : codes.filter((c) => c.status === filter);
+  const filtered = codes ? (filter === 'all' ? codes : codes.filter((c) => c.status === filter)) : [];
 
   return (
-    <div>
-      <h2 style={h2}>My Codes</h2>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        {STATUS_FILTERS.map((f) => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...pill, ...(filter === f.key ? pillOn : {}) }}>{f.label}</button>
-        ))}
-      </div>
-      {filtered.length === 0 ? <Empty text="No codes in this view." /> : filtered.map((c) => (
-        <div key={c.id} style={card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: c.status === 'active' ? 10 : 0 }}>
-            <div>
-              <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: INK }}>{c.code}</code>
-              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 3 }}>{c.startups?.name} · {c.credits} credits</div>
-            </div>
-            <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 100,
-              color: c.status === 'active' ? GREEN : c.status === 'used' ? MUTED2 : RED,
-              background: c.status === 'active' ? `${GREEN}14` : c.status === 'used' ? `${MUTED2}14` : `${RED}14` }}>{c.status}</span>
-          </div>
-          {c.status === 'active' && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => copyCode(c)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{copiedId === c.id ? 'Copied ✓' : 'Copy code'}</button>
-              <button onClick={() => shareCode(c)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Share to customer</button>
-            </div>
-          )}
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: WHITE, width: '100%', maxWidth: 540, maxHeight: '86vh', borderRadius: '22px 22px 0 0', overflowY: 'auto', fontFamily: FONT, animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
+        <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
+        <div style={{ position: 'sticky', top: 0, background: WHITE, padding: '10px 0 4px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 38, height: 4, borderRadius: 4, background: BORDER }} />
         </div>
-      ))}
+        <div style={{ padding: '4px 18px 26px' }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: INK, marginTop: 6 }}>{batch.startups?.name || 'Order'}</div>
+          <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>{batch.quantity} codes · {fmt(batch.unit_credits)} credits each · {usd(batch.total_cost_usd)} total · {new Date(batch.created_at).toLocaleDateString()}</div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {BATCH_STATUS_FILTERS.map((f) => (
+              <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...pill, ...(filter === f.key ? pillOn : {}) }}>{f.label}</button>
+            ))}
+          </div>
+
+          {codes === null ? <Loading /> : filtered.length === 0 ? <Empty text="No codes in this view." /> : filtered.map((c) => (
+            <div key={c.id} style={{ ...card, marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: c.status === 'active' ? 10 : 0 }}>
+                <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 800, color: INK }}>{c.code}</code>
+                <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 100,
+                  color: c.status === 'active' ? GREEN : c.status === 'used' ? MUTED2 : RED,
+                  background: c.status === 'active' ? `${GREEN}14` : c.status === 'used' ? `${MUTED2}14` : `${RED}14` }}>{c.status}</span>
+              </div>
+              {c.status === 'active' && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => copyCode(c)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>{copiedId === c.id ? 'Copied ✓' : 'Copy code'}</button>
+                  <button onClick={() => shareCode(c)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Share to customer</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
