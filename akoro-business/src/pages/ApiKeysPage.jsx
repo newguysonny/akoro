@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Copy, Check, ScrollText, Ban, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Copy, Check, ScrollText, Ban, RotateCcw, X } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
@@ -14,6 +14,9 @@ export default function ApiKeysPage() {
   const [newKey, setNewKey] = useState(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [naming, setNaming] = useState(false);   // name-the-key modal
+  const [keyName, setKeyName] = useState('');
+  const [err, setErr] = useState('');
 
   const load = useCallback(() => {
     if (!current) return;
@@ -21,26 +24,56 @@ export default function ApiKeysPage() {
   }, [current]);
   useEffect(() => { load(); }, [load]);
 
-  const issue = async () => {
-    setBusy(true);
-    try { const r = await apiPost(`/api/vouchers/startups/${current.id}/api-keys`, {}); setNewKey(r.key.rawKey); setCopied(false); load(); }
+  // The backend has always accepted a `label` — the UI just never sent one, so
+  // every key came back "Untitled key" with no way to tell them apart.
+  const issue = async (e) => {
+    e?.preventDefault?.();
+    setBusy(true); setErr('');
+    try {
+      const r = await apiPost(`/api/vouchers/startups/${current.id}/api-keys`, { label: keyName.trim() || undefined });
+      setNewKey(r.key.rawKey); setCopied(false); setNaming(false); setKeyName('');
+      load();
+    } catch (e2) { setErr(e2.message || 'Could not create the key'); }
     finally { setBusy(false); }
   };
   const toggleRevoke = async (k) => {
-    await apiPatch(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`, { status: k.status === 'active' ? 'revoked' : 'active' });
-    load();
+    try {
+      await apiPatch(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`, { status: k.status === 'active' ? 'revoked' : 'active' });
+      load();
+    } catch (e) { setErr(e.message || 'Could not update the key'); }
   };
   const remove = async (k) => {
     if (!window.confirm(`Permanently delete "${k.name}"? This can't be undone — any requests still using this key will start failing immediately.`)) return;
-    await apiDelete(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`);
-    load();
+    try {
+      await apiDelete(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`);
+      load();
+    } catch (e) { setErr(e.message || 'Could not delete the key'); }
   };
   const copy = () => { navigator.clipboard?.writeText(newKey); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
   if (!current) return null;
   return (
     <PageLayout title="API Keys" subtitle="Server-to-server keys for POST /api/vouchers/v1/validate"
-      action={<button onClick={issue} disabled={busy} style={primaryBtn}><Plus size={14} /> Create new secret key</button>}>
+      action={<button onClick={() => { setNaming(true); setErr(''); }} disabled={busy} style={primaryBtn}><Plus size={14} /> Create new secret key</button>}>
+
+      {err && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: RED, borderRadius: 10, padding: '10px 14px', fontSize: 12.5, fontWeight: 700, marginBottom: 16 }}>{err}</div>}
+
+      {naming && (
+        <div onClick={() => setNaming(false)} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <form onClick={(ev) => ev.stopPropagation()} onSubmit={issue} style={{ width: '100%', maxWidth: 400, background: WHITE, borderRadius: 16, padding: 24, fontFamily: FONT }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>Name your key</div>
+              <button type="button" onClick={() => setNaming(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><X size={18} /></button>
+            </div>
+            <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>So you can tell your keys apart later — e.g. "Production server", "Staging".</div>
+            <input value={keyName} onChange={(ev) => setKeyName(ev.target.value)} autoFocus maxLength={60} placeholder="e.g. Production server"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 10, border: `1px solid ${BORDER}`, fontSize: 14, fontFamily: FONT, outline: 'none' }} />
+            <button type="submit" disabled={busy} style={{ ...primaryBtn, width: '100%', justifyContent: 'center', marginTop: 16, padding: 12 }}>
+              {busy ? 'Creating…' : 'Create key'}
+            </button>
+          </form>
+        </div>
+      )}
 
       {newKey && (
         <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: 16, marginBottom: 20 }}>

@@ -15,13 +15,20 @@ export function StartupProvider({ children }) {
   const [startups, setStartups] = useState(null);   // null = loading
   const [currentId, setCurrentIdState] = useState(() => localStorage.getItem(CURRENT_KEY) || null);
   const [error, setError] = useState(false);
+  // Explicit, NOT derived from `startups === null`. On sign-in the
+  // unauthenticated branch below has already set startups to [], so a derived
+  // flag reads "loaded + zero businesses" while the real fetch is still in
+  // flight — PageLayout then redirects to /create-startup, which is an exempt
+  // path, so the user is stranded in onboarding every single login.
+  const [loading, setLoading] = useState(true);
 
   // Returns the promise so callers (e.g. CreateStartupPage) can `await` it
   // before navigating — otherwise the caller races ahead of the state update
   // and PageLayout's needsOnboarding check still sees the stale empty list.
   const refresh = useCallback(() => {
-    if (!isAuthenticated) { setStartups([]); return Promise.resolve(); }
+    if (!isAuthenticated) { setStartups([]); setLoading(false); return Promise.resolve(); }
     setError(false);
+    setLoading(true);
     return apiGet('/api/vouchers/startups/mine').then((r) => {
       const list = r.startups || [];
       setStartups(list);
@@ -36,7 +43,7 @@ export function StartupProvider({ children }) {
       // would dump an established business owner into onboarding.
       setError(true);
       setStartups((prev) => prev ?? []);
-    });
+    }).finally(() => setLoading(false));
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -45,7 +52,7 @@ export function StartupProvider({ children }) {
   const current = (startups || []).find((s) => s.id === currentId) || null;
 
   return (
-    <StartupContext.Provider value={{ startups, current, currentId, setCurrentId, loading: startups === null, error, refresh }}>
+    <StartupContext.Provider value={{ startups, current, currentId, setCurrentId, loading, error, refresh }}>
       {children}
     </StartupContext.Provider>
   );
