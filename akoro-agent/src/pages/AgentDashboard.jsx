@@ -234,11 +234,22 @@ function OrderSheet({ batch, onClose, onToast }) {
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: WHITE, width: '100%', maxWidth: 540, maxHeight: '86vh', borderRadius: '22px 22px 0 0', overflowY: 'auto', fontFamily: FONT, animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
         <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
-        <div style={{ position: 'sticky', top: 0, background: WHITE, padding: '10px 0 4px', display: 'flex', justifyContent: 'center' }}>
+        {/* Sticky header: the drag handle alone wasn't enough — with a long
+            code list the backdrop is scrolled out of reach, so there was no
+            way to dismiss the sheet without scrolling back to the top. */}
+        <div style={{ position: 'sticky', top: 0, background: WHITE, padding: '10px 12px 6px', display: 'flex', alignItems: 'center', zIndex: 2 }}>
+          <div style={{ flex: 1 }} />
           <div style={{ width: 38, height: 4, borderRadius: 4, background: BORDER }} />
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} aria-label="Close" style={{
+              width: 30, height: 30, borderRadius: '50%', border: 'none', background: LIGHT,
+              color: MUTED, fontSize: 16, lineHeight: 1, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>✕</button>
+          </div>
         </div>
         <div style={{ padding: '4px 18px 26px' }}>
-          <div style={{ fontSize: 17, fontWeight: 900, color: INK, marginTop: 6 }}>{batch.startups?.name || 'Order'}</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: INK, marginTop: 2 }}>{batch.startups?.name || 'Order'}</div>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>{batch.quantity} codes · {fmt(batch.unit_credits)} credits each · {usd(batch.total_cost_usd)} total · {new Date(batch.created_at).toLocaleDateString()}</div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
