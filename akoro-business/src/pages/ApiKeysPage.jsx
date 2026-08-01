@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Copy, Check, ScrollText } from 'lucide-react';
+import { Plus, Trash2, Copy, Check, ScrollText, Ban, RotateCcw } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
-import { apiGet, apiPost, apiDelete } from '../services/api.js';
-import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, ACCENT, FONT } from '../constants.js';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
+import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, AMBER, ACCENT, FONT } from '../constants.js';
 
 const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
 
@@ -26,7 +26,15 @@ export default function ApiKeysPage() {
     try { const r = await apiPost(`/api/vouchers/startups/${current.id}/api-keys`, {}); setNewKey(r.key.rawKey); setCopied(false); load(); }
     finally { setBusy(false); }
   };
-  const revoke = async (id) => { await apiDelete(`/api/vouchers/startups/${current.id}/api-keys/${id}`); load(); };
+  const toggleRevoke = async (k) => {
+    await apiPatch(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`, { status: k.status === 'active' ? 'revoked' : 'active' });
+    load();
+  };
+  const remove = async (k) => {
+    if (!window.confirm(`Permanently delete "${k.name}"? This can't be undone — any requests still using this key will start failing immediately.`)) return;
+    await apiDelete(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`);
+    load();
+  };
   const copy = () => { navigator.clipboard?.writeText(newKey); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
   if (!current) return null;
@@ -70,7 +78,11 @@ export default function ApiKeysPage() {
                   <td style={{ ...td, fontWeight: 700, color: INK }}>{usd(k.monthly_spend_usd)}</td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}>
                     <Link to={`/api-keys/${k.id}/logs`} title="View logs" style={{ color: MUTED, marginRight: 12 }}><ScrollText size={15} /></Link>
-                    {k.status === 'active' && <button onClick={() => revoke(k.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={15} /></button>}
+                    <button onClick={() => toggleRevoke(k)} title={k.status === 'active' ? 'Revoke' : 'Reactivate'}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: k.status === 'active' ? AMBER : GREEN, marginRight: 12 }}>
+                      {k.status === 'active' ? <Ban size={15} /> : <RotateCcw size={15} />}
+                    </button>
+                    <button onClick={() => remove(k)} title="Delete permanently" style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED }}><Trash2 size={15} /></button>
                   </td>
                 </tr>
               ))}

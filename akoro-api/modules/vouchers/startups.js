@@ -288,12 +288,31 @@ router.get("/:id/api-keys/:keyId/logs", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/vouchers/startups/:id/api-keys/:keyId — revoke.
+// PATCH /api/vouchers/startups/:id/api-keys/:keyId — revoke or reactivate.
+// Kept separate from DELETE, which now genuinely removes the row — revoke
+// is the reversible "turn it off" action, delete is not.
+router.patch("/:id/api-keys/:keyId", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    if (!["active", "revoked"].includes(req.body?.status)) return res.status(400).json({ error: "status must be 'active' or 'revoked'" });
+    const { data, error } = await vdb().from("api_keys").update({ status: req.body.status })
+      .eq("id", req.params.keyId).eq("startup_id", startup.id).select("id, key_prefix, status").single();
+    if (error) throw new Error(error.message);
+    res.json({ success: true, key: data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/vouchers/startups/:id/api-keys/:keyId — permanently remove the
+// key. Cascades its request logs (vouchers.api_key_logs); any redemptions
+// already attributed to it keep the redemption record but lose the
+// attribution (api_key_id → NULL) rather than being deleted themselves.
 router.delete("/:id/api-keys/:keyId", async (req, res) => {
   const startup = await ownedStartup(req, res);
   if (!startup) return;
   try {
-    await vdb().from("api_keys").update({ status: "revoked" }).eq("id", req.params.keyId).eq("startup_id", startup.id);
+    const { error } = await vdb().from("api_keys").delete().eq("id", req.params.keyId).eq("startup_id", startup.id);
+    if (error) throw new Error(error.message);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
