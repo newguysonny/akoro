@@ -26,8 +26,108 @@ function ErrRow({ status, reason, meaning }) {
   );
 }
 
+const LANGS = [
+  { key: 'curl',   label: 'cURL' },
+  { key: 'node',   label: 'Node.js' },
+  { key: 'python', label: 'Python' },
+  { key: 'php',    label: 'PHP' },
+];
+
+const SNIPPETS = {
+  curl: (base) => `curl -X POST ${base}/api/vouchers/v1/validate \\
+  -H "Authorization: Bearer $AKORO_VOUCHER_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "voucher_code": "X9K7-MQPL-3R9T",
+    "customer_id": "cust_456",
+    "idempotency_key": "redeem_cust_456_X9K7"
+  }'`,
+
+  node: (base) => `const res = await fetch("${base}/api/vouchers/v1/validate", {
+  method: "POST",
+  headers: {
+    "Authorization": \`Bearer \${process.env.AKORO_VOUCHER_KEY}\`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    voucher_code: code,
+    customer_id: user.id,
+    idempotency_key: \`redeem_\${user.id}_\${code}\`,
+  }),
+});
+const data = await res.json();
+
+if (data.valid) {
+  await addCreditsToUser(user.id, data.credits);
+} else {
+  // data.reason: 'not_found' | 'already_used' | 'expired' | ...
+  return respondWithError(data.reason);
+}`,
+
+  python: (base) => `import os, requests
+
+res = requests.post(
+    "${base}/api/vouchers/v1/validate",
+    headers={"Authorization": f"Bearer {os.environ['AKORO_VOUCHER_KEY']}"},
+    json={
+        "voucher_code": code,
+        "customer_id": str(user.id),
+        "idempotency_key": f"redeem_{user.id}_{code}",
+    },
+    timeout=10,
+)
+data = res.json()
+
+if data.get("valid"):
+    add_credits_to_user(user.id, data["credits"])
+else:
+    # data["reason"]: 'not_found' | 'already_used' | 'expired' | ...
+    return respond_with_error(data.get("reason"))`,
+
+  php: (base) => `<?php
+$ch = curl_init("${base}/api/vouchers/v1/validate");
+curl_setopt_array($ch, [
+    CURLOPT_POST           => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER     => [
+        "Authorization: Bearer " . getenv("AKORO_VOUCHER_KEY"),
+        "Content-Type: application/json",
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "voucher_code"    => $code,
+        "customer_id"     => (string) $user->id,
+        "idempotency_key" => "redeem_{$user->id}_{$code}",
+    ]),
+]);
+$data = json_decode(curl_exec($ch), true);
+curl_close($ch);
+
+if (!empty($data["valid"])) {
+    add_credits_to_user($user->id, $data["credits"]);
+} else {
+    // $data["reason"]: 'not_found' | 'already_used' | 'expired' | ...
+    return respond_with_error($data["reason"] ?? "server_error");
+}`,
+};
+
+function LangTabs({ lang, onPick }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+      {LANGS.map((l) => (
+        <button key={l.key} onClick={() => onPick(l.key)} style={{
+          padding: '6px 13px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 800,
+          border: lang === l.key ? `1.5px solid ${ACCENT}` : `1px solid ${BORDER}`,
+          background: lang === l.key ? `${ACCENT}12` : WHITE,
+          color: lang === l.key ? ACCENT : MUTED,
+        }}>{l.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export default function DocsPage() {
   const { current } = useStartup();
+  const [lang, setLang] = useState('node');
   const [copied, setCopied] = useState(null);
   const onCopy = (id, text) => { navigator.clipboard?.writeText(text); setCopied(id); setTimeout(() => setCopied(null), 1600); };
 
@@ -117,34 +217,79 @@ export default function DocsPage() {
           <p style={p}><strong>300 requests / minute per API key</strong> on <code style={ic}>/v1/*</code>. Standard <code style={ic}>X-RateLimit-*</code> headers are included on every response; a <code style={ic}>429</code> means back off and retry after the window resets.</p>
         </Section>
 
-        {/* Example code */}
-        <Section title="Example — cURL">
-          <CodeBlock id="curl" copied={copied} onCopy={onCopy}>{`curl -X POST ${base}/api/vouchers/v1/validate \\
-  -H "Authorization: Bearer sk_live_..." \\
-  -H "Content-Type: application/json" \\
-  -d '{"voucher_code":"X9K7-MQPL-3R9T","customer_id":"cust_456"}'`}</CodeBlock>
+        {/* Quick call — one request, in your language */}
+        <Section title="Redeem a code">
+          <p style={p}>The whole integration is one server-to-server call. Pick your stack:</p>
+          <LangTabs lang={lang} onPick={setLang} />
+          <CodeBlock id={`snippet-${lang}`} copied={copied} onCopy={onCopy}>{SNIPPETS[lang](base)}</CodeBlock>
+          <p style={{ ...p, marginTop: 10 }}>
+            ⚠️ Call this from your <strong>backend only</strong>. Your secret key must never ship in a
+            web page, mobile binary, or anything a customer can read — anyone holding it can redeem
+            every voucher you've issued.
+          </p>
         </Section>
 
-        <Section title="Example — Node.js">
-          <CodeBlock id="node" copied={copied} onCopy={onCopy}>{`const res = await fetch("${base}/api/vouchers/v1/validate", {
-  method: "POST",
-  headers: {
-    "Authorization": \`Bearer \${process.env.AKORO_VOUCHER_KEY}\`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    voucher_code: code,
-    customer_id: user.id,
-    idempotency_key: requestId,
-  }),
-});
-const data = await res.json();
-if (data.valid) {
-  await addCreditsToUser(user.id, data.credits);
-} else {
-  // data.reason: 'already_used' | 'expired' | 'not_found' | ...
-  return respondWithError(data.reason);
-}`}</CodeBlock>
+        {/* Full reference implementation */}
+        <Section title="Full example — a top-up endpoint">
+          <p style={p}>
+            A complete “redeem a code and credit the customer” route, with the error handling you
+            actually need in production. This is the same shape Akoro's own learner app uses.
+          </p>
+          <CodeBlock id="full" copied={copied} onCopy={onCopy}>{`// POST /redeem  { code }   — called by YOUR app's "Redeem a voucher" screen
+app.post("/redeem", requireLogin, async (req, res) => {
+  const code = String(req.body.code || "").trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: "Enter a voucher code" });
+
+  let data;
+  try {
+    const r = await fetch("${base}/api/vouchers/v1/validate", {
+      method: "POST",
+      headers: {
+        "Authorization": \`Bearer \${process.env.AKORO_VOUCHER_KEY}\`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        voucher_code: code,
+        customer_id: req.user.id,          // your own user id, for your audit trail
+        idempotency_key: \`redeem_\${req.user.id}_\${code}\`,  // stable → safe to retry
+      }),
+    });
+    data = await r.json();
+  } catch (e) {
+    // Network/DNS/TLS — the code was NOT redeemed. Safe to retry.
+    return res.status(502).json({ error: "Couldn't reach the voucher service. Try again." });
+  }
+
+  if (!data.valid) {
+    const messages = {
+      not_found:     "We don't recognise that code.",
+      already_used:  "That code has already been used.",
+      expired:       "That code has expired.",
+      refunded:      "That code is no longer valid.",
+      not_available: "That code isn't available for redemption.",
+      rate_limited:  "Too many attempts — wait a moment and try again.",
+    };
+    return res.status(400).json({ error: messages[data.reason] || "Could not redeem that code." });
+  }
+
+  // Credit YOUR OWN balance table. Key the write on transaction_id so a
+  // retry (or a double-tapped button) can never credit the same code twice.
+  await creditCustomerOnce({
+    userId: req.user.id,
+    credits: data.credits,
+    ref: \`akoro_voucher_\${data.transaction_id}\`,   // unique index on this column
+  });
+
+  res.json({ ok: true, credits: data.credits });
+});`}</CodeBlock>
+          <div style={sub}>The one thing to get right</div>
+          <p style={p}>
+            We guarantee a code can only be redeemed once — two concurrent calls can never both
+            succeed. What we can't guarantee is <em>your</em> side: if you credit the customer and
+            your own write is retried, you'd double-credit. Put a unique index on the reference
+            column (<code style={ic}>akoro_voucher_&lt;transaction_id&gt;</code>) and let the database
+            reject the duplicate.
+          </p>
         </Section>
 
         {/* Redemptions feed */}
