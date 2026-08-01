@@ -151,6 +151,18 @@ router.post("/redeem-voucher", authenticateToken, async (req, res) => {
   if (!code) return res.status(400).json({ error: "Enter a voucher code" });
   if (!voucherRedeemConfigured()) return res.status(503).json({ error: "Voucher redemption isn't configured on this server" });
 
+  // Same targeting rules as /topup/init. Without this a school admin
+  // redeeming from the school wallet page — where top-ups fund the SCHOOL —
+  // would silently credit their personal wallet instead.
+  const target = req.body?.target === "school" ? "school" : "user";
+  let ownerType = "user", ownerId = req.user.id;
+  if (target === "school") {
+    if (!SCHOOL_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Only school admins can top up the school wallet" });
+    const sid = await mySchoolId(req.user.id);
+    if (!sid) return res.status(404).json({ error: "No school found for this account" });
+    ownerType = "school"; ownerId = sid;
+  }
+
   try {
     const { credits, transactionId } = await redeemVoucher({ code, customerId: req.user.id });
     if (credits < 1) return res.status(400).json({ error: "That voucher carries no credits" });
@@ -158,10 +170,10 @@ router.post("/redeem-voucher", authenticateToken, async (req, res) => {
     // Idempotent on the voucher's own transaction id, so a retried request
     // (or a double-tap) can never credit the same voucher twice.
     const { balance } = await creditTopup({
-      ownerType: "user", ownerId: req.user.id, coins: credits,
+      ownerType, ownerId, coins: credits,
       ref: `voucher_${transactionId}`, by: req.user.id,
     });
-    res.json({ success: true, data: { coins: credits, balance } });
+    res.json({ success: true, data: { coins: credits, balance, target } });
   } catch (e) {
     if (e instanceof VoucherError) return res.status(e.status === 429 ? 429 : 400).json({ error: e.message, reason: e.reason });
     console.error("[wallet/redeem-voucher]", e.message);

@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon, Send } from 'lucide-react';
+import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon, Send, Ticket } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { inputStyle } from '../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost } from '../services/api.js';
@@ -19,6 +19,10 @@ export default function WalletPage() {
   const [pricing, setPricing] = useState(null);
   const [coins, setCoins] = useState(2000);
   const [target, setTarget] = useState('school');       // 'school' | 'user'
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherErr, setVoucherErr] = useState('');
+  const [voucherMsg, setVoucherMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
@@ -47,6 +51,25 @@ export default function WalletPage() {
   const userAcc   = data?.accounts?.find((a) => a.kind === 'user');
   const nairaFor  = (c) => pricing ? Math.round(c * (pricing.coinPriceNaira || 0)) : null;
 
+  // Redeem a voucher bought from an Akoro agent. Passes the SAME `target` the
+  // top-up flow uses, so a code redeemed on this page funds the school wallet
+  // rather than silently landing in the admin's personal one.
+  const redeemVoucher = async (e) => {
+    e.preventDefault();
+    const code = voucherCode.trim();
+    if (!code) return setVoucherErr('Enter a voucher code');
+    setBusy(true); setVoucherErr(''); setVoucherMsg('');
+    try {
+      const r = await apiPost('/api/wallet/redeem-voucher', { code, target });
+      const d = r?.data ?? r;
+      setVoucherMsg(`Redeemed — +${fmt(d.coins)} coins added to the ${d.target === 'school' ? 'school' : 'personal'} wallet.`);
+      setVoucherCode(''); setVoucherOpen(false);
+      load();
+    } catch (e2) {
+      setVoucherErr(e2?.message || 'Could not redeem that code');
+    } finally { setBusy(false); }
+  };
+
   return (
     <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance">
       {/* Single school balance — AI on the school website is funded here. */}
@@ -74,6 +97,33 @@ export default function WalletPage() {
             Example costs: {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins} coin${e.coins === 1 ? '' : 's'}`).join(' · ')}
           </div>
         )}
+
+        {/* Voucher redemption — a code bought from an Akoro agent, offline */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+          {voucherMsg && <div style={{ fontSize: 12.5, fontWeight: 800, color: GREEN, marginBottom: 10 }}>{voucherMsg}</div>}
+          {!voucherOpen ? (
+            <button onClick={() => { setVoucherOpen(true); setVoucherErr(''); setVoucherMsg(''); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1px dashed ${BORDER}`, background: 'transparent', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 800, color: INK }}>
+              <Ticket size={15} /> Top up with a voucher code
+            </button>
+          ) : (
+            <form onSubmit={redeemVoucher}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 8 }}>Redeem a voucher code</div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} autoFocus
+                  placeholder="XXXX-XXXX-XXXX"
+                  style={{ ...inputStyle, width: 190, fontFamily: 'monospace', letterSpacing: 0.5 }} />
+                <button type="submit" disabled={busy} style={primaryBtn}>{busy ? 'Redeeming…' : 'Redeem'}</button>
+                <button type="button" onClick={() => { setVoucherOpen(false); setVoucherErr(''); }}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              </div>
+              {voucherErr && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{voucherErr}</div>}
+              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 8 }}>
+                Credits the <strong>{target === 'school' ? 'school' : 'personal'}</strong> wallet — the same one “Continue to checkout” tops up.
+              </div>
+            </form>
+          )}
+        </div>
       </div>
 
       {/* Allocate to a student (school admins) */}
