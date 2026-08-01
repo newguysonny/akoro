@@ -145,7 +145,8 @@ router.get("/redemptions", requireApiKey, async (req, res) => {
       .eq("startup_id", req.startup.id).order("redeemed_at", { ascending: false }).limit(limit);
     res.json({ success: true, redemptions: data || [] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error("[vouchers] 500 GET /v1/redemptions —", e?.stack || e?.message);
+    res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 });
 

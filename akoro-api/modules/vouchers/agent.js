@@ -6,6 +6,7 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { authenticateToken } from "../auth/routes.js";
 import { vdb } from "./db.js";
+import { serverError } from "./lib/httpError.js";
 import { getBalance, debit, credit, transactions } from "./lib/wallet.js";
 import { priceForQuantity } from "./lib/pricing.js";
 import { generateCodes } from "./lib/codes.js";
@@ -50,7 +51,7 @@ router.get("/marketplace", async (req, res) => {
         boughtBefore: boughtFrom.has(s.id),
       })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/wallet — my balance + recent transactions.
@@ -58,7 +59,7 @@ router.get("/wallet", async (req, res) => {
   try {
     const [balance, recent] = await Promise.all([getBalance(req.user.id), transactions(req.user.id, { limit: 25 })]);
     res.json({ success: true, balance, recent });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/wallet/transactions
@@ -68,7 +69,7 @@ router.get("/wallet/transactions", async (req, res) => {
     const offset = parseInt(req.query.offset ?? "0", 10);
     const rows = await transactions(req.user.id, { limit, offset });
     res.json({ success: true, transactions: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/wallet/topup/init — Paystack top-up (fiat only, v1).
@@ -89,7 +90,7 @@ router.post("/wallet/topup/init", async (req, res) => {
       callback_url: `${frontend}/wallet?ref=${reference}`,
     });
     res.json({ success: true, authorization_url: init.authorization_url, reference, amountUsd, amountNaira: kobo / 100 });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/purchase — buy N codes of a startup, paid from the wallet.
@@ -157,7 +158,7 @@ router.post("/purchase", async (req, res) => {
     }
   } catch (e) {
     console.error("[vouchers/purchase]", e.message);
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -220,7 +221,7 @@ router.post("/purchase-product", async (req, res) => {
     }
   } catch (e) {
     console.error("[vouchers/purchase-product]", e.message);
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -234,7 +235,7 @@ router.get("/my-codes", async (req, res) => {
     if (req.query.batchId) q = q.eq("batch_id", req.query.batchId);
     const { data } = await q;
     res.json({ success: true, codes: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/batches — my purchase history, one row per bulk order.
@@ -258,7 +259,7 @@ router.get("/batches", async (req, res) => {
       success: true,
       batches: (batches || []).map((b) => ({ ...b, codeCounts: counts[b.id] || { active: 0, used: 0, expired: 0, refunded: 0 } })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 export default router;

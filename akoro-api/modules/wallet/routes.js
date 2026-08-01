@@ -11,6 +11,7 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import db from "../../db.js";
+import { serverError } from "../../lib/httpError.js";
 import { authenticateToken } from "../auth/routes.js";
 import {
   ensureAccount, getBalance, payerAccountsForUser, creditTopup,
@@ -74,7 +75,7 @@ router.get("/", authenticateToken, async (req, res) => {
         low: (accounts.reduce((s, a) => s + Number(a.balance || 0), 0)) < LOW_BALANCE,
       },
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── GET /api/wallet/transactions?account=&limit=&offset= ──────────────────────
@@ -92,7 +93,7 @@ router.get("/transactions", authenticateToken, async (req, res) => {
       .eq("account_id", accountId).order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
     res.json({ success: true, data: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── GET /api/wallet/pricing — coin economics + example costs ──────────────────
@@ -138,7 +139,7 @@ router.post("/topup/init", authenticateToken, async (req, res) => {
       callback_url: `${walletFrontend(req)}/wallet?ref=${reference}`,
     });
     res.json({ success: true, data: { authorization_url: init.authorization_url, reference, coins, amountNaira: kobo / 100 } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── POST /api/wallet/redeem-voucher  { code } ─────────────────────────────────
@@ -181,7 +182,7 @@ router.post("/allocate", authenticateToken, async (req, res) => {
     res.json({ success: true, data: { schoolBalance: r.schoolBalance, allocated: amount } });
   } catch (e) {
     if (e instanceof InsufficientCoins) return res.status(402).json({ error: "Insufficient school balance", code: "INSUFFICIENT_COINS", needed: e.needed, balance: e.balance });
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -192,7 +193,7 @@ router.get("/admin/overview", authenticateToken, async (req, res) => {
     const { data, error } = await db.rpc("coin_overview");
     if (error) throw new Error(error.message);
     res.json({ success: true, data: { ...data, coinValueUsd: COIN_USD } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── Admin: grant/adjust coins on any account  { owner_type, owner_id, coins } ──
@@ -213,7 +214,7 @@ router.post("/admin/grant", authenticateToken, async (req, res) => {
     const { data: bal } = await db.rpc("coin_debit", { p_account: acc.id, p_amount: -amount, p_type: "adjust", p_meta: meta });
     if (bal == null) return res.status(402).json({ error: "Account balance too low to deduct that amount" });
     res.json({ success: true, data: { balance: bal, adjusted: amount } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── Webhook fulfillment — credit a coin top-up (idempotent by reference) ──────
