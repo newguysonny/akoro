@@ -139,8 +139,16 @@ export function PageLayout({ title, subtitle, action, children }) {
   // makes the one page that could show/create/delete businesses itself
   // unreachable, bouncing back to /create-startup before it can render.
   const EXEMPT_PATHS = ['/create-startup', '/manage-businesses'];
-  // `error` gates this too: a failed fetch must not look like "zero businesses".
-  const needsOnboarding = !loading && !error && startups && startups.length === 0 && !EXEMPT_PATHS.includes(window.location.pathname);
+  // Belt-and-braces. Three independent conditions must ALL hold before we
+  // send someone to onboarding, because getting this wrong strands them:
+  //   loading   — a fetch is in flight (or belongs to a previous auth state)
+  //   error     — a failed fetch must not look like "zero businesses"
+  //   !== null  — [] set by the pre-login branch is NOT proof of zero
+  //               businesses; only a completed fetch is.
+  const needsOnboarding =
+    !loading && !error &&
+    Array.isArray(startups) && startups.length === 0 &&
+    !EXEMPT_PATHS.includes(window.location.pathname);
 
   useEffect(() => { if (needsOnboarding) navigate('/create-startup', { replace: true }); }, [needsOnboarding, navigate]);
   if (needsOnboarding) return null;

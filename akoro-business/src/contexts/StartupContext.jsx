@@ -15,20 +15,24 @@ export function StartupProvider({ children }) {
   const [startups, setStartups] = useState(null);   // null = loading
   const [currentId, setCurrentIdState] = useState(() => localStorage.getItem(CURRENT_KEY) || null);
   const [error, setError] = useState(false);
-  // Explicit, NOT derived from `startups === null`. On sign-in the
-  // unauthenticated branch below has already set startups to [], so a derived
-  // flag reads "loaded + zero businesses" while the real fetch is still in
-  // flight — PageLayout then redirects to /create-startup, which is an exempt
-  // path, so the user is stranded in onboarding every single login.
-  const [loading, setLoading] = useState(true);
+  // Which auth state the data in `startups` actually belongs to.
+  //
+  // This must be computed during RENDER, not set from an effect. React runs
+  // child effects before parent ones, so PageLayout's redirect effect fires
+  // BEFORE StartupProvider's fetch effect — a `loading` flag flipped inside
+  // an effect is still false at that moment, PageLayout sees "loaded + zero
+  // businesses" (the [] left by the pre-login branch) and redirects to
+  // /create-startup, which is exempt, so the user is stranded there. Deriving
+  // it from state makes it correct on the very first render after sign-in.
+  const [loadedFor, setLoadedFor] = useState(null);
+  const loading = loadedFor !== isAuthenticated;
 
   // Returns the promise so callers (e.g. CreateStartupPage) can `await` it
   // before navigating — otherwise the caller races ahead of the state update
   // and PageLayout's needsOnboarding check still sees the stale empty list.
   const refresh = useCallback(() => {
-    if (!isAuthenticated) { setStartups([]); setLoading(false); return Promise.resolve(); }
+    if (!isAuthenticated) { setStartups([]); setLoadedFor(false); return Promise.resolve(); }
     setError(false);
-    setLoading(true);
     return apiGet('/api/vouchers/startups/mine').then((r) => {
       const list = r.startups || [];
       setStartups(list);
@@ -43,7 +47,7 @@ export function StartupProvider({ children }) {
       // would dump an established business owner into onboarding.
       setError(true);
       setStartups((prev) => prev ?? []);
-    }).finally(() => setLoading(false));
+    }).finally(() => setLoadedFor(true));
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { refresh(); }, [refresh]);

@@ -7,7 +7,7 @@ import { BRAND, ACCENT, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT, CATEGORIES
 
 export default function CreateStartupPage() {
   const { logout } = useAuth();
-  const { refresh } = useStartup();
+  const { refresh, startups } = useStartup();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', credit_rate_usd: 0.1, category: 'other', description: '', cover_image_url: '' });
   const [busy, setBusy] = useState(false);
@@ -62,7 +62,9 @@ export default function CreateStartupPage() {
         <button type="submit" disabled={busy} style={btn}>{busy ? 'Creating…' : 'Create voucher program'}</button>
 
         <div style={{ textAlign: 'center', marginTop: 14 }}>
-          <Link to="/manage-businesses" style={{ fontSize: 12, color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>Already have a business? Manage businesses</Link>
+          {startups?.length > 0
+            ? <Link to="/" style={{ fontSize: 12.5, color: ACCENT, fontWeight: 800, textDecoration: 'none' }}>← Back to dashboard</Link>
+            : <Link to="/manage-businesses" style={{ fontSize: 12, color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>Already have a business? Manage businesses</Link>}
         </div>
 
         <button type="button" onClick={logout} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 11, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Sign out</button>
