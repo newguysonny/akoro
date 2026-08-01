@@ -18,6 +18,7 @@ const slugify = (s) => String(s || "").toLowerCase().trim()
   .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || `startup-${Date.now()}`;
 
 const CATEGORIES = ["education", "fintech", "gaming", "productivity", "health", "ecommerce", "other"];
+const BILLING_PERIODS = ["one_time", "monthly", "quarterly", "yearly"];
 
 // Ownership guard — only the startup's owner may manage it.
 async function ownedStartup(req, res) {
@@ -146,11 +147,16 @@ function validProductBody(body) {
   const credits = Math.floor(Number(body?.credits));
   const priceUsd = Number(body?.price_usd);
   const minOrderQty = body?.min_order_qty != null ? Math.floor(Number(body.min_order_qty)) : 1;
+  const billingPeriod = body?.billing_period || "one_time";
   if (!name) return "name is required";
   if (!credits || credits < 1) return "credits must be a positive integer";
   if (!priceUsd || priceUsd <= 0) return "price_usd must be a positive number";
   if (!minOrderQty || minOrderQty < 1) return "min_order_qty must be a positive integer";
-  return { name, credits, price_usd: priceUsd, min_order_qty: minOrderQty };
+  if (!BILLING_PERIODS.includes(billingPeriod)) return "Invalid billing_period";
+  return {
+    name, credits, price_usd: priceUsd, min_order_qty: minOrderQty, billing_period: billingPeriod,
+    description: body?.description?.trim() || null, image_url: body?.image_url?.trim() || null,
+  };
 }
 
 // POST /api/vouchers/startups/:id/products — create a voucher product.
@@ -187,6 +193,12 @@ router.patch("/:id/products/:productId", async (req, res) => {
     if (req.body.price_usd !== undefined) { const p = Number(req.body.price_usd); if (!p || p <= 0) return res.status(400).json({ error: "price_usd must be a positive number" }); patch.price_usd = p; }
     if (req.body.min_order_qty !== undefined) { const m = Math.floor(Number(req.body.min_order_qty)); if (!m || m < 1) return res.status(400).json({ error: "min_order_qty must be a positive integer" }); patch.min_order_qty = m; }
     if (req.body.status && ["active", "archived"].includes(req.body.status)) patch.status = req.body.status;
+    if (req.body.billing_period !== undefined) {
+      if (!BILLING_PERIODS.includes(req.body.billing_period)) return res.status(400).json({ error: "Invalid billing_period" });
+      patch.billing_period = req.body.billing_period;
+    }
+    if (req.body.description !== undefined) patch.description = req.body.description?.trim() || null;
+    if (req.body.image_url !== undefined) patch.image_url = req.body.image_url?.trim() || null;
     if (!Object.keys(patch).length) return res.status(400).json({ error: "No valid fields" });
     patch.updated_at = new Date().toISOString();
     const { data, error } = await vdb().from("voucher_products").update(patch).eq("id", req.params.productId).eq("startup_id", startup.id).select("*").single();

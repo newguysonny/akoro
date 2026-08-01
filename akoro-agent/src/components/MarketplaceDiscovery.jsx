@@ -1,8 +1,11 @@
 /**
  * MarketplaceDiscovery.jsx — the agent app's browse/buy surface, styled
  * after the learner app's DiscoveryTab.jsx: a category chip row plus
- * horizontal "rails" of rich cards (cover photo, category badge, price),
- * with a bottom-sheet purchase flow instead of an inline expanding card.
+ * horizontal "rails" of rich cards (cover photo, category badge, price).
+ * Tapping a business opens a restaurant-menu-style page: a cover banner,
+ * business info, then a scrollable menu of voucher products — each with
+ * a photo, a description, and a billing-period tag (one-time/monthly/
+ * quarterly/yearly) — plus a custom-amount option.
  */
 import { useState, useEffect, useMemo } from 'react';
 import { apiGet, apiPost } from '../services/api.js';
@@ -12,6 +15,7 @@ const usd = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractio
 const fmt = (n) => Number(n || 0).toLocaleString();
 const fmtCount = (n) => { const v = Number(n) || 0; return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : String(v); };
 const catInfo = (key) => CATEGORIES[key] || CATEGORIES.other;
+const BILLING_LABELS = { one_time: 'One-time', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 
 /* ── Startup card (Discovery-style vertical) ─────────────────────────── */
 const CARD_W = 172;
@@ -107,48 +111,47 @@ function Chip({ active, onClick, icon, label, color = BRAND }) {
   );
 }
 
-/* ── Purchase sheet — swipe-up bottom sheet, opened from a card tap ───
- * Two ways to buy: pick one of the business's fixed-price products
- * (gift-card-style denominations), or a custom credits × quantity amount
- * priced off the base rate + bulk discount tiers. Both are always
- * available — a product list doesn't replace the custom option. */
-function PurchaseSheet({ startup, onClose, onBought, onToast }) {
+/* ── Startup menu page — full-screen, restaurant-menu style ───────────
+ * Cover banner + business info up top, then a scrollable "menu" of
+ * voucher products (photo, description, billing-period tag, price —
+ * tap to expand a quantity stepper inline, like a food item's "Add"),
+ * plus a Custom Amount tab for the existing credits×quantity flow. */
+function StartupMenuPage({ startup, onClose, onBought, onToast }) {
   const hasProducts = (startup.products || []).length > 0;
-  const [mode, setMode] = useState(hasProducts ? 'products' : 'custom');
+  const [mode, setMode] = useState(hasProducts ? 'menu' : 'custom');
   const cat = catInfo(startup.category);
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(17,12,40,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: WHITE, width: '100%', maxWidth: 540, maxHeight: '86vh', borderRadius: '22px 22px 0 0', overflowY: 'auto', fontFamily: FONT, animation: 'sheet-up .28s cubic-bezier(.34,1.4,.6,1)' }}>
-        <style>{`@keyframes sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
-        <div style={{ position: 'sticky', top: 0, background: WHITE, padding: '10px 0 4px', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: 38, height: 4, borderRadius: 4, background: BORDER }} />
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: WHITE, overflowY: 'auto', fontFamily: FONT }}>
+      {/* Cover banner */}
+      <div style={{ position: 'relative', width: '100%', height: 190, background: `linear-gradient(135deg, ${cat.color}33, ${cat.color}11)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {startup.cover_image_url
+          ? <img src={startup.cover_image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          : <span style={{ fontSize: 64 }}>{cat.icon}</span>}
+        <button onClick={onClose} style={{
+          position: 'absolute', top: 14, left: 14, width: 36, height: 36, borderRadius: '50%', border: 'none',
+          background: 'rgba(17,12,40,.55)', color: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>←</button>
+      </div>
+
+      <div style={{ padding: '16px 20px 40px' }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: INK }}>{startup.name}</div>
+        <div style={{ fontSize: 12.5, color: MUTED, marginTop: 4 }}>
+          {cat.icon} {cat.label} · {usd(startup.credit_rate_usd)} / credit
+          {startup.codesSold > 0 && ` · 🎟️ ${fmtCount(startup.codesSold)} sold`}
         </div>
+        {startup.description && <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.5, margin: '10px 0 0' }}>{startup.description}</p>}
 
-        <div style={{ padding: '4px 20px 26px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <div style={{ width: 54, height: 54, borderRadius: 14, flexShrink: 0, overflow: 'hidden', position: 'relative', background: `linear-gradient(135deg, ${cat.color}22, ${cat.color}0D)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {startup.cover_image_url
-                ? <img src={startup.cover_image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                : <span style={{ fontSize: 26 }}>{cat.icon}</span>}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 900, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{startup.name}</div>
-              <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{cat.icon} {cat.label} · {usd(startup.credit_rate_usd)} / credit</div>
-            </div>
+        {hasProducts && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+            <ModeTab active={mode === 'menu'} onClick={() => setMode('menu')} label="Menu" />
+            <ModeTab active={mode === 'custom'} onClick={() => setMode('custom')} label="Custom amount" />
           </div>
+        )}
 
-          {startup.description && <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.5, margin: '0 0 16px' }}>{startup.description}</p>}
-
-          {hasProducts && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <ModeTab active={mode === 'products'} onClick={() => setMode('products')} label="Voucher packs" />
-              <ModeTab active={mode === 'custom'} onClick={() => setMode('custom')} label="Custom amount" />
-            </div>
-          )}
-
-          {mode === 'products'
-            ? <ProductsPurchase startup={startup} onBought={onBought} onToast={onToast} onClose={onClose} />
+        <div style={{ marginTop: hasProducts ? 16 : 20 }}>
+          {mode === 'menu'
+            ? <ProductsMenu startup={startup} onBought={onBought} onToast={onToast} onClose={onClose} />
             : <CustomPurchase startup={startup} onBought={onBought} onToast={onToast} onClose={onClose} />}
         </div>
       </div>
@@ -166,7 +169,10 @@ function ModeTab({ active, onClick, label }) {
   );
 }
 
-function ProductsPurchase({ startup, onBought, onToast, onClose }) {
+/* Menu items styled like a food-delivery app's dish list: thumbnail,
+ * name + description, billing-period tag, price — tap to expand a
+ * quantity stepper + confirm, right where the item is. */
+function ProductsMenu({ startup, onBought, onToast, onClose }) {
   const [selected, setSelected] = useState(null);
   const [qty, setQty] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -187,14 +193,27 @@ function ProductsPurchase({ startup, onBought, onToast, onClose }) {
   return (
     <div>
       {(startup.products || []).map((p) => (
-        <div key={p.id} style={{ border: `1px solid ${selected?.id === p.id ? BRAND : BORDER}`, borderRadius: 12, padding: 14, marginBottom: 10, cursor: 'pointer' }}
+        <div key={p.id} style={{ border: `1px solid ${selected?.id === p.id ? BRAND : BORDER}`, borderRadius: 14, padding: 12, marginBottom: 10, cursor: 'pointer' }}
           onClick={() => pick(selected?.id === p.id ? null : p)}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: INK }}>{p.name}</div>
-              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 2 }}>{fmt(p.credits)} credits · min. order {p.min_order_qty}</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ width: 68, height: 68, borderRadius: 11, flexShrink: 0, overflow: 'hidden', background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>
+              {p.image_url
+                ? <img src={p.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                : '🎟️'}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: INK }}>{usd(p.price_usd)}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 900, color: INK }}>{p.name}</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: INK, flexShrink: 0 }}>{usd(p.price_usd)}</div>
+              </div>
+              {p.description && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                {p.billing_period !== 'one_time' && (
+                  <span style={{ fontSize: 9.5, fontWeight: 900, color: GOLD, background: `${GOLD}18`, padding: '2px 7px', borderRadius: 6 }}>{BILLING_LABELS[p.billing_period]}</span>
+                )}
+                <span style={{ fontSize: 10.5, color: MUTED2, fontWeight: 700 }}>{fmt(p.credits)} credits · min. order {p.min_order_qty}</span>
+              </div>
+            </div>
           </div>
 
           {selected?.id === p.id && (
@@ -320,7 +339,7 @@ export default function MarketplaceDiscovery({ onToast, onBought }) {
       {rail('new', 'New ', 'businesses', GOLD, newest)}
       {rail('all', 'All ', 'businesses', '#EC4899', filtered)}
 
-      {picked && <PurchaseSheet startup={picked} onClose={() => setPicked(null)} onBought={onBought} onToast={onToast} />}
+      {picked && <StartupMenuPage startup={picked} onClose={() => setPicked(null)} onBought={onBought} onToast={onToast} />}
     </div>
   );
 }
