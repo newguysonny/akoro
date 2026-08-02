@@ -14,6 +14,7 @@
     "2026-dynamic-tools.sql",
     "2026-platform-tools.sql",
     "2026-platform-tools-agent.sql",
+    "2026-platform-tools-audience.sql",
     "2026-tool-outputs.sql",
     "2026-instructor-templates.sql",
     "2026-instructor-templates-body.sql",

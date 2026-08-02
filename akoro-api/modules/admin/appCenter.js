@@ -27,6 +27,9 @@ const adminOnly = [authenticateToken, requireRole(["admin"])];
 
 const KINDS = ["tool", "asset", "management"];
 const MGMT_STATUS = ["active", "soon"];
+// Who the listing is offered to. Enforced in modules/instructor/tools.js —
+// both the instructor and school apps read that one endpoint.
+const AUDIENCES = ["both", "instructors", "schools"];
 const toNaira = (kobo) => Math.round(Number(kobo || 0)) / 100;
 
 const shape = (r, counts = {}) => ({
@@ -43,6 +46,7 @@ const shape = (r, counts = {}) => ({
   priceKobo: r.price_kobo,
   priceNaira: toNaira(r.price_kobo),
   currency: r.currency,
+  audience: r.audience || 'both',
   isActive: r.is_active,
   sortOrder: r.sort_order,
   purchases: counts[r.id] || 0,
@@ -83,6 +87,8 @@ router.post("/app-center", adminOnly, async (req, res) => {
     if (!Number.isFinite(priceKobo) || priceKobo < 0) return res.status(400).json({ error: "priceKobo must be 0 or a positive number" });
     if (kind === "management" && b.status && !MGMT_STATUS.includes(b.status))
       return res.status(400).json({ error: `status must be one of: ${MGMT_STATUS.join(", ")}` });
+    if (b.audience && !AUDIENCES.includes(b.audience))
+      return res.status(400).json({ error: `audience must be one of: ${AUDIENCES.join(", ")}` });
 
     const { data: clash } = await db.schema("edu").from("platform_tools").select("id").eq("key", key).maybeSingle();
     if (clash) return res.status(409).json({ error: `A listing with key "${key}" already exists` });
@@ -94,6 +100,7 @@ router.post("/app-center", adminOnly, async (req, res) => {
       tag: kind === "management" ? (b.status || "active") : (b.tag || null),
       price_kobo: priceKobo,
       currency: b.currency || "NGN",
+      audience: b.audience || "both",
       is_active: b.isActive !== false,
       sort_order: Math.round(Number(b.sortOrder ?? 0)) || 0,
     }).select("*").single();
@@ -116,6 +123,10 @@ router.patch("/app-center/:id", adminOnly, async (req, res) => {
     if (b.emoji !== undefined) patch.emoji = b.emoji || "🛠️";
     if (b.currency !== undefined) patch.currency = b.currency || "NGN";
     if (b.isActive !== undefined) patch.is_active = !!b.isActive;
+    if (b.audience !== undefined) {
+      if (!AUDIENCES.includes(b.audience)) return res.status(400).json({ error: `audience must be one of: ${AUDIENCES.join(", ")}` });
+      patch.audience = b.audience;
+    }
     if (b.sortOrder !== undefined) {
       const n = Math.round(Number(b.sortOrder));
       if (!Number.isFinite(n)) return res.status(400).json({ error: "sortOrder must be a number" });

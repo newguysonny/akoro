@@ -249,14 +249,31 @@ router.get("/purchases", authenticateToken, async (req, res) => {
   }
 });
 
+// Which slice of the catalogue this caller should see. The instructor app and
+// the school app both hit this endpoint, so without it every listing is shown
+// to both audiences regardless of who it was meant for.
+function audienceFor(req) {
+  const role = String(req.user?.role || "").toLowerCase();
+  if (["school", "school_admin"].includes(role)) return "schools";
+  if (role === "admin") {
+    // Admins can browse either app — trust the portal they're actually in.
+    const portal = String(req.headers["x-akoro-portal"] || "").toLowerCase();
+    return portal === "school" ? "schools" : "instructors";
+  }
+  return "instructors";
+}
+// A listing is visible when it targets everyone or targets this audience.
+const audienceFilter = (aud) => `both,${aud}`;
+
 router.get("/", authenticateToken, async (req, res) => {
   try {
     const instructorId = req.user.id;
 
     const { data: catalog, error } = await db
       .schema("edu").from("platform_tools")
-      .select("id, key, kind, name, description, emoji, tag, price_kobo, currency")
+      .select("id, key, kind, name, description, emoji, tag, price_kobo, currency, audience")
       .eq("is_active", true)
+      .in("audience", audienceFilter(audienceFor(req)).split(","))
       .order("sort_order", { ascending: true });
     if (error) throw error;
 
@@ -310,6 +327,13 @@ router.post("/checkout", authenticateToken, requireRole(["instructor", "teacher"
       .eq("is_active", true)
       .single();
     if (error || !tool) return res.status(404).json({ error: "Tool not found" });
+
+    // Hiding it from the list isn't enough — without this a school-only (or
+    // instructor-only) listing could still be bought by posting its id.
+    const aud = audienceFor(req);
+    if (tool.audience && tool.audience !== "both" && tool.audience !== aud) {
+      return res.status(403).json({ error: "This item isn't available for your account type" });
+    }
 
     // Already owned?
     const { data: existing } = await db

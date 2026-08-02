@@ -16,10 +16,17 @@ const MGMT_STATUS = [
   { key: 'active', label: 'Live' },
   { key: 'soon',   label: 'Coming soon' },
 ];
+// Enforced server-side in modules/instructor/tools.js — the instructor and
+// school apps share one catalogue endpoint, so this is what separates them.
+const AUDIENCES = [
+  { key: 'both',        label: 'Instructors + Schools', short: 'Both' },
+  { key: 'instructors', label: 'Instructors only',      short: 'Instructors' },
+  { key: 'schools',     label: 'Schools only',          short: 'Schools' },
+];
 
 const EMPTY = {
   key: '', name: '', kind: 'tool', description: '', emoji: '🛠️',
-  tag: '', status: 'active', priceNaira: '', isActive: true, sortOrder: 0,
+  tag: '', status: 'active', audience: 'both', priceNaira: '', isActive: true, sortOrder: 0,
 };
 
 const ngn = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`;
@@ -57,7 +64,7 @@ export default function AppCenterPage() {
   const openEdit = (it) => {
     setForm({
       key: it.key, name: it.name, kind: it.kind, description: it.description || '',
-      emoji: it.emoji || '🛠️', tag: it.tag || '', status: it.status || 'active',
+      emoji: it.emoji || '🛠️', tag: it.tag || '', status: it.status || 'active', audience: it.audience || 'both',
       priceNaira: String(it.priceNaira ?? ''), isActive: it.isActive, sortOrder: it.sortOrder ?? 0,
     });
     setFormErr(''); setEditing(it);
@@ -71,7 +78,7 @@ export default function AppCenterPage() {
     // The API stores kobo; the form takes naira so nobody has to multiply by 100.
     const body = {
       name: form.name, kind: form.kind, description: form.description, emoji: form.emoji,
-      priceKobo: Math.round(priceNaira * 100), isActive: form.isActive,
+      priceKobo: Math.round(priceNaira * 100), isActive: form.isActive, audience: form.audience,
       sortOrder: Number(form.sortOrder) || 0,
       ...(form.kind === 'management' ? { status: form.status } : { tag: form.tag || null }),
     };
@@ -143,7 +150,7 @@ export default function AppCenterPage() {
         ) : (
           <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: FONT, minWidth: 880 }}>
             <thead>
-              <tr>{['', 'Name', 'Key', 'Kind', 'Price', 'Status', 'Owned by', 'Order', ''].map((h) => (
+              <tr>{['', 'Name', 'Key', 'Kind', 'Available to', 'Price', 'Status', 'Owned by', 'Order', ''].map((h) => (
                 <th key={h} style={{ textAlign: 'left', padding: '11px 14px', fontSize: 11.5, fontWeight: 700, color: MUTED2, background: LIGHT, whiteSpace: 'nowrap' }}>{h}</th>
               ))}</tr>
             </thead>
@@ -157,6 +164,10 @@ export default function AppCenterPage() {
                   </td>
                   <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>{it.key}</td>
                   <td style={td}>{KINDS.find((k) => k.key === it.kind)?.label || it.kind}</td>
+                  <td style={td}>
+                    <Pill text={AUDIENCES.find((a) => a.key === (it.audience || 'both'))?.short || it.audience}
+                      color={it.audience === 'schools' ? PURPLE : it.audience === 'instructors' ? AMBER : MUTED} />
+                  </td>
                   <td style={{ ...td, fontWeight: 700, color: INK }}>{it.priceKobo === 0 ? <span style={{ color: GREEN }}>Free</span> : ngn(it.priceNaira)}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -200,6 +211,11 @@ export default function AppCenterPage() {
           <label style={lbl}>Kind</label>
           <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} style={sel}>
             {KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+          </select>
+
+          <label style={lbl}>Available to</label>
+          <select value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} style={sel}>
+            {AUDIENCES.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
           </select>
 
           {form.kind === 'management' ? (
