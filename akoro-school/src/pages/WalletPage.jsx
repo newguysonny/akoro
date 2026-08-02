@@ -136,11 +136,19 @@ export default function WalletPage() {
           <div style={{ padding: 28, textAlign: 'center', color: MUTED2, fontSize: 13 }}>No transactions yet.</div>
         ) : (
           <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: FONT, marginTop: 10 }}>
-            <thead><tr>{['When', 'Type', 'Detail', 'Coins', 'Balance'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{['When', 'Wallet', 'Type', 'Detail', 'Coins', 'Balance'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
               {data.recent.map((t) => (
                 <tr key={t.id} style={{ borderTop: `1px solid ${BORDER}` }}>
                   <td style={td}>{new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                  {/* The list now spans both wallets, so say which one. */}
+                  <td style={td}>
+                    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 100,
+                      color: t.accountKind === 'school' ? AMBER : MUTED,
+                      background: t.accountKind === 'school' ? `${AMBER}18` : LIGHT }}>
+                      {t.accountKind === 'school' ? 'School' : 'Personal'}
+                    </span>
+                  </td>
                   <td style={td}>{TYPE_LABEL[t.type] || t.type}</td>
                   <td style={{ ...td, color: MUTED2 }}>{t.feature || t.model || '—'}{t.tokens_in ? ` · ${fmt((t.tokens_in || 0) + (t.tokens_out || 0))} tok` : ''}</td>
                   <td style={{ ...td, fontWeight: 800, color: t.delta >= 0 ? GREEN : RED }}>

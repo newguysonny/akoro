@@ -61,15 +61,23 @@ router.get("/", authenticateToken, async (req, res) => {
       }
     }
     const primary = accounts[0];
+    // Activity must cover EVERY wallet this user can see, not just their own.
+    // accounts[0] is always the personal account, so a school admin — whose
+    // page shows the SCHOOL balance — saw personal transactions only: a
+    // school-targeted top-up or voucher redemption updated the balance but
+    // never appeared in the list. Each row is tagged so the UI can label it.
+    const byId = Object.fromEntries(accounts.map((a) => [a.id, a.kind]));
     const { data: txns } = await db.from("coin_transactions")
-      .select("id, delta, balance_after, type, feature, model, tokens_in, tokens_out, ref, created_at")
-      .eq("account_id", primary.id).order("created_at", { ascending: false }).limit(25);
+      .select("id, account_id, delta, balance_after, type, feature, model, tokens_in, tokens_out, ref, created_at")
+      .in("account_id", accounts.map((a) => a.id))
+      .order("created_at", { ascending: false }).limit(25);
+    const recent = (txns || []).map((t) => ({ ...t, accountKind: byId[t.account_id] || "user" }));
     res.json({
       success: true,
       data: {
         balance: primary.balance,
         accounts: accounts.map((a) => ({ id: a.id, kind: a.kind, balance: a.balance })),
-        recent: txns || [],
+        recent,
         coinValueUsd: COIN_USD,
         lowBalanceThreshold: LOW_BALANCE,
         low: (accounts.reduce((s, a) => s + Number(a.balance || 0), 0)) < LOW_BALANCE,
