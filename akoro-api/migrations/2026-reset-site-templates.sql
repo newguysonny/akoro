@@ -4,10 +4,9 @@
 -- Schema migrations re-run on EVERY deploy, so this must never touch a
 -- template a school has (re)installed from the current gallery:
 --   • Chrisland / Classic / demo-templates — old samples, always removed.
---   • Vista — remove only OLD broken clones (their import payload pages were
---     stripped body fragments); the current gallery's clones store pages as
---     full <!doctype html> documents and are preserved. This is what keeps a
---     school's ACTIVE template intact across deploys.
+--   • Vista — withdrawn from the gallery; every inactive clone is removed.
+--     ACTIVE clones are preserved, which is what keeps a school's live site
+--     intact across deploys.
 -- Schools' own uploaded templates (any other name) are untouched.
 -- =============================================================
 
@@ -27,13 +26,12 @@ WHERE is_active = false
     'demo-templates'
   );
 
+-- Vista has been withdrawn from the gallery (the code default was deleted), so
+-- every INACTIVE clone goes with it. Active clones are still left alone: a
+-- school running Vista keeps its site until it chooses another template.
 DELETE FROM edu.school_website_templates
 WHERE is_active = false
-  AND name = 'Vista Charter — School Site'
-  AND (
-    import_payload IS NULL
-    OR import_payload->'pages'->0->>'content' NOT ILIKE '<!doctype html%'
-  );
+  AND name = 'Vista Charter — School Site';
 
 -- Remove the old hardcoded sample custom domain the demo seed used to insert.
 DELETE FROM edu.school_domains WHERE domain = 'www.akorodemoacademy.com';
