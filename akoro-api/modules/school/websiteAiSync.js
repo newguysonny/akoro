@@ -47,6 +47,15 @@ async function mySchool(req) {
 
 const isBlank = (v) => v === null || v === undefined || String(v).trim() === "";
 
+// A page imported from a website template holds a full HTML document, not
+// prose. Writing model text over it destroys the layout — so HTML pages are
+// rewritten IN PLACE (same tags, same structure) or not at all.
+const looksLikeHtml = (s) => /<\/?[a-z][a-z0-9]*[\s/>]/i.test(String(s || ""));
+const tagCount = (s) => (String(s || "").match(/<[a-z][a-z0-9]*[\s/>]/gi) || []).length;
+// Above this the document can't be round-tripped through the model without
+// risking truncation, which would silently amputate the page.
+const MAX_HTML_REWRITE = 12000;
+
 // ── GET /api/school/website/ai-sync/plan ─────────────────────────────────────
 router.get("/website/ai-sync/plan", schoolOnly, async (req, res) => {
   try {
@@ -58,7 +67,7 @@ router.get("/website/ai-sync/plan", schoolOnly, async (req, res) => {
     const { data: tpl } = await db.schema("edu").from("school_website_templates")
       .select("id, name, sections").eq("school_id", school.id).eq("is_active", true).maybeSingle();
     const { data: pages } = await db.schema("mgmt").from("site_pages")
-      .select("id, title, slug, status, content").eq("school_id", school.id)
+      .select("id, title, slug, status, content, content_backup").eq("school_id", school.id)
       .is("deleted_at", null).order("sort_order", { ascending: true });
 
     // Units = enabled template sections + builder pages.
@@ -69,6 +78,9 @@ router.get("/website/ai-sync/plan", schoolOnly, async (req, res) => {
       })),
       ...(pages || []).map((p) => ({
         key: p.id, type: "page", label: p.title,
+        // A template page is a full HTML document — the AI only re-words it
+        // in place, and the UI says so before anyone hits Start.
+        html: looksLikeHtml(p.content),
         // A page with almost no body is what the sync is FOR — flag it rather
         // than treating it as done.
         thin: String(p.content || "").trim().length < 120,
@@ -89,6 +101,7 @@ router.get("/website/ai-sync/plan", schoolOnly, async (req, res) => {
         missing,
         // Everything the UI needs to say "you can't sync yet, and here's why".
         canSync: !!tpl || (pages || []).length > 0,
+        canRevert: (pages || []).some((p) => p.content_backup != null),
         syncEnabled: !!site?.sync_school_info,
       },
     });
@@ -133,24 +146,53 @@ router.post("/website/ai-sync/unit", schoolOnly, async (req, res) => {
     );
     facts.name = school.name;
 
-    let existing = "", label = key;
+    let existing = "", label = key, backup = null;
     if (type === "page") {
       const { data: page } = await db.schema("mgmt").from("site_pages")
-        .select("id, title, content").eq("id", key).eq("school_id", school.id).maybeSingle();
+        .select("id, title, content, content_backup").eq("id", key).eq("school_id", school.id).maybeSingle();
       if (!page) return res.status(404).json({ error: "Page not found" });
-      existing = page.content || ""; label = page.title;
+      existing = page.content || ""; label = page.title; backup = page.content_backup;
     }
 
-    const system = "You write copy for Nigerian school websites. Use ONLY the facts provided — never invent fees, dates, staff, results or contact details. Warm, plain, parent-facing English. Return the body copy only: no preamble, no markdown code fences, no commentary.";
-    const prompt = type === "page"
+    const htmlPage = type === "page" && looksLikeHtml(existing);
+    if (htmlPage && existing.length > MAX_HTML_REWRITE) {
+      // Refusing is the correct outcome: a truncated rewrite would delete most
+      // of the page, and nothing about that failure is obvious afterwards.
+      return res.status(422).json({
+        error: `"${label}" is a full template page and too large to rewrite safely. Edit it in the website builder instead.`,
+        code: "PAGE_TOO_LARGE", key, type, skipped: true,
+      });
+    }
+
+    const system = htmlPage
+      ? "You edit the copy inside existing HTML for Nigerian school websites. Return the COMPLETE HTML back, byte-identical in structure: same tags, same nesting, same class names, ids, attributes, links, images and scripts. Change ONLY human-readable text between tags. Never add, remove or reorder elements. Never wrap the output in markdown code fences. Use ONLY the facts provided — never invent fees, dates, staff, results or contact details."
+      : "You write copy for Nigerian school websites. Use ONLY the facts provided — never invent fees, dates, staff, results or contact details. Warm, plain, parent-facing English. Return the body copy only: no preamble, no markdown code fences, no commentary.";
+
+    const prompt = htmlPage
+      ? `Rewrite only the visible text of this "${label}" page for ${school.name}, keeping the HTML structure exactly as it is.\n\nSchool facts (JSON):\n${JSON.stringify(facts, null, 2)}\n\nHTML:\n${existing}`
+      : type === "page"
       ? `Rewrite the "${label}" page for ${school.name}.\n\nSchool facts (JSON):\n${JSON.stringify(facts, null, 2)}\n\nCurrent content (may be empty or thin):\n"""${existing.slice(0, 4000)}"""\n\nKeep any specifics already present that aren't contradicted by the facts. If a detail isn't in the facts and isn't already written, leave it out rather than guessing.`
       : `Write the "${label}" section for ${school.name}'s homepage.\n\nSchool facts (JSON):\n${JSON.stringify(facts, null, 2)}\n\nKeep it tight — this is one section of a page, not a whole page.`;
 
     const resp = await openai.chat.completions.create({
-      model: OPENAI_MODEL, max_tokens: 900,
+      model: OPENAI_MODEL, max_tokens: htmlPage ? 8000 : 900,
       messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
     });
-    const content = resp.choices?.[0]?.message?.content?.trim() || "";
+    let content = resp.choices?.[0]?.message?.content?.trim() || "";
+    content = content.replace(/^```(?:html)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+    // Structural guard: the rewrite must still BE the page. A response that
+    // lost its markup (or most of it) is a broken layout, not new copy.
+    if (htmlPage) {
+      const before = tagCount(existing), after = tagCount(content);
+      if (!looksLikeHtml(content) || after < before * 0.8) {
+        return res.status(422).json({
+          error: `The rewrite of "${label}" came back without the page's structure, so it was discarded and the page is unchanged.`,
+          code: "STRUCTURE_LOST", key, type, skipped: true,
+        });
+      }
+    }
+    if (!content) return res.status(422).json({ error: `The rewrite of "${label}" came back empty; the page is unchanged.`, code: "EMPTY", key, type, skipped: true });
 
     // Bill the SCHOOL wallet, metered on real usage like every other AI
     // feature. Charged AFTER the call so a failed generation is free.
@@ -171,8 +213,12 @@ router.post("/website/ai-sync/unit", schoolOnly, async (req, res) => {
     }
 
     if (type === "page") {
+      // Snapshot the page as it was BEFORE its first sync, once. Every later
+      // sync overwrites `content` but leaves the original recoverable.
+      const patch = { content, ai_synced_at: new Date().toISOString() };
+      if (backup === null || backup === undefined) patch.content_backup = existing;
       const { error } = await db.schema("mgmt").from("site_pages")
-        .update({ content }).eq("id", key).eq("school_id", school.id);
+        .update(patch).eq("id", key).eq("school_id", school.id);
       if (error) throw error;
     } else {
       // Sections live in the template's own store; persist as a content
@@ -186,6 +232,34 @@ router.post("/website/ai-sync/unit", schoolOnly, async (req, res) => {
     }
 
     res.json({ success: true, key, type, label, content, coinsCharged: charged });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// ── POST /api/school/website/ai-sync/revert ──────────────────────────────────
+// Put every AI-synced page back the way it was, and drop the AI copy written
+// over template sections. Free — no model call, so no charge.
+router.post("/website/ai-sync/revert", schoolOnly, async (req, res) => {
+  try {
+    const school = await mySchool(req);
+    if (!school) return res.status(404).json({ error: "No school found for this account" });
+
+    const M = db.schema("mgmt");
+    const { data: pages } = await M.from("site_pages")
+      .select("id, content_backup").eq("school_id", school.id).not("content_backup", "is", null);
+
+    let restored = 0;
+    for (const p of pages || []) {
+      const { error } = await M.from("site_pages")
+        .update({ content: p.content_backup, content_backup: null, ai_synced_at: null }).eq("id", p.id);
+      if (error) throw error;
+      restored++;
+    }
+
+    // Sections fall back to whatever the school typed manually once the AI
+    // override is cleared, so emptying it is the revert.
+    await db.schema("edu").from("school_website").update({ section_content: {} }).eq("school_id", school.id);
+
+    res.json({ success: true, restored });
   } catch (e) { serverError(res, e, req); }
 });
 

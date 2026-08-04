@@ -6,7 +6,7 @@
  * stopping midway keeps everything already written.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Check, AlertCircle, Plus, Loader2, Square } from 'lucide-react';
+import { Sparkles, Check, AlertCircle, Plus, Loader2, Square, Undo2, MinusCircle } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { inputStyle } from '../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
@@ -23,6 +23,7 @@ export default function WebsiteAiSyncPage() {
   const [openField, setOpenField] = useState(null);
   const [fieldValue, setFieldValue] = useState('');
   const [savingField, setSavingField] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const stopped = useRef(false);
 
   const load = useCallback(() => {
@@ -49,14 +50,30 @@ export default function WebsiteAiSyncPage() {
         setDone((d) => ({ ...d, [u.key]: 'ok' }));
         setCoins((c) => c + (r.coinsCharged || 0));
       } catch (e) {
-        setDone((d) => ({ ...d, [u.key]: 'error' }));
         // Out of coins is terminal — every remaining unit would fail the same
         // way, so stop instead of burning through the list.
-        if (e?.status === 402) { setNote(e.message || 'The school wallet ran out of coins.'); break; }
+        if (e?.status === 402) { setDone((d) => ({ ...d, [u.key]: 'error' })); setNote(e.message || 'The school wallet ran out of coins.'); break; }
+        // 422 means the page was deliberately left alone (too large to rewrite
+        // safely, or the rewrite lost its structure). That's a skip, not a
+        // failure — the page is intact.
+        const skipped = e?.status === 422;
+        setDone((d) => ({ ...d, [u.key]: skipped ? 'skipped' : 'error' }));
         setNote(`${u.label}: ${e?.message || 'failed'} — continuing.`);
       }
     }
     setCurrent(null); setRunning(false);
+  };
+
+  const revert = async () => {
+    if (!window.confirm('Restore every page to how it was before the AI sync? The AI copy will be discarded.')) return;
+    setReverting(true); setNote('');
+    try {
+      const r = await apiPost('/api/school/website/ai-sync/revert', {});
+      setDone({}); setCoins(0);
+      setNote(`Restored ${r.restored || 0} page${r.restored === 1 ? '' : 's'} to their pre-sync content.`);
+      load();
+    } catch (e) { setNote(e?.message || 'Could not restore the pages'); }
+    finally { setReverting(false); }
   };
 
   const saveField = async (e) => {
@@ -98,6 +115,12 @@ export default function WebsiteAiSyncPage() {
           ) : (
             <button onClick={() => { stopped.current = true; }} style={{ ...primaryBtn, background: MUTED }}>
               <Square size={13} /> Stop after this page
+            </button>
+          )}
+          {!running && plan.canRevert && (
+            <button onClick={revert} disabled={reverting} style={ghostBtn}>
+              <Undo2 size={13} style={{ verticalAlign: -2, marginRight: 4 }} />
+              {reverting ? 'Restoring…' : 'Undo AI sync'}
             </button>
           )}
           {!plan.canSync && <span style={{ fontSize: 12.5, color: MUTED, alignSelf: 'center' }}>Pick a website template or add a page first.</span>}
@@ -168,16 +191,18 @@ export default function WebsiteAiSyncPage() {
                 background: st === 'ok' ? `${GREEN}18` : st === 'error' ? `${RED}18` : LIGHT }}>
                 {isNow ? <Loader2 size={13} color={AMBER} style={{ animation: 'spin .8s linear infinite' }} />
                   : st === 'ok' ? <Check size={13} color={GREEN} />
+                  : st === 'skipped' ? <MinusCircle size={13} color={MUTED} />
                   : st === 'error' ? <AlertCircle size={13} color={RED} /> : null}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{u.label}</div>
                 <div style={{ fontSize: 11.5, color: MUTED2 }}>
-                  {u.type === 'section' ? 'Template section' : 'Website page'}
+                  {u.type === 'section' ? 'Template section' : u.html ? 'Template page · wording only' : 'Website page'}
                   {u.thin && st !== 'ok' && ' · little or no content yet'}
                 </div>
               </div>
-              {st === 'error' && <span style={{ fontSize: 11.5, color: RED, fontWeight: 700 }}>Failed</span>}
+              {st === 'error'   && <span style={{ fontSize: 11.5, color: RED, fontWeight: 700 }}>Failed</span>}
+              {st === 'skipped' && <span style={{ fontSize: 11.5, color: MUTED, fontWeight: 700 }}>Left as is</span>}
             </div>
           );
         })}
