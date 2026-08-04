@@ -18,15 +18,31 @@ const BOARDS = [
     empty: 'No one in your class has earned XP yet.' },
   { key: 'school',    label: 'My school',  icon: '🏆', endpoint: '/api/ranking/my-school',
     empty: 'No one in your school has earned XP yet.' },
+  { key: 'subjects',  label: 'Subjects',   icon: '📚', endpoint: '/api/ranking/my-class-subjects',
+    empty: 'No subject XP in your class yet.' },
 ];
 
 const SILVER = '#C0C0C0', BRONZE = '#CD7F32';
+
+const mapRow = (r) => ({
+  rank: r.rank,
+  name: r.name || r.full_name || r.username || 'Unknown',
+  avatar: r.avatar || r.avatar_url || null,
+  xp: r.total_xp || 0,
+  isMe: !!r.is_me,
+  subject: r.subject,
+  students: r.students,
+});
 
 export default function RankingSheet({ onClose }) {
   const [board, setBoard] = useState('classroom');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  // Subjects board returns one leaderboard PER subject, so it needs its own
+  // picker on top of the board tabs.
+  const [subjects, setSubjects] = useState([]);
+  const [subject, setSubject] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -36,6 +52,14 @@ export default function RankingSheet({ onClose }) {
       .then((res) => {
         if (!alive) return;
         // Ranking endpoints wrap their payload in `data` (some don't) — accept both.
+        if (board === 'subjects') {
+          const list = res.data?.subjects || res.subjects || [];
+          setSubjects(list);
+          const pick = list.find((x) => x.subject === subject) || list[0] || null;
+          setSubject(pick?.subject || null);
+          setRows((pick?.leaders || []).map(mapRow));
+          return;
+        }
         const leaders = res.data?.leaders || res.leaders || [];
         setRows(leaders.map((r) => ({
           rank: r.rank,
@@ -91,6 +115,22 @@ export default function RankingSheet({ onClose }) {
             </button>
           ))}
         </div>
+
+        {board === 'subjects' && subjects.length > 0 && (
+          <div style={{ display: 'flex', gap: 7, padding: '10px 12px', overflowX: 'auto', borderBottom: `1px solid ${BORDER}`, scrollbarWidth: 'none' }}>
+            {subjects.map((sx) => (
+              <button key={sx.subject}
+                onClick={() => { setSubject(sx.subject); setRows((sx.leaders || []).map(mapRow)); }}
+                style={{
+                  flexShrink: 0, padding: '6px 13px', borderRadius: 100, cursor: 'pointer', fontFamily: FONT,
+                  fontSize: 12, fontWeight: 800,
+                  border: subject === sx.subject ? `1.5px solid ${AMBER}` : `1.5px solid ${BORDER}`,
+                  background: subject === sx.subject ? `${AMBER}14` : WHITE,
+                  color: subject === sx.subject ? AMBER : MUTED,
+                }}>{sx.subject}</button>
+            ))}
+          </div>
+        )}
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {err ? (

@@ -56,8 +56,16 @@ const XP = {
  * Creates an xp_transactions record and updates user_agents.total_xp.
  * Called by other modules (course-content, live-sessions, agents) via import.
  */
-export const awardXP = async ({ userId, courseId = null, classroomId = null, reason, amount, metadata = {} }) => {
+export const awardXP = async ({ userId, courseId = null, classroomId = null, reason, amount, metadata = {}, subject = null }) => {
   try {
+    // Subject powers the per-subject leaderboards. Callers that know it pass
+    // it; for course XP we can always derive it, so the caller doesn't have to.
+    let subj = subject || metadata?.subject || null;
+    if (!subj && courseId) {
+      const { data: c } = await db.from("courses").select("subject").eq("id", courseId).maybeSingle();
+      subj = c?.subject || null;
+    }
+
     await db.from("xp_transactions").insert({
       user_id:      userId,
       course_id:    courseId,
@@ -65,6 +73,7 @@ export const awardXP = async ({ userId, courseId = null, classroomId = null, rea
       reason,
       amount,
       metadata,
+      subject:      subj,
     });
 
     // Update agent XP
@@ -205,6 +214,59 @@ const handlers = {
   // Resolve the caller's school from their classroom membership, then hand off
   // to the existing school board. Added for the school-website student chat,
   // where the client knows the tenant but not its id.
+  // Per-subject boards for the caller's own classroom. Built from
+  // xp_transactions rather than xp_leaderboard: the leaderboard table is
+  // refreshed periodically and has no subject rows yet, whereas the ledger
+  // carries the subject from the moment it's awarded.
+  myClassSubjects: asyncHandler(async (req, res) => {
+    const { data: membership } = await db
+      .from("classroom_students")
+      .select("classroom_id")
+      .eq("user_id", req.user.id).eq("status", "active")
+      .order("joined_at", { ascending: true }).limit(1).maybeSingle();
+
+    const classroomId = membership?.classroom_id;
+    if (!classroomId) return res200(res, { scope: "class_subjects", subjects: [] }, { total: 0 });
+
+    const { data: peers } = await db.from("classroom_students")
+      .select("user_id").eq("classroom_id", classroomId).eq("status", "active");
+    const ids = [...new Set((peers || []).map((p) => p.user_id).filter(Boolean))];
+    if (!ids.length) return res200(res, { scope: "class_subjects", subjects: [] }, { total: 0 });
+
+    const { data: tx } = await db.from("xp_transactions")
+      .select("user_id, subject, amount")
+      .in("user_id", ids).not("subject", "is", null);
+
+    // subject -> user -> xp
+    const bySubject = {};
+    for (const t of tx || []) {
+      const subj = String(t.subject).trim();
+      if (!subj) continue;
+      (bySubject[subj] ||= {});
+      bySubject[subj][t.user_id] = (bySubject[subj][t.user_id] || 0) + (t.amount || 0);
+    }
+
+    const { data: users } = await db.from("users")
+      .select("id, full_name, username, avatar_url").in("id", ids);
+    const nameOf = Object.fromEntries((users || []).map((u) => [u.id, u]));
+
+    const subjects = Object.entries(bySubject).map(([subject, totals]) => ({
+      subject,
+      leaders: Object.entries(totals)
+        .sort((a, b) => b[1] - a[1])
+        .map(([uid, xp], i) => ({
+          rank: i + 1,
+          user_id: uid,
+          name: nameOf[uid]?.full_name || nameOf[uid]?.username || "Unknown",
+          avatar_url: nameOf[uid]?.avatar_url || null,
+          total_xp: xp,
+          is_me: uid === req.user.id,
+        })),
+    })).sort((a, b) => a.subject.localeCompare(b.subject));
+
+    return res200(res, { scope: "class_subjects", subjects }, { total: subjects.length });
+  }),
+
   mySchool: asyncHandler(async (req, res, next) => {
     const { data: membership } = await db
       .from("classroom_students")
@@ -554,6 +616,7 @@ const router = Router();
 
 router.get ("/my-classroom",            authenticateToken, handlers.myClassroom);
 router.get ("/my-school",               authenticateToken, handlers.mySchool);
+router.get ("/my-class-subjects",       authenticateToken, handlers.myClassSubjects);
 router.get ("/course/:courseId",        authenticateToken, handlers.course);
 router.get ("/classroom/:classroomId",  authenticateToken, handlers.classroom);
 router.get ("/school/:schoolId",        authenticateToken, handlers.school);
