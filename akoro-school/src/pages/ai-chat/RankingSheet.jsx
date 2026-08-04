@@ -62,6 +62,9 @@ export default function RankingSheet({ onClose }) {
 
   const podium = rows.slice(0, 3);
   const rest = rows.slice(3);
+  // Pinned so a student never has to scroll a whole-school board to find
+  // themselves. Only meaningful once the list has loaded.
+  const me = rows.find((r) => r.isMe) || null;
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2600, background: 'rgba(17,17,26,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -168,6 +171,29 @@ export default function RankingSheet({ onClose }) {
             </>
           )}
         </div>
+
+        {!loading && !err && rows.length > 0 && (
+          <div style={{ borderTop: `2px solid ${BORDER}`, background: `${AMBER}0A`, padding: '10px 16px', flexShrink: 0 }}>
+            {me ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: `${AMBER}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: AMBER }}>{me.rank}</div>
+                <Avatar r={me} size={32} ring={AMBER} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 900, color: AMBER }}>Your rank</div>
+                  <div style={{ fontSize: 11, color: MUTED2, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.name}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <Zap size={11} color={GOLD} />
+                  <span style={{ fontSize: 13, fontWeight: 900, color: INK }}>{me.xp.toLocaleString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11.5, color: MUTED, fontWeight: 600, textAlign: 'center' }}>
+                You're not on this board yet — earn XP from lessons and assessments to appear.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
