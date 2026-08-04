@@ -16,7 +16,10 @@ import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, GOLD, FONT } from '../constants.js';
 
-const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?";
+// The chat is named after the school's own agent (set during onboarding), so
+// the greeting is built once the name arrives rather than hardcoded.
+const greetingFor = (name) =>
+  `Hi! I'm ${name}, your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?`;
 
 const SITE_KEY = 'akoro_ai_return';
 
@@ -38,6 +41,7 @@ export default function AiChatPage() {
   // resolved server-side so a parent (whose account role is 'student') doesn't
   // get the student's Assessment option, etc.
   const [schoolRole, setSchoolRole] = useState(null);
+  const [aiName, setAiName] = useState('');
   const isStudent = schoolRole === 'student';
   const isTeacher = schoolRole === 'teacher' || schoolRole === 'admin';
 
@@ -65,7 +69,7 @@ export default function AiChatPage() {
     window.location.href = dest;
   }, []);
   const firstName = (user?.fullName || '').split(' ')[0] || '';
-  const [messages, setMessages] = useState([{ from: 'agent', text: GREETING }]);
+  const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
@@ -89,9 +93,21 @@ export default function AiChatPage() {
   // Resolve the caller's role within the school they came from.
   useEffect(() => {
     apiGet(`/api/school/ai/context?host=${encodeURIComponent(resolveHost())}`)
-      .then((r) => setSchoolRole((r?.data ?? r)?.role || null))
-      .catch(() => setSchoolRole(null));
+      .then((r) => {
+        const d = r?.data ?? r;
+        setSchoolRole(d?.role || null);
+        setAiName(d?.aiName || 'Akoro');
+      })
+      .catch(() => { setSchoolRole(null); setAiName('Akoro'); });
   }, []);
+
+  // Greet only once the name is known, so the student never sees the greeting
+  // rewrite itself mid-read. Guarded on an empty thread so it can't reappear
+  // after the conversation has started.
+  useEffect(() => {
+    if (!aiName) return;
+    setMessages((p) => (p.length === 0 ? [{ from: 'agent', text: greetingFor(aiName) }] : p));
+  }, [aiName]);
 
   const openAttach = (type) => {
     setAttachMenu(false);
@@ -176,13 +192,13 @@ export default function AiChatPage() {
         } catch { lane.current = 'tutor'; }
       }
       const data = await apiPost('/api/adaptive/chat/tutor', {
-        message: body, history, agentName: 'Akoro', role: isStudent ? 'student' : 'instructor',
+        message: body, history, agentName: aiName || 'Akoro', role: isStudent ? 'student' : 'instructor',
       });
       setMessages((p) => [...p, { from: 'agent', text: data.reply || data.response || "I'm here to help — could you rephrase that?" }]);
     } catch {
       setMessages((p) => [...p, { from: 'agent', text: 'Sorry — I had trouble responding just now. Please try again.' }]);
     } finally { setBusy(false); }
-  }, [busy, messages, isStudent]);
+  }, [busy, messages, isStudent, aiName]);
 
   const send = useCallback(() => {
     const body = text.trim();
@@ -215,7 +231,7 @@ export default function AiChatPage() {
           <Bot size={22} color={WHITE} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>AI Study Assistant</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>{aiName || 'AI Study Assistant'}</div>
           <div style={{ fontSize: 11.5, color: GREEN, display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN }} /> Online{firstName ? ` · ${firstName}` : ''}
           </div>

@@ -272,7 +272,10 @@ router.get("/ai/context", authenticateToken, async (req, res) => {
     if (!school) return res.json({ success: true, role: null });
     const { data: user } = await db.from("users").select("id, email, full_name").eq("id", req.user.id).maybeSingle();
     const role = await roleInSchool(user, school);
-    res.json({ success: true, role, schoolName: school.name });
+    // The chat UI greets and labels itself with the school's own agent name,
+    // so it must come from the same resolver the personas use.
+    const aiName = await resolveAiName(school);
+    res.json({ success: true, role, schoolName: school.name, aiName });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

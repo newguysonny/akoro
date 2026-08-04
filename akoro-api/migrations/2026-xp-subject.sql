@@ -27,9 +27,37 @@ UPDATE xp_transactions t
    AND c.subject IS NOT NULL;
 
 -- Leaderboard gains a subject scope.
+--
+-- The scope CHECK is rebuilt as the UNION of the scopes we know about and the
+-- scopes already present in the table. Listing a fixed set here once dropped
+-- 'battle_course' (added by 2026-base-schema step 3b) and halted a deploy:
+-- this migration re-runs on every deploy, so it must never invalidate rows a
+-- later feature introduced.
 ALTER TABLE xp_leaderboard ADD COLUMN IF NOT EXISTS subject text;
-ALTER TABLE xp_leaderboard DROP CONSTRAINT IF EXISTS xp_leaderboard_scope_check;
-ALTER TABLE xp_leaderboard ADD  CONSTRAINT xp_leaderboard_scope_check
-  CHECK (scope IN ('course', 'classroom', 'global', 'subject'));
+
+DO $$
+DECLARE
+  v_scopes text[];
+  v_extra  text[];
+BEGIN
+  SELECT array_agg(DISTINCT s ORDER BY s) INTO v_scopes
+  FROM (
+    SELECT unnest(ARRAY['course', 'classroom', 'global', 'battle_course', 'subject']) AS s
+    UNION
+    SELECT DISTINCT scope FROM xp_leaderboard WHERE scope IS NOT NULL
+  ) t;
+
+  SELECT array_agg(s) INTO v_extra FROM unnest(v_scopes) s
+   WHERE s <> ALL (ARRAY['course', 'classroom', 'global', 'battle_course', 'subject']);
+  IF v_extra IS NOT NULL THEN
+    RAISE NOTICE 'xp_leaderboard has unlisted scopes, preserving them: %', v_extra;
+  END IF;
+
+  EXECUTE 'ALTER TABLE xp_leaderboard DROP CONSTRAINT IF EXISTS xp_leaderboard_scope_check';
+  EXECUTE format(
+    'ALTER TABLE xp_leaderboard ADD CONSTRAINT xp_leaderboard_scope_check CHECK (scope IN (%s))',
+    (SELECT string_agg(quote_literal(s), ', ') FROM unnest(v_scopes) s)
+  );
+END $$;
 
 NOTIFY pgrst, 'reload schema';
