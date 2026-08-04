@@ -325,7 +325,7 @@ export default function LearnerDashboard() {
     title:          a.topic,
     topic:          a.topic,
     subject:        a.subject,
-    avatar:         `https://i.pravatar.cc/150?u=${a.id}`,
+    avatar:         null,
     tutor:          "AI Agent",
     level:          "Adaptive",
     nextSession:    `${a.daysSince}d ago`,

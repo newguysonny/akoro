@@ -1,5 +1,5 @@
 import React from 'react';
-import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
 import { XIcon, ZapIcon, StarIcon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -15,7 +15,7 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
           {isClassroom?<div style={{ width:32,height:32,borderRadius:"50%",background:"#10B981",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16 }}>🏫</div>:isImmediate?<div style={{ width:32,height:32,borderRadius:"50%",background:RED,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><ZapIcon size={16} color="#fff"/></div>:<div style={{ width:32,height:32,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16 }}>🗓</div>}
         </div>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16 }}>
-          <div style={{ display:"flex",alignItems:"center",gap:12 }}><div style={{ position:"relative" }}><img src={challenge.avatar} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2.5px solid ${sc}` }}/><div style={{ position:"absolute",bottom:0,right:0,width:16,height:16,borderRadius:"50%",background:isClassroom?"#10B981":isImmediate?RED:BRAND,border:"2px solid var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center" }}><ZapIcon size={8} color="var(--ak-surface)"/></div></div>
+          <div style={{ display:"flex",alignItems:"center",gap:12 }}><div style={{ position:"relative" }}><img src={challenge.avatar || AVATAR_FALLBACK} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2.5px solid ${sc}` }}/><div style={{ position:"absolute",bottom:0,right:0,width:16,height:16,borderRadius:"50%",background:isClassroom?"#10B981":isImmediate?RED:BRAND,border:"2px solid var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center" }}><ZapIcon size={8} color="var(--ak-surface)"/></div></div>
             <div><p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{challenge.challenger}</p><div style={{ display:"flex",alignItems:"center",gap:4,marginTop:2 }}><StarIcon size={11} color={GOLD}/><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{challenge.rating} · {challenge.badge}</span></div></div></div>
           <div style={{ background:diff.bg,borderRadius:8,padding:"4px 11px",display:"flex",alignItems:"center",gap:5 }}><div style={{ width:6,height:6,borderRadius:"50%",background:diff.color }}/><span style={{ fontSize:10,fontWeight:800,color:diff.color }}>{diff.label}</span></div>
         </div>

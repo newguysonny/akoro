@@ -1,5 +1,5 @@
 import React from 'react';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, AVATAR_FALLBACK } from '../../constants.js';
 import { PlayIcon, PhoneIcon, MessageIcon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -39,7 +39,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
             {agentProfile?.emoji||"🤖"}
           </div>
         ) : (
-          <img src={session.avatar} alt="" style={{ width:46,height:46,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}` }}/>
+          <img src={session.avatar || AVATAR_FALLBACK} alt="" style={{ width:46,height:46,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}` }}/>
         )}
         <div style={{ flex:1 }}>
           <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{session.title}</p>

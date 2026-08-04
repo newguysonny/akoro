@@ -309,7 +309,7 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
     io.to(`user:${opponent_id}`).emit("new_challenge", {
       id:           battle.id,
       challenger:   me?.full_name  ?? "Opponent",
-      avatar:       me?.avatar_url ?? `https://i.pravatar.cc/150?u=${req.user.id}`,
+      avatar:       me?.avatar_url ?? null,
       title,
       subject:      req.body.subject ?? "science",
       topic:        req.body.topic   ?? title,

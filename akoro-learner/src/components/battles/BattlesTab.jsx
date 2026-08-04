@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
 import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -11,7 +11,7 @@ function ChallengeRow({ challenge, onTap }) {
   return (
     <div onClick={()=>onTap(challenge)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid var(--ak-border)",cursor:"pointer",background:"var(--ak-surface)",transition:"background .15s" }}>
       <div style={{ position:"relative",flexShrink:0 }}>
-        <img src={challenge.avatar} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}60` }}/>
+        <img src={challenge.avatar || AVATAR_FALLBACK} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}60` }}/>
         <div style={{ position:"absolute",bottom:1,right:1,width:12,height:12,borderRadius:"50%",background:isImmediate?RED:isClassroom?"#10B981":BRAND,border:"2px solid #fff",animation:isImmediate?"pulse-dot 1.2s ease-in-out infinite":"none" }}/>
       </div>
       <div style={{ flex:1,minWidth:0 }}>
@@ -95,7 +95,7 @@ function BattlesTab({ battles, onViewChallenge }) {
               <div style={{ padding:"13px 14px" }}>
                 <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10 }}>
                   <div style={{ display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0 }}>
-                    <img src={b.avatar} alt="" style={{ width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50`,flexShrink:0 }}/>
+                    <img src={b.avatar || AVATAR_FALLBACK} alt="" style={{ width:40,height:40,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50`,flexShrink:0 }}/>
                     <div style={{ minWidth:0 }}><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:"0 0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{b.title}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>vs {b.challenger}</p></div>
                   </div>
                   <div style={{ background:st.bg,borderRadius:8,padding:"3px 9px",border:`1px solid ${st.border}`,flexShrink:0,display:"flex",alignItems:"center",gap:4 }}>

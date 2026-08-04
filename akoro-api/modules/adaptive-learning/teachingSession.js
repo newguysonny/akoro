@@ -128,7 +128,7 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         title:          s.topic,
         topic:          s.topic,
         subject:        SUBJECTS[s.subject?.toLowerCase()] || s.subject || "science",
-        avatar:         `https://i.pravatar.cc/150?img=${(i % 30) + 10}`,
+        avatar:         null,
         tutor:          "AI Agent",
         level:          "Adaptive",
         startsAt:       completedAt,

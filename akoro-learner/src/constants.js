@@ -48,3 +48,13 @@ export const AGENT_STYLES = {
   sargeant:{ name:"Sargeant",    emoji:"⚡", bg:"#FFF0F0", color:"#7F1D1D", ring:"#FCA5A5" },
   student: { name:"Agent",       emoji:"🤖", bg:"#FEF0E6", color:"#92400E", ring:"#F59E0B" },
 };
+
+// Neutral avatar for users with no uploaded picture. Inline SVG data URI:
+// no network request and, crucially, no user id sent to a third party — this
+// replaces the old `https://i.pravatar.cc/150?u=<user id>` fallback, which
+// leaked a real person's id to an external image host on every render.
+export const AVATAR_FALLBACK =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'>"
+  + "<rect width='40' height='40' fill='%23E9E4F5'/>"
+  + "<circle cx='20' cy='15.5' r='6.8' fill='%23B4A8D8'/>"
+  + "<path d='M6 38c0-7.7 6.4-11.6 14-11.6S34 30.3 34 38z' fill='%23B4A8D8'/></svg>";

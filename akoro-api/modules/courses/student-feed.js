@@ -99,7 +99,7 @@ function mapLiveSession(row, participantStatus) {
     description:    row.description ?? "",
     topic:          row.topic       ?? row.courses?.title ?? "",
     subject:        row.subject     ?? "science",
-    avatar:         row.users?.avatar_url  ?? `https://i.pravatar.cc/150?u=${row.id}`,
+    avatar:         row.users?.avatar_url  ?? null,
     tutor:          row.users?.full_name   ?? "Instructor",
     level:          row.level ?? "All levels",
 
@@ -218,7 +218,7 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         description:    "",
         topic:          row.topic   ?? "",
         subject:        row.subject ?? "science",
-        avatar:         `https://i.pravatar.cc/150?img=${(i % 30) + 10}`,
+        avatar:         null,
         tutor:          "AI Agent",
         level:          "Adaptive",
         startsAt:       row.updated_at,
@@ -339,7 +339,7 @@ function mapChallenge(battle, myUserId, challengerUser) {
   return {
     id:           battle.id,
     challenger:   challengerUser?.full_name  ?? "Opponent",
-    avatar:       challengerUser?.avatar_url ?? `https://i.pravatar.cc/150?u=${battle.created_by}`,
+    avatar:       challengerUser?.avatar_url ?? null,
     title:        battle.title,
     subject:      battle.subject  ?? "science",
     topic:        battle.topic    ?? battle.title,
@@ -465,7 +465,7 @@ battleFeedRouter.get("/my-battles", authenticateToken, async (req, res) => {
         xpPrize:      `+${b.xp_prize ?? 200} XP`,
         timeLimit:    `${Math.round((b.time_limit_seconds ?? 900) / 60)} min`,
         challenger:   opp?.users?.full_name ?? "Opponent",
-        avatar:       opp?.users?.avatar_url ?? `https://i.pravatar.cc/150?u=${b.id}`,
+        avatar:       opp?.users?.avatar_url ?? null,
         startedAgo:   b.status === "live" && b.scheduled_start
           ? Math.round((Date.now() - new Date(b.scheduled_start)) / 60_000)
           : null,
