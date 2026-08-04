@@ -27,7 +27,6 @@ const schoolOnly = [authenticateToken, requireRole(["school", "school_admin", "a
 // School facts a website needs. `field` is the school_profiles column; the UI
 // renders `label`/`hint` and PATCHes the field back when the user fills it.
 const REQUIRED_INFO = [
-  { field: "logo_url",        label: "School logo",        hint: "Shown in the header and on every page." },
   { field: "description",     label: "About the school",   hint: "A short paragraph the About and Hero sections are written from.", long: true },
   { field: "address",         label: "Street address",     hint: "Used on the Contact page and in search results." },
   { field: "city",            label: "City / town",        hint: "" },
@@ -38,6 +37,17 @@ const REQUIRED_INFO = [
   { field: "gender_type",     label: "Gender",             hint: "Mixed · Boys only · Girls only" },
   { field: "boarding_type",   label: "Day / boarding",     hint: "Day only · Boarding only · Day & Boarding" },
 ];
+
+// Pictures the site needs. `on: 'website'` fields live in edu.school_website
+// rather than public.school_profiles — the PATCH handler routes by that.
+// The AI writes copy, never images: a school photo can only come from the
+// school, so these are collected the same way the missing facts are.
+const REQUIRED_IMAGES = [
+  { field: "logo_url",       label: "School logo",       hint: "Shown in the header of every page.", on: "school" },
+  { field: "hero_image_url", label: "Homepage banner",   hint: "The large photo behind your homepage headline. A wide shot of the school works best.", on: "website" },
+  { field: "og_image_url",   label: "Social share image", hint: "Used when your website link is shared on WhatsApp or Facebook.", on: "website" },
+];
+const imageField = (f) => REQUIRED_IMAGES.find((x) => x.field === f);
 
 async function mySchool(req) {
   const { data } = await db.from("school_profiles").select("*")
@@ -91,6 +101,11 @@ router.get("/website/ai-sync/plan", schoolOnly, async (req, res) => {
       .filter((f) => isBlank(school[f.field]))
       .map((f) => ({ ...f, value: school[f.field] ?? "" }));
 
+    // Images are listed whether set or not — unlike a fact, you can only judge
+    // a picture by looking at it, so the UI shows a thumbnail and a Replace.
+    const valueOf = (f) => (f.on === "website" ? site?.[f.field] : school[f.field]) ?? "";
+    const images = REQUIRED_IMAGES.map((f) => ({ ...f, image: true, value: valueOf(f), missing: isBlank(valueOf(f)) }));
+
     res.json({
       success: true,
       data: {
@@ -99,6 +114,8 @@ router.get("/website/ai-sync/plan", schoolOnly, async (req, res) => {
         units,
         total: units.length,
         missing,
+        images,
+        imagesMissing: images.filter((i) => i.missing).length,
         // Everything the UI needs to say "you can't sync yet, and here's why".
         canSync: !!tpl || (pages || []).length > 0,
         canRevert: (pages || []).some((p) => p.content_backup != null),
@@ -116,9 +133,30 @@ router.patch("/website/ai-sync/info", schoolOnly, async (req, res) => {
     if (!school) return res.status(404).json({ error: "No school found for this account" });
 
     const { field, value } = req.body || {};
-    const allowed = REQUIRED_INFO.find((f) => f.field === field);
+    const img = imageField(field);
+    const allowed = img || REQUIRED_INFO.find((f) => f.field === field);
     if (!allowed) return res.status(400).json({ error: "Unknown field" });
     if (isBlank(value)) return res.status(400).json({ error: `${allowed.label} cannot be empty` });
+
+    if (img) {
+      // The client uploads to storage first and sends back the public URL, so
+      // this only ever stores a link — never file bytes.
+      const url = String(value).trim();
+      if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: "That doesn't look like an image link" });
+
+      if (img.on === "website") {
+        // Upsert, not update: a school that has never opened Appearance has no
+        // school_website row yet, and a plain update would report success
+        // while changing nothing.
+        const { error } = await db.schema("edu").from("school_website")
+          .upsert({ school_id: school.id, [field]: url }, { onConflict: "school_id" });
+        if (error) throw error;
+      } else {
+        const { error } = await db.from("school_profiles").update({ [field]: url }).eq("id", school.id);
+        if (error) throw error;
+      }
+      return res.json({ success: true, field, value: url });
+    }
 
     const v = allowed.type === "number" ? Math.round(Number(value)) : String(value).trim();
     if (allowed.type === "number" && !Number.isFinite(v)) return res.status(400).json({ error: `${allowed.label} must be a number` });

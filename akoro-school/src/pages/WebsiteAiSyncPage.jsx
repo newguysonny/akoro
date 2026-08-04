@@ -6,10 +6,12 @@
  * stopping midway keeps everything already written.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Sparkles, Check, AlertCircle, Plus, Loader2, Square, Undo2, MinusCircle } from 'lucide-react';
+import { Sparkles, Check, AlertCircle, Plus, Loader2, Square, Undo2, MinusCircle, Image as ImageIcon, Upload } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { inputStyle } from '../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
+import { uploadFile } from '../services/uploadApi.js';
+import { Link } from 'react-router-dom';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
 
 export default function WebsiteAiSyncPage() {
@@ -24,6 +26,7 @@ export default function WebsiteAiSyncPage() {
   const [fieldValue, setFieldValue] = useState('');
   const [savingField, setSavingField] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [uploading, setUploading] = useState(null);   // field currently uploading
   const stopped = useRef(false);
 
   const load = useCallback(() => {
@@ -74,6 +77,21 @@ export default function WebsiteAiSyncPage() {
       load();
     } catch (e) { setNote(e?.message || 'Could not restore the pages'); }
     finally { setReverting(false); }
+  };
+
+  // Images can't be written by the AI — a photo of the school can only come
+  // from the school. Uploaded here straight into the same media storage the
+  // website builder uses, so it's one step rather than a trip to another page.
+  const uploadImage = async (f, file) => {
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) { setNote('That file is not an image.'); return; }
+    setUploading(f.field); setNote('');
+    try {
+      const { fileUrl } = await uploadFile(file);
+      await apiPatch('/api/school/website/ai-sync/info', { field: f.field, value: fileUrl });
+      load();
+    } catch (e) { setNote(e?.message || `Could not upload the ${f.label.toLowerCase()}`); }
+    finally { setUploading(null); }
   };
 
   const saveField = async (e) => {
@@ -174,6 +192,46 @@ export default function WebsiteAiSyncPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Images */}
+      {plan.images?.length > 0 && (
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <ImageIcon size={16} color={plan.imagesMissing ? AMBER : GREEN} />
+            <div style={{ fontSize: 14, fontWeight: 800, color: INK }}>
+              Images{plan.imagesMissing ? ` — ${plan.imagesMissing} missing` : ''}
+            </div>
+          </div>
+          <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 14 }}>
+            The AI writes words, not pictures. Add your own here, or pick from{' '}
+            <Link to="/website-builder/media" style={{ color: AMBER, fontWeight: 700 }}>Website Builder → Media</Link>.
+          </div>
+
+          {plan.images.map((f, i) => (
+            <div key={f.field} style={{ display: 'flex', alignItems: 'center', gap: 14, borderTop: i === 0 ? 'none' : `1px solid ${BORDER}`, padding: '12px 0' }}>
+              <div style={{ width: 64, height: 44, borderRadius: 8, background: LIGHT, border: `1px solid ${BORDER}`, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {f.value
+                  ? <img src={f.value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <ImageIcon size={16} color={MUTED2} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{f.label}</div>
+                <div style={{ fontSize: 11.5, color: f.missing ? AMBER : MUTED2, marginTop: 2 }}>
+                  {f.missing ? `Missing — ${f.hint}` : f.hint}
+                </div>
+              </div>
+              <label style={{ ...addBtn, opacity: uploading === f.field ? 0.6 : 1 }}>
+                {uploading === f.field
+                  ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Uploading…</>
+                  : <><Upload size={13} /> {f.missing ? 'Add' : 'Replace'}</>}
+                <input type="file" accept="image/*" disabled={uploading === f.field} style={{ display: 'none' }}
+                  onChange={(e) => { uploadImage(f, e.target.files?.[0]); e.target.value = ''; }} />
+              </label>
+            </div>
+          ))}
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 
