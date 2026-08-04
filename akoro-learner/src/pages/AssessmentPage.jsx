@@ -78,7 +78,7 @@ export default function AssessmentPage() {
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>⚡</div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#F1F5F9' }}>
-            Proctored Assessment
+            Live Assessment
           </h1>
           <p style={{ margin: '6px 0 0', fontSize: 13, color: '#64748B', fontWeight: 600 }}>
             Sergeant will conduct your exam. Your webcam is required.

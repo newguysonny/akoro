@@ -174,7 +174,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
           style={{ width:"100%",padding:"12px",borderRadius:14,border:"1.5px solid rgba(245,158,11,.4)",
             background:"rgba(245,158,11,.1)",fontSize:13,fontWeight:800,color:"#F59E0B",cursor:"pointer",
             fontFamily:"'Nunito',sans-serif",marginBottom:10 }}>
-          ⚡ Take proctored assessment
+          ⚡ Take live assessment
         </button>
       )}
 
