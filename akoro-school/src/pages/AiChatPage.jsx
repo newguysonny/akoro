@@ -5,15 +5,16 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck, Trophy } from 'lucide-react';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
+import RankingSheet from './ai-chat/RankingSheet.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import TeacherToolSheet from './ai-chat/TeacherToolSheet.jsx';
 import { API, apiGet, apiPost, getPortal } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, GOLD, FONT } from '../constants.js';
 
 const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?";
 
@@ -80,6 +81,7 @@ export default function AiChatPage() {
   const [voiceMode, setVoiceMode]     = useState(false);
   const [assessOpen, setAssessOpen]   = useState(false);
   const [assessment, setAssessment]   = useState(null);  // active proctored exam
+  const [rankOpen, setRankOpen]       = useState(false);
   const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | null
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
@@ -95,6 +97,7 @@ export default function AiChatPage() {
     setAttachMenu(false);
     if (type === 'voice') { setVoiceMode(true); return; }
     if (type === 'assessment') { setAssessOpen(true); return; }
+    if (type === 'ranking') { setRankOpen(true); return; }
     if (type === 'lesson' || type === 'website') { setTeacherTool(type); return; }
     setAttachType(type); setAttachModal(true); setOcrText(''); setOcrError(''); setAttachFile(null);
   };
@@ -131,7 +134,10 @@ export default function AiChatPage() {
       { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
     ] : []),
     { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
-    ...(isStudent ? [{ type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' }] : []),
+    ...(isStudent ? [
+      { type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' },
+      { type: 'ranking',    icon: <Trophy size={15} color={GOLD} />,           label: 'Ranking',    desc: 'Class · courses · schools leaderboards' },
+    ] : []),
     ...(isTeacher ? [
       { type: 'lesson',  icon: <FileText size={15} color={PURPLE} />, label: 'Lesson tools',    desc: 'Lesson plan · worksheet · quiz' },
       { type: 'website', icon: <FileText size={15} color={GREEN} />,  label: 'Website content', desc: 'Newsletter · recap · social · event' },
@@ -220,6 +226,7 @@ export default function AiChatPage() {
       </header>
 
       {assessOpen && <AssessmentPicker onClose={() => setAssessOpen(false)} onStart={startAssessment} />}
+      {rankOpen && <RankingSheet onClose={() => setRankOpen(false)} />}
       {teacherTool && (
         <TeacherToolSheet kind={teacherTool} host={siteHost.current} onClose={() => setTeacherTool(null)}
           onInsert={(text) => setMessages((p) => [...p, { from: 'agent', text }])} />
