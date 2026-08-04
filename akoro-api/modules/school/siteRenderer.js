@@ -110,23 +110,35 @@ function findMatchingClose(src, start, kind) {
 }
 
 /* ── Theme-mode layout ───────────────────────────────────────────────────── */
+
+// Copy written by the AI Website Sync screen, stored per section in
+// edu.school_website.section_content. It is PLAIN TEXT from the model, so it
+// is escaped here and only paragraph breaks are honoured — never interpolated
+// as markup.
+const aiHtml = (txt) => {
+  const t = String(txt || "").trim();
+  if (!t) return "";
+  return t.split(/\n{2,}/)
+    .map((para) => `<p>${escapeHtml(para.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+};
 const SECTION_RENDERERS = {
-  hero: (w, c) => `
+  hero: (w, c, ai) => `
     <section class="hero" ${w.hero_image_url ? `style="background-image:linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.45)),url('${escapeHtml(w.hero_image_url)}');background-size:cover;background-position:center;color:#fff"` : ""}>
       <div class="wrap">
         <h1>${escapeHtml(w.hero_title || c.school_name)}</h1>
-        <p>${escapeHtml(w.hero_subtitle || "")}</p>
+        ${ai ? aiHtml(ai) : `<p>${escapeHtml(w.hero_subtitle || "")}</p>`}
         ${c.portal?.apply ? `<a class="btn" href="/apply">Apply for Admission</a> ` : ""}
         <a class="btn${c.portal?.apply ? " btn-outline" : ""}" href="/login">Parent / Student Login</a>
       </div>
     </section>`,
-  about: (w) => w.about_text ? `
+  about: (w, c, ai) => (ai || w.about_text) ? `
     <section class="about" id="about"><div class="wrap">
-      <h2>About Us</h2><p>${escapeHtml(w.about_text)}</p>
+      <h2>About Us</h2>${ai ? aiHtml(ai) : `<p>${escapeHtml(w.about_text)}</p>`}
     </div></section>` : "",
-  notices: (w, c) => (c.notices || []).length ? `
+  notices: (w, c, ai) => (c.notices || []).length ? `
     <section class="notices" id="notices"><div class="wrap">
-      <h2>Notice Board</h2>
+      <h2>Notice Board</h2>${aiHtml(ai)}
       <div class="cards">
         ${c.notices.map((n) => `
         <div class="card">
@@ -137,9 +149,9 @@ const SECTION_RENDERERS = {
         </div>`).join("")}
       </div>
     </div></section>` : "",
-  events: (w, c) => (c.events || []).length ? `
+  events: (w, c, ai) => (c.events || []).length ? `
     <section class="events" id="events"><div class="wrap">
-      <h2>Upcoming Events</h2>
+      <h2>Upcoming Events</h2>${aiHtml(ai)}
       <div class="cards">
         ${c.events.map((e) => `
         <div class="card">
@@ -153,12 +165,12 @@ const SECTION_RENDERERS = {
   gallery:  () => "",
   contact:  (w, c) => `
     <section class="contact" id="contact"><div class="wrap">
-      <h2>Contact</h2>
+      <h2>Contact</h2>${aiHtml(ai)}
       <p>${escapeHtml(c.school_address || "")}</p>
       ${c.contact_email ? `<p>Email: <a href="mailto:${escapeHtml(c.contact_email)}">${escapeHtml(c.contact_email)}</a></p>` : ""}
       ${c.contact_phone ? `<p>Phone: ${escapeHtml(c.contact_phone)}</p>` : ""}
     </div></section>`,
-  stats: (w, c) => `
+  stats: (w, c, ai) => `
     <section class="stats"><div class="wrap stats-grid">
       <div><b>${c.stats.courses}</b><span>Courses</span></div>
       <div><b>${c.stats.teachers}</b><span>Teachers</span></div>
@@ -253,9 +265,12 @@ ${w.footer_scripts || ""}
 // Landing page = the enabled theme sections, wrapped in the shared chrome.
 export function renderThemePage(website, ctx) {
   const sections = Array.isArray(website.sections) ? website.sections : [];
+  // AI-synced copy, keyed by section. Absent -> each renderer falls back to
+  // whatever the school typed in manually, so syncing is purely additive.
+  const ai = (website.section_content && typeof website.section_content === "object") ? website.section_content : {};
   const body = sections
     .filter((s) => s.on)
-    .map((s) => (SECTION_RENDERERS[s.key] ? SECTION_RENDERERS[s.key](website, ctx) : ""))
+    .map((s) => (SECTION_RENDERERS[s.key] ? SECTION_RENDERERS[s.key](website, ctx, ai[s.key]) : ""))
     .join("\n");
   return renderThemeDocument(website, ctx, body);
 }
