@@ -202,6 +202,31 @@ const handlers = {
    * Leaderboard for the current student's own (first) classroom.
    * Resolves the classroom server-side so the client doesn't need its id.
    */
+  // Resolve the caller's school from their classroom membership, then hand off
+  // to the existing school board. Added for the school-website student chat,
+  // where the client knows the tenant but not its id.
+  mySchool: asyncHandler(async (req, res, next) => {
+    const { data: membership } = await db
+      .from("classroom_students")
+      .select("classroom_id")
+      .eq("user_id", req.user.id)
+      .eq("status", "active")
+      .order("joined_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    let schoolId = null;
+    if (membership?.classroom_id) {
+      const { data: cls } = await db.from("classrooms")
+        .select("school_id").eq("id", membership.classroom_id).maybeSingle();
+      schoolId = cls?.school_id || null;
+    }
+    if (!schoolId) return res200(res, { scope: "school", leaders: [] }, { total: 0 });
+
+    req.params.schoolId = schoolId;
+    return handlers.school(req, res, next);
+  }),
+
   myClassroom: asyncHandler(async (req, res) => {
     const { limit = 50 } = req.query;
 
@@ -528,6 +553,7 @@ const handlers = {
 const router = Router();
 
 router.get ("/my-classroom",            authenticateToken, handlers.myClassroom);
+router.get ("/my-school",               authenticateToken, handlers.mySchool);
 router.get ("/course/:courseId",        authenticateToken, handlers.course);
 router.get ("/classroom/:classroomId",  authenticateToken, handlers.classroom);
 router.get ("/school/:schoolId",        authenticateToken, handlers.school);

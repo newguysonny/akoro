@@ -1,19 +1,23 @@
 /**
  * RankingSheet — leaderboards inside the school-site student chat.
  *
- * Mirrors the learner app's RankingsTab: the same three boards, the same
- * /api/ranking endpoints and the same podium-then-list shape, so a student
- * sees one consistent ranking wherever they are.
+ * Uses the learner app's /api/ranking endpoints and its podium-then-list
+ * layout, but shows only the boards that rank PEOPLE — see BOARDS below.
  */
 import { useState, useEffect } from 'react';
 import { X, Zap } from 'lucide-react';
 import { apiGet } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GOLD, FONT } from '../../constants.js';
 
+// Student-focused: both boards rank PEOPLE, so the pupil can always find
+// themselves. The learner app also carries Courses and Schools boards, but
+// those rank courses and schools against each other — a student opening them
+// never appears in the list, which is confusing on their own school's site.
 const BOARDS = [
-  { key: 'classroom',   label: 'My class',   icon: '🏫', endpoint: '/api/ranking/my-classroom' },
-  { key: 'courses',     label: 'Courses',    icon: '📘', endpoint: '/api/ranking/courses' },
-  { key: 'interSchool', label: 'Schools',    icon: '🌍', endpoint: '/api/ranking/schools' },
+  { key: 'classroom', label: 'My class',  icon: '🏫', endpoint: '/api/ranking/my-classroom',
+    empty: 'No one in your class has earned XP yet.' },
+  { key: 'school',    label: 'My school',  icon: '🏆', endpoint: '/api/ranking/my-school',
+    empty: 'No one in your school has earned XP yet.' },
 ];
 
 const SILVER = '#C0C0C0', BRONZE = '#CD7F32';
@@ -94,7 +98,7 @@ export default function RankingSheet({ onClose }) {
             <div style={{ padding: '40px 24px', textAlign: 'center' }}>
               <div style={{ fontSize: 46, opacity: .2 }}>🏆</div>
               <p style={{ fontSize: 14.5, fontWeight: 800, color: MUTED, margin: '10px 0 4px' }}>No rankings yet</p>
-              <p style={{ fontSize: 12, color: MUTED2, margin: 0 }}>Earn XP from lessons and assessments to appear here.</p>
+              <p style={{ fontSize: 12, color: MUTED2, margin: 0 }}>{BOARDS.find((b) => b.key === board)?.empty} Earn XP from lessons and assessments to climb the board.</p>
             </div>
           ) : (
             <>
