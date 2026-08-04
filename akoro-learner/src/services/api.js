@@ -11,6 +11,54 @@ import { enqueue, allItems, remove, queueSize } from './offlineQueue.js';
 
 export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
+/* ── Session recovery ────────────────────────────────────────────────────────
+ * The access token lives ~15 minutes. Leave a tab idle past that and the next
+ * request comes back 401 with the raw backend message ("Access token required"),
+ * which used to land in the UI as if it were a real error.
+ *
+ * Instead: on a 401 we silently spend the (30-day) refresh cookie once and
+ * replay the request, so an idle user notices nothing. Only if the refresh
+ * ALSO fails is the session genuinely over — then we clear it and send them to
+ * sign-in with an explanation, rather than showing a cryptic string.
+ *
+ * `refreshing` dedupes: when a page fires six requests at once they all 401
+ * together, and without it we'd hit /refresh six times and rotate the token
+ * out from under ourselves.
+ */
+const PORTAL_ID = 'student';
+const SESSION_USER_KEY = 'akoro_user';
+let refreshing = null;
+
+function refreshSession() {
+  if (!refreshing) {
+    refreshing = fetch(`${API}/api/auth/refresh`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
+      body: '{}',
+    }).then((r) => r.ok).catch(() => false).finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+function endSession() {
+  try { localStorage.removeItem(SESSION_USER_KEY); } catch { /* private mode */ }
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/signin')) {
+    window.location.href = '/signin?error=session_expired';
+  }
+}
+
+/** fetch + one transparent refresh-and-retry on 401. */
+async function authedFetch(url, opts) {
+  const res = await fetch(url, opts);
+  if (res.status !== 401) return res;
+  // Never recurse on the auth endpoints themselves.
+  if (String(url).includes('/api/auth/')) return res;
+  const ok = await refreshSession();
+  if (!ok) { endSession(); return res; }
+  return fetch(url, opts);
+}
+
+
 const BASE_OPTS = {
   credentials: 'include',                 // send HttpOnly auth cookies
   headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
@@ -29,7 +77,7 @@ function markOffline(data) {
 
 export async function apiGet(path, { cache = true } = {}) {
   try {
-    const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
+    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
     if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
     const json = await r.json();
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
@@ -49,7 +97,7 @@ export async function apiGet(path, { cache = true } = {}) {
 // on reconnect, and an optimistic { queued: true } is returned instead of throwing.
 async function apiSend(method, path, body, { queueOffline = false } = {}) {
   try {
-    const r = await fetch(`${API}${path}`, {
+    const r = await authedFetch(`${API}${path}`, {
       ...BASE_OPTS,
       method,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -90,7 +138,7 @@ export async function flushQueue() {
   try {
     for (const it of await allItems()) {
       try {
-        await fetch(`${API}${it.path}`, {
+        await authedFetch(`${API}${it.path}`, {
           ...BASE_OPTS,
           method: it.method,
           ...(it.body !== undefined ? { body: JSON.stringify(it.body) } : {}),
@@ -124,7 +172,7 @@ export function initOfflineSync() {
  * caller can fall back to a non-streaming request.
  */
 export async function streamPost(path, body, { onDelta, onDone } = {}) {
-  const r = await fetch(`${API}${path}`, {
+  const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
     headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' },

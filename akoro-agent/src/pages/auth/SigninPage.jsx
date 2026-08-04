@@ -27,7 +27,8 @@ export default function SigninPage() {
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required style={inp} />
         <label style={lbl}>Password</label>
         <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required style={inp} />
-        {(error || urlError) && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error || (urlError === 'google_failed' ? 'Google sign-in failed. Please try again.' : urlError)}</div>}
+        {(error || urlError) && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error || (urlError === 'session_expired' ? 'Your session timed out for security. Please sign in again.'
+              : urlError === 'google_failed' ? 'Google sign-in failed. Please try again.' : urlError)}</div>}
         <button type="submit" disabled={loading} style={btn}>{loading ? 'Signing in…' : 'Sign in'}</button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0 12px' }}>
