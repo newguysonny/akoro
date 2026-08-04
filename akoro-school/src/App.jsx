@@ -120,6 +120,7 @@ import {
   ReportsAnalyticsPage,
 } from './pages/mgmt/helpAssetsPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
+import WebsiteAiSyncPage   from './pages/WebsiteAiSyncPage.jsx';
 import AppearancePage      from './pages/AppearancePage.jsx';
 import WebsiteTemplatesPage, { AddTemplatePage, UploadTemplatePage } from './pages/WebsiteTemplatesPage.jsx';
 import { MediaPage, MediaEditorPage, SitePagesPage, SitePageEditorPage, MenusPage } from './pages/WebsiteBuilderPages.jsx';
@@ -483,6 +484,7 @@ function AppRoutes() {
       <Route path="/mgmt/asset-reports"      element={<ProtectedRoute><AssetReportsPage /></ProtectedRoute>} />
       <Route path="/mgmt/reports-analytics"  element={<ProtectedRoute><ReportsAnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
+      <Route path="/settings-website/ai-sync" element={<ProtectedRoute><WebsiteAiSyncPage /></ProtectedRoute>} />
       <Route path="/website-builder/appearance" element={<ProtectedRoute><AppearancePage /></ProtectedRoute>} />
       <Route path="/website-builder/media" element={<ProtectedRoute><MediaPage /></ProtectedRoute>} />
       <Route path="/website-builder/media/new" element={<ProtectedRoute><MediaEditorPage /></ProtectedRoute>} />

@@ -281,6 +281,7 @@ const NAV_SECTIONS = [
       { label: 'Menus', to: '/website-builder/menus' },
       { label: 'Template', to: '/settings-website/templates' },
       { label: 'School Website', to: '/settings-website' },
+      { label: 'AI Website Sync', to: '/settings-website/ai-sync' },
       { label: 'Appearance', to: '/website-builder/appearance' },
     ] },
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },

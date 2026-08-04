@@ -44,6 +44,7 @@
     "2026-public-portal.sql",
     "2026-bulk-import-logs.sql",
     "2026-website-sync-school.sql",
+    "2026-website-ai-sync.sql",
     "2026-academic-levels.sql",
     "2026-section-types.sql",
     "2026-periods-class-type.sql",

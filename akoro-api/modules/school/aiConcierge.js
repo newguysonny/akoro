@@ -141,12 +141,34 @@ async function runTool(name, args, ctx) {
 }
 
 // ── Chat loop (function-calling) ──────────────────────────────────────────────
+// The public site's assistant introduces itself with the school's OWN agent
+// name — the one chosen at onboarding (public.user_agents for the school-admin
+// account), so the website and the in-app assistant are the same character.
+// An explicit override on the website settings wins if one is set.
+async function resolveAiName(school) {
+  try {
+    const { data: site } = await db.schema("edu").from("school_website")
+      .select("ai_chat_name").eq("school_id", school.id).maybeSingle();
+    if (site?.ai_chat_name?.trim()) return site.ai_chat_name.trim();
+
+    const { data: sp } = await db.from("school_profiles")
+      .select("admin_user_id").eq("id", school.id).maybeSingle();
+    if (sp?.admin_user_id) {
+      const { data: agent } = await db.from("user_agents")
+        .select("agent_name").eq("user_id", sp.admin_user_id).maybeSingle();
+      if (agent?.agent_name?.trim()) return agent.agent_name.trim();
+    }
+  } catch { /* fall through to the neutral default */ }
+  return "Akoro";
+}
+
 async function conciergeChat({ role, school, user, message, history }) {
   const tools = role === "guest" ? GUEST_TOOLS : role === "parent" ? PARENT_TOOLS : [];
+  const aiName = await resolveAiName(school);
   const persona = {
-    guest: `You are the admissions assistant for ${school.name}. Warmly help prospective families: answer questions about the school, programmes, tuition and admissions using get_school_info, offer to book a campus tour, and capture their contact details for follow-up. Be encouraging and concise; never invent fees or policies you can't confirm — offer to have the school follow up instead.`,
-    parent: `You are the parent assistant for ${school.name}, helping ${user?.full_name || "a parent"}. Use the tools to answer about THEIR children only — progress, fees, school calendar, and teaching materials/resources for their child's subjects. When sharing materials, list them clearly with any links. Be warm, clear and reassuring. For fee payments, give the payment link.`,
-  }[role] || `You are the assistant for ${school.name}.`;
+    guest: `You are ${aiName}, the admissions assistant for ${school.name}. Introduce yourself by name when you first greet someone. Warmly help prospective families: answer questions about the school, programmes, tuition and admissions using get_school_info, offer to book a campus tour, and capture their contact details for follow-up. Be encouraging and concise; never invent fees or policies you can't confirm — offer to have the school follow up instead.`,
+    parent: `You are ${aiName}, the parent assistant for ${school.name}, helping ${user?.full_name || "a parent"}. Use the tools to answer about THEIR children only — progress, fees, school calendar, and teaching materials/resources for their child's subjects. When sharing materials, list them clearly with any links. Be warm, clear and reassuring. For fee payments, give the payment link.`,
+  }[role] || `You are ${aiName}, the assistant for ${school.name}.`;
 
   const messages = [{ role: "system", content: persona }, ...(history || []).slice(-8), { role: "user", content: message }];
   const toolExecutions = [];
