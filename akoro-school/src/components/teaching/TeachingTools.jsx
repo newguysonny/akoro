@@ -16,7 +16,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus,
-  SkipBack, SkipForward, Download,
+  SkipBack, SkipForward, Download, RotateCcw,
   AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target,
   ListChecks, MessageCircle, GraduationCap, Users, FileText, Award } from 'lucide-react';
 import { apiGet, apiPost } from '../../services/api.js';
@@ -210,11 +210,18 @@ const fmtTime = (s) => {
  * click-a-line-to-jump without decoding anything. It is a proxy for real
  * timestamps — close enough that a listener can't tell, and free.
  */
-function Podcast({ data, onError }) {
+function Podcast({ data, tool, onError }) {
   const [audio, setAudio] = useState(null);
   const [segments, setSegments] = useState([]);
   const [totalBytes, setTotalBytes] = useState(0);
   const [voices, setVoices] = useState({});
+  // Voice options come from the tool's own field definition, so the list can
+  // never drift from what the server accepts. A reopened past generation has no
+  // catalog behind it, hence the fallback to whatever the script was made with.
+  const voiceOptions = tool?.fields?.find((f) => f.name === 'voiceA')?.options || [];
+  const [voiceA, setVoiceA] = useState(data.voiceA || voiceOptions[0] || '');
+  const [voiceB, setVoiceB] = useState(data.voiceB || voiceOptions[1] || '');
+  const [narratedWith, setNarratedWith] = useState(null);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -232,16 +239,38 @@ function Podcast({ data, onError }) {
     setBusy(true);
     try {
       const r = await apiPost('/api/teaching/tools/podcast/audio', {
-        turns: data.turns || [], voiceA: data.voiceA, voiceB: data.voiceB,
+        turns: data.turns || [], voiceA, voiceB,
       });
       const d = r?.data ?? r;
       setAudio(d?.audio || null);
       setSegments(d?.segments || []);
       setTotalBytes(d?.totalBytes || 0);
       setVoices(d?.voices || {});
+      setNarratedWith(`${voiceA}|${voiceB}`);
+      setTime(0); setPlaying(false);
     } catch (e) { onError(e?.message || 'Could not create the audio'); }
     finally { setBusy(false); }
   };
+
+  // Re-narrating is a fresh round of text-to-speech and is charged again, so
+  // the button only offers itself once the voices actually differ from the
+  // ones this recording was made with.
+  const voicesChanged = narratedWith !== null && narratedWith !== `${voiceA}|${voiceB}`;
+
+  const voicePickers = (compact) => (
+    voiceOptions.length === 0 ? null : (
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: compact ? 0 : 12 }}>
+        {[['First voice', voiceA, setVoiceA], ['Second voice', voiceB, setVoiceB]].map(([label, val, set]) => (
+          <label key={label} style={{ flex: '1 1 180px', minWidth: 160 }}>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 4 }}>{label}</span>
+            <select value={val} onChange={(e) => set(e.target.value)} style={{ ...input, padding: '8px 10px' }}>
+              {voiceOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
+    )
+  );
 
   const seek = (t) => { const a = ref.current; if (a) { a.currentTime = Math.max(0, Math.min(t, duration || 0)); setTime(a.currentTime); } };
   const nudge = (by) => seek((ref.current?.currentTime || 0) + by);
@@ -260,11 +289,14 @@ function Podcast({ data, onError }) {
   return (
     <div>
       {!audio ? (
-        <button onClick={narrate} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center', marginBottom: 14 }}>
-          {busy
-            ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
-            : <><Volume2 size={15} /> Generate audio</>}
-        </button>
+        <>
+          {voicePickers()}
+          <button onClick={narrate} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center', marginBottom: 14 }}>
+            {busy
+              ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
+              : <><Volume2 size={15} /> Generate audio</>}
+          </button>
+        </>
       ) : (
         <div style={{ background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
           <audio ref={ref} src={audio} preload="metadata"
@@ -317,6 +349,23 @@ function Podcast({ data, onError }) {
           {Object.keys(voices).length > 0 && (
             <div style={{ fontSize: 11, color: MUTED2, marginTop: 9 }}>
               {Object.entries(voices).map(([who, v]) => `${who} — ${v}`).join('   ·   ')}
+            </div>
+          )}
+
+          {/* Change the cast without regenerating the script */}
+          {voiceOptions.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+              {voicePickers(true)}
+              <button onClick={narrate} disabled={busy || !voicesChanged}
+                title={voicesChanged ? 'Records the same script again with the new voices' : 'Pick different voices to re-record'}
+                style={{ ...ghost, marginTop: 10, opacity: busy || !voicesChanged ? .55 : 1 }}>
+                {busy
+                  ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Re-recording…</>
+                  : <><RotateCcw size={13} /> Re-narrate with these voices</>}
+              </button>
+              {voicesChanged && !busy && (
+                <span style={{ fontSize: 11, color: MUTED2, marginLeft: 10 }}>Charged again — the script is reused, the audio is new.</span>
+              )}
             </div>
           )}
         </div>
@@ -547,7 +596,7 @@ function Result({ tool, out, onInsert, onError = () => {}, title }) {
         </>
       )}
       {tool.output === 'cards'  && <Flashcards data={out} />}
-      {tool.output === 'script' && <Podcast data={out} onError={onError} />}
+      {tool.output === 'script' && <Podcast data={out} tool={tool} onError={onError} />}
       {tool.output === 'grades' && <Grades data={out} />}
       {tool.output === 'markdown' && (
         <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />
