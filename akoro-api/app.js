@@ -98,6 +98,30 @@ const corsOriginFn = (origin, cb) => isAllowedOrigin(origin)
   ? cb(null, true)
   : cb(new Error(`CORS: origin ${origin} not allowed`));
 
+// CREDENTIALS are granted only to the explicitly listed portal origins.
+//
+// Tenant school sites (<slug>.<base domain>) are allowed to call the API, but
+// WITHOUT cookies. They must not be credentialed: a school admin can put
+// arbitrary <script> in header_scripts/footer_scripts and page HTML on their
+// own site, so a credentialed wildcard would let that script call the API as
+// ANY signed-in visitor — a parent, a teacher, or an admin of another school —
+// and read the response. School sites only need public endpoints, so this
+// costs them nothing.
+const isListedOrigin = (origin) => {
+  if (!origin) return true;                       // curl / mobile / same-origin
+  const bare = stripWww(originHost(origin));
+  return !!bare && listedHosts.has(bare);
+};
+const corsDelegate = (req, cb) => {
+  const origin = req.headers.origin;
+  cb(null, {
+    origin: allowedOrigins === '*' ? true : isAllowedOrigin(origin),
+    credentials: allowedOrigins === '*' ? true : isListedOrigin(origin),
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Akoro-Portal", "X-Internal-Secret"],
+  });
+};
+
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
@@ -105,7 +129,15 @@ redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
 redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
 const io = new SocketServer(httpServer, {
-  cors:       { origin: allowedOrigins === '*' ? '*' : corsOriginFn, credentials: true, methods: ["GET", "POST"] },
+  // Sockets authenticate from the handshake COOKIE, so the same rule as HTTP
+  // credentials applies: portal origins only. A tenant school site must never
+  // be able to open a socket as whoever is visiting it.
+  cors: {
+    origin: allowedOrigins === '*' ? '*' : ((origin, cb) => isListedOrigin(origin)
+      ? cb(null, true)
+      : cb(new Error(`CORS: socket origin ${origin} not allowed`))),
+    credentials: true, methods: ["GET", "POST"],
+  },
   transports: ["websocket", "polling"],
 });
 io.adapter(createAdapter(redisPub, redisSub));
@@ -155,12 +187,7 @@ app.use(helmet({
   contentSecurityPolicy: false,   // configured separately per-page if needed
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-app.use(cors({
-  origin: allowedOrigins === '*' ? '*' : corsOriginFn,
-  credentials: true,
-  methods:     ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization","X-Akoro-Portal","X-Internal-Secret"],
-}));
+app.use(cors(corsDelegate));
 app.use(cookieParser());
 // Paystack webhook signature validation needs the RAW request body. The raw
 // parser must run BEFORE the global JSON parser (body-parser skips bodies
@@ -245,7 +272,7 @@ if (process.env.REDIS_URL) {
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
-app.use("/api/teaching/tools",   standardLimit, teachingToolsModule);   // shared teaching tool suite (instructor + school + site chat)
+app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);   // shared teaching tool suite — LLM + TTS, so aiLimit not standardLimit
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/school",     standardLimit, schoolModule);        // school partner portal
 app.use("/api/voice",      aiLimit,       voiceModule);

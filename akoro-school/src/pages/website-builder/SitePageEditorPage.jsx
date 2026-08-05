@@ -276,7 +276,7 @@ export function SitePageEditorPage() {
                 <iframe ref={editorFrameRef} title="Visual editor" srcDoc={editorDoc} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
               )
             ) : (
-              <iframe title="Page preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
+              <iframe title="Page preview" srcDoc={previewHtml} sandbox="" style={{ flex: 1, width: '100%', border: 'none', minHeight: 440, background: WHITE }} />
             )}
           </div>
         </div>

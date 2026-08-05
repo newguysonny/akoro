@@ -12,6 +12,8 @@
  * them against the school's data (mgmt.*), and it answers from the results.
  */
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
+import { ipKeyGenerator } from "express-rate-limit";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL, llmComplete } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -189,13 +191,25 @@ async function conciergeChat({ role, school, user, message, history }) {
 }
 
 // ── PUBLIC guest endpoint (admissions counselor) ──────────────────────────────
-router.post("/site/guest-chat", async (req, res) => {
+// Unauthenticated and backed by an LLM, so it is the one endpoint on this
+// router that anyone on the internet can spend our money on. Tighter than the
+// router-wide limit, keyed by IP since there is no user.
+const guestChatLimit = rateLimit({
+  windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  message: { success: false, error: "Too many messages — please wait a moment." },
+});
+
+router.post("/site/guest-chat", guestChatLimit, async (req, res) => {
   try {
     const { host, message, history } = req.body || {};
     if (!message?.trim()) return res.status(400).json({ error: "message required" });
+    // Cap what an anonymous caller can push into a prompt.
+    const text = String(message).trim().slice(0, 2000);
+    const past = Array.isArray(history) ? history.slice(-8) : [];
     const school = await resolveSchoolByHost(host);
     if (!school) return res.status(404).json({ error: "This website isn't connected to a school yet." });
-    const out = await conciergeChat({ role: "guest", school, user: null, message: message.trim(), history });
+    const out = await conciergeChat({ role: "guest", school, user: null, message: text, history: past });
     res.json({ success: true, ...out });
   } catch (e) { console.error("[guest-chat]", e); res.status(500).json({ error: "Something went wrong." }); }
 });

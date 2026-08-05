@@ -76,6 +76,16 @@ const EDITOR_BOOT_JS = `(function(){
 // (fragments edited inside the theme chrome); null = whole body editable.
 function prepareEditableDoc(docHtml, regionSelector) {
   const doc = new DOMParser().parseFromString(docHtml || '', 'text/html');
+  // The editor iframe is same-origin by necessity (the parent reads its DOM),
+  // so disabling <script> is not enough on its own: inline handlers and
+  // javascript: URLs would still run with the portal's origin. Strip them.
+  doc.querySelectorAll('*').forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+      else if (/^(href|src|action|formaction|xlink:href)$/i.test(attr.name)
+               && /^\s*javascript:/i.test(attr.value)) el.removeAttribute(attr.name);
+    }
+  });
   doc.querySelectorAll('script').forEach((s) => {
     s.setAttribute('data-orig-script', '1');
     const t = s.getAttribute('type');

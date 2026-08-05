@@ -39,7 +39,7 @@ function Thumb({ getHtml, baseW = 830, height = 122, fallback }) {
     <div ref={ref} style={{ height, overflow: 'hidden', position: 'relative', background: '#f1f1f4', borderBottom: `1px solid ${BORDER}` }}>
       {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={16} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /></div>
         : html === '' ? (fallback || null)
-        : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 1.3, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
+        : <iframe title="preview" srcDoc={html} sandbox="" scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 1.3, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
     </div>
   );
 }
@@ -371,7 +371,7 @@ export function DocumentTemplateEditorPage() {
               <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>Live Preview · {form.page_size} {form.orientation}</span>
               {previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
-            <iframe title="Document preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: '#e9e9ee' }} />
+            <iframe title="Document preview" srcDoc={previewHtml} sandbox="" style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: '#e9e9ee' }} />
           </div>
         </div>
       )}

@@ -46,7 +46,7 @@ function Screenshot({ id, name, active, badge }) {
     <div ref={ref} style={{ position: 'relative', height: 158, borderBottom: `1px solid ${BORDER}`, overflow: 'hidden', background: '#f1f1f4' }}>
       {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={18} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /></div>
         : html === '' ? <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${AMBER}14, ${BLUE}14)`, fontSize: 15, fontWeight: 900, color: INK }}>{name}</div>
-        : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 0.85, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
+        : <iframe title="preview" srcDoc={html} sandbox="" scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 0.85, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
       {active && (
         <span style={{ position: 'absolute', top: 10, left: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: GREEN, color: WHITE, fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 20, boxShadow: '0 1px 4px rgba(0,0,0,.2)' }}>
           <CheckCircle2 size={11} /> Active
