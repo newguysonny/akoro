@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { X, Sparkles, Copy, Check, MessageSquarePlus, Globe } from 'lucide-react';
 import { apiPost } from '../../services/api.js';
 import TeachingTools from '../../components/teaching/TeachingTools.jsx';
+import ContentView, { contentViewStyles } from '../../components/ContentView.jsx';
 
 const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', MUTED = '#6B6B80', BORDER = '#EDE8E1', INK = '#1A1A2E';
@@ -144,7 +145,10 @@ function LegacyToolSheet({ kind, host, onClose, onInsert }) {
 
           {out && (
             <div style={{ marginTop: 14 }}>
-              <div style={{ background: '#FAF8F5', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px', fontSize: 12.5, lineHeight: 1.6, color: INK, whiteSpace: 'pre-wrap', maxHeight: '40vh', overflowY: 'auto' }}>{out}</div>
+              <div style={{ background: '#FAF8F5', border: `1px solid ${BORDER}`, borderRadius: 12, maxHeight: '40vh', overflowY: 'auto' }}>
+                <style>{contentViewStyles}</style>
+                <ContentView content={out} kind={type === 'social_post' ? 'social' : null} style={{ padding: '12px 14px' }} />
+              </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <button onClick={copy} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 800, color: INK, cursor: 'pointer', fontFamily: FONT }}>
                   {copied ? <Check size={14} color="#10B981" /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}
