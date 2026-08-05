@@ -5,7 +5,8 @@
  * tool added on the server appears here with no frontend change. Only the four
  * OUTPUT shapes are known to this file:
  *
- *   markdown → readable text + copy/print
+ *   doc      → titled cards of labelled blocks (most tools)
+ *   markdown → plain readable text (fallback)
  *   cards    → flippable flashcards (vocabulary)
  *   script   → transcript + narrated audio with a speed control (podcast)
  *   grades   → one result card per essay
@@ -14,7 +15,9 @@
  * passes `onInsert` to drop the result into the conversation.
  */
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus } from 'lucide-react';
+import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus,
+  AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target,
+  ListChecks, MessageCircle, GraduationCap, Users, FileText, Award } from 'lucide-react';
 import { apiGet, apiPost } from '../../services/api.js';
 
 const FONT = "'Nunito', sans-serif";
@@ -22,6 +25,27 @@ const BRAND = '#6C3BFF', AMBER = '#E8853A', MUTED = '#6B6B80', MUTED2 = '#9A96A8
       BORDER = '#EDE8E1', INK = '#1A1A2E', LIGHT = '#F7F5F2', WHITE = '#fff', GREEN = '#16A34A', RED = '#DC2626';
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+
+/* Block labels are free text from the model, so they're matched on keywords
+   rather than an exact list — a tool can invent a label and still get a sensible
+   icon and colour instead of falling out of the design. */
+const LABEL_STYLES = [
+  [/misconception|watch for|struggle/i,        { icon: AlertCircle,   color: '#DC2626' }],
+  [/clarification|correct|answer|truth/i,      { icon: CheckCircle2,  color: '#16A34A' }],
+  [/why|because|reason/i,                      { icon: HelpCircle,    color: '#2563EB' }],
+  [/fix|strateg|support|tip/i,                 { icon: Lightbulb,     color: '#7C3AED' }],
+  [/profession|career|job/i,                   { icon: Briefcase,     color: '#7C3AED' }],
+  [/context|connection|application|real/i,     { icon: Link2,         color: '#0EA5E9' }],
+  [/timing|time|duration/i,                    { icon: Clock,         color: '#D97706' }],
+  [/material|resource|equipment/i,             { icon: Package,       color: '#0891B2' }],
+  [/objective|outcome|end|goal|bridge/i,       { icon: Target,        color: '#DB2777' }],
+  [/question|quick check|check for/i,          { icon: ListChecks,    color: '#059669' }],
+  [/discussion|talk|prompt/i,                  { icon: MessageCircle, color: '#2563EB' }],
+  [/teacher does|instruction|for students/i,   { icon: GraduationCap, color: '#7C3AED' }],
+  [/students do|group|activity|try this/i,     { icon: Users,         color: '#EA580C' }],
+  [/mark|score|grade|total/i,                  { icon: Award,         color: '#CA8A04' }],
+];
+const styleFor = (label) => (LABEL_STYLES.find(([re]) => re.test(label || ''))?.[1]) || { icon: FileText, color: BRAND };
 
 /* ── Minimal Markdown → HTML. Enough for headings, bold, italic, lists and
    rules, which is all the tool prompts ask the model to produce. Escaped
@@ -49,6 +73,13 @@ function mdToHtml(md) {
   return html;
 }
 
+// **bold** only — everything else is escaped, so model text can't inject markup.
+const boldish = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+function Bold({ children }) {
+  return <span dangerouslySetInnerHTML={{ __html: boldish(children) }} />;
+}
+
 function printDoc(title, bodyHtml) {
   const w = window.open('', '_blank');
   if (!w) return;
@@ -60,12 +91,55 @@ function printDoc(title, bodyHtml) {
     code{background:#f1f1f4;padding:1px 4px;border-radius:3px;font-size:.92em}
     .card{border:1px solid #999;border-radius:8px;padding:12px 14px;margin-bottom:10px;page-break-inside:avoid}
     .term{font-weight:700;font-size:15px} .def{margin-top:4px} .ex{font-style:italic;color:#555;margin-top:4px;font-size:.94em}
+    .card h2{margin:0 0 10px;font-size:17px} .blk{margin-bottom:12px}
+    .lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:3px}
+    .blk p{margin:0} .blk ul{margin:0}
+    .chip{display:inline-block;border:1px solid #bbb;border-radius:20px;padding:2px 9px;margin-right:5px;font-size:.9em}
+    .sub{color:#555;font-style:italic;margin-top:-4px}
     @media print{@page{margin:16mm}}
   </style></head><body>${bodyHtml}<script>window.onload=()=>window.print()</script></body></html>`);
   w.document.close();
 }
 
 /* ══════════════════════ Output renderers ══════════════════════ */
+
+function Doc({ data }) {
+  return (
+    <div>
+      {(data.cards || []).map((c, n) => (
+        <div key={n} style={{ border: `1px solid ${BORDER}`, borderRadius: 14, padding: '16px 18px', marginBottom: 12, background: WHITE }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: INK, marginBottom: 12 }}>{c.heading}</div>
+          {(c.blocks || []).map((b, k) => {
+            const { icon: Icon, color } = styleFor(b.label);
+            return (
+              <div key={k} style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 7, background: `${color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon size={12} color={color} />
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color }}>{b.label}</span>
+                </div>
+                {b.chips?.length ? (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingLeft: 29 }}>
+                    {b.chips.map((x, j) => (
+                      <span key={j} style={{ padding: '5px 11px', borderRadius: 8, background: LIGHT, border: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 700, color: INK }}>{x}</span>
+                    ))}
+                  </div>
+                ) : b.bullets?.length ? (
+                  <ul style={{ margin: 0, paddingLeft: 48, color: INK, fontSize: 13.5, lineHeight: 1.65 }}>
+                    {b.bullets.map((x, j) => <li key={j} style={{ marginBottom: 4 }}><Bold>{x}</Bold></li>)}
+                  </ul>
+                ) : (
+                  <p style={{ margin: 0, paddingLeft: 29, fontSize: 13.5, color: INK, lineHeight: 1.65 }}><Bold>{b.text}</Bold></p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Flashcards({ data }) {
   const [i, setI] = useState(0);
@@ -245,7 +319,17 @@ export default function TeachingTools({ onInsert, compact = false }) {
   };
 
   const print = () => {
-    const title = form.topic || tool.name;
+    const title = out.title || form.topic || tool.name;
+    if (tool.output === 'doc') {
+      const meta = [out.subject, out.class].filter(Boolean).join(' · ');
+      printDoc(title, `<h1>${esc(title)}</h1>${out.subtitle ? `<p class="sub">${esc(out.subtitle)}</p>` : ''}${meta ? `<p class="sub">${esc(meta)}</p>` : ''}` +
+        (out.cards || []).map((c) => `<div class="card"><h2>${esc(c.heading)}</h2>` +
+          (c.blocks || []).map((b) => `<div class="blk"><div class="lbl">${esc(b.label)}</div>` +
+            (b.chips?.length ? `<p>${b.chips.map((x) => `<span class="chip">${esc(x)}</span>`).join(' ')}</p>`
+              : b.bullets?.length ? `<ul>${b.bullets.map((x) => `<li>${boldish(x)}</li>`).join('')}</ul>`
+              : `<p>${boldish(b.text)}</p>`) + '</div>').join('') + '</div>').join(''));
+      return;
+    }
     if (tool.output === 'cards') {
       printDoc(title, `<h1>${esc(out.title || title)}</h1>` +
         (out.cards || []).map((c) => `<div class="card"><div class="term">${esc(c.term)}</div><div class="def">${esc(c.definition)}</div>${c.example ? `<div class="ex">${esc(c.example)}</div>` : ''}</div>`).join(''));
@@ -321,6 +405,19 @@ export default function TeachingTools({ onInsert, compact = false }) {
             {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
           </div>
 
+          {tool.output === 'doc' && (
+            <>
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: INK }}>{out.title || form.topic}</div>
+                {out.subtitle && <div style={{ fontSize: 12.5, color: MUTED, marginTop: 4 }}>{out.subtitle}</div>}
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 9 }}>
+                  {out.subject && <span style={{ ...pill, background: `${AMBER}18`, color: AMBER }}>{out.subject}</span>}
+                  {out.class   && <span style={{ ...pill, background: `${BRAND}18`, color: BRAND }}>{out.class}</span>}
+                </div>
+              </div>
+              <Doc data={out} />
+            </>
+          )}
           {tool.output === 'cards'  && <Flashcards data={out} />}
           {tool.output === 'script' && <Podcast data={out} onError={setError} />}
           {tool.output === 'grades' && <Grades data={out} />}
@@ -339,4 +436,5 @@ const primary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding:
 const ghost = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 13px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
 const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 999, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
 const toolCard = { display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left', padding: '14px 15px', borderRadius: 12, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT };
+const pill = { padding: '4px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, fontFamily: FONT };
 const errBox = { marginTop: 12, padding: '10px 12px', borderRadius: 9, background: `${RED}0F`, border: `1px solid ${RED}33`, color: RED, fontSize: 12.5, fontWeight: 700 };

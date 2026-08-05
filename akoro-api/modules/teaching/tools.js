@@ -43,6 +43,24 @@ const F = {
 };
 
 const JSON_RULE = "Return ONLY valid JSON matching the requested shape. No markdown fences, no commentary.";
+
+/* A 'doc' is the structured shape every prose tool returns instead of a wall of
+   Markdown: a titled set of cards, each card a few labelled blocks. The client
+   renders labels as coloured, icon'd headings, so output is scannable and
+   prints as a proper handout.
+
+   {"title":string,"subtitle":string,
+    "cards":[{"heading":string,
+              "blocks":[{"label":string,"text":string}
+                       |{"label":string,"bullets":[string]}
+                       |{"label":string,"chips":[string]}]}]}
+
+   Block labels are free text — the client maps known ones to icons and falls
+   back to a neutral style — so a tool can name its own sections. */
+const DOC_RULE = `Return ONLY valid JSON in this shape, no markdown fences and no commentary:
+{"title":string,"subtitle":string,"cards":[{"heading":string,"blocks":[{"label":string,"text":string}]}]}
+Each block carries exactly ONE of: "text" (a paragraph), "bullets" (array of short lines) or "chips" (array of 1-3 word labels).
+Write **bold** around key terms inside text and bullets. Keep every paragraph under 60 words — cards are read at a glance, not studied.`;
 const HOUSE = "You support Nigerian secondary school teachers. Be concrete and classroom-ready — real examples, real materials, nothing generic. Never invent exam results, statistics or citations.";
 
 export const TOOLS = [
@@ -62,43 +80,45 @@ JSON shape:
 Use at most two distinct speaker names. Keep each turn under 60 words so it narrates naturally.`,
   },
   {
-    key: "misconceptions", name: "Common Misconceptions", emoji: "🧠", output: "markdown",
+    key: "misconceptions", name: "Common Misconceptions", emoji: "🧠", output: "doc",
     blurb: "The wrong ideas students arrive with, where they'll struggle, and how to fix each one.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 1800,
-    system: `${HOUSE} You write in Markdown with clear headings. For each misconception give: what students believe, WHY it feels right to them, what actually happens, and a specific teaching move that corrects it.`,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 2600,
+    system: `${HOUSE} ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Write:
-1. **Common misconceptions** — 5–7, each with belief / why it feels right / the correction / a teaching move.
-2. **Where students struggle** — the specific steps or ideas that trip them up.
-3. **Strategies that work** — concrete classroom tactics, not general advice.
-4. **Quick check questions** — 5 questions that expose whether a student still holds a misconception.`,
+Produce 5 cards, one per misconception. Each card's heading is the misconception stated plainly, with these blocks in order:
+- "Common Misconception" (text) — what students believe.
+- "Clarification" (text) — what is actually true.
+- "Why This Happens" (text) — why the wrong idea feels right to them.
+- "Fix Strategies" (bullets) — 3 specific teaching moves, not general advice.
+Then add two final cards: "Where Students Struggle" (a "Watch For" bullets block) and "Quick Checks" (a "Questions" bullets block of 5 questions that expose the misconception).`,
   },
   {
-    key: "real-world", name: "Real-World Connections", emoji: "🌍", output: "markdown",
+    key: "real-world", name: "Real-World Connections", emoji: "🌍", output: "doc",
     blurb: "Why this topic matters — everyday contexts, local examples, and the careers built on it.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 1800,
-    system: `${HOUSE} You write in Markdown. Ground examples in Nigerian and West African daily life where it fits naturally — markets, farming, transport, weather, mobile money, local industry — without forcing it.`,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 2600,
+    system: `${HOUSE} Ground examples in Nigerian and West African daily life where it fits naturally — markets, farming, transport, weather, mobile money, local industry — without forcing it. ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Write:
-1. **Where students already meet this** — everyday situations they'd recognise.
-2. **Real-world applications** — how it's actually used, with specifics.
-3. **Careers & professions** — roles that depend on this, what the work involves, what to study.
-4. **Discussion prompts** — 5 questions that connect the lesson to students' own lives.
-5. **A class activity** — one thing they can do or observe outside the classroom.`,
+Produce 5 cards, each a different real-world connection. The heading is a short, vivid name for the connection (e.g. "Our Shared Recipes"). Blocks in order:
+- "Context" (text) — the everyday situation, in language a student recognises.
+- "Application" (text) — how the topic actually shows up there.
+- "Professions" (chips) — 3 job titles that depend on this.
+Then two final cards: "Talk About It" (a "Discussion" bullets block of 5 questions linking the topic to students' own lives) and "Try This" (an "Activity" text block describing one thing they can do or observe outside class).`,
   },
   {
-    key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "markdown",
+    key: "lesson-hooks", name: "Lesson Hooks", emoji: "🪝", output: "doc",
     blurb: "Openings that grab the class in the first two minutes — with materials and outcomes.",
-    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 1600,
-    system: `${HOUSE} You write in Markdown. A hook is something the teacher DOES in the first 2 minutes — a demonstration, a question with a surprising answer, a story, a challenge. Every hook must be runnable with materials a Nigerian classroom actually has.`,
+    fields: [F.topic, F.subject, F.klass, F.notes], maxTokens: 2400,
+    system: `${HOUSE} A hook is something the teacher DOES in the first 2 minutes — a demonstration, a question with a surprising answer, a story, a challenge. Every hook must be runnable with materials a Nigerian classroom actually has. ${DOC_RULE}`,
     prompt: (i) => `Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Give 5 different hooks. For each: **Name**, what the teacher says or does (word for word where it helps), materials needed, how long it takes, and the bridge sentence into the lesson.
-Then close with:
-- **Expected outcomes** — what students should be able to do by the end.
-- **Materials checklist** — everything needed, combined.`,
+Produce 5 cards, one per hook. The heading names the hook. Blocks in order:
+- "The Hook" (text) — what the teacher says or does, word for word where it helps.
+- "Materials" (chips) — what's needed; use "None" if nothing.
+- "Timing" (text) — how long it takes.
+- "Bridge Into The Lesson" (text) — the sentence that moves the class from hook to content.
+Then a final card "Expected Outcomes" with an "By The End" bullets block of what students should be able to do.`,
   },
   {
     key: "vocabulary", name: "Vocabulary Builder", emoji: "🔤", output: "cards",
@@ -137,33 +157,40 @@ JSON shape:
 One entry per essay, in the order given. "label" is the student's name if the essay states one, otherwise "Essay 1", "Essay 2"…`,
   },
   {
-    key: "lesson-plan", name: "Lesson Plan", emoji: "📋", output: "markdown",
+    key: "lesson-plan", name: "Lesson Plan", emoji: "📋", output: "doc",
     blurb: "A full period plan — objectives, timings, activities, differentiation and assessment.",
     fields: [F.topic, F.subject, F.klass,
       { name: "duration", label: "Period length", type: "select", options: ["35 minutes", "40 minutes", "45 minutes", "60 minutes", "Double period"], default: "40 minutes" },
       { name: "objectives", label: "Your objectives", placeholder: "Optional — leave blank and I'll write them", long: true },
       F.notes],
-    maxTokens: 2200,
-    system: `${HOUSE} You write lesson plans in Markdown that a teacher can follow minute by minute. Every activity states what the TEACHER does and what the STUDENTS do.`,
+    maxTokens: 3000,
+    system: `${HOUSE} Every activity states what the TEACHER does and what the STUDENTS do. ${DOC_RULE}`,
     prompt: (i) => `Write a ${i.duration || "40 minute"} lesson plan.
 Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}
 ${i.objectives ? `Objectives to cover:\n${i.objectives}\n` : ""}${i.notes ? `Context: ${i.notes}\n` : ""}
-Include: learning objectives, prior knowledge assumed, materials, a timed breakdown (introduction / development / practice / close) with teacher and student actions, differentiation for strugglers and fast finishers, assessment for learning, homework, and the board plan.`,
+Produce these cards in order:
+1. "Overview" — blocks: "Objectives" (bullets), "Prior Knowledge" (text), "Materials" (chips).
+2. One card per phase — "Introduction", "Development", "Guided Practice", "Close" — each with "Timing" (text), "Teacher Does" (bullets), "Students Do" (bullets).
+3. "Differentiation" — blocks: "Support" (bullets) and "Extension" (bullets).
+4. "Assessment & Homework" — blocks: "Check For Understanding" (bullets), "Homework" (text), "Board Plan" (text).
+Timings must add up to the period length.`,
   },
   {
-    key: "assignment", name: "Assignment Creator", emoji: "✍️", output: "markdown",
+    key: "assignment", name: "Assignment Creator", emoji: "✍️", output: "doc",
     blurb: "Homework or classwork with a marking scheme, at the difficulty you choose.",
     fields: [F.topic, F.subject, F.klass,
       { name: "type", label: "Type", type: "select", options: ["Homework", "Classwork", "Project", "Practice questions", "Group task"], default: "Homework" },
       { name: "count", label: "How many questions", type: "select", options: ["5", "10", "15", "20"], default: "10" },
       { name: "difficulty", label: "Difficulty", type: "select", options: ["Mixed", "Foundation", "Standard", "Challenge"], default: "Mixed" },
       F.notes],
-    maxTokens: 2400,
-    system: `${HOUSE} You write assignments in Markdown. Questions are unambiguous and answerable from what was taught. The marking scheme is separated clearly so the teacher can hand out the questions alone.`,
+    maxTokens: 3200,
+    system: `${HOUSE} Questions are unambiguous and answerable from what was taught. The marking scheme is a separate card so the teacher can hand out the questions alone. ${DOC_RULE}`,
     prompt: (i) => `Create a ${String(i.type || "homework").toLowerCase()} of ${i.count || 10} questions on "${i.topic}"${i.subject ? ` (${i.subject})` : ""}${i.class ? `, ${i.class}` : ""}. Difficulty: ${i.difficulty || "Mixed"}.
 ${i.notes ? `Context: ${i.notes}\n` : ""}
-Include: instructions for students, mark allocation per question, the questions themselves, then a clearly separated **Marking scheme** with answers and where marks are awarded.
-Finish with an estimate of how long it should take a student.`,
+Produce these cards in order:
+1. "Instructions" — blocks: "For Students" (text), "Time Needed" (text), "Total Marks" (text).
+2. "Questions" — a "Questions" bullets block, each line starting with the number and ending with the marks in brackets.
+3. "Marking Scheme" — an "Answers" bullets block matching the question numbers, showing where marks are awarded.`,
   },
 ];
 
@@ -181,6 +208,16 @@ function parseJson(text) {
 // Turn structured output back into readable text so copy / print / "send to
 // chat" work identically for every tool.
 function asMarkdown(tool, data) {
+  if (tool.output === "doc") {
+    const block = (b) => {
+      if (b.bullets?.length) return `**${b.label}**\n${b.bullets.map((x) => `- ${x}`).join("\n")}`;
+      if (b.chips?.length)   return `**${b.label}:** ${b.chips.join(" · ")}`;
+      return `**${b.label}**\n${b.text || ""}`;
+    };
+    return [`# ${data.title || tool.name}`, data.subtitle || "", "",
+      ...(data.cards || []).map((c) => [`## ${c.heading}`, ...(c.blocks || []).map(block)].join("\n\n")),
+    ].filter(Boolean).join("\n\n");
+  }
   if (tool.output === "cards") {
     return [`# ${data.title || "Vocabulary"}`, "",
       ...(data.cards || []).map((c, n) => `**${n + 1}. ${c.term}**\n\n${c.definition}${c.example ? `\n\n_${c.example}_` : ""}${c.tip ? `\n\n💡 ${c.tip}` : ""}`)].join("\n\n");
@@ -236,6 +273,11 @@ router.post("/:key", teacherOnly, async (req, res) => {
     } else {
       const data = parseJson(raw);
       if (!data) return res.status(422).json({ error: "That came back in an unusable shape — try again." });
+      // A doc with no cards renders as an empty page — better to say so than
+      // to hand back a blank result that looks like a bug.
+      if (tool.output === "doc" && !Array.isArray(data.cards)) {
+        return res.status(422).json({ error: "That came back without any sections — try again." });
+      }
       payload = { ...data, content: asMarkdown(tool, data) };
     }
 
@@ -263,7 +305,16 @@ router.post("/:key", teacherOnly, async (req, res) => {
       content: payload,
     }).then(({ error }) => { if (error) console.warn("[teaching/tools] save failed:", error.message); });
 
-    res.json({ success: true, data: { key: tool.key, output: tool.output, ...payload, coinsCharged: charged } });
+    res.json({
+      success: true,
+      data: {
+        key: tool.key, output: tool.output, ...payload,
+        // Echoed back so the result header can show the same pills the teacher
+        // filled in, without the client having to remember the form.
+        topic: input.topic || null, subject: input.subject || null, class: input.class || null,
+        coinsCharged: charged,
+      },
+    });
   } catch (e) { serverError(res, e, req); }
 });
 
