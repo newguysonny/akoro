@@ -139,8 +139,17 @@ const isListedOrigin = (origin) => {
   // Ours: an app on the base domain, under whatever name it is deployed.
   return SITE_BASE_DOMAINS.some((b) => bare === b || bare.endsWith(`.${b}`));
 };
+// One line per origin, the first time it is seen, so a wrongly-classified host
+// shows up in the deploy log instead of only in someone's browser console.
+const seenOrigins = new Set();
 const corsDelegate = (req, cb) => {
   const origin = req.headers.origin;
+  if (origin && !seenOrigins.has(origin)) {
+    seenOrigins.add(origin);
+    const bare = stripWww(originHost(origin));
+    console.log(`[cors] ${origin} → allowed=${isAllowedOrigin(origin)} credentials=${isListedOrigin(origin)}` +
+      ` (listed=${listedHosts.has(bare)} tenant=${isTenantHost(bare)})`);
+  }
   cb(null, {
     origin: allowedOrigins === '*' ? true : isAllowedOrigin(origin),
     credentials: allowedOrigins === '*' ? true : isListedOrigin(origin),

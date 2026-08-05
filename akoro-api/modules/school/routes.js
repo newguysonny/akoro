@@ -1728,7 +1728,9 @@ router.post("/site/ai-login", strictLimit, async (req, res) => {
     const chatBase = (process.env.SCHOOL_CHAT_SAME_DOMAIN === "true" && cleanHost)
       ? `https://${cleanHost}`
       : SCHOOL_PORTAL_URL;
-    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${chatBase}/ai-chat?ai=${encodeURIComponent(handoff)}` });
+    const redirect = `${chatBase}/ai-chat?ai=${encodeURIComponent(handoff)}`;
+    console.log(`[ai-login] ok school=${school.slug} role=${actualRole} origin=${req.headers.origin || "-"} redirect=${chatBase}/ai-chat`);
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect });
   } catch (e) {
     console.error("[ai-login]", e);
     res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });
@@ -1740,8 +1742,12 @@ router.post("/site/ai-login", strictLimit, async (req, res) => {
 // the AI-chat login redirect. Verifies it and issues the real session cookie.
 router.post("/site/ai-login/exchange", async (req, res) => {
   try {
+    const origin = req.headers.origin || "-";
     const userId = verifyHandoff(String(req.body?.token || ""));
-    if (!userId) return res.status(401).json({ success: false, message: "This sign-in link expired. Please sign in again." });
+    if (!userId) {
+      console.warn(`[ai-login exchange] REJECTED bad/expired token origin=${origin} portal=${req.headers["x-akoro-portal"] || "-"}`);
+      return res.status(401).json({ success: false, message: "This sign-in link expired. Please sign in again." });
+    }
     const { data: user } = await db.from("users").select("*").eq("id", userId).maybeSingle();
     if (!user || user.deleted_at || !user.is_active) return res.status(403).json({ success: false, message: "Account unavailable." });
     // Issue the SCHOOL-portal session cookie (akoro_access_school) — the school
@@ -1749,6 +1755,7 @@ router.post("/site/ai-login/exchange", async (req, res) => {
     // defaulted to the student cookie, so the app never found its session and
     // bounced to /signin.
     await issueTokenPair(res, user, "site");
+    console.log(`[ai-login exchange] ok user=${user.id} origin=${origin} portal=${req.headers["x-akoro-portal"] || "-"} → set akoro_access_site`);
     res.json({ success: true });
   } catch (e) {
     console.error("[ai-login exchange]", e);
