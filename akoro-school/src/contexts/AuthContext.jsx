@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API, getPortal } from '../services/api.js';
+import { API, getPortal, setSiteTokens, clearSiteTokens } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -124,6 +124,7 @@ export function AuthProvider({ children }) {
       await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': getPortal() } });
     } catch { /* ignore */ }
     clearUser();
+    clearSiteTokens();     // a bearer session lives in this tab, not in a cookie
     window.location.href = '/signin';  // full reload also clears the cached school-verification status
   }, [clearUser]);
 
@@ -162,10 +163,14 @@ export function AuthProvider({ children }) {
             setHandoffReason(j.message || `The sign-in hand-off was rejected (HTTP ${r.status}).`);
             return false;
           }
+          // On the school's own domain there is no cookie — the tokens in the
+          // body are the session. Store them BEFORE loadMe, which needs them.
+          const j = await r.json().catch(() => ({}));
+          if (j.accessToken) setSiteTokens({ accessToken: j.accessToken, refreshToken: j.refreshToken });
           const ok = await loadMe();
           // The exchange succeeded but the session didn't stick — that is the
           // browser refusing to store a cross-site cookie, not a bad password.
-          if (!ok) setHandoffReason('Signed in, but your browser did not keep the session cookie. This usually means third-party cookies are blocked.');
+          if (!ok) setHandoffReason('Signed in, but the session could not be read back. If this page is served on your school\u2019s own domain, the sign-in token was not accepted.');
           return ok;
         })
         .then((ok) => { if (!ok) setHandoffError(true); })

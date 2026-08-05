@@ -26,13 +26,51 @@ const PORTAL_ID = 'school';
 const SESSION_USER_KEY = 'akoro_user';
 let refreshing = null;
 
+/* ── Bearer tokens for the site chat ────────────────────────────────────────
+ *
+ * When the AI chat is served from the SCHOOL'S OWN domain
+ * (SCHOOL_CHAT_SAME_DOMAIN=true), the page runs on a tenant origin. Tenant
+ * origins are deliberately not granted credentialed CORS — a school admin can
+ * put arbitrary script on their own site, and a credentialed origin would let
+ * that script call the API as whoever is visiting. So no cookie reaches this
+ * page, and it authenticates with the tokens the hand-off exchange returns.
+ *
+ * sessionStorage, not localStorage: the token dies with the tab, and it is
+ * never written on the portal's own origin, where cookies work normally.
+ */
+const TOKEN_KEY = 'akoro_site_access';
+const REFRESH_KEY = 'akoro_site_refresh';
+const ss = {
+  get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch { /* ignore */ } },
+};
+export const setSiteTokens = ({ accessToken, refreshToken } = {}) => {
+  ss.set(TOKEN_KEY, accessToken || null);
+  ss.set(REFRESH_KEY, refreshToken || null);
+};
+export const clearSiteTokens = () => setSiteTokens({});
+const siteAccessToken = () => ss.get(TOKEN_KEY);
+
 function refreshSession() {
   if (!refreshing) {
+    // A bearer session refreshes with the token in the body; a cookie session
+    // refreshes with the cookie. /auth/refresh accepts either.
+    const rt = ss.get(REFRESH_KEY);
     refreshing = fetch(`${API}/api/auth/refresh`, {
       method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
-      body: '{}',
-    }).then((r) => r.ok).catch(() => false).finally(() => { refreshing = null; });
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL },
+      body: rt ? JSON.stringify({ refreshToken: rt }) : '{}',
+    })
+      .then(async (r) => {
+        if (!r.ok) return false;
+        if (rt) {
+          const j = await r.json().catch(() => ({}));
+          if (j.accessToken) setSiteTokens({ accessToken: j.accessToken, refreshToken: j.refreshToken || rt });
+        }
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => { refreshing = null; });
   }
   return refreshing;
 }
@@ -44,15 +82,23 @@ function endSession() {
   }
 }
 
+// Adds Authorization when this tab holds a site-chat token. Cookies still ride
+// along for the portal's own origin, so one code path serves both.
+function withAuth(opts = {}) {
+  const t = siteAccessToken();
+  if (!t) return opts;
+  return { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` } };
+}
+
 /** fetch + one transparent refresh-and-retry on 401. */
 async function authedFetch(url, opts) {
-  const res = await fetch(url, opts);
+  const res = await fetch(url, withAuth(opts));
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
   const ok = await refreshSession();
   if (!ok) { endSession(); return res; }
-  return fetch(url, opts);
+  return fetch(url, withAuth(opts));
 }
 
 

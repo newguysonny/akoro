@@ -1754,9 +1754,17 @@ router.post("/site/ai-login/exchange", async (req, res) => {
     // app reads with X-Akoro-Portal: school. Without the portal arg this
     // defaulted to the student cookie, so the app never found its session and
     // bounced to /signin.
-    await issueTokenPair(res, user, "site");
-    console.log(`[ai-login exchange] ok user=${user.id} origin=${origin} portal=${req.headers["x-akoro-portal"] || "-"} → set akoro_access_site`);
-    res.json({ success: true });
+    const pair = await issueTokenPair(res, user, "site");
+    console.log(`[ai-login exchange] ok user=${user.id} origin=${origin} portal=${req.headers["x-akoro-portal"] || "-"}`);
+    // The tokens go back in the BODY as well as in cookies.
+    //
+    // When SCHOOL_CHAT_SAME_DOMAIN is on, the chat is served from the school's
+    // own domain — a tenant origin, which is deliberately not granted
+    // credentialed CORS, because a school admin can put arbitrary script on
+    // that page. So the cookie never arrives there and the page authenticates
+    // with a bearer token instead. A bearer has to be handed over; a cookie
+    // rides along on its own, which is precisely the difference that matters.
+    res.json({ success: true, accessToken: pair.accessToken, refreshToken: pair.refreshToken });
   } catch (e) {
     console.error("[ai-login exchange]", e);
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
