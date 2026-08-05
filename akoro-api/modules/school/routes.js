@@ -587,12 +587,43 @@ router.get("/settings", authenticateToken, async (req, res) => {
         personalisation:   settings?.personalisation ?? {},
         notificationPrefs: settings?.notification_prefs ?? {},
         modules:           settings?.modules ?? {},
+        // Which optional modules this school has actually bought. The sidebar
+        // needs both: `modules` is the school's own on/off switch, this is
+        // entitlement. A module shows only when it is owned AND not switched
+        // off, so turning one off never silently loses the purchase.
+        moduleAccess:      await ownedModuleKeys(req.user.id),
         backupSchedule:    settings?.backup_schedule ?? { autoBackup: true, frequency: 'daily', retentionDays: 30 },
         content:           settings?.content ?? {},
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+/**
+ * The optional modules a school owns, as { moduleKey: true }.
+ *
+ * Optional modules are sold through the same catalog as agent tools
+ * (edu.platform_tools, kind='management', key 'module-<moduleKey>'), so
+ * ownership is the same instructor_tool_access row a tool purchase writes —
+ * there is no second entitlement system to keep in step.
+ */
+async function ownedModuleKeys(userId) {
+  try {
+    const { data: rows } = await db.schema("edu").from("instructor_tool_access")
+      .select("tool_id, access_granted, platform_tools!inner(key, kind)")
+      .eq("instructor_id", userId).eq("access_granted", true)
+      .eq("platform_tools.kind", "management");
+    const out = {};
+    for (const r of rows || []) {
+      const key = r.platform_tools?.key || "";
+      if (key.startsWith("module-")) out[key.slice(7)] = true;
+    }
+    return out;
+  } catch (e) {
+    console.warn("[school] module entitlements failed:", e.message);
+    return {};
+  }
+}
 
 // ── PUT /api/school/settings/profile ─────────────────────────────────────────
 router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {

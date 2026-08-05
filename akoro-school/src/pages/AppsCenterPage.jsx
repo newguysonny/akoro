@@ -174,6 +174,7 @@ export default function AppsCenterPage() {
     const ref = params.get('tool_ref');
     if (ref) {
       window.history.replaceState({}, '', window.location.pathname);
+      window.dispatchEvent(new Event('akoro:modules-updated'));
       apiGet(`/api/instructor/tools/verify/${ref}`)
         .then((r) => showToast(r?.owned ? 'Unlocked ✓' : (r?.message || 'Payment not completed')))
         .catch((e) => showToast(e.message || 'Verification failed'))
@@ -190,7 +191,13 @@ export default function AppsCenterPage() {
     setBusyId(item.id);
     try {
       const res = await apiPost('/api/instructor/tools/checkout', { toolId: item.id });
-      if (res?.owned) { showToast('Unlocked ✓'); await load(); }
+      if (res?.owned) {
+        showToast('Unlocked ✓');
+        // A module unlock changes what the sidebar may show, and the sidebar
+        // only re-reads settings on this event or a tab focus.
+        window.dispatchEvent(new Event('akoro:modules-updated'));
+        await load();
+      }
       else showToast(res?.error || 'Could not unlock');
     } catch (e) { showToast(e.message || 'Checkout failed'); }
     finally { setBusyId(null); }

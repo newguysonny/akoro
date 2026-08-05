@@ -362,6 +362,7 @@ export function Sidebar({ collapsed }) {
   const [open, setOpen] = useState({});
   const [query, setQuery] = useState('');
   const [modules, setModules] = useState(null);
+  const [access, setAccess] = useState(null);   // optional modules this school owns
   const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
 
   // Load the school's enabled/disabled modules once, then keep it fresh:
@@ -371,7 +372,11 @@ export function Sidebar({ collapsed }) {
     let cancelled = false;
     const loadModules = () => {
       apiGet('/api/school/settings')
-        .then((res) => { if (!cancelled) setModules(res.data?.modules || {}); })
+        .then((res) => {
+          if (cancelled) return;
+          setModules(res.data?.modules || {});
+          setAccess(res.data?.moduleAccess || {});
+        })
         .catch(() => {});
     };
     loadModules();
@@ -384,7 +389,16 @@ export function Sidebar({ collapsed }) {
     };
   }, []);
 
-  const isModuleOn = (key) => !key || !modules || modules[key] !== false; // default on until loaded/explicitly off
+  // Two independent gates, and both must pass:
+  //   owned   — the school bought this module in the Apps Center
+  //   enabled — the school hasn't switched it off in Module Management
+  // Core areas carry no moduleKey and skip both. Until settings load, nothing
+  // is hidden, so the sidebar never flashes items away on a slow connection.
+  const isModuleOn = (key) => {
+    if (!key || !modules) return true;
+    if (access && access[key] !== true) return false;
+    return modules[key] !== false;
+  };
 
   const moduleFiltered = NAV_SECTIONS.map((sec) => ({
     ...sec,
