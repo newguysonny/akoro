@@ -1339,6 +1339,13 @@ function templateColorStyle(colors) {
 // (student / teacher / admin). Successful login redirects to the school
 // portal's AI Chat. Self-contained ES5 — no dependencies, works inside any
 // template. Auto-opens on the /ai-chat page.
+//
+// The sign-in fetch is deliberately NOT credentialed. It sets no cookie: it
+// returns a short-lived hand-off token which the portal exchanges for a session
+// on its own origin. Asking for credentials from a tenant school domain would
+// need the API to grant credentialed CORS to every <slug> subdomain — which is
+// exactly the hole that let a script on one school's site call the API as any
+// signed-in visitor. Nothing here needs it.
 const SCHOOL_PORTAL_URL = (process.env.SCHOOL_FRONTEND_URL || "https://akoro-school.akoro.name.ng").replace(/\/$/, "");
 function aiChatWidgetHtml(apiOrigin) {
   const api = String(apiOrigin || "").replace(/\/$/, "");
@@ -1365,7 +1372,7 @@ function aiChatWidgetHtml(apiOrigin) {
     if(!em){err.textContent='Enter your email address.';err.style.display='block';return;}
     if(!pw){err.textContent='Enter your password.';err.style.display='block';return;}
     var btn=this; btn.disabled=true; btn.textContent='Signing in…';
-    fetch(API+'/api/school/site/ai-login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:location.hostname,email:em,password:pw,role:selectedRole()})})
+    fetch(API+'/api/school/site/ai-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:location.hostname,email:em,password:pw,role:selectedRole()})})
       .then(function(r){return r.json().catch(function(){return {};});})
       .then(function(d){
         if(d&&d.success){
