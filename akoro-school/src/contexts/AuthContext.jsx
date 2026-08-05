@@ -51,6 +51,9 @@ export function AuthProvider({ children }) {
   // cross-site cookie didn't stick) — the AI chat shows a clear retry screen
   // instead of a silent bounce to /signin.
   const [handoffError, setHandoffError] = useState(false);
+  // Why it failed, so the retry screen can say something actionable instead of
+  // 'we couldn't complete your sign-in' for four different causes.
+  const [handoffReason, setHandoffReason] = useState('');
   const [error,   setError]   = useState(null);
 
   const isAuthenticated = !!user;
@@ -153,9 +156,24 @@ export function AuthProvider({ children }) {
         headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
         body: JSON.stringify({ token: handoff }),
       })
-        .then((r) => (r.ok ? loadMe() : false))
+        .then(async (r) => {
+          if (!r.ok) {
+            const j = await r.json().catch(() => ({}));
+            setHandoffReason(j.message || `The sign-in hand-off was rejected (HTTP ${r.status}).`);
+            return false;
+          }
+          const ok = await loadMe();
+          // The exchange succeeded but the session didn't stick — that is the
+          // browser refusing to store a cross-site cookie, not a bad password.
+          if (!ok) setHandoffReason('Signed in, but your browser did not keep the session cookie. This usually means third-party cookies are blocked.');
+          return ok;
+        })
         .then((ok) => { if (!ok) setHandoffError(true); })
-        .catch(() => setHandoffError(true))
+        .catch((e) => {
+          // A thrown fetch here is the request never completing — CORS or network.
+          setHandoffReason(`Could not reach the sign-in service (${e?.message || 'network error'}).`);
+          setHandoffError(true);
+        })
         .finally(() => {
           params.delete('ai');
           const q = params.toString();
@@ -177,7 +195,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, error, isAuthenticated, booting, handoffError,
+      user, loading, error, isAuthenticated, booting, handoffError, handoffReason,
       login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
