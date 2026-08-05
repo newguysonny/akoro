@@ -87,7 +87,30 @@ const allowedOrigins = config.server.corsOrigin === '*'
 // (<slug>.<domain>) can call the API without being listed one by one.
 const originHost = (o) => { try { return new URL(o).hostname.toLowerCase(); } catch { return ''; } };
 const stripWww = (h) => h.replace(/^www\./, '');
-const listedHosts = new Set(allowedOrigins === '*' ? [] : allowedOrigins.map(originHost).filter(Boolean).map(stripWww));
+// The platform's OWN front-ends. These are configured as env URLs and are not
+// tenant sites, so they belong in the credentialed set even when CORS_ORIGIN
+// doesn't spell them out. Missing them is what broke the AI-chat hand-off: the
+// school portal sits at a subdomain of the base domain, so the wildcard matched
+// it for access but the credentials rule — correctly — did not.
+const PLATFORM_APP_URLS = [
+  process.env.FRONTEND_URL, process.env.MAIN_SITE_URL,
+  process.env.SCHOOL_FRONTEND_URL, process.env.INSTRUCTOR_FRONTEND_URL,
+  process.env.INSTRUCTOR_APP_URL, process.env.ADMIN_FRONTEND_URL,
+  process.env.AGENT_FRONTEND_URL, process.env.BUSINESS_FRONTEND_URL,
+  process.env.VOUCHERS_FRONTEND_URL,
+].filter(Boolean);
+
+// Deployment fallback: the apps are published at fixed subdomains of the base
+// domain, and the school portal's default (akoro-school.<base>) is baked into
+// the AI-chat redirect. A tenant school can never take one of these names —
+// they are reserved app hosts, not school slugs.
+const PLATFORM_SUBDOMAINS = ['akoro-school', 'akoro-learner', 'akoro-instructor',
+  'akoro-admin', 'akoro-agent', 'akoro-business', 'app', 'portal'];
+
+const listedHosts = new Set(
+  allowedOrigins === '*' ? [] :
+  [...allowedOrigins, ...PLATFORM_APP_URLS].map(originHost).filter(Boolean).map(stripWww)
+);
 function isAllowedOrigin(origin) {
   if (!origin) return true;                 // curl / mobile / same-origin
   const bare = stripWww(originHost(origin));
@@ -109,10 +132,14 @@ const corsOriginFn = (origin, cb) => isAllowedOrigin(origin)
 // ANY signed-in visitor — a parent, a teacher, or an admin of another school —
 // and read the response. School sites only need public endpoints, so this
 // costs them nothing.
+const isPlatformAppHost = (bare) =>
+  SITE_BASE_DOMAINS.some((b) => PLATFORM_SUBDOMAINS.some((p) => bare === `${p}.${b}`));
+
 const isListedOrigin = (origin) => {
   if (!origin) return true;                       // curl / mobile / same-origin
   const bare = stripWww(originHost(origin));
-  return !!bare && listedHosts.has(bare);
+  if (!bare) return false;
+  return listedHosts.has(bare) || isPlatformAppHost(bare);
 };
 const corsDelegate = (req, cb) => {
   const origin = req.headers.origin;
