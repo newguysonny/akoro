@@ -94,7 +94,9 @@
     "2026-seed-ncee-2017.sql",
     "2026-seed-ncee-2017-full.sql",
     "2026-seed-ncee-2019.sql",
-    "2026-seed-ncee-2017-aptitude.sql"
+    "2026-seed-ncee-2017-aptitude.sql",
+    "2026-curriculum.sql",
+    "2026-seed-nerdc-bst.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

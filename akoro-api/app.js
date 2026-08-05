@@ -49,6 +49,7 @@ import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
 import teachingToolsModule        from "./modules/teaching/tools.js";
 import pastQuestionsModule        from "./modules/past-questions/routes.js";
+import curriculumModule           from "./modules/curriculum/routes.js";
 import schoolModule               from "./modules/school/index.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
@@ -275,6 +276,7 @@ app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
 app.use("/api/past-questions",   standardLimit, pastQuestionsModule);  // WAEC/NECO/JAMB/NCEE question bank
+app.use("/api/curriculum",       standardLimit, curriculumModule);     // NERDC & co. curriculum bank
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/school",     standardLimit, schoolModule);        // school partner portal
 app.use("/api/voice",      aiLimit,       voiceModule);
