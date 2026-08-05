@@ -21,6 +21,7 @@ import db from "../../db.js";
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
 import { getSyllabusContext, getSyllabusGrounding } from "./syllabus.js";
+import { getPastQuestionGrounding } from "../past-questions/routes.js";
 import {
   getOrCreateStudentAgent,
   getAgentGrowthHistory,
@@ -766,10 +767,16 @@ router.post("/tutor", async (req, res) => {
     // Ground the tutor in the uploaded exam syllabus when the question relates
     // to it (semantic match; empty for off-syllabus questions). `refs` are the
     // human-facing source chips shown under the reply.
-    const { context: syllabusCtx, refs: syllabusRefs } =
-      await getSyllabusGrounding(message.trim(), { limit: 5 }).catch(() => ({ context: "", refs: [] }));
+    // Ground in BOTH the syllabus (what should be taught) and the past-question
+    // bank (how it is actually examined) — they answer different halves of
+    // "will this be in the exam?". Fetched together; either may come back empty.
+    const [{ context: syllabusCtx, refs: syllabusRefs }, { context: pastCtx, refs: pastRefs }] = await Promise.all([
+      getSyllabusGrounding(message.trim(), { limit: 5 }).catch(() => ({ context: "", refs: [] })),
+      getPastQuestionGrounding(message.trim(), { limit: 3 }).catch(() => ({ context: "", refs: [] })),
+    ]);
     const systemContent = tutorSystemPrompt({ agentName, role }) +
-      (syllabusCtx ? `\n\n${syllabusCtx}` : "");
+      (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
+      (pastCtx ? `\n\n${pastCtx}` : "");
 
     const messages = [
       { role: "system", content: systemContent },
@@ -786,7 +793,7 @@ router.post("/tutor", async (req, res) => {
       });
       const reply = completion.choices?.[0]?.message?.content?.trim()
         || "I'm here to help with your studies — ask me anything about your subjects!";
-      return res.json({ success: true, reply, syllabus: syllabusRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+      return res.json({ success: true, reply, syllabus: syllabusRefs, pastQuestions: pastRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
     }
 
     // ── Streaming path (SSE) ──────────────────────────────────────────────

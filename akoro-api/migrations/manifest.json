@@ -88,7 +88,9 @@
     "2026-vouchers-webhooks.sql",
     "2026-vouchers-integrity.sql",
     "2026-vouchers-preserve-history.sql",
-    "2026-xp-subject.sql"
+    "2026-xp-subject.sql",
+    "2026-past-questions.sql",
+    "2026-seed-ncee-2017.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
