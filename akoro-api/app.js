@@ -31,7 +31,7 @@ import {
 import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { schoolBillTo }            from "./lib/coins.js";
-import { SITE_BASE_DOMAINS }       from "./modules/school/tenant.js";
+import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
@@ -100,12 +100,10 @@ const PLATFORM_APP_URLS = [
   process.env.VOUCHERS_FRONTEND_URL,
 ].filter(Boolean);
 
-// Deployment fallback: the apps are published at fixed subdomains of the base
-// domain, and the school portal's default (akoro-school.<base>) is baked into
-// the AI-chat redirect. A tenant school can never take one of these names —
-// they are reserved app hosts, not school slugs.
-const PLATFORM_SUBDOMAINS = ['akoro-school', 'akoro-learner', 'akoro-instructor',
-  'akoro-admin', 'akoro-agent', 'akoro-business', 'app', 'portal'];
+// Hostnames are no longer guessed. isTenantHost() answers from the actual
+// school slugs and verified custom domains, so any subdomain of the base domain
+// that ISN'T a school is one of our apps — whatever it happens to be named.
+// The cache is warmed at boot and refreshed in the background.
 
 const listedHosts = new Set(
   allowedOrigins === '*' ? [] :
@@ -132,14 +130,14 @@ const corsOriginFn = (origin, cb) => isAllowedOrigin(origin)
 // ANY signed-in visitor — a parent, a teacher, or an admin of another school —
 // and read the response. School sites only need public endpoints, so this
 // costs them nothing.
-const isPlatformAppHost = (bare) =>
-  SITE_BASE_DOMAINS.some((b) => PLATFORM_SUBDOMAINS.some((p) => bare === `${p}.${b}`));
-
 const isListedOrigin = (origin) => {
   if (!origin) return true;                       // curl / mobile / same-origin
   const bare = stripWww(originHost(origin));
   if (!bare) return false;
-  return listedHosts.has(bare) || isPlatformAppHost(bare);
+  if (listedHosts.has(bare)) return true;         // explicitly configured
+  if (isTenantHost(bare)) return false;           // a school's own site — never credentialed
+  // Ours: an app on the base domain, under whatever name it is deployed.
+  return SITE_BASE_DOMAINS.some((b) => bare === b || bare.endsWith(`.${b}`));
 };
 const corsDelegate = (req, cb) => {
   const origin = req.headers.origin;
@@ -342,6 +340,14 @@ process.on("SIGINT",  () => shutdown("SIGINT"));
 // ─── Start ────────────────────────────────────────────────────────────────────
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
+
+  // Warm the tenant-host cache, then keep it fresh. Until it loads, every
+  // unknown subdomain is treated as a school site and denied credentials — so
+  // a slow or failed load costs a broken page, never an open door.
+  refreshTenantHosts()
+    .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
+    .catch(() => {});
+  setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
   console.log(`
 [API]  Akoro API  [${config.instanceId.slice(0, 8)}]  --  http://localhost:${config.server.port}
 
