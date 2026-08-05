@@ -350,6 +350,21 @@ router.post("/papers/:id/questions", adminOnly, async (req, res) => {
   } catch (e) { serverError(res, e, req); }
 });
 
+// GET /api/past-questions/review — everything still awaiting a human check.
+// One query rather than walking every paper: the admin queue is the whole point
+// of the verified flag, so it shouldn't cost N+1 requests to look at.
+router.get("/review", adminOnly, async (req, res) => {
+  try {
+    const { data, error } = await db.schema("edu").from("past_questions")
+      .select(`${Q_COLS}, past_papers!inner(id, exam_slug, year, title)`)
+      .eq("verified", false)
+      .order("created_at", { ascending: true })
+      .limit(Math.min(Number(req.query.limit) || 200, 500));
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (e) { serverError(res, e, req); }
+});
+
 // POST /api/past-questions/reembed — fill in missing embeddings.
 // Questions written by SQL seed have no vector, so they'd be invisible to
 // semantic search until this runs. Bounded per call so it can't hang a request.

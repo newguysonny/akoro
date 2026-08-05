@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store } from 'lucide-react';
+import { LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, LayoutTemplate, FileText, Briefcase, Bell, Settings, LogOut, BarChart2, CreditCard, Star, Tag, DollarSign, FileBarChart, Inbox, Megaphone, Building2, Bot, ChevronDown, Menu, Store, Library } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -39,6 +39,7 @@ const NAV_GROUPS = [
   { label: 'Catalog', icon: BookOpen, children: [
     { to: '/courses',           icon: BookOpen,       label: 'Courses' },
     { to: '/syllabus',          icon: BookMarked,     label: 'Syllabus' },
+    { to: '/past-questions',    icon: Library,        label: 'Past Questions' },
     { to: '/website-templates', icon: LayoutTemplate, label: 'Web Templates' },
     { to: '/app-center',        icon: Store,          label: 'App Center' },
   ] },

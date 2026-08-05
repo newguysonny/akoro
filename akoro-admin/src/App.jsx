@@ -9,6 +9,7 @@ import SchoolsPage          from './pages/SchoolsPage.jsx';
 import CoursesPage          from './pages/CoursesPage.jsx';
 import AppCenterPage        from './pages/AppCenterPage.jsx';
 import AgentsPage           from './pages/AgentsPage.jsx';
+import PastQuestionsPage    from './pages/PastQuestionsPage.jsx';
 import SyllabusPage         from './pages/SyllabusPage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import BlogAdminPage        from './pages/BlogAdminPage.jsx';
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/app-center"        element={<AdminRoute><AppCenterPage /></AdminRoute>} />
           <Route path="/agents"            element={<AdminRoute><AgentsPage /></AdminRoute>} />
           <Route path="/syllabus"          element={<AdminRoute><SyllabusPage /></AdminRoute>} />
+          <Route path="/past-questions"    element={<AdminRoute><PastQuestionsPage /></AdminRoute>} />
           <Route path="/website-templates" element={<AdminRoute><WebsiteTemplatesPage /></AdminRoute>} />
           <Route path="/content/blog"      element={<AdminRoute><BlogAdminPage /></AdminRoute>} />
           <Route path="/content/blog/new"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
