@@ -16,6 +16,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { Sparkles, Copy, Check, Printer, Loader2, ArrowLeft, Volume2, Play, Pause, MessageSquarePlus,
+  SkipBack, SkipForward, Download,
   AlertCircle, CheckCircle2, HelpCircle, Lightbulb, Briefcase, Link2, Clock, Package, Target,
   ListChecks, MessageCircle, GraduationCap, Users, FileText, Award } from 'lucide-react';
 import { apiGet, apiPost } from '../../services/api.js';
@@ -24,7 +25,7 @@ const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', AMBER = '#E8853A', MUTED = '#6B6B80', MUTED2 = '#9A96A8',
       BORDER = '#EDE8E1', INK = '#1A1A2E', LIGHT = '#F7F5F2', WHITE = '#fff', GREEN = '#16A34A', RED = '#DC2626';
 
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 /* Block labels are free text from the model, so they're matched on keywords
    rather than an exact list — a tool can invent a label and still get a sensible
@@ -194,63 +195,161 @@ function Flashcards({ data }) {
   );
 }
 
+const fmtTime = (s) => {
+  if (!Number.isFinite(s)) return '0:00';
+  const m = Math.floor(s / 60), r = Math.floor(s % 60);
+  return `${m}:${String(r).padStart(2, '0')}`;
+};
+
+/**
+ * Podcast — the generated episode as a real player.
+ *
+ * The transcript follows the audio: the segment list the server returns carries
+ * each turn's byte range, and OpenAI's mp3 is constant bit-rate, so the byte
+ * fraction maps onto the time fraction. That gives a current-turn highlight and
+ * click-a-line-to-jump without decoding anything. It is a proxy for real
+ * timestamps — close enough that a listener can't tell, and free.
+ */
 function Podcast({ data, onError }) {
   const [audio, setAudio] = useState(null);
+  const [segments, setSegments] = useState([]);
+  const [totalBytes, setTotalBytes] = useState(0);
+  const [voices, setVoices] = useState({});
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
   const [showScript, setShowScript] = useState(true);
   const ref = useRef(null);
 
-  // playbackRate is reset whenever a new src loads, so it's reapplied here
-  // rather than only in the speed handler.
+  // playbackRate resets whenever a new src loads, so it is reapplied on both.
   useEffect(() => { if (ref.current) ref.current.playbackRate = speed; }, [speed, audio]);
+  useEffect(() => { if (ref.current) ref.current.volume = volume; }, [volume, audio]);
 
   const narrate = async () => {
     setBusy(true);
     try {
-      const r = await apiPost('/api/teaching/tools/podcast/audio', { turns: data.turns || [] });
-      setAudio((r?.data ?? r)?.audio || null);
+      const r = await apiPost('/api/teaching/tools/podcast/audio', {
+        turns: data.turns || [], voiceA: data.voiceA, voiceB: data.voiceB,
+      });
+      const d = r?.data ?? r;
+      setAudio(d?.audio || null);
+      setSegments(d?.segments || []);
+      setTotalBytes(d?.totalBytes || 0);
+      setVoices(d?.voices || {});
     } catch (e) { onError(e?.message || 'Could not create the audio'); }
     finally { setBusy(false); }
   };
+
+  const seek = (t) => { const a = ref.current; if (a) { a.currentTime = Math.max(0, Math.min(t, duration || 0)); setTime(a.currentTime); } };
+  const nudge = (by) => seek((ref.current?.currentTime || 0) + by);
+  const toggle = () => { const a = ref.current; if (!a) return; playing ? a.pause() : a.play(); };
+
+  // Which turn is sounding now, and where each one starts.
+  const startOf = (i) => (totalBytes && duration && segments[i] ? (segments[i].byteStart / totalBytes) * duration : null);
+  const currentTurn = (() => {
+    if (!totalBytes || !duration || !segments.length) return -1;
+    const b = (time / duration) * totalBytes;
+    return segments.findIndex((sg) => b >= sg.byteStart && b < sg.byteEnd);
+  })();
+
+  const pct = duration ? (time / duration) * 100 : 0;
 
   return (
     <div>
       {!audio ? (
         <button onClick={narrate} disabled={busy} style={{ ...primary, width: '100%', justifyContent: 'center', marginBottom: 14 }}>
-          {busy ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</> : <><Volume2 size={15} /> Generate audio</>}
+          {busy
+            ? <><Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} /> Recording the episode…</>
+            : <><Volume2 size={15} /> Generate audio</>}
         </button>
       ) : (
-        <div style={{ background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          <audio ref={ref} src={audio} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)} controls style={{ width: '100%' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => { const a = ref.current; if (!a) return; playing ? a.pause() : a.play(); }} style={ghost}>
-              {playing ? <Pause size={13} /> : <Play size={13} />} {playing ? 'Pause' : 'Play'}
+        <div style={{ background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+          <audio ref={ref} src={audio} preload="metadata"
+            onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+            onEnded={() => { setPlaying(false); setTime(0); }}
+            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+            style={{ display: 'none' }} />
+
+          {/* Scrubber */}
+          <input type="range" min={0} max={duration || 0} step={0.1} value={time}
+            onChange={(e) => seek(Number(e.target.value))}
+            style={{ width: '100%', accentColor: BRAND, cursor: 'pointer' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: MUTED2, fontWeight: 700, marginTop: -2 }}>
+            <span>{fmtTime(time)}</span><span>{fmtTime(duration)}</span>
+          </div>
+
+          {/* Transport */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginTop: 10 }}>
+            <button onClick={() => nudge(-10)} title="Back 10 seconds" style={iconBtn}><SkipBack size={16} /></button>
+            <button onClick={toggle} style={playBtn}>
+              {playing ? <Pause size={19} color={WHITE} /> : <Play size={19} color={WHITE} style={{ marginLeft: 2 }} />}
             </button>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: MUTED }}>Speed</span>
-            {SPEEDS.map((s) => (
-              <button key={s} onClick={() => setSpeed(s)}
-                style={{ ...chip, borderColor: speed === s ? BRAND : BORDER, color: speed === s ? BRAND : MUTED, fontWeight: speed === s ? 800 : 600 }}>
-                {s}×
+            <button onClick={() => nudge(10)} title="Forward 10 seconds" style={iconBtn}><SkipForward size={16} /></button>
+          </div>
+
+          {/* Speed · volume · download */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: MUTED, letterSpacing: .3 }}>SPEED</span>
+            {SPEEDS.map((sp) => (
+              <button key={sp} onClick={() => setSpeed(sp)}
+                style={{ ...chip, padding: '4px 9px',
+                  borderColor: speed === sp ? BRAND : BORDER,
+                  background: speed === sp ? `${BRAND}12` : 'transparent',
+                  color: speed === sp ? BRAND : MUTED, fontWeight: speed === sp ? 800 : 600 }}>
+                {sp}×
               </button>
             ))}
-            <a href={audio} download="podcast.mp3" style={{ ...ghost, textDecoration: 'none' }}>Download</a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 6 }}>
+              <Volume2 size={13} color={MUTED} />
+              <input type="range" min={0} max={1} step={0.05} value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                style={{ width: 74, accentColor: BRAND, cursor: 'pointer' }} />
+            </div>
+            <a href={audio} download="podcast.mp3" style={{ ...ghost, textDecoration: 'none', marginLeft: 'auto' }}>
+              <Download size={13} /> Download
+            </a>
           </div>
+
+          {Object.keys(voices).length > 0 && (
+            <div style={{ fontSize: 11, color: MUTED2, marginTop: 9 }}>
+              {Object.entries(voices).map(([who, v]) => `${who} — ${v}`).join('   ·   ')}
+            </div>
+          )}
         </div>
       )}
 
-      <button onClick={() => setShowScript((s) => !s)} style={chip}>{showScript ? 'Hide transcript' : 'Show transcript'}</button>
+      <button onClick={() => setShowScript((v) => !v)} style={chip}>
+        {showScript ? 'Hide transcript' : 'Show transcript'}
+      </button>
+
       {showScript && (
         <div style={{ marginTop: 12 }}>
           {data.summary && <p style={{ fontSize: 12.5, color: MUTED, marginBottom: 12 }}>{data.summary}</p>}
-          {(data.turns || []).map((t, n) => (
-            <div key={n} style={{ marginBottom: 10 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 900, color: BRAND }}>{t.speaker}</span>
-              <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.6 }}>{t.text}</div>
-            </div>
-          ))}
+          {(data.turns || []).map((t, n) => {
+            const at = startOf(n);
+            const on = n === currentTurn;
+            return (
+              <div key={n}
+                onClick={() => { if (at != null) { seek(at); ref.current?.play(); } }}
+                title={at != null ? 'Play from here' : undefined}
+                style={{
+                  marginBottom: 8, padding: '8px 11px', borderRadius: 10,
+                  cursor: at != null ? 'pointer' : 'default',
+                  background: on ? `${BRAND}0E` : 'transparent',
+                  borderLeft: `3px solid ${on ? BRAND : 'transparent'}`,
+                }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 900, color: BRAND }}>{t.speaker}</span>
+                  {at != null && <span style={{ fontSize: 10.5, color: MUTED2, fontWeight: 700 }}>{fmtTime(at)}</span>}
+                </div>
+                <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.6 }}>{t.text}</div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -463,5 +562,7 @@ const primary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding:
 const ghost = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 13px', borderRadius: 9, border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
 const chip = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 999, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
 const toolCard = { display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left', padding: '14px 15px', borderRadius: 12, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT };
+const iconBtn = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', border: `1px solid ${BORDER}`, background: WHITE, color: MUTED, cursor: 'pointer' };
+const playBtn = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 46, height: 46, borderRadius: '50%', border: 'none', background: `linear-gradient(135deg,${BRAND},#5326CC)`, cursor: 'pointer', boxShadow: `0 4px 14px ${BRAND}55` };
 const pill = { padding: '4px 12px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, fontFamily: FONT };
 const errBox = { marginTop: 12, padding: '10px 12px', borderRadius: 9, background: `${RED}0F`, border: `1px solid ${RED}33`, color: RED, fontSize: 12.5, fontWeight: 700 };

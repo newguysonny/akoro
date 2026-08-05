@@ -44,6 +44,21 @@ const F = {
 
 const JSON_RULE = "Return ONLY valid JSON matching the requested shape. No markdown fences, no commentary.";
 
+/* The TTS voices, named so a teacher picks a person rather than a codename.
+   Order matters only in that the first two are the defaults for two hosts. */
+const VOICE_CATALOG = [
+  { label: "Ade — warm, steady",     voice: "onyx"    },
+  { label: "Ngozi — bright, lively", voice: "nova"    },
+  { label: "Tunde — calm, low",      voice: "echo"    },
+  { label: "Amina — soft, clear",    voice: "shimmer" },
+  { label: "Kunle — storyteller",    voice: "fable"   },
+  { label: "Zainab — neutral",       voice: "alloy"   },
+];
+const VOICE_LABELS = VOICE_CATALOG.map((v) => v.label);
+const voiceFromLabel = (label, fallback) =>
+  VOICE_CATALOG.find((v) => v.label === label)?.voice
+  || (VOICE_CATALOG.some((v) => v.voice === label) ? label : fallback);
+
 /* A 'doc' is the structured shape every prose tool returns instead of a wall of
    Markdown: a titled set of cards, each card a few labelled blocks. The client
    renders labels as coloured, icon'd headings, so output is scannable and
@@ -70,6 +85,8 @@ export const TOOLS = [
     fields: [F.topic, F.subject, F.klass,
       { name: "minutes", label: "Length", type: "select", options: ["3", "5", "10"], default: "5" },
       { name: "hosts", label: "Format", type: "select", options: ["Two hosts", "Single narrator"], default: "Two hosts" },
+      { name: "voiceA", label: "First voice", type: "select", options: VOICE_LABELS, default: "Ade — warm, steady" },
+      { name: "voiceB", label: "Second voice", type: "select", options: VOICE_LABELS, default: "Ngozi — bright, lively" },
       F.notes],
     maxTokens: 3000,
     system: `${HOUSE} You write podcast scripts for students: warm, curious, and genuinely entertaining — banter, questions, analogies, a moment of surprise. No filler. ${JSON_RULE}`,
@@ -384,6 +401,9 @@ router.post("/:key", teacherOnly, async (req, res) => {
         // Echoed back so the result header can show the same pills the teacher
         // filled in, without the client having to remember the form.
         topic: input.topic || null, subject: input.subject || null, class: input.class || null,
+        // The narrator endpoint is a separate call, so the voices the teacher
+        // chose have to travel with the script for it to honour them.
+        ...(tool.key === "podcast" ? { voiceA: input.voiceA, voiceB: input.voiceB } : {}),
         coinsCharged: charged,
       },
     });
@@ -393,7 +413,6 @@ router.post("/:key", teacherOnly, async (req, res) => {
 // ── POST /api/teaching/tools/podcast/audio ───────────────────────────────────
 // Narrate a script produced by the podcast tool. Two hosts get two voices, so
 // the episode sounds like a conversation rather than one person reading.
-const VOICES = ["alloy", "nova", "echo", "shimmer", "fable", "onyx"];
 const TTS_LIMIT = 12000;  // characters — roughly a 12-minute episode
 
 router.post("/podcast/audio", teacherOnly, async (req, res) => {
@@ -401,8 +420,19 @@ router.post("/podcast/audio", teacherOnly, async (req, res) => {
     const turns = Array.isArray(req.body?.turns) ? req.body.turns : null;
     if (!turns?.length) return res.status(400).json({ error: "Nothing to narrate" });
 
+    // Speakers keep a consistent voice across the episode, and the teacher's
+    // two picks map onto them in the order they first speak.
     const speakers = [...new Set(turns.map((t) => String(t.speaker || "Host")))].slice(0, 2);
-    const voiceOf = Object.fromEntries(speakers.map((s, i) => [s, VOICES[i] || "alloy"]));
+    const picked = [
+      voiceFromLabel(req.body?.voiceA, "onyx"),
+      voiceFromLabel(req.body?.voiceB, "nova"),
+    ];
+    // Two hosts with the same voice is indistinguishable from one — nudge the
+    // second onto a different voice rather than shipping a confusing episode.
+    if (speakers.length > 1 && picked[0] === picked[1]) {
+      picked[1] = VOICE_CATALOG.find((v) => v.voice !== picked[0]).voice;
+    }
+    const voiceOf = Object.fromEntries(speakers.map((s, i) => [s, picked[i] || picked[0]]));
 
     const total = turns.reduce((n, t) => n + String(t.text || "").length, 0);
     if (total > TTS_LIMIT) return res.status(413).json({ error: "That episode is too long to narrate in one go. Shorten it and try again." });
@@ -413,7 +443,15 @@ router.post("/podcast/audio", teacherOnly, async (req, res) => {
 
     // One request per turn, concatenated. MP3 frames are self-contained, so
     // joining the buffers plays as a single continuous episode.
+    //
+    // Each part's byte length is reported back as a segment. The client uses
+    // the running byte fraction to work out which turn is playing and to jump
+    // to one: OpenAI's mp3 is constant bit-rate, so bytes are proportional to
+    // time. It is a proxy, not a timestamp — near-exact here, and it costs
+    // nothing, where real timings would mean decoding every clip.
     const parts = [];
+    const segments = [];
+    let bytes = 0;
     for (const t of turns) {
       const text = String(t.text || "").trim();
       if (!text) continue;
@@ -421,7 +459,10 @@ router.post("/podcast/audio", teacherOnly, async (req, res) => {
         model: "tts-1", voice: voiceOf[String(t.speaker || "Host")] || "alloy",
         input: text.slice(0, 4000), response_format: "mp3",
       });
-      parts.push(Buffer.from(await speech.arrayBuffer()));
+      const buf = Buffer.from(await speech.arrayBuffer());
+      parts.push(buf);
+      segments.push({ speaker: String(t.speaker || "Host"), byteStart: bytes, byteEnd: bytes + buf.length });
+      bytes += buf.length;
     }
     if (!parts.length) return res.status(422).json({ error: "Nothing to narrate" });
 
@@ -441,7 +482,10 @@ router.post("/podcast/audio", teacherOnly, async (req, res) => {
     const audio = Buffer.concat(parts);
     res.json({
       success: true,
-      data: { audio: `data:audio/mpeg;base64,${audio.toString("base64")}`, voices: voiceOf, coinsCharged: charged },
+      data: {
+        audio: `data:audio/mpeg;base64,${audio.toString("base64")}`,
+        voices: voiceOf, segments, totalBytes: audio.length, coinsCharged: charged,
+      },
     });
   } catch (e) { serverError(res, e, req); }
 });
