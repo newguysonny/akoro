@@ -8,10 +8,6 @@
 --   1. Adds 16 classmates to JSS1 (password: Password123!)
 --   2. Puts the test learners (priya@ / amaka@) in that same class, so
 --      "my class" and "my class subjects" resolve when you log in as them
---
--- NOTE: 2026-seed-school-passwords.sql assigns the documented demo passwords
--- POSITIONALLY, ordered by email. It is scoped to the stu.* accounts precisely
--- so the classmates added here cannot shift that mapping.
 --   3. Awards XP per (student, subject) across 8 JSS subjects
 --   4. Rebuilds the classroom/global/subject leaderboard scopes
 --
@@ -21,6 +17,10 @@
 --
 -- Requires 2026-seed-school.sql (creates the school + JSS1) and
 -- 2026-xp-subject.sql (adds xp_transactions.subject).
+--
+-- NOTE: 2026-seed-school-passwords.sql assigns the documented demo passwords
+-- POSITIONALLY, ordered by email. It is scoped to the stu.* accounts precisely
+-- so the classmates added here cannot shift that mapping.
 -- =============================================================
 
 DO $$
