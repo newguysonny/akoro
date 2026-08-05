@@ -59,12 +59,20 @@ BEGIN
 
   -- Students → assign a real first name (keep their class suffix) + FirstName2026.
   -- Ordered by EMAIL so the mapping is stable and predictable (see table below).
+  --
+  -- SCOPED TO THE ORIGINAL stu.* ACCOUNTS. The mapping is positional, so any
+  -- other student added to this school's classrooms would shift every password
+  -- after it and silently invalidate the table above — which is exactly what
+  -- happened when the JSS1 cohort seed added sixteen classmates whose emails
+  -- sort before 'stu.'. Those classmates also keep their own names instead of
+  -- being renamed from the cycling list.
   FOR r IN
     SELECT DISTINCT u.id, u.email, u.full_name
     FROM public.users u
     JOIN public.classroom_students cs ON cs.user_id = u.id
     JOIN public.classrooms c          ON c.id = cs.classroom_id
     WHERE c.school_id = v_school AND u.role = 'student'
+      AND u.email LIKE 'stu.%@demo.akoro.app'
     ORDER BY u.email
   LOOP
     i := i + 1;
