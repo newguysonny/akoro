@@ -16,10 +16,27 @@ import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, GOLD, FONT } from '../constants.js';
 
-// The chat is named after the school's own agent (set during onboarding), so
-// the greeting is built once the name arrives rather than hardcoded.
-const greetingFor = (name) =>
-  `Hi! I'm ${name}, your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?`;
+// The chat is named after the school's own agent (set during onboarding), and
+// it opens differently for each kind of visitor. A parent asking about fees and
+// a student asking for homework help share nothing, so a single "ask me
+// anything about studying" greeting was wrong for everyone but the student.
+// Roles come from /ai/context: admin | teacher | parent | student | null (guest).
+function greetingFor(name, role, { school, firstName } = {}) {
+  const who = firstName ? ` ${firstName}` : '';
+  const at = school ? ` at ${school}` : '';
+  switch (role) {
+    case 'parent':
+      return `Hello${who}, I'm ${name}${at}. I can help you follow your child's progress, check fees and payments, see what's coming up on the school calendar, and find the learning materials for their subjects. What would you like to know?`;
+    case 'teacher':
+    case 'admin':
+      return `Hi${who}, I'm ${name}. I can help you plan and teach — lesson plans, hooks, worksheets, misconceptions to watch for, vocabulary sets, podcasts, marking against your rubric, and content for the school website. Tap ＋ for the teaching tools, or just tell me what you're teaching.`;
+    case 'student':
+      return `Hi${who}! I'm ${name}, your study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or test yourself with an assessment. What would you like to explore?`;
+    default:
+      // No role resolved: a visitor who isn't a member of this school.
+      return `Hello, I'm ${name}${at}. I'm here to help you get to know the school — our programmes, admissions, fees and what makes us different. I can also book you a campus tour. What would you like to know?`;
+  }
+}
 
 const SITE_KEY = 'akoro_ai_return';
 
@@ -42,6 +59,10 @@ export default function AiChatPage() {
   // get the student's Assessment option, etc.
   const [schoolRole, setSchoolRole] = useState(null);
   const [aiName, setAiName] = useState('');
+  const [schoolName, setSchoolName] = useState('');
+  // Role may legitimately resolve to null (a guest), so "loaded" is tracked
+  // separately — the greeting can't wait for a truthy role.
+  const [ctxLoaded, setCtxLoaded] = useState(false);
   const isStudent = schoolRole === 'student';
   const isTeacher = schoolRole === 'teacher' || schoolRole === 'admin';
 
@@ -97,17 +118,20 @@ export default function AiChatPage() {
         const d = r?.data ?? r;
         setSchoolRole(d?.role || null);
         setAiName(d?.aiName || 'Akoro');
+        setSchoolName(d?.schoolName || '');
       })
-      .catch(() => { setSchoolRole(null); setAiName('Akoro'); });
+      .catch(() => { setSchoolRole(null); setAiName('Akoro'); })
+      .finally(() => setCtxLoaded(true));
   }, []);
 
-  // Greet only once the name is known, so the student never sees the greeting
-  // rewrite itself mid-read. Guarded on an empty thread so it can't reappear
-  // after the conversation has started.
+  // Greet only once the name AND the role are known, so nobody sees the
+  // greeting rewrite itself mid-read. Guarded on an empty thread so it can't
+  // reappear after the conversation has started.
   useEffect(() => {
-    if (!aiName) return;
-    setMessages((p) => (p.length === 0 ? [{ from: 'agent', text: greetingFor(aiName) }] : p));
-  }, [aiName]);
+    if (!aiName || !ctxLoaded) return;
+    const text = greetingFor(aiName, schoolRole, { school: schoolName, firstName });
+    setMessages((p) => (p.length === 0 ? [{ from: 'agent', text }] : p));
+  }, [aiName, ctxLoaded, schoolRole, schoolName, firstName]);
 
   const openAttach = (type) => {
     setAttachMenu(false);
