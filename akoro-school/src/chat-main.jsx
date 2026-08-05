@@ -15,6 +15,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
+import { entryUrlInfo } from './services/api.js';
 import AiChatPage from './pages/AiChatPage.jsx';
 import { FONT, INK, MUTED, AMBER } from './constants.js';
 
@@ -36,7 +37,7 @@ function Spinner() {
 }
 
 function Gate() {
-  const { booting, isAuthenticated, handoffError } = useAuth();
+  const { booting, isAuthenticated, handoffError, handoffReason } = useAuth();
 
   if (booting) {
     return (
@@ -58,9 +59,17 @@ function Gate() {
       <div style={{ fontSize: 16, fontWeight: 800, color: INK }}>Please sign in first</div>
       <div style={{ fontSize: 13.5, color: MUTED, maxWidth: 340, lineHeight: 1.55 }}>
         {handoffError
-          ? "We couldn't complete your sign-in. Head back to your school website and open the AI assistant again."
+          ? (handoffReason || "We couldn't complete your sign-in. Head back to your school website and open the AI assistant again.")
           : "Open the AI assistant from your school website to start chatting."}
       </div>
+      {/* No sign-in token reached this page. Showing what it WAS opened with
+          turns 'it doesn't work' into a one-glance diagnosis: a missing ?ai=
+          means the redirect or the tenant proxy dropped the query string. */}
+      {!handoffError && (
+        <div style={{ fontSize: 11, color: '#9A96A8', maxWidth: 340, wordBreak: 'break-all' }}>
+          Opened at <code>{entryUrlInfo()}</code> — no sign-in token was present.
+        </div>
+      )}
     </Centered>
   );
 }

@@ -38,6 +38,38 @@ let refreshing = null;
  * sessionStorage, not localStorage: the token dies with the tab, and it is
  * never written on the portal's own origin, where cookies work normally.
  */
+/* The hand-off token is grabbed AT MODULE LOAD, before React mounts and before
+ * anything can rewrite the URL. A tenant deployment proxies /ai-chat to this
+ * build, and a proxy rewrite or a /ai-chat → /ai-chat/ redirect can drop the
+ * query string — after which the page looks like a plain unauthenticated visit
+ * and the sign-in silently "does nothing".
+ *
+ * Checked in both the query and the hash, then stashed, so a later re-render or
+ * a history.replaceState can't lose it either. */
+const HANDOFF_KEY = 'akoro_site_handoff';
+function captureHandoff() {
+  try {
+    const fromSearch = new URLSearchParams(window.location.search).get('ai');
+    const fromHash = new URLSearchParams(String(window.location.hash || '').replace(/^#/, '')).get('ai');
+    const t = fromSearch || fromHash;
+    if (t) sessionStorage.setItem(HANDOFF_KEY, t);
+    return t || sessionStorage.getItem(HANDOFF_KEY);
+  } catch { return null; }
+}
+captureHandoff();
+export const takeHandoffToken = () => {
+  try {
+    const t = sessionStorage.getItem(HANDOFF_KEY);
+    sessionStorage.removeItem(HANDOFF_KEY);   // single use
+    return t;
+  } catch { return null; }
+};
+/** For the "no session" screen: what the page was actually opened with. */
+export const entryUrlInfo = () => {
+  try { return `${window.location.pathname}${window.location.search}${window.location.hash}`; }
+  catch { return ''; }
+};
+
 const TOKEN_KEY = 'akoro_site_access';
 const REFRESH_KEY = 'akoro_site_refresh';
 const ss = {

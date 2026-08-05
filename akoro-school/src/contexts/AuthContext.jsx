@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API, getPortal, setSiteTokens, clearSiteTokens } from '../services/api.js';
+import { API, getPortal, setSiteTokens, clearSiteTokens, takeHandoffToken } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -150,7 +150,9 @@ export function AuthProvider({ children }) {
   // session cookie, then the URL is cleaned.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const handoff = params.get('ai');
+    // Read the token from the module-load capture, not from the URL: by the
+    // time this effect runs the query may already have been rewritten away.
+    const handoff = takeHandoffToken();
     if (handoff) {
       fetch(`${API}/api/school/site/ai-login/exchange`, {
         method: 'POST', credentials: 'include',
