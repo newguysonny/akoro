@@ -10,7 +10,6 @@ import {
   User, ShieldQuestion,
   BookOpen, Presentation, Swords, ListTodo, FileCheck, Store,
   PanelsTopLeft,
-  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
@@ -186,7 +185,6 @@ const NAV_SECTIONS = [
     { label: 'Assessments', icon: FileCheck, to: '/assessments' },
     { label: 'Review AI Lessons', icon: BookOpenCheck, to: '/lesson-review' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
-    { label: 'Teaching Tools', icon: Sparkles, to: '/teaching-tools' },
     { label: 'Tools & Assets', icon: Store, to: '/marketplace' },
     { label: 'Content Library', icon: Library, to: '/library' },
   ]},

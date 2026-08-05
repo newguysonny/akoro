@@ -24,7 +24,6 @@ import PurchaseCheckoutPage from './pages/PurchaseCheckoutPage.jsx';
 import LessonReviewPage from './pages/LessonReviewPage.jsx';
 import ProfilePage        from './pages/ProfilePage.jsx';
 import MarketplacePage     from './pages/MarketplacePage.jsx';
-import TeachingToolsPage   from './pages/TeachingToolsPage.jsx';
 import AppCenterPage       from './pages/AppCenterPage.jsx';
 import LibraryPage         from './pages/LibraryPage.jsx';
 import NotificationsPage  from './pages/NotificationsPage.jsx';
@@ -130,7 +129,6 @@ function AppRoutes() {
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="/profile"        element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/marketplace"    element={<ProtectedRoute><MarketplacePage /></ProtectedRoute>} />
-      <Route path="/teaching-tools" element={<ProtectedRoute><TeachingToolsPage /></ProtectedRoute>} />
       <Route path="/apps"           element={<ProtectedRoute><AppCenterPage /></ProtectedRoute>} />
       <Route path="/library"        element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
       <Route path="/notifications"  element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />

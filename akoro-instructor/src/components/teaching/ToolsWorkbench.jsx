@@ -60,16 +60,20 @@ export default function ToolsWorkbench() {
     const on = t.key === key;
     return (
       <button onClick={() => setKey(t.key)} style={{
-        display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+        display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', textAlign: 'left',
         padding: '11px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
         background: on ? BLUE : 'transparent', color: on ? WHITE : MUTED,
         fontSize: 13.5, fontWeight: on ? 700 : 600, fontFamily: FONT, transition: 'all .12s',
       }}
         onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = LIGHT; }}
         onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = 'transparent'; }}>
-        <span style={{ fontSize: 15, flexShrink: 0 }}>{t.emoji}</span>
-        <span style={{ flex: 1, minWidth: 0 }}>{t.name}</span>
-        {t.locked && <Lock size={13} color={on ? WHITE : MUTED2} />}
+        <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{t.emoji}</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block' }}>{t.name}</span>
+          <span style={{ display: 'block', fontSize: 11, fontWeight: 600, lineHeight: 1.4, marginTop: 2,
+            color: on ? 'rgba(255,255,255,.82)' : MUTED2 }}>{t.blurb}</span>
+        </span>
+        {t.locked && <Lock size={13} color={on ? WHITE : MUTED2} style={{ marginTop: 2 }} />}
       </button>
     );
   };
@@ -83,7 +87,7 @@ export default function ToolsWorkbench() {
     <>
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left rail */}
-        <aside style={{ width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <aside style={{ width: 268, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={railHeading}>TEACHING TOOLS</div>
             {free.map((t) => <Rail key={t.key} t={t} />)}
@@ -111,7 +115,7 @@ export default function ToolsWorkbench() {
         <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
           {!tool ? <div style={{ color: MUTED2, fontFamily: FONT }}>Pick a tool.</div>
             : tool.locked ? <LockedPanel tool={tool} />
-            : <ToolRunner tool={tool} onDone={() => setRefreshKey((k) => k + 1)} />}
+            : <ToolRunner tool={tool} showHeader onDone={() => setRefreshKey((k) => k + 1)} />}
         </section>
       </div>
 
