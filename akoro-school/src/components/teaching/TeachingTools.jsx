@@ -288,11 +288,7 @@ function Grades({ data }) {
 export default function TeachingTools({ onInsert, compact = false }) {
   const [tools, setTools] = useState([]);
   const [tool, setTool] = useState(null);
-  const [form, setForm] = useState({});
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [out, setOut] = useState(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     apiGet('/api/teaching/tools')
@@ -300,77 +296,78 @@ export default function TeachingTools({ onInsert, compact = false }) {
       .catch((e) => setError(e?.message || 'Could not load the tools'));
   }, []);
 
-  const pick = (t) => {
-    setTool(t); setOut(null); setError('');
-    setForm(Object.fromEntries(t.fields.map((f) => [f.name, f.default || ''])));
-  };
+  if (tool) {
+    return (
+      <div>
+        <button onClick={() => setTool(null)} style={{ ...ghost, marginBottom: 14 }}>
+          <ArrowLeft size={13} /> All tools
+        </button>
+        <ToolRunner tool={tool} onInsert={onInsert} showHeader />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {error && <div style={errBox}>{error}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fill,minmax(230px,1fr))', gap: 10 }}>
+        {tools.map((t) => (
+          <button key={t.key} onClick={() => setTool(t)} disabled={t.locked}
+            style={{ ...toolCard, opacity: t.locked ? .55 : 1, cursor: t.locked ? 'default' : 'pointer' }}>
+            <span style={{ fontSize: 22 }}>{t.emoji}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{t.name}{t.locked ? ' 🔒' : ''}</div>
+              <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, marginTop: 2 }}>
+                {t.locked ? 'Unlock this in Tools & Assets' : t.blurb}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      {!tools.length && !error && <div style={{ color: MUTED2, fontSize: 13, padding: 20 }}>Loading tools…</div>}
+    </div>
+  );
+}
+
+/**
+ * ToolRunner — one tool's form and its result. Exported so the Tools & Assets
+ * workbench can host exactly the same thing inside its own chrome; nothing
+ * about a tool's behaviour or appearance is duplicated between the two.
+ */
+export function ToolRunner({ tool, onInsert, onDone, showHeader = false }) {
+  const [form, setForm] = useState(() => Object.fromEntries(tool.fields.map((f) => [f.name, f.default || ''])));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [out, setOut] = useState(null);
+
+  // Switching tools in the rail reuses this component — reset, or the new tool
+  // inherits the previous one's form values and result.
+  useEffect(() => {
+    setForm(Object.fromEntries(tool.fields.map((f) => [f.name, f.default || ''])));
+    setOut(null); setError('');
+  }, [tool.key]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async () => {
     setBusy(true); setError(''); setOut(null);
     try {
       const r = await apiPost(`/api/teaching/tools/${tool.key}`, form);
       setOut(r?.data ?? r);
+      onDone?.();
     } catch (e) { setError(e?.message || 'Could not generate that.'); }
     finally { setBusy(false); }
   };
 
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(out.content || ''); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
-  };
-
-  const print = () => {
-    const title = out.title || form.topic || tool.name;
-    if (tool.output === 'doc') {
-      const meta = [out.subject, out.class].filter(Boolean).join(' · ');
-      printDoc(title, `<h1>${esc(title)}</h1>${out.subtitle ? `<p class="sub">${esc(out.subtitle)}</p>` : ''}${meta ? `<p class="sub">${esc(meta)}</p>` : ''}` +
-        (out.cards || []).map((c) => `<div class="card"><h2>${esc(c.heading)}</h2>` +
-          (c.blocks || []).map((b) => `<div class="blk"><div class="lbl">${esc(b.label)}</div>` +
-            (b.chips?.length ? `<p>${b.chips.map((x) => `<span class="chip">${esc(x)}</span>`).join(' ')}</p>`
-              : b.bullets?.length ? `<ul>${b.bullets.map((x) => `<li>${boldish(x)}</li>`).join('')}</ul>`
-              : `<p>${boldish(b.text)}</p>`) + '</div>').join('') + '</div>').join(''));
-      return;
-    }
-    if (tool.output === 'cards') {
-      printDoc(title, `<h1>${esc(out.title || title)}</h1>` +
-        (out.cards || []).map((c) => `<div class="card"><div class="term">${esc(c.term)}</div><div class="def">${esc(c.definition)}</div>${c.example ? `<div class="ex">${esc(c.example)}</div>` : ''}</div>`).join(''));
-      return;
-    }
-    printDoc(title, `<h1>${esc(title)}</h1>${mdToHtml(out.content || '')}`);
-  };
-
-  /* ── Picker ── */
-  if (!tool) {
-    return (
-      <div>
-        {error && <div style={errBox}>{error}</div>}
-        <div style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fill,minmax(230px,1fr))', gap: 10 }}>
-          {tools.map((t) => (
-            <button key={t.key} onClick={() => pick(t)} style={toolCard}>
-              <span style={{ fontSize: 22 }}>{t.emoji}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{t.name}</div>
-                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, marginTop: 2 }}>{t.blurb}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-        {!tools.length && !error && <div style={{ color: MUTED2, fontSize: 13, padding: 20 }}>Loading tools…</div>}
-      </div>
-    );
-  }
-
-  /* ── One tool ── */
   return (
     <div>
-      <button onClick={() => { setTool(null); setOut(null); }} style={{ ...ghost, marginBottom: 14 }}>
-        <ArrowLeft size={13} /> All tools
-      </button>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4 }}>
-        <span style={{ fontSize: 20 }}>{tool.emoji}</span>
-        <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>{tool.name}</div>
-      </div>
-      <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px' }}>{tool.blurb}</p>
+      {showHeader && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4 }}>
+            <span style={{ fontSize: 20 }}>{tool.emoji}</span>
+            <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>{tool.name}</div>
+          </div>
+          <p style={{ fontSize: 12.5, color: MUTED, margin: '0 0 16px' }}>{tool.blurb}</p>
+        </>
+      )}
 
       {tool.fields.map((f) => (
         <div key={f.name} style={{ marginBottom: 12 }}>
@@ -396,40 +393,70 @@ export default function TeachingTools({ onInsert, compact = false }) {
       </button>
       {error && <div style={errBox}>{error}</div>}
 
-      {out && (
-        <div style={{ marginTop: 18, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-            <button onClick={copy} style={ghost}>{copied ? <Check size={13} color={GREEN} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}</button>
-            <button onClick={print} style={ghost}><Printer size={13} /> Save as PDF</button>
-            {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><MessageSquarePlus size={13} /> Send to chat</button>}
-            {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
-          </div>
-
-          {tool.output === 'doc' && (
-            <>
-              <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                <div style={{ fontSize: 19, fontWeight: 900, color: INK }}>{out.title || form.topic}</div>
-                {out.subtitle && <div style={{ fontSize: 12.5, color: MUTED, marginTop: 4 }}>{out.subtitle}</div>}
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 9 }}>
-                  {out.subject && <span style={{ ...pill, background: `${AMBER}18`, color: AMBER }}>{out.subject}</span>}
-                  {out.class   && <span style={{ ...pill, background: `${BRAND}18`, color: BRAND }}>{out.class}</span>}
-                </div>
-              </div>
-              <Doc data={out} />
-            </>
-          )}
-          {tool.output === 'cards'  && <Flashcards data={out} />}
-          {tool.output === 'script' && <Podcast data={out} onError={setError} />}
-          {tool.output === 'grades' && <Grades data={out} />}
-          {tool.output === 'markdown' && (
-            <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />
-          )}
-        </div>
-      )}
+      {out && <Result tool={tool} out={out} onInsert={onInsert} onError={setError} />}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
+
+function Result({ tool, out, onInsert, onError = () => {}, title }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(out.content || ''); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ }
+  };
+
+  const print = () => {
+    const head = out.title || title || tool.name;
+    if (tool.output === 'doc') {
+      const meta = [out.subject, out.class].filter(Boolean).join(' · ');
+      printDoc(head, `<h1>${esc(head)}</h1>${out.subtitle ? `<p class="sub">${esc(out.subtitle)}</p>` : ''}${meta ? `<p class="sub">${esc(meta)}</p>` : ''}` +
+        (out.cards || []).map((c) => `<div class="card"><h2>${esc(c.heading)}</h2>` +
+          (c.blocks || []).map((b) => `<div class="blk"><div class="lbl">${esc(b.label)}</div>` +
+            (b.chips?.length ? `<p>${b.chips.map((x) => `<span class="chip">${esc(x)}</span>`).join(' ')}</p>`
+              : b.bullets?.length ? `<ul>${b.bullets.map((x) => `<li>${boldish(x)}</li>`).join('')}</ul>`
+              : `<p>${boldish(b.text)}</p>`) + '</div>').join('') + '</div>').join(''));
+      return;
+    }
+    if (tool.output === 'cards') {
+      printDoc(head, `<h1>${esc(out.title || head)}</h1>` +
+        (out.cards || []).map((c) => `<div class="card"><div class="term">${esc(c.term)}</div><div class="def">${esc(c.definition)}</div>${c.example ? `<div class="ex">${esc(c.example)}</div>` : ''}</div>`).join(''));
+      return;
+    }
+    printDoc(head, `<h1>${esc(head)}</h1>${mdToHtml(out.content || '')}`);
+  };
+
+  return (
+    <div style={{ marginTop: 18, borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button onClick={copy} style={ghost}>{copied ? <Check size={13} color={GREEN} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy'}</button>
+        <button onClick={print} style={ghost}><Printer size={13} /> Save as PDF</button>
+        {onInsert && <button onClick={() => onInsert(out.content || '')} style={ghost}><MessageSquarePlus size={13} /> Send to chat</button>}
+        {out.coinsCharged > 0 && <span style={{ fontSize: 11, color: MUTED2, alignSelf: 'center' }}>{out.coinsCharged.toLocaleString()} coins</span>}
+      </div>
+
+      {tool.output === 'doc' && (
+        <>
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 19, fontWeight: 900, color: INK }}>{out.title || title}</div>
+            {out.subtitle && <div style={{ fontSize: 12.5, color: MUTED, marginTop: 4 }}>{out.subtitle}</div>}
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 9 }}>
+              {out.subject && <span style={{ ...pill, background: `${AMBER}18`, color: AMBER }}>{out.subject}</span>}
+              {out.class   && <span style={{ ...pill, background: `${BRAND}18`, color: BRAND }}>{out.class}</span>}
+            </div>
+          </div>
+          <Doc data={out} />
+        </>
+      )}
+      {tool.output === 'cards'  && <Flashcards data={out} />}
+      {tool.output === 'script' && <Podcast data={out} onError={onError} />}
+      {tool.output === 'grades' && <Grades data={out} />}
+      {tool.output === 'markdown' && (
+        <div style={{ fontSize: 13.5, color: INK, lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: mdToHtml(out.content || '') }} />
+      )}
+    </div>
+  );
+}
+ToolRunner.Result = Result;
 
 const input = { width: '100%', padding: '10px 12px', borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box' };
 const primary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '11px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${BRAND},#5326CC)`, color: WHITE, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };

@@ -238,12 +238,77 @@ function asMarkdown(tool, data) {
   return "";
 }
 
+/* Some tools are also sold in Tools & Assets (edu.platform_tools). Where a
+   catalog key matches a PAID platform tool, the teaching tool is locked until
+   the teacher has bought it — otherwise the purchase would be meaningless.
+   Tools with no matching paid row are free to everyone. */
+async function lockState(userId) {
+  const { data: paid } = await db.schema("edu").from("platform_tools")
+    .select("id, key, name, price_kobo, is_active")
+    .in("key", TOOLS.map((t) => t.key));
+  const priced = (paid || []).filter((p) => p.is_active && (p.price_kobo || 0) > 0);
+  if (!priced.length) return {};
+
+  const { data: access } = await db.schema("edu").from("instructor_tool_access")
+    .select("tool_id, access_granted").eq("instructor_id", userId);
+  const ownedIds = new Set((access || []).filter((a) => a.access_granted).map((a) => a.tool_id));
+
+  return Object.fromEntries(priced.map((p) => [p.key, {
+    locked: !ownedIds.has(p.id), priceKobo: p.price_kobo, toolId: p.id,
+  }]));
+}
+
 // ── GET /api/teaching/tools ──────────────────────────────────────────────────
-router.get("/", teacherOnly, (req, res) => {
-  res.json({
-    success: true,
-    data: TOOLS.map(({ key, name, emoji, blurb, output, fields }) => ({ key, name, emoji, blurb, output, fields })),
-  });
+router.get("/", teacherOnly, async (req, res) => {
+  try {
+    const locks = await lockState(req.user.id);
+    res.json({
+      success: true,
+      data: TOOLS.map(({ key, name, emoji, blurb, output, fields }) => {
+        const l = locks[key];
+        return {
+          key, name, emoji, blurb, output, fields,
+          locked: !!l?.locked,
+          priceKobo: l?.priceKobo || 0,
+          toolId: l?.toolId || null,
+        };
+      }),
+    });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// ── GET /api/teaching/tools/outputs?key= ─────────────────────────────────────
+// Past generations, so the workbench can list them the way the content hub
+// lists past creations.
+router.get("/outputs", teacherOnly, async (req, res) => {
+  try {
+    let q = db.schema("edu").from("tool_outputs")
+      .select("id, tool, kind, title, subject, created_at")
+      .eq("instructor_id", req.user.id).like("tool", "teaching_%")
+      .order("created_at", { ascending: false }).limit(50);
+    if (req.query.key && byKey[req.query.key]) q = q.eq("kind", req.query.key);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (e) { serverError(res, e, req); }
+});
+
+router.get("/outputs/:id", teacherOnly, async (req, res) => {
+  try {
+    const { data } = await db.schema("edu").from("tool_outputs")
+      .select("*").eq("id", req.params.id).eq("instructor_id", req.user.id).maybeSingle();
+    if (!data) return res.status(404).json({ error: "Not found" });
+    res.json({ success: true, data });
+  } catch (e) { serverError(res, e, req); }
+});
+
+router.delete("/outputs/:id", teacherOnly, async (req, res) => {
+  try {
+    const { error } = await db.schema("edu").from("tool_outputs")
+      .delete().eq("id", req.params.id).eq("instructor_id", req.user.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── POST /api/teaching/tools/:key ────────────────────────────────────────────
@@ -251,6 +316,13 @@ router.post("/:key", teacherOnly, async (req, res) => {
   try {
     const tool = byKey[req.params.key];
     if (!tool) return res.status(404).json({ error: "Unknown tool" });
+
+    // Enforced here as well as in the catalog: a locked tool must not run just
+    // because the client didn't grey out the button.
+    const locks = await lockState(req.user.id);
+    if (locks[tool.key]?.locked) {
+      return res.status(403).json({ error: `${tool.name} is locked. Unlock it in Tools & Assets to use it.`, code: "TOOL_LOCKED", toolId: locks[tool.key].toolId });
+    }
 
     const input = {};
     for (const f of tool.fields) {
