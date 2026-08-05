@@ -90,7 +90,8 @@
     "2026-vouchers-preserve-history.sql",
     "2026-xp-subject.sql",
     "2026-past-questions.sql",
-    "2026-seed-ncee-2017.sql"
+    "2026-seed-ncee-2017.sql",
+    "2026-seed-ncee-2017-full.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
