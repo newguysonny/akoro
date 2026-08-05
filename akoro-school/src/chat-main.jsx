@@ -15,7 +15,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
-import { entryUrlInfo } from './services/api.js';
+import SiteSignIn from './pages/ai-chat/SiteSignIn.jsx';
 import AiChatPage from './pages/AiChatPage.jsx';
 import { FONT, INK, MUTED, AMBER } from './constants.js';
 
@@ -37,7 +37,7 @@ function Spinner() {
 }
 
 function Gate() {
-  const { booting, isAuthenticated, handoffError, handoffReason } = useAuth();
+  const { booting, isAuthenticated, handoffError, handoffReason, exchangeHandoff } = useAuth();
 
   if (booting) {
     return (
@@ -51,24 +51,14 @@ function Gate() {
 
   if (isAuthenticated) return <AiChatPage />;
 
-  // No session — the hand-off token was missing, expired, or the cookie didn't
-  // stick. Send the visitor back to sign in from their school website.
+  // No session. This page is reachable straight from the school's menu — it
+  // sits at /ai-chat on their own domain — so it signs the visitor in rather
+  // than telling them to go and find the assistant they already opened.
   return (
     <Centered>
-      <div style={{ fontSize: 34 }}>🔒</div>
-      <div style={{ fontSize: 16, fontWeight: 800, color: INK }}>Please sign in first</div>
-      <div style={{ fontSize: 13.5, color: MUTED, maxWidth: 340, lineHeight: 1.55 }}>
-        {handoffError
-          ? (handoffReason || "We couldn't complete your sign-in. Head back to your school website and open the AI assistant again.")
-          : "Open the AI assistant from your school website to start chatting."}
-      </div>
-      {/* No sign-in token reached this page. Showing what it WAS opened with
-          turns 'it doesn't work' into a one-glance diagnosis: a missing ?ai=
-          means the redirect or the tenant proxy dropped the query string. */}
-      {!handoffError && (
-        <div style={{ fontSize: 11, color: '#9A96A8', maxWidth: 340, wordBreak: 'break-all' }}>
-          Opened at <code>{entryUrlInfo()}</code> — no sign-in token was present.
-        </div>
+      <SiteSignIn onSignedIn={exchangeHandoff} />
+      {handoffError && handoffReason && (
+        <div style={{ fontSize: 12, color: MUTED, maxWidth: 340, lineHeight: 1.5 }}>{handoffReason}</div>
       )}
     </Centered>
   );

@@ -145,42 +145,42 @@ export function AuthProvider({ children }) {
       .catch(() => false),
   [saveUser, clearUser]);
 
+  /**
+   * Turn a hand-off token into a live session. Used by the ?ai= boot path and
+   * by the chat build's own sign-in form, which has a token in hand and no
+   * reason to bounce through a redirect to use it.
+   */
+  const exchangeHandoff = useCallback(async (token) => {
+    const r = await fetch(`${API}/api/school/site/ai-login/exchange`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
+      body: JSON.stringify({ token }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.message || `The sign-in hand-off was rejected (HTTP ${r.status}).`);
+    }
+    // On the school's own domain there is no cookie — the tokens in the body
+    // ARE the session. Stored before loadMe, which needs them.
+    const j = await r.json().catch(() => ({}));
+    if (j.accessToken) setSiteTokens({ accessToken: j.accessToken, refreshToken: j.refreshToken });
+    const ok = await loadMe();
+    if (!ok) throw new Error('Signed in, but the session could not be read back.');
+    return true;
+  }, [loadMe]);
+
   // Verify session on mount. An AI-chat hand-off (?ai=<token>) from the public
-  // school website is exchanged HERE (on the portal's own origin) for a real
-  // session cookie, then the URL is cleaned.
+  // school website is exchanged HERE for a session.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     // Read the token from the module-load capture, not from the URL: by the
     // time this effect runs the query may already have been rewritten away.
     const handoff = takeHandoffToken();
     if (handoff) {
-      fetch(`${API}/api/school/site/ai-login/exchange`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
-        body: JSON.stringify({ token: handoff }),
-      })
-        .then(async (r) => {
-          if (!r.ok) {
-            const j = await r.json().catch(() => ({}));
-            setHandoffReason(j.message || `The sign-in hand-off was rejected (HTTP ${r.status}).`);
-            return false;
-          }
-          // On the school's own domain there is no cookie — the tokens in the
-          // body are the session. Store them BEFORE loadMe, which needs them.
-          const j = await r.json().catch(() => ({}));
-          if (j.accessToken) setSiteTokens({ accessToken: j.accessToken, refreshToken: j.refreshToken });
-          const ok = await loadMe();
-          // The exchange succeeded but the session didn't stick — that is the
-          // browser refusing to store a cross-site cookie, not a bad password.
-          if (!ok) setHandoffReason('Signed in, but the session could not be read back. If this page is served on your school\u2019s own domain, the sign-in token was not accepted.');
-          return ok;
-        })
+      exchangeHandoff(handoff)
+        .then(() => true)
+        .catch((e) => { setHandoffReason(e.message || ''); return false; })
         .then((ok) => { if (!ok) setHandoffError(true); })
-        .catch((e) => {
-          // A thrown fetch here is the request never completing — CORS or network.
-          setHandoffReason(`Could not reach the sign-in service (${e?.message || 'network error'}).`);
-          setHandoffError(true);
-        })
         .finally(() => {
           params.delete('ai');
           const q = params.toString();
@@ -202,7 +202,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, loading, error, isAuthenticated, booting, handoffError, handoffReason,
+      user, loading, error, isAuthenticated, booting, handoffError, handoffReason, exchangeHandoff,
       login, verifyTwoFactor, register, loginWithGoogle, logout, refresh, restoreFromCallback,
       markOnboarded,
       clearError: () => setError(null),
