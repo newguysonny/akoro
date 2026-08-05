@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/documents', icon: FileText,     label: 'Documents' },
   { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
   { to: '/apps',     icon: LayoutGrid,    label: 'App Center' },
+  { to: '/teaching-tools', icon: Sparkles, label: 'Teaching Tools' },
   { to: '/marketplace', icon: Store,       label: 'Tools & Assets' },
   { to: '/library',  icon: Library,       label: 'Library' },
   { to: '/chat',     icon: MessageSquare, label: 'AI Chat' },

@@ -47,6 +47,7 @@ import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
+import teachingToolsModule        from "./modules/teaching/tools.js";
 import schoolModule               from "./modules/school/index.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
@@ -244,6 +245,7 @@ if (process.env.REDIS_URL) {
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
+app.use("/api/teaching/tools",   standardLimit, teachingToolsModule);   // shared teaching tool suite (instructor + school + site chat)
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/school",     standardLimit, schoolModule);        // school partner portal
 app.use("/api/voice",      aiLimit,       voiceModule);

@@ -5,7 +5,7 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck, Trophy } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck, Trophy, Sparkles } from 'lucide-react';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import RankingSheet from './ai-chat/RankingSheet.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
@@ -86,7 +86,7 @@ export default function AiChatPage() {
   const [assessOpen, setAssessOpen]   = useState(false);
   const [assessment, setAssessment]   = useState(null);  // active proctored exam
   const [rankOpen, setRankOpen]       = useState(false);
-  const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | null
+  const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | 'teaching' | null
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
@@ -114,7 +114,7 @@ export default function AiChatPage() {
     if (type === 'voice') { setVoiceMode(true); return; }
     if (type === 'assessment') { setAssessOpen(true); return; }
     if (type === 'ranking') { setRankOpen(true); return; }
-    if (type === 'lesson' || type === 'website') { setTeacherTool(type); return; }
+    if (type === 'lesson' || type === 'website' || type === 'teaching') { setTeacherTool(type); return; }
     setAttachType(type); setAttachModal(true); setOcrText(''); setOcrError(''); setAttachFile(null);
   };
 
@@ -151,10 +151,11 @@ export default function AiChatPage() {
     ] : []),
     { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
     ...(isStudent ? [
-      { type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' },
+      { type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Live — today’s subjects & topics' },
       { type: 'ranking',    icon: <Trophy size={15} color={GOLD} />,           label: 'Ranking',    desc: 'Class · courses · schools leaderboards' },
     ] : []),
     ...(isTeacher ? [
+      { type: 'teaching', icon: <Sparkles size={15} color={AMBER} />,  label: 'Teaching tools',  desc: 'Podcast · misconceptions · hooks · vocabulary · grading' },
       { type: 'lesson',  icon: <FileText size={15} color={PURPLE} />, label: 'Lesson tools',    desc: 'Lesson plan · worksheet · quiz' },
       { type: 'website', icon: <FileText size={15} color={GREEN} />,  label: 'Website content', desc: 'Newsletter · recap · social · event' },
     ] : []),
