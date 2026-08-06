@@ -155,11 +155,27 @@ export function AuthProvider({ children }) {
     // makes the browser reject the request outright ("Failed to fetch") because
     // that origin is not granted credentialed CORS. Omitting works on both the
     // portal and a tenant domain, so there is one path rather than two.
-    const r = await fetch(`${API}/api/school/site/ai-login/exchange`, {
-      method: 'POST', credentials: 'omit',
-      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
-      body: JSON.stringify({ token }),
-    });
+    let r;
+    try {
+      r = await fetch(`${API}/api/school/site/ai-login/exchange`, {
+        method: 'POST', credentials: 'omit',
+        headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
+        body: JSON.stringify({ token }),
+      });
+    } catch (netErr) {
+      // "Failed to fetch" says nothing about WHY. Probe the API root: if that
+      // is reachable the problem is this endpoint's CORS; if it isn't, the
+      // build is pointing at the wrong host — which no amount of CORS work
+      // would ever fix.
+      let reachable = false;
+      try { await fetch(`${API}/health`, { mode: 'no-cors' }); reachable = true; } catch { /* stays false */ }
+      throw new Error(
+        `Could not reach the API at ${API} (${netErr?.message || 'network error'}). ` +
+        (reachable
+          ? 'The server answered on /health, so this endpoint is being blocked — most likely CORS.'
+          : 'The server did not answer at all, so this build is pointing at the wrong API address.')
+      );
+    }
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       throw new Error(j.message || `The sign-in hand-off was rejected (HTTP ${r.status}).`);

@@ -37,11 +37,16 @@ export default function SiteSignIn({ onSignedIn }) {
     if (!password) return setError('Enter your password.');
     setBusy(true); setError('');
     try {
-      const res = await fetch(`${API}/api/school/site/ai-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host: window.location.hostname, email: email.trim(), password, role }),
-      });
+      let res;
+      try {
+        res = await fetch(`${API}/api/school/site/ai-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host: window.location.hostname, email: email.trim(), password, role }),
+        });
+      } catch (netErr) {
+        throw new Error(`Could not reach the API at ${API} (${netErr?.message || 'network error'}).`);
+      }
       const d = await res.json().catch(() => ({}));
       if (!d?.success) throw new Error(d?.message || 'Sign-in failed. Please check your details.');
 

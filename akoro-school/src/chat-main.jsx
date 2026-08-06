@@ -16,7 +16,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import SiteSignIn from './pages/ai-chat/SiteSignIn.jsx';
-import { entryUrlInfo } from './services/api.js';
+import { entryUrlInfo, API } from './services/api.js';
 import AiChatPage from './pages/AiChatPage.jsx';
 import { FONT, INK, MUTED, AMBER } from './constants.js';
 
@@ -62,7 +62,7 @@ function Gate() {
         <div style={{ fontSize: 12, color: MUTED, maxWidth: 340, lineHeight: 1.5 }}>{handoffReason}</div>
       )}
       <div style={{ fontSize: 10.5, color: '#B9B5C2', maxWidth: 340, wordBreak: 'break-all' }}>
-        Opened at <code>{entryUrlInfo() || '/'}</code>
+        API <code>{API}</code>
       </div>
     </Centered>
   );
