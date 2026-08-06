@@ -189,6 +189,9 @@ export function AuthProvider({ children }) {
         });
       return;
     }
+    // No hand-off. Whatever happens next, stop booting — a page that never
+    // leaves "Signing you in…" is the one failure with no way out.
+    setBooting(false);
     if (!getStoredUser()) return;
     loadMe().then((ok) => { if (!ok) refresh(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

@@ -47,28 +47,39 @@ let refreshing = null;
  * Checked in both the query and the hash, then stashed, so a later re-render or
  * a history.replaceState can't lose it either. */
 const HANDOFF_KEY = 'akoro_site_handoff';
+
+// Held in a module variable FIRST. sessionStorage is only a backup: it throws
+// in private mode and when storage is blocked, and making the token depend on
+// it would lose a perfectly good sign-in in exactly those browsers — a
+// regression on simply reading the query string.
+let handoffInMemory = null;
+
+// The URL AS THE PAGE WAS OPENED. Captured before anything runs, because the
+// hand-off effect strips ?ai= with history.replaceState — so reading
+// window.location later reports a clean /ai-chat whether or not a token ever
+// arrived, which is worse than no diagnostic at all.
+let entryUrl = '';
+
 function captureHandoff() {
   try {
+    entryUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const fromSearch = new URLSearchParams(window.location.search).get('ai');
     const fromHash = new URLSearchParams(String(window.location.hash || '').replace(/^#/, '')).get('ai');
-    const t = fromSearch || fromHash;
-    if (t) sessionStorage.setItem(HANDOFF_KEY, t);
-    return t || sessionStorage.getItem(HANDOFF_KEY);
-  } catch { return null; }
+    handoffInMemory = fromSearch || fromHash || null;
+    if (handoffInMemory) { try { sessionStorage.setItem(HANDOFF_KEY, handoffInMemory); } catch { /* storage blocked */ } }
+    if (!handoffInMemory) { try { handoffInMemory = sessionStorage.getItem(HANDOFF_KEY); } catch { /* storage blocked */ } }
+  } catch { /* ignore */ }
 }
 captureHandoff();
+
 export const takeHandoffToken = () => {
-  try {
-    const t = sessionStorage.getItem(HANDOFF_KEY);
-    sessionStorage.removeItem(HANDOFF_KEY);   // single use
-    return t;
-  } catch { return null; }
+  const t = handoffInMemory;
+  handoffInMemory = null;                                    // single use
+  try { sessionStorage.removeItem(HANDOFF_KEY); } catch { /* ignore */ }
+  return t;
 };
 /** For the "no session" screen: what the page was actually opened with. */
-export const entryUrlInfo = () => {
-  try { return `${window.location.pathname}${window.location.search}${window.location.hash}`; }
-  catch { return ''; }
-};
+export const entryUrlInfo = () => entryUrl;
 
 const TOKEN_KEY = 'akoro_site_access';
 const REFRESH_KEY = 'akoro_site_refresh';
