@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API, getPortal, setSiteTokens, clearSiteTokens, takeHandoffToken } from '../services/api.js';
+import { API, getPortal, setSiteTokens, clearSiteTokens, takeHandoffToken, withAuth } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -21,12 +21,11 @@ function getStoredUser() {
 async function authFetch(path, body) {
   let res;
   try {
-    res = await fetch(`${API}${path}`, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
-      body:        JSON.stringify(body),
-    });
+    res = await fetch(`${API}${path}`, withAuth({
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
+      body:    JSON.stringify(body),
+    }));
   } catch {
     throw new Error("Couldn't reach the server. Check your connection and try again.");
   }
@@ -121,7 +120,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': getPortal() } });
+      await fetch(`${API}/api/auth/logout`, withAuth({ method: 'POST', headers: { 'X-Akoro-Portal': getPortal() } }));
     } catch { /* ignore */ }
     clearUser();
     clearSiteTokens();     // a bearer session lives in this tab, not in a cookie
@@ -139,7 +138,7 @@ export function AuthProvider({ children }) {
   }, [saveUser]);
 
   const loadMe = useCallback(() =>
-    fetch(`${API}/api/auth/me`, { credentials: 'include', headers: { 'X-Akoro-Portal': getPortal() } })
+    fetch(`${API}/api/auth/me`, withAuth({ headers: { 'X-Akoro-Portal': getPortal() } }))
       .then(async (r) => { const t = await r.text(); try { return t ? JSON.parse(t) : {}; } catch { return {}; } })
       .then(({ data }) => { if (data?.id) { saveUser(data); return true; } clearUser(); return false; })
       .catch(() => false),
@@ -151,8 +150,13 @@ export function AuthProvider({ children }) {
    * reason to bounce through a redirect to use it.
    */
   const exchangeHandoff = useCallback(async (token) => {
+    // credentials OMITTED deliberately. The tokens come back in the body, so no
+    // cookie is needed — and on the school's own domain, asking for credentials
+    // makes the browser reject the request outright ("Failed to fetch") because
+    // that origin is not granted credentialed CORS. Omitting works on both the
+    // portal and a tenant domain, so there is one path rather than two.
     const r = await fetch(`${API}/api/school/site/ai-login/exchange`, {
-      method: 'POST', credentials: 'include',
+      method: 'POST', credentials: 'omit',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': getPortal() },
       body: JSON.stringify({ token }),
     });

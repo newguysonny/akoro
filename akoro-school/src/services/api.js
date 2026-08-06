@@ -100,7 +100,10 @@ function refreshSession() {
     // refreshes with the cookie. /auth/refresh accepts either.
     const rt = ss.get(REFRESH_KEY);
     refreshing = fetch(`${API}/api/auth/refresh`, {
-      method: 'POST', credentials: 'include',
+      method: 'POST',
+      // A bearer session carries its refresh token in the body and must not ask
+      // for credentials; a cookie session does the opposite.
+      credentials: rt ? 'omit' : 'include',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL },
       body: rt ? JSON.stringify({ refreshToken: rt }) : '{}',
     })
@@ -125,12 +128,25 @@ function endSession() {
   }
 }
 
-// Adds Authorization when this tab holds a site-chat token. Cookies still ride
-// along for the portal's own origin, so one code path serves both.
-function withAuth(opts = {}) {
+/**
+ * Decide how this request proves who it is.
+ *
+ * A bearer token means we are on a tenant origin — the school's own domain —
+ * which is NOT granted credentialed CORS. Sending credentials there doesn't
+ * merely fail to attach a cookie: the browser rejects the whole request and
+ * fetch throws "Failed to fetch". So a bearer session must also drop
+ * credentials, or nothing gets through at all.
+ *
+ * No token → the portal's own origin, where cookies are the session.
+ */
+export function withAuth(opts = {}) {
   const t = siteAccessToken();
-  if (!t) return opts;
-  return { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` } };
+  if (!t) return { credentials: 'include', ...opts };
+  return {
+    ...opts,
+    credentials: 'omit',
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${t}` },
+  };
 }
 
 /** fetch + one transparent refresh-and-retry on 401. */

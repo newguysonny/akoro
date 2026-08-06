@@ -8,7 +8,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, MicOff, PhoneOff, Loader2, AlertCircle } from 'lucide-react';
-import { API } from '../../services/api.js';
+import { API, withAuth } from '../../services/api.js';
 import VoiceOrb from './VoiceOrb.jsx';
 import { createAudioBuffer, playAudioBuffer, downsample, convertFloat32ToInt16, normalizeVolume } from './voiceAudioUtils.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../../constants.js';
@@ -81,7 +81,7 @@ export default function VoiceChatPanel({ onClose, onExchange }) {
       // 1. Mint a Deepgram agent token + role-aware prompt from our backend.
       // X-Akoro-Portal must match the app's session cookie (akoro_access_school);
       // without it authenticateToken looks for the student cookie → 401.
-      const res = await fetch(`${API}/api/voice/agent-token`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
+      const res = await fetch(`${API}/api/voice/agent-token`, withAuth({ method: 'POST', headers: { 'X-Akoro-Portal': 'school' } }));
       let cfg = {}; try { cfg = await res.json(); } catch { /* non-JSON (e.g. proxy error) */ }
       if (!res.ok || !cfg.access_token) throw new Error(cfg.error || `Voice chat couldn't start (${res.status}) — it may not be configured yet.`);
 

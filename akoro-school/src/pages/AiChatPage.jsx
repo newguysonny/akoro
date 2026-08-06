@@ -10,7 +10,7 @@ import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
 import RankingSheet from './ai-chat/RankingSheet.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import TeacherToolSheet from './ai-chat/TeacherToolSheet.jsx';
-import { API, apiGet, apiPost, getPortal } from '../services/api.js';
+import { API, apiGet, apiPost, getPortal, withAuth } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
@@ -83,7 +83,7 @@ export default function AiChatPage() {
   // no cross-origin referrer to remember, so we default to this origin's
   // homepage ("/") rather than "/signin" (which doesn't exist on the site).
   const logout = useCallback(async () => {
-    try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': getPortal() } }); } catch { /* ignore */ }
+    try { await fetch(`${API}/api/auth/logout`, withAuth({ method: 'POST', headers: { 'X-Akoro-Portal': getPortal() } })); } catch { /* ignore */ }
     try { localStorage.removeItem('akoro_user'); } catch { /* ignore */ }
     let dest = '/';
     try { dest = sessionStorage.getItem(SITE_KEY) || dest; } catch { /* ignore */ }

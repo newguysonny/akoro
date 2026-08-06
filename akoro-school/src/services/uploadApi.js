@@ -9,14 +9,14 @@
  *   4. GET  /api/tasks/files/:id     → poll until ocrReady, returns ocrText
  */
 
-import { API } from './api.js';
+import { API, withAuth } from './api.js';
 
 const POST = (path, body) =>
-  fetch(`${API}${path}`, {
-    method: 'POST', credentials: 'include',
+  fetch(`${API}${path}`, withAuth({
+    method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'school' },
     body: JSON.stringify(body),
-  }).then(async r => {
+  })).then(async r => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || j.message || `POST ${path} -> ${r.status}`);
     return j;
@@ -59,7 +59,7 @@ function putWithProgress(url, file, onProgress) {
  */
 export async function pollOcr(fileId, { tries = 20, intervalMs = 1500 } = {}) {
   for (let i = 0; i < tries; i++) {
-    const r = await fetch(`${API}/api/tasks/files/${fileId}`, { credentials: 'include', headers: { 'X-Akoro-Portal': 'school' } });
+    const r = await fetch(`${API}/api/tasks/files/${fileId}`, withAuth({ headers: { 'X-Akoro-Portal': 'school' } }));
     if (r.ok) {
       const j = await r.json();
       if (j.ocrReady && j.ocrText) return j.ocrText;
