@@ -66,9 +66,15 @@ async function ownedAssignment(req, id) {
 /**
  * resolveStudents — the one targeting rule the whole platform uses.
  *
- * Accepts any mix of usernames (or emails), user ids, a whole classroom, or a
- * whole course. Unknown handles are reported rather than silently dropped: a
- * typo that quietly assigns work to nobody is worse than an error.
+ * Accepts any mix of usernames (or emails), user ids, or "everyone in the
+ * class". Unknown handles are reported rather than silently dropped: a typo
+ * that quietly assigns work to nobody is worse than an error.
+ *
+ * `course_id` and `classroom_id` describe WHERE the assignment lives; they
+ * expand into a target list ONLY when whole_class is set. Treating their mere
+ * presence as "target everyone" is a live footgun — the create form always
+ * sends course_id as scope, so a teacher who picked two learners would have
+ * silently assigned the work to the entire course.
  */
 async function resolveStudents({ usernames = [], user_ids = [], classroom_id, course_id, whole_class }) {
   const ids      = new Set((Array.isArray(user_ids) ? user_ids : []).filter(Boolean));
@@ -83,13 +89,13 @@ async function resolveStudents({ usernames = [], user_ids = [], classroom_id, co
     else notFound.push(handle);
   }
 
-  if (whole_class || classroom_id || course_id) {
+  // Only ever an explicit request, never inferred from scope.
+  if (whole_class) {
     if (classroom_id) {
       const { data } = await db.from("classroom_students")
         .select("user_id").eq("classroom_id", classroom_id).eq("status", "active");
       for (const r of (data ?? [])) ids.add(r.user_id);
-    }
-    if (course_id) {
+    } else if (course_id) {
       const { data } = await db.from("enrollments")
         .select("user_id").eq("course_id", course_id).eq("status", "active");
       for (const r of (data ?? [])) ids.add(r.user_id);
@@ -288,7 +294,13 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
   if (error === "not_found") return missing(res, "Assignment not found");
   if (error === "forbidden") return denied(res, "Not your assignment");
 
-  const { ids, notFound } = await resolveStudents({ ...req.body, course_id: req.body.course_id ?? assignment.course_id });
+  const { ids, notFound } = await resolveStudents({
+    usernames:    req.body.usernames,
+    user_ids:     req.body.user_ids,
+    whole_class:  req.body.whole_class,
+    classroom_id: req.body.classroom_id ?? assignment.classroom_id,
+    course_id:    req.body.course_id    ?? assignment.course_id,
+  });
   if (notFound.length) return bad(res, `No account found for: ${notFound.join(", ")}`);
   if (!ids.length)     return bad(res, "Pick at least one learner");
 
