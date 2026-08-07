@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus,
+  Trash2, ChevronRight, Copy, Check, Upload, Download, Link2, UserPlus,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
@@ -47,7 +47,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const [copied, setCopied] = useState(false);
 
   // CSV form
-  const [csv, setCsv]       = useState({ courseId: '', file: null });
+  const [csv, setCsv]       = useState({ courseId: '', classId: '', file: null });
   const [csvResult, setCsvR] = useState(null);
 
   // The classes this teacher can add to. Loaded here rather than passed in,
@@ -60,6 +60,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
         const list = d?.data ?? [];
         setClasses(list);
         setManual(f => ({ ...f, classId: f.classId || list[0]?.id || '' }));
+        setCsv(f => ({ ...f, classId: f.classId || list[0]?.id || '' }));
       })
       .catch(() => setClasses([]))
       .finally(() => setClassesLoading(false));
@@ -71,7 +72,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
       setManual(f => ({ email: '', fullName: '', classId: f.classId || '', courseIds: [] }));
       setInv({ courseIds: [], expiresInDays: 7, emails: '' });
       setUrl(''); setCopied(false);
-      setCsv({ courseId: '', file: null }); setCsvR(null);
+      setCsv(f => ({ courseId: '', classId: f.classId || '', file: null })); setCsvR(null);
     }
   }, [open]);
 
@@ -155,16 +156,37 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   /* CSV submit */
   const submitCSV = async (e) => {
     e.preventDefault(); reset();
-    if (!csv.file)     { setError('Please choose a CSV file'); return; }
-    if (!csv.courseId) { setError('Please select a course'); return; }
+    if (!csv.file) { setError('Please choose a CSV file'); return; }
+    if (!csv.classId && !csv.courseId) {
+      setError('Pick a class, or a course — the students have to be added to something.'); return;
+    }
     setLoad(true);
     try {
-      const result = await importCSV(csv.file, csv.courseId);
+      const result = await importCSV(csv.file, csv.courseId || null, csv.classId || null);
       setCsvR(result);
       onDone?.();
     } catch (err) {
       setError(err.message || 'Import failed');
     } finally { setLoad(false); }
+  };
+
+  /* The sample is generated rather than hosted, so it can never drift from the
+     format the importer actually parses: name, email, phone. */
+  const downloadSample = () => {
+    const csvText = [
+      'name,email,phone',
+      'Zainab Bello,zainab.bello@example.com,+2348012345678',
+      'Ifeanyi Obi,ifeanyi.obi@example.com,+2348023456789',
+      'Halima Yusuf,halima.yusuf@example.com,',
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'akoro-students-sample.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const TAB_STYLE = (active) => ({
@@ -400,6 +422,30 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
         <form onSubmit={submitCSV} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Feedback />
 
+          {/* Same order as Manual: the class is what they join, the course is
+              extra. A register is usually a class register. */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>
+              Add to class
+            </label>
+            <select
+              value={csv.classId}
+              onChange={e => setCsv(f => ({ ...f, classId: e.target.value }))}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 10,
+                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
+                fontFamily: FONT, color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+              }}
+            >
+              <option value="">{classesLoading ? 'Loading classes…' : 'No class'}</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <CourseSelect value={csv.courseId} onChange={v => setCsv(f => ({ ...f, courseId: v }))} />
 
           {/* Drop zone */}
@@ -436,14 +482,28 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           </div>
 
           <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 14px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: INK, marginBottom: 4, fontFamily: FONT }}>
-              CSV format — one student per row:
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: INK, fontFamily: FONT }}>
+                CSV format — one student per row:
+              </div>
+              <button type="button" onClick={downloadSample} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px',
+                borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE,
+                color: AMBER, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                flexShrink: 0,
+              }}>
+                <Download size={12} /> Sample CSV
+              </button>
             </div>
             <code style={{ fontSize: 11, color: MUTED, fontFamily: 'monospace' }}>
               name,email,phone<br />
               Jane Doe,jane@example.com,+2348012345678<br />
               John Smith,john@example.com,
             </code>
+            <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 6, lineHeight: 1.45 }}>
+              Phone is optional. A header row is skipped if it contains “name”, and any extra
+              columns are ignored.
+            </div>
           </div>
 
           {csvResult && (

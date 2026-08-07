@@ -1207,8 +1207,9 @@ router.post("/invite-redeem", authenticateToken, asyncHandler(async (req, res) =
 /**
  * POST /api/profiles/teacher/students/import
  * Bulk CSV import: parse rows, auto-create accounts, enrol in course.
- * Multipart form: csv file + course_id
- * CSV format: name, email, phone, course (last column optional — overrides course_id param)
+ * Multipart form: csv file + optional course_id and/or classroom_id
+ * CSV format: name, email, phone — the header row is skipped if it contains
+ * "name". Extra columns are ignored.
  */
 
 router.post("/teacher/students/import", authenticateToken, requireRole(["instructor", "admin"]), (req, res, next) => {
@@ -1241,6 +1242,32 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
     const header = lines[0].toLowerCase();
     const dataLines = header.includes("name") ? lines.slice(1) : lines;
 
+    // Resolve the class ONCE. This sat inside the per-row loop, re-querying the
+    // same classroom for every line of the CSV — a 200-row register meant 200
+    // identical lookups.
+    let classroom = null;
+    if (classroomId) {
+      const { data: room } = await db.from("classrooms")
+        .select("id, teacher_id, school_id").eq("id", classroomId).maybeSingle();
+      if (room) {
+        let allowed = room.teacher_id === req.user.id || req.user.role === "admin";
+        if (!allowed && room.school_id) {
+          const { data: school } = await db.from("school_profiles")
+            .select("id").eq("admin_user_id", req.user.id).eq("id", room.school_id).maybeSingle();
+          allowed = !!school;
+        }
+        if (!allowed) return res403(res, "You do not teach that class");
+        classroom = room;
+      } else {
+        return res404(res, "Class not found");
+      }
+    } else {
+      const { data: own } = await db.from("classrooms")
+        .select("id").eq("teacher_id", req.user.id)
+        .order("created_at", { ascending: true }).limit(1).maybeSingle();
+      classroom = own ?? null;
+    }
+
     const results = { created: 0, existing: 0, failed: 0, rows: [] };
 
     for (const line of dataLines) {
@@ -1250,30 +1277,6 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
 
       try {
         const { user, isNew, tempPassword } = await findOrCreateStudent(name, email, phone || null);
-
-        // Which class? Named in the request if the importer chose one,
-        // otherwise the teacher's own — but never GUESSED from a school's
-        // classrooms, which carry the school's teacher_id and so matched
-        // nothing here, silently importing every learner into no class at all.
-        let classroom = null;
-        if (classroomId) {
-          const { data: room } = await db.from("classrooms")
-            .select("id, teacher_id, school_id").eq("id", classroomId).maybeSingle();
-          if (room) {
-            let allowed = room.teacher_id === req.user.id || req.user.role === "admin";
-            if (!allowed && room.school_id) {
-              const { data: school } = await db.from("school_profiles")
-                .select("id").eq("admin_user_id", req.user.id).eq("id", room.school_id).maybeSingle();
-              allowed = !!school;
-            }
-            if (allowed) classroom = room;
-          }
-        } else {
-          const { data: own } = await db.from("classrooms")
-            .select("id").eq("teacher_id", req.user.id)
-            .order("created_at", { ascending: true }).limit(1).maybeSingle();
-          classroom = own ?? null;
-        }
 
         if (classroom) {
           await db.from("classroom_students").upsert(
