@@ -10,8 +10,16 @@ export function useBattlesAPI() {
 
   // One creation path for a duel, a handful of learners, or the whole class:
   // the backend picks 1v1 vs classroom from how many targets resolve.
-  const createBattle = (courseId, data) =>
-    apiPost(`/api/battle/courses/${courseId}/battles/invite`, data);
+  // One creator for both kinds; the scope travels in the path. A course battle
+  // takes its questions from that course's bank, a class battle from the
+  // past-questions bank for the subject — the API decides, not the caller.
+  const createBattle = ({ kind, courseId, classId, ...data }) =>
+    kind === 'class'
+      ? apiPost(`/api/battle/classes/${classId}/battles/invite`, data)
+      : apiPost(`/api/battle/courses/${courseId}/battles/invite`, data);
+
+  const getClasses = () => apiGet('/api/battle/my-classes');
+  const getClassRoster = (classId) => apiGet(`/api/battle/classes/${classId}/roster`);
 
   const updateBattle = (id, data) => apiPut(`/api/battle/battles/${id}`, data);
   // Starting is its own endpoint — it queues the worker, it isn't a status write.
@@ -20,5 +28,5 @@ export function useBattlesAPI() {
   const deleteBattle = (id) => apiDelete(`/api/battle/battles/${id}`);
   const cancelBattle = (id) => apiDelete(`/api/battle/battles/${id}?cancel=1`);
 
-  return { getBattles, getRoster, createBattle, updateBattle, startBattle, deleteBattle, cancelBattle };
+  return { getBattles, getRoster, getClasses, getClassRoster, createBattle, updateBattle, startBattle, deleteBattle, cancelBattle };
 }

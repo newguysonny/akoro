@@ -43,16 +43,32 @@ export function parseHandles(typed) {
  */
 export function audienceBody(value) {
   const { mode, classroomId, selected = [], typed = '' } = value;
+  // 'course' is "everyone in whatever scope the caller established" — the whole
+  // course for a course battle, the whole class for a class battle. The scope
+  // itself travels in the URL, not here.
   if (mode === 'course') return { whole_class: true, classroom_id: null, user_ids: [], usernames: [] };
   if (mode === 'class')  return { whole_class: true, classroom_id: classroomId || null, user_ids: [], usernames: [] };
   return { whole_class: false, classroom_id: null, user_ids: selected, usernames: parseHandles(typed) };
 }
 
+/**
+ * `modes` lets a caller narrow the question. Self study asks "which group?" and
+ * needs all three. A battle has already established its scope (this course, or
+ * this class) by the time it asks who plays, so it only needs "everyone in it"
+ * or "these people" — offering "a class" again there would be asking the same
+ * question twice with two different answers.
+ */
 export default function AudiencePicker({
   value, onChange, courseId, courseBound = false, requireAgent = false,
+  modes: modeKeys = ['course', 'class', 'picked'],
+  rosterUrl = null,          // overrides the course roster (e.g. a class roster)
+  allLabel = null,           // what "everyone" means in this scope
 }) {
   const { mode, classroomId, selected = [], typed = '' } = value;
   const set = (patch) => onChange({ ...value, ...patch });
+  const MODE_LIST = MODES
+    .filter((m) => modeKeys.includes(m.key))
+    .map((m) => (m.key === 'course' && allLabel ? { ...m, label: allLabel.label, hint: allLabel.hint } : m));
 
   const [classes, setClasses]   = useState([]);
   const [roster, setRoster]     = useState([]);
@@ -60,17 +76,20 @@ export default function AudiencePicker({
   const [q, setQ]               = useState('');
 
   useEffect(() => {
+    if (!modeKeys.includes('class')) return;
     apiGet('/api/instructor/classrooms')
       .then(d => setClasses(d?.data ?? []))
       .catch(() => setClasses([]));
-  }, []);
+  }, [modeKeys.join(',')]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // The roster follows whichever group is selected, so the count and the list
   // always describe the same people.
   useEffect(() => {
-    const url = mode === 'class' && classroomId
-      ? `/api/instructor/classrooms/${classroomId}/students`
-      : courseId ? `/api/battle/courses/${courseId}/roster` : null;
+    const url = rosterUrl
+      ? rosterUrl
+      : mode === 'class' && classroomId
+        ? `/api/instructor/classrooms/${classroomId}/students`
+        : courseId ? `/api/battle/courses/${courseId}/roster` : null;
     if (!url) { setRoster([]); return; }
     let dead = false;
     setRLoading(true);
@@ -79,7 +98,7 @@ export default function AudiencePicker({
       .catch(() => { if (!dead) setRoster([]); })
       .finally(() => { if (!dead) setRLoading(false); });
     return () => { dead = true; };
-  }, [mode, classroomId, courseId]);
+  }, [mode, classroomId, courseId, rosterUrl]);
 
   const eligible = requireAgent ? roster.filter(r => r.has_agent) : roster;
   const chosenClass = classes.find(c => c.id === classroomId);
@@ -100,7 +119,7 @@ export default function AudiencePicker({
       <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Send to *</div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {MODES.map(({ key, label, hint, Icon }) => {
+        {MODE_LIST.map(({ key, label, hint, Icon }) => {
           const on = mode === key;
           return (
             <button key={key} type="button" onClick={() => set({ mode: key })} style={{

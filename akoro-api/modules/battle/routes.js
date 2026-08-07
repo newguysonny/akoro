@@ -481,11 +481,27 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
  * actually supply if the school hasn't set its curriculum up yet.
  */
 router.get("/my-classes", authenticateToken, asyncHandler(async (req, res) => {
+  // Learners get the classes they are IN; teachers and school admins get the
+  // ones they run. Same shape either way, so one form serves all three apps —
+  // and unioned rather than branched on role, so a head of department who both
+  // teaches and administers sees all of theirs.
   const { data: memberships } = await db.from("classroom_students")
     .select("classroom_id, classrooms!inner(id, name, school_id)")
     .eq("user_id", req.user.id).eq("status", "active");
 
-  const rooms = (memberships ?? []).map((m) => m.classrooms).filter(Boolean);
+  const byId = new Map();
+  for (const m of (memberships ?? [])) if (m.classrooms) byId.set(m.classrooms.id, m.classrooms);
+
+  const { data: school } = await db.from("school_profiles")
+    .select("id").eq("admin_user_id", req.user.id).limit(1).maybeSingle();
+
+  let q = db.from("classrooms").select("id, name, school_id");
+  q = school ? q.or(`teacher_id.eq.${req.user.id},school_id.eq.${school.id}`)
+             : q.eq("teacher_id", req.user.id);
+  const { data: taught } = await q;
+  for (const r of (taught ?? [])) byId.set(r.id, r);
+
+  const rooms = [...byId.values()];
   if (!rooms.length) return res200(res, []);
 
   const out = [];
@@ -522,8 +538,8 @@ async function subjectsWithQuestions() {
 
 /** GET /api/battle/classes/:id/roster — classmates who can battle. */
 router.get("/classes/:id/roster", authenticateToken, asyncHandler(async (req, res) => {
-  const mine = await inClassroom(req.user.id, req.params.id);
-  if (!mine) return res403(res, "You are not in this class");
+  if (!(await classroomRole(req.user.id, req.user.role, req.params.id)))
+    return res403(res, "You don't have access to this class");
 
   const { data: rows } = await db.from("classroom_students")
     .select("user_id, users!inner(id, username, full_name, avatar_url, avatar_emoji)")
@@ -548,6 +564,32 @@ async function inClassroom(userId, classroomId) {
   const { data } = await db.from("classroom_students")
     .select("id").eq("user_id", userId).eq("classroom_id", classroomId).eq("status", "active").maybeSingle();
   return !!data;
+}
+
+/**
+ * canUseClassroom — who may run a battle for a class.
+ *
+ * Membership is the learner's answer, and it is the wrong question for a
+ * teacher: the person most likely to set a class battle is precisely the one
+ * who is not IN the class. So three ways in — you're a member, you teach it, or
+ * you administer the school that owns it — and the caller gets told which,
+ * because a teacher joins the battle as a teacher, not as a competitor.
+ */
+async function classroomRole(userId, role, classroomId) {
+  if (await inClassroom(userId, classroomId)) return "member";
+  if (role === "admin") return "teacher";
+
+  const { data: room } = await db.from("classrooms")
+    .select("id, teacher_id, school_id").eq("id", classroomId).maybeSingle();
+  if (!room) return null;
+  if (room.teacher_id === userId) return "teacher";
+
+  if (room.school_id) {
+    const { data: school } = await db.from("school_profiles")
+      .select("id").eq("admin_user_id", userId).eq("id", room.school_id).maybeSingle();
+    if (school) return "teacher";
+  }
+  return null;
 }
 
 /**
@@ -607,7 +649,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 
   if (!title)   return res400(res, "title is required");
   if (!subject) return res400(res, "Pick a subject — a class battle draws its questions from one");
-  if (!(await inClassroom(req.user.id, classroomId))) return res403(res, "You are not in this class");
+  const myRole = await classroomRole(req.user.id, req.user.role, classroomId);
+  if (!myRole) return res403(res, "You don't have access to this class");
 
   const myAgent = await resolveAgent(req.user.id);
   if (!myAgent) return res400(res, "Create your agent first");
@@ -650,7 +693,11 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   if (!opponents.length) return res400(res, "None of those classmates can battle yet — they need to be in this class and have an agent.");
 
   // ── Create ───────────────────────────────────────────────────────────────
-  const isDuel      = opponents.length === 1;
+  // One opponent is a duel only between CLASSMATES. A teacher picking one
+  // learner is setting them work, not challenging them to a fight — so it stays
+  // a classroom battle that starts on its own rather than an invitation the
+  // teacher would have to wait for.
+  const isDuel      = myRole === "member" && opponents.length === 1;
   const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
 
@@ -680,7 +727,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 
   await db.from("battle_participants").insert({
     battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id,
-    role: "creator", joined_at: now(),
+    // A teacher runs the battle; a classmate competes in it.
+    role: myRole === "teacher" ? "teacher" : "creator", joined_at: now(),
   });
   for (const o of opponents) {
     await db.from("battle_participants").upsert({

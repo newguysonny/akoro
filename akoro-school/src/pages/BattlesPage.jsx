@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Search, Trash2, Pencil } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, StatusPill, Badge, Toast } from '../components/Primitives.jsx';
+import { apiGet } from '../services/api.js';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
@@ -14,6 +15,8 @@ import { confirmDialog } from '../components/ConfirmHost.jsx';
 /* ── New / Edit Battle Modal ────────────────────────────────────────────── */
 const BLANK = {
   courseId: '', title: '', topic: '', description: '',
+  kind: 'course',            // 'course' | 'class'
+  classId: '', subject: '',  // class battles only
   audience: BLANK_AUDIENCE,
   totalQuestions: '15', duration: '15', xpPrize: '200',
   difficulty: 'intermediate', scheduledAt: '', expiresInMinutes: '60',
@@ -21,9 +24,25 @@ const BLANK = {
 
 function BattleModal({ open, onClose, onSubmit, courses, editing }) {
   const [form, setForm]     = useState(BLANK);
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Classes carry their own subjects, which is what a class battle draws
+  // questions from — so one fetch answers both "which class?" and "which
+  // subject?".
+  useEffect(() => {
+    if (!open) return;
+    setClassesLoading(true);
+    apiGet('/api/battle/my-classes')
+      .then(d => setClasses(d?.data ?? []))
+      .catch(() => setClasses([]))
+      .finally(() => setClassesLoading(false));
+  }, [open]);
+
+  const chosenClass = classes.find(c => c.id === form.classId);
 
   // Reset each time the modal opens, seeded from the battle being edited.
   useEffect(() => {
@@ -47,11 +66,29 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
     }
   }, [open, editing, courses]);
 
+  useEffect(() => {
+    if (!classes.length) return;
+    setForm(f => {
+      if (f.classId && classes.some(c => c.id === f.classId)) return f;
+      const first = classes[0];
+      return { ...f, classId: first.id, subject: first.subjects?.[0] ?? '' };
+    });
+  }, [classes]);
+
+  useEffect(() => {
+    if (!chosenClass) return;
+    setForm(f => (chosenClass.subjects?.includes(f.subject)
+      ? f : { ...f, subject: chosenClass.subjects?.[0] ?? '' }));
+  }, [chosenClass]);   // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.courseId) return setError('Pick a course.');
+    if (!editing && form.kind === 'class') {
+      if (!form.classId) return setError('Pick a class.');
+      if (!form.subject) return setError('Pick a subject — a class battle draws its questions from one.');
+    } else if (!form.courseId) return setError('Pick a course.');
     if (!form.title.trim()) return setError('Give the battle a title.');
     if (!editing) {
       const aud = form.audience;
@@ -74,24 +111,75 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
   return (
     <Modal open={open} onClose={onClose} title={editing ? 'Edit Battle' : 'Create Battle'} width={540}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Sel label="Course *" value={form.courseId} onChange={e => setField('courseId', e.target.value)} disabled={!!editing}>
-          <option value="">Select a course…</option>
-          {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
-        </Sel>
+        {/* Battle type first: it decides where the questions come from, and
+            therefore what every field below means. A course battle draws on
+            that course's question bank; a class battle draws on the
+            past-questions bank for a subject the class studies. */}
+        {!editing && (
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Battle type *</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[
+                { key: 'course', label: '📘 Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
+                { key: 'class',  label: '🏫 Class battle',  hint: classesLoading ? 'Loading…' : classes.length ? 'From a class subject' : 'No classes yet', off: !classesLoading && !classes.length },
+              ].map(o => (
+                <button key={o.key} type="button" disabled={o.off}
+                  onClick={() => setField('kind', o.key)}
+                  style={{
+                    flex: 1, padding: '9px 8px', borderRadius: 10, textAlign: 'left',
+                    border: `1.5px solid ${form.kind === o.key ? AMBER : BORDER}`,
+                    background: form.kind === o.key ? `${AMBER}12` : WHITE,
+                    cursor: o.off ? 'not-allowed' : 'pointer', opacity: o.off ? 0.5 : 1,
+                    fontFamily: FONT,
+                  }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.kind === o.key ? AMBER : INK }}>{o.label}</div>
+                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {form.kind === 'course' || editing ? (
+          <Sel label="Course *" value={form.courseId} onChange={e => setField('courseId', e.target.value)} disabled={!!editing}>
+            <option value="">Select a course…</option>
+            {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
+          </Sel>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Sel label="Class *" value={form.classId} onChange={e => setField('classId', e.target.value)}>
+              {classesLoading && <option value="">Loading classes…</option>}
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.student_count ? ` — ${c.student_count} learners` : ''}
+                </option>
+              ))}
+            </Sel>
+            <Sel label="Subject *" value={form.subject} onChange={e => setField('subject', e.target.value)}>
+              {(chosenClass?.subjects ?? []).length === 0 && <option value="">No subjects set</option>}
+              {(chosenClass?.subjects ?? []).map(sub => <option key={sub} value={sub}>{sub}</option>)}
+            </Sel>
+          </div>
+        )}
 
         <Inp label="Battle Title *" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="e.g. Photosynthesis Showdown" />
         <Inp label="Topic" value={form.topic} onChange={e => setField('topic', e.target.value)} placeholder="e.g. Photosynthesis" />
         <Txa label="Description" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="What will learners be tested on?" rows={2} />
 
-        {/* A battle lives in a course (its questions come from that course's bank),
-            so a class member who isn't enrolled can't take part — courseBound
-            makes the picker say that rather than let the count surprise you. */}
+        {/* The scope is already settled above, so this only asks WHO within it —
+            offering "a class" again here would be the same question with two
+            possible answers. */}
         {!editing && (
           <AudiencePicker
             value={form.audience}
             onChange={(v) => setField('audience', v)}
-            courseId={form.courseId}
-            courseBound
+            modes={['course', 'picked']}
+            allLabel={form.kind === 'class'
+              ? { label: 'Everyone in the class', hint: 'All active members' }
+              : { label: 'Everyone on the course', hint: 'All active enrolments' }}
+            rosterUrl={form.kind === 'class'
+              ? (form.classId ? `/api/battle/classes/${form.classId}/roster` : null)
+              : (form.courseId ? `/api/battle/courses/${form.courseId}/roster` : null)}
             requireAgent
           />
         )}
@@ -115,7 +203,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
-          <Btn type="submit" disabled={loading || !form.title.trim() || !form.courseId}>
+          <Btn type="submit" disabled={loading || !form.title.trim() || (form.kind === 'course' && !form.courseId)}>
             {loading ? 'Saving…' : editing ? 'Save changes' : 'Create Battle'}
           </Btn>
         </div>
@@ -314,7 +402,9 @@ export default function BattlesPage() {
       });
       showToast('Battle updated');
     } else {
-      const res = await createBattle(form.courseId, {
+      const res = await createBattle({
+        kind: form.kind, courseId: form.courseId, classId: form.classId,
+        ...(form.kind === 'class' ? { subject: form.subject } : {}),
         title: form.title.trim(),
         description: form.description || null,
         topic: form.topic || null,
@@ -332,6 +422,7 @@ export default function BattlesPage() {
       // Name who missed out. "2 skipped" tells a teacher nothing they can act on.
       const bits = [];
       if (d.skipped?.not_enrolled?.length) bits.push(`not on this course: ${d.skipped.not_enrolled.join(', ')}`);
+      if (d.skipped?.not_in_class?.length)  bits.push(`not in this class: ${d.skipped.not_in_class.join(', ')}`);
       if (d.skipped?.no_agent?.length)     bits.push(`no agent yet: ${d.skipped.no_agent.join(', ')}`);
       showToast(`Battle created — ${d.invited} challenged${bits.length ? `. Left out — ${bits.join('; ')}` : ''}`);
     }
