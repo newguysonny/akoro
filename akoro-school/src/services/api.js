@@ -151,13 +151,18 @@ export function withAuth(opts = {}) {
 
 /** fetch + one transparent refresh-and-retry on 401. */
 async function authedFetch(url, opts) {
-  const res = await fetch(url, withAuth(opts));
+  // A dead network throws here rather than answering, so translate it once —
+  // otherwise every caller in the app shows the browser's "Failed to fetch".
+  let res;
+  try { res = await fetch(url, withAuth(opts)); }
+  catch (e) { throw networkError(e, opts?.method || 'GET', String(url).replace(API, '')); }
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
   const ok = await refreshSession();
   if (!ok) { endSession(); return res; }
-  return fetch(url, withAuth(opts));
+  try { return await fetch(url, withAuth(opts)); }
+  catch (e) { throw networkError(e, opts?.method || 'GET', String(url).replace(API, '')); }
 }
 
 
@@ -176,6 +181,67 @@ function detectPortal() {
 const PORTAL = detectPortal();
 export const getPortal = () => PORTAL;
 
+/* ── Errors users can act on ─────────────────────────────────────────────
+   Every call site shows err.message somewhere — a toast, a form, a page. So
+   what we throw IS the user-facing copy, and "POST /api/self-study -> 500" is
+   not copy, it is a stack trace with a URL in it.
+   apiError() keeps the server's own message when there is one (those are
+   written for humans: "Opponent has no agent yet"), and otherwise turns the
+   status into a sentence that says what happened and what to do. The technical
+   detail stays on the error object — err.status, err.path, err.method — so
+   logging and branching lose nothing.                                       */
+const STATUS_COPY = {
+  400: 'Something in that request wasn\'t right. Check the details and try again.',
+  401: 'Your session has expired. Please sign in again.',
+  403: "You don't have permission to do that.",
+  404: "We couldn't find that — it may have been deleted.",
+  409: 'That conflicts with something that already exists.',
+  413: 'That file is too large.',
+  422: 'Some of those details are not valid. Please check them.',
+  429: "That's a lot of requests — please wait a moment and try again.",
+  500: 'Something went wrong on our side. Please try again.',
+  502: 'Akoro is having trouble right now. Please try again in a moment.',
+  503: 'Akoro is temporarily unavailable. Please try again in a moment.',
+  504: 'That took too long to respond. Please try again.',
+};
+
+async function apiError(res, method, path) {
+  let serverMsg = '';
+  try {
+    const j = await res.json();
+    serverMsg = j.error || j.message || '';
+  } catch { /* HTML error page or empty body — fall through to the status copy */ }
+
+  const err = new Error(
+    serverMsg ||
+    STATUS_COPY[res.status] ||
+    (res.status >= 500
+      ? 'Something went wrong on our side. Please try again.'
+      : 'That did not work. Please try again.')
+  );
+  err.status = res.status;
+  err.path   = path;
+  err.method = method;
+  err.detail = `${method} ${path} -> ${res.status}`;   // for logs, never for users
+  return err;
+}
+
+/* A thrown fetch means the request never reached us — offline, DNS, CORS, a
+   dead API. "Failed to fetch" tells the user nothing, so name the likely cause
+   and mark it so callers can offer Retry rather than treating it as a bug. */
+function networkError(cause, method, path) {
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const err = new Error(offline
+    ? "You're offline. Reconnect and try again."
+    : "Couldn't reach Akoro. Check your connection and try again.");
+  err.isNetwork = true;
+  err.offline   = offline;
+  err.path      = path;
+  err.method    = method;
+  err.detail    = cause?.message || 'network error';
+  return err;
+}
+
 const BASE_OPTS = {
   credentials: 'include',                 // send HttpOnly auth cookies
   headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL },
@@ -183,11 +249,7 @@ const BASE_OPTS = {
 
 export async function apiGet(path) {
   const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
-  if (!r.ok) {
-    let msg = `GET ${path} -> ${r.status}`;
-    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!r.ok) throw await apiError(r, 'GET', path);
   return r.json();
 }
 
@@ -197,11 +259,7 @@ export async function apiPost(path, body) {
     method: 'POST',
     body:   JSON.stringify(body),
   });
-  if (!r.ok) {
-    let msg = `POST ${path} -> ${r.status}`;
-    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!r.ok) throw await apiError(r, 'POST', path);
   return r.json();
 }
 
@@ -211,11 +269,7 @@ export async function apiPut(path, body) {
     method: 'PUT',
     body:   JSON.stringify(body),
   });
-  if (!r.ok) {
-    let msg = `PUT ${path} -> ${r.status}`;
-    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!r.ok) throw await apiError(r, 'PUT', path);
   return r.json();
 }
 
@@ -225,20 +279,12 @@ export async function apiPatch(path, body) {
     method: 'PATCH',
     body:   JSON.stringify(body),
   });
-  if (!r.ok) {
-    let msg = `PATCH ${path} -> ${r.status}`;
-    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!r.ok) throw await apiError(r, 'PATCH', path);
   return r.json();
 }
 
 export async function apiDelete(path) {
   const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'DELETE' });
-  if (!r.ok) {
-    let msg = `DELETE ${path} -> ${r.status}`;
-    try { const j = await r.json(); msg = j.error || j.message || msg; } catch {}
-    throw new Error(msg);
-  }
+  if (!r.ok) throw await apiError(r, 'DELETE', path);
   return r.json();
 }

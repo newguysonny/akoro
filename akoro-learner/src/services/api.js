@@ -64,9 +64,52 @@ const BASE_OPTS = {
   headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
 };
 
+/* ── Errors users can act on ─────────────────────────────────────────────
+   These messages are shown to learners — in toasts, forms and sheets — so what
+   we throw IS the copy. `GET /api/x -> 500` is not copy.
+
+   It also DISCARDED the server's own message, which is the more serious half:
+   the API writes messages meant for people ("Opponent has no agent yet"), and
+   throwing away the body meant no caller could ever read, match or show one.  */
+const STATUS_COPY = {
+  400: "Something in that wasn't right. Check it and try again.",
+  401: 'Please sign in again to continue.',
+  403: "You don't have permission to do that.",
+  404: "We couldn't find that — it may have been removed.",
+  409: 'That clashes with something that already exists.',
+  413: 'That file is too large.',
+  422: 'Some of those details are not valid. Please check them.',
+  429: "That's a lot at once — wait a moment and try again.",
+  500: 'Something went wrong on our side. Please try again.',
+  502: 'Akoro is having trouble right now. Try again in a moment.',
+  503: 'Akoro is temporarily unavailable. Try again in a moment.',
+  504: 'That took too long. Please try again.',
+};
+
+async function apiError(res, method, path) {
+  let serverMsg = '';
+  try { const j = await res.json(); serverMsg = j.error || j.message || ''; } catch {}
+  const err = new Error(
+    serverMsg ||
+    STATUS_COPY[res.status] ||
+    (res.status >= 500 ? 'Something went wrong on our side. Please try again.'
+                       : 'That did not work. Please try again.')
+  );
+  err.status = res.status;
+  err.path   = path;
+  err.method = method;
+  err.detail = `${method} ${path} -> ${res.status}`;   // logs only, never shown
+  return err;
+}
+
 // A thrown fetch (no HTTP response) or a browser marked offline = network error,
 // as opposed to the server responding with a 4xx/5xx.
-const isNetworkError = (err) => (typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError';
+// `status` is only set when the server actually answered, so its presence is
+// what separates "the API said no" from "the request never arrived". Without
+// this check a 500 would be served from the offline cache, or a rejected write
+// would be queued for replay forever.
+const isNetworkError = (err) =>
+  !err?.status && ((typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError' || err?.isNetwork === true);
 
 // Tag a payload served from the offline cache so callers can show a "saved"
 // hint if they want; non-enumerable so it never changes the data's shape.
@@ -78,7 +121,7 @@ function markOffline(data) {
 export async function apiGet(path, { cache = true } = {}) {
   try {
     const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
-    if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+    if (!r.ok) throw await apiError(r, 'GET', path);
     const json = await r.json();
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
     return json;
@@ -102,7 +145,7 @@ async function apiSend(method, path, body, { queueOffline = false } = {}) {
       method,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}`);
+    if (!r.ok) throw await apiError(r, method, path);
     return r.json();
   } catch (err) {
     if (queueOffline && isNetworkError(err)) {
@@ -178,7 +221,14 @@ export async function streamPost(path, body, { onDelta, onDone } = {}) {
     headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' },
     body:    JSON.stringify(body),
   });
-  if (!r.ok || !r.body) throw new Error(`STREAM ${path} -> ${r.status}`);
+  if (!r.ok) throw await apiError(r, 'POST', path);
+  // A 200 with no body means the stream died before it began — the caller's
+  // fallback needs a real error, not a silent hang.
+  if (!r.body) {
+    const err = new Error('The reply stopped before it started. Please try again.');
+    err.status = r.status; err.detail = `STREAM ${path} -> no body`;
+    throw err;
+  }
 
   const reader  = r.body.getReader();
   const decoder = new TextDecoder();
