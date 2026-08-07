@@ -6,6 +6,7 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
+import { confirmDialog } from '../common/ConfirmHost.jsx';
 import { formatTaskOutputs } from '../../utils/formatTaskOutput.js';
 import AgentStatsTab from './AgentStatsTab.jsx';
 
@@ -71,7 +72,8 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [tPriority,  setTPriority]  = useState("medium");
   const [tDueAt,     setTDueAt]     = useState("");     // datetime-local wall-clock
   const [tEditing,   setTEditing]   = useState(null);   // task being edited, or null
-  const [tError,     setTError]     = useState("");
+  const [tError,     setTError]     = useState("");   // inside the task sheet
+  const [listError,  setListError]  = useState("");   // on the task list itself
   const [needsAgent, setNeedsAgent] = useState(false);
   const feedRef = useRef(null);
 
@@ -349,8 +351,14 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   };
 
   const removeTask=async(tk)=>{
-    if(!window.confirm(t('agent.confirm_delete')?.includes('agent.') ? `Delete “${tk.title}”?` : t('agent.confirm_delete'))) return;
-    await deleteTask(tk.id);
+    setListError("");
+    const okToDelete = await confirmDialog({
+      title: 'Delete this task?',
+      message: `“${tk.title}” and anything your agent produced for it will be removed.`,
+    });
+    if(!okToDelete) return;
+    try { await deleteTask(tk.id); }
+    catch(e){ setListError(e?.message||"Couldn't delete that task."); }
   };
 
   const addTask=async()=>{
@@ -479,10 +487,16 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>
           </div>
+          {listError&&(
+            <div style={{ margin:"0 16px 8px",padding:"9px 12px",borderRadius:12,background:"rgba(239,68,68,.10)",border:`1px solid ${RED}35`,display:"flex",alignItems:"center",gap:8 }}>
+              <span style={{ flex:1,fontSize:11.5,fontWeight:700,color:RED }}>{listError}</span>
+              <button onClick={()=>setListError("")} style={{ border:"none",background:"transparent",color:RED,cursor:"pointer",fontSize:14,fontWeight:900 }}>×</button>
+            </div>
+          )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
             {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
               <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
-                <button onClick={()=>toggleTask(tk.id)} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                <button onClick={()=>toggleTask(tk.id).catch(e=>setListError(e?.message||"Couldn't update that task."))} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                   {tk.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>

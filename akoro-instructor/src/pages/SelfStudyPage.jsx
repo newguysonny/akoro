@@ -18,6 +18,7 @@ import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitive
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const SUBJECTS = [
   'Mathematics', 'English Language', 'Basic Science', 'Basic Technology',
@@ -526,7 +527,7 @@ export default function SelfStudyPage() {
   };
 
   const handleDelete = async (a) => {
-    if (!window.confirm(`Delete “${a.title}”? Learners keep any session they already started.`)) return;
+    if (!await confirmDialog(`Delete “${a.title}”? Learners keep any session they already started.`)) return;
     const before = items;
     setItems(is => is.filter(x => x.id !== a.id));
     try { await apiDelete(`/api/self-study/${a.id}`); showToast('Assignment deleted'); }

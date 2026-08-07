@@ -8,6 +8,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const DEFAULT_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -103,7 +104,7 @@ export default function WebsiteTemplatesPage() {
     finally { setBusyId(null); }
   };
   const remove = async (id) => {
-    if (!window.confirm('Delete this template?')) return;
+    if (!await confirmDialog('Delete this template?')) return;
     setBusyId(id);
     try { await apiDelete(`/api/school/website/templates/${id}`); setTemplates((p) => p.filter((t) => t.id !== id)); showToast('Deleted'); }
     catch (e) { showToast(e.message || 'Could not delete'); }

@@ -4,6 +4,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, ACCENT, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
 const EMPTY = { name: '', credits: 1000, price_usd: 0.65, min_order_qty: 1, billing_period: 'one_time', description: '', image_url: '' };
@@ -26,7 +27,7 @@ export default function VoucherProductsPage() {
     catch (e) { setErr(e.message || 'Could not update'); }
   };
   const remove = async (p) => {
-    if (!window.confirm(`Delete "${p.name}"? This only works if it has never been ordered.`)) return;
+    if (!await confirmDialog(`Delete "${p.name}"? This only works if it has never been ordered.`)) return;
     try { await apiDelete(`/api/vouchers/startups/${current.id}/products/${p.id}`); load(); }
     catch (e) { setErr(e.message || 'Could not delete — it may already have order history. Archive it instead.'); }
   };

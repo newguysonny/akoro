@@ -13,6 +13,7 @@ import { apiGet, apiPost, apiPatch } from '../services/api.js';
 import { uploadFile } from '../services/uploadApi.js';
 import { Link } from 'react-router-dom';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 export default function WebsiteAiSyncPage() {
   const [plan, setPlan] = useState(null);
@@ -68,7 +69,7 @@ export default function WebsiteAiSyncPage() {
   };
 
   const revert = async () => {
-    if (!window.confirm('Restore every page to how it was before the AI sync? The AI copy will be discarded.')) return;
+    if (!await confirmDialog({ title: 'Undo the AI sync?', message: 'Every page goes back to how it was before the sync ran.', detail: 'The copy the AI wrote is discarded and cannot be recovered.', confirmLabel: 'Restore pages' })) return;
     setReverting(true); setNote('');
     try {
       const r = await apiPost('/api/school/website/ai-sync/revert', {});

@@ -107,16 +107,17 @@ export default function NotificationsPage() {
   // ── Web Push (PWA) opt-in ──────────────────────────────────────────────────
   const [push, setPush] = useState({ supported: false, subscribed: false, permission: 'default' });
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState('');
   useEffect(() => { if (pushSupported()) getPushStatus().then(setPush); }, []);
 
   const togglePush = async () => {
-    setPushBusy(true);
+    setPushBusy(true); setPushError('');
     try {
       if (push.subscribed) { await disablePush(); }
       else { await enablePush(); }
       setPush(await getPushStatus());
     } catch (e) {
-      alert(e?.message || 'Could not update push notifications.');
+      setPushError(e?.message || 'Could not update push notifications.');
     } finally { setPushBusy(false); }
   };
 
@@ -207,6 +208,11 @@ export default function NotificationsPage() {
               style={{ flexShrink: 0, background: push.subscribed ? 'transparent' : BRAND, color: push.subscribed ? BRAND : '#fff', border: push.subscribed ? `1px solid ${BRAND}` : 'none', borderRadius: 100, padding: '7px 14px', cursor: pushBusy ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 800, fontFamily: "'Nunito',sans-serif" }}>
               {pushBusy ? '…' : push.subscribed ? 'Turn off' : 'Turn on'}
             </button>
+          </div>
+        )}
+        {pushError && (
+          <div style={{ marginTop: 12, padding: '10px 12px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 12, fontSize: 11.5, color: '#991B1B', fontWeight: 700, lineHeight: 1.45 }}>
+            {pushError}
           </div>
         )}
         {push.supported && push.permission === 'denied' && (

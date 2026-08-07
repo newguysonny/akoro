@@ -12,6 +12,7 @@ import { PageLayout } from '../../../components/Layout.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 import {
   BASE, GENERIC_STATUS_OPTS, STATUS_PILL, downloadBlob, csvCell, openPrintTable,
   ModalShell, th, td, iconBtn, selStyle, toolBtn, toastEl,
@@ -90,13 +91,13 @@ export function AcademicLevelsPage() {
   const toggleAll = (on) => setSelected((prev) => { const next = { ...prev }; pageRows.forEach((r) => { next[r.id] = on; }); return next; });
 
   const remove = async (r) => {
-    if (!window.confirm(`Remove "${r.name}"? Classes under it will keep their data but lose the level link.`)) return;
+    if (!await confirmDialog(`Remove "${r.name}"? Classes under it will keep their data but lose the level link.`)) return;
     setBusyId(r.id);
     try { await apiDelete(`${BASE}/academic-levels/${r.id}`); showToast('Removed'); load(); }
     catch (e) { showToast(e.message || 'Could not remove'); } finally { setBusyId(null); }
   };
   const bulkDelete = async () => {
-    if (!selectedIds.length || !window.confirm(`Delete ${selectedIds.length} selected level(s)?`)) return;
+    if (!selectedIds.length || !await confirmDialog(`Delete ${selectedIds.length} selected level(s)?`)) return;
     try { await Promise.all(selectedIds.map((id) => apiDelete(`${BASE}/academic-levels/${id}`))); showToast(`Deleted ${selectedIds.length} level(s)`); load(); }
     catch (e) { showToast(e.message || 'Bulk delete failed'); }
   };

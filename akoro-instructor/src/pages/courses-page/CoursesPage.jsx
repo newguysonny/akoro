@@ -13,6 +13,7 @@ import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, F
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
 import { ScheduleSessionModal, EditCourseModal, LEARNER_URL, CourseCard, SessionRow } from './parts.jsx';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 export default function CoursesPage() {
   const { getCourses, createCourse, updateCourse, deleteCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
@@ -139,7 +140,7 @@ export default function CoursesPage() {
   };
 
   const handleDeleteCourse = async (course) => {
-    if (!window.confirm(`Delete "${course.title}"? This removes its sessions and enrollments and cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete "${course.title}"? This removes its sessions and enrollments and cannot be undone.`)) return;
     try {
       await deleteCourse(course.id);
       setCourses(cs => cs.filter(c => c.id !== course.id));

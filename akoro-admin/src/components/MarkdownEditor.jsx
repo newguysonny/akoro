@@ -6,7 +6,7 @@
  */
 import { useState, useRef } from 'react';
 import { Bold, Italic, Heading, List, Quote, Link2, Code, Image as ImageIcon, Eye, Pencil } from 'lucide-react';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, RED, FONT } from '../constants.js';
 
 /* ── Inline markdown → HTML (shared shape with the reader) ─────────────────── */
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -75,6 +75,7 @@ function Preview({ md }) {
 export default function MarkdownEditor({ value, onChange, minHeight = 320, onUpload }) {
   const [tab, setTab] = useState('write');   // write | preview
   const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
   const ref = useRef(null);
   const fileRef = useRef(null);
 
@@ -120,9 +121,9 @@ export default function MarkdownEditor({ value, onChange, minHeight = 320, onUpl
   const onFilePicked = async (e) => {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
-    setUploading(true);
+    setUploading(true); setUploadErr('');
     try { const url = await onUpload(file); if (url) insertImageMd(url, ''); }
-    catch (err) { window.alert(err.message || 'Upload failed'); }
+    catch (err) { setUploadErr(err.message || "That image couldn't be uploaded."); }
     finally { setUploading(false); }
   };
 
@@ -143,6 +144,12 @@ export default function MarkdownEditor({ value, onChange, minHeight = 320, onUpl
         {tbtn(insertLink, Link2, 'Link')}
         {tbtn(onImageClick, ImageIcon, onUpload ? 'Upload image' : 'Image URL')}
         {uploading && <span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER }}>Uploading…</span>}
+        {uploadErr && (
+          <span onClick={() => setUploadErr('')} title="Dismiss"
+            style={{ fontSize: 11.5, fontWeight: 700, color: RED, cursor: 'pointer' }}>
+            {uploadErr} ×
+          </span>
+        )}
         <input ref={fileRef} type="file" accept="image/*" onChange={onFilePicked} style={{ display: 'none' }} />
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 4, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 2 }}>

@@ -14,6 +14,7 @@ import BackButton from '../../components/BackButton.jsx';
 import { inputStyle } from '../../components/mgmt/ResourcePage.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const BASE = '/api/school/mgmt';
 const CATEGORIES = [
@@ -113,7 +114,7 @@ export function DocumentTemplatesPage() {
       });
   };
   const remove = async (t) => {
-    if (!window.confirm(`Delete "${t.name}"?`)) return;
+    if (!await confirmDialog(`Delete "${t.name}"?`)) return;
     try { await apiDelete(`${BASE}/${t.kind === 'cert' ? 'certificate-templates' : 'document-templates'}/${t.id}`); showToast('Deleted'); load(); }
     catch (e) { showToast(e.message); }
   };

@@ -6,6 +6,7 @@ import { ThemeProvider }           from './contexts/ThemeContext.jsx';
 import { LanguageProvider }        from './contexts/LanguageContext.jsx';
 import { CartProvider }            from './contexts/CartContext.jsx';
 import ErrorBoundary    from './components/common/ErrorBoundary.jsx';
+import ConfirmHost      from './components/common/ConfirmHost.jsx';
 import OfflineBanner     from './components/common/OfflineBanner.jsx';
 import UpdatePrompt      from './components/common/UpdatePrompt.jsx';
 
@@ -148,6 +149,8 @@ export default function App() {
               <BrowserRouter>
                 <AppRoutes />
                 <OfflineBanner />
+                {/* One host for every confirmDialog() call in the app. */}
+                <ConfirmHost />
                 <UpdatePrompt />
               </BrowserRouter>
             </CartProvider>

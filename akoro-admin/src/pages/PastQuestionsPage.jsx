@@ -21,6 +21,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Inp, Sel, Txa, Modal, Toast, Badge, Skeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const STATUS_COLOR = { draft: MUTED, review: AMBER, published: GREEN };
 const DIFFICULTY = ['', 'easy', 'medium', 'hard'];
@@ -305,7 +306,7 @@ function QuestionRow({ q, passage, onChanged, onToast }) {
   };
 
   const del = async () => {
-    if (!window.confirm(`Delete question ${q.number}? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete question ${q.number}? This cannot be undone.`)) return;
     try { await apiDelete(`/api/past-questions/questions/${q.id}`); onToast('Deleted'); onChanged(); }
     catch (e) { onToast(e.message || 'Could not delete', 'error'); }
   };

@@ -4,6 +4,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, AMBER, ACCENT, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const STATUS_COLOR = { delivered: GREEN, failed: RED, pending: AMBER, sending: AMBER };
 
@@ -30,7 +31,7 @@ export default function WebhooksPage() {
     finally { setBusy(false); }
   };
   const rotate = async () => {
-    if (!window.confirm('Rotate the signing secret? Deliveries will be signed with the new secret immediately — update your server first or verification will start failing.')) return;
+    if (!await confirmDialog({ title: 'Rotate the signing secret?', message: 'Deliveries are signed with the new secret immediately.', detail: 'Update your server with the new secret first, or signature verification will start failing on the next delivery.', confirmLabel: 'Rotate secret' })) return;
     try { await apiPost(`/api/vouchers/startups/${current.id}/webhooks/rotate-secret`, {}); flash('Signing secret rotated.'); load(); }
     catch (e) { flash(e.message || 'Could not rotate'); }
   };

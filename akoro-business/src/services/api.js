@@ -45,6 +45,7 @@ function endSession() {
 /** fetch + one transparent refresh-and-retry on 401. */
 async function authedFetch(url, opts) {
   const res = await fetch(url, opts);
+  reportConnection(true);
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
@@ -61,6 +62,25 @@ if (!import.meta.env.VITE_API_URL) {
   console.error(`[akoro-business] VITE_API_URL is not set — falling back to ${API}. Set it in the Vercel project and REDEPLOY.`);
 }
 
+/* ── Connection state ────────────────────────────────────────────────────
+   Reads that pages choose to swallow still tell us something: whether the API
+   is reachable at all. Publishing that here lets one banner explain an outage
+   that would otherwise render as "you have nothing". */
+const connListeners = new Set();
+let connOk = true;
+
+export function onConnectionChange(fn) {
+  connListeners.add(fn);
+  fn({ ok: connOk, offline: typeof navigator !== 'undefined' && navigator.onLine === false });
+  return () => connListeners.delete(fn);
+}
+
+function reportConnection(ok, offline = false) {
+  if (ok === connOk) return;              // only announce transitions
+  connOk = ok;
+  connListeners.forEach((fn) => { try { fn({ ok, offline }); } catch { /* a bad listener must not break fetch */ } });
+}
+
 const BASE_OPTS = {
   credentials: 'include',
   headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'business' },
@@ -73,19 +93,51 @@ async function request(path, opts) {
   try {
     return await authedFetch(`${API}${path}`, opts);
   } catch (e) {
-    const err = new Error(`Cannot reach the API at ${API} — check VITE_API_URL and that ${window.location.origin} is in the backend's CORS_ORIGIN.`);
-    err.cause = e;
+    reportConnection(false, typeof navigator !== 'undefined' && navigator.onLine === false);
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    // The message is what the user reads, so it says what they can do. The
+    // configuration hint that used to be the message — VITE_API_URL, CORS_ORIGIN
+    // — is a developer's problem and belongs in the console, not on screen.
+    const err = new Error(offline
+      ? "You're offline. Reconnect and try again."
+      : "Couldn't reach Akoro. Check your connection and try again.");
+    err.cause   = e;
     err.network = true;
+    err.offline = offline;
+    err.detail  = `Cannot reach the API at ${API} — check VITE_API_URL and that ${window.location.origin} is in the backend's CORS_ORIGIN.`;
+    console.warn('[akoro-business]', err.detail);
     throw err;
   }
 }
 
+/* The server's own message when there is one — those are written for people.
+   Otherwise a sentence for the status, never "GET /api/x failed". */
+const STATUS_COPY = {
+  400: "Something in that request wasn't right. Check the details and try again.",
+  401: 'Your session has expired. Please sign in again.',
+  403: "You don't have permission to do that.",
+  404: "We couldn't find that — it may have been deleted.",
+  409: 'That conflicts with something that already exists.',
+  422: 'Some of those details are not valid. Please check them.',
+  429: "That's a lot of requests — please wait a moment and try again.",
+  500: 'Something went wrong on our side. Please try again.',
+  502: 'Akoro is having trouble right now. Please try again in a moment.',
+  503: 'Akoro is temporarily unavailable. Please try again in a moment.',
+  504: 'That took too long to respond. Please try again.',
+};
+
 async function handle(r, label) {
   if (!r.ok) {
-    let msg = label;
-    try { const j = await r.json(); msg = j.error || j.message || msg; } catch { /* ignore */ }
-    const err = new Error(msg);
+    let serverMsg = '';
+    try { const j = await r.json(); serverMsg = j.error || j.message || ''; } catch { /* ignore */ }
+    const err = new Error(
+      serverMsg ||
+      STATUS_COPY[r.status] ||
+      (r.status >= 500 ? 'Something went wrong on our side. Please try again.'
+                       : 'That did not work. Please try again.')
+    );
     err.status = r.status;
+    err.detail = label;          // for logs, never for users
     throw err;
   }
   return r.json();

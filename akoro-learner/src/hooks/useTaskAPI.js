@@ -41,11 +41,23 @@ export function useTaskAPI() {
   }, []);
 
   const toggleTask = useCallback(async (taskId) => {
-    setTasks(prev => prev.map(t => t.id === taskId
-      ? { ...t, status: t.status === 'done' ? 'pending' : 'done' }
-      : t
-    ));
-    await apiPatch(`/api/tasks/${taskId}/toggle`).catch(() => {});
+    // Optimistic, then reconciled. Swallowing the failure left the checkbox
+    // ticked for a task the server still has as pending — the UI stating
+    // something that isn't true, which is worse than a slow tick.
+    let previous;
+    setTasks(prev => {
+      previous = prev;
+      return prev.map(t => t.id === taskId
+        ? { ...t, status: t.status === 'done' ? 'pending' : 'done' }
+        : t);
+    });
+    try {
+      const d = await apiPatch(`/api/tasks/${taskId}/toggle`);
+      if (d?.task) setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, status: d.task.status } : t)));
+    } catch (e) {
+      if (previous) setTasks(previous);   // put it back rather than lie
+      throw e;
+    }
   }, []);
 
   const deleteTask = useCallback(async (taskId) => {
@@ -53,8 +65,9 @@ export function useTaskAPI() {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     try {
       await apiDelete(`/api/tasks/${taskId}`);
-    } catch {
+    } catch (e) {
       setTasks(before);   // the row is still there — don't lie about it
+      throw e;            // ...and let the caller say so
     }
   }, [tasks]);
 

@@ -736,7 +736,10 @@ export default function LearnerDashboard() {
             // teacher's progress view points at nothing.
             onSessionStarted={sid=>{
               if (teachSession?.selfStudyId && sid) {
-                apiPost(`/api/self-study/${teachSession.selfStudyId}/link`, { sessionId: sid }).catch(()=>{});
+                // Best-effort, but not silent: if this never lands the teacher's
+                // progress view points at no session, so leave a trail.
+                apiPost(`/api/self-study/${teachSession.selfStudyId}/link`, { sessionId: sid })
+                  .catch(e => console.warn('[self-study] could not link session', sid, e?.detail || e?.message));
               }
             }}
             onClose={()=>{ setTeachSession(null); loadAgentSessions(); }}

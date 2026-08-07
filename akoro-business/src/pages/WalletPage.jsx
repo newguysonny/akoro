@@ -3,6 +3,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, ACCENT, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const usd = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -39,7 +40,7 @@ export default function WalletPage() {
     if (amount > Number(wallet.balance || 0)) return showToast(`You only have ${usd(wallet.balance)} available`);
     if (!/^\d{10}$/.test(form.accountNumber.trim())) return showToast('Account number must be 10 digits');
     if (!form.bankCode.trim()) return showToast('Select your bank');
-    if (!window.confirm(`Withdraw ${usd(amount)} to account ${form.accountNumber}? Payouts cannot be reversed.`)) return;
+    if (!await confirmDialog({ title: 'Confirm this withdrawal', message: `${usd(amount)} will be sent to account ${form.accountNumber}.`, detail: 'Payouts cannot be reversed once submitted. Check the account number.', confirmLabel: 'Withdraw', danger: false })) return;
 
     submitting.current = true;
     setBusy(true);

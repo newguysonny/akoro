@@ -8,6 +8,7 @@ import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 /* ── Opponent picker ─────────────────────────────────────────────────────
    Two ways to say who you're challenging, because teachers know their class
@@ -470,7 +471,7 @@ export default function BattlesPage() {
   };
 
   const handleDelete = async (battle) => {
-    if (!window.confirm(`Delete “${battle.title}”? This removes it for everyone invited, along with its questions and results.`)) return;
+    if (!await confirmDialog(`Delete “${battle.title}”? This removes it for everyone invited, along with its questions and results.`)) return;
     const before = battles;
     setBattles(bs => bs.filter(b => b.id !== battle.id));
     try {

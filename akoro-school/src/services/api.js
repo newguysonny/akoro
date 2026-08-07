@@ -155,14 +155,21 @@ async function authedFetch(url, opts) {
   // otherwise every caller in the app shows the browser's "Failed to fetch".
   let res;
   try { res = await fetch(url, withAuth(opts)); }
-  catch (e) { throw networkError(e, opts?.method || 'GET', String(url).replace(API, '')); }
+  catch (e) {
+    reportConnection(false, typeof navigator !== 'undefined' && navigator.onLine === false);
+    throw networkError(e, opts?.method || 'GET', String(url).replace(API, ''));
+  }
+  reportConnection(true);
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
   const ok = await refreshSession();
   if (!ok) { endSession(); return res; }
   try { return await fetch(url, withAuth(opts)); }
-  catch (e) { throw networkError(e, opts?.method || 'GET', String(url).replace(API, '')); }
+  catch (e) {
+    reportConnection(false, typeof navigator !== 'undefined' && navigator.onLine === false);
+    throw networkError(e, opts?.method || 'GET', String(url).replace(API, ''));
+  }
 }
 
 
@@ -240,6 +247,25 @@ function networkError(cause, method, path) {
   err.method    = method;
   err.detail    = cause?.message || 'network error';
   return err;
+}
+
+/* ── Connection state ────────────────────────────────────────────────────
+   Reads that pages choose to swallow still tell us something: whether the API
+   is reachable at all. Publishing that here lets one banner explain an outage
+   that would otherwise render as "you have nothing". */
+const connListeners = new Set();
+let connOk = true;
+
+export function onConnectionChange(fn) {
+  connListeners.add(fn);
+  fn({ ok: connOk, offline: typeof navigator !== 'undefined' && navigator.onLine === false });
+  return () => connListeners.delete(fn);
+}
+
+function reportConnection(ok, offline = false) {
+  if (ok === connOk) return;              // only announce transitions
+  connOk = ok;
+  connListeners.forEach((fn) => { try { fn({ ok, offline }); } catch { /* a bad listener must not break fetch */ } });
 }
 
 const BASE_OPTS = {

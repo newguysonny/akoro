@@ -5,6 +5,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, AMBER, ACCENT, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
 
@@ -43,7 +44,7 @@ export default function ApiKeysPage() {
     } catch (e) { setErr(e.message || 'Could not update the key'); }
   };
   const remove = async (k) => {
-    if (!window.confirm(`Permanently delete "${k.name}"? This can't be undone — any requests still using this key will start failing immediately.`)) return;
+    if (!await confirmDialog({ title: `Delete "${k.name}"?`, message: 'This cannot be undone.', detail: 'Any request still using this key starts failing immediately.', confirmLabel: 'Delete key' })) return;
     try {
       await apiDelete(`/api/vouchers/startups/${current.id}/api-keys/${k.id}`);
       load();

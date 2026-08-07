@@ -17,6 +17,7 @@ import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
 import { BASE, fullName, studentOpts, STATUS_PILL, STUDENT_FIELDS, STUDENT_COLUMNS, STUDENT_SEARCH, CLASS_FILTER, naira, STATUS_OPTS, InfoRow, GridInfo, InfoGrid, SectionCard, Ring, statPill, FEE_STATUS_COLOR, ModalShell } from './shared.jsx';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
 function FeesTab({ studentId, showToast }) {
   const [data, setData] = useState(null);
@@ -98,7 +99,7 @@ function DocumentsTab({ studentId, showToast }) {
     } catch (e) { showToast(e.message || 'Upload failed'); }
     finally { setBusy(false); }
   };
-  const remove = async (d) => { if (!window.confirm(`Delete "${d.title}"?`)) return; try { await apiDelete(`${BASE}/student-documents/${d.id}`); load(); } catch (e) { showToast(e.message); } };
+  const remove = async (d) => { if (!await confirmDialog(`Delete "${d.title}"?`)) return; try { await apiDelete(`${BASE}/student-documents/${d.id}`); load(); } catch (e) { showToast(e.message); } };
 
   return (
     <SectionCard title="Documents" color={GREEN}>
@@ -172,7 +173,7 @@ function HealthTab({ studentId, showToast }) {
   const [rows, setRows] = useState(null);
   const load = useCallback(() => apiGet(`${BASE}/health-records?student_id=${studentId}`).then((r) => setRows(r.data || [])).catch(() => setRows([])), [studentId]);
   useEffect(() => { load(); }, [load]);
-  const remove = async (r) => { if (!window.confirm(`Delete "${r.title}"?`)) return; try { await apiDelete(`${BASE}/health-records/${r.id}`); load(); } catch (e) { showToast(e.message); } };
+  const remove = async (r) => { if (!await confirmDialog(`Delete "${r.title}"?`)) return; try { await apiDelete(`${BASE}/health-records/${r.id}`); load(); } catch (e) { showToast(e.message); } };
   return (
     <SectionCard title="Health Records" color={RED} action={
       <button onClick={() => navigate(`/mgmt/students/${studentId}/health/new`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${AMBER}, #D4651E)`, color: WHITE, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>

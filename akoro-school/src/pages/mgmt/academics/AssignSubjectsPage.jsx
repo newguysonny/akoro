@@ -10,6 +10,7 @@ import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
 import { BASE, iconBtn, toastEl } from './shared.jsx';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
 const label = { display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 5 };
 const card = { background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' };
@@ -61,7 +62,7 @@ export function AssignSubjectsPage() {
     } catch (e) { showToast(e.message || 'Could not add subjects'); } finally { setBusy(false); }
   };
   const remove = async (r) => {
-    if (!window.confirm(`Remove "${r.subject_name}" from this class?`)) return;
+    if (!await confirmDialog(`Remove "${r.subject_name}" from this class?`)) return;
     try { await apiDelete(`${BASE}/class-subjects/${r.id}`); loadAssigned(); }
     catch (e) { showToast(e.message || 'Could not remove'); }
   };

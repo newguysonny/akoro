@@ -18,6 +18,7 @@ import {
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
 import { EnrolModal } from './parts.jsx';
 import JoinRequests from './JoinRequests.jsx';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const PAGE_SIZE = 12;
 const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -94,7 +95,7 @@ export default function StudentsPage() {
   };
   const bulkRemove = async () => {
     const targets = filtered.filter(s => checked[rowId(s)]);
-    if (!targets.length || !window.confirm(`Remove ${targets.length} student${targets.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    if (!targets.length || !await confirmDialog(`Remove ${targets.length} student${targets.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
     for (const s of targets) await handleRemove(s.enrollmentId);
     setChecked({});
   };

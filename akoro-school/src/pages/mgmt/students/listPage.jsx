@@ -16,6 +16,7 @@ import ResourcePage, { inputStyle } from '../../../components/mgmt/ResourcePage.
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
 import { BASE, fullName, studentOpts, STATUS_PILL, STUDENT_FIELDS, STUDENT_COLUMNS, STUDENT_SEARCH, CLASS_FILTER, naira, STATUS_OPTS, InfoRow, GridInfo, InfoGrid, SectionCard, Ring, statPill, FEE_STATUS_COLOR, ModalShell } from './shared.jsx';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
 /* ── CSV / export / print helpers (no external deps) ─────────────────────── */
 const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -95,7 +96,7 @@ export function StudentListPage() {
   const toggleAll = (on) => setSelected((prev) => { const next = { ...prev }; pageRows.forEach((r) => { next[r.id] = on; }); return next; });
 
   const remove = async (r) => {
-    if (!window.confirm(`Remove ${fullName(r)} (${r.admission_no})? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Remove ${fullName(r)} (${r.admission_no})? This cannot be undone.`)) return;
     setBusyId(r.id);
     try { await apiDelete(`${BASE}/students/${r.id}`); setRows((p) => p.filter((x) => x.id !== r.id)); showToast('Removed'); }
     catch (e) { showToast(e.message || 'Could not remove'); }
@@ -104,7 +105,7 @@ export function StudentListPage() {
 
   const bulkDelete = async () => {
     if (!selectedIds.length) return;
-    if (!window.confirm(`Delete ${selectedIds.length} selected student(s)? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete ${selectedIds.length} selected student(s)? This cannot be undone.`)) return;
     try { await apiPost(`${BASE}/students/bulk-delete`, { ids: selectedIds }); showToast(`Deleted ${selectedIds.length} student(s)`); load(); }
     catch (e) { showToast(e.message || 'Bulk delete failed'); }
   };

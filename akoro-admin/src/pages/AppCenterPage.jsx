@@ -4,6 +4,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton, Inp } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const KINDS = [
   { key: 'tool',       label: 'Tool' },
@@ -100,7 +101,7 @@ export default function AppCenterPage() {
   };
 
   const remove = async (it) => {
-    if (!window.confirm(`Delete "${it.name}"? This can't be undone.`)) return;
+    if (!await confirmDialog(`Delete "${it.name}"? This can't be undone.`)) return;
     try { await apiDelete(`/api/admin/app-center/${it.id}`); setToast({ message: 'Listing deleted', type: 'success' }); load(); }
     catch (e) { setToast({ message: e?.message || 'Could not delete', type: 'error' }); }
   };

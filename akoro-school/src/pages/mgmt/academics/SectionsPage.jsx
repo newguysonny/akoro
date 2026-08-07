@@ -14,6 +14,7 @@ import BackButton from '../../../components/BackButton.jsx';
 import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 import {
   BASE, GENERIC_STATUS_OPTS, STATUS_PILL, downloadBlob, csvCell, openPrintTable,
   ModalShell, Breadcrumb, th, td, iconBtn, selStyle, toolBtn, toastEl,
@@ -111,13 +112,13 @@ export function SectionsPage() {
   const backToClasses = () => navigate(activeLevel ? `/mgmt/classes?level=${activeLevel.id}` : '/mgmt/classes');
 
   const remove = async (r) => {
-    if (!window.confirm(`Remove Section "${r.name}"? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Remove Section "${r.name}"? This cannot be undone.`)) return;
     setBusyId(r.id);
     try { await apiDelete(`${BASE}/sections/${r.id}`); showToast('Removed'); load(); }
     catch (e) { showToast(e.message || 'Could not remove'); } finally { setBusyId(null); }
   };
   const bulkDelete = async () => {
-    if (!selectedIds.length || !window.confirm(`Delete ${selectedIds.length} selected section(s)?`)) return;
+    if (!selectedIds.length || !await confirmDialog(`Delete ${selectedIds.length} selected section(s)?`)) return;
     try { await Promise.all(selectedIds.map((id) => apiDelete(`${BASE}/sections/${id}`))); showToast(`Deleted ${selectedIds.length} section(s)`); load(); }
     catch (e) { showToast(e.message || 'Bulk delete failed'); }
   };

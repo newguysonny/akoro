@@ -134,6 +134,9 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
     s.on('battle:log', (e) => pushLog(e.message, e.timestamp));
     s.on('battle:over', (d) => { setOver(d); setStatus('completed'); pushLog('🏁 Battle complete!'); });
 
+    // Deliberately silent: a heartbeat that misses is replaced by the next one
+    // 20s later, and telling the learner mid-battle that one ping failed would
+    // be noise about something that already fixed itself.
     const hb = setInterval(() => { apiPost(`${B}/battles/${battleId}/heartbeat`, {}).catch(() => {}); }, 20000);
     apiPost(`${B}/battles/${battleId}/heartbeat`, {}).catch(() => {});
 

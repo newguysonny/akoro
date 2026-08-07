@@ -5,6 +5,7 @@ import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitive
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 /* datetime-local speaks local wall-clock; the API speaks ISO/UTC. */
 function toLocalInput(iso) {
@@ -300,7 +301,7 @@ export default function TasksPage() {
   };
 
   const handleDelete = async (task) => {
-    if (!window.confirm(`Delete “${task.title}”? This also removes anything it produced.`)) return;
+    if (!await confirmDialog(`Delete “${task.title}”? This also removes anything it produced.`)) return;
     const before = tasks;
     setTasks(ts => ts.filter(t => t.id !== task.id));
     try {
