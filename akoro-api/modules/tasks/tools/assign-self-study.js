@@ -25,10 +25,11 @@ import { callAsUser }   from "./assign-battle.js";
 export const assignSelfStudyDefinition = {
   name: "assign_self_study",
   description:
-    "Assign an AI self-study topic to learners — a whole course, a class (e.g. JSS1), or " +
-    "named learners. Each learner works through it with their own AI agent. Use this when " +
-    "the teacher says 'assign self study', 'set them a topic to study', 'independent study', " +
-    "or asks for study work to be given out. The AI drafts the subtopics and objectives.",
+    "Assign an AI self-study topic to a class (e.g. JSS1) or to named learners. Each learner " +
+    "works through it with their own AI agent. Use this when the teacher says 'assign self " +
+    "study', 'set them a topic to study', 'independent study', or asks for study work to be " +
+    "given out. The AI drafts the subtopics and objectives. Self study is not tied to a " +
+    "course — always name a class or the learners.",
   input_schema: {
     type: "object",
     properties: {
@@ -37,10 +38,9 @@ export const assignSelfStudyDefinition = {
       title:     { type: "string", description: "What learners see. Defaults to the topic." },
       audience:  {
         type: "string",
-        enum: ["course", "class", "learners"],
-        description: "Who it is for: everyone on the course, a whole class, or named learners",
+        enum: ["class", "learners"],
+        description: "Who it is for: a whole class, or named learners",
       },
-      courseId:  { type: "string", description: "Course this belongs to. Required for audience 'course'." },
       className: { type: "string", description: "Class name when audience is 'class', e.g. 'JSS1'" },
       usernames: { type: "array", items: { type: "string" }, description: "Usernames when audience is 'learners'" },
       instructions: { type: "string", description: "A note to the learners, e.g. 'Finish before Friday's lesson.'" },
@@ -55,8 +55,7 @@ const paramsSchema = z.object({
   topic:        z.string(),
   subject:      z.string(),
   title:        z.string().optional(),
-  audience:     z.enum(["course", "class", "learners"]),
-  courseId:     z.string().optional(),
+  audience:     z.enum(["class", "learners"]),
   className:    z.string().optional(),
   usernames:    z.array(z.string()).default([]),
   instructions: z.string().optional(),
@@ -74,20 +73,23 @@ async function findClassroom(name, teacherId) {
 }
 
 export async function executeAssignSelfStudy(rawInput, ctx) {
+  // A task written before self study dropped courses may still say "course".
+  // The model reads the schema fresh each run so it won't produce one, but a
+  // teacher's own wording might steer it there — answer with the instruction
+  // rather than a schema error the task run would report as a crash.
+  if (rawInput?.audience === "course") {
+    return { success: false,
+      error: "Self study goes to a class or to named learners, not a course. Name the class, e.g. 'for JSS1'." };
+  }
   const input = paramsSchema.parse(rawInput);
   const { data: creator } = await db.from("users").select("role, email").eq("id", ctx.teacherId).maybeSingle();
   const as = { userId: ctx.teacherId, role: creator?.role, email: creator?.email };
 
-  // Self study only needs a course when the audience IS the course; otherwise
-  // the id is just scope. Fall back to the task's own course either way.
-  const courseId = input.courseId || ctx.courseId || null;
-
   // ── Who ────────────────────────────────────────────────────────────────
-  const target = { whole_class: false, classroom_id: null, usernames: [], course_id: courseId };
-  if (input.audience === "course") {
-    if (!courseId) return { success: false, error: "Which course? Attach this task to a course, or name one." };
-    target.whole_class = true;
-  } else if (input.audience === "class") {
+  // No course_id: self study is a topic worked through with an agent, not
+  // something hanging off an enrolment.
+  const target = { whole_class: false, classroom_id: null, usernames: [] };
+  if (input.audience === "class") {
     if (!input.className) return { success: false, error: "Which class? Name it in the task, e.g. 'for JSS1'." };
     const room = await findClassroom(input.className, ctx.teacherId);
     if (!room) return { success: false, error: `No class called "${input.className}" — check the name under Academics → Classes.` };
