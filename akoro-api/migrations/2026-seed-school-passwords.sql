@@ -90,3 +90,20 @@ END $$;
 --   JOIN public.school_profiles sp ON sp.id=c.school_id
 --   JOIN public.users a ON a.id=sp.admin_user_id
 --  WHERE a.email='school@demo.akoro.app';
+
+-- ── These accounts are meant to be SIGNED IN TO ────────────────────────────
+-- users.onboarding_completed defaults to false, and no seed ever set it — so
+-- every documented demo credential, including the teachers and the school
+-- admin, landed on the onboarding wizard instead of the app. The credentials
+-- above are only useful if they reach the thing they were created to
+-- demonstrate.
+--
+-- Scoped to the seeded demo domains, so a real learner still onboards.
+UPDATE public.users
+   SET onboarding_completed = true
+ WHERE (email LIKE '%@demo.akoro.app' OR email LIKE '%@student.akoro.app')
+   AND onboarding_completed IS DISTINCT FROM true;
+
+-- Verify:
+--   SELECT onboarding_completed, count(*) FROM public.users
+--   WHERE email LIKE '%@demo.akoro.app' GROUP BY 1;
