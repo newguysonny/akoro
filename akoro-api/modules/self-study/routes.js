@@ -105,6 +105,25 @@ async function resolveStudents({ usernames = [], user_ids = [], classroom_id, co
   return { ids: [...ids], notFound };
 }
 
+/**
+ * notifyAll — best-effort notifications, in one insert.
+ *
+ * Deliberately try/catch rather than a trailing .catch(): the Supabase query
+ * builder is a thenable WITHOUT a .catch method, so calling one on it throws
+ * TypeError synchronously — which is how this route came to be a guaranteed
+ * 500. A failed notification must never lose the assignment it announces.
+ */
+async function notifyAll(userIds, payload) {
+  if (!userIds?.length) return;
+  try {
+    const { error } = await db.from("notifications")
+      .insert(userIds.map((user_id) => ({ user_id, ...payload })));
+    if (error) console.warn("[self-study] notify failed:", error.message);
+  } catch (e) {
+    console.warn("[self-study] notify threw:", e.message);
+  }
+}
+
 router.use(authenticateToken);
 
 /* ═══════════════════════════ TEACHER / SCHOOL ═══════════════════════════ */
@@ -164,15 +183,16 @@ router.post("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
             { onConflict: "assignment_id,student_id" });
   if (tErr) throw new Error(tErr.message);
 
-  for (const sid of ids) {
-    await db.from("notifications").insert({
-      user_id: sid, type: "self_study_assigned",
-      title:   `📖 Self study: ${assignment.title}`,
-      content: `${assignment.subject} · ${assignment.topic}${due_at ? ` · due ${new Date(due_at).toLocaleDateString("en-GB")}` : ""}`,
-      related_id: assignment.id,
-    }).catch(() => {});
-    global.io?.to(`user:${sid}`).emit("self_study_assigned", { assignment });
-  }
+  // notify() rather than a bare insert: a PostgREST builder is a THENABLE with
+  // no .catch, so `.insert({…}).catch(() => {})` threw synchronously and made
+  // this endpoint a guaranteed 500 — assignments could never be created at all.
+  await notifyAll(ids, {
+    type: "self_study_assigned",
+    title: `📖 Self study: ${assignment.title}`,
+    content: `${assignment.subject} · ${assignment.topic}${due_at ? ` · due ${new Date(due_at).toLocaleDateString("en-GB")}` : ""}`,
+    related_id: assignment.id,
+  });
+  for (const sid of ids) global.io?.to(`user:${sid}`).emit("self_study_assigned", { assignment });
 
   res.status(201).json({ success: true, data: { ...assignment, assigned: ids.length } });
 }));
@@ -309,14 +329,12 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
             { onConflict: "assignment_id,student_id" });
   if (tErr) throw new Error(tErr.message);
 
-  for (const sid of ids) {
-    await db.from("notifications").insert({
-      user_id: sid, type: "self_study_assigned",
-      title: `📖 Self study: ${assignment.title}`,
-      content: `${assignment.subject} · ${assignment.topic}`,
-      related_id: assignment.id,
-    }).catch(() => {});
-  }
+  await notifyAll(ids, {
+    type: "self_study_assigned",
+    title: `📖 Self study: ${assignment.title}`,
+    content: `${assignment.subject} · ${assignment.topic}`,
+    related_id: assignment.id,
+  });
   ok(res, { assigned: ids.length });
 }));
 

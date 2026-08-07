@@ -395,7 +395,11 @@ if (process.env.REDIS_URL) {
 }
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
-app.use("/api/self-study", aiLimit,       selfStudyModule);   // teacher-assigned AI study, /plan calls the model
+// Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module
+// behind aiLimit capped a teacher at 10 requests a minute for listing and
+// assigning, which a single afternoon of setting work would blow straight past.
+app.use("/api/self-study/plan", aiLimit);
+app.use("/api/self-study", standardLimit, selfStudyModule);
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
 app.use("/api/past-questions",   standardLimit, pastQuestionsModule);  // WAEC/NECO/JAMB/NCEE question bank
