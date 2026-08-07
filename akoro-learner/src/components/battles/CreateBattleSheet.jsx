@@ -78,6 +78,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
   const [typed, setTyped] = useState('');
   const [checking, setChecking] = useState(false);  // resolving typed usernames
   const [checked, setChecked] = useState(null);     // { found: [], missing: [] }
+  const [questionSource, setQuestionSource] = useState('auto');   // 'auto' | 'bank' | 'ai'
   const [difficulty, setDifficulty] = useState('intermediate');
   const [xpPrize, setXpPrize] = useState('200');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -193,6 +194,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
       xp_prize: parseInt(xpPrize, 10) || 200,
       expires_in_minutes: 60,
       scheduled_for: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      question_source: questionSource,
       whole_class: mode === 'all',
       user_ids: mode === 'all' ? [] : selected,
       usernames: mode === 'all' ? [] : typedNames,
@@ -410,6 +412,32 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
                       ? '1 classmate — a 1-v-1 challenge they can accept or decline'
                       : `${count} classmates — a group battle`}
               </p>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={LABEL}>Questions</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[
+                  ['auto', 'Bank + AI', 'Real first'],
+                  ['bank', 'Bank only', 'Past papers'],
+                  ['ai',   'AI',        "Bank's style"],
+                ].map(([k, l, hint]) => (
+                  <button key={k} onClick={() => setQuestionSource(k)} style={{
+                    flex: 1, padding: '9px 6px', borderRadius: 12, textAlign: 'left',
+                    border: `1.5px solid ${questionSource === k ? BRAND : 'var(--ak-border2)'}`,
+                    background: questionSource === k ? `${BRAND}10` : 'var(--ak-surface-hover)',
+                    cursor: 'pointer', fontFamily: "'Nunito',sans-serif",
+                  }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: questionSource === k ? BRAND : 'var(--ak-text)' }}>{l}</div>
+                    <div style={{ fontSize: 10, color: 'var(--ak-text-muted)' }}>{hint}</div>
+                  </button>
+                ))}
+              </div>
+              {questionSource !== 'bank' && (
+                <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
+                  Generated questions are modelled on real exam questions for this subject, and cost coins.
+                </p>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>

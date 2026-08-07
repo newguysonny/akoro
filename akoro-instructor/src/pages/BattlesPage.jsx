@@ -17,6 +17,7 @@ import { confirmDialog } from '../components/ConfirmHost.jsx';
 const BLANK = {
   courseId: '', title: '', topic: '', description: '',
   kind: 'course',            // 'course' | 'class'
+  questionSource: 'auto',    // 'auto' | 'bank' | 'ai'
   classId: '', subject: '',  // class battles only
   audience: BLANK_AUDIENCE,
   totalQuestions: '15', duration: '15', xpPrize: '200',
@@ -190,6 +191,34 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           <Inp label="Duration (min)" type="number" min="1" value={form.duration} onChange={e => setField('duration', e.target.value)} />
           <Inp label="XP prize" type="number" min="0" value={form.xpPrize} onChange={e => setField('xpPrize', e.target.value)} />
         </div>
+
+        {!editing && (
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 7 }}>Questions *</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[
+                { key: 'auto', label: 'Bank + AI', hint: 'Real questions first, AI for the rest' },
+                { key: 'bank', label: 'Question bank only', hint: 'Past papers / your bank' },
+                { key: 'ai',   label: 'Generate with AI',   hint: 'Written in the bank\u2019s style' },
+              ].map(o => (
+                <button key={o.key} type="button" onClick={() => setField('questionSource', o.key)} style={{
+                  flex: 1, padding: '9px 8px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
+                  border: `1.5px solid ${form.questionSource === o.key ? AMBER : BORDER}`,
+                  background: form.questionSource === o.key ? `${AMBER}12` : WHITE, fontFamily: FONT,
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: form.questionSource === o.key ? AMBER : INK }}>{o.label}</div>
+                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
+                </button>
+              ))}
+            </div>
+            {form.questionSource !== 'bank' && (
+              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 5, lineHeight: 1.45 }}>
+                Generated questions are modelled on real exam questions for this subject and cost coins.
+                Nothing is charged if generation fails.
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <Sel label="Difficulty" value={form.difficulty} onChange={e => setField('difficulty', e.target.value)}>
@@ -406,6 +435,7 @@ export default function BattlesPage() {
     } else {
       const res = await createBattle({
         kind: form.kind, courseId: form.courseId, classId: form.classId,
+        question_source: form.questionSource,
         ...(form.kind === 'class' ? { subject: form.subject } : {}),
         title: form.title.trim(),
         description: form.description || null,
@@ -426,7 +456,10 @@ export default function BattlesPage() {
       if (d.skipped?.not_enrolled?.length) bits.push(`not on this course: ${d.skipped.not_enrolled.join(', ')}`);
       if (d.skipped?.not_in_class?.length)  bits.push(`not in this class: ${d.skipped.not_in_class.join(', ')}`);
       if (d.skipped?.no_agent?.length)     bits.push(`no agent yet: ${d.skipped.no_agent.join(', ')}`);
-      showToast(`Battle created — ${d.invited} challenged${bits.length ? `. Left out — ${bits.join('; ')}` : ''}`);
+      // Where the questions came from is the thing a teacher most wants to know
+      // about an AI-assisted battle, so lead with it.
+      const src = d.generated ? `${d.fromBank} from the bank + ${d.generated} generated` : `${d.questions} questions`;
+      showToast(`Battle created — ${d.invited} challenged, ${src}${bits.length ? `. Left out — ${bits.join('; ')}` : ''}`);
     }
     setEditing(null);
     load();

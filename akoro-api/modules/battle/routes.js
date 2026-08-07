@@ -53,6 +53,8 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { buildQuestions } from "./questionSource.js";
+import { InsufficientCoins } from "../../lib/coins.js";
 
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
 let _battleQueue = null;
@@ -593,46 +595,6 @@ async function classroomRole(userId, role, classroomId) {
 }
 
 /**
- * assignQuestionsBySubject — fill a class battle from the past-questions bank.
- *
- * Only verified multiple-choice questions: an unverified vision-parsed question
- * must not be scored as fact in a competition. Returns how many were placed so
- * the caller can refuse to create a battle nobody can play.
- */
-async function assignQuestionsBySubject(battleId, subject, difficulty, total) {
-  let q = db.schema("edu").from("past_questions")
-    .select("id, stem, options, answer, topic, difficulty")
-    .eq("type", "mcq").eq("verified", true).ilike("subject", subject)
-    .not("answer", "is", null).limit(total * 4);
-  const { data: pool } = await q;
-
-  // Prefer the requested difficulty, then top up from the rest — a thin bank
-  // shouldn't mean no battle.
-  const rows = pool ?? [];
-  const wanted = difficulty === "intermediate" ? "medium" : difficulty;
-  const ordered = [...rows.filter((r) => r.difficulty === wanted),
-                   ...rows.filter((r) => r.difficulty !== wanted)];
-
-  const placed = [];
-  for (const r of ordered) {
-    if (placed.length >= total) break;
-    const opts = Array.isArray(r.options) ? r.options : [];
-    if (opts.length < 2 || !r.answer) continue;
-    const idx = opts.findIndex((o) => String(o.label).trim().toUpperCase() === String(r.answer).trim().toUpperCase());
-    if (idx < 0) continue;   // answer key doesn't match any option — skip it
-    placed.push({
-      battle_id: battleId, question_order: placed.length + 1,
-      question_text: r.stem,
-      options_json: JSON.stringify(opts.map((o) => `${o.label}. ${o.text}`)),
-      correct_answer_index: idx,
-      topic: r.topic ?? subject, xp_value: 35, time_limit_seconds: 15,
-    });
-  }
-  if (placed.length) await db.from("battle_questions").insert(placed);
-  return placed.length;
-}
-
-/**
  * POST /api/battle/classes/:classroomId/battles/invite
  * Same shape as the course invite — one opponent makes a duel, several make a
  * group battle — but scoped to classmates and a class subject.
@@ -645,6 +607,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     time_limit_seconds = 900, xp_prize = 200,
     expires_in_minutes = 60, scheduled_for = null,
     usernames = [], user_ids = [], whole_class = false,
+    question_source = "auto",          // 'bank' | 'ai' | 'auto'
   } = req.body;
 
   if (!title)   return res400(res, "title is required");
@@ -715,14 +678,31 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   if (error) throw new Error(error.message);
 
   // Questions before anyone is told about it: a battle with none is worse than
-  // no battle, so if the bank can't supply enough, undo and say why.
-  const placed = await assignQuestionsBySubject(battle.id, subject, difficulty, total_questions);
-  if (placed < 5) {
+  // no battle, so if we can't fill it, undo and say why.
+  let fill;
+  try {
+    const { data: room } = await db.from("classrooms").select("name").eq("id", classroomId).maybeSingle();
+    fill = await buildQuestions({
+      battleId: battle.id, source: question_source, total: total_questions,
+      subject, topic, difficulty, classLabel: room?.name, userId: req.user.id,
+    });
+  } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);
-    return res400(res, `Not enough ${subject} questions in the bank yet (found ${placed}). Try another subject.`);
+    if (e instanceof InsufficientCoins) {
+      return res.status(402).json({ success: false, code: "INSUFFICIENT_COINS",
+        error: "Not enough coins to generate questions. Use the question bank instead, or top up.",
+        needed: e.needed, balance: e.balance });
+    }
+    throw e;
   }
-  if (placed < total_questions) {
-    await db.from("battles").update({ total_questions: placed }).eq("id", battle.id);
+  if (fill.placed < 5) {
+    await db.from("battles").delete().eq("id", battle.id);
+    return res400(res, question_source === "bank"
+      ? `Only ${fill.placed} ${subject} questions in the bank. Switch Questions to "Generate with AI" to fill the rest.`
+      : `Could not put together enough ${subject} questions (got ${fill.placed}). Try a different subject or topic.`);
+  }
+  if (fill.placed < total_questions) {
+    await db.from("battles").update({ total_questions: fill.placed }).eq("id", battle.id);
   }
 
   await db.from("battle_participants").insert({
@@ -772,7 +752,8 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     success: true, battle_id: battle.id,
     battle_type: isDuel ? "1v1" : "classroom",
     status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
-    invited: opponents.length, questions: placed, expires_at: expiresAt,
+    invited: opponents.length, expires_at: expiresAt,
+    questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
     skipped: {
       not_in_class: skipped.not_in_class.map((id) => nameById.get(id) ?? id),
       no_agent:     skipped.no_agent.map((id) => nameById.get(id) ?? id),
@@ -909,6 +890,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     time_limit_seconds = 900, xp_prize = 200,
     expires_in_minutes = 60, scheduled_for = null,
     usernames = [], user_ids = [], whole_class = false, classroom_id = null,
+    question_source = "auto",          // 'bank' | 'ai' | 'auto'
   } = req.body;
 
   if (!title) return res400(res, "title is required");
@@ -1023,7 +1005,32 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     }, { onConflict: "battle_id,user_id" });
   }
 
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions);
+  // A course battle prefers its own bank and tops up with AI when that bank is
+  // thin — which it usually is for a course nobody has written questions for.
+  let fill;
+  try {
+    fill = await buildQuestions({
+      battleId: battle.id, source: question_source, total: total_questions,
+      courseId, subject: subject || topic || "General", topic, difficulty, userId: req.user.id,
+    });
+  } catch (e) {
+    await db.from("battles").delete().eq("id", battle.id);
+    if (e instanceof InsufficientCoins) {
+      return res.status(402).json({ success: false, code: "INSUFFICIENT_COINS",
+        error: "Not enough coins to generate questions. Use the question bank instead, or top up.",
+        needed: e.needed, balance: e.balance });
+    }
+    throw e;
+  }
+  if (fill.placed < 5) {
+    await db.from("battles").delete().eq("id", battle.id);
+    return res400(res, question_source === "bank"
+      ? `Only ${fill.placed} questions in this course's bank. Switch Questions to "Generate with AI" to fill the rest.`
+      : `Could not put together enough questions (got ${fill.placed}). Try a different topic.`);
+  }
+  if (fill.placed < total_questions) {
+    await db.from("battles").update({ total_questions: fill.placed }).eq("id", battle.id);
+  }
 
   const q = await getBattleQueue();
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
@@ -1060,6 +1067,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     battle_type: isDuel ? "1v1" : "classroom",
     status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
     invited: opponents.length, expires_at: expiresAt, skipped: named,
+    questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
   });
 }));
 
