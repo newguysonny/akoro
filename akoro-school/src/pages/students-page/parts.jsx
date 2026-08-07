@@ -9,10 +9,11 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
+import { apiGet } from '../../services/api.js';
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
 import {
-  AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
+  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
 } from '../../constants.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
@@ -26,7 +27,9 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const fileRef = useRef(null);
 
   // Manual form
-  const [manual, setManual] = useState({ email: '', fullName: '', courseIds: [] });
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [manual, setManual] = useState({ email: '', fullName: '', classId: '', courseIds: [] });
   const setM = (k, v) => setManual(f => ({ ...f, [k]: v }));
   const toggleManualCourse = (id) =>
     setManual(f => ({ ...f, courseIds: f.courseIds.includes(id) ? f.courseIds.filter(x => x !== id) : [...f.courseIds, id] }));
@@ -47,10 +50,25 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const [csv, setCsv]       = useState({ courseId: '', file: null });
   const [csvResult, setCsvR] = useState(null);
 
+  // The classes this teacher can add to. Loaded here rather than passed in,
+  // because the page above only ever knew about courses.
+  useEffect(() => {
+    if (!open) return;
+    setClassesLoading(true);
+    apiGet('/api/instructor/classrooms')
+      .then(d => {
+        const list = d?.data ?? [];
+        setClasses(list);
+        setManual(f => ({ ...f, classId: f.classId || list[0]?.id || '' }));
+      })
+      .catch(() => setClasses([]))
+      .finally(() => setClassesLoading(false));
+  }, [open]);
+
   useEffect(() => {
     if (open) {
       setTab('manual'); setLoad(false); setError(''); setOk('');
-      setManual({ email: '', fullName: '', courseIds: [] });
+      setManual(f => ({ email: '', fullName: '', classId: f.classId || '', courseIds: [] }));
       setInv({ courseIds: [], expiresInDays: 7, emails: '' });
       setUrl(''); setCopied(false);
       setCsv({ courseId: '', file: null }); setCsvR(null);
@@ -62,23 +80,47 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   /* Manual submit */
   const submitManual = async (e) => {
     e.preventDefault(); reset();
-    if (!manual.email)              { setError('Email is required'); return; }
-    if (!manual.courseIds.length)   { setError('Please select at least one course'); return; }
+    if (!manual.email) { setError('Email is required'); return; }
+    if (!manual.classId && !manual.courseIds.length) {
+      setError('Pick a class, or at least one course.'); return;
+    }
     setLoad(true);
     const errors = [];
-    for (const courseId of manual.courseIds) {
+    let addedToClass = false;
+    let enrolled = 0;
+
+    // One call per course, but the CLASS only needs adding once — send it with
+    // the first request and omit it after, or every course would re-upsert the
+    // same membership.
+    const courseList = manual.courseIds.length ? manual.courseIds : [null];
+    for (let i = 0; i < courseList.length; i++) {
       try {
-        await addStudent({ email: manual.email, fullName: manual.fullName, courseId });
+        const r = await addStudent({
+          email: manual.email,
+          fullName: manual.fullName,
+          courseId: courseList[i],
+          classroomId: i === 0 ? (manual.classId || null) : null,
+        });
+        const d = r?.data ?? r;
+        if (d?.addedToClass) addedToClass = true;
+        if (d?.enrolled) enrolled += 1;
       } catch (err) { errors.push(err.message); }
     }
     setLoad(false);
-    if (errors.length === manual.courseIds.length) {
+
+    if (!addedToClass && !enrolled) {
       setError(errors[0] || 'Failed to add student');
-    } else {
-      const n = manual.courseIds.length - errors.length;
-      setOk(`Student added to ${n} course${n > 1 ? 's' : ''}! They'll receive a welcome email to set their password.${errors.length ? ` (${errors.length} skipped: ${errors[0]})` : ''}`);
-      onDone?.();
+      return;
     }
+    // Say what actually happened. "Added to 2 courses" while the class silently
+    // failed is how this went unnoticed in the first place.
+    const className = classes.find(c => c.id === manual.classId)?.name;
+    const bits = [];
+    if (addedToClass && className) bits.push(`added to ${className}`);
+    if (enrolled) bits.push(`enrolled in ${enrolled} course${enrolled > 1 ? 's' : ''}`);
+    setOk(`Student ${bits.join(' and ')}. They'll receive a welcome email to set their password.` +
+          (errors.length ? ` (${errors.length} skipped: ${errors[0]})` : ''));
+    onDone?.();
   };
 
   /* Invite link generate */
@@ -138,7 +180,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>
-          Enrol in Course(s) *
+          Enrol in Course(s) <span style={{ fontWeight: 500, color: MUTED }}>— optional</span>
         </label>
         <button
           type="button"
@@ -241,10 +283,40 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
             onChange={e => setM('fullName', e.target.value)}
             placeholder="Jane Doe"
           />
+          {/* Class first: it is what a student BELONGS to. A course is
+              something they may or may not also be taking. */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>
+              Class
+            </label>
+            <select
+              value={manual.classId}
+              onChange={e => setM('classId', e.target.value)}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 10,
+                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
+                fontFamily: FONT, color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+              }}
+            >
+              <option value="">{classesLoading ? 'Loading classes…' : 'No class'}</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}
+                </option>
+              ))}
+            </select>
+            {!classesLoading && !classes.length && (
+              <p style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, margin: '5px 0 0' }}>
+                No classes yet — create one under Academics → Classes.
+              </p>
+            )}
+          </div>
+
           <CourseChecklist selected={manual.courseIds} onToggle={toggleManualCourse} onToggleAll={toggleAllManualCourses} />
           <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
-            If the student doesn't have an Akoro account yet, one will be created automatically
-            and they can set their password via the welcome email.
+            Courses are optional — a student can be in a class without taking any.
+            If they don't have an Akoro account yet, one is created automatically and
+            they set their password via the welcome email.
           </p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>

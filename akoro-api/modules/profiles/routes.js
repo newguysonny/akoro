@@ -1217,12 +1217,20 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
     if (err) return res400(res, `Upload error: ${err.message}`);
     if (!req.file) return res400(res, "CSV file is required");
 
-    const { course_id } = req.body;
-    if (!course_id) return res400(res, "course_id is required");
+    // classroom_id is optional but is what the importer usually means: a CSV of
+    // a class register. course_id stays optional too — bulk-adding learners to
+    // JSS1 shouldn't require inventing a course to hang them off.
+    const { course_id, classroom_id: classroomId = null } = req.body;
+    if (!course_id && !classroomId)
+      return res400(res, "Choose a class, a course, or both — the students have to be added to something");
 
-    // Verify teacher owns the course
-    const { data: course } = await db.from("courses").select("id, title, instructor_id").eq("id", course_id).single();
-    if (!course || course.instructor_id !== req.user.id) return res403(res, "Not your course");
+    // Verify teacher owns the course — only when one was given.
+    let course = null;
+    if (course_id) {
+      const { data } = await db.from("courses").select("id, title, instructor_id").eq("id", course_id).maybeSingle();
+      if (!data || data.instructor_id !== req.user.id) return res403(res, "Not your course");
+      course = data;
+    }
 
     // Parse CSV (simple split — handles standard comma-separated CSVs)
     const text = req.file.buffer.toString("utf-8");
@@ -1243,9 +1251,29 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
       try {
         const { user, isNew, tempPassword } = await findOrCreateStudent(name, email, phone || null);
 
-        // Get classroom linked to this course (or add directly to enrollment)
-        const { data: classroom } = await db.from("classrooms")
-          .select("id").eq("teacher_id", req.user.id).limit(1).single();
+        // Which class? Named in the request if the importer chose one,
+        // otherwise the teacher's own — but never GUESSED from a school's
+        // classrooms, which carry the school's teacher_id and so matched
+        // nothing here, silently importing every learner into no class at all.
+        let classroom = null;
+        if (classroomId) {
+          const { data: room } = await db.from("classrooms")
+            .select("id, teacher_id, school_id").eq("id", classroomId).maybeSingle();
+          if (room) {
+            let allowed = room.teacher_id === req.user.id || req.user.role === "admin";
+            if (!allowed && room.school_id) {
+              const { data: school } = await db.from("school_profiles")
+                .select("id").eq("admin_user_id", req.user.id).eq("id", room.school_id).maybeSingle();
+              allowed = !!school;
+            }
+            if (allowed) classroom = room;
+          }
+        } else {
+          const { data: own } = await db.from("classrooms")
+            .select("id").eq("teacher_id", req.user.id)
+            .order("created_at", { ascending: true }).limit(1).maybeSingle();
+          classroom = own ?? null;
+        }
 
         if (classroom) {
           await db.from("classroom_students").upsert(
@@ -1255,20 +1283,20 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
         }
 
         // Enrol in course
-        await db.from("enrollments").upsert(
+        if (course) await db.from("enrollments").upsert(
           { user_id: user.id, course_id, status: "active" },
           { onConflict: "user_id,course_id" }
         );
-        try { await db.rpc("increment_course_students", { course_id_input: course_id }); } catch {}
+        if (course) { try { await db.rpc("increment_course_students", { course_id_input: course_id }); } catch {} }
 
         // Recipient side — notify the student they were enrolled.
         try {
           const { error: notifErr } = await db.from("notifications").insert({
             user_id:    user.id,
             type:       "enrolled_in_course",
-            title:      `You're enrolled in "${course.title}"`,
-            content:    `You've been added to this course`,
-            related_id: course_id,
+            title:      course ? `You're enrolled in "${course.title}"` : "You've been added to a class",
+            content:    course ? "You've been added to this course" : "Your teacher added you to a class.",
+            related_id: course_id ?? classroomId,
           });
           if (notifErr) console.warn("[notify] CSV enrol insert failed:", notifErr.message);
         } catch (e) {
@@ -1279,7 +1307,7 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
         if (isNew && tempPassword) {
           const { data: teacher } = await db.from("users").select("full_name").eq("id", req.user.id).single();
           await sendWelcomeCredentials({
-            user, tempPassword, classroomName: course.title,
+            user, tempPassword, classroomName: course?.title ?? "your class",
             teacherName: teacher?.full_name ?? "Your teacher", isNew: true,
           });
         }
@@ -1293,7 +1321,7 @@ router.post("/teacher/students/import", authenticateToken, requireRole(["instruc
     }
 
     res201(res, {
-      course_title:   course.title,
+      course_title:   course?.title ?? null,
       total_rows:     dataLines.length,
       accounts_created: results.created,
       already_existed: results.existing,

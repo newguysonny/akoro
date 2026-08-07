@@ -1050,153 +1050,152 @@ const listStudents = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * addStudent — put a learner in a CLASS, and enrol them on a course only if one
+ * was chosen.
+ *
+ * It used to be the other way round, and got the class wrong twice over:
+ *   • courseId was required, so a school teacher who just wanted a learner in
+ *     JSS1 had to invent a course to hang them off.
+ *   • the classroom was never chosen, it was GUESSED — the teacher's oldest
+ *     classroom by created_at. A teacher of both JSS1 and JSS3 put everyone in
+ *     whichever room existed first. And school classrooms carry the school's own
+ *     teacher_id, so for most school staff the lookup matched nothing at all and
+ *     the learner was silently added to no class whatsoever. That is the
+ *     reported symptom: enrolled on the course, absent from the class.
+ *
+ * Now the class is named explicitly and checked, the course is optional, and the
+ * response says what actually happened rather than implying it.
+ */
 const enrolStudent = asyncHandler(async (req, res) => {
   try {
     const {
       email, fullName, phone,
-      courseId, accessLevel = "full",
+      courseId = null, classroomId = null, accessLevel = "full",
     } = req.body;
 
-    if (!email)    return err400(res, "email is required");
-    if (!courseId) return err400(res, "courseId is required");
+    if (!email) return err400(res, "email is required");
+    if (!courseId && !classroomId)
+      return err400(res, "Choose a class, a course, or both — a student has to be added to something");
 
-    // Verify teacher owns course
-    const { data: course } = await db
-      .from("courses")
-      .select("id, instructor_id, title")
-      .eq("id", courseId)
-      .single();
+    // ── Course, when one was chosen ──────────────────────────────────────
+    let course = null;
+    if (courseId) {
+      const { data } = await db.from("courses").select("id, instructor_id, title").eq("id", courseId).single();
+      if (!data) return err404(res, "Course not found");
+      if (data.instructor_id !== req.user.id) return err403(res, "You do not own this course");
+      course = data;
+    }
 
-    if (!course)                        return err404(res, "Course not found");
-    if (course.instructor_id !== req.user.id) return err403(res, "You do not own this course");
+    // ── Class, when one was chosen ───────────────────────────────────────
+    // Checked, not guessed: you may add to a class you teach, or to any class in
+    // a school you administer.
+    let classroom = null;
+    if (classroomId) {
+      const { data: room } = await db.from("classrooms")
+        .select("id, name, teacher_id, school_id").eq("id", classroomId).maybeSingle();
+      if (!room) return err404(res, "Class not found");
 
-    // Find or create user by email
-    let { data: user } = await db
-      .from("users")
-      .select("id, full_name, email")
-      .eq("email", email)
-      .maybeSingle();
+      let allowed = room.teacher_id === req.user.id || req.user.role === "admin";
+      if (!allowed && room.school_id) {
+        const { data: school } = await db.from("school_profiles")
+          .select("id").eq("admin_user_id", req.user.id).eq("id", room.school_id).maybeSingle();
+        allowed = !!school;
+      }
+      if (!allowed) return err403(res, "You do not teach this class");
+      classroom = room;
+    }
+
+    // ── Find or create the learner ───────────────────────────────────────
+    let { data: user } = await db.from("users")
+      .select("id, full_name, email").eq("email", email).maybeSingle();
 
     if (!user) {
       // users.username and users.password_hash are NOT NULL. Invited students
       // get a derived unique username and a sentinel hash (they sign in via the
       // magic/Google flow and set a password later).
-      const base   = (email.split("@")[0] || "student").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 30) || "student";
-      const uname  = `${base}_${Math.random().toString(36).slice(2, 7)}`;
-      const { data: newUser, error: createErr } = await db
-        .from("users")
-        .insert({
-          email,
-          username:      uname,
-          password_hash: "INVITED",          // placeholder; cannot log in with it
-          full_name:     fullName ?? email.split("@")[0],
-          phone:         phone ?? null,
-          role:          "student",
-          created_at:    now(),
-          updated_at:    now(),
-        })
-        .select()
-        .single();
-
+      const base  = (email.split("@")[0] || "student").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 30) || "student";
+      const uname = `${base}_${Math.random().toString(36).slice(2, 7)}`;
+      const { data: newUser, error: createErr } = await db.from("users").insert({
+        email, username: uname, password_hash: "INVITED",
+        full_name: fullName ?? email.split("@")[0],
+        phone: phone ?? null, role: "student",
+        created_at: now(), updated_at: now(),
+      }).select().single();
       if (createErr) throw new Error(createErr.message);
       user = newUser;
     }
 
-    // Check not already enrolled
-    const { data: existing } = await db
-      .from("enrollments")
-      .select("id, status")
-      .eq("user_id", user.id)
-      .eq("course_id", courseId)
-      .maybeSingle();
+    // ── Class membership ─────────────────────────────────────────────────
+    let addedToClass = false;
+    if (classroom) {
+      const { error: cErr } = await db.from("classroom_students").upsert(
+        { classroom_id: classroom.id, user_id: user.id, status: "active", joined_at: now() },
+        { onConflict: "classroom_id,user_id", ignoreDuplicates: false });
+      if (cErr) throw new Error(cErr.message);
+      addedToClass = true;
+    }
 
-    if (existing) {
-      if (existing.status === "active")
-        return err400(res, "Student is already enrolled in this course");
+    // ── Enrolment, only when a course was chosen ─────────────────────────
+    let enrollment = null;
+    let alreadyEnrolled = false;
+    if (course) {
+      const { data: existing } = await db.from("enrollments")
+        .select("id, status").eq("user_id", user.id).eq("course_id", course.id).maybeSingle();
 
-      // Re-activate if previously expired/suspended
-      const { data: reactivated, error: reErr } = await db
-        .from("enrollments")
-        .update({ status: "active", enrolled_at: now() })
-        .eq("id", existing.id)
-        .select()
-        .single();
-
-      if (reErr) throw new Error(reErr.message);
-
-      // Re-add to classroom too (may have been removed)
-      const { data: classroom } = await db
-        .from("classrooms")
-        .select("id")
-        .eq("teacher_id", req.user.id)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (classroom) {
-        await db.from("classroom_students")
-          .upsert(
-            { classroom_id: classroom.id, user_id: user.id, status: "active", joined_at: now() },
-            { onConflict: "classroom_id,user_id", ignoreDuplicates: false }
-          );
+      if (existing?.status === "active") {
+        // No longer fatal: the class part may still have been the point of the
+        // request, so report it rather than throwing the whole thing away.
+        alreadyEnrolled = true;
+      } else if (existing) {
+        const { data: reactivated, error: reErr } = await db.from("enrollments")
+          .update({ status: "active", enrolled_at: now() }).eq("id", existing.id).select().single();
+        if (reErr) throw new Error(reErr.message);
+        enrollment = reactivated;
+      } else {
+        const { data: fresh, error: enrolErr } = await db.from("enrollments").insert({
+          user_id: user.id, course_id: course.id, status: "active", progress: 0, enrolled_at: now(),
+        }).select().single();
+        if (enrolErr) throw new Error(enrolErr.message);
+        enrollment = fresh;
       }
 
+      if (enrollment) {
+        notify(req.user.id, {
+          type: "student_enrolled",
+          title: `${user.full_name || user.email} enrolled`,
+          content: `Enrolled in "${course.title}"`,
+          relatedId: course.id,
+        });
+        notify(user.id, {
+          type: "enrolled_in_course",
+          title: `You're enrolled in "${course.title}"`,
+          content: "You've been added to this course",
+          relatedId: course.id,
+        });
+      }
+    }
+
+    if (classroom && !course) {
       notify(user.id, {
-        type:      "enrolled_in_course",
-        title:     `You're enrolled in "${course.title}"`,
-        content:   `Your access to this course has been restored`,
-        relatedId: courseId,
+        type: "added_to_class",
+        title: `You've been added to ${classroom.name}`,
+        content: "Your teacher added you to this class.",
+        relatedId: classroom.id,
       });
-      return ok(res, { enrollment: reactivated, user, classroomId: classroom?.id ?? null });
     }
 
-    const { data: enrollment, error: enrolErr } = await db
-      .from("enrollments")
-      .insert({
-        user_id:     user.id,
-        course_id:   courseId,
-        status:      "active",
-        progress:    0,
-        enrolled_at: now(),
-      })
-      .select()
-      .single();
+    if (alreadyEnrolled && !addedToClass)
+      return err400(res, "Student is already enrolled in this course");
 
-    if (enrolErr) throw new Error(enrolErr.message);
-
-    // Also add student to the instructor's classroom (if one exists).
-    // Uses upsert so re-adding a removed student just re-activates them.
-    const { data: classroom } = await db
-      .from("classrooms")
-      .select("id")
-      .eq("teacher_id", req.user.id)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    if (classroom) {
-      await db.from("classroom_students")
-        .upsert(
-          { classroom_id: classroom.id, user_id: user.id, status: "active", joined_at: now() },
-          { onConflict: "classroom_id,user_id", ignoreDuplicates: false }
-        );
-    }
-
-    notify(req.user.id, {
-      type:      "student_enrolled",
-      title:     `${user.full_name || user.email} enrolled`,
-      content:   `Enrolled in "${course.title}"`,
-      relatedId: courseId,
+    created(res, {
+      user, enrollment,
+      classroomId:   classroom?.id ?? null,
+      className:     classroom?.name ?? null,
+      addedToClass,
+      enrolled:      !!enrollment,
+      alreadyEnrolled,
     });
-    // Recipient side — tell the student they've been enrolled.
-    notify(user.id, {
-      type:      "enrolled_in_course",
-      title:     `You're enrolled in "${course.title}"`,
-      content:   `You've been added to this course`,
-      relatedId: courseId,
-    });
-
-    created(res, { enrollment, user, classroomId: classroom?.id ?? null });
   } catch (e) {
     err500(res, e);
   }
