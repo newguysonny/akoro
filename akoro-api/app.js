@@ -299,8 +299,9 @@ app.get("/internal/preflight", (req, res) => {
  * The fix is a HOP COUNT, never `true`: trusting the whole chain lets a caller
  * spoof X-Forwarded-For and pick their own bucket, which is worse than sharing
  * one. Left unset by default so this change can't silently make things less
- * safe — set TRUST_PROXY=1 on Railway (one edge hop) and watch the diagnostic
- * below confirm it.
+ * safe. The diagnostic below reads the hop count off a real request and tells
+ * you the number to use — guessing it gets you an intermediate proxy, not the
+ * visitor.
  */
 if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== "") {
   const hops = Number(process.env.TRUST_PROXY);
@@ -309,25 +310,47 @@ if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== "") {
 }
 
 /**
- * One-shot diagnostic: print what the first API request actually looks like.
- * Whether IP-keyed limits work at all depends on this, and it cannot be
- * determined from the code — only from what the platform sends.
+ * One-shot diagnostic: print what the first API request actually looks like,
+ * and work out the hop count rather than guessing it.
+ *
+ * X-Forwarded-For is built left-to-right: the leftmost entry is the original
+ * client, and each proxy appends the address it received the request from. So
+ * the number of entries IS the number of hops to trust — with two entries,
+ * TRUST_PROXY=1 yields the intermediate proxy, not the visitor.
  */
 let ipProbed = false;
 app.use("/api", (req, _res, next) => {
   if (!ipProbed) {
     ipProbed = true;
+    const xff  = req.headers["x-forwarded-for"];
+    const hops = xff ? String(xff).split(",").length : 0;
+
     console.log("[security] first request — req.ip=%s socket=%s x-forwarded-for=%s trustProxy=%s",
-      req.ip, req.socket?.remoteAddress, req.headers["x-forwarded-for"] ?? "(none)",
-      app.get("trust proxy") ?? "(unset)");
-    if (!process.env.TRUST_PROXY && req.headers["x-forwarded-for"]) {
-      console.warn("[security] X-Forwarded-For is present but TRUST_PROXY is unset — " +
-        "IP-keyed limits (login, refresh) are keying on the proxy, i.e. one shared bucket. " +
-        "Set TRUST_PROXY to the number of proxy hops (Railway: 1).");
+      req.ip, req.socket?.remoteAddress, xff ?? "(none)", app.get("trust proxy") ?? "(unset)");
+
+    if (!process.env.TRUST_PROXY && hops) {
+      console.warn(`[security] X-Forwarded-For has ${hops} hop(s) but TRUST_PROXY is unset — ` +
+        "IP-keyed limits (login, refresh) are keying on the proxy, i.e. ONE bucket for every " +
+        `visitor. Set TRUST_PROXY=${hops} and redeploy.`);
+    } else if (process.env.TRUST_PROXY && isNonRoutable(req.ip)) {
+      // The point of the setting is to reach the visitor's address. Landing on
+      // a private or carrier-NAT address means the count is too low and the
+      // shared-bucket problem is still there, just less obviously.
+      console.warn(`[security] TRUST_PROXY=${process.env.TRUST_PROXY} but req.ip=${req.ip} is still ` +
+        `a proxy address. X-Forwarded-For has ${hops} hop(s) — try TRUST_PROXY=${hops}.`);
     }
   }
   next();
 });
+
+/** Private, loopback and carrier-grade-NAT ranges — never a real visitor. */
+function isNonRoutable(ip) {
+  if (!ip) return true;
+  const v4 = String(ip).replace(/^::ffff:/, "");
+  return /^(10\.|127\.|192\.168\.|169\.254\.|::1$|fc|fd)/.test(v4)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(v4)
+      || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(v4);   // 100.64.0.0/10
+}
 
 app.use("/api", attachRateLimitIdentity);
 // Background jobs call this same API over loopback as the user who scheduled
