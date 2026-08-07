@@ -3,6 +3,7 @@ import { Plus, CheckSquare, Square, Trash2, Pencil, Clock, Repeat, Play } from '
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
+import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 
 /* datetime-local speaks local wall-clock; the API speaks ISO/UTC. */
@@ -227,6 +228,7 @@ export default function TasksPage() {
   const [editing, setEditing] = useState(null);
   const [toast,   setToast]   = useState(null);
   const [filter,  setFilter]  = useState('all');
+  const [noAgent, setNoAgent] = useState(null);   // holds the retry, so creating one resumes the save
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -261,7 +263,19 @@ export default function TasksPage() {
     };
   };
 
+  // A missing agent isn't a form error, it's a setup step: swap it for the
+  // modal that creates one, then replay this exact save.
   const handleSubmit = async (form) => {
+    try {
+      return await submitTask(form);
+    } catch (err) {
+      if (!isNoAgentError(err)) throw err;
+      setNoAgent(() => () => submitTask(form));
+      return;
+    }
+  };
+
+  const submitTask = async (form) => {
     if (editing) {
       await apiPatch(`/api/tasks/${editing.id}`, bodyFrom(form));
       showToast('Task updated');
@@ -391,6 +405,7 @@ export default function TasksPage() {
         onSubmit={handleSubmit}
         editing={editing}
       />
+      <NoAgentModal open={!!noAgent} context="task" onClose={() => setNoAgent(null)} onCreated={noAgent} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );

@@ -10,6 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { apiGet, apiPost } from '../../services/api.js';
+import NoAgentSheet, { isNoAgentError } from './NoAgentSheet.jsx';
 
 const SHEET = {
   position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2100,
@@ -43,6 +44,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [needsAgent, setNeedsAgent] = useState(false);
 
   // Courses the learner is actually enrolled in — you can only battle inside one.
   useEffect(() => {
@@ -83,7 +85,17 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
 
     setBusy(true);
     try {
-      const d = await apiPost(`/api/battle/courses/${courseId}/battles/invite`, {
+      await send();
+    } catch (err) {
+      // No agent isn't an error to report — it's a step to offer.
+      if (isNoAgentError(err)) { setNeedsAgent(true); setBusy(false); return; }
+      setError(err?.message || 'Could not create the battle.');
+      setBusy(false);
+    }
+  };
+
+  const send = async () => {
+    const d = await apiPost(`/api/battle/courses/${courseId}/battles/invite`, {
         title: title.trim(),
         topic: topic.trim() || null,
         difficulty,
@@ -92,14 +104,10 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
         scheduled_for: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         whole_class: mode === 'class',
         user_ids: mode === 'class' ? [] : selected,
-        usernames: mode === 'class' ? [] : typedNames,
-      });
-      onCreated?.(d?.data ?? d);
-      onClose();
-    } catch (err) {
-      setError(err?.message || 'Could not create the battle.');
-      setBusy(false);
-    }
+      usernames: mode === 'class' ? [] : typedNames,
+    });
+    onCreated?.(d?.data ?? d);
+    onClose();
   };
 
   return (
@@ -235,6 +243,13 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
           }}>{busy ? 'Sending…' : `⚔️ Challenge${count ? ` ${count}` : ''}`}</button>
         </div>
       </div>
+
+      <NoAgentSheet
+        open={needsAgent}
+        onClose={() => setNeedsAgent(false)}
+        defaultName="My Agent"
+        onCreated={send}
+      />
     </>
   );
 }

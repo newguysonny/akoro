@@ -5,6 +5,7 @@ import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
+import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { formatTaskOutputs } from '../../utils/formatTaskOutput.js';
 import AgentStatsTab from './AgentStatsTab.jsx';
 
@@ -70,6 +71,8 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [tPriority,  setTPriority]  = useState("medium");
   const [tDueAt,     setTDueAt]     = useState("");     // datetime-local wall-clock
   const [tEditing,   setTEditing]   = useState(null);   // task being edited, or null
+  const [tError,     setTError]     = useState("");
+  const [needsAgent, setNeedsAgent] = useState(false);
   const feedRef = useRef(null);
 
   // ── Persistent chat sessions ───────────────────────────────────────────────
@@ -352,6 +355,16 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
 
   const addTask=async()=>{
     if(!tTitle.trim()) return;
+    setTError("");
+    try { await saveTask(); }
+    catch(err){
+      // No agent yet is a setup step, not a failure to report.
+      if(isNoAgentError(err)) setNeedsAgent(true);
+      else setTError(err?.message||"Could not save the task. Please try again.");
+    }
+  };
+
+  const saveTask=async()=>{
     const ts=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
     const dueAt=tDueAt?new Date(tDueAt).toISOString():null;
     if(tEditing){
@@ -516,6 +529,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
               Leave empty and your agent starts right away. Pick a date and time to schedule it.
             </p>
           </div>
+          {tError&&<p style={{ fontSize:12,fontWeight:800,color:RED,margin:"0 0 12px" }}>{tError}</p>}
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={closeTaskSheet} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
             <button onClick={addTask} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:tTitle.trim()?"pointer":"default",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
@@ -524,6 +538,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
         </div></>
       )}
+      <NoAgentSheet open={needsAgent} onClose={()=>setNeedsAgent(false)} defaultName={agentName||'My Agent'} onCreated={saveTask}/>
       {custOpen&&(
         <><div onClick={()=>setCustOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 48px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>

@@ -7,6 +7,7 @@ import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import QuestionBankModal from '../components/QuestionBankModal.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 
 /* ── Opponent picker ─────────────────────────────────────────────────────
@@ -365,6 +366,7 @@ export default function BattlesPage() {
   const [bankOpen, setBankOpen] = useState(false);
   const [toast,   setToast]   = useState(null);
   const [filter,  setFilter]  = useState('all');
+  const [noAgent, setNoAgent] = useState(null);   // holds the retry, so creating one resumes the battle
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -402,7 +404,20 @@ export default function BattlesPage() {
     };
   }, [load]);
 
+  // The modal's submit awaits this, so a thrown error surfaces in the form.
+  // A missing agent is not a form error though — it's a setup step, so we swap
+  // it for the modal that creates one and then replays this exact submit.
   const handleSubmit = async (form, typedNames) => {
+    try {
+      return await submitBattle(form, typedNames);
+    } catch (err) {
+      if (!isNoAgentError(err)) throw err;
+      setNoAgent(() => () => submitBattle(form, typedNames));
+      return;   // the battle modal closes; the agent modal takes over
+    }
+  };
+
+  const submitBattle = async (form, typedNames) => {
     const scheduledIso = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null;
 
     if (editing) {
@@ -553,6 +568,7 @@ export default function BattlesPage() {
         editing={editing}
       />
       <QuestionBankModal open={bankOpen} onClose={() => setBankOpen(false)} />
+      <NoAgentModal open={!!noAgent} context="battle" onClose={() => setNoAgent(null)} onCreated={noAgent} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );
