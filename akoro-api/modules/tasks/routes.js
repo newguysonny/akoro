@@ -192,7 +192,7 @@ router.post("/", async (req, res) => {
     if (isRecurring && !cronExpr) return res.status(400).json({ error: "cronExpr required for recurring tasks" });
 
     const teacherId             = req.user.id;
-    const { taskType, payload } = await extractIntent(title, description);
+    const { taskType, payload } = await extractIntent(title, description, req.user.role);
 
     const task = await TaskDB.create({
       creator_id: teacherId, agent_id: agentId,

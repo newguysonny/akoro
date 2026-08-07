@@ -328,86 +328,112 @@ router.delete("/outputs/:id", teacherOnly, async (req, res) => {
   } catch (e) { serverError(res, e, req); }
 });
 
+
+/**
+ * runTeachingTool — the one place a teaching tool actually runs.
+ *
+ * Extracted from the HTTP route so a scheduled task can run the same eight
+ * tools the workbench does, with the same lock check, the same charge-after
+ * billing and the same saved output. Duplicating any of that in the task
+ * worker would guarantee the two drift: a tool unlocked in one place and not
+ * the other, or work that never reaches the teacher's library.
+ *
+ * Throws ToolError with a `code` the caller maps to a status or a task failure.
+ */
+export class ToolError extends Error {
+  constructor(message, code, extra = {}) { super(message); this.code = code; Object.assign(this, extra); }
+}
+
+export async function runTeachingTool({ key, body = {}, userId }) {
+  const tool = byKey[key];
+  if (!tool) throw new ToolError("Unknown tool", "UNKNOWN_TOOL");
+
+  const locks = await lockState(userId);
+  if (locks[tool.key]?.locked) {
+    throw new ToolError(`${tool.name} is locked. Unlock it in Tools & Assets to use it.`,
+      "TOOL_LOCKED", { toolId: locks[tool.key].toolId });
+  }
+
+  const input = {};
+  for (const f of tool.fields) {
+    const v = body?.[f.name];
+    input[f.name] = v === undefined || v === null ? "" : String(v).trim();
+    if (f.required && !input[f.name]) throw new ToolError(`${f.label} is required`, "MISSING_FIELD");
+    if (!input[f.name] && f.default) input[f.name] = f.default;
+  }
+
+  const resp = await openai.chat.completions.create({
+    model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
+    messages: [{ role: "system", content: tool.system }, { role: "user", content: tool.prompt(input) }],
+  });
+  const raw = resp.choices?.[0]?.message?.content?.trim() || "";
+
+  let payload;
+  if (tool.output === "markdown") {
+    if (!raw) throw new ToolError("Nothing came back — try again.", "EMPTY");
+    payload = { content: raw.replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```$/, "") };
+  } else {
+    const data = parseJson(raw);
+    if (!data) throw new ToolError("That came back in an unusable shape — try again.", "UNPARSEABLE");
+    // A doc with no cards renders as an empty page — better to say so than to
+    // hand back a blank result that looks like a bug.
+    if (tool.output === "doc" && !Array.isArray(data.cards)) {
+      throw new ToolError("That came back without any sections — try again.", "NO_SECTIONS");
+    }
+    payload = { ...data, content: asMarkdown(tool, data) };
+  }
+
+  // Charged AFTER the call, so a failed generation is free.
+  let charged = 0;
+  try {
+    const billTo = await schoolBillTo(userId);
+    const r = await chargeForAI({
+      userId, feature: `tool_${tool.key}`, model: OPENAI_MODEL,
+      usage: resp.usage || {}, ref: tool.key, billTo,
+    });
+    charged = r?.charged || 0;
+  } catch (e) {
+    if (e instanceof InsufficientCoins) {
+      throw new ToolError("Not enough coins to run this tool.", "INSUFFICIENT_COINS",
+        { needed: e.needed, balance: e.balance });
+    }
+    console.error("[teaching/tools] charge failed:", e.message);
+  }
+
+  // Keep it: teachers reuse what they generated, and the tool library is where
+  // they look for it — including for work a scheduled task produced overnight.
+  db.schema("edu").from("tool_outputs").insert({
+    instructor_id: userId, tool: `teaching_${tool.key}`, kind: tool.key,
+    title: input.topic || payload.title || tool.name, subject: input.subject || null,
+    content: payload,
+  }).then(({ error }) => { if (error) console.warn("[teaching/tools] save failed:", error.message); });
+
+  return {
+    key: tool.key, name: tool.name, output: tool.output, ...payload,
+    topic: input.topic || null, subject: input.subject || null, class: input.class || null,
+    ...(tool.key === "podcast" ? { voiceA: input.voiceA, voiceB: input.voiceB } : {}),
+    coinsCharged: charged,
+  };
+}
+
 // ── POST /api/teaching/tools/:key ────────────────────────────────────────────
 router.post("/:key", teacherOnly, async (req, res) => {
   try {
-    const tool = byKey[req.params.key];
-    if (!tool) return res.status(404).json({ error: "Unknown tool" });
-
-    // Enforced here as well as in the catalog: a locked tool must not run just
-    // because the client didn't grey out the button.
-    const locks = await lockState(req.user.id);
-    if (locks[tool.key]?.locked) {
-      return res.status(403).json({ error: `${tool.name} is locked. Unlock it in Tools & Assets to use it.`, code: "TOOL_LOCKED", toolId: locks[tool.key].toolId });
+    const data = await runTeachingTool({ key: req.params.key, body: req.body, userId: req.user.id });
+    res.json({ success: true, data });
+  } catch (e) {
+    // The runner speaks in codes so both callers — this route and the task
+    // worker — can react without parsing prose.
+    const map = { UNKNOWN_TOOL: 404, TOOL_LOCKED: 403, MISSING_FIELD: 400,
+                  EMPTY: 422, UNPARSEABLE: 422, NO_SECTIONS: 422, INSUFFICIENT_COINS: 402 };
+    if (e.code && map[e.code]) {
+      const body = { error: e.message, code: e.code };
+      if (e.toolId  !== undefined) body.toolId  = e.toolId;
+      if (e.needed  !== undefined) { body.needed = e.needed; body.balance = e.balance; }
+      return res.status(map[e.code]).json(body);
     }
-
-    const input = {};
-    for (const f of tool.fields) {
-      const v = req.body?.[f.name];
-      input[f.name] = v === undefined || v === null ? "" : String(v).trim();
-      if (f.required && !input[f.name]) return res.status(400).json({ error: `${f.label} is required` });
-      if (!input[f.name] && f.default) input[f.name] = f.default;
-    }
-
-    const resp = await openai.chat.completions.create({
-      model: OPENAI_MODEL, max_tokens: tool.maxTokens, temperature: 0.6,
-      messages: [{ role: "system", content: tool.system }, { role: "user", content: tool.prompt(input) }],
-    });
-    const raw = resp.choices?.[0]?.message?.content?.trim() || "";
-
-    let payload;
-    if (tool.output === "markdown") {
-      if (!raw) return res.status(422).json({ error: "Nothing came back — try again." });
-      payload = { content: raw.replace(/^```(?:markdown)?\s*/i, "").replace(/\s*```$/, "") };
-    } else {
-      const data = parseJson(raw);
-      if (!data) return res.status(422).json({ error: "That came back in an unusable shape — try again." });
-      // A doc with no cards renders as an empty page — better to say so than
-      // to hand back a blank result that looks like a bug.
-      if (tool.output === "doc" && !Array.isArray(data.cards)) {
-        return res.status(422).json({ error: "That came back without any sections — try again." });
-      }
-      payload = { ...data, content: asMarkdown(tool, data) };
-    }
-
-    // Charged AFTER the call, so a failed generation is free.
-    let charged = 0;
-    try {
-      const billTo = await schoolBillTo(req.user.id);
-      const r = await chargeForAI({
-        userId: req.user.id, feature: `tool_${tool.key}`, model: OPENAI_MODEL,
-        usage: resp.usage || {}, ref: tool.key, billTo,
-      });
-      charged = r?.charged || 0;
-    } catch (e) {
-      if (e instanceof InsufficientCoins) {
-        return res.status(402).json({ error: "Not enough coins to run this tool.", code: "INSUFFICIENT_COINS", needed: e.needed, balance: e.balance });
-      }
-      console.error("[teaching/tools] charge failed:", e.message);
-    }
-
-    // Keep it: teachers reuse what they generated, and the tool library is
-    // where they look for it.
-    db.schema("edu").from("tool_outputs").insert({
-      instructor_id: req.user.id, tool: `teaching_${tool.key}`, kind: tool.key,
-      title: input.topic || payload.title || tool.name, subject: input.subject || null,
-      content: payload,
-    }).then(({ error }) => { if (error) console.warn("[teaching/tools] save failed:", error.message); });
-
-    res.json({
-      success: true,
-      data: {
-        key: tool.key, output: tool.output, ...payload,
-        // Echoed back so the result header can show the same pills the teacher
-        // filled in, without the client having to remember the form.
-        topic: input.topic || null, subject: input.subject || null, class: input.class || null,
-        // The narrator endpoint is a separate call, so the voices the teacher
-        // chose have to travel with the script for it to honour them.
-        ...(tool.key === "podcast" ? { voiceA: input.voiceA, voiceB: input.voiceB } : {}),
-        coinsCharged: charged,
-      },
-    });
-  } catch (e) { serverError(res, e, req); }
+    serverError(res, e, req);
+  }
 });
 
 // ── POST /api/teaching/tools/podcast/audio ───────────────────────────────────

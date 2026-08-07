@@ -50,8 +50,11 @@ function buildSystemPrompt(agent, course) {
   const base = agent.systemPrompt ?? agent.system_prompt ??
     `You are ${agent.name ?? agent.agent_name}, a helpful AI teaching assistant on Akoro Learning Platform.`;
 
+  // The id, not just the title: tools that create work for a course (battles,
+  // self study) take a courseId, and without it here the model either invents
+  // one or gives up.
   const courseContext = course
-    ? `\n\nYou are currently working on: "${course.title}" (${course.subject}).`
+    ? `\n\nYou are currently working on: "${course.title}" (${course.subject}). Its courseId is ${course.id} — use that when a tool asks for one.`
     : "";
 
   return base + courseContext + `\n\nAlways be helpful, accurate, and professional. When you need more information, ask. When you have everything, act.`;
@@ -73,25 +76,58 @@ function buildTaskPrompt(task, files, fileTexts, course) {
   return prompt;
 }
 
-export async function extractIntent(title, description) {
-  const text  = `${title} ${description ?? ""}`.toLowerCase();
-  const types = {
-    quiz_me:            ["quiz me", "test me", "practice questions for me", "practise me"],
-    explain_concept:    ["explain", "what is", "help me understand", "teach me"],
-    create_study_plan:  ["study plan", "revision plan", "schedule my study", "plan my"],
-    set_study_reminder: ["remind me", "set a reminder", "reminder to"],
-    challenge_peer:     ["challenge", "battle", "duel", "compete with"],
-    generate_quiz:      ["quiz", "test", "questions", "assessment", "practice"],
-    send_reminder:      ["remind", "notification", "alert", "message students", "notify"],
-    grade_submissions:  ["grade", "mark", "score", "evaluate", "assess submission"],
-    schedule_session:   ["schedule", "book", "live class", "session", "zoom", "meet"],
-    export_report:      ["report", "analytics", "progress", "overview", "export", "csv"],
-    create_battle:      ["battle", "challenge", "competition", "speed round", "quiz game"],
-  };
+/**
+ * extractIntent — pick the task type, and therefore which tools are in scope.
+ *
+ * Order matters and used to be wrong. The map is scanned top-down and
+ * challenge_peer owned "battle"/"challenge", so it swallowed every teacher
+ * phrasing — "create a battle for JSS1" resolved to a student-facing 1v1 duel
+ * whose only tool needs an opponentId the teacher never supplies. create_battle
+ * sat below it and could never be reached.
+ *
+ * So: the ROLE decides first. A student challenging a friend and a teacher
+ * setting work for a class use the same words and mean different things, and no
+ * amount of keyword ordering fixes that. Only once we know who is asking do the
+ * keywords disambiguate, most specific phrasing first.
+ */
+const STUDENT_INTENTS = {
+  quiz_me:            ["quiz me", "test me", "practice questions for me", "practise me"],
+  set_study_reminder: ["remind me", "set a reminder", "reminder to"],
+  create_study_plan:  ["study plan", "revision plan", "schedule my study", "plan my"],
+  challenge_peer:     ["challenge", "battle", "duel", "compete with"],
+  explain_concept:    ["explain", "what is", "help me understand", "teach me"],
+};
 
-  for (const [type, keywords] of Object.entries(types)) {
-    if (keywords.some((k) => text.includes(k))) {
-      return { taskType: type, payload: {} };
+const TEACHER_INTENTS = {
+  // Multi-word phrases before single words, so "self study" can't be eaten by
+  // "study plan" and "assign a battle" can't be eaten by "assess".
+  assign_self_study:  ["self study", "self-study", "assign study", "study assignment", "independent study"],
+  run_teaching_tool:  ["podcast", "misconception", "real-world", "real world connection", "lesson hook",
+                       "vocabulary", "essay grade", "grade this essay", "lesson plan", "assignment creator"],
+  create_battle:      ["battle", "challenge", "competition", "speed round", "quiz game", "duel"],
+  attendance_rollcall:["attendance", "roll call", "rollcall", "register"],
+  grade_submissions:  ["grade", "mark", "score", "evaluate", "assess submission"],
+  schedule_session:   ["schedule a class", "book a class", "live class", "session", "zoom", "meet"],
+  export_report:      ["report", "analytics", "progress", "overview", "export", "csv"],
+  send_reminder:      ["remind", "notification", "alert", "message students", "notify"],
+  generate_quiz:      ["quiz", "test", "questions", "assessment", "practice"],
+};
+
+const STUDENT_ROLES = new Set(["student", "learner"]);
+
+export async function extractIntent(title, description, role) {
+  const text = `${title} ${description ?? ""}`.toLowerCase();
+  // Unknown role → try teacher phrasings first, then student. A teacher account
+  // is the one that can do damage by picking wrong (it assigns work to others),
+  // so the ambiguous case should still land on an intent whose tool asks for
+  // the targeting it needs rather than one that silently needs an opponentId.
+  const maps = STUDENT_ROLES.has(role)
+    ? [STUDENT_INTENTS, TEACHER_INTENTS]
+    : [TEACHER_INTENTS, STUDENT_INTENTS];
+
+  for (const map of maps) {
+    for (const [type, keywords] of Object.entries(map)) {
+      if (keywords.some((k) => text.includes(k))) return { taskType: type, payload: {} };
     }
   }
   return { taskType: "general", payload: {} };

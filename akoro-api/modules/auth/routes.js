@@ -119,6 +119,31 @@ function signAccess(user) {
   return { token, jti };
 }
 
+/**
+ * signInternalAccess — a short-lived access token for a background job acting
+ * on a user's behalf.
+ *
+ * The task worker has no request and therefore no cookie, but the endpoints it
+ * calls are the user's own. Rather than invent a service account with wider
+ * reach than the teacher who scheduled the work, it borrows their identity for
+ * two minutes. Signed by the same factory as a real login, so it satisfies
+ * authenticateToken without loosening anything.
+ */
+export function signInternalAccess(user, ttlSeconds = 120) {
+  const payload = {
+    jti:   randomUUID(),
+    sub:   user.id,
+    email: user.email ?? null,
+    role:  user.role,
+    iss:   JWT_ISSUER,
+    aud:   JWT_AUDIENCE,
+    internal: true,          // visible in logs: this call came from a job
+  };
+  return USE_RSA
+    ? jwt.sign(payload, PRIVATE_KEY, { algorithm: "RS256", expiresIn: ttlSeconds })
+    : jwt.sign(payload, DEV_SECRET,  { algorithm: "HS256", expiresIn: ttlSeconds });
+}
+
 function signRefresh(userId, family) {
   const jti = randomUUID();
   const payload = {

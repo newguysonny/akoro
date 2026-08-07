@@ -17,6 +17,12 @@ import { reportWritingDefinition,       executeReportWriting       } from "./rep
 import { examPrepDefinition,            executeExamPrep            } from "./exam-prep.js";
 import { attendanceRollcallDefinition,  executeAttendanceRollcall  } from "./attendance-rollcall.js";
 import { interactiveMaterialDefinition, executeInteractiveMaterial } from "./interactive-material.js";
+// Scheduling the things teachers actually assign, through the same endpoints
+// the UI uses — so a battle or study topic set by a schedule is the same object
+// as one set by hand.
+import { assignBattleDefinition,    executeAssignBattle    } from "./assign-battle.js";
+import { assignSelfStudyDefinition, executeAssignSelfStudy } from "./assign-self-study.js";
+import { teachingToolDefinition,    executeTeachingTool    } from "./teaching-tool.js";
 
 export const ALL_TOOLS = [
   { definition: generateQuizDefinition,     execute: executeGenerateQuiz     },
@@ -37,6 +43,9 @@ export const ALL_TOOLS = [
   { definition: examPrepDefinition,            execute: executeExamPrep            },
   { definition: attendanceRollcallDefinition,  execute: executeAttendanceRollcall  },
   { definition: interactiveMaterialDefinition, execute: executeInteractiveMaterial },
+  { definition: assignBattleDefinition,        execute: executeAssignBattle        },
+  { definition: assignSelfStudyDefinition,     execute: executeAssignSelfStudy     },
+  { definition: teachingToolDefinition,        execute: executeTeachingTool        },
 ];
 
 const tool = (name) => {
@@ -52,7 +61,14 @@ export const TOOLS_BY_TYPE = {
   fetch_student_data: [tool("fetch_student_data")],
   schedule_session:   [tool("schedule_session"),   tool("fetch_student_data")],
   export_report:      [tool("export_report"),      tool("fetch_student_data")],
-  create_battle:      [tool("create_battle"),      tool("fetch_student_data")],
+  // create_battle is kept for tasks created before assign_battle existed. New
+  // work routes to assign_battle, which can target a course, a class or named
+  // learners and notifies them — create_battle opens an empty lobby nobody is
+  // told about.
+  create_battle:      [tool("assign_battle"), tool("create_battle"), tool("fetch_student_data")],
+  assign_battle:      [tool("assign_battle"), tool("fetch_student_data")],
+  assign_self_study:  [tool("assign_self_study"), tool("fetch_student_data")],
+  run_teaching_tool:  [tool("run_teaching_tool")],
   quiz_me:            [tool("quiz_me")],
   explain_concept:    [tool("explain_concept")],
   create_study_plan:  [tool("create_study_plan")],

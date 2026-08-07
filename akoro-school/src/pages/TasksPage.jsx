@@ -27,6 +27,18 @@ const REPEATS = [
 ];
 const cronToRepeat = (cron) => REPEATS.find(r => r.cron === cron)?.key ?? (cron ? 'custom' : 'none');
 
+
+/* What a task can actually do, in the teacher's words. The engine reads free
+   text and picks a tool, so the only thing standing between a teacher and a
+   scheduled podcast is knowing it's possible. */
+const EXAMPLES = [
+  'Every Monday 7am, create a battle for JSS1 on last week\'s topic',
+  'Assign self study on the water cycle to JSS2, due Friday',
+  'Make a podcast about the solar system for JSS1',
+  'Draft lesson hooks for next week\'s Basic Science lesson',
+  'Every Friday, take attendance for JSS1',
+];
+
 const BLANK = { title: '', description: '', priority: 'medium', dueAt: '', repeat: 'none', customCron: '' };
 
 /* ── New / Edit Task Modal ──────────────────────────────────────────────── */
@@ -72,7 +84,25 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
   return (
     <Modal open={open} onClose={onClose} title={editing ? 'Edit Task' : 'New Task'}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Inp label="Task Title *" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="What should your agent do?" />
+        <Inp label="Task Title *" value={form.title} onChange={e => setField('title', e.target.value)}
+          placeholder="e.g. Every Monday, create a battle for JSS1" />
+
+        {!editing && !form.title && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: MUTED2, fontFamily: FONT, marginBottom: 6 }}>
+              Your agent can set battles, assign self study and run your teaching tools. Try:
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {EXAMPLES.map(ex => (
+                <button key={ex} type="button" onClick={() => setField('title', ex)} style={{
+                  padding: '5px 10px', borderRadius: 20, cursor: 'pointer', textAlign: 'left',
+                  border: `1px solid ${BORDER}`, background: LIGHT, color: MUTED,
+                  fontSize: 11, fontWeight: 600, fontFamily: FONT,
+                }}>{ex}</button>
+              ))}
+            </div>
+          </div>
+        )}
         <Txa label="Description" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Additional details…" rows={2} />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
