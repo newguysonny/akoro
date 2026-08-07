@@ -134,15 +134,11 @@ export default function LearnerDashboard() {
       .then(d=>{ if(d.sessions?.length) setSessions(d.sessions); })
       .catch(()=>{});
 
-    // Challenges
-    apiGet("/api/battle/my-challenges")
-      .then(d=>{ if(d.challenges?.length) setChallenges(d.challenges); })
-      .catch(()=>{});
-
-    // Battles
-    apiGet("/api/battle/my-battles")
-      .then(d=>{ if(d.battles?.length) setBattles(d.battles); })
-      .catch(()=>{});
+    // Challenges + battles. Both answer { success, data } with the card shape
+    // the tabs render, so we set them straight through — including the empty
+    // case, which is a real answer ("nothing pending"), not a reason to keep
+    // whatever was on screen before.
+    loadBattles();
 
     // Decay alerts
     apiGet(`/api/adaptive/chat/decay/alerts/${STUDENT_ID}`)
@@ -394,6 +390,11 @@ export default function LearnerDashboard() {
       setToast(t('common.network_error'));
     }
   };
+
+  const loadBattles = useCallback(() => {
+    apiGet("/api/battle/my-challenges").then(d=>setChallenges(d?.data ?? [])).catch(()=>{});
+    apiGet("/api/battle/my-battles").then(d=>setBattles(d?.data ?? [])).catch(()=>{});
+  }, []);
 
   const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
   const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
@@ -659,7 +660,7 @@ export default function LearnerDashboard() {
           )}
           {tab==="discovery" && <DiscoveryTab/>}
           {tab==="rankings" && <RankingsTab/>}
-          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")}/>}
+          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}
         </div>
 

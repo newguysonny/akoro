@@ -1,57 +1,114 @@
-import { useState, useEffect } from 'react';
-import { Plus, CheckSquare, Square, Trash2, Circle, Clock, Tag } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, CheckSquare, Square, Trash2, Pencil, Clock, Repeat, Play } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
-import { Btn, Modal, Inp, Txa, Sel, Badge, Toast, Skeleton } from '../components/Primitives.jsx';
-import { apiGet, apiPost, apiPatch } from '../services/api.js';
+import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 
-/* ── Mock data ─────────────────────────────────────────────────────── */
-const MOCK_TASKS = [
-  { id: 1, title: 'Prepare React Hooks slides', status: 'pending', task_type: 'course', priority: 'high', dueDate: new Date(Date.now() + 86400000).toISOString() },
-  { id: 2, title: 'Review student submissions for JS course', status: 'done', task_type: 'review', priority: 'medium', dueDate: null },
-  { id: 3, title: 'Update course curriculum for Q3', status: 'pending', task_type: 'general', priority: 'low', dueDate: new Date(Date.now() + 604800000).toISOString() },
-  { id: 4, title: 'Schedule office hours for next week', status: 'pending', task_type: 'general', priority: 'medium', dueDate: new Date(Date.now() + 259200000).toISOString() },
-  { id: 5, title: 'Create quiz for Algorithm challenge battle', status: 'done', task_type: 'battle', priority: 'high', dueDate: null },
-];
+/* datetime-local speaks local wall-clock; the API speaks ISO/UTC. */
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const toIso = (local) => (local ? new Date(local).toISOString() : null);
 
-/* ── New Task Modal ─────────────────────────────────────────────────── */
-function NewTaskModal({ open, onClose, onSubmit }) {
-  const [form, setForm] = useState({ title: '', description: '', task_type: 'general', priority: 'medium', dueDate: '' });
+/* Repeat presets, expressed as the cron the scheduler already understands. */
+const REPEATS = [
+  { key: 'none',    label: 'Does not repeat', cron: null },
+  { key: 'daily',   label: 'Every day',       cron: '0 8 * * *' },
+  { key: 'weekdays',label: 'Every weekday',   cron: '0 8 * * 1-5' },
+  { key: 'weekly',  label: 'Every week',      cron: '0 8 * * 1' },
+  { key: 'monthly', label: 'Every month',     cron: '0 8 1 * *' },
+];
+const cronToRepeat = (cron) => REPEATS.find(r => r.cron === cron)?.key ?? (cron ? 'custom' : 'none');
+
+const BLANK = { title: '', description: '', priority: 'medium', dueAt: '', repeat: 'none', customCron: '' };
+
+/* ── New / Edit Task Modal ──────────────────────────────────────────────── */
+function TaskModal({ open, onClose, onSubmit, editing }) {
+  const [form, setForm]   = useState(BLANK);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!open) return;
+    setError('');
+    setForm(editing
+      ? {
+          title: editing.title || '',
+          description: editing.description || '',
+          priority: editing.priority || 'medium',
+          dueAt: toLocalInput(editing.due_at),
+          repeat: editing.is_recurring ? cronToRepeat(editing.cron_expr) : 'none',
+          customCron: editing.is_recurring && cronToRepeat(editing.cron_expr) === 'custom' ? editing.cron_expr : '',
+        }
+      : BLANK);
+  }, [open, editing]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim()) return;
+    setError('');
+    if (!form.title.trim()) return setError('Give the task a title.');
+    if (form.repeat === 'custom' && !form.customCron.trim())
+      return setError('Enter a cron expression, or pick a preset.');
+
     setLoading(true);
-    try { await onSubmit(form); onClose(); setForm({ title: '', description: '', task_type: 'general', priority: 'medium', dueDate: '' }); }
-    catch (err) { console.error(err); }
-    finally { setLoading(false); }
+    try {
+      await onSubmit(form);
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'Could not save the task.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="New Task">
+    <Modal open={open} onClose={onClose} title={editing ? 'Edit Task' : 'New Task'}>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Inp label="Task Title *" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="What needs to be done?" />
+        <Inp label="Task Title *" value={form.title} onChange={e => setField('title', e.target.value)} placeholder="What should your agent do?" />
         <Txa label="Description" value={form.description} onChange={e => setField('description', e.target.value)} placeholder="Additional details…" rows={2} />
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Sel label="Type" value={form.task_type} onChange={e => setField('task_type', e.target.value)}>
-            <option value="general">General</option>
-            <option value="course">Course</option>
-            <option value="review">Review</option>
-            <option value="battle">Battle</option>
-          </Sel>
           <Sel label="Priority" value={form.priority} onChange={e => setField('priority', e.target.value)}>
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
           </Sel>
+          <Sel label="Repeat" value={form.repeat} onChange={e => setField('repeat', e.target.value)}>
+            {REPEATS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+            <option value="custom">Custom (cron)…</option>
+          </Sel>
         </div>
-        <Inp label="Due Date (optional)" type="date" value={form.dueDate} onChange={e => setField('dueDate', e.target.value)} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+
+        <div>
+          <Inp
+            label="Run at (date & time)"
+            type="datetime-local"
+            value={form.dueAt}
+            onChange={e => setField('dueAt', e.target.value)}
+          />
+          <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 4 }}>
+            {form.repeat === 'none'
+              ? 'Leave empty to run it straight away. A future time schedules it.'
+              : 'The repeat schedule takes over after the first run.'}
+          </div>
+        </div>
+
+        {form.repeat === 'custom' && (
+          <Inp label="Cron expression" value={form.customCron} onChange={e => setField('customCron', e.target.value)} placeholder="0 8 * * 1-5" />
+        )}
+
+        {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
           <Btn type="submit" disabled={loading || !form.title.trim()}>
-            {loading ? 'Adding…' : 'Add Task'}
+            {loading ? 'Saving…' : editing ? 'Save changes' : 'Add Task'}
           </Btn>
         </div>
       </form>
@@ -59,7 +116,7 @@ function NewTaskModal({ open, onClose, onSubmit }) {
   );
 }
 
-/* ── Priority badge ─────────────────────────────────────────────────── */
+/* ── Badges ─────────────────────────────────────────────────────────────── */
 function PriorityBadge({ priority }) {
   const map = {
     high:   { color: RED,    bg: '#FEE2E2', label: 'High' },
@@ -70,7 +127,6 @@ function PriorityBadge({ priority }) {
   return <Badge color={cfg.color} bg={cfg.bg}>{cfg.label}</Badge>;
 }
 
-/* ── Type badge ─────────────────────────────────────────────────────── */
 function TypeBadge({ type }) {
   const map = {
     course:  { color: AMBER,  bg: '#FFF7ED' },
@@ -79,27 +135,44 @@ function TypeBadge({ type }) {
     general: { color: MUTED,  bg: LIGHT },
   };
   const cfg = map[type] || map.general;
-  return <Badge color={cfg.color} bg={cfg.bg}>{type}</Badge>;
+  return <Badge color={cfg.color} bg={cfg.bg}>{type || 'general'}</Badge>;
 }
 
-/* ── Task Row ───────────────────────────────────────────────────────── */
-function TaskRow({ task, onToggle }) {
-  const isDone = task.status === 'done';
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && !isDone;
+function StatusBadge({ status }) {
+  const map = {
+    done:      { color: GREEN, bg: '#DCFCE7' },
+    running:   { color: BLUE,  bg: '#EFF6FF' },
+    queued:    { color: AMBER, bg: '#FFF7ED' },
+    pending:   { color: MUTED, bg: LIGHT },
+    failed:    { color: RED,   bg: '#FEE2E2' },
+    cancelled: { color: MUTED, bg: LIGHT },
+  };
+  const cfg = map[status] || map.pending;
+  return <Badge color={cfg.color} bg={cfg.bg}>{status}</Badge>;
+}
+
+/* ── Task Row ───────────────────────────────────────────────────────────── */
+function TaskRow({ task, onToggle, onEdit, onDelete, onRun }) {
+  const isDone    = task.status === 'done';
+  const isRunning = task.status === 'running';
+  const due       = task.due_at ? new Date(task.due_at) : null;
+  const isOverdue = due && due < new Date() && !isDone;
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
       padding: '12px 16px', background: WHITE, borderRadius: 12,
       border: `1px solid ${isOverdue ? '#FECACA' : BORDER}`,
-      opacity: isDone ? 0.65 : 1, transition: 'opacity .2s',
+      opacity: isDone ? 0.7 : 1, transition: 'opacity .2s',
     }}>
       <button
-        onClick={() => onToggle(task.id, isDone ? 'pending' : 'done')}
+        onClick={() => onToggle(task)}
         style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0, color: isDone ? GREEN : MUTED }}
+        title={isDone ? 'Mark as pending' : 'Mark as done'}
       >
         {isDone ? <CheckSquare size={20} /> : <Square size={20} />}
       </button>
+
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <div style={{
           fontSize: 13, fontWeight: 600, color: isDone ? MUTED : INK,
@@ -109,28 +182,49 @@ function TaskRow({ task, onToggle }) {
           {task.title}
         </div>
         {task.description && (
-          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: 2 }}>{task.description}</div>
+          <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {task.description}
+          </div>
         )}
       </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
         <TypeBadge type={task.task_type} />
         <PriorityBadge priority={task.priority} />
-        {task.dueDate && (
-          <span style={{ fontSize: 11, color: isOverdue ? RED : MUTED, display: 'flex', alignItems: 'center', gap: 3, fontFamily: FONT }}>
+        <StatusBadge status={task.status} />
+        {task.is_recurring && (
+          <span title="Repeats on a schedule" style={{ color: PURPLE, display: 'flex' }}><Repeat size={12} /></span>
+        )}
+        {due && (
+          <span style={{ fontSize: 11, color: isOverdue ? RED : MUTED, display: 'flex', alignItems: 'center', gap: 3, fontFamily: FONT, whiteSpace: 'nowrap' }}>
             <Clock size={10} />
-            {new Date(task.dueDate).toLocaleDateString()}
+            {due.toLocaleDateString()} {due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
+
+        <button onClick={() => onRun(task)} disabled={isRunning} title="Run now"
+          style={iconBtn(isRunning)}><Play size={13} /></button>
+        <button onClick={() => onEdit(task)} disabled={isRunning} title="Edit"
+          style={iconBtn(isRunning)}><Pencil size={13} /></button>
+        <button onClick={() => onDelete(task)} disabled={isRunning} title="Delete"
+          style={iconBtn(isRunning, RED)}><Trash2 size={13} /></button>
       </div>
     </div>
   );
 }
 
-/* ── Main page ──────────────────────────────────────────────────────── */
+const iconBtn = (disabled, color = MUTED) => ({
+  background: 'none', border: `1px solid ${BORDER}`, borderRadius: 8,
+  padding: '5px 6px', cursor: disabled ? 'not-allowed' : 'pointer',
+  color, display: 'flex', opacity: disabled ? 0.4 : 1,
+});
+
+/* ── Main page ──────────────────────────────────────────────────────────── */
 export default function TasksPage() {
   const [tasks,   setTasks]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal,   setModal]   = useState(false);
+  const [editing, setEditing] = useState(null);
   const [toast,   setToast]   = useState(null);
   const [filter,  setFilter]  = useState('all');
 
@@ -139,54 +233,98 @@ export default function TasksPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const res = await apiGet('/api/tasks');
-      setTasks(res?.data || MOCK_TASKS);
+      setTasks(res?.tasks ?? []);
     } catch (err) {
-      console.warn('Tasks API error, using mock:', err);
-      setTasks(MOCK_TASKS);
+      console.warn('Tasks API error:', err);
+      setTasks([]);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const bodyFrom = (form) => {
+    const cron = form.repeat === 'custom'
+      ? form.customCron.trim()
+      : REPEATS.find(r => r.key === form.repeat)?.cron ?? null;
+    return {
+      title: form.title.trim(),
+      description: form.description || null,
+      priority: form.priority,
+      dueAt: toIso(form.dueAt),
+      isRecurring: !!cron,
+      cronExpr: cron,
+    };
   };
 
-  useEffect(() => { load(); }, []);
-
-  const handleCreate = async (form) => {
-    await apiPost('/api/tasks', form).catch(console.warn);
-    showToast('Task added!');
+  const handleSubmit = async (form) => {
+    if (editing) {
+      await apiPatch(`/api/tasks/${editing.id}`, bodyFrom(form));
+      showToast('Task updated');
+    } else {
+      await apiPost('/api/tasks', bodyFrom(form));
+      showToast('Task created');
+    }
+    setEditing(null);
     load();
   };
 
-  const handleToggle = async (id, status) => {
-    // Optimistic update; backend /toggle flips done <-> pending and persists.
-    setTasks(ts => ts.map(t => t.id === id ? { ...t, status } : t));
+  const handleToggle = async (task) => {
+    const next = task.status === 'done' ? 'pending' : 'done';
+    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, status: next } : t));
     try {
-      const res = await apiPatch(`/api/tasks/${id}/toggle`, {});
-      if (res?.task) setTasks(ts => ts.map(t => t.id === id ? { ...t, status: res.task.status } : t));
+      const res = await apiPatch(`/api/tasks/${task.id}/toggle`, {});
+      if (res?.task) setTasks(ts => ts.map(t => t.id === task.id ? { ...t, status: res.task.status } : t));
     } catch (e) {
-      console.warn('toggle failed', e);
+      showToast('Could not update the task', 'error');
+      load();
     }
   };
 
+  const handleDelete = async (task) => {
+    if (!window.confirm(`Delete “${task.title}”? This also removes anything it produced.`)) return;
+    const before = tasks;
+    setTasks(ts => ts.filter(t => t.id !== task.id));
+    try {
+      await apiDelete(`/api/tasks/${task.id}`);
+      showToast('Task deleted');
+    } catch (e) {
+      setTasks(before);
+      showToast(e?.message || 'Could not delete the task', 'error');
+    }
+  };
+
+  const handleRun = async (task) => {
+    try {
+      await apiPost(`/api/tasks/${task.id}/trigger`, {});
+      showToast('Task queued — your agent is on it.');
+      load();
+    } catch (e) {
+      showToast(e?.message || 'Could not run the task', 'error');
+    }
+  };
+
+  const openNew  = () => { setEditing(null); setModal(true); };
+  const openEdit = (t) => { setEditing(t); setModal(true); };
+
   const filtered = filter === 'all' ? tasks
     : filter === 'done' ? tasks.filter(t => t.status === 'done')
+    : filter === 'scheduled' ? tasks.filter(t => t.due_at && new Date(t.due_at) > new Date() && t.status !== 'done')
     : tasks.filter(t => t.status !== 'done');
 
   const pending  = tasks.filter(t => t.status !== 'done').length;
   const done     = tasks.filter(t => t.status === 'done').length;
-  const overdue  = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done').length;
+  const overdue  = tasks.filter(t => t.due_at && new Date(t.due_at) < new Date() && t.status !== 'done').length;
 
   return (
     <PageLayout
       title="Tasks"
-      subtitle="Manage your to-dos and action items"
-      action={
-        <Btn size="sm" onClick={() => setModal(true)}>
-          <Plus size={14} /> New Task
-        </Btn>
-      }
+      subtitle="Schedule work for your agent — once, or on a repeat"
+      action={<Btn size="sm" onClick={openNew}><Plus size={14} /> New Task</Btn>}
     >
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24, maxWidth: 480 }}>
@@ -205,9 +343,10 @@ export default function TasksPage() {
       {/* Filter */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[
-          { key: 'all',     label: 'All' },
-          { key: 'pending', label: 'Pending' },
-          { key: 'done',    label: 'Done' },
+          { key: 'all',       label: 'All' },
+          { key: 'pending',   label: 'Pending' },
+          { key: 'scheduled', label: 'Scheduled' },
+          { key: 'done',      label: 'Done' },
         ].map(({ key, label }) => (
           <button
             key={key}
@@ -236,15 +375,22 @@ export default function TasksPage() {
           <p style={{ fontSize: 14, color: MUTED, fontFamily: FONT, margin: '0 0 16px' }}>
             {filter === 'done' ? 'No completed tasks yet' : 'No tasks here'}
           </p>
-          <Btn onClick={() => setModal(true)}><Plus size={14} /> Add a task</Btn>
+          <Btn onClick={openNew}><Plus size={14} /> Add a task</Btn>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(t => <TaskRow key={t.id} task={t} onToggle={handleToggle} />)}
+          {filtered.map(t => (
+            <TaskRow key={t.id} task={t} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} onRun={handleRun} />
+          ))}
         </div>
       )}
 
-      <NewTaskModal open={modal} onClose={() => setModal(false)} onSubmit={handleCreate} />
+      <TaskModal
+        open={modal}
+        onClose={() => { setModal(false); setEditing(null); }}
+        onSubmit={handleSubmit}
+        editing={editing}
+      />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );

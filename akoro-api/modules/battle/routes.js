@@ -116,6 +116,28 @@ async function isEligible(userId, courseId) {
   return { eligible: !!enrolled, isInstructor: false, course };
 }
 
+/**
+ * canRunCourseBattles — who may create/see battles for a course.
+ *
+ * isEligible() answers "enrolled or owns it", which is right for learners and
+ * the teacher. School admins own neither: they administer the school the
+ * teacher belongs to. Without this they'd get a 403 on their own school's
+ * courses, which is exactly what the school app does today.
+ */
+async function canRunCourseBattles(userId, role, courseId) {
+  const base = await isEligible(userId, courseId);
+  if (base.eligible) return base;
+  if (role === "admin") return { ...base, eligible: true, isInstructor: true };
+
+  const { data: school } = await db.from("school_profiles")
+    .select("id").eq("admin_user_id", userId).limit(1).maybeSingle();
+  if (!school || !base.course) return base;
+
+  const { data: link } = await db.from("school_teachers")
+    .select("id").eq("school_id", school.id).eq("teacher_id", base.course.instructor_id).maybeSingle();
+  return link ? { ...base, eligible: true, isInstructor: true } : base;
+}
+
 async function resolveAgent(userId) {
   const { data } = await db.from("user_agents").select("*").eq("user_id", userId).single();
   return data;
@@ -439,6 +461,263 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay });
 
   res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "starting", participants: (students?.length ?? 0) + 1, expires_at: expiresAt });
+}));
+
+// ─── MY BATTLES / MY CHALLENGES ──────────────────────────────────────────────
+// Course-independent lists. The learner dashboard and the instructor/school
+// Battles pages both need "everything I'm involved in" without knowing a course
+// id up front, and both render the same card shape the WebSocket push uses —
+// so the mapping lives here, once.
+
+function toCard(b, extra = {}) {
+  const mins = Math.round((b.time_limit_seconds ?? 900) / 60);
+  return {
+    id:            b.id,
+    battleId:      b.id,
+    courseId:      b.course_id,
+    title:         b.title,
+    description:   b.description ?? null,
+    topic:         b.topic ?? null,
+    subject:       b.subject ?? "science",
+    difficulty:    b.difficulty ?? "intermediate",
+    status:        b.status,
+    battleType:    b.status === "scheduled" ? "scheduled" : (b.battle_type === "classroom" ? "classroom" : "immediate"),
+    type:          b.battle_type,
+    xpPrize:       `+${b.xp_prize ?? b.xp_pool ?? 0} XP`,
+    xpPool:        b.xp_pool ?? b.xp_prize ?? 0,
+    totalQuestions: b.total_questions ?? 0,
+    timeLimit:     `${mins} min`,
+    durationMin:   mins,
+    maxParticipants: b.max_participants ?? null,
+    participantCount: b.total_participants ?? 0,
+    scheduledFor:  b.scheduled_start ?? null,
+    scheduledAt:   b.scheduled_start ?? null,
+    expiresAt:     b.expires_at ?? null,
+    expiresIn:     b.expires_at
+      ? `${Math.max(0, Math.round((new Date(b.expires_at) - Date.now()) / 60000))} min`
+      : null,
+    createdBy:     b.created_by,
+    challenger:    b.users?.full_name ?? null,
+    avatar:        b.users?.avatar_url ?? null,
+    ...extra,
+  };
+}
+
+// GET /api/battle/my-battles — every battle I take part in or created
+router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: parts } = await db.from("battle_participants")
+    .select("battle_id").eq("user_id", req.user.id);
+  const ids = [...new Set((parts ?? []).map((p) => p.battle_id))];
+
+  let q = db.from("battles")
+    .select("*, users!battles_created_by_fkey(full_name, avatar_url)")
+    .order("created_at", { ascending: false }).limit(100);
+  q = ids.length ? q.or(`id.in.(${ids.join(",")}),created_by.eq.${req.user.id}`)
+                 : q.eq("created_by", req.user.id);
+
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  res200(res, (data ?? []).map((b) => toCard(b, { mine: b.created_by === req.user.id })));
+}));
+
+// GET /api/battle/my-challenges — open 1v1 invitations waiting on me
+router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: parts } = await db.from("battle_participants")
+    .select("battle_id, joined_at, role").eq("user_id", req.user.id).eq("role", "opponent");
+  const pending = (parts ?? []).filter((p) => !p.joined_at).map((p) => p.battle_id);
+  if (!pending.length) return res200(res, []);
+
+  const { data } = await db.from("battles")
+    .select("*, users!battles_created_by_fkey(full_name, avatar_url)")
+    .in("id", pending).in("status", ["lobby", "scheduled"])
+    .gt("expires_at", now()).order("created_at", { ascending: false });
+
+  res200(res, (data ?? []).map((b) => toCard(b)));
+}));
+
+// ─── ROSTER + TARGETED INVITE ────────────────────────────────────────────────
+
+/**
+ * GET /api/battle/courses/:courseId/roster
+ * Everyone who could be challenged in this course, for the "who do you want to
+ * battle?" picker: username, name, and whether they have an agent yet (no
+ * agent = cannot fight, so the UI can grey them out instead of failing later).
+ */
+router.get("/courses/:courseId/roster", authenticateToken, asyncHandler(async (req, res) => {
+  const { eligible } = await canRunCourseBattles(req.user.id, req.user.role, req.params.courseId);
+  if (!eligible) return res403(res, "Not enrolled in this course");
+
+  const { data: rows } = await db.from("enrollments")
+    .select("user_id, users!inner(id, username, full_name, avatar_url, avatar_emoji)")
+    .eq("course_id", req.params.courseId).eq("status", "active");
+
+  const ids = (rows ?? []).map((r) => r.user_id);
+  const { data: agents } = ids.length
+    ? await db.from("user_agents").select("user_id").in("user_id", ids)
+    : { data: [] };
+  const withAgent = new Set((agents ?? []).map((a) => a.user_id));
+
+  res200(res, (rows ?? [])
+    .filter((r) => r.user_id !== req.user.id)
+    .map((r) => ({
+      id:        r.users.id,
+      username:  r.users.username,
+      full_name: r.users.full_name,
+      avatar:    r.users.avatar_url ?? null,
+      emoji:     r.users.avatar_emoji ?? null,
+      has_agent: withAgent.has(r.user_id),
+    })));
+}));
+
+/**
+ * POST /api/battle/courses/:courseId/battles/invite
+ *
+ * One creation path for "challenge these people". Targets come from any mix of:
+ *   usernames:   ["priya", "amaka@student.akoro.app"]   (username or email)
+ *   user_ids:    ["uuid", …]
+ *   whole_class: true                                    (every active enrolment)
+ *
+ * One opponent produces a 1v1 challenge they must accept; two or more produces
+ * a classroom-style battle with everyone pre-registered — the same shape the
+ * existing /challenge and /classroom routes create, so nothing downstream
+ * (worker, results, leaderboard) needs to know this route exists.
+ */
+router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler(async (req, res) => {
+  const { courseId } = req.params;
+  const {
+    title, description, topic, subject,
+    difficulty = "intermediate", total_questions = 15,
+    time_limit_seconds = 900, xp_prize = 200,
+    expires_in_minutes = 60, scheduled_for = null,
+    usernames = [], user_ids = [], whole_class = false,
+  } = req.body;
+
+  if (!title) return res400(res, "title is required");
+
+  const { eligible, isInstructor } = await canRunCourseBattles(req.user.id, req.user.role, courseId);
+  if (!eligible) return res403(res, "Not enrolled in this course");
+
+  const myAgent = await resolveAgent(req.user.id);
+  if (!myAgent) return res400(res, "Create your agent first");
+
+  // ── Resolve targets ──────────────────────────────────────────────────────
+  const targetIds = new Set((Array.isArray(user_ids) ? user_ids : []).filter(Boolean));
+  const notFound  = [];
+
+  const handles = (Array.isArray(usernames) ? usernames : [])
+    .map((u) => String(u).trim().replace(/^@/, ""))
+    .filter(Boolean);
+
+  for (const handle of handles) {
+    const { data: found } = await db.from("users")
+      .select("id, username, email")
+      .or(`username.ilike.${handle},email.ilike.${handle}`)
+      .limit(1);
+    if (found?.length) targetIds.add(found[0].id);
+    else notFound.push(handle);
+  }
+
+  if (whole_class) {
+    const { data: rows } = await db.from("enrollments")
+      .select("user_id").eq("course_id", courseId).eq("status", "active");
+    for (const r of (rows ?? [])) targetIds.add(r.user_id);
+  }
+
+  targetIds.delete(req.user.id);
+  if (notFound.length) return res400(res, `No account found for: ${notFound.join(", ")}`);
+  if (!targetIds.size) return res400(res, "Pick at least one learner to challenge");
+
+  // ── Filter to people who can actually fight ──────────────────────────────
+  const ids = [...targetIds];
+  const [{ data: enrolled }, { data: agents }] = await Promise.all([
+    db.from("enrollments").select("user_id").eq("course_id", courseId).eq("status", "active").in("user_id", ids),
+    db.from("user_agents").select("user_id, id").in("user_id", ids),
+  ]);
+  const enrolledSet = new Set((enrolled ?? []).map((e) => e.user_id));
+  const agentByUser = new Map((agents ?? []).map((a) => [a.user_id, a.id]));
+
+  const skipped   = { not_enrolled: [], no_agent: [] };
+  const opponents = [];
+  for (const id of ids) {
+    if (!enrolledSet.has(id))   { skipped.not_enrolled.push(id); continue; }
+    if (!agentByUser.has(id))   { skipped.no_agent.push(id);     continue; }
+    opponents.push({ user_id: id, agent_id: agentByUser.get(id) });
+  }
+  if (!opponents.length)
+    return res400(res, "None of those learners can battle yet — they must be enrolled and have an agent.");
+
+  // ── Create ───────────────────────────────────────────────────────────────
+  const isDuel      = opponents.length === 1;
+  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
+  const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+
+  // A scheduled DUEL stays in 'lobby': /challenges/:id/accept only accepts from
+  // lobby, and it already schedules the start itself once accepted. Marking it
+  // 'scheduled' up front would make the invitation unacceptable.
+  const { data: battle, error } = await db.from("battles").insert({
+    course_id: courseId, battle_type: isDuel ? "1v1" : "classroom",
+    title, description: description ?? null,
+    topic: topic ?? null, subject: subject ?? null, difficulty,
+    total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
+    total_participants: opponents.length + 1,
+    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    scheduled_start: scheduled_for ?? null, expires_at: expiresAt,
+    created_by: req.user.id,
+  }).select().single();
+  if (error) throw new Error(error.message);
+
+  await db.from("battle_participants").insert({
+    battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id,
+    role: isDuel ? "creator" : (isInstructor ? "teacher" : "creator"), joined_at: now(),
+  });
+
+  for (const o of opponents) {
+    await db.from("battle_participants").upsert({
+      battle_id: battle.id, user_id: o.user_id, agent_id: o.agent_id,
+      role: isDuel ? "opponent" : "participant",
+      // A duel is an invitation — the opponent joins by accepting it.
+      joined_at: isDuel ? null : now(),
+    }, { onConflict: "battle_id,user_id" });
+  }
+
+  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions);
+
+  const q = await getBattleQueue();
+  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now()) });
+  // A duel waits for an accept; a group battle starts on its own.
+  if (!isDuel) {
+    const delay = isScheduled ? new Date(scheduled_for).getTime() - Date.now() : 5000;
+    await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: Math.max(0, delay) });
+  }
+
+  const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
+  const when = isScheduled
+    ? `Starts ${new Date(scheduled_for).toLocaleString("en-GB", { timeZone: "Africa/Lagos" })}`
+    : (isDuel ? `Expires in ${expires_in_minutes} min` : "Starting shortly");
+
+  for (const o of opponents) {
+    await notifyUser(o.user_id,
+      isDuel ? "battle_challenge" : "classroom_battle",
+      isDuel ? `⚔️ ${me?.full_name ?? "Someone"} challenged you!` : `🏫 Class battle: ${title}`,
+      `${title} · ${xp_prize} XP · ${when}`, battle.id);
+
+    global.io?.to(`user:${o.user_id}`).emit("new_challenge", {
+      id: battle.id, challenger: me?.full_name ?? "Opponent", avatar: me?.avatar_url ?? null,
+      title, subject: subject ?? "science", topic: topic ?? title, difficulty,
+      battleType: isScheduled ? "scheduled" : (isDuel ? "immediate" : "classroom"),
+      xpPrize: `+${xp_prize} XP`, timeLimit: `${Math.round(time_limit_seconds / 60)} min`,
+      expiresIn: `${expires_in_minutes} min`, scheduledFor: scheduled_for ?? null,
+      courseId, status: isScheduled ? "scheduled" : "lobby",
+    });
+  }
+
+  res201(res, {
+    success: true, battle_id: battle.id,
+    battle_type: isDuel ? "1v1" : "classroom",
+    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    invited: opponents.length, expires_at: expiresAt, skipped,
+  });
 }));
 
 // ─── CHALLENGE RESPONSES ──────────────────────────────────────────────────────

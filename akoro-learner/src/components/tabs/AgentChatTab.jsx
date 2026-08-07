@@ -68,6 +68,8 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [tTitle,     setTTitle]     = useState("");
   const [tDesc,      setTDesc]      = useState("");
   const [tPriority,  setTPriority]  = useState("medium");
+  const [tDueAt,     setTDueAt]     = useState("");     // datetime-local wall-clock
+  const [tEditing,   setTEditing]   = useState(null);   // task being edited, or null
   const feedRef = useRef(null);
 
   // ── Persistent chat sessions ───────────────────────────────────────────────
@@ -152,7 +154,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { tasks, loading: tasksLoading, createTask, toggleTask, deleteTask, getOutputs } = useTaskAPI();
+  const { tasks, loading: tasksLoading, createTask, updateTask, toggleTask, deleteTask, getOutputs } = useTaskAPI();
 
   // Socket for instant task results; resolvers map taskId → fn called on push.
   const socketRef       = useRef(null);
@@ -329,12 +331,36 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
     setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.updated').replace('{name}',name).replace('{emoji}',draftEmoji),time:t2}]);
   };
 
+  // datetime-local gives local wall-clock; the API wants ISO.
+  const toLocalInput=(iso)=>{ if(!iso) return ""; const d=new Date(iso); if(Number.isNaN(d.getTime())) return "";
+    const p=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+  const closeTaskSheet=()=>{ setTaskOpen(false); setTEditing(null); setTTitle(""); setTDesc(""); setTPriority("medium"); setTDueAt(""); };
+
+  const openNewTask=()=>{ setTEditing(null); setTTitle(""); setTDesc(""); setTPriority("medium"); setTDueAt(""); setTaskOpen(true); };
+
+  const openEditTask=(tk)=>{
+    setTEditing(tk); setTTitle(tk.title||""); setTDesc(tk.description||"");
+    setTPriority(tk.priority||"medium"); setTDueAt(toLocalInput(tk.due_at)); setTaskOpen(true);
+  };
+
+  const removeTask=async(tk)=>{
+    if(!window.confirm(t('agent.confirm_delete')?.includes('agent.') ? `Delete “${tk.title}”?` : t('agent.confirm_delete'))) return;
+    await deleteTask(tk.id);
+  };
+
   const addTask=async()=>{
     if(!tTitle.trim()) return;
     const ts=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
-    await createTask({ title:tTitle, description:tDesc, priority:tPriority });
-    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]),time:ts}]);
-    setTTitle(""); setTDesc(""); setTPriority("medium"); setTaskOpen(false);
+    const dueAt=tDueAt?new Date(tDueAt).toISOString():null;
+    if(tEditing){
+      await updateTask({ id:tEditing.id, title:tTitle, description:tDesc, priority:tPriority, dueAt });
+    } else {
+      await createTask({ title:tTitle, description:tDesc, priority:tPriority, dueAt });
+      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]),time:ts}]);
+    }
+    closeTaskSheet();
     if(innerTab!=="tasks") setInnerTab("tasks");
   };
 
@@ -436,7 +462,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
             <div style={{ display:"flex",gap:6 }}>{[["pending",t('agent.to_do')],["done",t('agent.done')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div>
-            <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>
           </div>
@@ -449,7 +475,19 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
                 <div style={{ flex:1,minWidth:0 }}>
                   <p style={{ fontSize:13.5,fontWeight:tk.status==="done"?500:700,color:tk.status==="done"?"var(--ak-text-muted)":"var(--ak-text)",textDecoration:tk.status==="done"?"line-through":"none",margin:"0 0 4px" }}>{tk.title}</p>
                   {tk.description&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 5px",lineHeight:1.45 }}>{tk.description}</p>}
-                  <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[tk.priority],color:PRI_COLOR[tk.priority] }}>{PRI_LABEL[tk.priority]}</span>
+                  <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
+                    <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[tk.priority],color:PRI_COLOR[tk.priority] }}>{PRI_LABEL[tk.priority]}</span>
+                    {tk.due_at&&<span style={{ fontSize:10,fontWeight:700,color:new Date(tk.due_at)<new Date()&&tk.status!=="done"?RED:"var(--ak-text-muted)" }}>
+                      🗓 {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                    </span>}
+                    {tk.is_recurring&&<span style={{ fontSize:10,fontWeight:700,color:BRAND }}>🔁 repeats</span>}
+                  </div>
+                </div>
+                <div style={{ display:"flex",gap:5,flexShrink:0 }}>
+                  <button onClick={()=>openEditTask(tk)} disabled={tk.status==="running"} title="Edit"
+                    style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}>✏️</button>
+                  <button onClick={()=>removeTask(tk)} disabled={tk.status==="running"} title="Delete"
+                    style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}>🗑</button>
                 </div>
               </div>
             ))}
@@ -460,18 +498,28 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
         <AgentStatsTab studentId={STUDENT_ID} agentName={agentName} agentEmoji={agentEmoji} onStartTeach={onStartTeach}/>
       )}
       {taskOpen&&(
-        <><div onClick={()=>setTaskOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
+        <><div onClick={closeTaskSheet} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>📋 {t('agent.assign_to')} {agentName}</p>
+          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>{tEditing?`✏️ Edit task`:`📋 ${t('agent.assign_to')} ${agentName}`}</p>
           <p style={{ fontSize:12,color:"var(--ak-text-muted)",margin:"0 0 20px",lineHeight:1.5 }}>{t('agent.assign_sub')}</p>
           <div style={{ marginBottom:14 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.task_title')}</label><input className="ak-chat-input" value={tTitle} onChange={e=>setTTitle(e.target.value)} placeholder={t('agent.task_title_ph')} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
           <div style={{ marginBottom:18 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.description')} <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span></label><textarea className="ak-chat-input" value={tDesc} onChange={e=>setTDesc(e.target.value)} placeholder={t('agent.desc_ph')} rows={3} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
           <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('agent.priority')}</label><div style={{ display:"flex",gap:8 }}>{[["high",t('agent.pri_high')],["medium",t('agent.pri_medium')],["low",t('agent.pri_low')]].map(([k,l])=><button key={k} onClick={()=>setTPriority(k)} style={{ flex:1,padding:"9px 6px",borderRadius:12,border:`1.5px solid ${tPriority===k?PRI_COLOR[k]:"var(--ak-border2)"}`,background:tPriority===k?`${PRI_COLOR[k]}10`:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:tPriority===k?PRI_COLOR[k]:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div></div>
+          <div style={{ marginBottom:22 }}>
+            <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>
+              🗓 Run at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
+            </label>
+            <input type="datetime-local" value={tDueAt} onChange={e=>setTDueAt(e.target.value)}
+              style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }}/>
+            <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"5px 0 0",lineHeight:1.45 }}>
+              Leave empty and your agent starts right away. Pick a date and time to schedule it.
+            </p>
+          </div>
           <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>setTaskOpen(false)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
+            <button onClick={closeTaskSheet} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
             <button onClick={addTask} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:tTitle.trim()?"pointer":"default",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{t('agent.assign_task')}
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{tEditing?'Save changes':t('agent.assign_task')}
             </button>
           </div>
         </div></>

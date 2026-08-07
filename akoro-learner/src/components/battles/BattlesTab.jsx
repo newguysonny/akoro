@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
 import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
+import CreateBattleSheet from './CreateBattleSheet.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
@@ -34,10 +35,11 @@ function ChallengeRow({ challenge, onTap }) {
 }
 
 
-function BattlesTab({ battles, onViewChallenge }) {
+function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const { t } = useLang();
   const [viewFilter, setViewFilter] = useState("active");
   const [watching,   setWatching]   = useState(null);
+  const [creating,   setCreating]   = useState(false);
   const liveBattles      = battles.filter(b=>b.status==="live");
   const scheduledBattles = battles.filter(b=>b.status==="scheduled");
   const completedBattles = battles.filter(b=>b.status==="completed");
@@ -68,7 +70,8 @@ function BattlesTab({ battles, onViewChallenge }) {
           </button>
         ))}
       </div>
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"8px 16px 6px",borderBottom:"1px solid var(--ak-border)" }}>
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 16px 6px",borderBottom:"1px solid var(--ak-border)" }}>
+        <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>⚔️ Start a battle</button>
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
       {battles.length===0&&(
@@ -143,6 +146,7 @@ function BattlesTab({ battles, onViewChallenge }) {
         })}
       </div>
       {watching&&<BattleModal battle={watching} onClose={()=>setWatching(null)}/>}
+      {creating&&<CreateBattleSheet onClose={()=>setCreating(false)} onCreated={onBattleCreated}/>}
     </div>
   );
 }

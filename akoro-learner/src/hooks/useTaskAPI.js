@@ -32,6 +32,14 @@ export function useTaskAPI() {
     return d.task;
   }, [agentId]);
 
+  // Edit a task that hasn't started. Sending dueAt/isRecurring re-queues it on
+  // the backend, so the new time is the one that actually fires.
+  const updateTask = useCallback(async ({ id, title, description, priority, dueAt, isRecurring, cronExpr }) => {
+    const d = await apiPatch(`/api/tasks/${id}`, { title, description, priority, dueAt, isRecurring, cronExpr });
+    if (d?.task) setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...d.task } : t)));
+    return d?.task;
+  }, []);
+
   const toggleTask = useCallback(async (taskId) => {
     setTasks(prev => prev.map(t => t.id === taskId
       ? { ...t, status: t.status === 'done' ? 'pending' : 'done' }
@@ -41,9 +49,14 @@ export function useTaskAPI() {
   }, []);
 
   const deleteTask = useCallback(async (taskId) => {
+    const before = tasks;
     setTasks(prev => prev.filter(t => t.id !== taskId));
-    await apiDelete(`/api/tasks/${taskId}`).catch(() => {});
-  }, []);
+    try {
+      await apiDelete(`/api/tasks/${taskId}`);
+    } catch {
+      setTasks(before);   // the row is still there — don't lie about it
+    }
+  }, [tasks]);
 
   const createChallenge = useCallback(async (taskId, opponentId, xpPrize = 100) => {
     return apiPost(`/api/tasks/${taskId}/create-challenge`, { opponentId, xpPrize });
@@ -78,5 +91,5 @@ export function useTaskAPI() {
     return { task, outputs: [], timedOut: true };
   }, [createTask, getOutputs]);
 
-  return { tasks, loading, agentId, createTask, toggleTask, deleteTask, createChallenge, getOutputs, runTaskAndWait, refetch: fetchTasks };
+  return { tasks, loading, agentId, createTask, updateTask, toggleTask, deleteTask, createChallenge, getOutputs, runTaskAndWait, refetch: fetchTasks };
 }
