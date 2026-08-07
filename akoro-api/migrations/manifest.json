@@ -131,6 +131,7 @@
     "2026-seed-voucher-demo.sql",
     "2026-seed-voucher-demo-2.sql",
     "2026-seed-voucher-products.sql",
-    "2026-seed-voucher-media.sql"
+    "2026-seed-voucher-media.sql",
+    "2026-seed-jss1-battle-ready.sql"
   ]
 }
