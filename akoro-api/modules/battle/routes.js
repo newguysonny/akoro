@@ -463,6 +463,275 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   res.status(201).json({ success: true, battle_id: battle.id, status: isScheduled ? "scheduled" : "starting", participants: (students?.length ?? 0) + 1, expires_at: expiresAt });
 }));
 
+
+// ─── CLASS BATTLES ───────────────────────────────────────────────────────────
+// A class battle belongs to a classroom and a subject rather than a course.
+// Most school learners aren't "enrolled on a course" at all — they attend JSS1
+// and study Mathematics there — so a course-only battle system had nothing to
+// offer them. Questions come from the past-questions bank by subject.
+
+/**
+ * GET /api/battle/my-classes
+ * The learner's classes and the subjects taught in each, for the battle form.
+ *
+ * public.classrooms (who is in the room) and mgmt.classes (the academic
+ * structure) are separate tables with no foreign key between them — they line
+ * up by school and name. So resolve the room first, then look up its subjects
+ * by that pair, and fall back to the subjects the past-questions bank can
+ * actually supply if the school hasn't set its curriculum up yet.
+ */
+router.get("/my-classes", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: memberships } = await db.from("classroom_students")
+    .select("classroom_id, classrooms!inner(id, name, school_id)")
+    .eq("user_id", req.user.id).eq("status", "active");
+
+  const rooms = (memberships ?? []).map((m) => m.classrooms).filter(Boolean);
+  if (!rooms.length) return res200(res, []);
+
+  const out = [];
+  for (const room of rooms) {
+    let subjects = [];
+    if (room.school_id) {
+      const { data: cls } = await db.schema("mgmt").from("classes")
+        .select("id").eq("school_id", room.school_id).ilike("name", room.name).limit(1);
+      if (cls?.length) {
+        const { data: cs } = await db.schema("mgmt").from("class_subjects")
+          .select("subjects:subject_id(name)").eq("class_id", cls[0].id);
+        subjects = [...new Set((cs ?? []).map((r) => r.subjects?.name).filter(Boolean))];
+      }
+    }
+    // No curriculum configured — offer what we can actually set questions on
+    // rather than an empty dropdown that looks broken.
+    if (!subjects.length) subjects = await subjectsWithQuestions();
+
+    const { count } = await db.from("classroom_students")
+      .select("id", { count: "exact", head: true })
+      .eq("classroom_id", room.id).eq("status", "active");
+
+    out.push({ id: room.id, name: room.name, subjects, student_count: count ?? 0 });
+  }
+  res200(res, out);
+}));
+
+/** Subjects the past-questions bank can actually supply verified MCQs for. */
+async function subjectsWithQuestions() {
+  const { data } = await db.schema("edu").from("past_questions")
+    .select("subject").eq("type", "mcq").eq("verified", true).not("subject", "is", null).limit(2000);
+  return [...new Set((data ?? []).map((r) => r.subject))].sort();
+}
+
+/** GET /api/battle/classes/:id/roster — classmates who can battle. */
+router.get("/classes/:id/roster", authenticateToken, asyncHandler(async (req, res) => {
+  const mine = await inClassroom(req.user.id, req.params.id);
+  if (!mine) return res403(res, "You are not in this class");
+
+  const { data: rows } = await db.from("classroom_students")
+    .select("user_id, users!inner(id, username, full_name, avatar_url, avatar_emoji)")
+    .eq("classroom_id", req.params.id).eq("status", "active");
+
+  const ids = (rows ?? []).map((r) => r.user_id);
+  const { data: agents } = ids.length
+    ? await db.from("user_agents").select("user_id").in("user_id", ids)
+    : { data: [] };
+  const withAgent = new Set((agents ?? []).map((a) => a.user_id));
+
+  res200(res, (rows ?? [])
+    .filter((r) => r.user_id !== req.user.id)
+    .map((r) => ({
+      id: r.users.id, username: r.users.username, full_name: r.users.full_name,
+      avatar: r.users.avatar_url ?? null, emoji: r.users.avatar_emoji ?? null,
+      has_agent: withAgent.has(r.user_id),
+    })));
+}));
+
+async function inClassroom(userId, classroomId) {
+  const { data } = await db.from("classroom_students")
+    .select("id").eq("user_id", userId).eq("classroom_id", classroomId).eq("status", "active").maybeSingle();
+  return !!data;
+}
+
+/**
+ * assignQuestionsBySubject — fill a class battle from the past-questions bank.
+ *
+ * Only verified multiple-choice questions: an unverified vision-parsed question
+ * must not be scored as fact in a competition. Returns how many were placed so
+ * the caller can refuse to create a battle nobody can play.
+ */
+async function assignQuestionsBySubject(battleId, subject, difficulty, total) {
+  let q = db.schema("edu").from("past_questions")
+    .select("id, stem, options, answer, topic, difficulty")
+    .eq("type", "mcq").eq("verified", true).ilike("subject", subject)
+    .not("answer", "is", null).limit(total * 4);
+  const { data: pool } = await q;
+
+  // Prefer the requested difficulty, then top up from the rest — a thin bank
+  // shouldn't mean no battle.
+  const rows = pool ?? [];
+  const wanted = difficulty === "intermediate" ? "medium" : difficulty;
+  const ordered = [...rows.filter((r) => r.difficulty === wanted),
+                   ...rows.filter((r) => r.difficulty !== wanted)];
+
+  const placed = [];
+  for (const r of ordered) {
+    if (placed.length >= total) break;
+    const opts = Array.isArray(r.options) ? r.options : [];
+    if (opts.length < 2 || !r.answer) continue;
+    const idx = opts.findIndex((o) => String(o.label).trim().toUpperCase() === String(r.answer).trim().toUpperCase());
+    if (idx < 0) continue;   // answer key doesn't match any option — skip it
+    placed.push({
+      battle_id: battleId, question_order: placed.length + 1,
+      question_text: r.stem,
+      options_json: JSON.stringify(opts.map((o) => `${o.label}. ${o.text}`)),
+      correct_answer_index: idx,
+      topic: r.topic ?? subject, xp_value: 35, time_limit_seconds: 15,
+    });
+  }
+  if (placed.length) await db.from("battle_questions").insert(placed);
+  return placed.length;
+}
+
+/**
+ * POST /api/battle/classes/:classroomId/battles/invite
+ * Same shape as the course invite — one opponent makes a duel, several make a
+ * group battle — but scoped to classmates and a class subject.
+ */
+router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHandler(async (req, res) => {
+  const { classroomId } = req.params;
+  const {
+    title, description, subject, topic,
+    difficulty = "intermediate", total_questions = 15,
+    time_limit_seconds = 900, xp_prize = 200,
+    expires_in_minutes = 60, scheduled_for = null,
+    usernames = [], user_ids = [], whole_class = false,
+  } = req.body;
+
+  if (!title)   return res400(res, "title is required");
+  if (!subject) return res400(res, "Pick a subject — a class battle draws its questions from one");
+  if (!(await inClassroom(req.user.id, classroomId))) return res403(res, "You are not in this class");
+
+  const myAgent = await resolveAgent(req.user.id);
+  if (!myAgent) return res400(res, "Create your agent first");
+
+  // ── Targets ──────────────────────────────────────────────────────────────
+  const targetIds = new Set((Array.isArray(user_ids) ? user_ids : []).filter(Boolean));
+  const notFound  = [];
+  for (const raw of (Array.isArray(usernames) ? usernames : [])) {
+    const handle = String(raw).trim().replace(/^@/, "");
+    if (!handle) continue;
+    const { data: found } = await db.from("users")
+      .select("id").or(`username.ilike.${handle},email.ilike.${handle}`).limit(1);
+    if (found?.length) targetIds.add(found[0].id);
+    else notFound.push(handle);
+  }
+  if (whole_class) {
+    const { data: rows } = await db.from("classroom_students")
+      .select("user_id").eq("classroom_id", classroomId).eq("status", "active");
+    for (const r of (rows ?? [])) targetIds.add(r.user_id);
+  }
+  targetIds.delete(req.user.id);
+  if (notFound.length) return res400(res, `No account found for: ${notFound.join(", ")}`);
+  if (!targetIds.size) return res400(res, "Pick at least one classmate to challenge");
+
+  const ids = [...targetIds];
+  const [{ data: members }, { data: agents }] = await Promise.all([
+    db.from("classroom_students").select("user_id").eq("classroom_id", classroomId).eq("status", "active").in("user_id", ids),
+    db.from("user_agents").select("user_id, id").in("user_id", ids),
+  ]);
+  const memberSet  = new Set((members ?? []).map((m) => m.user_id));
+  const agentByUser = new Map((agents ?? []).map((a) => [a.user_id, a.id]));
+
+  const skipped = { not_in_class: [], no_agent: [] };
+  const opponents = [];
+  for (const id of ids) {
+    if (!memberSet.has(id))    { skipped.not_in_class.push(id); continue; }
+    if (!agentByUser.has(id))  { skipped.no_agent.push(id);     continue; }
+    opponents.push({ user_id: id, agent_id: agentByUser.get(id) });
+  }
+  if (!opponents.length) return res400(res, "None of those classmates can battle yet — they need to be in this class and have an agent.");
+
+  // ── Create ───────────────────────────────────────────────────────────────
+  const isDuel      = opponents.length === 1;
+  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
+  const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+
+  const { data: battle, error } = await db.from("battles").insert({
+    course_id: null, classroom_id: classroomId,
+    battle_type: isDuel ? "1v1" : "classroom",
+    title, description: description ?? null,
+    topic: topic ?? null, subject, difficulty,
+    total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
+    total_participants: opponents.length + 1,
+    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    scheduled_start: scheduled_for ?? null, expires_at: expiresAt,
+    created_by: req.user.id,
+  }).select().single();
+  if (error) throw new Error(error.message);
+
+  // Questions before anyone is told about it: a battle with none is worse than
+  // no battle, so if the bank can't supply enough, undo and say why.
+  const placed = await assignQuestionsBySubject(battle.id, subject, difficulty, total_questions);
+  if (placed < 5) {
+    await db.from("battles").delete().eq("id", battle.id);
+    return res400(res, `Not enough ${subject} questions in the bank yet (found ${placed}). Try another subject.`);
+  }
+  if (placed < total_questions) {
+    await db.from("battles").update({ total_questions: placed }).eq("id", battle.id);
+  }
+
+  await db.from("battle_participants").insert({
+    battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id,
+    role: "creator", joined_at: now(),
+  });
+  for (const o of opponents) {
+    await db.from("battle_participants").upsert({
+      battle_id: battle.id, user_id: o.user_id, agent_id: o.agent_id,
+      role: isDuel ? "opponent" : "participant",
+      joined_at: isDuel ? null : now(),
+    }, { onConflict: "battle_id,user_id" });
+  }
+
+  const q = await getBattleQueue();
+  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+    { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now()) });
+  if (!isDuel) {
+    const delay = isScheduled ? new Date(scheduled_for).getTime() - Date.now() : 5000;
+    await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: Math.max(0, delay) });
+  }
+
+  const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
+  for (const o of opponents) {
+    await notifyUser(o.user_id,
+      isDuel ? "battle_challenge" : "classroom_battle",
+      isDuel ? `⚔️ ${me?.full_name ?? "A classmate"} challenged you!` : `🏫 Class battle: ${title}`,
+      `${subject} · ${xp_prize} XP`, battle.id);
+    global.io?.to(`user:${o.user_id}`).emit("new_challenge", {
+      id: battle.id, challenger: me?.full_name ?? "Classmate", avatar: me?.avatar_url ?? null,
+      title, subject, topic: topic ?? subject, difficulty,
+      battleType: isScheduled ? "scheduled" : (isDuel ? "immediate" : "classroom"),
+      xpPrize: `+${xp_prize} XP`, timeLimit: `${Math.round(time_limit_seconds / 60)} min`,
+      expiresIn: `${expires_in_minutes} min`, scheduledFor: scheduled_for ?? null,
+      classroomId, status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    });
+  }
+
+  const skippedIds = [...skipped.not_in_class, ...skipped.no_agent];
+  const { data: skippedUsers } = skippedIds.length
+    ? await db.from("users").select("id, full_name, username").in("id", skippedIds)
+    : { data: [] };
+  const nameById = new Map((skippedUsers ?? []).map((u) => [u.id, u.full_name || u.username]));
+
+  res201(res, {
+    success: true, battle_id: battle.id,
+    battle_type: isDuel ? "1v1" : "classroom",
+    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    invited: opponents.length, questions: placed, expires_at: expiresAt,
+    skipped: {
+      not_in_class: skipped.not_in_class.map((id) => nameById.get(id) ?? id),
+      no_agent:     skipped.no_agent.map((id) => nameById.get(id) ?? id),
+    },
+  });
+}));
+
 // ─── MY BATTLES / MY CHALLENGES ──────────────────────────────────────────────
 // Course-independent lists. The learner dashboard and the instructor/school
 // Battles pages both need "everything I'm involved in" without knowing a course
@@ -475,6 +744,8 @@ function toCard(b, extra = {}) {
     id:            b.id,
     battleId:      b.id,
     courseId:      b.course_id,
+    classroomId:   b.classroom_id ?? null,
+    scope:         b.course_id ? "course" : "class",
     title:         b.title,
     description:   b.description ?? null,
     topic:         b.topic ?? null,

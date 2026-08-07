@@ -279,6 +279,11 @@ async function expireBattle(battleId) {
 // ─── refresh-leaderboard ──────────────────────────────────────────────────────
 
 async function refreshLeaderboard(courseId, scope) {
+  // Class battles have no course. Querying course_id = null would match nothing
+  // useful and rewrite the course-scoped leaderboard with an empty set, so skip
+  // — class standings are covered by the classroom/subject scopes elsewhere.
+  if (!courseId) return;
+
   const { data: rows } = await db.from("battle_participants")
     .select(`user_id, is_winner, battle_id, battles!inner(course_id, status)`)
     .eq("battles.course_id", courseId).eq("battles.status", "completed");
