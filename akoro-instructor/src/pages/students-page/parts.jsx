@@ -170,23 +170,35 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
     } finally { setLoad(false); }
   };
 
-  /* The sample is generated rather than hosted, so it can never drift from the
-     format the importer actually parses: name, email, phone. */
-  const downloadSample = () => {
-    const csvText = [
+  /* A STARTER file, not a finished one: the teacher opens it, replaces the two
+     example rows with their register, and uploads it back. Generated in the
+     browser rather than hosted so it can never drift from the format the
+     importer actually parses (name, email, phone).
+
+     Two details that matter for a file people open in Excel:
+       • a UTF-8 BOM, or Excel mangles any name with an accent in it
+       • CRLF line endings, which Excel and Numbers both expect
+     And it keeps example rows rather than shipping headers alone, because the
+     importer rejects a file with no data rows — a header-only template would
+     fail on upload and look like the feature was broken. */
+  const downloadTemplate = () => {
+    const csvText = '\uFEFF' + [
       'name,email,phone',
       'Zainab Bello,zainab.bello@example.com,+2348012345678',
-      'Ifeanyi Obi,ifeanyi.obi@example.com,+2348023456789',
-      'Halima Yusuf,halima.yusuf@example.com,',
-    ].join('\n');
-    const url = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8' }));
+      'Ifeanyi Obi,ifeanyi.obi@example.com,',
+    ].join('\r\n') + '\r\n';
+
+    const url = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'akoro-students-sample.csv';
+    a.download = 'akoro-students-template.csv';
+    a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    // Revoked on the next tick — Safari cancels the download if the URL is
+    // released in the same frame as the click.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const TAB_STYLE = (active) => ({
@@ -486,13 +498,13 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               <div style={{ fontSize: 11, fontWeight: 700, color: INK, fontFamily: FONT }}>
                 CSV format — one student per row:
               </div>
-              <button type="button" onClick={downloadSample} style={{
+              <button type="button" onClick={downloadTemplate} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px',
                 borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE,
                 color: AMBER, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
                 flexShrink: 0,
               }}>
-                <Download size={12} /> Sample CSV
+                <Download size={12} /> Starter file
               </button>
             </div>
             <code style={{ fontSize: 11, color: MUTED, fontFamily: 'monospace' }}>
@@ -501,8 +513,8 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
               John Smith,john@example.com,
             </code>
             <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 6, lineHeight: 1.45 }}>
-              Phone is optional. A header row is skipped if it contains “name”, and any extra
-              columns are ignored.
+              Download the starter file, replace the two example rows with your students,
+              and upload it back. Phone is optional; extra columns are ignored.
             </div>
           </div>
 
