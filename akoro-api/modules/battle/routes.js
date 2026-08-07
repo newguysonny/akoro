@@ -1378,18 +1378,57 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
   });
 }));
 
+/**
+ * GET /api/battle/battles/:battleId/questions
+ *
+ * The answer key was already withheld until you'd answered — but the question
+ * TEXT was not, at any status. So anyone in a battle could read all fifteen
+ * questions during the lobby, and for a scheduled battle that window can be
+ * days. In a timed contest, knowing the questions in advance is most of the
+ * game, key or no key. Worse for AI-generated battles, where the person who
+ * chose the topic is also the one who could read them.
+ *
+ * A question is now only returned once it has actually been PUT IN PLAY. The
+ * worker logs each question as it broadcasts it, so the furthest logged
+ * question_order is exactly "what has been shown" — no new column, and it
+ * preserves the client's socket-drop fallback, which looks for the first
+ * question with no revealed key and finds it as the last item here.
+ */
 router.get("/battles/:battleId/questions", authenticateToken, asyncHandler(async (req, res) => {
-  const { data: battle } = await db.from("battles").select("status").eq("id", req.params.battleId).single();
+  const { data: battle } = await db.from("battles").select("status, total_questions").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
 
-  const { data: questions } = await db.from("battle_questions").select("*").eq("battle_id", req.params.battleId).order("question_order");
-  const { data: participant } = await db.from("battle_participants").select("id").eq("battle_id", req.params.battleId).eq("user_id", req.user.id).single();
+  const finished = ["completed", "expired", "cancelled"].includes(battle.status);
 
-  const result = await Promise.all((questions ?? []).map(async (q) => {
+  // Not started: say how many there are, show none of them.
+  if (!finished && battle.status !== "live") {
+    return res.json({ questions: [], total: battle.total_questions ?? 0, notStarted: true });
+  }
+
+  const { data: questions } = await db.from("battle_questions")
+    .select("*").eq("battle_id", req.params.battleId).order("question_order");
+  const { data: participant } = await db.from("battle_participants")
+    .select("id").eq("battle_id", req.params.battleId).eq("user_id", req.user.id).maybeSingle();
+
+  // How far the battle has actually got. Battle-wide, not per-participant, so
+  // someone who timed out on a question doesn't get stuck behind it.
+  let reached = Infinity;
+  if (!finished) {
+    const { data: log } = await db.from("battle_log")
+      .select("question_order").eq("battle_id", req.params.battleId)
+      .not("question_order", "is", null).order("question_order", { ascending: false }).limit(1);
+    reached = log?.[0]?.question_order ?? 1;
+  }
+
+  const inPlay = (questions ?? []).filter((q) => q.question_order <= reached);
+
+  const result = await Promise.all(inPlay.map(async (q) => {
     const myAnswer = participant
-      ? (await db.from("battle_answers").select("selected_index, is_correct, xp_gained").eq("participant_id", participant.id).eq("question_id", q.id).single()).data
+      ? (await db.from("battle_answers")
+          .select("selected_index, is_correct, xp_gained")
+          .eq("participant_id", participant.id).eq("question_id", q.id).maybeSingle()).data
       : null;
-    const revealed = battle.status === "completed" || !!myAnswer;
+    const revealed = finished || !!myAnswer;
     const options  = JSON.parse(q.options_json);
     return {
       questionOrder: q.question_order, questionText: q.question_text, options,
@@ -1402,7 +1441,8 @@ router.get("/battles/:battleId/questions", authenticateToken, asyncHandler(async
     };
   }));
 
-  res.json({ questions: result, total: result.length });
+  // `total` stays the real count so progress reads "3 of 15", not "3 of 3".
+  res.json({ questions: result, total: battle.total_questions ?? (questions ?? []).length });
 }));
 
 router.get("/battles/:battleId/log", authenticateToken, asyncHandler(async (req, res) => {

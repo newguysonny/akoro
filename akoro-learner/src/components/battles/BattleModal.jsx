@@ -80,7 +80,10 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
       if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); setViewerCount(st.viewer_count || 0); }
       if (lg?.logs?.length) setLog(lg.logs.map((e) => ({ msg: e.message, ts: e.created_at ? new Date(e.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' })));
       if (qd?.questions?.length) {
-        setTotalQ(qd.questions.length);
+        // `total` is the battle's real length. The array now holds only the
+        // questions actually in play — unplayed ones are withheld so nobody can
+        // read ahead — so counting it would show "3 of 3" mid-battle.
+        setTotalQ(qd.total ?? qd.questions.length);
         // Seed the Questions tab with anything already answered/revealed.
         qd.questions.forEach((q) => {
           if (q.correctAnswerIndex != null || q.myAnswer != null) {
