@@ -332,12 +332,23 @@ app.use("/api", (req, _res, next) => {
       console.warn(`[security] X-Forwarded-For has ${hops} hop(s) but TRUST_PROXY is unset — ` +
         "IP-keyed limits (login, refresh) are keying on the proxy, i.e. ONE bucket for every " +
         `visitor. Set TRUST_PROXY=${hops} and redeploy.`);
-    } else if (process.env.TRUST_PROXY && isNonRoutable(req.ip)) {
-      // The point of the setting is to reach the visitor's address. Landing on
-      // a private or carrier-NAT address means the count is too low and the
-      // shared-bucket problem is still there, just less obviously.
-      console.warn(`[security] TRUST_PROXY=${process.env.TRUST_PROXY} but req.ip=${req.ip} is still ` +
-        `a proxy address. X-Forwarded-For has ${hops} hop(s) — try TRUST_PROXY=${hops}.`);
+    } else if (process.env.TRUST_PROXY) {
+      // Two ways the count can be wrong, and only one of them LOOKS wrong.
+      const trusted = Number(process.env.TRUST_PROXY);
+      if (Number.isFinite(trusted) && hops > trusted) {
+        // The case that slipped through the first time: req.ip resolved to a
+        // proxy with a perfectly ordinary public address, so nothing looked
+        // amiss — it was simply the wrong machine. Compare the counts rather
+        // than judging the address. (A client can pad X-Forwarded-For, so this
+        // is phrased as a prompt to check, not a verdict.)
+        console.warn(`[security] TRUST_PROXY=${trusted} but X-Forwarded-For has ${hops} hop(s), so ` +
+          `req.ip=${req.ip} is a proxy rather than the visitor — everyone behind it shares one ` +
+          `rate-limit bucket. If ${hops} hops is your normal setup, set TRUST_PROXY=${hops}.`);
+      } else if (isNonRoutable(req.ip)) {
+        console.warn(`[security] TRUST_PROXY=${process.env.TRUST_PROXY} but req.ip=${req.ip} is a ` +
+          `private or carrier-NAT address, so it is not the visitor. X-Forwarded-For has ` +
+          `${hops} hop(s) — try TRUST_PROXY=${hops}.`);
+      }
     }
   }
   next();
