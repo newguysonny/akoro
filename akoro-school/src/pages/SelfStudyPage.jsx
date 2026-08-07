@@ -16,7 +16,6 @@ import {
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
-import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
@@ -136,17 +135,28 @@ function PlanEditor({ subtopics, objectives, onChange }) {
 /* ── Create / edit modal ─────────────────────────────────────────────────── */
 const BLANK = {
   title: '', subject: 'Basic Science', topic: '', instructions: '',
-  difficulty: 'intermediate', dueAt: '', courseId: '',
+  difficulty: 'intermediate', dueAt: '', classId: '',
   audience: BLANK_AUDIENCE,
   subtopics: [], objectives: {},
 };
 
-function AssignModal({ open, onClose, onSubmit, courses, editing }) {
+function AssignModal({ open, onClose, onSubmit, editing }) {
   const [form, setForm]   = useState(BLANK);
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
   const [drafting, setDrafting] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!open) return;
+    setClassesLoading(true);
+    apiGet('/api/instructor/classrooms')
+      .then(d => setClasses(d?.data ?? []))
+      .catch(() => setClasses([]))
+      .finally(() => setClassesLoading(false));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -158,13 +168,13 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
         topic: editing.topic || '', instructions: editing.instructions || '',
         difficulty: editing.difficulty || 'intermediate',
         dueAt: toLocalInput(editing.due_at),
-        courseId: editing.course_id || '',
+        classId: editing.classroom_id || '',
         subtopics: editing.subtopics ?? [], objectives: editing.objectives ?? {},
       });
     } else {
-      setForm({ ...BLANK, courseId: courses[0]?.id || '' });
+      setForm({ ...BLANK, classId: classes[0]?.id || '' });
     }
-  }, [open, editing, courses]);
+  }, [open, editing, classes]);
 
   const draft = async () => {
     if (!form.topic.trim()) return setError('Enter a topic first — that is what the plan is built from.');
@@ -191,7 +201,7 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
     setError('');
     if (!form.title.trim()) return setError('Give the assignment a title.');
     if (!form.topic.trim()) return setError('Enter the topic learners will study.');
-    if (!editing && !form.courseId) return setError('Pick a course.');
+    if (!editing && !form.classId) return setError('Pick a class.');
     if (!editing) {
       const aud = form.audience;
       if (aud.mode === 'class' && !aud.classroomId) return setError('Pick which class this is for.');
@@ -245,19 +255,36 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
           </div>
         </div>
 
-        {/* Who */}
+        {/* Who — a class, then who within it. Self study needs no course: it is
+            a topic a learner works through with their own agent, not something
+            attached to an enrolment. Asking for a course made teachers pick one
+            that had nothing to do with the work. */}
         {!editing && (
           <div>
-            <Sel label="Course *" value={form.courseId} onChange={e => setField('courseId', e.target.value)}>
-              <option value="">Select a course…</option>
-              {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
+            <Sel label="Class *" value={form.classId} onChange={e => setField('classId', e.target.value)}>
+              {classesLoading && <option value="">Loading classes…</option>}
+              {!classesLoading && !classes.length && <option value="">No classes set up yet</option>}
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}
+                </option>
+              ))}
             </Sel>
+            {!classesLoading && !classes.length && (
+              <div style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, marginTop: 5 }}>
+                Create one under Academics → Classes, then come back.
+              </div>
+            )}
 
-            <AudiencePicker
-              value={form.audience}
-              onChange={(v) => setField('audience', v)}
-              courseId={form.courseId}
-            />
+            <div style={{ marginTop: 12 }}>
+              <AudiencePicker
+                value={form.audience}
+                onChange={(v) => setField('audience', v)}
+                modes={['course', 'picked']}
+                allLabel={{ label: 'Everyone in the class', hint: 'All active members' }}
+                rosterUrl={form.classId ? `/api/instructor/classrooms/${form.classId}/students` : null}
+              />
+            </div>
           </div>
         )}
 
@@ -383,9 +410,7 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete }) {
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function SelfStudyPage() {
-  const { getCourses } = useCoursesAPI();
   const [items, setItems]     = useState([]);
-  const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);
   const [editing, setEditing] = useState(null);
@@ -408,7 +433,6 @@ export default function SelfStudyPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { getCourses().then(r => setCourses(r?.data ?? r?.courses ?? [])).catch(() => setCourses([])); }, []);
 
   const handleSubmit = async (form) => {
     const dueIso = form.dueAt ? new Date(form.dueAt).toISOString() : null;
@@ -429,10 +453,13 @@ export default function SelfStudyPage() {
     } else {
       const d = await apiPost('/api/self-study', {
         ...body,
-        course_id: form.courseId,      // scope: which course this belongs to
-        // ...and separately, who it goes to. The two were conflated before,
-        // which quietly sent individually-picked work to the whole course.
-        ...audienceBody(form.audience),
+        // The class is the scope; audienceBody says who within it. "Everyone"
+        // resolves against classroom_id, so it has to travel with the target
+        // rather than sit beside it.
+        ...(() => {
+          const t = audienceBody(form.audience);
+          return { ...t, classroom_id: t.whole_class ? form.classId : null };
+        })(),
       });
       showToast(`Assigned to ${d?.data?.assigned ?? 0} learner${d?.data?.assigned === 1 ? '' : 's'}`);
     }
@@ -501,7 +528,7 @@ export default function SelfStudyPage() {
 
       <AssignModal
         open={modal} onClose={() => { setModal(false); setEditing(null); }}
-        onSubmit={handleSubmit} courses={courses} editing={editing}
+        onSubmit={handleSubmit} editing={editing}
       />
       <DetailModal open={!!detail} onClose={() => setDetail(null)} assignmentId={detail} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

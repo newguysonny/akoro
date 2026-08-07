@@ -30,13 +30,35 @@ const cronToRepeat = (cron) => REPEATS.find(r => r.cron === cron)?.key ?? (cron 
 
 /* What a task can actually do, in the teacher's words. The engine reads free
    text and picks a tool, so the only thing standing between a teacher and a
-   scheduled podcast is knowing it's possible. */
+   scheduled podcast is knowing it's possible.
+
+   Each carries a description as well as a title. The title is what the teacher
+   scans in their task list; the description is what the agent actually works
+   from — it goes into the prompt alongside the title, so the detail that makes
+   a task specific (which class, which subject, what to include) belongs there.
+   Filling only the title left the sample sounding complete while giving the
+   agent half the brief. */
 const EXAMPLES = [
-  'Every Monday 7am, create a battle for JSS1 on last week\'s topic',
-  'Assign self study on the water cycle to JSS2, due Friday',
-  'Make a podcast about the solar system for JSS1',
-  'Draft lesson hooks for next week\'s Basic Science lesson',
-  'Every Friday, take attendance for JSS1',
+  {
+    title: 'Every Monday 7am, create a battle for JSS1',
+    description: "Set a class battle for JSS1 on the topic we covered last week. 15 questions, medium difficulty, 200 XP. Use the question bank and top up with AI if it's short.",
+  },
+  {
+    title: 'Assign self study on the water cycle to JSS2',
+    description: 'Basic Science. Due Friday. Tell them to finish it before the practical lesson.',
+  },
+  {
+    title: 'Make a podcast about the solar system for JSS1',
+    description: 'Basic Science, 5 minutes, two hosts. Keep it lively and cover the planets in order, with one surprising fact each.',
+  },
+  {
+    title: "Draft lesson hooks for next week's Basic Science lesson",
+    description: 'JSS1, topic: photosynthesis. Five openers I can use in the first two minutes of the lesson.',
+  },
+  {
+    title: 'Every Friday, take attendance for JSS1',
+    description: 'Summarise who was present, absent and late this week, and flag anyone who missed more than two days.',
+  },
 ];
 
 const BLANK = { title: '', description: '', priority: 'medium', dueAt: '', repeat: 'none', customCron: '' };
@@ -94,11 +116,14 @@ function TaskModal({ open, onClose, onSubmit, editing }) {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {EXAMPLES.map(ex => (
-                <button key={ex} type="button" onClick={() => setField('title', ex)} style={{
-                  padding: '5px 10px', borderRadius: 20, cursor: 'pointer', textAlign: 'left',
-                  border: `1px solid ${BORDER}`, background: LIGHT, color: MUTED,
-                  fontSize: 11, fontWeight: 600, fontFamily: FONT,
-                }}>{ex}</button>
+                <button key={ex.title} type="button"
+                  title={ex.description}
+                  onClick={() => setForm(f => ({ ...f, title: ex.title, description: ex.description }))}
+                  style={{
+                    padding: '5px 10px', borderRadius: 20, cursor: 'pointer', textAlign: 'left',
+                    border: `1px solid ${BORDER}`, background: LIGHT, color: MUTED,
+                    fontSize: 11, fontWeight: 600, fontFamily: FONT,
+                  }}>{ex.title}</button>
               ))}
             </div>
           </div>
