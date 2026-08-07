@@ -78,6 +78,7 @@
     "2026-coin-wallet.sql",
     "2026-payment-items-check-fix.sql",
     "2026-coin-admin.sql",
+    "2026-coin-welcome-grant-heal.sql",
     "2026-marketplace-rpc.sql",
     "2026-lesson-ladders.sql",
     "2026-vouchers-module.sql",

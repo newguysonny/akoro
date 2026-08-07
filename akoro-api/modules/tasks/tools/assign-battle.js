@@ -25,30 +25,32 @@ const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env
 export const assignBattleDefinition = {
   name: "assign_battle",
   description:
-    "Create a battle for learners — a whole course, a class (e.g. JSS1), or named learners. " +
-    "Use this when the teacher says 'create a battle', 'set a challenge', 'quiz competition', " +
-    "'speed round' or similar, for their students. Questions come from the course's question " +
-    "bank. One named learner produces a 1-v-1 challenge they accept or decline; two or more " +
-    "produces a group battle everyone is entered into.",
+    "Create a battle for learners. Two kinds, like the Battles form: a CLASS battle " +
+    "(name the class and a subject — questions come from the past-questions bank) or a " +
+    "COURSE battle (name the course — questions come from that course's bank). Use this when " +
+    "the teacher says 'create a battle', 'set a challenge', 'quiz competition', 'speed round' " +
+    "or similar. One named learner produces a 1-v-1 challenge they accept or decline; two or " +
+    "more produces a group battle everyone is entered into.",
   input_schema: {
     type: "object",
     properties: {
       courseId:  { type: "string", description: "The course the battle belongs to — its question bank supplies the questions. Omit to use the course this task is attached to." },
       title:     { type: "string", description: "Battle title, e.g. 'Photosynthesis Showdown'" },
       topic:     { type: "string", description: "Topic to draw questions on" },
-      subject:   { type: "string", description: "Subject, e.g. Basic Science" },
+      subject:   { type: "string", description: "Subject, e.g. Mathematics. REQUIRED for a class battle — its questions are drawn from this subject." },
       audience:  {
         type: "string",
         enum: ["course", "class", "learners"],
         description: "Who it is for: everyone on the course, a whole class, or named learners",
       },
-      className: { type: "string", description: "Class name when audience is 'class', e.g. 'JSS1'" },
+      className: { type: "string", description: "Class name when audience is 'class', e.g. 'JSS1'. A class battle needs this and a subject." },
       usernames: { type: "array", items: { type: "string" }, description: "Usernames when audience is 'learners'" },
       difficulty:      { type: "string", enum: ["easy", "intermediate", "hard"] },
       totalQuestions:  { type: "number", description: "Default 15" },
       durationMinutes: { type: "number", description: "Default 15" },
       xpPrize:         { type: "number", description: "Default 200" },
       scheduledFor:    { type: "string", description: "ISO timestamp to start it later. Omit to send it now." },
+      questionSource:  { type: "string", enum: ["auto", "bank", "ai"], description: "Where questions come from. 'auto' (default) uses the bank and generates the shortfall." },
     },
     required: ["title", "audience"],
   },
@@ -67,6 +69,7 @@ const paramsSchema = z.object({
   durationMinutes: z.number().min(1).max(180).default(15),
   xpPrize:         z.number().min(0).default(200),
   scheduledFor:    z.string().optional(),
+  questionSource:  z.enum(["auto", "bank", "ai"]).default("auto"),
 });
 
 /**
@@ -108,39 +111,47 @@ export async function executeAssignBattle(rawInput, ctx) {
 
   const { data: creator } = await db.from("users").select("role, email").eq("id", ctx.teacherId).maybeSingle();
 
-  // A battle needs a course for its question bank. Prefer what the model said,
-  // fall back to the task's own course, then to the teacher's only course —
-  // and if it is still ambiguous, name the options instead of failing blankly.
-  let courseId = input.courseId || ctx.courseId;
-  if (!courseId) {
-    const { data: mine } = await db.from("courses")
-      .select("id, title").eq("instructor_id", ctx.teacherId).limit(5);
-    if (mine?.length === 1) courseId = mine[0].id;
-    else return {
-      success: false,
-      error: mine?.length
-        ? `Which course is this battle for? Yours are: ${mine.map((c) => c.title).join(", ")}. Name one in the task.`
-        : "You have no courses yet — a battle takes its questions from a course's question bank.",
-    };
-  }
-
+  // Which kind of battle? A named class means a CLASS battle — questions from
+  // the past-questions bank for a subject. This tool could only ever make
+  // course battles, so "every Monday, set JSS1 a battle" produced nothing at
+  // all for a teacher whose learners simply attend a class.
   const target = { whole_class: false, classroom_id: null, usernames: [] };
-  if (input.audience === "course") {
-    target.whole_class = true;
-  } else if (input.audience === "class") {
+  let path, room = null;
+
+  if (input.audience === "class") {
     if (!input.className) return { success: false, error: "Which class? Name it in the task, e.g. 'for JSS1'." };
-    const room = await findClassroom(input.className, ctx.teacherId);
+    room = await findClassroom(input.className, ctx.teacherId);
     if (!room) return { success: false, error: `No class called "${input.className}" — check the name under Academics → Classes.` };
+    if (!input.subject) return { success: false, error: `Which subject? A class battle draws its questions from one — name it, e.g. "Mathematics".` };
     target.whole_class = true;
-    target.classroom_id = room.id;
+    path = `/api/battle/classes/${room.id}/battles/invite`;
   } else {
-    if (!input.usernames.length) return { success: false, error: "Which learners? List their usernames in the task." };
-    target.usernames = input.usernames;
+    // Course battle. Prefer what the model said, fall back to the task's own
+    // course, then to the teacher's only course — and if still ambiguous, name
+    // the options instead of failing blankly.
+    let courseId = input.courseId || ctx.courseId;
+    if (!courseId) {
+      const { data: mine } = await db.from("courses")
+        .select("id, title").eq("instructor_id", ctx.teacherId).limit(5);
+      if (mine?.length === 1) courseId = mine[0].id;
+      else return {
+        success: false,
+        error: mine?.length
+          ? `Which course is this battle for? Yours are: ${mine.map((c) => c.title).join(", ")}. Or name a class instead, e.g. "for JSS1".`
+          : 'You have no courses — name a class instead, e.g. "for JSS1", and a subject for its questions.',
+      };
+    }
+    if (input.audience === "course") target.whole_class = true;
+    else {
+      if (!input.usernames.length) return { success: false, error: "Which learners? List their usernames in the task." };
+      target.usernames = input.usernames;
+    }
+    path = `/api/battle/courses/${courseId}/battles/invite`;
   }
 
   let result;
   try {
-    result = await callAsUser(`/api/battle/courses/${courseId}/battles/invite`, {
+    result = await callAsUser(path, {
       userId: ctx.teacherId,
       role:   creator?.role,
       email:  creator?.email,
@@ -153,6 +164,7 @@ export async function executeAssignBattle(rawInput, ctx) {
         time_limit_seconds: input.durationMinutes * 60,
         xp_prize:           input.xpPrize,
         scheduled_for:      input.scheduledFor ?? null,
+        question_source:    input.questionSource,
         ...target,
       },
     });
@@ -175,7 +187,8 @@ export async function executeAssignBattle(rawInput, ctx) {
       status:     d.status,
       invited:    d.invited,
       skipped:    d.skipped ?? {},
-      courseId,
+      courseId: input.courseId ?? ctx.courseId ?? null,
+      classroomId: room?.id ?? null,
       scheduledFor: input.scheduledFor ?? null,
     },
     delivered: false,

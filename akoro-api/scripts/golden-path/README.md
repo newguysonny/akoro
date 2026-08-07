@@ -46,3 +46,22 @@ Boot the API against the shim, then:
 Logins are rate limited to 5 per 15 minutes per IP — which is the limiter
 working, since it was inert until recently. Restart the API between full runs;
 the store is in-process.
+
+## AI-backed paths (gp-tools.mjs)
+
+Needs a stand-in model, since these paths would otherwise call OpenAI:
+
+    node scripts/golden-path/mock-openai.mjs &
+    export OPENAI_BASE_URL=http://127.0.0.1:4900/v1
+    export ENABLE_TASK_WORKER=true
+    export INTERNAL_API_URL=http://127.0.0.1:4800
+    export RATE_LIMIT_AI=500 RATE_LIMIT_STANDARD=2000 RATE_LIMIT_STRICT=100
+
+What the mock DOES prove: routing, tool selection plumbing, argument
+validation, DB writes, coin charging, artifact persistence, every failure
+branch. What it CANNOT prove: whether a real model picks the right tool or
+writes good questions. That needs a live key.
+
+Coins are real. A run costs a few, and a wallet at zero fails every AI test
+with "Insufficient coin balance" — top up the test accounts, don't chase it as
+a bug.

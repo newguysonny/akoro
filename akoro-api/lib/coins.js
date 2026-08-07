@@ -36,7 +36,20 @@ export async function ensureAccount(ownerType, ownerId) {
     throw new Error(error.message);
   }
   if (WELCOME_GRANT > 0) {
-    await db.rpc("coin_credit", { p_account: created.id, p_amount: WELCOME_GRANT, p_type: "grant", p_meta: { feature: "welcome_grant" } }).catch(() => {});
+    // try/catch, NOT a trailing .catch(): a Supabase builder is a thenable with
+    // no .catch method, so calling one threw TypeError synchronously — and this
+    // runs the FIRST time any user's wallet is created, which made every new
+    // user's first AI action a 500. Existing users had wallets already, so it
+    // never showed up in an environment that had been running a while.
+    try {
+      const { error: grantErr } = await db.rpc("coin_credit", {
+        p_account: created.id, p_amount: WELCOME_GRANT, p_type: "grant",
+        p_meta: { feature: "welcome_grant" },
+      });
+      if (grantErr) console.warn("[coins] welcome grant failed:", grantErr.message);
+    } catch (e) {
+      console.warn("[coins] welcome grant threw:", e.message);
+    }
     return { ...created, balance: WELCOME_GRANT };
   }
   return created;
@@ -156,7 +169,17 @@ export async function debitCoins({ userId, coins, feature, model = null, tokensI
   }
   if (remaining > 0) {
     for (const a of applied) {
-      await db.rpc("coin_credit", { p_account: a.account, p_amount: a.took, p_type: "refund", p_meta: { feature: `${feature}:rollback`, ref } }).catch(() => {});
+      // Same trap, and worse here: this is the ROLLBACK path, so the TypeError
+      // masked whatever failure triggered it and left the coins debited.
+      try {
+        const { error: refundErr } = await db.rpc("coin_credit", {
+          p_account: a.account, p_amount: a.took, p_type: "refund",
+          p_meta: { feature: `${feature}:rollback`, ref },
+        });
+        if (refundErr) console.error("[coins] ROLLBACK FAILED — coins still debited:", refundErr.message, { account: a.account, amount: a.took });
+      } catch (e) {
+        console.error("[coins] ROLLBACK THREW — coins still debited:", e.message, { account: a.account, amount: a.took });
+      }
     }
     const { total } = await hasCoins(userId, coins);
     throw new InsufficientCoins(coins, total);

@@ -16,6 +16,28 @@ import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { hasCoins } from "../../lib/coins.js";
 
 const MAX_TOOL_ITERATIONS = 20;
+
+/**
+ * Tools that CHANGE THE WORLD, and so must run at most once per task run.
+ *
+ * The agent loop lets the model call tools until it stops. That is right for
+ * reads — look up a student, then another — and dangerous for writes: a model
+ * that misreads a tool result as a failure will simply try again, and each
+ * retry is a real battle sent to a real class, or work assigned to eighteen
+ * learners, or coins spent. Observed in testing: one task produced twenty
+ * battles and eighteen self-study assignments before the iteration cap stopped
+ * it.
+ *
+ * So a successful side-effecting call is remembered and replayed. The model
+ * sees the same result it already got — which is the truth, since the work was
+ * done — and stops asking. Failures are NOT cached: a retry after a genuine
+ * error is exactly what should be allowed.
+ */
+const SIDE_EFFECTING = new Set([
+  "assign_battle", "create_battle", "challenge_peer",
+  "assign_self_study", "run_teaching_tool",
+  "send_reminder", "schedule_session", "create_study_plan", "set_study_reminder",
+]);
 const MODEL               = OPENAI_MODEL;
 
 const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
@@ -69,6 +91,7 @@ export const taskWorker = new Worker("task-runner", async (job) => {
     ];
 
     let iterations = 0;
+    const done = new Map();   // side-effecting tool -> its result, this run only
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
       const response = await openai.chat.completions.create({
@@ -101,12 +124,21 @@ export const taskWorker = new Worker("task-runner", async (job) => {
         let content;
         if (!registered) {
           content = `Tool "${name}" not found`;
+        } else if (SIDE_EFFECTING.has(name) && done.has(name)) {
+          // Already done in this run — hand back the same answer rather than
+          // doing it a second time.
+          content = JSON.stringify({ ...done.get(name), alreadyDone: true,
+            note: `${name} already ran for this task; this is the result of that run.` });
         } else {
           await deliverProgress(task, `Using tool: ${name}...`);
           let args = {};
           try { args = JSON.parse(call.function.arguments || "{}"); } catch { args = {}; }
-          try { content = JSON.stringify(await registered.execute(args, toolCtx)); }
-          catch (err) { content = `Tool error: ${err.message}`; }
+          try {
+            const result = await registered.execute(args, toolCtx);
+            // Cache only SUCCESS: a retry after a real error is legitimate.
+            if (SIDE_EFFECTING.has(name) && result?.success !== false) done.set(name, result);
+            content = JSON.stringify(result);
+          } catch (err) { content = `Tool error: ${err.message}`; }
         }
         // One tool message per tool_call_id, or OpenAI rejects the next call.
         messages.push({ role: "tool", tool_call_id: call.id, content });

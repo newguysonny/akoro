@@ -68,6 +68,19 @@ const isInternal = (req) => req.isInternalCall === true;
 
 // ─── Tiered rate limiters ──────────────────────────────────────────────────────
 
+/**
+ * Ceilings are env-tunable, with today's values as defaults.
+ *
+ * They were hardcoded, so raising a limit for a school running two hundred
+ * learners at once — or lowering one under abuse — meant a code change and a
+ * deploy. A number you cannot change while an incident is happening is not
+ * really a control.
+ */
+const lim = (name, fallback) => {
+  const v = Number(process.env[`RATE_LIMIT_${name}`]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+};
+
 const BASE = {
   standardHeaders: true,   // X-RateLimit-* headers
   legacyHeaders:   false,
@@ -78,7 +91,7 @@ const BASE = {
 export const strictLimit = rateLimit({
   ...BASE,
   windowMs: 15 * 60 * 1000,
-  max:      5,
+  max:      lim('STRICT', 5),
   keyGenerator: ipKey,
   message: { success: false, message: 'Too many attempts. Please try again in 15 minutes.' },
 });
@@ -87,7 +100,7 @@ export const strictLimit = rateLimit({
 export const refreshLimit = rateLimit({
   ...BASE,
   windowMs: 15 * 60 * 1000,
-  max:      30,
+  max:      lim('REFRESH', 30),
   keyGenerator: ipKey,
   message: { success: false, message: 'Too many refresh attempts. Please slow down.' },
 });
@@ -97,7 +110,7 @@ export const standardLimit = rateLimit({
   ...BASE,
   skip: isInternal,
   windowMs: 60 * 1000,
-  max:      100,
+  max:      lim('STANDARD', 100),
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'Rate limit exceeded. Please slow down.' },
 });
@@ -107,7 +120,7 @@ export const teachingLimit = rateLimit({
   ...BASE,
   skip: isInternal,
   windowMs: 60 * 1000,
-  max:      50,
+  max:      lim('TEACHING', 50),
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'Teaching endpoint rate limit exceeded.' },
 });
@@ -117,7 +130,7 @@ export const aiLimit = rateLimit({
   ...BASE,
   skip: isInternal,
   windowMs: 60 * 1000,
-  max:      10,
+  max:      lim('AI', 10),
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'AI operation rate limit exceeded. Please wait.' },
 });
@@ -131,7 +144,7 @@ export const aiLimit = rateLimit({
 export const internalLimit = rateLimit({
   ...BASE,
   windowMs: 60 * 1000,
-  max:      300,
+  max:      lim('INTERNAL', 300),
   keyGenerator: () => 'internal',
   skip: (req) => !isInternal(req),
   message: { success: false, message: 'Internal job rate limit exceeded.' },

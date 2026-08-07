@@ -15,7 +15,13 @@ import { AI_DEFAULT_MAX_TOKENS } from "./aiPricing.js";
 export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export { InsufficientCoins };
 
-const rawClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// baseURL is overridable so the golden-path tests can point the whole platform
+// at a local stand-in and exercise every tool path end to end without a live
+// key. Unset in every real environment, where the SDK's default applies.
+const rawClient = new OpenAI({
+  apiKey:  process.env.OPENAI_API_KEY,
+  ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+});
 
 /**
  * Metered chat completion. The acting user comes from (in order): explicit
