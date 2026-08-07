@@ -589,7 +589,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     difficulty = "intermediate", total_questions = 15,
     time_limit_seconds = 900, xp_prize = 200,
     expires_in_minutes = 60, scheduled_for = null,
-    usernames = [], user_ids = [], whole_class = false,
+    usernames = [], user_ids = [], whole_class = false, classroom_id = null,
   } = req.body;
 
   if (!title) return res400(res, "title is required");
@@ -617,7 +617,16 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     else notFound.push(handle);
   }
 
-  if (whole_class) {
+  // "Everyone" means one of two different groups and the caller says which.
+  // A class (JSS1) is not the same set as a course enrolment, and a battle
+  // still lives in a course — so class members who aren't enrolled fall out at
+  // the eligibility step below and come back in `skipped.not_enrolled` rather
+  // than being silently dropped.
+  if (classroom_id) {
+    const { data: rows } = await db.from("classroom_students")
+      .select("user_id").eq("classroom_id", classroom_id).eq("status", "active");
+    for (const r of (rows ?? [])) targetIds.add(r.user_id);
+  } else if (whole_class) {
     const { data: rows } = await db.from("enrollments")
       .select("user_id").eq("course_id", courseId).eq("status", "active");
     for (const r of (rows ?? [])) targetIds.add(r.user_id);
@@ -643,8 +652,23 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     if (!agentByUser.has(id))   { skipped.no_agent.push(id);     continue; }
     opponents.push({ user_id: id, agent_id: agentByUser.get(id) });
   }
-  if (!opponents.length)
-    return res400(res, "None of those learners can battle yet — they must be enrolled and have an agent.");
+  if (!opponents.length) {
+    const why = skipped.not_enrolled.length && !skipped.no_agent.length
+      ? "None of them are enrolled in this course, so they can't take its battle."
+      : "None of those learners can battle yet — they must be enrolled in this course and have an agent.";
+    return res400(res, why);
+  }
+
+  // Ids are useless to the UI; send names so it can say who missed out.
+  const skippedIds = [...skipped.not_enrolled, ...skipped.no_agent];
+  const { data: skippedUsers } = skippedIds.length
+    ? await db.from("users").select("id, full_name, username").in("id", skippedIds)
+    : { data: [] };
+  const nameById = new Map((skippedUsers ?? []).map((u) => [u.id, u.full_name || u.username]));
+  const named = {
+    not_enrolled: skipped.not_enrolled.map((id) => nameById.get(id) ?? id),
+    no_agent:     skipped.no_agent.map((id) => nameById.get(id) ?? id),
+  };
 
   // ── Create ───────────────────────────────────────────────────────────────
   const isDuel      = opponents.length === 1;
@@ -716,7 +740,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     success: true, battle_id: battle.id,
     battle_type: isDuel ? "1v1" : "classroom",
     status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
-    invited: opponents.length, expires_at: expiresAt, skipped,
+    invited: opponents.length, expires_at: expiresAt, skipped: named,
   });
 }));
 

@@ -141,7 +141,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
         <div style={{ marginBottom: 12 }}>
           <label style={LABEL}>Who are you challenging?</label>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {[['picked', 'Pick classmates', 'One or more'], ['class', 'Whole class', 'Everyone enrolled']].map(([k, l, hint]) => (
+            {[['picked', 'Pick classmates', 'One or more'], ['class', 'Everyone on this course', 'All classmates enrolled']].map(([k, l, hint]) => (
               <button key={k} onClick={() => setMode(k)} style={{
                 flex: 1, padding: '10px 8px', borderRadius: 12, textAlign: 'left',
                 border: `1.5px solid ${mode === k ? BRAND : 'var(--ak-border2)'}`,
@@ -195,7 +195,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
 
           <p style={{ fontSize: 11, fontWeight: 700, color: count ? GREEN : 'var(--ak-text-muted)', margin: '8px 0 0' }}>
             {mode === 'class'
-              ? `${count} classmate${count === 1 ? '' : 's'} will be entered`
+              ? `${count} classmate${count === 1 ? '' : 's'} on this course will be entered`
               : count === 1
                 ? '1 classmate — a 1-v-1 challenge they can accept or decline'
                 : `${count} classmates — a group battle`}

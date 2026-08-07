@@ -1655,6 +1655,77 @@ router.patch("/profile/notifications", updateNotifications);
 router.patch("/profile/agent",         updateAgent);
 
 // Courses
+/**
+ * GET /api/instructor/classrooms
+ *
+ * The classes this user can assign work to. "Class" and "course" are different
+ * groupings and the UI now asks which one you mean: a course is who enrolled in
+ * a subject, a class is JSS1 — the same learners only by coincidence.
+ *
+ * Serves both portals. An instructor gets the classes they teach; a school
+ * admin gets every class in their school, because that is the set they think
+ * in. The two are unioned rather than branched on role, so a head of
+ * department who both teaches and administers sees all of theirs.
+ */
+const listClassrooms = asyncHandler(async (req, res) => {
+  try {
+    const { data: school } = await db.from("school_profiles")
+      .select("id").eq("admin_user_id", req.user.id).limit(1).maybeSingle();
+
+    let q = db.from("classrooms")
+      .select("id, name, description, school_id, teacher_id, classroom_students(id)")
+      .order("name");
+    q = school
+      ? q.or(`teacher_id.eq.${req.user.id},school_id.eq.${school.id}`)
+      : q.eq("teacher_id", req.user.id);
+
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+
+    ok(res, (data ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description ?? null,
+      student_count: c.classroom_students?.length ?? 0,
+    })));
+  } catch (e) {
+    err500(res, e);
+  }
+});
+
+/**
+ * GET /api/instructor/classrooms/:id/students
+ * Who is actually in a class, for the picker and for the "N will get this"
+ * count. has_agent matters for battles — no agent, no fight.
+ */
+const listClassroomStudents = asyncHandler(async (req, res) => {
+  try {
+    const { data: rows } = await db.from("classroom_students")
+      .select("user_id, users!inner(id, username, full_name, avatar_url, avatar_emoji)")
+      .eq("classroom_id", req.params.id).eq("status", "active");
+
+    const ids = (rows ?? []).map((r) => r.user_id);
+    const { data: agents } = ids.length
+      ? await db.from("user_agents").select("user_id").in("user_id", ids)
+      : { data: [] };
+    const withAgent = new Set((agents ?? []).map((a) => a.user_id));
+
+    ok(res, (rows ?? []).map((r) => ({
+      id:        r.users.id,
+      username:  r.users.username,
+      full_name: r.users.full_name,
+      avatar:    r.users.avatar_url ?? null,
+      emoji:     r.users.avatar_emoji ?? null,
+      has_agent: withAgent.has(r.user_id),
+    })));
+  } catch (e) {
+    err500(res, e);
+  }
+});
+
+
+router.get   ("/classrooms", listClassrooms);
+router.get   ("/classrooms/:id/students", listClassroomStudents);
 router.get   ("/courses",     listCourses);
 router.post  ("/courses",     createCourse);
 router.patch ("/courses/:id", updateCourse);

@@ -17,6 +17,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
+import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
@@ -132,67 +133,16 @@ function PlanEditor({ subtopics, objectives, onChange }) {
   );
 }
 
-/* ── Learner picker (same shape as the battle one) ───────────────────────── */
-function LearnerPicker({ roster, loading, selected, onToggle, typed, onTyped }) {
-  const [q, setQ] = useState('');
-  const term = q.trim().toLowerCase();
-  const shown = term
-    ? roster.filter(r => (r.full_name || '').toLowerCase().includes(term) || (r.username || '').toLowerCase().includes(term))
-    : roster;
-
-  return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: LIGHT }}>
-        <Search size={13} color={MUTED} />
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search learners…"
-          style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 12.5, fontFamily: FONT, color: INK }} />
-      </div>
-      <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-        {loading ? <div style={{ padding: 14, fontSize: 12, color: MUTED, fontFamily: FONT }}>Loading roster…</div>
-          : shown.length === 0 ? <div style={{ padding: 14, fontSize: 12, color: MUTED, fontFamily: FONT }}>
-              {roster.length === 0 ? 'No learners enrolled in this course yet.' : 'No match.'}
-            </div>
-          : shown.map(r => {
-            const on = selected.includes(r.id);
-            return (
-              <button key={r.id} type="button" onClick={() => onToggle(r.id)} style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px',
-                border: 'none', borderBottom: `1px solid ${BORDER}`, textAlign: 'left',
-                background: on ? `${AMBER}12` : WHITE, cursor: 'pointer', fontFamily: FONT,
-              }}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                  border: `1.5px solid ${on ? AMBER : BORDER}`, background: on ? AMBER : WHITE,
-                  color: WHITE, fontSize: 11, fontWeight: 900, lineHeight: '16px', textAlign: 'center',
-                }}>{on ? '✓' : ''}</span>
-                <span style={{ fontSize: 15 }}>{r.emoji || '🧑‍🎓'}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: INK }}>{r.full_name}</span>
-                  <span style={{ display: 'block', fontSize: 11, color: MUTED }}>@{r.username}</span>
-                </span>
-              </button>
-            );
-          })}
-      </div>
-      <div style={{ padding: '9px 10px', borderTop: `1px solid ${BORDER}`, background: LIGHT }}>
-        <Inp label="…or type usernames" value={typed} onChange={e => onTyped(e.target.value)} placeholder="priya, amaka, jss1_mate3" />
-      </div>
-    </div>
-  );
-}
-
 /* ── Create / edit modal ─────────────────────────────────────────────────── */
 const BLANK = {
   title: '', subject: 'Basic Science', topic: '', instructions: '',
   difficulty: 'intermediate', dueAt: '', courseId: '',
-  targetMode: 'class', selected: [], typed: '',
+  audience: BLANK_AUDIENCE,
   subtopics: [], objectives: {},
 };
 
 function AssignModal({ open, onClose, onSubmit, courses, editing }) {
   const [form, setForm]   = useState(BLANK);
-  const [roster, setRoster] = useState([]);
-  const [rLoading, setRLoading] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
@@ -216,17 +166,6 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
     }
   }, [open, editing, courses]);
 
-  useEffect(() => {
-    if (!open || editing || !form.courseId) { setRoster([]); return; }
-    let dead = false;
-    setRLoading(true);
-    apiGet(`/api/battle/courses/${form.courseId}/roster`)
-      .then(d => { if (!dead) setRoster(d?.data ?? []); })
-      .catch(() => { if (!dead) setRoster([]); })
-      .finally(() => { if (!dead) setRLoading(false); });
-    return () => { dead = true; };
-  }, [open, editing, form.courseId]);
-
   const draft = async () => {
     if (!form.topic.trim()) return setError('Enter a topic first — that is what the plan is built from.');
     setError(''); setDrafting(true);
@@ -246,8 +185,6 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
     }
   };
 
-  const typedNames = form.typed.split(',').map(s => s.trim()).filter(Boolean);
-  const targetCount = form.targetMode === 'class' ? roster.length : form.selected.length + typedNames.length;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -255,13 +192,17 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
     if (!form.title.trim()) return setError('Give the assignment a title.');
     if (!form.topic.trim()) return setError('Enter the topic learners will study.');
     if (!editing && !form.courseId) return setError('Pick a course.');
-    if (!editing && form.targetMode === 'picked' && targetCount === 0)
-      return setError('Choose at least one learner, or switch to “Whole class”.');
+    if (!editing) {
+      const aud = form.audience;
+      if (aud.mode === 'class' && !aud.classroomId) return setError('Pick which class this is for.');
+      if (aud.mode === 'picked' && !(aud.selected.length + parseHandles(aud.typed).length))
+        return setError('Choose at least one learner, or send it to a course or class.');
+    }
     if (!form.subtopics.filter(s => s.trim()).length)
       return setError('The plan needs at least one subtopic — draft it or add one.');
 
     setLoading(true);
-    try { await onSubmit(form, typedNames); onClose(); }
+    try { await onSubmit(form); onClose(); }
     catch (err) { setError(err?.message || 'Could not save the assignment.'); }
     finally { setLoading(false); }
   };
@@ -312,38 +253,11 @@ function AssignModal({ open, onClose, onSubmit, courses, editing }) {
               {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
             </Sel>
 
-            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, margin: '12px 0 7px' }}>
-              Send to *
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              {[
-                { key: 'class',  label: 'Whole class', hint: 'Everyone enrolled' },
-                { key: 'picked', label: 'Individual learners', hint: 'One or more' },
-              ].map(o => (
-                <button key={o.key} type="button" onClick={() => setField('targetMode', o.key)} style={{
-                  flex: 1, padding: '9px 8px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
-                  border: `1.5px solid ${form.targetMode === o.key ? AMBER : BORDER}`,
-                  background: form.targetMode === o.key ? `${AMBER}12` : WHITE,
-                }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: form.targetMode === o.key ? AMBER : INK }}>{o.label}</div>
-                  <div style={{ fontSize: 10.5, color: MUTED }}>{o.hint}</div>
-                </button>
-              ))}
-            </div>
-
-            {form.targetMode === 'picked' && (
-              <LearnerPicker
-                roster={roster} loading={rLoading} selected={form.selected}
-                onToggle={id => setForm(f => ({
-                  ...f, selected: f.selected.includes(id) ? f.selected.filter(x => x !== id) : [...f.selected, id],
-                }))}
-                typed={form.typed} onTyped={v => setField('typed', v)}
-              />
-            )}
-
-            <div style={{ fontSize: 11, color: targetCount ? GREEN : MUTED, fontWeight: 700, fontFamily: FONT, marginTop: 7 }}>
-              {targetCount} learner{targetCount === 1 ? '' : 's'} will get this
-            </div>
+            <AudiencePicker
+              value={form.audience}
+              onChange={(v) => setField('audience', v)}
+              courseId={form.courseId}
+            />
           </div>
         )}
 
@@ -496,7 +410,7 @@ export default function SelfStudyPage() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { getCourses().then(r => setCourses(r?.data ?? r?.courses ?? [])).catch(() => setCourses([])); }, []);
 
-  const handleSubmit = async (form, typedNames) => {
+  const handleSubmit = async (form) => {
     const dueIso = form.dueAt ? new Date(form.dueAt).toISOString() : null;
     const clean = form.subtopics.map(s => s.trim()).filter(Boolean);
     const objectives = {};
@@ -515,10 +429,10 @@ export default function SelfStudyPage() {
     } else {
       const d = await apiPost('/api/self-study', {
         ...body,
-        course_id: form.courseId,
-        whole_class: form.targetMode === 'class',
-        user_ids: form.targetMode === 'class' ? [] : form.selected,
-        usernames: form.targetMode === 'class' ? [] : typedNames,
+        course_id: form.courseId,      // scope: which course this belongs to
+        // ...and separately, who it goes to. The two were conflated before,
+        // which quietly sent individually-picked work to the whole course.
+        ...audienceBody(form.audience),
       });
       showToast(`Assigned to ${d?.data?.assigned ?? 0} learner${d?.data?.assigned === 1 ? '' : 's'}`);
     }
