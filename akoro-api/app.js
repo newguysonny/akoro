@@ -25,7 +25,7 @@ import { fileURLToPath }          from "url";
 import { MulterError }            from "multer";
 import {
   strictLimit, refreshLimit, standardLimit, teachingLimit, aiLimit,
-  requestLogger,
+  internalLimit, attachRateLimitIdentity, requestLogger,
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
@@ -282,6 +282,59 @@ app.get("/internal/preflight", (req, res) => {
 //   standardLimit — read APIs      (100 req/min, by user or IP)
 //   teachingLimit — adaptive       (50 req/min, by user or IP)
 //   aiLimit       — AI operations  (10 req/min, by user or IP)
+//   internalLimit — background jobs (300 req/min, all jobs pooled)
+//
+// "by user" only became true when this was added: the limiters are mounted
+// here, authenticateToken lives inside each router, so req.user did not exist
+// when the key was computed and every limiter fell back to per-IP. Behind a
+// proxy that is ONE bucket for the whole platform. This verifies the token's
+// signature (no DB) just to answer "whose quota is this?".
+/**
+ * Proxy trust — deliberately opt-in.
+ *
+ * req.ip is the socket peer unless Express is told how many proxies sit in
+ * front. On a platform edge that means every visitor shares one address, so
+ * every IP-keyed limit (login: 5 per 15 min) is one bucket for everybody.
+ *
+ * The fix is a HOP COUNT, never `true`: trusting the whole chain lets a caller
+ * spoof X-Forwarded-For and pick their own bucket, which is worse than sharing
+ * one. Left unset by default so this change can't silently make things less
+ * safe — set TRUST_PROXY=1 on Railway (one edge hop) and watch the diagnostic
+ * below confirm it.
+ */
+if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== "") {
+  const hops = Number(process.env.TRUST_PROXY);
+  app.set("trust proxy", Number.isFinite(hops) ? hops : process.env.TRUST_PROXY);
+  console.log(`[security] trust proxy = ${process.env.TRUST_PROXY}`);
+}
+
+/**
+ * One-shot diagnostic: print what the first API request actually looks like.
+ * Whether IP-keyed limits work at all depends on this, and it cannot be
+ * determined from the code — only from what the platform sends.
+ */
+let ipProbed = false;
+app.use("/api", (req, _res, next) => {
+  if (!ipProbed) {
+    ipProbed = true;
+    console.log("[security] first request — req.ip=%s socket=%s x-forwarded-for=%s trustProxy=%s",
+      req.ip, req.socket?.remoteAddress, req.headers["x-forwarded-for"] ?? "(none)",
+      app.get("trust proxy") ?? "(unset)");
+    if (!process.env.TRUST_PROXY && req.headers["x-forwarded-for"]) {
+      console.warn("[security] X-Forwarded-For is present but TRUST_PROXY is unset — " +
+        "IP-keyed limits (login, refresh) are keying on the proxy, i.e. one shared bucket. " +
+        "Set TRUST_PROXY to the number of proxy hops (Railway: 1).");
+    }
+  }
+  next();
+});
+
+app.use("/api", attachRateLimitIdentity);
+// Background jobs call this same API over loopback as the user who scheduled
+// the work. They skip the per-user limiters and are counted here instead, so a
+// cron firing six assignments cannot trip a 10/min ceiling — while a runaway
+// loop still hits one.
+app.use("/api", internalLimit);
 // Unified Paystack webhook — verifies the signature once from the raw body and
 // dispatches to every fulfillment domain (course/cart, agent/tool, payouts).
 // The mount path is derived from PAYSTACK_WEBHOOK_URL (its path component) so it

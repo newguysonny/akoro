@@ -7,13 +7,64 @@
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z }                         from 'zod';
+import { peekAccessToken }           from '../lib/tokenPeek.js';
+
+// ─── Who is this request? ─────────────────────────────────────────────────────
+
+/**
+ * attachRateLimitIdentity — mount ONCE, before any limiter.
+ *
+ * The limiters were mounted on the app while authenticateToken lives inside
+ * each router, so req.user did not exist when the key was computed and every
+ * "per user" limiter fell back to per-IP. Behind a proxy that is one shared
+ * bucket for the entire platform.
+ *
+ * This verifies the access token's signature (no database, no deny-list check)
+ * purely to answer "whose quota is this?". Verification is the gate: an
+ * unsigned or forged token yields null and the request keys by IP as before, so
+ * nobody can borrow another user's quota or dodge their own.
+ */
+export function attachRateLimitIdentity(req, res, next) {
+  const claims = peekAccessToken(req);
+  if (claims) {
+    req.rateLimitId = String(claims.sub);
+    // Minted by signInternalAccess() for a background job acting as a user.
+    // Only our signing key can produce this claim, so the signature check above
+    // is what makes it trustworthy — not the flag itself.
+    req.isInternalCall = claims.internal === true;
+  }
+  next();
+}
 
 // ─── Rate-limit key helpers ────────────────────────────────────────────────────
 
-/** Prefer authenticated user id over IP; use ipKeyGenerator for IPv6 safety */
-function userOrIpKey(req, res) {
-  return req.user?.id ? String(req.user.id) : ipKeyGenerator(req, res);
+/**
+ * ipKey — the IPv6-safe key for an address.
+ *
+ * express-rate-limit v8's ipKeyGenerator takes an IP STRING; it was being
+ * called as ipKeyGenerator(req, res), which returns the request object. Every
+ * request therefore produced a different key and no counter ever incremented —
+ * so standardLimit, teachingLimit, aiLimit, strictLimit and refreshLimit were
+ * all silently inert, including the 5-per-15-minutes guard on login.
+ */
+const ipKey = (req) => ipKeyGenerator(req.ip ?? req.socket?.remoteAddress ?? "unknown");
+
+/** Prefer authenticated user id over IP; fall back to an IPv6-safe address key. */
+function userOrIpKey(req) {
+  const id = req.user?.id ?? req.rateLimitId;
+  return id ? String(id) : ipKey(req);
 }
+
+/**
+ * Internal calls get their own bucket, not an exemption.
+ *
+ * The task worker calls this same API over loopback to create battles and
+ * assignments — one cron firing six assignments is a dozen requests from one
+ * address, which trips a 10/min AI limit and fails work the teacher scheduled.
+ * But "skip entirely" turns a runaway loop into an outage, so they are counted
+ * against a ceiling high enough that only a bug reaches it.
+ */
+const isInternal = (req) => req.isInternalCall === true;
 
 // ─── Tiered rate limiters ──────────────────────────────────────────────────────
 
@@ -28,7 +79,7 @@ export const strictLimit = rateLimit({
   ...BASE,
   windowMs: 15 * 60 * 1000,
   max:      5,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: ipKey,
   message: { success: false, message: 'Too many attempts. Please try again in 15 minutes.' },
 });
 
@@ -37,13 +88,14 @@ export const refreshLimit = rateLimit({
   ...BASE,
   windowMs: 15 * 60 * 1000,
   max:      30,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: ipKey,
   message: { success: false, message: 'Too many refresh attempts. Please slow down.' },
 });
 
 /** Standard read endpoints — 100 req / min */
 export const standardLimit = rateLimit({
   ...BASE,
+  skip: isInternal,
   windowMs: 60 * 1000,
   max:      100,
   keyGenerator: userOrIpKey,
@@ -53,6 +105,7 @@ export const standardLimit = rateLimit({
 /** Adaptive / teaching endpoints — 50 req / min */
 export const teachingLimit = rateLimit({
   ...BASE,
+  skip: isInternal,
   windowMs: 60 * 1000,
   max:      50,
   keyGenerator: userOrIpKey,
@@ -62,10 +115,26 @@ export const teachingLimit = rateLimit({
 /** Resource-intensive AI operations — 10 req / min */
 export const aiLimit = rateLimit({
   ...BASE,
+  skip: isInternal,
   windowMs: 60 * 1000,
   max:      10,
   keyGenerator: userOrIpKey,
   message: { success: false, message: 'AI operation rate limit exceeded. Please wait.' },
+});
+
+/**
+ * Background work, all callers pooled — 300 req / min.
+ *
+ * Deliberately one shared bucket rather than per-task: the thing worth
+ * catching is the platform's own jobs looping, and that shows up in the total.
+ */
+export const internalLimit = rateLimit({
+  ...BASE,
+  windowMs: 60 * 1000,
+  max:      300,
+  keyGenerator: () => 'internal',
+  skip: (req) => !isInternal(req),
+  message: { success: false, message: 'Internal job rate limit exceeded.' },
 });
 
 // ─── BOLA guard ────────────────────────────────────────────────────────────────
