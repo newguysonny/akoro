@@ -24,18 +24,58 @@ const PORTAL_ID = 'business';
 const SESSION_USER_KEY = 'akoro_business_user';
 let refreshing = null;
 
+/* ── Refresh before the herd, not after it ───────────────────────────────
+   The access token lives 15 minutes. A screen that opens after that fires its
+   whole first batch of requests in parallel, every one 401s, ONE refresh runs
+   (refreshSession dedupes), and all of them retry — double the traffic on every
+   return visit, and a wall of red in the server logs for something that is
+   working exactly as designed.
+
+   The access cookie is HttpOnly and set on the API's domain, so this app cannot
+   read its expiry. The API hands it back as accessExpiresAt instead; we stash
+   it and, when it has passed, refresh FIRST. Concurrent callers all await the
+   same refreshSession() promise, so 16 requests still cost one refresh — they
+   just no longer cost 16 rejections first.
+
+   If storage is unavailable (private mode) this is a no-op and the old
+   401-then-retry path still carries the request. */
+const EXP_KEY = 'akoro_access_exp';
+
+export function rememberExpiry(json) {
+  const exp = json?.accessExpiresAt ?? json?.data?.accessExpiresAt;
+  if (!exp) return json;
+  try { localStorage.setItem(EXP_KEY, String(exp)); } catch { /* private mode */ }
+  return json;
+}
+
+function accessExpired() {
+  try {
+    const at = Number(localStorage.getItem(EXP_KEY) || 0);
+    // 0 = we've never been told; let the request go and 401 if it must.
+    return at > 0 && at <= Date.now() + 5000;   // 5s skew for a slow request
+  } catch { return false; }
+}
+
+function forgetExpiry() {
+  try { localStorage.removeItem(EXP_KEY); } catch { /* private mode */ }
+}
+
 function refreshSession() {
   if (!refreshing) {
     refreshing = fetch(`${API}/api/auth/refresh`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
       body: '{}',
-    }).then((r) => r.ok).catch(() => false).finally(() => { refreshing = null; });
+    }).then(async (r) => {
+      if (r.ok) rememberExpiry(await r.json().catch(() => null));
+      return r.ok;
+    }).catch(() => false).finally(() => { refreshing = null; });
   }
   return refreshing;
 }
 
 function endSession() {
+  forgetExpiry();
   try { localStorage.removeItem(SESSION_USER_KEY); } catch { /* private mode */ }
   if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/signin')) {
     window.location.href = '/signin?error=session_expired';
@@ -44,6 +84,9 @@ function endSession() {
 
 /** fetch + one transparent refresh-and-retry on 401. */
 async function authedFetch(url, opts) {
+  // Known-expired token: refresh once up front instead of letting every
+  // request in this batch discover it independently.
+  if (accessExpired()) await refreshSession();
   const res = await fetch(url, opts);
   reportConnection(true);
   if (res.status !== 401) return res;

@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API, getPortal, setSiteTokens, clearSiteTokens, takeHandoffToken, withAuth } from '../services/api.js';
+import { API, getPortal, setSiteTokens, clearSiteTokens, takeHandoffToken, withAuth, rememberExpiry } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -35,6 +35,9 @@ async function authFetch(path, body) {
   let json = {};
   if (text) { try { json = JSON.parse(text); } catch { json = {}; } }
   if (!res.ok) throw new Error(json.message || json.error || `Request failed (${res.status})`);
+  // Sign-in is where the first expiry comes from — without it the next visit
+  // after 15 minutes still discovers the dead token once per request.
+  rememberExpiry(json);
   return json;
 }
 

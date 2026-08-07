@@ -533,8 +533,15 @@ const issueTokenPair = async (res, user, portal = "student") => {
   setRefreshCookie(res, refreshToken, portal);
   clearLegacyCookies(res);
 
-  // Also return tokens in body for mobile clients
-  return { accessToken, refreshToken, user: safeUser(user) };
+  // Also return tokens in body for mobile clients.
+  //
+  // accessExpiresAt exists because the access cookie is HttpOnly AND set on the
+  // API's own domain, so a browser app on a different origin cannot read it or
+  // its expiry. Without knowing when it dies, an app returning after 15 minutes
+  // fires its whole first screen of requests, watches every one 401, refreshes
+  // once and retries all of them — double the traffic and a wall of red in the
+  // logs. Handing back the expiry lets the client refresh first instead.
+  return { accessToken, refreshToken, accessExpiresAt: Date.now() + ACCESS_TTL_SECS * 1000, user: safeUser(user) };
 };
 
 const authHandlers = {
@@ -750,7 +757,11 @@ const authHandlers = {
     setRefreshCookie(res, newRefreshToken, portal);
     clearLegacyCookies(res);
 
-    res200(res, { accessToken, refreshToken: newRefreshToken, user: safeUser(user) });
+    res200(res, {
+      accessToken, refreshToken: newRefreshToken,
+      accessExpiresAt: Date.now() + ACCESS_TTL_SECS * 1000,
+      user: safeUser(user),
+    });
   }),
 
   // POST /api/auth/logout

@@ -209,18 +209,27 @@ function scrub(obj, depth = 0) {
   );
 }
 
-export function securityLog(event, req, extra = {}) {
+export function securityLog(event, req, extra = {}, { level = 'error' } = {}) {
   const entry = {
     ts:      new Date().toISOString(),
     event,
+    // A `message` so log viewers that parse JSON have something to SHOW. Without
+    // it Railway rendered every one of these as a blank red row: you had to
+    // expand each one individually to learn it was a routine 401.
+    message: `${event} ${req?.method ?? ''} ${req?.path ?? ''}`.trim() +
+             (extra?.status ? ` -> ${extra.status}` : ''),
+    level,
     ip:      req?.ip,
     method:  req?.method,
     path:    req?.path,
     userId:  req?.user?.id ?? null,
     ...scrub(extra),
   };
-  // Only log to stderr so it doesn't mix with access logs
-  process.stderr.write(JSON.stringify(entry) + '\n');
+  // stderr is for things worth someone's attention; routine client-side
+  // outcomes go to stdout so they don't read as incidents.
+  const line = JSON.stringify(entry) + '\n';
+  if (level === 'error') process.stderr.write(line);
+  else                   process.stdout.write(line);
 }
 
 /**
@@ -231,8 +240,23 @@ export function requestLogger(req, res, next) {
   const start = Date.now();
   res.on('finish', () => {
     const ms = Date.now() - start;
-    if (res.statusCode >= 400) {
-      securityLog('HTTP_ERROR', req, { status: res.statusCode, ms });
+    const s  = res.statusCode;
+    if (s < 400) return;
+
+    // 401 is usually the auth handshake working, not failing: the access token
+    // lives 15 minutes, so a screen opened after that 401s once per request
+    // before the client refreshes and retries. Logging a wall of those as
+    // errors buried the failures that matter. They are still recorded — as
+    // AUTH_CHALLENGE on stdout — so a genuine flood is still visible.
+    //
+    // 403 stays an error: that is a signed-in user reaching for something that
+    // is not theirs, which is worth seeing.
+    if (s === 401) {
+      securityLog('AUTH_CHALLENGE', req, { status: s, ms }, { level: 'info' });
+    } else if (s === 404) {
+      securityLog('HTTP_NOT_FOUND', req, { status: s, ms }, { level: 'info' });
+    } else {
+      securityLog('HTTP_ERROR', req, { status: s, ms });
     }
   });
   next();
