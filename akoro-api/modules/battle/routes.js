@@ -1182,7 +1182,10 @@ router.put("/battles/:battleId", authenticateToken, asyncHandler(async (req, res
   const { data: battle } = await db.from("battles").select("id, created_by, status").eq("id", req.params.battleId).single();
   if (!battle) return res404(res, "Battle not found");
   if (req.user.role !== "admin" && battle.created_by !== req.user.id) return res403(res, "Not authorised");
-  if (!["lobby", "scheduled"].includes(battle.status)) return res400(res, `Cannot edit a ${battle.status} battle`);
+  // Anything that isn't in flight or finished is editable. Restricting this to
+  // lobby/scheduled meant a battle that had expired or been cancelled could
+  // never be fixed and re-used — you had to build it again from scratch.
+  if (["live", "completed"].includes(battle.status)) return res400(res, `Cannot edit a ${battle.status} battle`);
 
   const allowed = ["title", "description", "topic", "subject", "difficulty", "xp_prize", "xp_pool", "time_limit_seconds", "total_questions", "max_participants", "scheduled_start"];
   const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
@@ -1193,6 +1196,44 @@ router.put("/battles/:battleId", authenticateToken, asyncHandler(async (req, res
   const { data, error } = await db.from("battles").update(updates).eq("id", req.params.battleId).select().single();
   if (error) throw new Error(error.message);
   res200(res, data);
+}));
+
+/**
+ * DELETE /api/battle/battles/:battleId
+ *
+ * Removes a battle for good — participants, questions and logs cascade with it.
+ * Only the creator (or an admin) may, and never while it is live: deleting a
+ * battle mid-round would strand everyone currently answering. Finished battles
+ * CAN be deleted; they are the creator's own history to clear.
+ *
+ * ?cancel=1 keeps the record and just marks it cancelled, which is what the
+ * older /challenges/:id route does.
+ */
+router.delete("/battles/:battleId", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: battle } = await db.from("battles")
+    .select("id, created_by, status, title").eq("id", req.params.battleId).single();
+  if (!battle) return res404(res, "Battle not found");
+  if (req.user.role !== "admin" && battle.created_by !== req.user.id) return res403(res, "Not authorised");
+  if (battle.status === "live") return res400(res, "Cannot delete a battle that is live — end it first");
+
+  if (req.query.cancel === "1") {
+    const { error } = await db.from("battles").update({ status: "cancelled" }).eq("id", battle.id);
+    if (error) throw new Error(error.message);
+    return res200(res, { id: battle.id, cancelled: true });
+  }
+
+  // Tell everyone who was invited, so a battle doesn't just vanish from their
+  // list with no explanation.
+  const { data: parts } = await db.from("battle_participants")
+    .select("user_id").eq("battle_id", battle.id).neq("user_id", battle.created_by);
+  for (const p of (parts ?? [])) {
+    await notifyUser(p.user_id, "battle_cancelled", `Battle cancelled: ${battle.title}`,
+      "The person who created it has removed this battle.", battle.id).catch(() => {});
+  }
+
+  const { error } = await db.from("battles").delete().eq("id", battle.id);
+  if (error) throw new Error(error.message);
+  res200(res, { id: battle.id, deleted: true });
 }));
 
 /**

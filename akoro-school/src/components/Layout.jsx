@@ -182,6 +182,7 @@ const NAV_SECTIONS = [
     // Academics → Classes, and Student Information respectively.
     { label: 'Battles', icon: Swords, to: '/battles' },
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
+    { label: 'AI Self Study', icon: GraduationCap, to: '/self-study' },
     { label: 'Assessments', icon: FileCheck, to: '/assessments' },
     { label: 'Review AI Lessons', icon: BookOpenCheck, to: '/lesson-review' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },

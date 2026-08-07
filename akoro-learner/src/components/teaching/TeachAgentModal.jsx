@@ -8,7 +8,7 @@ import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function TeachAgentModal({ session, config, onClose }) {
+function TeachAgentModal({ session, config, onClose, onSessionStarted }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
@@ -196,6 +196,7 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("session_preparing", d => setPrepNote(`Preparing your lesson on ${d.topic}…`));
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
+        onSessionStarted?.(d.sessionId);
         sessionIdRef.current = d.sessionId;
         setWsReady(true);
         setInitLoading(false); setPrepNote('');
@@ -230,7 +231,7 @@ function TeachAgentModal({ session, config, onClose }) {
       });
 
       // Backward compat
-      ws.on("student_session_ready", d => { setSessionId(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
+      ws.on("student_session_ready", d => { setSessionId(d.sessionId); onSessionStarted?.(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
 
       // Summary delivered over the socket (replaces REST /teaching/summary).
       ws.on("session_summary", ({ summary }) => { setSummary(summary); setLoading(false); });

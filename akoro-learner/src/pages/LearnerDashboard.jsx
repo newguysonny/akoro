@@ -10,6 +10,7 @@ import { useCart } from '../contexts/CartContext.jsx';
 import TeacherNudge   from '../components/TeacherNudge.jsx';
 import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
+import SelfStudyList  from '../components/sessions/SelfStudyList.jsx';
 import SessionSheet   from '../components/sessions/SessionSheet.jsx';
 import BlockRenderer  from '../components/sessions/BlockRenderer.jsx';
 import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
@@ -58,6 +59,7 @@ export default function LearnerDashboard() {
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
   const [agentSubTab,       setAgentSubTab]       = useState("sessions");
+  const [selfStudyCount,    setSelfStudyCount]    = useState(0);   // badge on the Self study tab
   const [liveSubjectFilter, setLiveSubjectFilter] = useState("all");
   const [agentSubjectFilter,setAgentSubjectFilter]= useState("all");
   const [subjectFilter,     setSubjectFilter]     = useState("all");
@@ -139,6 +141,11 @@ export default function LearnerDashboard() {
     // case, which is a real answer ("nothing pending"), not a reason to keep
     // whatever was on screen before.
     loadBattles();
+
+    // Self study — only the outstanding ones drive the tab badge.
+    apiGet("/api/self-study/mine")
+      .then(d=>setSelfStudyCount((d?.data??[]).filter(a=>a.status!=="complete").length))
+      .catch(()=>{});
 
     // Decay alerts
     apiGet(`/api/adaptive/chat/decay/alerts/${STUDENT_ID}`)
@@ -563,6 +570,7 @@ export default function LearnerDashboard() {
                   <div style={{ display:"flex",borderBottom:"1px solid #F3F4F6",background:"#fff",flexShrink:0 }}>
                     {[
                       {key:"sessions",  label:t('sessions.sessions'),  icon:"📚", count:agentSessionsFiltered.length},
+                      {key:"selfstudy", label:"Self study",            icon:"📖", count:selfStudyCount},
                       {key:"revisions", label:t('sessions.revisions'), icon:"🔄", count:agentRevisions.length},
                     ].map(({key,label,icon,count})=>{
                       const active=agentSubTab===key;
@@ -619,6 +627,18 @@ export default function LearnerDashboard() {
                           decayAlert={decayBySession[s.id]||null}
                           agentProfile={agentProfile}/>
                       ))
+                  )}
+                  {/* Self study sub-tab — teacher-assigned topics */}
+                  {agentSubTab==="selfstudy"&&(
+                    <SelfStudyList
+                      subjectFilter={agentSubjectFilter}
+                      onStart={brief=>{
+                        setTeachSession({
+                          ...brief,
+                          agentName:  agentProfile.name,
+                          agentEmoji: agentProfile.emoji,
+                        });
+                      }}/>
                   )}
                   {/* Revisions sub-tab */}
                   {agentSubTab==="revisions"&&(
@@ -712,6 +732,13 @@ export default function LearnerDashboard() {
           <TeachAgentModal
             session={teachSession?.topic ? null : teachSession}
             config={teachSession?.topic ? teachSession : null}
+            // A self-study attempt has to know which session it became, or the
+            // teacher's progress view points at nothing.
+            onSessionStarted={sid=>{
+              if (teachSession?.selfStudyId && sid) {
+                apiPost(`/api/self-study/${teachSession.selfStudyId}/link`, { sessionId: sid }).catch(()=>{});
+              }
+            }}
             onClose={()=>{ setTeachSession(null); loadAgentSessions(); }}
           />
         )}

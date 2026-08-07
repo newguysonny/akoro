@@ -16,7 +16,9 @@ export function useBattlesAPI() {
   const updateBattle = (id, data) => apiPut(`/api/battle/battles/${id}`, data);
   // Starting is its own endpoint — it queues the worker, it isn't a status write.
   const startBattle  = (id) => apiPost(`/api/battle/battles/${id}/start`, {});
-  const deleteBattle = (id) => apiDelete(`/api/battle/challenges/${id}`);
+  // Real delete (participants/questions cascade). ?cancel=1 keeps the record.
+  const deleteBattle = (id) => apiDelete(`/api/battle/battles/${id}`);
+  const cancelBattle = (id) => apiDelete(`/api/battle/battles/${id}?cancel=1`);
 
   // ── Question bank (per course) ──────────────────────────────────────────
   const getQuestionBank    = (courseId) => apiGet(`/api/battle/courses/${courseId}/questions-bank`);
@@ -26,7 +28,7 @@ export function useBattlesAPI() {
   const generateBank       = (courseId, data) => apiPost(`/api/battle/courses/${courseId}/questions-bank/generate`, data);
 
   return {
-    getBattles, getRoster, createBattle, updateBattle, startBattle, deleteBattle,
+    getBattles, getRoster, createBattle, updateBattle, startBattle, deleteBattle, cancelBattle,
     getQuestionBank, addBankQuestion, updateBankQuestion, deleteBankQuestion, generateBank,
   };
 }

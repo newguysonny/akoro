@@ -45,6 +45,7 @@ import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
+import selfStudyModule            from "./modules/self-study/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
 import teachingToolsModule        from "./modules/teaching/tools.js";
@@ -307,6 +308,7 @@ if (process.env.REDIS_URL) {
 }
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
+app.use("/api/self-study", aiLimit,       selfStudyModule);   // teacher-assigned AI study, /plan calls the model
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
 app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
 app.use("/api/past-questions",   standardLimit, pastQuestionsModule);  // WAEC/NECO/JAMB/NCEE question bank

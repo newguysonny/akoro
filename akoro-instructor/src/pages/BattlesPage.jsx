@@ -272,7 +272,8 @@ function DiffBadge({ difficulty }) {
 function BattleCard({ battle, onStart, onEdit, onDelete }) {
   const isLive     = battle.status === 'live';
   const isFinished = ['completed', 'cancelled', 'expired'].includes(battle.status);
-  const editable   = ['lobby', 'scheduled'].includes(battle.status) && battle.mine;
+  const editable   = !['live', 'completed'].includes(battle.status) && battle.mine;
+  const deletable  = battle.status !== 'live' && battle.mine;
   const scheduled  = battle.scheduledAt ? new Date(battle.scheduledAt) : null;
 
   return (
@@ -342,9 +343,13 @@ function BattleCard({ battle, onStart, onEdit, onDelete }) {
       )}
 
       {isFinished && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED, fontFamily: FONT }}>
-          <Trophy size={14} color={AMBER} />
-          {battle.participantCount} participants
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED, fontFamily: FONT }}>
+            <Trophy size={14} color={AMBER} />
+            {battle.participantCount} participants
+          </div>
+          {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>}
+          {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Trash2 size={13} /></Btn>}
         </div>
       )}
     </div>
@@ -467,13 +472,15 @@ export default function BattlesPage() {
   };
 
   const handleDelete = async (battle) => {
-    if (!window.confirm(`Cancel “${battle.title}”? Everyone invited will lose access to it.`)) return;
+    if (!window.confirm(`Delete “${battle.title}”? This removes it for everyone invited, along with its questions and results.`)) return;
+    const before = battles;
+    setBattles(bs => bs.filter(b => b.id !== battle.id));
     try {
       await deleteBattle(battle.id);
-      setBattles(bs => bs.filter(b => b.id !== battle.id));
-      showToast('Battle cancelled');
+      showToast('Battle deleted');
     } catch (e) {
-      showToast(e?.message || 'Could not cancel the battle', 'error');
+      setBattles(before);   // it's still there — don't pretend otherwise
+      showToast(e?.message || 'Could not delete the battle', 'error');
     }
   };
 

@@ -14,6 +14,7 @@ import InstructorsPage from './pages/InstructorsPage.jsx';
 import ClassroomsPage from './pages/ClassroomsPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
+import SelfStudyPage from './pages/SelfStudyPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AiChatPage   from './pages/AiChatPage.jsx';
@@ -255,6 +256,7 @@ function AppRoutes() {
       <Route path="/classes" element={<Navigate to="/mgmt/classes" replace />} />
       <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
+      <Route path="/self-study" element={<ProtectedRoute><SelfStudyPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute anyRole><ChatPage /></ProtectedRoute>} />
