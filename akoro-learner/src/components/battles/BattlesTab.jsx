@@ -4,6 +4,7 @@ import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
+import ParticipantsSheet from './ParticipantsSheet.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
@@ -74,6 +75,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const { t } = useLang();
   const [viewFilter, setViewFilter] = useState("active");
   const [watching,   setWatching]   = useState(null);
+  const [rosterOf,   setRosterOf]   = useState(null);   // battle whose roster is open
   const [creating,   setCreating]   = useState(false);
   // Only battles I am actually IN. An invitation I have not answered belongs in
   // Challenges — it was appearing in both places at once, so a learner saw the
@@ -187,7 +189,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📺</span>{t('battles.watch_live')}</button>}
                   {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>👁</span>{t('battles.preview')}</button>}
                   {b.status==="completed"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:`1.5px solid var(--ak-border2)`,background:"var(--ak-surface-hover)",color:"var(--ak-text-sec)",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📊</span>{t('battles.view_result')}</button>}
-                  <button style={{ padding:"10px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('battles.details')}</button>
+                  <button onClick={()=>setRosterOf(b)} style={{ padding:"10px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('battles.details')}</button>
                 </div>
               </div>
             </div>
@@ -196,6 +198,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
       </div>
       {watching&&<BattleModal battle={watching} onClose={()=>setWatching(null)}/>}
       {creating&&<CreateBattleSheet onClose={()=>setCreating(false)} onCreated={onBattleCreated}/>}
+      {rosterOf&&<ParticipantsSheet battle={rosterOf} onClose={()=>setRosterOf(null)}/>}
     </div>
   );
 }

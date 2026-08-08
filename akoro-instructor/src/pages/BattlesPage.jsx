@@ -414,6 +414,12 @@ function MarkSheetModal({ open, onClose, battleId }) {
             <span style={{ fontSize: 26, fontWeight: 900, color: s.percent >= 50 ? GREEN : RED }}>{s.percent}%</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{s.correct} of {s.total} correct</span>
             <span style={{ flex: 1 }} />
+            {/* What the review paid. The drawer showed the mark but not the
+                reward, so a teacher could not answer "what did they get for
+                it?" — which is the learner's first question. */}
+            {data.learner?.xpEarned > 0 && (
+              <Badge color={AMBER} bg="#FFF7ED"><Zap size={10} style={{ marginRight: 3 }} />{data.learner.xpEarned} XP</Badge>
+            )}
             {s.unanswered > 0 && <Badge color={MUTED} bg={WHITE}>{s.unanswered} unanswered</Badge>}
             {data.battle?.duration_formatted && (
               <Badge color={MUTED} bg={WHITE}><Clock size={10} style={{ marginRight: 3 }} />{data.battle.duration_formatted}</Badge>

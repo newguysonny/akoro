@@ -230,4 +230,27 @@ const ownCard = (await call(seatLearner, 'GET', '/api/battle/my-battles'))
 check('a battle I created is mine without accepting', ownCard?.myState === 'accepted',
   `myState=${ownCard?.myState} role=${ownCard?.myRole}`);
 
+console.log('\n· A learner can see the roster of a battle THEY made');
+// Teachers got the participants view the day battles became invitations;
+// learners never did, so a learner who set a battle for classmates could see
+// "3 invited" on the card and nothing else. The endpoint always allowed it —
+// only the surface was missing.
+const ownRoster = await call(learnerA, 'GET',
+  `/api/battle/battles/${own.json?.data?.battle_id}/participants`);
+check('the creator may read it', ownRoster.status === 200,
+  `${ownRoster.status} ${ownRoster.json?.error ?? ''}`);
+check('and every row can be rendered',
+  (ownRoster.json?.data?.participants ?? []).filter(p => p.role !== 'teacher')
+    .every(p => p.fullName && p.username && p.state),
+  (ownRoster.json?.data?.participants ?? []).map(p => `${p.username}:${p.state}`).join(' '));
+
+// Still nobody else's business.
+const stranger = mates[4];
+if (stranger) {
+  const nosy = await login('stranger', 'student', email(stranger), 'Password123!');
+  const denied = await call(nosy, 'GET',
+    `/api/battle/battles/${own.json?.data?.battle_id}/participants`);
+  check('an uninvited classmate is still refused', denied.status === 403, `status=${denied.status}`);
+}
+
 score();
