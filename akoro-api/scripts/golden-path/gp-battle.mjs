@@ -64,5 +64,39 @@ check('teacher creates class battle', tBattle.status === 201,
   tBattle.status !== 201 ? JSON.stringify(tBattle.json).slice(0,160) : `invited ${tBattle.json.data.invited}`);
 check('teacher single-pick is never a duel', tBattle.json?.data?.battle_type === 'classroom');
 
+console.log('\n· All three battle types the form offers actually create');
+// The Battles form offers course / class / study review. Each is a different
+// route or flag, and one of them — course — was impossible to exercise at all
+// until the demo had a single course enrolment: the whole enrollments table
+// was empty, so "everyone on the course" resolved to nobody.
+const tKlass = await call(teacher, 'POST', `/api/battle/classes/${tRoom.id}/battles/invite`, {
+  title: 'Types — class', subject: 'Mathematics', total_questions: 8,
+  question_source: 'bank', whole_class: true,
+});
+check('class battle', tKlass.status === 201 && tKlass.json?.data?.battle_type === 'classroom',
+  `${tKlass.status} ${tKlass.json?.error ?? tKlass.json?.data?.battle_type}`);
+
+const tRoster = await call(teacher, 'GET', `/api/battle/classes/${tRoom.id}/roster`);
+const one = (tRoster.json?.data ?? []).find(x => x.has_agent);
+const tReview = await call(teacher, 'POST', `/api/battle/classes/${tRoom.id}/battles/invite`, {
+  title: 'Types — review', subject: 'Mathematics', mode: 'review',
+  total_questions: 8, question_source: 'bank', user_ids: [one.id],
+});
+check('study review', tReview.status === 201 && tReview.json?.data?.battle_type === 'review',
+  `${tReview.status} ${tReview.json?.error ?? tReview.json?.data?.battle_type}`);
+
+const tCourses = await call(teacher, 'GET', '/api/instructor/courses');
+const enrolled = (tCourses.json?.data ?? []).find(c => (c.title || c.name) === 'JSS Mathematics');
+check('the demo has a course with learners on it', !!enrolled,
+  'seeded by 2026-seed-course-enrolments.sql');
+if (enrolled) {
+  const tCourse = await call(teacher, 'POST', `/api/battle/courses/${enrolled.id}/battles/invite`, {
+    title: 'Types — course', topic: 'Revision', total_questions: 8,
+    question_source: 'auto', whole_class: true,
+  });
+  check('course battle', tCourse.status === 201,
+    `${tCourse.status} ${tCourse.json?.error ?? `invited ${tCourse.json?.data?.invited}`}`);
+}
+
 const s = score();
 console.log(`\nBATTLE: ${s.pass} passed, ${s.fail} failed`);
