@@ -991,60 +991,129 @@ const deleteMaterial = asyncHandler(async (req, res) => {
 
 // ─── § STUDENTS ───────────────────────────────────────────────────────────────
 
+/**
+ * listStudents — everyone this teacher teaches.
+ *
+ * It listed course ENROLMENTS only, and never looked at classroom_students. So
+ * a teacher with thirty-eight learners across four classes and no course
+ * enrolments saw an empty page — and "2 enrolled learners" when two happened to
+ * be on a course. Since a learner is now put in a CLASS first and enrolled on a
+ * course only if one is chosen, that made My Students the one place the new
+ * arrivals never appeared.
+ *
+ * Both sources now, merged by learner: a class member who is also enrolled
+ * shows once, carrying their class and their courses.
+ */
 const listStudents = asyncHandler(async (req, res) => {
   try {
-    const { courseId, search, status } = req.query;
+    const { courseId, classroomId, search, status } = req.query;
 
-    // Get teacher's course IDs
+    // ── Course enrolments ────────────────────────────────────────────────
     let cq = db.from("courses").select("id").eq("instructor_id", req.user.id);
     if (courseId) cq = cq.eq("id", courseId);
     const { data: courses, error: cErr } = await cq;
     if (cErr) throw new Error(cErr.message);
+    const courseIds = (courses ?? []).map((c) => c.id);
 
-    const ids = (courses ?? []).map((c) => c.id);
-    if (ids.length === 0) return ok(res, []);
-
-    let q = db
-      .from("enrollments")
-      .select(`
-        id, course_id, status, progress, enrolled_at,
-        users ( id, full_name, email, avatar_url, phone ),
-        courses ( id, title )
-      `)
-      .in("course_id", ids);
-
-    if (status) q = q.eq("status", status);
-
-    const { data: enrollments, error } = await q.order("enrolled_at", { ascending: false });
-    if (error) throw new Error(error.message);
-
-    let rows = enrollments ?? [];
-
-    // In-memory search filter (Supabase JS doesn't support ilike on joined columns cleanly)
-    if (search) {
-      const s = search.toLowerCase();
-      rows = rows.filter((e) => {
-        const name  = (e.users?.full_name ?? "").toLowerCase();
-        const email = (e.users?.email     ?? "").toLowerCase();
-        return name.includes(s) || email.includes(s);
-      });
+    let enrollments = [];
+    if (courseIds.length) {
+      let q = db.from("enrollments")
+        .select(`id, course_id, status, progress, enrolled_at,
+                 users ( id, full_name, email, avatar_url, phone ),
+                 courses ( id, title )`)
+        .in("course_id", courseIds);
+      if (status) q = q.eq("status", status);
+      const { data, error } = await q.order("enrolled_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      enrollments = data ?? [];
     }
 
-    // Shape for the instructor StudentsPage
-    ok(res, rows.map((e) => ({
-      id:              e.users?.id,
-      enrollmentId:    e.id,
-      fullName:        e.users?.full_name,
-      email:           e.users?.email,
-      avatarUrl:       e.users?.avatar_url,
-      phone:           e.users?.phone,
-      progress:        e.progress ?? 0,
-      status:          e.status,
-      joinedAt:        e.enrolled_at,
-      course:          e.courses?.title,
-      courseId:        e.course_id,
-      coursesEnrolled: 1,
-    })));
+    // ── Class members ────────────────────────────────────────────────────
+    // Classes this teacher runs, plus every class in a school they administer —
+    // the same reach the rest of the platform grants.
+    const { data: school } = await db.from("school_profiles")
+      .select("id").eq("admin_user_id", req.user.id).limit(1).maybeSingle();
+
+    let rq = db.from("classrooms").select("id, name");
+    rq = school ? rq.or(`teacher_id.eq.${req.user.id},school_id.eq.${school.id}`)
+                : rq.eq("teacher_id", req.user.id);
+    if (classroomId) rq = rq.eq("id", classroomId);
+    const { data: rooms } = await rq;
+
+    let members = [];
+    const roomIds = (rooms ?? []).map((r) => r.id);
+    if (roomIds.length) {
+      const { data } = await db.from("classroom_students")
+        .select(`id, classroom_id, status, joined_at,
+                 users!inner ( id, full_name, email, avatar_url, phone, role )`)
+        .in("classroom_id", roomIds).eq("status", "active");
+      // A classroom row exists for the teacher too, and for demo/service
+      // accounts parked in a room. This is a list of LEARNERS.
+      members = (data ?? []).filter((m) =>
+        m.users?.id !== req.user.id && (m.users?.role ?? "student") === "student");
+    }
+    const roomName = new Map((rooms ?? []).map((r) => [r.id, r.name]));
+
+    // ── Merge, learner by learner ────────────────────────────────────────
+    const byUser = new Map();
+    const seed = (u) => {
+      if (!u?.id) return null;
+      if (!byUser.has(u.id)) byUser.set(u.id, {
+        id: u.id, fullName: u.full_name, email: u.email,
+        avatarUrl: u.avatar_url, phone: u.phone,
+        progress: 0, status: "active", joinedAt: null,
+        classes: [], className: null, classroomId: null,
+        course: null, courseId: null, courses: [], coursesEnrolled: 0,
+        enrollmentId: null,
+      });
+      return byUser.get(u.id);
+    };
+
+    for (const m of members) {
+      const row = seed(m.users);
+      if (!row) continue;
+      // A learner can be in several rooms. Overwriting left whichever came last,
+      // so JSS1 turned into "Riverside High · Class A" for no reason the teacher
+      // could see. Keep them all; className stays as the first for callers that
+      // only render one.
+      const name = roomName.get(m.classroom_id) ?? null;
+      if (name && !row.classes.some((c) => c.id === m.classroom_id)) {
+        row.classes.push({ id: m.classroom_id, name });
+      }
+      row.className   = row.className   ?? name;
+      row.classroomId = row.classroomId ?? m.classroom_id;
+      row.joinedAt    = row.joinedAt    ?? m.joined_at;
+    }
+
+    for (const e of enrollments) {
+      const row = seed(e.users);
+      if (!row) continue;
+      row.enrollmentId = row.enrollmentId ?? e.id;
+      row.progress     = Math.max(row.progress, e.progress ?? 0);
+      row.joinedAt     = row.joinedAt ?? e.enrolled_at;
+      if (e.courses?.title) row.courses.push({ id: e.course_id, title: e.courses.title });
+      row.course   = row.course   ?? e.courses?.title ?? null;
+      row.courseId = row.courseId ?? e.course_id;
+      row.coursesEnrolled = row.courses.length;
+      if (e.status && e.status !== "active") row.status = e.status;
+    }
+
+    let rows = [...byUser.values()];
+
+    // Filtering by course means "enrolled on it", so class-only learners drop
+    // out — which is what the caller asked for.
+    if (courseId)    rows = rows.filter((r) => r.courses.some((c) => c.id === courseId));
+    if (classroomId) rows = rows.filter((r) => r.classes.some((c) => c.id === classroomId));
+    if (status)   rows = rows.filter((r) => r.status === status);
+
+    if (search) {
+      const s = search.toLowerCase();
+      rows = rows.filter((r) =>
+        (r.fullName ?? "").toLowerCase().includes(s) || (r.email ?? "").toLowerCase().includes(s));
+    }
+
+    rows.sort((a, b) => (a.fullName ?? "").localeCompare(b.fullName ?? ""));
+    ok(res, rows);
   } catch (e) {
     err500(res, e);
   }

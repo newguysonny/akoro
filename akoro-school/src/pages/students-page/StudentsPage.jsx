@@ -12,7 +12,7 @@ import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
 import {
-  AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
+  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
 } from '../../constants.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
@@ -76,7 +76,7 @@ export default function StudentsPage() {
   return (
     <PageLayout
       title="Students"
-      subtitle={`${loading ? '…' : students.length} enrolled learners`}
+      subtitle={`${loading ? '…' : students.length} learner${students.length === 1 ? '' : 's'}`}
       action={
         <Btn size="sm" onClick={() => setModal(true)}>
           <Plus size={14} /> Add Student
