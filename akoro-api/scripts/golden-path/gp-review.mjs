@@ -68,6 +68,15 @@ for (const q of qs) {
   if (r.status !== 200) { check(`answer Q${q.question_order}`, false, JSON.stringify(r.json).slice(0, 120)); break; }
 }
 check('answers were accepted', true, `${qs.length - 1} answered, ${expectCorrect} correct`);
+// The exception that matters: battles are agent-only, but a REVIEW is the
+// learner's own paper and must stay answerable by hand.
+check('a review is still answered by the learner, not their agent', expectCorrect > 0,
+  `${expectCorrect} of the learner's own answers were accepted`);
+const { rows: agentRows } = await sql.query(
+  `select count(*)::int n from battle_answers ba
+   join battle_participants p on p.id = ba.participant_id
+   where ba.battle_id = $1 and p.role = 'teacher'`, [id]);
+check('and nobody else answered it for them', agentRows[0].n === 0, `${agentRows[0].n} foreign answers`);
 
 console.log('\n· It runs to the END of the paper, not to question one');
 // The engine ends a contest when one agent is left standing — always true for a

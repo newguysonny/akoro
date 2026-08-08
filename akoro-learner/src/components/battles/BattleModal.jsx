@@ -50,6 +50,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const [totalQ,       setTotalQ]       = useState(initialBattle?.totalQ || 0);
   const [tab,          setTab]          = useState('watch');
   const [notice,       setNotice]       = useState(null);
+  const [battleType,   setBattleType]   = useState(initialBattle?.type ?? initialBattle?.battleType ?? null);
 
   const qStartRef  = useRef(0);
   const logRef     = useRef(null);
@@ -77,7 +78,12 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
         apiGet(`${B}/battles/${battleId}/log`).catch(() => null),
       ]);
       if (!alive) return;
-      if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); setViewerCount(st.viewer_count || 0); }
+      if (st) {
+        setStatus(st.status);
+        setParticipants((st.participants || []).map(mapStateP));
+        setViewerCount(st.viewer_count || 0);
+        if (st.battleType) setBattleType(st.battleType);
+      }
       if (lg?.logs?.length) setLog(lg.logs.map((e) => ({ msg: e.message, ts: e.created_at ? new Date(e.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' })));
       if (qd?.questions?.length) {
         // `total` is the battle's real length. The array now holds only the
@@ -158,6 +164,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
     if (status !== 'live' || !battleId) return;
     const iv = setInterval(async () => {
       const st = await apiGet(`${B}/battles/${battleId}/state`).catch(() => null);
+      if (st?.battleType) setBattleType(st.battleType);
       if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); if (st.viewer_count != null) setViewerCount(st.viewer_count); }
       if (!questionRef.current || (selectedRef.current != null && !revealRef.current)) {
         const qd = await apiGet(`${B}/battles/${battleId}/questions`).catch(() => null);
@@ -181,6 +188,15 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
 
   const iAmParticipant = participants.some((p) => p.userId === myId);
+  // A battle is fought by the AGENTS — yours answers from what you have
+  // actually learned, and you watch. Tapping an option raced your own agent and
+  // usually lost ("already answered"), so it was a control that did nothing.
+  // A STUDY REVIEW is the exception: it is your paper, so you answer it.
+  // From the SERVER, not the card. The card that opened this may carry no type
+  // at all — accepting an invitation opens the arena with an id and a status —
+  // and getting it wrong locks a learner out of answering their own review.
+  const isReview  = battleType === 'review';
+  const iAnswer   = isReview && iAmParticipant;
   const isClassroom = (initialBattle?.battleType === 'classroom') || participants.length > 2;
   const sorted = [...participants].sort((a, b) => b.score - a.score || b.hp - a.hp);
   const me  = participants.find((p) => p.userId === myId);
@@ -191,7 +207,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const curOrder = question?.questionOrder ?? (answered.length ? Math.max(...answered.map((a) => a.order)) : 0);
 
   const answer = async (idx) => {
-    if (selected !== null || reveal || !question || answering || !iAmParticipant) return;
+    if (!iAnswer || selected !== null || reveal || !question || answering) return;
     setSelected(idx); setAnswering(true);
     try {
       const d = await apiPost(`${B}/battles/${battleId}/answer`, {
@@ -394,8 +410,8 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
                       } else if (selected === i) { border = '1.5px solid #E8884A'; bg = 'rgba(255,255,255,.12)'; }
                       const pickers = reveal?.answers?.filter((a) => a.selectedIndex === i) || [];
                       return (
-                        <button key={i} onClick={() => answer(i)} disabled={!iAmParticipant || selected !== null || !!reveal || answering}
-                          style={{ ...optBtn, border, background: bg, color, cursor: (!iAmParticipant || selected !== null || reveal) ? 'default' : 'pointer' }}>
+                        <button key={i} onClick={() => answer(i)} disabled={!iAnswer || selected !== null || !!reveal || answering}
+                          style={{ ...optBtn, border, background: bg, color, cursor: (!iAnswer || selected !== null || reveal) ? 'default' : 'pointer' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ width: 22, height: 22, borderRadius: '50%', border: '1px solid rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.45)', flexShrink: 0 }}>{['A', 'B', 'C', 'D', 'E'][i]}</span>{opt}
                           </span>
@@ -408,7 +424,13 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
                       );
                     })}
                   </div>
-                  {!iAmParticipant && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>👁 You’re watching — pick nothing, just spectate</div>}
+                  {!iAnswer && (
+                    <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>
+                      {iAmParticipant
+                        ? '🤖 Your agent is answering — watch it play'
+                        : '👁 You’re watching this battle'}
+                    </div>
+                  )}
                   {myResult?.error && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: '#FCA5A5' }}>{myResult.error}</div>}
                   {myResult && !myResult.error && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? `✓ Correct! +${myResult.xp_gained} XP` : '✗ Wrong answer'}</div>}
                 </div>
@@ -500,7 +522,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
             <span>·</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookIcon size={11} color="rgba(255,255,255,.35)" />Your class</span>
           </div>
-          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />You’re in this battle</span>}
+          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{iAnswer ? 'Your review — answer below' : 'Your agent is playing'}</span>}
         </div>
       </div>
     </div>

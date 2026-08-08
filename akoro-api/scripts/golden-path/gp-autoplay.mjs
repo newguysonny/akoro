@@ -33,6 +33,24 @@ for (const m of [a, b]) {
   await call(s, 'POST', `/api/battle/challenges/${id}/accept`, {});
 }
 
+console.log('\n· While it is LIVE, a learner cannot answer by hand');
+// Checked here, not after it finishes: a completed battle refuses every answer
+// with "not live", which would pass this check while proving nothing about the
+// agent-only rule.
+const asLearner = await login('spectator', 'student', email(a), 'Password123!');
+let live = false;
+for (let i = 0; i < 25 && !live; i++) {
+  await new Promise(r => setTimeout(r, 2000));
+  const { rows } = await sql.query('select status from battles where id = $1', [id]);
+  live = rows[0]?.status === 'live';
+}
+check('the battle went live', live);
+const manual = await call(asLearner, 'POST', `/api/battle/battles/${id}/answer`,
+  { question_order: 1, selected_index: 0 });
+check('manual answering is refused because the agent plays',
+  manual.status === 409 && manual.json?.code === 'AGENT_ANSWERS',
+  `${manual.status} ${manual.json?.error ?? ''}`);
+
 // Nobody answers anything from here on. 5 questions x 10s + slack.
 console.log('  …letting it run, untouched');
 await new Promise(r => setTimeout(r, 70000));
@@ -74,8 +92,7 @@ const { rows: times } = await sql.query(
 check('response times differ between agents', times.length > 1, `${times.length} distinct times`);
 
 console.log('\n· The finished card can say what happened');
-const learner = await login('a', 'student', email(a), 'Password123!');
-const mine = await call(learner, 'GET', '/api/battle/my-battles');
+const mine = await call(asLearner, 'GET', '/api/battle/my-battles');
 const card = (mine.json?.data ?? []).find(x => x.id === id);
 check('the card carries agentA/agentB/winner', !!card?.agentA && !!card?.agentB && !!card?.winner,
   `A=${card?.agentA?.name} B=${card?.agentB?.name} winner=${card?.winner ? 'set' : 'null'}`);

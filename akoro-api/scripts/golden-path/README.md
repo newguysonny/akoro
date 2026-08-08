@@ -47,6 +47,14 @@ Logins are rate limited to 5 per 15 minutes per IP — which is the limiter
 working, since it was inert until recently. Restart the API between full runs;
 the store is in-process.
 
+## If gp-tools reports "Connection error"
+
+That is the stand-in model being down, not a regression — every AI path fails
+at once and the message comes from the OpenAI client, not from our code. Check
+it before reading anything into the failures:
+
+    curl -s localhost:4900/v1/models >/dev/null && echo up || echo down
+
 ## AI-backed paths (gp-tools.mjs)
 
 Needs a stand-in model, since these paths would otherwise call OpenAI:

@@ -1648,8 +1648,22 @@ router.post("/battles/:battleId/answer", authenticateToken, asyncHandler(async (
 
   if (selected_index === undefined || !question_order) return res.status(400).json({ error: "question_order and selected_index are required" });
 
-  const { data: battle } = await db.from("battles").select("status").eq("id", battleId).single();
+  const { data: battle } = await db.from("battles").select("status, battle_type").eq("id", battleId).single();
   if (!battle || battle.status !== "live") return res.status(400).json({ error: "Battle is not live" });
+
+  // A battle is fought by the AGENTS. The learner watches — their agent answers
+  // for them, from what they have actually learned. Tapping an option here
+  // raced the agent and usually lost anyway ("already answered"), so it was a
+  // control that mostly did nothing.
+  //
+  // A STUDY REVIEW is the exception, and the whole exception: it exists to find
+  // out what the LEARNER knows, so the learner answers it themselves.
+  if (battle.battle_type !== "review") {
+    return res.status(409).json({
+      code:  "AGENT_ANSWERS",
+      error: "Your agent answers battles for you — watch it play.",
+    });
+  }
 
   const { data: participant } = await db.from("battle_participants").select("*").eq("battle_id", battleId).eq("user_id", req.user.id).single();
   if (!participant) return res.status(403).json({ error: "Not in this battle" });
@@ -1713,7 +1727,8 @@ router.post("/battles/:battleId/heartbeat", authenticateToken, asyncHandler(asyn
 }));
 
 router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (req, res) => {
-  const { data: battle } = await db.from("battles").select("status, total_questions").eq("id", req.params.battleId).single();
+  const { data: battle } = await db.from("battles")
+    .select("status, total_questions, battle_type").eq("id", req.params.battleId).single();
   if (!battle) return res.status(404).json({ error: "Battle not found" });
 
   const { data: participants } = await db.from("battle_participants")
@@ -1721,7 +1736,15 @@ router.get("/battles/:battleId/state", authenticateToken, asyncHandler(async (re
     .eq("battle_id", req.params.battleId).order("score", { ascending: false });
 
   const { count } = await db.from("battle_viewers").select("id", { count: "exact", head: true }).eq("battle_id", req.params.battleId);
-  res.json({ status: battle.status, participants: participants ?? [], viewer_count: count ?? 0 });
+  // battle_type too: the arena has to know whether the learner answers (a
+  // study review) or watches their agent (everything else), and the card it was
+  // opened from does not always carry it — accepting an invitation opens the
+  // arena with only an id and a status.
+  res.json({
+    status: battle.status, battleType: battle.battle_type,
+    totalQuestions: battle.total_questions ?? 0,
+    participants: participants ?? [], viewer_count: count ?? 0,
+  });
 }));
 
 router.post("/battles/:battleId/start", authenticateToken, asyncHandler(async (req, res) => {
