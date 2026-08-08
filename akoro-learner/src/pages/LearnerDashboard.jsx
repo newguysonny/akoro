@@ -344,6 +344,12 @@ export default function LearnerDashboard() {
     decayAlertId:   a.id,
   }));
 
+  // Outstanding work that lives under Agent but isn't an adaptive session:
+  // assigned self study, and topics due for revision. Declared after
+  // decayAsSessions because it reads it — a const referenced above its
+  // definition throws rather than being undefined.
+  const agentExtras = selfStudyCount + decayAsSessions.length;
+
   const totalUnread       = sessions.reduce((sum,s)=>sum+s.unread,0);
   const pendingChallenges = challenges.filter(c=>!acceptedIds.has(c.id)).length;
 
@@ -492,9 +498,14 @@ export default function LearnerDashboard() {
               {/* ── Top session type tabs ── */}
               <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                 {[
-                  {key:"all",    label:t('sessions.all'),          icon:"📚", count:bySubject.length},
+                  // The Agent tab holds three things — sessions, self study and
+                  // revisions — so its badge has to count all three. Counting
+                  // only sessions read "Agent 0" above a "Self study 1", which
+                  // is the tab telling the learner there is nothing there while
+                  // pointing at the thing that is.
+                  {key:"all",    label:t('sessions.all'),          icon:"📚", count:bySubject.length + agentExtras},
                   {key:"live",   label:t('sessions.live_classes'),  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
-                  {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length},
+                  {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length + agentExtras},
                 ].map(({key,label,icon,count})=>(
                   <button key={key} onClick={()=>setSessionTab(key)} style={{ flex:1,padding:"10px 4px 11px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:sessionTab===key?800:600,color:sessionTab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${sessionTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
                     <span style={{ fontSize:13 }}>{icon}</span>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"#F3F4F6",color:sessionTab===key?"#fff":"#9CA3AF",borderRadius:8,padding:"1px 6px" }}>{count}</span>
