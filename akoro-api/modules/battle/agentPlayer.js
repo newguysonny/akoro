@@ -15,8 +15,10 @@
 // is the honest description of what the learner's agent knows, so it is what
 // decides the answer here. An agent is good at what its owner is good at.
 //
-// A REVIEW is deliberately excluded. Its whole purpose is to find out what the
-// LEARNER knows, so an agent answering for them would defeat it.
+// This includes a STUDY REVIEW. The agent's odds come from that learner's own
+// per-topic confidence, so what the review measures is unchanged — the mark
+// sheet still reports what the learner knows, read through the agent that
+// represents them rather than typed in by hand.
 
 import db from "../../db.js";
 
@@ -98,18 +100,19 @@ export function chooseAnswer(accuracy, optionCount, correctIndex) {
 }
 
 /**
- * Who in this battle answers for themselves?
+ * Whose agent answers?
  *
- * Not the teacher — they host it, and their agent appearing in the running
+ * Everyone competing — including in a study review, where the single learner's
+ * agent works through the paper for them.
+ *
+ * Not the teacher: they host it, and their agent appearing in the running
  * commentary ("⏰ Agent demo_teacher1 ran out of time!") was already confusing
  * in a battle they were only refereeing.
- *
- * Not anyone in a REVIEW: that is the learner's own paper.
  */
 export async function autoPlayers(battleId) {
   const { data: battle } = await db.from("battles")
     .select("battle_type, status").eq("id", battleId).maybeSingle();
-  if (!battle || battle.status !== "live" || battle.battle_type === "review") return [];
+  if (!battle || battle.status !== "live") return [];
 
   const { data: seats } = await db.from("battle_participants")
     .select("id, user_id, agent_id, role, current_streak, max_streak, correct_answers, wrong_answers")

@@ -38,7 +38,6 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const [question,     setQuestion]     = useState(null);
   const [reveal,       setReveal]       = useState(null);
   const [selected,     setSelected]     = useState(null);
-  const [answering,    setAnswering]    = useState(false);
   const [myResult,     setMyResult]     = useState(null);
   const [myXp,         setMyXp]         = useState(0);
   const [timer,        setTimer]        = useState(0);
@@ -188,15 +187,14 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
 
   const iAmParticipant = participants.some((p) => p.userId === myId);
-  // A battle is fought by the AGENTS — yours answers from what you have
-  // actually learned, and you watch. Tapping an option raced your own agent and
-  // usually lost ("already answered"), so it was a control that did nothing.
-  // A STUDY REVIEW is the exception: it is your paper, so you answer it.
-  // From the SERVER, not the card. The card that opened this may carry no type
-  // at all — accepting an invitation opens the arena with an id and a status —
-  // and getting it wrong locks a learner out of answering their own review.
-  const isReview  = battleType === 'review';
-  const iAnswer   = isReview && iAmParticipant;
+  // Every battle is fought by the AGENTS, study review included. Yours answers
+  // from what you have actually learned — its odds come from your own per-topic
+  // confidence — and you watch. Nothing in the arena is tappable.
+  //
+  // The type comes from the SERVER (/battles/:id/state), not from the card that
+  // opened this: accepting an invitation opens the arena with only an id and a
+  // status, so the card cannot be relied on to carry it.
+  const isReview = battleType === 'review';
   const isClassroom = (initialBattle?.battleType === 'classroom') || participants.length > 2;
   const sorted = [...participants].sort((a, b) => b.score - a.score || b.hp - a.hp);
   const me  = participants.find((p) => p.userId === myId);
@@ -205,20 +203,6 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const teacher  = participants.find((p) => p.role === 'teacher');
   const students = participants.filter((p) => p !== teacher).sort((a, b) => b.score - a.score || b.hp - a.hp);
   const curOrder = question?.questionOrder ?? (answered.length ? Math.max(...answered.map((a) => a.order)) : 0);
-
-  const answer = async (idx) => {
-    if (!iAnswer || selected !== null || reveal || !question || answering) return;
-    setSelected(idx); setAnswering(true);
-    try {
-      const d = await apiPost(`${B}/battles/${battleId}/answer`, {
-        question_order: question.questionOrder, selected_index: idx, response_time_ms: Date.now() - qStartRef.current,
-      });
-      setMyResult(d);
-      if (d?.xp_gained) setMyXp((x) => x + d.xp_gained);
-    } catch (e) {
-      setMyResult({ error: /409/.test(e.message) ? 'Already answered' : /400/.test(e.message) ? 'Battle not live' : 'Could not submit' });
-    } finally { setAnswering(false); }
-  };
 
   const startBattle = async () => {
     try { await apiPost(`${B}/battles/${battleId}/start`, {}); setNotice('Starting…'); }
@@ -410,8 +394,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
                       } else if (selected === i) { border = '1.5px solid #E8884A'; bg = 'rgba(255,255,255,.12)'; }
                       const pickers = reveal?.answers?.filter((a) => a.selectedIndex === i) || [];
                       return (
-                        <button key={i} onClick={() => answer(i)} disabled={!iAnswer || selected !== null || !!reveal || answering}
-                          style={{ ...optBtn, border, background: bg, color, cursor: (!iAnswer || selected !== null || reveal) ? 'default' : 'pointer' }}>
+                        <div key={i} style={{ ...optBtn, border, background: bg, color, cursor: 'default' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ width: 22, height: 22, borderRadius: '50%', border: '1px solid rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.45)', flexShrink: 0 }}>{['A', 'B', 'C', 'D', 'E'][i]}</span>{opt}
                           </span>
@@ -420,19 +403,16 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
                               {pickers.map((a, j) => <span key={j} style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, background: a.userId === myId ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.08)', color: '#fff' }}>{a.agentEmoji} {a.userId === myId ? 'You' : a.agentName}</span>)}
                             </span>
                           )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
-                  {!iAnswer && (
-                    <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>
-                      {iAmParticipant
-                        ? '🤖 Your agent is answering — watch it play'
-                        : '👁 You’re watching this battle'}
-                    </div>
-                  )}
-                  {myResult?.error && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: '#FCA5A5' }}>{myResult.error}</div>}
-                  {myResult && !myResult.error && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? `✓ Correct! +${myResult.xp_gained} XP` : '✗ Wrong answer'}</div>}
+                  <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>
+                    {iAmParticipant
+                      ? (isReview ? '🤖 Your agent is working through your review' : '🤖 Your agent is answering — watch it play')
+                      : '👁 You’re watching this battle'}
+                  </div>
+                  {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? `✓ Your agent got it — +${myResult.xp_gained} XP` : '✗ Your agent got it wrong'}</div>}
                 </div>
               )}
 
@@ -522,7 +502,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
             <span>·</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookIcon size={11} color="rgba(255,255,255,.35)" />Your class</span>
           </div>
-          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{iAnswer ? 'Your review — answer below' : 'Your agent is playing'}</span>}
+          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
         </div>
       </div>
     </div>

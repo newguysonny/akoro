@@ -227,81 +227,9 @@ async function assignQuestions(battleId, courseId, topic, subject, difficulty, t
   return picked.length;
 }
 
-// ─── Confidence update (the key feature addition) ─────────────────────────────
-
-/**
- * updateKnowledgeConfidence
- * Called after every battle answer submission.
- *
- * Correct answer  → confidence += 0.05 (capped at 1.0)
- * Wrong answer    → confidence -= 0.05 (floored at 0.0)
- * Topic unknown   → INSERT with confidence = -0.10 (negative = flagged for review)
- *
- * Updates edu.student_knowledge and edu.agent_knowledge in the edu schema.
- * Both tables have a 'confidence' column added in MIGRATIONS_v31.sql.
- */
-async function updateKnowledgeConfidence(userId, topic, subject, isCorrect) {
-  if (!topic) return;
-
-  try {
-    // Get student's agent
-    const { data: agent } = await db
-      .schema("edu").from("student_agents")
-      .select("id").eq("student_id", userId).single();
-    if (!agent) return;
-
-    const delta = isCorrect ? 0.05 : -0.05;
-
-    // Try to update existing student_knowledge record
-    const { data: existing } = await db
-      .schema("edu").from("student_knowledge")
-      .select("id, confidence, topic")
-      .eq("agent_id", agent.id).eq("topic", topic).single();
-
-    if (existing) {
-      // Update confidence — clamp between 0.0 and 1.0
-      const newConf = Math.min(1.0, Math.max(0.0, (existing.confidence ?? 0.5) + delta));
-      await db.schema("edu").from("student_knowledge").update({
-        confidence:      newConf,
-        updated_at:      now(),
-        next_review_due: isCorrect
-          ? new Date(Date.now() + 7  * 86_400_000).toISOString()   // correct → review in 7 days
-          : new Date(Date.now() + 1  * 86_400_000).toISOString(),  // wrong   → review in 1 day
-      }).eq("id", existing.id);
-    } else {
-      // Topic not in student's knowledge base — insert with negative confidence
-      // Negative score = "encountered but struggled" — triggers review priority
-      const initialConf = isCorrect ? 0.40 : -0.10;
-      await db.schema("edu").from("student_knowledge").insert({
-        agent_id:        agent.id,
-        topic,
-        subject:         subject ?? null,
-        confidence:      initialConf,
-        decay_rate:      0.10,
-        next_review_due: new Date(Date.now() + (isCorrect ? 7 : 1) * 86_400_000).toISOString(),
-        priority:        isCorrect ? "low" : "critical",
-      });
-
-      if (!isCorrect) {
-        // Log a decay event so the student gets a review notification
-        try {
-          await db.schema("edu").from("decay_notifications").insert({
-            student_id: userId,
-            agent_id:   agent.id,
-            subject:    subject ?? "General",
-            topic,
-            confidence: initialConf,
-            priority:   "critical",
-            message:    `You got a question on "${topic}" wrong in a battle — let's review it!`,
-          });
-        } catch {}
-      }
-    }
-  } catch (e) {
-    // Non-fatal — battle continues even if knowledge update fails
-    console.warn("[battle] Knowledge confidence update failed:", e.message);
-  }
-}
+// Knowledge confidence lives in ./knowledge.js — the worker writes it now that
+// agents answer, and importing the router from the worker to reach it would
+// couple the queue to the whole HTTP surface.
 
 // ─── CREATION ROUTES ─────────────────────────────────────────────────────────
 
@@ -1641,83 +1569,29 @@ router.get("/battles/:battleId", authenticateToken, asyncHandler(async (req, res
   });
 }));
 
-// POST /api/battles/:battleId/answer  ← CORE CONFIDENCE UPDATE
+/**
+ * POST /api/battles/:battleId/answer
+ *
+ * Gone. Every battle — study review included — is answered by the AGENTS, and
+ * the learner watches. Their agent answers from what they have actually
+ * learned: its odds come from that learner's own per-topic confidence, so a
+ * review still measures the learner, read through the agent that represents
+ * them rather than typed in by hand.
+ *
+ * The route stays so an old client gets an explanation rather than a 404, and
+ * so it cannot quietly write a second answer alongside the agent's.
+ *
+ * The knowledge update this handler used to own now lives in the worker's
+ * agentAnswer — see modules/battle/worker.js. That matters: agent accuracy is
+ * READ from the same table, so if nothing wrote to it the agents would be
+ * frozen at whatever they knew today, and no battle would ever teach anyone
+ * anything.
+ */
 router.post("/battles/:battleId/answer", authenticateToken, asyncHandler(async (req, res) => {
-  const { battleId }  = req.params;
-  const { question_order, selected_index, response_time_ms } = req.body;
-
-  if (selected_index === undefined || !question_order) return res.status(400).json({ error: "question_order and selected_index are required" });
-
-  const { data: battle } = await db.from("battles").select("status, battle_type").eq("id", battleId).single();
-  if (!battle || battle.status !== "live") return res.status(400).json({ error: "Battle is not live" });
-
-  // A battle is fought by the AGENTS. The learner watches — their agent answers
-  // for them, from what they have actually learned. Tapping an option here
-  // raced the agent and usually lost anyway ("already answered"), so it was a
-  // control that mostly did nothing.
-  //
-  // A STUDY REVIEW is the exception, and the whole exception: it exists to find
-  // out what the LEARNER knows, so the learner answers it themselves.
-  if (battle.battle_type !== "review") {
-    return res.status(409).json({
-      code:  "AGENT_ANSWERS",
-      error: "Your agent answers battles for you — watch it play.",
-    });
-  }
-
-  const { data: participant } = await db.from("battle_participants").select("*").eq("battle_id", battleId).eq("user_id", req.user.id).single();
-  if (!participant) return res.status(403).json({ error: "Not in this battle" });
-
-  const { data: question } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", question_order).single();
-  if (!question) return res.status(404).json({ error: "Question not found" });
-
-  const { data: already } = await db.from("battle_answers").select("id").eq("participant_id", participant.id).eq("question_id", question.id).single();
-  if (already) return res.status(409).json({ error: "Already answered" });
-
-  const isCorrect  = selected_index === question.correct_answer_index;
-  const newStreak  = isCorrect ? (participant.current_streak ?? 0) + 1 : 0;
-  const streakBonus = isCorrect ? Math.floor(newStreak * 5) : 0;
-  const xpGained   = isCorrect ? question.xp_value + streakBonus : 0;
-
-  await db.from("battle_answers").insert({
-    battle_id: battleId, participant_id: participant.id, question_id: question.id,
-    selected_index, is_correct: isCorrect, response_time_ms: response_time_ms ?? null,
-    xp_gained: xpGained, streak_at_time: newStreak,
+  res.status(409).json({
+    code:  "AGENT_ANSWERS",
+    error: "Your agent answers for you — watch it play.",
   });
-
-  // Streaks only — revealQuestion owns the correct/wrong tally, and counting it
-  // here too double-counted every answer.
-  await db.from("battle_participants").update({
-    current_streak: newStreak,
-    max_streak:     Math.max(participant.max_streak ?? 0, newStreak),
-  }).eq("id", participant.id);
-
-  // ── Update knowledge confidence ─────────────────────────────────────────
-  // This is the key feature: battle answers update the student's knowledge base
-  await updateKnowledgeConfidence(req.user.id, question.topic, question.subject, isCorrect);
-
-  // Broadcast updated scoreboard
-  const { data: stateRows } = await db.from("battle_participants")
-    .select(`user_id, score, hp, current_streak, is_connected, user_agents(agent_name, agent_emoji, agent_color)`)
-    .eq("battle_id", battleId).order("score", { ascending: false });
-
-  const { count: answeredCnt } = await db.from("battle_answers").select("id", { count: "exact", head: true }).eq("battle_id", battleId).eq("question_id", question.id);
-  const { count: connectedCnt } = await db.from("battle_participants").select("id", { count: "exact", head: true }).eq("battle_id", battleId).eq("is_connected", true);
-
-  global.io?.to(`battle:${battleId}`).emit("battle:state", {
-    questionOrder: question_order, answeredCount: answeredCnt,
-    participants: (stateRows ?? []).map((p) => ({
-      userId: p.user_id, agentName: p.user_agents?.agent_name, agentEmoji: p.user_agents?.agent_emoji,
-      score: p.score, hp: p.hp, streak: p.current_streak, isConnected: p.is_connected,
-    })),
-  });
-
-  // Early reveal if all connected answered
-  if ((answeredCnt ?? 0) >= (connectedCnt ?? 1)) {
-    await (await getBattleQueue()).add("reveal-question", { action: "reveal-question", battleId, questionOrder: question_order }, { delay: 800 });
-  }
-
-  res.json({ success: true, is_correct: isCorrect, xp_gained: xpGained, streak: newStreak });
 }));
 
 router.post("/battles/:battleId/heartbeat", authenticateToken, asyncHandler(async (req, res) => {
@@ -2063,7 +1937,6 @@ router.post("/courses/:courseId/questions-bank/generate", authenticateToken, req
   res.status(201).json({ success: true, generated: inserted, topic, subject, difficulty });
 }));
 
-export { updateKnowledgeConfidence };
 export default router;
 
 // ─── § RESPONSE HELPERS (used by the endpoints below) ────────────────────────

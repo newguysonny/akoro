@@ -26,7 +26,10 @@ const [a, b] = mates;
 console.log('\n· A review is for exactly ONE learner');
 const made = await call(teacher, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
   title: 'Fractions review', subject: 'Mathematics', mode: 'review',
-  total_questions: 6, question_source: 'bank', user_ids: [a.id],
+  // 60s over 6 questions = 10s each, so the agent can work through the whole
+  // paper inside this test rather than one question of a 15-minute default.
+  total_questions: 6, time_limit_seconds: 60,
+  question_source: 'bank', user_ids: [a.id],
 });
 check('one learner is accepted here, where a battle refuses it', made.status === 201,
   `${made.status} ${JSON.stringify(made.json).slice(0, 160)}`);
@@ -52,31 +55,29 @@ const live = await sql.query('select status, total_questions from battles where 
 check('a solo review starts rather than being cancelled', live.rows[0]?.status === 'live',
   `status=${live.rows[0]?.status}`);
 
-console.log('\n· They answer the paper — right, wrong, and one left blank');
+console.log('\n· The learner\'s AGENT works through the paper — they watch');
+// A review is answered by the agent like every other battle. What it measures
+// is unchanged: the agent's odds come from that learner's own per-topic
+// confidence, so the mark sheet still reports what the learner knows.
+const manual = await call(learner, 'POST', `/api/battle/battles/${id}/answer`,
+  { question_order: 1, selected_index: 0 });
+check('the learner cannot answer it by hand',
+  manual.status === 409 && manual.json?.code === 'AGENT_ANSWERS',
+  `${manual.status} ${manual.json?.error ?? ''}`);
+
 const { rows: qs } = await sql.query(
   'select question_order, correct_answer_index from battle_questions where battle_id = $1 order by question_order', [id]);
 check('questions were placed', qs.length >= 5, `${qs.length} questions`);
 
-let expectCorrect = 0;
-for (const q of qs) {
-  if (q.question_order === qs.length) break;          // leave the last unanswered
-  const wrong = q.question_order % 3 === 0;           // every third one wrong
-  const pick  = wrong ? (q.correct_answer_index + 1) % 4 : q.correct_answer_index;
-  if (!wrong) expectCorrect++;
-  const r = await call(learner, 'POST', `/api/battle/battles/${id}/answer`,
-    { question_order: q.question_order, selected_index: pick, response_time_ms: 4000 });
-  if (r.status !== 200) { check(`answer Q${q.question_order}`, false, JSON.stringify(r.json).slice(0, 120)); break; }
-}
-check('answers were accepted', true, `${qs.length - 1} answered, ${expectCorrect} correct`);
-// The exception that matters: battles are agent-only, but a REVIEW is the
-// learner's own paper and must stay answerable by hand.
-check('a review is still answered by the learner, not their agent', expectCorrect > 0,
-  `${expectCorrect} of the learner's own answers were accepted`);
-const { rows: agentRows } = await sql.query(
-  `select count(*)::int n from battle_answers ba
-   join battle_participants p on p.id = ba.participant_id
-   where ba.battle_id = $1 and p.role = 'teacher'`, [id]);
-check('and nobody else answered it for them', agentRows[0].n === 0, `${agentRows[0].n} foreign answers`);
+// Let the agent work through them: 6 questions x 10s, plus slack.
+await new Promise(r => setTimeout(r, 80000));
+
+const { rows: given } = await sql.query(
+  `select count(*)::int n, count(*) filter (where is_correct)::int correct
+   from battle_answers where battle_id = $1`, [id]);
+check('the agent answered the whole paper', given[0].n === qs.length,
+  `${given[0].n} of ${qs.length} answered, ${given[0].correct} correct`);
+const expectCorrect = given[0].correct;
 
 console.log('\n· It runs to the END of the paper, not to question one');
 // The engine ends a contest when one agent is left standing — always true for a
@@ -91,11 +92,13 @@ const res = await call(teacher, 'GET', `/api/battle/battles/${id}/results`);
 check('results are a review', res.status === 200 && res.json?.type === 'review', `type=${res.json?.type}`);
 check('every question is on the sheet', res.json?.markSheet?.length === qs.length,
   `${res.json?.markSheet?.length} of ${qs.length}`);
-check('the score matches what they answered', res.json?.score?.correct === expectCorrect,
+check('the mark sheet matches what the agent answered', res.json?.score?.correct === expectCorrect,
   `${res.json?.score?.correct} correct, expected ${expectCorrect} — ${JSON.stringify(res.json?.score)}`);
-check('an unanswered question is marked as such, not as wrong',
-  res.json?.markSheet?.some(r => r.answered === false && r.chosenAnswer === null),
-  JSON.stringify(res.json?.markSheet?.[qs.length - 1] ?? {}).slice(0, 140));
+// Every question carries what was chosen and what was right — the blank case is
+// still distinguished in the payload even when the agent answered them all.
+check('every row says what was chosen and what was right',
+  res.json?.markSheet?.every(r => r.correctAnswer != null && ('answered' in r)),
+  JSON.stringify(res.json?.markSheet?.[0] ?? {}).slice(0, 150));
 check('a wrong answer shows what they chose AND what was right',
   res.json?.markSheet?.some(r => r.answered && !r.isCorrect && r.chosenAnswer && r.correctAnswer),
   JSON.stringify(res.json?.markSheet?.find(r => r.answered && !r.isCorrect) ?? {}).slice(0, 160));
@@ -120,8 +123,11 @@ check('it is ranked, so it shows in their history', row.final_rank === 1, `rank=
 // existing per-question XP and is not what this checks.
 const { rows: ledger } = await sql.query(
   `select amount, source from xp_ledger where reference_id = $1 and source = 'study_review'`, [id]);
+// A paper with nothing right earns nothing, and writing a 0 row would be
+// noise — so the ledger entry is expected only when there is XP to record.
 check('and it reaches the XP ledger the leaderboard reads',
-  ledger.length === 1 && ledger[0].amount === expectXp, JSON.stringify(ledger));
+  expectXp > 0 ? (ledger.length === 1 && ledger[0].amount === expectXp) : ledger.length === 0,
+  `expected ${expectXp} — ${JSON.stringify(ledger)}`);
 
 check('the tally is not double-counted',
   row.correct_answers <= row.total_questions,

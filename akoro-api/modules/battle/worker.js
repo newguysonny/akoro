@@ -11,6 +11,7 @@ import Redis             from "ioredis";
 import db                from "../../db.js";
 import { bullRedisOptions } from "../../lib/redisOptions.js";
 import { accuracyFor, thinkingTimeMs, chooseAnswer, autoPlayers } from "./agentPlayer.js";
+import { updateKnowledgeConfidence } from "./knowledge.js";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
@@ -251,6 +252,16 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
     current_streak: newStreak,
     max_streak:     Math.max(p.max_streak ?? 0, newStreak),
   }).eq("id", p.id);
+
+  // Feed the result back into what the learner is modelled as knowing.
+  //
+  // This used to happen in the HTTP answer route, which no longer exists. It
+  // has to happen HERE or the loop is open: agent accuracy is read from the
+  // same per-topic confidence, so with nothing writing to it every agent would
+  // be frozen at whatever its owner knew the day this shipped, and no battle
+  // would teach anyone anything.
+  await updateKnowledgeConfidence(p.user_id, q.topic, q.subject, isCorrect)
+    .catch((e) => console.warn("[battle-worker] knowledge update failed:", e?.message ?? e));
 
   // Push the running scoreboard so anyone watching sees it move as they answer,
   // rather than everything jumping at the reveal.
