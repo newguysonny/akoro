@@ -41,17 +41,24 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const [watching,   setWatching]   = useState(null);
   const [creating,   setCreating]   = useState(false);
   const liveBattles      = battles.filter(b=>b.status==="live");
+  // A battle you have made but nobody has accepted yet. It used to last five
+  // seconds, so nothing showed it; now every battle waits for its invitations,
+  // and a lobby can sit for the whole invite window. Without this the battle
+  // you just created appears NOWHERE — not live, not scheduled, not completed.
+  const waitingBattles   = battles.filter(b=>b.status==="lobby");
   const scheduledBattles = battles.filter(b=>b.status==="scheduled");
   const completedBattles = battles.filter(b=>b.status==="completed");
-  const displayed = viewFilter==="active"?liveBattles:viewFilter==="scheduled"?scheduledBattles:completedBattles;
+  const displayed = viewFilter==="active"?[...liveBattles,...waitingBattles]
+                   :viewFilter==="scheduled"?scheduledBattles:completedBattles;
   const totalXP  = battles.reduce((s,b)=>s+(parseInt((b.xpPrize||"0").replace(/\D/g,""),10)||0),0);
   const DIFF_CFG = DIFFICULTY_CONFIG;
   const ST_STYLE = {
     live:     {label:"● LIVE",   bg:"rgba(239,68,68,.12)",  color:RED,   border:"rgba(239,68,68,.25)"  },
     scheduled:{label:"SCHEDULED",bg:"rgba(108,59,255,.10)", color:BRAND, border:"rgba(108,59,255,.25)" },
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
+    lobby:    {label:"WAITING",  bg:"rgba(245,158,11,.12)", color:GOLD,  border:"rgba(245,158,11,.28)" },
   };
-  const TABS=[{key:"active",label:t('battles.active'),icon:"⚡",count:liveBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"🗓",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"🏆",count:completedBattles.length}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"⚡",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"🗓",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"🏆",count:completedBattles.length}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
@@ -116,12 +123,12 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   <div style={{ display:"flex",alignItems:"center",gap:8,background:"rgba(0,0,0,.025)",borderRadius:12,padding:"10px 12px",marginBottom:10 }}>
                     <div style={{ flex:1,display:"flex",alignItems:"center",gap:7 }}>
                       <div style={{ width:32,height:32,borderRadius:"50%",background:A.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0 }}>{A.emoji}</div>
-                      <div><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)" }}>{A.name}</div>{A.isYou&&<span style={{ fontSize:8.5,fontWeight:800,background:"#1A1A2E",color:"#fff",borderRadius:4,padding:"1px 5px" }}>{t('battles.you')}</span>}<div style={{ fontSize:14,fontWeight:900,color:A.color }}>{b.status==="scheduled"?"—":A.score}</div></div>
+                      <div><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)" }}>{A.name}</div>{A.isYou&&<span style={{ fontSize:8.5,fontWeight:800,background:"#1A1A2E",color:"#fff",borderRadius:4,padding:"1px 5px" }}>{t('battles.you')}</span>}<div style={{ fontSize:14,fontWeight:900,color:A.color }}>{b.status==="scheduled"||b.status==="lobby"?"—":A.score}</div></div>
                     </div>
                     <div style={{ width:28,height:28,borderRadius:"50%",background:"#1A1A2E",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0 }}>{t('battles.vs')}</div>
                     <div style={{ flex:1,display:"flex",alignItems:"center",gap:7,justifyContent:"flex-end",flexDirection:"row-reverse" }}>
                       <div style={{ width:32,height:32,borderRadius:"50%",background:B.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0 }}>{B.emoji}</div>
-                      <div style={{ textAlign:"right" }}><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)" }}>{B.name}</div><div style={{ fontSize:14,fontWeight:900,color:B.color }}>{b.status==="scheduled"?"—":B.score}</div></div>
+                      <div style={{ textAlign:"right" }}><div style={{ fontSize:11.5,fontWeight:800,color:"var(--ak-text)" }}>{B.name}</div><div style={{ fontSize:14,fontWeight:900,color:B.color }}>{b.status==="scheduled"||b.status==="lobby"?"—":B.score}</div></div>
                     </div>
                   </div>
                 )}
@@ -132,6 +139,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   <span style={{ fontSize:10.5,color:"var(--ak-text-muted)",fontWeight:600 }}>⏱ {b.timeLimit}</span>
                   {b.status==="live"&&<span style={{ fontSize:10,color:RED,fontWeight:700 }}>{t('battles.started_ago').replace('{min}',b.startedAgo)}</span>}
                   {b.status==="scheduled"&&<span style={{ fontSize:10,color:BRAND,fontWeight:700 }}>🗓 {b.startsIn}</span>}
+                  {b.status==="lobby"&&<span style={{ fontSize:10,color:GOLD,fontWeight:700 }}>⏳ Waiting for players to accept</span>}
                 </div>
                 {b.status==="completed"&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><span style={{ fontSize:14 }}>🏆</span><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{t('battles.result').replace('{winner}',b.winner===b.agentA?.id?b.agentA?.name:b.agentB?.name).replace('{a}',b.agentA?.score).replace('{b}',b.agentB?.score)}</span></div>)}
                 <div style={{ display:"flex",gap:7 }}>

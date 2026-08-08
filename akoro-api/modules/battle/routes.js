@@ -710,16 +710,18 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     // A teacher runs the battle; a classmate competes in it.
     role: myRole === "teacher" ? "teacher" : "creator", joined_at: now(),
   });
-  // A teacher's battle is an INVITATION, not a conscription. It used to enter
-  // every learner with joined_at set, so the battle simply happened to them —
+  // EVERY battle is an INVITATION, whoever set it. Group battles used to enter
+  // people with joined_at already set, so the battle simply happened to them —
   // nothing appeared in their Challenges tab and there was nothing to accept.
-  // Leaving joined_at null puts it there; the start job below waits for them.
-  const needsAccept = !isDuel && myRole === "teacher";
+  // Being picked by a classmate is no more consent than being picked by a
+  // teacher, so the seat starts empty either way and the start job waits.
+  //
+  // Only the creator is in from the start; they are the one who asked for it.
   for (const o of opponents) {
     await db.from("battle_participants").upsert({
       battle_id: battle.id, user_id: o.user_id, agent_id: o.agent_id,
       role: isDuel ? "opponent" : "participant",
-      joined_at: (isDuel || needsAccept) ? null : now(),
+      joined_at: null,
     }, { onConflict: "battle_id,user_id" });
   }
 
@@ -727,25 +729,22 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
     { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now()) });
   if (!isDuel) {
-    // A learner's group battle starts on its own in 5 seconds — everyone in it
-    // chose to be there. A teacher's waits: at the scheduled time if there is
-    // one, otherwise at the end of the invite window, so learners have the
-    // chance to accept that the Challenges tab now offers them. It can start
-    // sooner — the accept route brings it forward once everyone has answered.
+    // Wait for the invitations: until the scheduled time if there is one,
+    // otherwise until the invite window closes. It starts sooner than that —
+    // the accept route brings it forward the moment everyone has answered, so
+    // a class that all accepts within a minute battles within a minute.
     const delay = isScheduled
       ? new Date(scheduled_for).getTime() - Date.now()
-      : (needsAccept ? new Date(expiresAt).getTime() - Date.now() : 5000);
+      : new Date(expiresAt).getTime() - Date.now();
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: Math.max(0, delay), jobId: `start-${battle.id}` });
   }
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   for (const o of opponents) {
-    await notifyUser(o.user_id,
-      (isDuel || needsAccept) ? "battle_challenge" : "classroom_battle",
-      isDuel        ? `⚔️ ${me?.full_name ?? "A classmate"} challenged you!`
-      : needsAccept ? `⚔️ ${me?.full_name ?? "Your teacher"} set a battle: ${title}`
-                    : `🏫 Class battle: ${title}`,
+    await notifyUser(o.user_id, "battle_challenge",
+      isDuel ? `⚔️ ${me?.full_name ?? "A classmate"} challenged you!`
+             : `⚔️ ${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
       `${subject} · ${xp_prize} XP`, battle.id);
     global.io?.to(`user:${o.user_id}`).emit("new_challenge", {
       id: battle.id, challenger: me?.full_name ?? "Classmate", avatar: me?.avatar_url ?? null,
@@ -1088,15 +1087,13 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     role: isDuel ? "creator" : (isInstructor ? "teacher" : "creator"), joined_at: now(),
   });
 
-  // As on the class route: a battle an instructor sets is an invitation the
-  // learner answers, not a fixture they are entered into without being asked.
-  const needsAccept = !isDuel && isInstructor;
+  // As on the class route: every battle is an invitation the learner answers,
+  // not a fixture they are entered into without being asked.
   for (const o of opponents) {
     await db.from("battle_participants").upsert({
       battle_id: battle.id, user_id: o.user_id, agent_id: o.agent_id,
       role: isDuel ? "opponent" : "participant",
-      // A duel is an invitation — the opponent joins by accepting it.
-      joined_at: (isDuel || needsAccept) ? null : now(),
+      joined_at: null,
     }, { onConflict: "battle_id,user_id" });
   }
 
@@ -1130,14 +1127,13 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   const q = await getBattleQueue();
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
     { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now()) });
-  // A duel waits for an accept. So does an instructor's group battle — it waits
+  // A duel waits for its accept; a group battle waits for its invitations —
   // until the scheduled time, or until the invite window closes, whichever
-  // applies; the accept route starts it early once everyone has answered. A
-  // learner's own group battle still starts on its own.
+  // applies. The accept route starts it early once everyone has answered.
   if (!isDuel) {
     const delay = isScheduled
       ? new Date(scheduled_for).getTime() - Date.now()
-      : (needsAccept ? new Date(expiresAt).getTime() - Date.now() : 5000);
+      : new Date(expiresAt).getTime() - Date.now();
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: Math.max(0, delay), jobId: `start-${battle.id}` });
   }
@@ -1145,14 +1141,15 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
   const when = isScheduled
     ? `Starts ${new Date(scheduled_for).toLocaleString("en-GB", { timeZone: "Africa/Lagos" })}`
-    : (isDuel ? `Expires in ${expires_in_minutes} min` : "Starting shortly");
+    // Not "Starting shortly" any more — a group battle waits on its
+    // invitations, so telling a learner it is about to start would be wrong in
+    // exactly the case where they still have to accept it.
+    : `Accept within ${expires_in_minutes} min`;
 
   for (const o of opponents) {
-    await notifyUser(o.user_id,
-      (isDuel || needsAccept) ? "battle_challenge" : "classroom_battle",
-      isDuel        ? `⚔️ ${me?.full_name ?? "Someone"} challenged you!`
-      : needsAccept ? `⚔️ ${me?.full_name ?? "Your instructor"} set a battle: ${title}`
-                    : `🏫 Class battle: ${title}`,
+    await notifyUser(o.user_id, "battle_challenge",
+      isDuel ? `⚔️ ${me?.full_name ?? "Someone"} challenged you!`
+             : `⚔️ ${me?.full_name ?? "Someone"} invited you to a battle: ${title}`,
       `${title} · ${xp_prize} XP · ${when}`, battle.id);
 
     global.io?.to(`user:${o.user_id}`).emit("new_challenge", {
@@ -1193,6 +1190,45 @@ router.get("/challenges/:challengeId", authenticateToken, asyncHandler(async (re
   res.json({ battle: data, expires_in_seconds: expiresIn });
 }));
 
+/**
+ * Everyone has answered — is there anything left to wait for?
+ *
+ * A group battle is queued to start when its invite window closes. Once the
+ * last invitee has answered, that wait buys nothing, so bring it forward.
+ *
+ * This must be reachable from BOTH answers. It first lived only in accept, and
+ * a battle whose final answer was a DECLINE then sat in its lobby for the full
+ * hour with nobody left to hear from — the common case of one learner turning
+ * it down while the rest are ready.
+ *
+ * Counts every non-teacher seat, creator included: a learner who makes a battle
+ * competes in it. The worker counts the same way, so the two cannot disagree
+ * about whether there are enough players.
+ */
+async function maybeStartEarly(battle) {
+  const { data: all } = await db.from("battle_participants")
+    .select("joined_at, declined_at, role").eq("battle_id", battle.id);
+
+  const invited  = (all ?? []).filter((s) => s.role === "participant");
+  const answered = invited.every((s) => s.joined_at || s.declined_at);
+  const players  = (all ?? []).filter((s) => s.role !== "teacher" && s.joined_at && !s.declined_at).length;
+
+  const startsAt = battle.scheduled_start ? new Date(battle.scheduled_start).getTime() : null;
+  // A scheduled battle keeps its time even when everyone is ready early — the
+  // teacher picked that hour for a reason.
+  if (!answered || players < 2 || (startsAt && startsAt > Date.now())) {
+    return { started: false, invited, players };
+  }
+
+  const q = await getBattleQueue();
+  // Same jobId as the invite route queued, so this REPLACES that job rather
+  // than running the battle twice.
+  await q.remove(`start-${battle.id}`).catch(() => {});
+  await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+    { delay: 3000, jobId: `start-${battle.id}` });
+  return { started: true, invited, players };
+}
+
 router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(async (req, res) => {
   // A teacher's battle sits in 'scheduled' until its start time, so restricting
   // this to 'lobby' would have made exactly the invitations we now send
@@ -1217,32 +1253,17 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
     await db.from("battle_participants").update({ joined_at: now(), declined_at: null })
       .eq("battle_id", battle.id).eq("user_id", req.user.id);
 
-    // Everyone answered? Then there is nothing left to wait for — bring it
-    // forward rather than leaving a full battle idling until its window shuts.
-    const { data: seats } = await db.from("battle_participants")
-      .select("joined_at, declined_at, role").eq("battle_id", battle.id).eq("role", "participant");
-    const answered = (seats ?? []).every((s) => s.joined_at || s.declined_at);
-    const accepted = (seats ?? []).filter((s) => s.joined_at && !s.declined_at).length;
-
-    const startsAt = battle.scheduled_start ? new Date(battle.scheduled_start).getTime() : null;
-    const early    = answered && accepted >= 2 && (!startsAt || startsAt <= Date.now());
-    if (early) {
-      const q = await getBattleQueue();
-      // Same jobId as the invite route queued, so this REPLACES that job rather
-      // than running the battle twice.
-      await q.remove(`start-${battle.id}`).catch(() => {});
-      await q.add("start-battle", { action: "start-battle", battleId: battle.id },
-        { delay: 3000, jobId: `start-${battle.id}` });
-    }
+    const { invited: seats } = await maybeStartEarly(battle);
+    const accepted = seats.filter((s) => s.joined_at && !s.declined_at).length;
 
     const { data: me } = await db.from("users").select("full_name").eq("id", req.user.id).single();
     await notifyUser(battle.created_by, "battle_accepted",
       `✅ ${me?.full_name} joined ${battle.title}`,
-      `${accepted} of ${(seats ?? []).length} accepted`, battle.id);
+      `${accepted} of ${seats.length} accepted`, battle.id);
     req.app.get("io")?.to(`user:${req.user.id}`).emit("join_battle_room", { battleId: battle.id });
 
     return res.json({ success: true, battle_id: battle.id, status: battle.status,
-      accepted, invited: (seats ?? []).length, is_immediate: false });
+      accepted, invited: seats.length, is_immediate: false });
   }
 
   const isScheduled = !!battle.scheduled_start && new Date(battle.scheduled_start) > new Date();
@@ -1295,18 +1316,22 @@ router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(
     await db.from("battle_participants").update({ declined_at: now(), joined_at: null })
       .eq("battle_id", p.battle_id).eq("user_id", req.user.id);
 
-    const { data: seats } = await db.from("battle_participants")
-      .select("joined_at, declined_at").eq("battle_id", p.battle_id).eq("role", "participant");
-    const accepted = (seats ?? []).filter((s) => s.joined_at).length;
+    // A decline can be the LAST answer, and then there is nothing left to wait
+    // for either. Without this the battle sat in its lobby for the full invite
+    // window while everyone who said yes waited on someone who had said no.
+    const { data: battle } = await db.from("battles")
+      .select("id, scheduled_start").eq("id", p.battle_id).maybeSingle();
+    const { invited: seats } = await maybeStartEarly(battle);
+    const accepted = seats.filter((s) => s.joined_at).length;
     // Nobody left to compete: cancel rather than run an empty battle at the
     // scheduled time and report a winner who was the only entrant.
-    if ((seats ?? []).every((s) => s.declined_at)) {
+    if (seats.every((s) => s.declined_at)) {
       await db.from("battles").update({ status: "cancelled" }).eq("id", p.battle_id);
     }
     await notifyUser(p.battles.created_by, "battle_declined",
       `❌ ${me?.full_name} declined ${p.battles.title}`,
-      `${accepted} of ${(seats ?? []).length} still in`, p.battle_id);
-    return res.json({ success: true, accepted, invited: (seats ?? []).length });
+      `${accepted} of ${seats.length} still in`, p.battle_id);
+    return res.json({ success: true, accepted, invited: seats.length });
   }
 
   await db.from("battles").update({ status: "cancelled" }).eq("id", req.params.challengeId);

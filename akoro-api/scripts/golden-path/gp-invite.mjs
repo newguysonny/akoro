@@ -1,11 +1,17 @@
-// gp-invite.mjs — a teacher's battle is an INVITATION, not a conscription.
+// gp-invite.mjs — EVERY battle is an INVITATION, not a conscription.
 //
-// The behaviour under test, which did not exist before:
-//   · a teacher's class battle puts a pending seat on every learner
+// Group battles used to enter people with joined_at already set, whoever made
+// them, so the battle simply happened to them. Being picked by a classmate is
+// no more consent than being picked by a teacher, so the seat now starts empty
+// either way; only the creator is in from the start, because they asked for it.
+//
+// Under test:
+//   · a group battle puts a pending seat on every invitee, teacher-made or not
 //   · that seat shows up in the learner's Challenges tab (/my-challenges)
 //   · accepting takes the seat WITHOUT starting the battle for everyone else
-//   · declining empties one seat, it does not cancel the teacher's battle
-//   · the teacher can see who accepted, declined, and never answered
+//   · declining empties one seat, it does not cancel the battle
+//   · a decline can be the LAST answer, and must start the battle too
+//   · the creator can see who accepted, declined, and never answered
 //
 // The last one is the point of the exercise: before this, a teacher could see a
 // participant COUNT and nothing else, so "did my class actually take this?" had
@@ -97,9 +103,10 @@ if (outsider) {
   check('uninvited learner is refused', peek.status === 403, `status=${peek.status}`);
 }
 
-console.log('\n· A learner\'s OWN group battle still enters everyone directly');
-// The invitation rule is about teachers. Classmates who agree to a battle
-// between themselves should not each have to accept it afterwards.
+console.log('\n· A learner-made group battle is an invitation too');
+// Being picked by a classmate is no more consent than being picked by a
+// teacher — the seats start empty either way. Only the creator is in from
+// the start, because they are the one who asked for the battle.
 const own = await call(learnerA, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
   title: 'Classmates own battle', subject: 'Mathematics',
   total_questions: 10, question_source: 'bank',
@@ -107,13 +114,41 @@ const own = await call(learnerA, 'POST', `/api/battle/classes/${jss1.id}/battles
 });
 if (own.status === 201) {
   const ownView = await call(learnerA, 'GET', `/api/battle/battles/${own.json.data.battle_id}/participants`);
-  // 3, not 2: the creator holds a seat too and is a competitor here, unlike a
-  // teacher who only runs the battle.
+  // 3 seats: the creator plus the two they invited. The creator is in
+  // (accepted); the two they picked still owe an answer.
   const own_s = ownView.json?.data?.summary;
-  check('learner-made battle enters everyone',
-    own_s?.accepted === 3 && own_s?.pending === 0, JSON.stringify(own_s));
+  check('only the creator is in; the invited must accept',
+    own_s?.invited === 3 && own_s?.accepted === 1 && own_s?.pending === 2,
+    JSON.stringify(own_s));
+
+  // And it reaches them the same way a teacher's does.
+  const learnerC = await login('c', 'student', email(c), 'Password123!');
+  const listC = await call(learnerC, 'GET', '/api/battle/my-challenges');
+  check('classmate sees the invitation',
+    (listC.json?.data ?? []).some(x => x.id === own.json.data.battle_id),
+    `${listC.json?.data?.length ?? 0} pending for ${c.username}`);
 } else {
   check('learner-made battle created', false, JSON.stringify(own.json).slice(0, 160));
 }
+
+console.log('\n· A decline can be the last answer — it must start the battle too');
+// The early-start check first lived only in accept, so a battle whose final
+// answer was a decline sat in its lobby for the full hour with nobody left to
+// hear from. Creator + one accept = two players, which is enough to run.
+const race = await call(learnerA, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
+  title: 'Decline closes the door', subject: 'Mathematics',
+  total_questions: 10, question_source: 'bank',
+  user_ids: [b.id, c.id],
+});
+const raceId = race.json?.data?.battle_id;
+const lb = await login('b2', 'student', email(b), 'Password123!');
+await call(lb, 'POST', `/api/battle/challenges/${raceId}/accept`, {});
+const lc = await login('c2', 'student', email(c), 'Password123!');
+await call(lc, 'POST', `/api/battle/challenges/${raceId}/decline`, {});
+await new Promise(r => setTimeout(r, 9000));
+const raceView = await call(learnerA, 'GET', `/api/battle/battles/${raceId}/participants`);
+check('a final decline starts it, it does not stall it',
+  raceView.json?.data?.status === 'live',
+  `status=${raceView.json?.data?.status} ${JSON.stringify(raceView.json?.data?.summary)}`);
 
 score();

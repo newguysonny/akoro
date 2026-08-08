@@ -416,7 +416,9 @@ export default function LearnerDashboard() {
   }, []);
 
   const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
-  const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
+  // 'lobby' counts too: a battle waiting on its invitations is outstanding work,
+  // and it can now sit there for the whole invite window rather than 5 seconds.
+  const activeBattleCount=battles.filter(b=>["live","scheduled","lobby"].includes(b.status)).length;
 
   return (
     <>
