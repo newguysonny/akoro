@@ -27,7 +27,13 @@ async function authFetch(path, body) {
     body:        JSON.stringify(body),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `${path} failed`);
+  if (!res.ok) {
+    // The STATUS is what tells refresh() whether the session is really gone or
+    // the request merely didn't land. Without it every failure looked fatal.
+    const err = new Error(json.message || `${path} failed`);
+    err.status = res.status;
+    throw err;
+  }
   // Sign-in is where the first expiry comes from — without it the next visit
   // after 15 minutes still discovers the dead token once per request.
   rememberExpiry(json);
@@ -100,12 +106,18 @@ export function AuthProvider({ children }) {
       if (data?.user) saveUser(data.user);
       return true;
     } catch (err) {
-      // Offline / network failure: KEEP the cached session so an offline learner
-      // isn't bounced to sign-in — the service worker serves cached content until
-      // they reconnect. Only a real auth rejection (server responded) signs out.
-      const offline = (typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError';
-      if (offline) return false;
-      clearUser();
+      // Only a real REJECTION ends a session. This used to ask "are we offline?"
+      // and sign out whenever the answer was no — but a 429 from the refresh
+      // limiter, or a 502, is the server failing to answer, not the server
+      // saying no. The proactive refresh runs every 13 minutes, so one such
+      // reply logged the learner out with a valid 30-day refresh cookie in hand.
+      //
+      // 401/403 means the server looked and rejected us. Anything else — a
+      // network throw, a rate limit, a gateway error — means we simply have no
+      // answer yet, and the session should survive until we do. The service
+      // worker keeps serving cached content in the meantime.
+      if (err?.status === 401 || err?.status === 403) { clearUser(); return false; }
+      console.warn('[auth] refresh could not complete, keeping the session:', err?.message);
       return false;
     }
   }, [saveUser, clearUser]);

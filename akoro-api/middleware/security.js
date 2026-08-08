@@ -7,6 +7,7 @@
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z }                         from 'zod';
+import { createHash }                from 'node:crypto';
 import { peekAccessToken }           from '../lib/tokenPeek.js';
 
 // ─── Who is this request? ─────────────────────────────────────────────────────
@@ -96,12 +97,43 @@ export const strictLimit = rateLimit({
   message: { success: false, message: 'Too many attempts. Please try again in 15 minutes.' },
 });
 
-/** Token refresh — 30 req / 15 min */
+/**
+ * Token refresh — per SESSION, not per IP.
+ *
+ * Keying this by IP was wrong in the one place it matters most: a school. Thirty
+ * learners on one NAT share one address, each app refreshes every 13 minutes,
+ * and 30 per 15 minutes is reached by the class before the first lesson ends.
+ * The 429s that followed were then treated as "session gone" by the clients, so
+ * a rate limit intended to slow down abuse signed a whole classroom out.
+ *
+ * The refresh cookie identifies the session — one bucket per signed-in device is
+ * exactly the granularity this limiter wants, and it survives NAT. It is hashed
+ * so a token never reaches the limiter's key store or any log.
+ *
+ * What this gives up: someone holding many stolen refresh tokens gets a bucket
+ * each. That is an acceptable trade — the endpoint rejects invalid tokens on
+ * their own merits, and brute-forcing credentials is strictLimit's job, not
+ * this one's. Requests with no cookie at all (the actual spray case) still key
+ * by IP and still hit the old ceiling.
+ *
+ * Note the effect of rotation: a SUCCESSFUL refresh issues a new cookie and so
+ * starts a new bucket. That is the behaviour we want — the ceiling then applies
+ * to repeated attempts with a cookie that is NOT being accepted, which is the
+ * hammering worth stopping, rather than to a device quietly refreshing on time.
+ */
+const refreshSessionKey = (req) => {
+  const jar = req.cookies || {};
+  const token = Object.keys(jar).find((k) => k.startsWith('akoro_refresh')) ;
+  const value = token ? jar[token] : null;
+  if (!value) return `ip:${ipKey(req)}`;
+  return `rt:${createHash('sha256').update(value).digest('base64url').slice(0, 32)}`;
+};
+
 export const refreshLimit = rateLimit({
   ...BASE,
   windowMs: 15 * 60 * 1000,
   max:      lim('REFRESH', 30),
-  keyGenerator: ipKey,
+  keyGenerator: refreshSessionKey,
   message: { success: false, message: 'Too many refresh attempts. Please slow down.' },
 });
 
