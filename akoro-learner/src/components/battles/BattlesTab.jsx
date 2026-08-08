@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, difficultyStyle, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
 import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
@@ -7,7 +7,7 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
   const { t } = useLang();
-  const sc=SUBJECT_COLORS[challenge.subject]||BRAND,diff=DIFFICULTY_CONFIG[challenge.difficulty],isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
+  const sc=SUBJECT_COLORS[challenge.subject]||BRAND,diff=difficultyStyle(challenge.difficulty),isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
   const typePill=isClassroom?{label:`🏫 ${t('battles.classroom')}`,bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:`⚡ ${t('battles.immediate')}`,bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:`🗓 ${t('battles.scheduled')}`,bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
     <div onClick={()=>onTap(challenge)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid var(--ak-border)",cursor:"pointer",background:"var(--ak-surface)",transition:"background .15s" }}>
@@ -26,7 +26,7 @@ function ChallengeRow({ challenge, onTap }) {
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
           <div style={{ display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:20,background:typePill.bg,border:`1px solid ${typePill.border}` }}><span style={{ fontSize:9.5,fontWeight:900,color:typePill.color }}>{typePill.label}</span></div>
-          {isClassroom?<span style={{ fontSize:10.5,fontWeight:600,color:"#10B981" }}>👥 {challenge.participants?.length} {t('battles.agents')} · ⏱ {challenge.timeLimit} · ⏰ {challenge.expiresIn}</span>:isImmediate?<span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>⏰ {t('battles.expires_in')} {challenge.expiresIn} · ⏱ {challenge.timeLimit}</span>:<span style={{ fontSize:10.5,fontWeight:600,color:BRAND }}>🗓 {challenge.scheduledFor} · ⏱ {challenge.timeLimit}</span>}
+          {isClassroom?<span style={{ fontSize:10.5,fontWeight:600,color:"#10B981" }}>👥 {(challenge.participants?.length ?? challenge.participantCount ?? 0)} {t('battles.agents')} · ⏱ {challenge.timeLimit} · ⏰ {challenge.expiresIn}</span>:isImmediate?<span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>⏰ {t('battles.expires_in')} {challenge.expiresIn} · ⏱ {challenge.timeLimit}</span>:<span style={{ fontSize:10.5,fontWeight:600,color:BRAND }}>🗓 {challenge.scheduledFor} · ⏱ {challenge.timeLimit}</span>}
         </div>
       </div>
       <div style={{ width:28,height:28,borderRadius:"50%",background:isImmediate?`${RED}12`:`${BRAND}12`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:`1.5px solid ${isImmediate?RED:BRAND}40` }}><ZapIcon size={12} color={isImmediate?RED:BRAND}/></div>
@@ -51,7 +51,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const displayed = viewFilter==="active"?[...liveBattles,...waitingBattles]
                    :viewFilter==="scheduled"?scheduledBattles:completedBattles;
   const totalXP  = battles.reduce((s,b)=>s+(parseInt((b.xpPrize||"0").replace(/\D/g,""),10)||0),0);
-  const DIFF_CFG = DIFFICULTY_CONFIG;
+  
   const ST_STYLE = {
     live:     {label:"● LIVE",   bg:"rgba(239,68,68,.12)",  color:RED,   border:"rgba(239,68,68,.25)"  },
     scheduled:{label:"SCHEDULED",bg:"rgba(108,59,255,.10)", color:BRAND, border:"rgba(108,59,255,.25)" },
@@ -97,7 +97,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
       )}
       <div style={{ padding:"10px 16px",display:"flex",flexDirection:"column",gap:10 }}>
         {displayed.map(b=>{
-          const sc=SUBJECT_COLORS[b.subject]||BRAND,diff=DIFF_CFG[b.difficulty]||DIFF_CFG.medium,st=ST_STYLE[b.status]||ST_STYLE.scheduled,A=b.agentA,B=b.agentB;
+          const sc=SUBJECT_COLORS[b.subject]||BRAND,diff=difficultyStyle(b.difficulty),st=ST_STYLE[b.status]||ST_STYLE.scheduled,A=b.agentA,B=b.agentB;
           return (
             <div key={b.id} style={{ borderRadius:18,border:`1.5px solid ${b.status==="live"?"rgba(239,68,68,.30)":b.status==="scheduled"?"rgba(108,59,255,.25)":"var(--ak-border)"}`,background:b.status==="live"?"linear-gradient(140deg,#FFF5F5,#FFFCFC)":b.status==="scheduled"?"linear-gradient(140deg,#F5F3FF,#FCFCFF)":"var(--ak-surface)",overflow:"hidden" }}>
               {b.status==="live"&&<div style={{ height:3,background:`linear-gradient(90deg,${RED},#FF6B6B,${RED})`,backgroundSize:"200% 100%",animation:"shimmer 1.8s linear infinite" }}/>}

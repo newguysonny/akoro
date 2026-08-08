@@ -1,17 +1,17 @@
 import React from 'react';
-import { BRAND, RED, GREEN, GOLD, DIFFICULTY_CONFIG, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, difficultyStyle, SUBJECT_COLORS, SUBJECTS, AVATAR_FALLBACK } from '../../constants.js';
 import { XIcon, ZapIcon, StarIcon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
   const { t } = useLang();
-  const sc=SUBJECT_COLORS[challenge.subject]||BRAND,diff=DIFFICULTY_CONFIG[challenge.difficulty],isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
+  const sc=SUBJECT_COLORS[challenge.subject]||BRAND,diff=difficultyStyle(challenge.difficulty),isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
   const typePill=isClassroom?{label:`🏫 ${t('challenge.classroom')}`,bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:`⚡ ${t('challenge.immediate')}`,bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:`🗓 ${t('challenge.scheduled')}`,bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
     <><div onClick={onClose} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.72)",backdropFilter:"blur(8px)" }}/><div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"24px 24px 0 0",padding:"0 0 40px",boxShadow:"0 -8px 40px rgba(0,0,0,.18)",animation:"sheet-up .32s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"88vh",overflowY:"auto" }}>
       <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border2)",margin:"14px auto 0" }}/><div style={{ padding:"18px 20px 0" }}>
         <div style={{ display:"flex",alignItems:"center",gap:8,padding:"9px 14px",borderRadius:12,background:typePill.bg,border:`1px solid ${typePill.border}`,marginBottom:16 }}>
-          <div style={{ flex:1 }}><div style={{ fontSize:11,fontWeight:900,color:typePill.color,marginBottom:2 }}>{typePill.label}</div><div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-sub)" }}>{isClassroom?`Accept → join the class battle · ${challenge.participants?.length} agents competing`:isImmediate?"Accept → battle starts immediately in Watch Live":`Accept → added to Battles › Scheduled · Starts ${challenge.scheduledFor}`}</div></div>
+          <div style={{ flex:1 }}><div style={{ fontSize:11,fontWeight:900,color:typePill.color,marginBottom:2 }}>{typePill.label}</div><div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-sub)" }}>{isClassroom?`Accept → join the class battle · ${(challenge.participants?.length ?? challenge.participantCount ?? 0)} agents competing`:isImmediate?"Accept → battle starts immediately in Watch Live":`Accept → added to Battles › Scheduled · Starts ${challenge.scheduledFor}`}</div></div>
           {isClassroom?<div style={{ width:32,height:32,borderRadius:"50%",background:"#10B981",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16 }}>🏫</div>:isImmediate?<div style={{ width:32,height:32,borderRadius:"50%",background:RED,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}><ZapIcon size={16} color="#fff"/></div>:<div style={{ width:32,height:32,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16 }}>🗓</div>}
         </div>
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16 }}>

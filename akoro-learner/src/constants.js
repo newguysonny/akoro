@@ -19,11 +19,28 @@ export const PRIORITY_CONFIG = {
   normal:   { label:"SCHEDULED", bg:"rgba(16,185,129,0.10)", color:"#10B981", dot:"#10B981", pulse:false },
 };
 
+/**
+ * The API's difficulty vocabulary is easy | intermediate | hard, and
+ * 'intermediate' is the DEFAULT on every battle. This map was keyed 'medium',
+ * so DIFFICULTY_CONFIG[difficulty] was undefined for almost every real battle
+ * and `diff.bg` threw — a blank Challenges tab with a TypeError behind it.
+ *
+ * Both spellings are here because both reach the UI: 'intermediate' from the
+ * battle engine, 'medium' from older seeded and locally-built cards.
+ */
 export const DIFFICULTY_CONFIG = {
-  hard:   { label:"Hard",   color:"#EF4444", bg:"rgba(239,68,68,0.10)"  },
-  medium: { label:"Medium", color:"#F59E0B", bg:"rgba(245,158,11,0.10)" },
-  easy:   { label:"Easy",   color:"#10B981", bg:"rgba(16,185,129,0.10)" },
+  hard:         { label:"Hard",   color:"#EF4444", bg:"rgba(239,68,68,0.10)"  },
+  intermediate: { label:"Medium", color:"#F59E0B", bg:"rgba(245,158,11,0.10)" },
+  medium:       { label:"Medium", color:"#F59E0B", bg:"rgba(245,158,11,0.10)" },
+  easy:         { label:"Easy",   color:"#10B981", bg:"rgba(16,185,129,0.10)" },
 };
+
+/**
+ * Never returns undefined. A missing or unknown difficulty is a cosmetic
+ * detail; it must not be able to take the whole tab down with it.
+ */
+export const difficultyStyle = (d) =>
+  DIFFICULTY_CONFIG[d] ?? DIFFICULTY_CONFIG.intermediate;
 
 // Resolve the active learner's id. The backend's `edu` tables type student_id
 // as a UUID, so we must use the authenticated user's real id (cached in
