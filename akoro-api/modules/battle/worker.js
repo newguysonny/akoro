@@ -157,7 +157,8 @@ async function startBattle(battleId) {
     battleId, title: battle?.title, battleType: battle?.battle_type,
     participants: (participants ?? []).map((p) => ({ ...p, hp: 100, score: 0 })),
   });
-  await appendLog(battleId, "battle_start", `⚔️ Battle started! ${participants?.length} agents competing.`);
+  // `competing`, not `participants` — the teacher is in the room, not the fight.
+  await appendLog(battleId, "battle_start", `⚔️ Battle started! ${competing.length} agents competing.`);
 
   const { data: firstQ } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", 1).single();
   if (!firstQ) return endBattle(battleId);
@@ -276,9 +277,16 @@ async function endBattle(battleId) {
     peak_viewers: (await db.from("battle_viewers").select("id", { count: "exact", head: true }).eq("battle_id", battleId)).count ?? 0,
   }).eq("id", battleId);
 
-  const { data: participants } = await db.from("battle_participants")
+  const { data: seats } = await db.from("battle_participants")
     .select(`*, user_agents(agent_name, agent_emoji, agent_color)`)
     .eq("battle_id", battleId).order("score", { ascending: false }).order("hp", { ascending: false });
+
+  // The teacher runs the battle, they are not in it. Their seat exists so the
+  // battle has a host, and it carries a score of 0 like everyone else at the
+  // start — which, with the tie broken by HP, ranked them FIRST and declared
+  // the teacher the winner of their own class battle, with a share of the XP.
+  // Nobody noticed while the scoreboard was invisible to them.
+  const participants = (seats ?? []).filter((p) => p.role !== "teacher");
 
   const pool   = battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool : battleInfo?.xp_prize;
   const xpDist = computeXpDistribution(participants ?? [], pool ?? 0);

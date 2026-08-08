@@ -1546,9 +1546,15 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
   if (!battle) return res.status(404).json({ error: "Battle not found" });
   if (battle.status !== "completed") return res.status(400).json({ error: "Battle not completed", status: battle.status });
 
-  const { data: participants } = await db.from("battle_participants")
+  const { data: seats } = await db.from("battle_participants")
     .select(`*, users(username, full_name), user_agents(agent_name, agent_emoji, agent_color, agent_bg)`)
     .eq("battle_id", req.params.battleId).order("final_rank");
+
+  // The teacher hosts the battle rather than competing in it, so they are not
+  // on the scoreboard. They used to be — with a score of 0 and the tie broken
+  // by HP, that ranked them first and named the teacher the winner of their
+  // own class battle.
+  const participants = (seats ?? []).filter((p) => p.role !== "teacher");
 
   const scoreboard = (participants ?? []).map((p) => {
     const total = (p.correct_answers ?? 0) + (p.wrong_answers ?? 0);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Target, Search, Trash2, Pencil } from 'lucide-react';
+import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Target, Search, Trash2, Pencil, Radio } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, StatusPill, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -10,6 +10,7 @@ import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import QuestionBankModal from '../components/QuestionBankModal.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import NoAgentModal, { isNoAgentError } from '../components/NoAgentModal.jsx';
+import WatchBattleModal from '../components/WatchBattleModal.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
@@ -346,7 +347,7 @@ function ParticipantsModal({ open, onClose, battleId }) {
 }
 
 /* ── Battle Card ────────────────────────────────────────────────────────── */
-function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants }) {
+function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onWatch }) {
   const isLive     = battle.status === 'live';
   const isFinished = ['completed', 'cancelled', 'expired'].includes(battle.status);
   const editable   = !['live', 'completed'].includes(battle.status) && battle.mine;
@@ -413,9 +414,11 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants }) {
             size="sm"
             variant={isLive ? 'secondary' : 'primary'}
             style={{ flex: 1, justifyContent: 'center' }}
-            onClick={() => !isLive && onStart(battle.id)}
+            onClick={() => (isLive ? onWatch(battle) : onStart(battle.id))}
           >
-            {isLive ? <><Target size={14} /> In Progress</> : <><Play size={14} /> Start Now</>}
+            {/* When it is live this said "In Progress" and did nothing at all.
+                Live is exactly when a teacher wants in. */}
+            {isLive ? <><Radio size={14} /> Watch Live</> : <><Play size={14} /> Start Now</>}
           </Btn>
           <Btn size="sm" variant="secondary" onClick={() => onViewParticipants(battle)} title="View participants"><Users size={13} /></Btn>
           {editable && (
@@ -441,6 +444,7 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants }) {
             <Trophy size={14} color={AMBER} />
             {battle.participantCount} participants — see results
           </button>
+          <Btn size="sm" variant="secondary" onClick={() => onWatch(battle)} title="Review the battle"><Radio size={13} /></Btn>
           {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>}
           {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Trash2 size={13} /></Btn>}
         </div>
@@ -461,6 +465,7 @@ export default function BattlesPage() {
   const [loading, setLoading] = useState(true);
   const [modal,   setModal]   = useState(false);
   const [viewing, setViewing] = useState(null);   // battle id whose roster is open
+  const [watching, setWatching] = useState(null); // battle being watched live
   const [editing, setEditing] = useState(null);
   const [bankOpen, setBankOpen] = useState(false);
   const [toast,   setToast]   = useState(null);
@@ -666,7 +671,8 @@ export default function BattlesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {filtered.map(b => (
             <BattleCard key={b.id} battle={b} onStart={handleStart} onEdit={openEdit}
-                        onDelete={handleDelete} onViewParticipants={(x) => setViewing(x.id)} />
+                        onDelete={handleDelete} onViewParticipants={(x) => setViewing(x.id)}
+                        onWatch={setWatching} />
           ))}
         </div>
       )}
@@ -678,6 +684,9 @@ export default function BattlesPage() {
         courses={courses}
         editing={editing}
       />
+      {watching && (
+        <WatchBattleModal battle={watching} onClose={() => setWatching(null)} onEnded={load} />
+      )}
       <ParticipantsModal open={!!viewing} onClose={() => setViewing(null)} battleId={viewing} />
       <QuestionBankModal open={bankOpen} onClose={() => setBankOpen(false)} />
       <NoAgentModal open={!!noAgent} context="battle" onClose={() => setNoAgent(null)} onCreated={noAgent} />

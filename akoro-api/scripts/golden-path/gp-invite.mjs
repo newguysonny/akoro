@@ -151,4 +151,27 @@ check('a final decline starts it, it does not stall it',
   raceView.json?.data?.status === 'live',
   `status=${raceView.json?.data?.status} ${JSON.stringify(raceView.json?.data?.summary)}`);
 
+console.log('\n· The host is not a competitor');
+// The teacher's seat exists so the battle has a host. It carried a score of 0
+// like everyone else at the start and, with the tie broken by HP, ranked FIRST
+// — naming the teacher the winner of their own class battle and paying them a
+// share of the XP. Invisible until teachers could see the scoreboard.
+const hostBattle = await call(teacher, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
+  title: 'Host is not a player', subject: 'Mathematics',
+  total_questions: 10, question_source: 'bank', user_ids: [a.id, b.id],
+});
+const hbId = hostBattle.json?.data?.battle_id;
+for (const who of [a, b]) {
+  const s2 = await login(who.username, 'student', email(who), 'Password123!');
+  await call(s2, 'POST', `/api/battle/challenges/${hbId}/accept`, {});
+}
+await new Promise(r => setTimeout(r, 9000));
+await call(teacher, 'POST', `/api/battle/battles/${hbId}/end`, {});
+await new Promise(r => setTimeout(r, 6000));
+const hbRes = await call(teacher, 'GET', `/api/battle/battles/${hbId}/results`);
+check('the teacher is not on the scoreboard',
+  hbRes.status === 200 && hbRes.json?.scoreboard?.length === 2
+    && !hbRes.json.scoreboard.some(p => p.userId === hbRes.json.battle?.created_by),
+  (hbRes.json?.scoreboard ?? []).map(p => `${p.rank}:${p.username}`).join(' '));
+
 score();
