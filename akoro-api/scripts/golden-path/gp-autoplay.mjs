@@ -100,6 +100,23 @@ check('and scores, so the line is not "undefined–undefined"',
   Number.isFinite(card?.agentA?.score) && Number.isFinite(card?.agentB?.score),
   `${card?.agentA?.score}–${card?.agentB?.score}`);
 
+console.log('\n· The live card can say how long it has been running');
+// "Started undefinedm ago" — startedAgo was never sent, the same omission as
+// agentA/agentB on the finished card.
+const liveCard = (await call(asLearner, 'GET', '/api/battle/my-battles')).json?.data
+  ?.find(x => x.id === id);
+check('the card carries startedAgo', Number.isFinite(liveCard?.startedAgo),
+  `startedAgo=${liveCard?.startedAgo}`);
+
+console.log('\n· Health reports whether live battles are actually playing');
+// "It doesn't play" has several causes that look identical from outside: no
+// agents scheduled, a queue that is not draining, or simply being early. The
+// health endpoint answers it rather than leaving it to be guessed.
+const health = await fetch(`${process.env.GP_API ?? 'http://127.0.0.1:4800'}/api/battle/health`)
+  .then(r => r.json()).catch(() => null);
+check('health reports a per-battle play verdict', Array.isArray(health?.play),
+  JSON.stringify(health?.play?.slice(0, 2) ?? health?.playError ?? 'missing'));
+
 await sql.end();
 score();
 process.exit(0);

@@ -97,6 +97,54 @@ router.get("/health", async (req, res) => {
     };
   } catch (err) { out.battlesError = err.message; }
 
+  // ── Is anything actually PLAYING? ────────────────────────────────────────
+  // "The battle doesn't play" has several possible causes that look identical
+  // from the outside: agents were never scheduled (a battle started by an older
+  // deploy), the queue is not draining, or it is simply early — with a
+  // 15-minute duration over 15 questions each agent answers somewhere in a
+  // 60-second window, so a freshly started battle showing 0–0 is normal.
+  // Guessing between those cost a diagnosis, so the answer is reported here.
+  try {
+    const q = await getBattleQueue();
+    const { data: liveB } = await db.from("battles")
+      .select("id, title, actual_start").eq("status", "live").limit(20);
+
+    const jobs = await q.getJobs(["delayed", "waiting", "active"]);
+    const pendingByBattle = new Map();
+    for (const j of jobs) {
+      if (j?.name !== "agent-answer") continue;
+      const id = j.data?.battleId;
+      pendingByBattle.set(id, (pendingByBattle.get(id) ?? 0) + 1);
+    }
+
+    const ids = (liveB ?? []).map((b) => b.id);
+    const { data: answered } = ids.length
+      ? await db.from("battle_answers").select("battle_id").in("battle_id", ids)
+      : { data: [] };
+    const answerCount = new Map();
+    for (const a of (answered ?? [])) answerCount.set(a.battle_id, (answerCount.get(a.battle_id) ?? 0) + 1);
+
+    out.play = (liveB ?? []).map((b) => {
+      const answers = answerCount.get(b.id) ?? 0;
+      const pending = pendingByBattle.get(b.id) ?? 0;
+      const ageSec  = b.actual_start ? Math.round((Date.now() - new Date(b.actual_start)) / 1000) : null;
+      return {
+        id: b.id, title: b.title, startedSecondsAgo: ageSec,
+        answers, pendingAgentJobs: pending,
+        // The verdict, in one word, so nobody has to interpret the numbers.
+        // `ageSec ?? 0` would have read a NULL actual_start as "0 seconds old"
+        // and so reported "just started" for ever — which is exactly the kind of
+        // reassuring-but-false answer this endpoint exists to avoid. A live
+        // battle with no start time never really started.
+        verdict: answers > 0        ? "playing"
+               : pending > 0        ? "agents queued — waiting for their thinking time"
+               : ageSec == null     ? "live but never started — no actual_start"
+               : ageSec < 90        ? "just started — no answers yet is normal"
+               : "STUCK — no answers and no agent jobs queued",
+      };
+    });
+  } catch (err) { out.playError = err.message; }
+
   res.json({ ok: out.redis === "up", ...out });
 });
 
@@ -831,6 +879,23 @@ function toCard(b, extra = {}) {
     participantCount: b.total_participants ?? 0,
     scheduledFor:  b.scheduled_start ?? null,
     scheduledAt:   b.scheduled_start ?? null,
+    // The live card says "Started {min}m ago" and the scheduled one "{startsIn}",
+    // and neither field was ever sent — the same omission as agentA/agentB, so
+    // the card read "Started undefinedm ago". Both are derived here rather than
+    // in the client, which has no actual_start to work from.
+    startedAt:     b.actual_start ?? null,
+    startedAgo:    b.actual_start
+      ? Math.max(0, Math.round((Date.now() - new Date(b.actual_start)) / 60000))
+      : null,
+    startsIn:      b.scheduled_start
+      ? (() => {
+          const mins = Math.round((new Date(b.scheduled_start) - Date.now()) / 60000);
+          if (mins <= 0)  return "now";
+          if (mins < 60)  return `in ${mins} min`;
+          const hrs = Math.round(mins / 60);
+          return hrs < 24 ? `in ${hrs}h` : `in ${Math.round(hrs / 24)} day${hrs >= 48 ? "s" : ""}`;
+        })()
+      : null,
     expiresAt:     b.expires_at ?? null,
     // The UI counts down from expiresAt itself; this stays for older callers.
     // null here means "no deadline", which is now the common case.

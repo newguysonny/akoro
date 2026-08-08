@@ -172,8 +172,8 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   <div style={{ background:diff.bg,borderRadius:5,padding:"1px 7px" }}><span style={{ fontSize:9.5,fontWeight:800,color:diff.color }}>{diff.label}</span></div>
                   <span style={{ fontSize:10.5,fontWeight:800,color:GOLD,display:"flex",alignItems:"center",gap:3 }}><ZapIcon size={10} color={GOLD}/>{b.xpPrize}</span>
                   <span style={{ fontSize:10.5,color:"var(--ak-text-muted)",fontWeight:600 }}>⏱ {b.timeLimit}</span>
-                  {b.status==="live"&&<span style={{ fontSize:10,color:RED,fontWeight:700 }}>{t('battles.started_ago').replace('{min}',b.startedAgo)}</span>}
-                  {b.status==="scheduled"&&<span style={{ fontSize:10,color:BRAND,fontWeight:700 }}>🗓 {b.startsIn}</span>}
+                  {b.status==="live"&&b.startedAgo!=null&&<span style={{ fontSize:10,color:RED,fontWeight:700 }}>{t('battles.started_ago').replace('{min}',b.startedAgo)}</span>}
+                  {b.status==="scheduled"&&b.startsIn&&<span style={{ fontSize:10,color:BRAND,fontWeight:700 }}>🗓 {b.startsIn}</span>}
                   {b.status==="lobby"&&<span style={{ fontSize:10,color:GOLD,fontWeight:700 }}>⏳ Waiting for players to accept</span>}
                 </div>
                 {b.status==="completed"&&resultLine(b,t)&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><span style={{ fontSize:14 }}>{b.review?"📋":"🏆"}</span><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{resultLine(b,t)}</span></div>)}
