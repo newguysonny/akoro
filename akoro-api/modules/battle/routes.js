@@ -911,9 +911,14 @@ function toCard(b, extra = {}) {
 
 // GET /api/battle/my-battles — every battle I take part in or created
 router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
+  // My own seat in each battle, not just which battles I have one in. The card
+  // needs it: a battle I have been invited to but not answered belongs in
+  // Challenges, not in Battles › Active, and the two lists had no way to tell
+  // those apart — so an unanswered invitation appeared in both at once.
   const { data: parts } = await db.from("battle_participants")
-    .select("battle_id").eq("user_id", req.user.id);
+    .select("battle_id, role, joined_at, declined_at").eq("user_id", req.user.id);
   const ids = [...new Set((parts ?? []).map((p) => p.battle_id))];
+  const mySeat = new Map((parts ?? []).map((p) => [p.battle_id, p]));
 
   let q = db.from("battles")
     .select("*, users!battles_created_by_fkey(full_name, avatar_url)")
@@ -943,7 +948,16 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
   }
 
   res200(res, (data ?? []).map((b) => {
-    const card = toCard(b, { mine: b.created_by === req.user.id });
+    const seat = mySeat.get(b.id);
+    const card = {
+      ...toCard(b, { mine: b.created_by === req.user.id }),
+      // 'accepted' | 'declined' | 'invited' | null (not in it — I created it)
+      myState: !seat ? null
+             : seat.declined_at ? "declined"
+             : seat.joined_at   ? "accepted"
+             : "invited",
+      myRole: seat?.role ?? null,
+    };
     const players = resultByBattle.get(b.id);
     if (!players?.length) return card;
 

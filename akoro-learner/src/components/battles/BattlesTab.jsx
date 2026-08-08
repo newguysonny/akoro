@@ -75,17 +75,23 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const [viewFilter, setViewFilter] = useState("active");
   const [watching,   setWatching]   = useState(null);
   const [creating,   setCreating]   = useState(false);
-  const liveBattles      = battles.filter(b=>b.status==="live");
-  // A battle you have made but nobody has accepted yet. It used to last five
-  // seconds, so nothing showed it; now every battle waits for its invitations,
-  // and a lobby can sit for the whole invite window. Without this the battle
-  // you just created appears NOWHERE — not live, not scheduled, not completed.
-  const waitingBattles   = battles.filter(b=>b.status==="lobby");
-  const scheduledBattles = battles.filter(b=>b.status==="scheduled");
-  const completedBattles = battles.filter(b=>b.status==="completed");
+  // Only battles I am actually IN. An invitation I have not answered belongs in
+  // Challenges — it was appearing in both places at once, so a learner saw the
+  // same battle twice and Active implied they had joined something they had
+  // not. myState is null when I created it (a creator holds a seat already) and
+  // 'accepted' once I have taken mine.
+  const mine = battles.filter(b => b.myState == null || b.myState === "accepted");
+  const liveBattles      = mine.filter(b=>b.status==="live");
+  // A battle waiting on its invitations. It used to last five seconds, so
+  // nothing showed it; now every battle waits, and a lobby can sit for the
+  // whole invite window — without this the battle you just created, or just
+  // accepted, appears NOWHERE.
+  const waitingBattles   = mine.filter(b=>b.status==="lobby");
+  const scheduledBattles = mine.filter(b=>b.status==="scheduled");
+  const completedBattles = mine.filter(b=>b.status==="completed");
   const displayed = viewFilter==="active"?[...liveBattles,...waitingBattles]
                    :viewFilter==="scheduled"?scheduledBattles:completedBattles;
-  const totalXP  = battles.reduce((s,b)=>s+(parseInt((b.xpPrize||"0").replace(/\D/g,""),10)||0),0);
+  const totalXP  = mine.reduce((s,b)=>s+(parseInt((b.xpPrize||"0").replace(/\D/g,""),10)||0),0);
   
   const ST_STYLE = {
     live:     {label:"● LIVE",   bg:"rgba(239,68,68,.12)",  color:RED,   border:"rgba(239,68,68,.25)"  },
@@ -116,7 +122,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
         <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>⚔️ Start a battle</button>
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
-      {battles.length===0&&(
+      {mine.length===0&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
           <span style={{ fontSize:52,opacity:.2 }}>⚔️</span>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty')}</p>
@@ -124,7 +130,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
           <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
         </div>
       )}
-      {battles.length>0&&displayed.length===0&&(
+      {mine.length>0&&displayed.length===0&&(
         <div style={{ textAlign:"center",padding:"36px 24px",color:"var(--ak-text-muted)" }}>
           <span style={{ fontSize:36,opacity:.3 }}>{viewFilter==="active"?"⚡":viewFilter==="scheduled"?"🗓":"🏆"}</span>
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>

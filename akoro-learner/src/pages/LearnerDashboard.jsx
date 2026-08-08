@@ -418,7 +418,11 @@ export default function LearnerDashboard() {
   const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
   // 'lobby' counts too: a battle waiting on its invitations is outstanding work,
   // and it can now sit there for the whole invite window rather than 5 seconds.
-  const activeBattleCount=battles.filter(b=>["live","scheduled","lobby"].includes(b.status)).length;
+  // Only battles I am actually in. An unanswered invitation is counted by the
+  // Challenges badge; counting it here too made one battle show as two pieces
+  // of outstanding work, in two different places.
+  const activeBattleCount=battles.filter(b=>["live","scheduled","lobby"].includes(b.status)
+    && (b.myState == null || b.myState === "accepted")).length;
 
   return (
     <>

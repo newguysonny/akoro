@@ -196,4 +196,38 @@ check('a classmate duel is untouched',
   pair.status === 201 && pair.json?.data?.battle_type === '1v1',
   `${pair.status} type=${pair.json?.data?.battle_type}`);
 
+console.log('\n· An unanswered invitation is a CHALLENGE, not one of my battles');
+// Battles › Active listed anything in a lobby, so a battle a teacher had merely
+// invited you to appeared there AND in Challenges at once — the same battle
+// twice, with Active implying you had joined something you had not. The card
+// now carries my own seat state so the two lists can tell them apart.
+const seatBattle = await call(teacher, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
+  title: 'Seat state', subject: 'Mathematics',
+  total_questions: 8, question_source: 'bank', user_ids: [a.id, b.id],
+});
+const seatId = seatBattle.json?.data?.battle_id;
+const seatLearner = await login('seat', 'student', email(a), 'Password123!');
+
+const beforeAccept = (await call(seatLearner, 'GET', '/api/battle/my-battles'))
+  .json?.data?.find(x => x.id === seatId);
+check('before accepting, my seat reads "invited"', beforeAccept?.myState === 'invited',
+  `myState=${beforeAccept?.myState}`);
+
+await call(seatLearner, 'POST', `/api/battle/challenges/${seatId}/accept`, {});
+const afterAccept = (await call(seatLearner, 'GET', '/api/battle/my-battles'))
+  .json?.data?.find(x => x.id === seatId);
+check('after accepting, it reads "accepted"', afterAccept?.myState === 'accepted',
+  `myState=${afterAccept?.myState}`);
+
+// A creator holds a seat already — their own battle must not vanish from
+// Active while they wait for answers.
+const ownSeat = await call(seatLearner, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
+  title: 'Seat state — mine', subject: 'Mathematics',
+  total_questions: 8, question_source: 'bank', user_ids: [b.id, c.id],
+});
+const ownCard = (await call(seatLearner, 'GET', '/api/battle/my-battles'))
+  .json?.data?.find(x => x.id === ownSeat.json?.data?.battle_id);
+check('a battle I created is mine without accepting', ownCard?.myState === 'accepted',
+  `myState=${ownCard?.myState} role=${ownCard?.myRole}`);
+
 score();
