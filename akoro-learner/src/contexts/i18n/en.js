@@ -440,6 +440,9 @@ export const EN = {
 
   /* ── Challenge modal ── */
   'challenge.accept':     'Accept challenge',
+  'challenge.accept_before': 'Accept before',
+  'challenge.deadline':      'Deadline',
+  'challenge.no_deadline':   'No deadline',
   'challenge.challenged_you': 'challenged you',
   'challenge.hint_classroom': 'Accept → you join the class battle; it starts when everyone has answered',
   'challenge.hint_immediate': 'Accept → the battle starts right away',

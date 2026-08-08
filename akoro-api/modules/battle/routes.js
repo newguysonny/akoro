@@ -108,18 +108,43 @@ const asyncHandler = (fn) => (req, res, next) =>
 const now = () => new Date().toISOString();
 
 /**
- * How far BEFORE the invite window closes a waiting battle starts.
+ * How long AFTER a scheduled battle's start time the expiry job runs.
  *
- * The invite window does two things at the same instant: it is when the battle
- * gives up waiting and runs with whoever accepted, and it is when expire-battle
- * marks an unstarted battle 'expired'. Queued at the identical timestamp, those
- * two jobs raced — and if expire won, a battle three learners had accepted was
- * declared expired instead of being played.
+ * A scheduled battle's start time and its accept deadline are now the same
+ * instant, by design — you cannot accept a battle that has begun. But that puts
+ * start-battle and expire-battle on the same timestamp, and if expire won the
+ * race, a battle a whole class had accepted was marked 'expired' instead of
+ * being played.
  *
- * Ten seconds is enough to order them deterministically without being a delay
- * anybody notices.
+ * Ten seconds orders them deterministically without being a delay anybody
+ * notices. expireBattle also refuses to expire a battle that has players, so
+ * this is the first of two defences rather than the only one.
  */
-const START_BEFORE_EXPIRY_MS = 10_000;
+const EXPIRE_AFTER_START_MS = 10_000;
+
+/**
+ * When does an invitation stop being acceptable?
+ *
+ * A SCHEDULED battle: the moment it starts. There is nothing to accept after
+ * that, and the start time is a deadline the teacher actually chose.
+ *
+ * An UNSCHEDULED battle: never. It used to be an hour, from a default parameter
+ * no form exposed — so a battle set in the morning for an afternoon lesson had
+ * its invitations expire before break, and the learners who had not opened the
+ * app simply never saw it. An invitation with no fixed start has no natural
+ * deadline, so it waits until it is answered.
+ *
+ * NULL means no deadline. Every reader must be null-safe: `new Date(null)` is
+ * the epoch, so a naive `< new Date()` marks an open invitation expired.
+ */
+const acceptDeadline = (scheduledFor) => {
+  if (!scheduledFor) return null;
+  const at = new Date(scheduledFor);
+  return Number.isNaN(at.getTime()) ? null : at.toISOString();
+};
+
+/** Has an invitation with a deadline passed? No deadline never has. */
+const deadlinePassed = (expiresAt) => !!expiresAt && new Date(expiresAt) < new Date();
 
 async function isEligible(userId, courseId) {
   const { data: course } = await db.from("courses").select("instructor_id").eq("id", courseId).single();
@@ -307,8 +332,10 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
     .in("battles.status", ["lobby", "scheduled", "live"]).limit(1);
   if (existing?.length) return res.status(409).json({ error: "Already have an active battle with this person" });
 
-  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+  // A deadline only where there is a start time to be a deadline. See
+  // acceptDeadline: unscheduled invitations do not expire.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: courseId, battle_type: "1v1", title, description: description ?? null,
@@ -329,8 +356,11 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
-  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
-    { delay: new Date(expiresAt).getTime() - Date.now() });
+  // No deadline, no expiry job — an unscheduled invitation waits.
+  if (expiresAt) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
+  }
   if (isScheduled) {
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: new Date(scheduled_for).getTime() - Date.now() });
@@ -346,7 +376,6 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
   // ── WebSocket: push challenge card directly to opponent's session ─────────
   const io = req.app.get("io");
   if (io) {
-    const expiresAt = new Date(Date.now() + expires_in_minutes * 60_000);
     io.to(`user:${opponent_id}`).emit("new_challenge", {
       id:           battle.id,
       challenger:   me?.full_name  ?? "Opponent",
@@ -385,8 +414,10 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
   const myAgent = await resolveAgent(req.user.id);
   if (!myAgent) return res.status(400).json({ error: "Create your agent first" });
 
-  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+  // A deadline only where there is a start time to be a deadline. See
+  // acceptDeadline: unscheduled invitations do not expire.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: courseId, battle_type: "open", title, description: description ?? null,
@@ -405,8 +436,11 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
   await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
-  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
-    { delay: new Date(expiresAt).getTime() - Date.now() });
+  // No deadline, no expiry job — an unscheduled invitation waits.
+  if (expiresAt) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
+  }
   if (isScheduled) {
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: new Date(scheduled_for).getTime() - Date.now() });
@@ -441,8 +475,10 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   const teacherAgent = await resolveAgent(req.user.id);
   if (!teacherAgent) return res.status(400).json({ error: "Create your agent first" });
 
-  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+  // A deadline only where there is a start time to be a deadline. See
+  // acceptDeadline: unscheduled invitations do not expire.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: courseId, battle_type: "classroom", title, description: description ?? null,
@@ -474,8 +510,11 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
-  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
-    { delay: new Date(expiresAt).getTime() - Date.now() });
+  // No deadline, no expiry job — an unscheduled invitation waits.
+  if (expiresAt) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
+  }
   const delay = isScheduled ? new Date(scheduled_for).getTime() - Date.now() : 5000;
   await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay });
 
@@ -678,8 +717,10 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   // a classroom battle that starts on its own rather than an invitation the
   // teacher would have to wait for.
   const isDuel      = myRole === "member" && opponents.length === 1;
-  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+  // A deadline only where there is a start time to be a deadline. See
+  // acceptDeadline: unscheduled invitations do not expire.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: null, classroom_id: classroomId,
@@ -754,18 +795,24 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   }
 
   const q = await getBattleQueue();
-  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
-    { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now()) });
+  // No deadline, no expiry job — an unscheduled invitation waits.
+  if (expiresAt) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
+  }
   if (!isDuel) {
     // Wait for the invitations: until the scheduled time if there is one,
     // otherwise until the invite window closes. It starts sooner than that —
     // the accept route brings it forward the moment everyone has answered, so
     // a class that all accepts within a minute battles within a minute.
-    const delay = isScheduled
-      ? new Date(scheduled_for).getTime() - Date.now()
-      : new Date(expiresAt).getTime() - Date.now() - START_BEFORE_EXPIRY_MS;
-    await q.add("start-battle", { action: "start-battle", battleId: battle.id },
-      { delay: Math.max(0, delay), jobId: `start-${battle.id}` });
+    // A scheduled battle starts at its time. An unscheduled one has no clock
+    // to start against any more, so it starts when everyone has answered —
+    // the accept and decline routes bring it forward — or when the creator
+    // presses Start Now. It will not run off a timer nobody set.
+    if (isScheduled) {
+      await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+        { delay: Math.max(0, new Date(scheduled_for).getTime() - Date.now()), jobId: `start-${battle.id}` });
+    }
   }
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
@@ -835,6 +882,8 @@ function toCard(b, extra = {}) {
     scheduledFor:  b.scheduled_start ?? null,
     scheduledAt:   b.scheduled_start ?? null,
     expiresAt:     b.expires_at ?? null,
+    // The UI counts down from expiresAt itself; this stays for older callers.
+    // null here means "no deadline", which is now the common case.
     expiresIn:     b.expires_at
       ? `${Math.max(0, Math.round((new Date(b.expires_at) - Date.now()) / 60000))} min`
       : null,
@@ -881,7 +930,11 @@ router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) =>
   const { data } = await db.from("battles")
     .select("*, users!battles_created_by_fkey(full_name, avatar_url)")
     .in("id", pending).in("status", ["lobby", "scheduled"])
-    .gt("expires_at", now()).order("created_at", { ascending: false });
+    // `or`, not `.gt` — a NULL expires_at means no deadline, and a plain
+    // greater-than drops NULLs, which would have hidden every open invitation
+    // the moment they stopped having one.
+    .or(`expires_at.is.null,expires_at.gt.${now()}`)
+    .order("created_at", { ascending: false });
 
   res200(res, (data ?? []).map((b) => toCard(b)));
 }));
@@ -1092,8 +1145,10 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
 
   // ── Create ───────────────────────────────────────────────────────────────
   const isDuel      = opponents.length === 1;
-  const expiresAt   = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
+  // A deadline only where there is a start time to be a deadline. See
+  // acceptDeadline: unscheduled invitations do not expire.
+  const expiresAt   = isScheduled ? acceptDeadline(scheduled_for) : null;
 
   // A scheduled DUEL stays in 'lobby': /challenges/:id/accept only accepts from
   // lobby, and it already schedules the start itself once accepted. Marking it
@@ -1164,17 +1219,23 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   }
 
   const q = await getBattleQueue();
-  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
-    { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now()) });
+  // No deadline, no expiry job — an unscheduled invitation waits.
+  if (expiresAt) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
+  }
   // A duel waits for its accept; a group battle waits for its invitations —
   // until the scheduled time, or until the invite window closes, whichever
   // applies. The accept route starts it early once everyone has answered.
   if (!isDuel) {
-    const delay = isScheduled
-      ? new Date(scheduled_for).getTime() - Date.now()
-      : new Date(expiresAt).getTime() - Date.now() - START_BEFORE_EXPIRY_MS;
-    await q.add("start-battle", { action: "start-battle", battleId: battle.id },
-      { delay: Math.max(0, delay), jobId: `start-${battle.id}` });
+    // A scheduled battle starts at its time. An unscheduled one has no clock
+    // to start against any more, so it starts when everyone has answered —
+    // the accept and decline routes bring it forward — or when the creator
+    // presses Start Now. It will not run off a timer nobody set.
+    if (isScheduled) {
+      await q.add("start-battle", { action: "start-battle", battleId: battle.id },
+        { delay: Math.max(0, new Date(scheduled_for).getTime() - Date.now()), jobId: `start-${battle.id}` });
+    }
   }
 
   const { data: me } = await db.from("users").select("full_name, avatar_url").eq("id", req.user.id).single();
@@ -1216,7 +1277,7 @@ router.get("/courses/:courseId/challenges", authenticateToken, asyncHandler(asyn
   const { data } = await db.from("battles")
     .select(`*, users!battles_created_by_fkey(full_name, username), user_agents!inner(agent_name, agent_emoji, agent_color, agent_bg)`)
     .eq("course_id", req.params.courseId).eq("battle_type", "1v1").eq("status", "lobby")
-    .gt("expires_at", now());
+    .or(`expires_at.is.null,expires_at.gt.${now()}`);
   res.json({ challenges: data ?? [] });
 }));
 
@@ -1225,7 +1286,11 @@ router.get("/challenges/:challengeId", authenticateToken, asyncHandler(async (re
     .select(`*, users!battles_created_by_fkey(full_name), user_agents(agent_name, agent_emoji, agent_color)`)
     .eq("id", req.params.challengeId).single();
   if (!data) return res.status(404).json({ error: "Challenge not found" });
-  const expiresIn = Math.max(0, Math.floor((new Date(data.expires_at) - Date.now()) / 1000));
+  // null = no deadline, NOT "expired 56 years ago" — which is what
+  // new Date(null) would have made of it.
+  const expiresIn = data.expires_at
+    ? Math.max(0, Math.floor((new Date(data.expires_at) - Date.now()) / 1000))
+    : null;
   res.json({ battle: data, expires_in_seconds: expiresIn });
 }));
 
@@ -1275,7 +1340,7 @@ router.post("/challenges/:challengeId/accept", authenticateToken, asyncHandler(a
   const { data: battle } = await db.from("battles").select("*")
     .eq("id", req.params.challengeId).in("status", ["lobby", "scheduled"]).single();
   if (!battle) return res.status(404).json({ error: "Challenge not found or already resolved" });
-  if (new Date(battle.expires_at) < new Date()) {
+  if (deadlinePassed(battle.expires_at)) {
     await db.from("battles").update({ status: "expired" }).eq("id", battle.id);
     return res.status(410).json({ error: "Challenge has expired" });
   }
@@ -1391,7 +1456,9 @@ router.get("/courses/:courseId/battles/open", authenticateToken, asyncHandler(as
   const { data: rows } = await db.from("battles")
     .select(`*, users!battles_created_by_fkey(full_name, username), user_agents(agent_name, agent_emoji, agent_color)`)
     .eq("course_id", req.params.courseId).eq("battle_type", "open")
-    .in("status", ["lobby", "scheduled"]).gt("expires_at", now()).order("created_at", { ascending: false });
+    .in("status", ["lobby", "scheduled"])
+    .or(`expires_at.is.null,expires_at.gt.${now()}`)
+    .order("created_at", { ascending: false });
 
   const enriched = await Promise.all((rows ?? []).map(async (r) => {
     const { data: joined } = await db.from("battle_participants").select("id").eq("battle_id", r.id).eq("user_id", req.user.id).single();
@@ -1407,7 +1474,7 @@ router.post("/battles/:battleId/join", authenticateToken, asyncHandler(async (re
   if (!battle) return res.status(404).json({ error: "Battle not found" });
   if (battle.battle_type !== "open") return res.status(400).json({ error: "Not an open lobby" });
   if (!["lobby", "scheduled"].includes(battle.status)) return res.status(400).json({ error: `Battle is ${battle.status}` });
-  if (new Date(battle.expires_at) < new Date()) return res.status(410).json({ error: "Lobby has expired" });
+  if (deadlinePassed(battle.expires_at)) return res.status(410).json({ error: "Lobby has expired" });
 
   const { eligible } = await isEligible(req.user.id, battle.course_id);
   if (!eligible) return res.status(403).json({ error: "Not enrolled" });
@@ -1563,8 +1630,21 @@ router.post("/battles/:battleId/start", authenticateToken, asyncHandler(async (r
   const { data: battle } = await db.from("battles").select("*").eq("id", req.params.battleId).eq("created_by", req.user.id).single();
   if (!battle || !["lobby", "scheduled"].includes(battle.status)) return res.status(404).json({ error: "Battle not found or not authorised" });
 
-  const { count } = await db.from("battle_participants").select("id", { count: "exact", head: true }).eq("battle_id", battle.id);
-  if ((count ?? 0) < 2) return res.status(400).json({ error: "Need at least 2 participants" });
+  // Count PLAYERS, not seats. Since an unscheduled battle has no deadline to
+  // start it, Start Now is the creator's way to run it without waiting for the
+  // last learner — so it has to answer the same question the worker asks:
+  // whoever accepted and did not decline, excluding the teacher, who hosts it.
+  const { data: seats } = await db.from("battle_participants")
+    .select("role, joined_at, declined_at").eq("battle_id", battle.id);
+  const players = (seats ?? []).filter((p) => p.role !== "teacher" && p.joined_at && !p.declined_at).length;
+  if (players < 2) {
+    const waiting = (seats ?? []).filter((p) => p.role !== "teacher" && !p.joined_at && !p.declined_at).length;
+    return res.status(400).json({
+      error: waiting
+        ? `Only ${players} learner${players === 1 ? " has" : "s have"} accepted so far — ${waiting} still to answer. A battle needs two.`
+        : "A battle needs at least 2 learners who have accepted.",
+    });
+  }
 
   await (await getBattleQueue()).add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: 1000 });
   res.json({ success: true, battle_id: battle.id });
@@ -1952,7 +2032,7 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
   const teacherAgent = await resolveAgent(req.user.id);
   if (!teacherAgent) return res400(res, "Create your agent first");
 
-  const expiresAt = new Date(Date.now() + expires_in_minutes * 60_000).toISOString();
+  const expiresAt = acceptDeadline(scheduled_for);
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: courseId, battle_type: "classroom", title,
@@ -1979,7 +2059,10 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
   await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
-  await q.add("expire-battle", { action: "expire-battle", battleId: battle.id }, { delay: new Date(expiresAt).getTime() - Date.now() });
+  if (expiresAt) {
+    await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
+      { delay: Math.max(0, new Date(expiresAt).getTime() - Date.now() + EXPIRE_AFTER_START_MS) });
+  }
   await q.add("start-battle", { action: "start-battle", battleId: battle.id }, { delay: 5000 });
 
   res201(res, { success: true, battle_id: battle.id, session_id, participants: (students?.length ?? 0) + 1 });

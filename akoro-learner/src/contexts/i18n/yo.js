@@ -202,6 +202,9 @@ export const YO = {
 
   /* ── Challenge ── */
   'challenge.accept':     'Gba ìpèníjà',
+  'challenge.accept_before': 'Gbà ṣáájú',
+  'challenge.deadline':      'Àkókò ìparí',
+  'challenge.no_deadline':   'Kò sí àkókò ìparí',
   'challenge.challenged_you': 'pè ọ́ níjà',
   'challenge.hint_classroom': 'Gbà → o wọlé sí ìjà kíláàsì; yóò bẹ̀rẹ̀ nígbà tí gbogbo ènìyàn bá dáhùn',
   'challenge.hint_immediate': 'Gbà → ìjà náà yóò bẹ̀rẹ̀ lẹ́sẹ̀kẹsẹ̀',

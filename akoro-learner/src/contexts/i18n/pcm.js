@@ -201,6 +201,9 @@ export const PCM = {
 
   /* ── Challenge ── */
   'challenge.accept':     'Accept am',
+  'challenge.accept_before': 'Accept before',
+  'challenge.deadline':      'Deadline',
+  'challenge.no_deadline':   'No deadline',
   'challenge.challenged_you': 'challenge you',
   'challenge.hint_classroom': 'Accept → you go join di class battle; e go start when everybody don answer',
   'challenge.hint_immediate': 'Accept → di battle go start sharp sharp',

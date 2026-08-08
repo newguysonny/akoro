@@ -183,6 +183,9 @@ export const HA = {
   'sheet.with_sargeant':     'tare da Sargeant',
 
   'challenge.accept':     'Karɓi ƙalubale',
+  'challenge.accept_before': 'Karɓa kafin',
+  'challenge.deadline':      'Wa’adi',
+  'challenge.no_deadline':   'Babu wa’adi',
   'challenge.challenged_you': 'ya kalubalance ka',
   'challenge.hint_classroom': 'Karɓa → za ka shiga faɗan aji; zai fara idan kowa ya amsa',
   'challenge.hint_immediate': 'Karɓa → faɗan zai fara nan take',

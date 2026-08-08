@@ -202,6 +202,9 @@ export const PT = {
 
   /* ── Challenges ── */
   'challenge.accept':     'Aceitar o desafio',
+  'challenge.accept_before': 'Aceitar antes de',
+  'challenge.deadline':      'Prazo',
+  'challenge.no_deadline':   'Sem prazo',
   'challenge.challenged_you': 'desafiou você',
   'challenge.hint_classroom': 'Aceitar → você entra na batalha da turma; começa quando todos responderem',
   'challenge.hint_immediate': 'Aceitar → a batalha começa imediatamente',

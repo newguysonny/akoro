@@ -202,6 +202,9 @@ export const ES = {
 
   /* ── Challenges ── */
   'challenge.accept':     'Aceptar el reto',
+  'challenge.accept_before': 'Aceptar antes de',
+  'challenge.deadline':      'Fecha límite',
+  'challenge.no_deadline':   'Sin fecha límite',
   'challenge.challenged_you': 'te ha retado',
   'challenge.hint_classroom': 'Aceptar → te unes a la batalla de clase; empieza cuando todos hayan respondido',
   'challenge.hint_immediate': 'Aceptar → la batalla empieza de inmediato',

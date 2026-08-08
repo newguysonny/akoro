@@ -201,6 +201,9 @@ export const IG = {
 
   /* ── Challenge ── */
   'challenge.accept':     'Nabata ihe ịma aka',
+  'challenge.accept_before': 'Nabata tupu',
+  'challenge.deadline':      'Oge njedebe',
+  'challenge.no_deadline':   'Enweghị oge njedebe',
   'challenge.challenged_you': 'mara gị aka',
   'challenge.hint_classroom': 'Nabata → ị ga-abanye na agha klaasị; ọ ga-amalite mgbe onye ọ bụla zara',
   'challenge.hint_immediate': 'Nabata → agha ga-amalite ozugbo',

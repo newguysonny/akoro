@@ -183,6 +183,9 @@ export const FR = {
   'sheet.with_sargeant':     'avec Sargeant',
 
   'challenge.accept':     'Accepter le défi',
+  'challenge.accept_before': 'Accepter avant',
+  'challenge.deadline':      'Échéance',
+  'challenge.no_deadline':   'Pas d’échéance',
   'challenge.challenged_you': 'vous a défié',
   'challenge.hint_classroom': 'Accepter → vous rejoignez la bataille de classe ; elle démarre quand tout le monde a répondu',
   'challenge.hint_immediate': 'Accepter → la bataille démarre immédiatement',

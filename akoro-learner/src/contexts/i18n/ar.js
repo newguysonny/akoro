@@ -183,6 +183,9 @@ export const AR = {
   'sheet.with_sargeant':     'مع سارجنت',
 
   'challenge.accept':     'قبول التحدي',
+  'challenge.accept_before': 'اقبل قبل',
+  'challenge.deadline':      'الموعد النهائي',
+  'challenge.no_deadline':   'بدون موعد نهائي',
   'challenge.challenged_you': 'تحداك',
   'challenge.hint_classroom': 'قبول ← تنضم إلى معركة الصف؛ تبدأ عندما يجيب الجميع',
   'challenge.hint_immediate': 'قبول ← تبدأ المعركة فورًا',

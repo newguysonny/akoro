@@ -1,10 +1,51 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
 import { XIcon, ZapIcon, StarIcon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
+/**
+ * Time left to accept, ticking.
+ *
+ * Only a SCHEDULED battle has a deadline, and it is the moment the battle
+ * starts — there is nothing to accept after that. An unscheduled invitation has
+ * none and waits until it is answered, so it must not show a clock at all: the
+ * hour it used to count down was a default nobody chose, and when it hit zero
+ * the card vanished from the tab.
+ */
+function useCountdown(expiresAt) {
+  const [left, setLeft] = useState(() => remaining(expiresAt));
+  useEffect(() => {
+    if (!expiresAt) { setLeft(null); return; }
+    setLeft(remaining(expiresAt));
+    // Every 30s: a minute-resolution label does not need a per-second timer
+    // burning battery behind a sheet the learner may leave open.
+    const id = setInterval(() => setLeft(remaining(expiresAt)), 30_000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+  return left;
+}
+
+function remaining(expiresAt) {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt) - Date.now();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, ms);
+}
+
+export function formatLeft(ms) {
+  if (ms == null) return null;
+  if (ms <= 0) return 'now';
+  const mins = Math.round(ms / 60_000);
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return mins % 60 ? `${hrs}h ${mins % 60}m` : `${hrs}h`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
 function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
   const { t } = useLang();
+  const msLeft = useCountdown(challenge.expiresAt);
   const subj=subjectStyle(challenge.subject),sc=subj.color,diff=difficultyStyle(challenge.difficulty),isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
   const typePill=isClassroom?{label:`🏫 ${t('challenge.classroom')}`,bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:`⚡ ${t('challenge.immediate')}`,bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:`🗓 ${t('challenge.scheduled')}`,bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
@@ -40,7 +81,14 @@ function ChallengeModal({ challenge, onAccept, onDecline, onClose }) {
           </div>
         )}
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16 }}>
-          {[{label:t('challenge.xp_prize'),value:challenge.xpPrize,icon:"⚡"},{label:t('challenge.time_limit'),value:challenge.timeLimit,icon:"⏱"},{label:isClassroom?"Expires In":isImmediate?"Expires In":"Starts",value:isClassroom?challenge.expiresIn:isImmediate?challenge.expiresIn:challenge.scheduledFor,icon:isClassroom?"⏰":isImmediate?"🔥":"🗓"}].map(({label,value,icon})=>(
+          {[{label:t('challenge.xp_prize'),value:challenge.xpPrize,icon:"⚡"},
+            {label:t('challenge.time_limit'),value:challenge.timeLimit,icon:"⏱"},
+            // Third tile: the deadline, and only if there is one. It used to
+            // read "Expires In 58 min" on every battle — an hour nobody set.
+            challenge.expiresAt
+              ? {label:t('challenge.accept_before'),value:formatLeft(msLeft),icon:"⏰"}
+              : {label:t('challenge.deadline'),value:t('challenge.no_deadline'),icon:"♾"}
+           ].map(({label,value,icon})=>(
             <div key={label} style={{ background:"var(--ak-bg)",borderRadius:12,padding:"10px",border:"1px solid var(--ak-border)",textAlign:"center" }}><p style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",margin:"0 0 3px" }}>{icon} {label}</p><p style={{ fontSize:12,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{value}</p></div>
           ))}
         </div>

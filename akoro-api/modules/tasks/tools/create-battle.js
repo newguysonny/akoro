@@ -324,7 +324,10 @@ async function callBattlesApi(payload) {
     status:           payload.status === "pending" ? "scheduled" : "lobby",
     peak_viewers:     0,
     scheduled_start:  payload.scheduledAt ?? null,
-    expires_at:       new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    // A scheduled battle's deadline is its start; anything else has none.
+    // This was a flat 24 hours, which quietly killed invitations a teacher had
+    // set further out than a day.
+    expires_at:       payload.scheduledAt ?? null,
     created_by:       payload.teacherId,
   }).select().single();
   if (error) throw new Error(error.message);
@@ -339,9 +342,11 @@ async function callBattlesApi(payload) {
   // Enqueue lifecycle so the open lobby cleans itself up (students join → it
   // auto-starts when full, or the teacher starts it manually).
   try {
-    const { battleQueue } = await import("../../battle/worker.js");
-    await battleQueue.add("expire-battle", { action: "expire-battle", battleId: data.id },
-      { delay: new Date(data.expires_at).getTime() - Date.now() });
+    if (data.expires_at) {
+      const { battleQueue } = await import("../../battle/worker.js");
+      await battleQueue.add("expire-battle", { action: "expire-battle", battleId: data.id },
+        { delay: Math.max(0, new Date(data.expires_at).getTime() - Date.now()) });
+    }
   } catch (e) { console.warn("[create-battle] could not enqueue expire job:", e.message); }
 
   return { id: data.id, status: data.status, title: data.title };

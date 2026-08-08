@@ -2,12 +2,17 @@ import React, { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
 import { ZapIcon, StarIcon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
+import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function ChallengeRow({ challenge, onTap }) {
   const { t } = useLang();
   const subj=subjectStyle(challenge.subject),sc=subj.color,diff=difficultyStyle(challenge.difficulty),isImmediate=challenge.battleType==="immediate",isClassroom=challenge.battleType==="classroom";
+  // Only a scheduled battle has a deadline. The row used to print the server's
+  // expiresIn unconditionally, so an invitation that never expires still
+  // advertised an hour and then disappeared when it ran out.
+  const deadline=challenge.expiresAt?formatLeft(Math.max(0,new Date(challenge.expiresAt)-Date.now())):null;
   const typePill=isClassroom?{label:`🏫 ${t('battles.classroom')}`,bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:`⚡ ${t('battles.immediate')}`,bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:`🗓 ${t('battles.scheduled')}`,bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
     <div onClick={()=>onTap(challenge)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid var(--ak-border)",cursor:"pointer",background:"var(--ak-surface)",transition:"background .15s" }}>
@@ -26,7 +31,7 @@ function ChallengeRow({ challenge, onTap }) {
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
           <div style={{ display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:20,background:typePill.bg,border:`1px solid ${typePill.border}` }}><span style={{ fontSize:9.5,fontWeight:900,color:typePill.color }}>{typePill.label}</span></div>
-          {isClassroom?<span style={{ fontSize:10.5,fontWeight:600,color:"#10B981" }}>👥 {(challenge.participants?.length ?? challenge.participantCount ?? 0)} {t('battles.agents')} · ⏱ {challenge.timeLimit} · ⏰ {challenge.expiresIn}</span>:isImmediate?<span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>⏰ {t('battles.expires_in')} {challenge.expiresIn} · ⏱ {challenge.timeLimit}</span>:<span style={{ fontSize:10.5,fontWeight:600,color:BRAND }}>🗓 {challenge.scheduledFor} · ⏱ {challenge.timeLimit}</span>}
+          {isClassroom?<span style={{ fontSize:10.5,fontWeight:600,color:"#10B981" }}>👥 {(challenge.participants?.length ?? challenge.participantCount ?? 0)} {t('battles.agents')} · ⏱ {challenge.timeLimit}{deadline?` · ⏰ ${deadline}`:''}</span>:isImmediate?<span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{deadline?`⏰ ${t('battles.expires_in')} ${deadline} · `:''}⏱ {challenge.timeLimit}</span>:<span style={{ fontSize:10.5,fontWeight:600,color:BRAND }}>🗓 {challenge.scheduledFor?new Date(challenge.scheduledFor).toLocaleString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'—'} · ⏱ {challenge.timeLimit}</span>}
         </div>
       </div>
       <div style={{ width:28,height:28,borderRadius:"50%",background:isImmediate?`${RED}12`:`${BRAND}12`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:`1.5px solid ${isImmediate?RED:BRAND}40` }}><ZapIcon size={12} color={isImmediate?RED:BRAND}/></div>
