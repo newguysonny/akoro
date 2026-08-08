@@ -200,6 +200,14 @@ export const PCM = {
   'sheet.with_sargeant':      'with Sargeant',
 
   /* ── Challenge ── */
+  'challenge.accept':     'Accept am',
+  'challenge.challenged_you': 'challenge you',
+  'challenge.hint_classroom': 'Accept → you go join di class battle; e go start when everybody don answer',
+  'challenge.hint_immediate': 'Accept → di battle go start sharp sharp',
+  'challenge.hint_scheduled': 'Accept → e go show for Battles › Scheduled',
+  'challenge.topic':      'Topic',
+  'challenge.questions':  'Questions',
+  'challenge.in_battle':  'dey this battle',
   'challenge.decline':    'Refuse',
   'challenge.time_limit': 'Time Limit',
   'challenge.xp_prize':   'XP Prize',

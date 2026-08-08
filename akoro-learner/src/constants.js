@@ -13,6 +13,52 @@ export const SUBJECTS = {
 
 export const SUBJECT_COLORS = { maths:"#6C3BFF", english:"#0EA5E9", science:"#10B981" };
 
+/**
+ * SUBJECTS above is keyed by three demo slugs. Real battles carry the school's
+ * own subject NAME — "Mathematics", "English Language", "Basic Science",
+ * "Social Studies", or anything a course is called — so SUBJECTS[subject] was
+ * undefined and the subject pill rendered as an empty rounded box.
+ *
+ * Match on words rather than exact keys, and fall back to the name itself with
+ * a colour derived from it. The label is never blank: a subject we have no icon
+ * for is still a subject the learner can read.
+ */
+const SUBJECT_MATCHERS = [
+  [/math/i,                       { icon:"🔢", color:"#6C3BFF" }],
+  [/english|literat|language art/i,{ icon:"📖", color:"#0EA5E9" }],
+  [/physics/i,                    { icon:"⚛️", color:"#6366F1" }],
+  [/chem/i,                       { icon:"🧪", color:"#14B8A6" }],
+  [/bio/i,                        { icon:"🧬", color:"#22C55E" }],
+  [/science/i,                    { icon:"🔬", color:"#10B981" }],
+  [/social|civic|government/i,    { icon:"🌍", color:"#F59E0B" }],
+  [/history/i,                    { icon:"🏛", color:"#B45309" }],
+  [/geograph/i,                   { icon:"🗺", color:"#0891B2" }],
+  [/econom|commerce|account/i,    { icon:"📊", color:"#EA580C" }],
+  [/comput|ict|technolog/i,       { icon:"💻", color:"#4F46E5" }],
+  [/agric/i,                      { icon:"🌾", color:"#65A30D" }],
+  [/health|physical/i,            { icon:"🏃", color:"#DB2777" }],
+  [/relig|christian|islamic/i,    { icon:"🕊", color:"#7C3AED" }],
+  [/art|music|creative/i,         { icon:"🎨", color:"#DB2777" }],
+];
+
+const FALLBACK_COLORS = ["#6C3BFF","#0EA5E9","#10B981","#F59E0B","#EC4899","#14B8A6"];
+
+export function subjectStyle(subject) {
+  const name = (subject ?? "").toString().trim();
+  if (!name) return { label:"General", icon:"📘", color:"#6B7280" };
+
+  const slug = SUBJECTS[name.toLowerCase()];
+  if (slug) return { label:slug.label, icon:slug.icon, color:slug.color };
+
+  for (const [re, cfg] of SUBJECT_MATCHERS) {
+    if (re.test(name)) return { label:name, icon:cfg.icon, color:cfg.color };
+  }
+  // Stable per name, so the same subject is always the same colour.
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return { label:name, icon:"📘", color:FALLBACK_COLORS[h % FALLBACK_COLORS.length] };
+}
+
 export const PRIORITY_CONFIG = {
   live:     { label:"LIVE",      bg:"rgba(239,68,68,0.12)",  color:"#EF4444", dot:"#EF4444", pulse:true  },
   upcoming: { label:"UPCOMING",  bg:"rgba(245,158,11,0.12)", color:"#F59E0B", dot:"#F59E0B", pulse:false },

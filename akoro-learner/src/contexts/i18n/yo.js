@@ -201,6 +201,14 @@ export const YO = {
   'sheet.with_sargeant':     'pẹ̀lú Sargeant',
 
   /* ── Challenge ── */
+  'challenge.accept':     'Gba ìpèníjà',
+  'challenge.challenged_you': 'pè ọ́ níjà',
+  'challenge.hint_classroom': 'Gbà → o wọlé sí ìjà kíláàsì; yóò bẹ̀rẹ̀ nígbà tí gbogbo ènìyàn bá dáhùn',
+  'challenge.hint_immediate': 'Gbà → ìjà náà yóò bẹ̀rẹ̀ lẹ́sẹ̀kẹsẹ̀',
+  'challenge.hint_scheduled': 'Gbà → yóò hàn ní Ìjà › Tí a ṣètò',
+  'challenge.topic':      'Àkòrí',
+  'challenge.questions':  'Ìbéèrè',
+  'challenge.in_battle':  'nínú ìjà yìí',
   'challenge.decline':    'Kọ̀',
   'challenge.time_limit': 'Àkókò Tí A Yàn',
   'challenge.xp_prize':   'Ẹ̀bùn XP',

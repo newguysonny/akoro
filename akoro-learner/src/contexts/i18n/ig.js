@@ -200,6 +200,14 @@ export const IG = {
   'sheet.with_sargeant':     'na Sargeant',
 
   /* ── Challenge ── */
+  'challenge.accept':     'Nabata ihe ịma aka',
+  'challenge.challenged_you': 'mara gị aka',
+  'challenge.hint_classroom': 'Nabata → ị ga-abanye na agha klaasị; ọ ga-amalite mgbe onye ọ bụla zara',
+  'challenge.hint_immediate': 'Nabata → agha ga-amalite ozugbo',
+  'challenge.hint_scheduled': 'Nabata → ọ ga-apụta na Agha › Ahaziri ahazi',
+  'challenge.topic':      'Isiokwu',
+  'challenge.questions':  'Ajụjụ',
+  'challenge.in_battle':  'na agha a',
   'challenge.decline':    'Jụ',
   'challenge.time_limit': 'Oke Oge',
   'challenge.xp_prize':   'Ihe Nrite XP',

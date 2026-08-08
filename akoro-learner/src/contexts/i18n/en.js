@@ -439,6 +439,14 @@ export const EN = {
   'sheet.with_sargeant':     'with Sargeant',
 
   /* ── Challenge modal ── */
+  'challenge.accept':     'Accept challenge',
+  'challenge.challenged_you': 'challenged you',
+  'challenge.hint_classroom': 'Accept → you join the class battle; it starts when everyone has answered',
+  'challenge.hint_immediate': 'Accept → the battle starts right away',
+  'challenge.hint_scheduled': 'Accept → it appears under Battles › Scheduled',
+  'challenge.topic':      'Topic',
+  'challenge.questions':  'Questions',
+  'challenge.in_battle':  'in this battle',
   'challenge.decline':    'Decline',
   'challenge.time_limit': 'Time Limit',
   'challenge.xp_prize':   'XP Prize',

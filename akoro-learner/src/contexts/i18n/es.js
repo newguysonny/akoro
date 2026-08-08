@@ -201,6 +201,14 @@ export const ES = {
   'sheet.with_sargeant':     'con Sargeant',
 
   /* ── Challenges ── */
+  'challenge.accept':     'Aceptar el reto',
+  'challenge.challenged_you': 'te ha retado',
+  'challenge.hint_classroom': 'Aceptar → te unes a la batalla de clase; empieza cuando todos hayan respondido',
+  'challenge.hint_immediate': 'Aceptar → la batalla empieza de inmediato',
+  'challenge.hint_scheduled': 'Aceptar → aparecerá en Batallas › Programadas',
+  'challenge.topic':      'Tema',
+  'challenge.questions':  'Preguntas',
+  'challenge.in_battle':  'en esta batalla',
   'challenge.decline':    'Rechazar',
   'challenge.time_limit': 'Límite de tiempo',
   'challenge.xp_prize':   'Premio de XP',
