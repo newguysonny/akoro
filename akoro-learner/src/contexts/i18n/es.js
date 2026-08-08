@@ -574,6 +574,8 @@ export const ES = {
   'battles.vs':           'VS',
   'battles.started_ago':  '⏱ Comenzó hace {min} min',
   'battles.result':       '{winner} ganó · {a}–{b} · XP distribuido',
+  'battles.review_result': 'Repasado · {correct} de {total} correctas',
+  'battles.your_score':    'Tu puntuación: {score}',
 
   /* ── Agent dynamic messages ── */
   'agent.greeting':       "¡Hola {user}! 👋 Soy {name} {emoji}, tu agente de aprendizaje personal.\n\nPuedo ayudarte a crear sesiones de estudio, autoevaluarte, seguir tu progreso o hablar sobre cualquier tema. ¿Qué te gustaría hacer hoy?",

@@ -10,6 +10,7 @@ import { Worker, Queue } from "bullmq";
 import Redis             from "ioredis";
 import db                from "../../db.js";
 import { bullRedisOptions } from "../../lib/redisOptions.js";
+import { accuracyFor, thinkingTimeMs, chooseAnswer, autoPlayers } from "./agentPlayer.js";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
@@ -30,6 +31,7 @@ const worker = new Worker("battles", async (job) => {
     case "start-battle":        return startBattle(battleId);
     case "advance-question":    return advanceQuestion(battleId, job.data.questionOrder);
     case "reveal-question":     return revealQuestion(battleId, job.data.questionOrder);
+    case "agent-answer":        return agentAnswer(battleId, job.data.questionOrder, job.data.participantId, job.data.thinkingMs);
     case "end-battle":          return endBattle(battleId);
     case "expire-battle":       return expireBattle(battleId);
     case "refresh-leaderboard": return refreshLeaderboard(job.data.courseId, job.data.scope);
@@ -46,10 +48,16 @@ const worker = new Worker("battles", async (job) => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const getIO = () => {
-  if (!global.io) throw new Error("global.io not set");
-  return global.io;
-};
+/**
+ * Emitting is best-effort. It used to THROW when no socket was attached, which
+ * failed the job — and BullMQ retries three times, so a battle re-broadcast
+ * questions it had already asked and logged "Battle complete!" twice. That is
+ * the duplicated Q4/Q5/Q6 and the second finish in the battle log.
+ *
+ * A missing socket means nobody is watching live. It must not change what the
+ * battle DOES; the log and the database are the record either way.
+ */
+const getIO = () => global.io ?? { to: () => ({ emit: () => {} }) };
 
 const now = () => new Date().toISOString();
 
@@ -64,6 +72,9 @@ async function appendLog(battleId, eventType, message, userId = null, agentName 
     timestamp: new Date().toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
   });
 }
+
+/** The answering agent, reached through the participant row it belongs to. */
+const agentOf = (answer) => answer?.battle_participants?.user_agents ?? null;
 
 function buildQuestionPayload(q) {
   return {
@@ -174,6 +185,7 @@ async function startBattle(battleId) {
 
   getIO().to(`battle:${battleId}`).emit("battle:question", buildQuestionPayload(firstQ));
   await appendLog(battleId, "question_start", `━━━ Q1: ${firstQ.topic} ━━━`, null, null, null, 1, { questionOrder: 1, topic: firstQ.topic });
+  await scheduleAgentAnswers(battleId, firstQ);
 
   await battleQueue.add("reveal-question",
     { action: "reveal-question", battleId, questionOrder: 1 },
@@ -181,15 +193,124 @@ async function startBattle(battleId) {
   );
 }
 
+// ─── agent-answer ─────────────────────────────────────────────────────────────
+
+/**
+ * One agent answers one question, on its own schedule.
+ *
+ * Queued per participant when a question is broadcast, each with its own delay,
+ * so the agents answer independently rather than in lockstep. Nothing used to
+ * do this at all: a battle nobody was watching produced ten questions of
+ * "⏰ ran out of time" and a 0–0 result.
+ */
+async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = null) {
+  const { data: battle } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  if (battle?.status !== "live") return;                       // ended, or ended early
+
+  const { data: q } = await db.from("battle_questions")
+    .select("*").eq("battle_id", battleId).eq("question_order", questionOrder).maybeSingle();
+  if (!q) return;
+
+  const { data: p } = await db.from("battle_participants")
+    .select("*").eq("id", participantId).maybeSingle();
+  if (!p) return;                                              // dropped before the start
+
+  // Already answered — by the human at the keyboard, or by a retry of this very
+  // job. Either way there is nothing to add.
+  const { data: already } = await db.from("battle_answers")
+    .select("id").eq("participant_id", p.id).eq("question_id", q.id).maybeSingle();
+  if (already) return;
+
+  const { data: bq } = await db.from("battles").select("difficulty").eq("id", battleId).maybeSingle();
+  const options  = JSON.parse(q.options_json);
+  const accuracy = await accuracyFor({
+    userId: p.user_id, agentId: p.agent_id, topic: q.topic, difficulty: bq?.difficulty,
+  });
+  const picked = chooseAnswer(accuracy, options.length, q.correct_answer_index);
+
+  const isCorrect   = picked === q.correct_answer_index;
+  const newStreak   = isCorrect ? (p.current_streak ?? 0) + 1 : 0;
+  const streakBonus = isCorrect ? Math.floor(newStreak * 5) : 0;
+
+  await db.from("battle_answers").insert({
+    battle_id: battleId, participant_id: p.id, question_id: q.id,
+    selected_index: picked, is_correct: isCorrect,
+    // The thinking time this agent was given, carried on the job — battle_questions
+    // has no "shown at" column, so it is the only true measure of who was quicker.
+    response_time_ms: thinkingMs ?? null,
+    xp_gained: isCorrect ? q.xp_value + streakBonus : 0,
+    streak_at_time: newStreak,
+  });
+
+  // Streaks only. The correct/wrong TALLY belongs to revealQuestion, which sees
+  // the whole question at once and is the only place that can count a
+  // no-answer. Counting here as well double-counted every answer — a 6-question
+  // review reported 7 correct — and that error fed the XP share and the mark
+  // sheet. It was invisible until answers started being visible to the reveal.
+  await db.from("battle_participants").update({
+    current_streak: newStreak,
+    max_streak:     Math.max(p.max_streak ?? 0, newStreak),
+  }).eq("id", p.id);
+
+  // Push the running scoreboard so anyone watching sees it move as they answer,
+  // rather than everything jumping at the reveal.
+  const { data: rows } = await db.from("battle_participants")
+    .select(`user_id, score, hp, current_streak, user_agents(agent_name, agent_emoji, agent_color)`)
+    .eq("battle_id", battleId).order("score", { ascending: false });
+  global.io?.to(`battle:${battleId}`).emit("battle:state", {
+    questionOrder,
+    participants: (rows ?? []).map((r) => ({
+      userId: r.user_id, agentName: r.user_agents?.agent_name, agentEmoji: r.user_agents?.agent_emoji,
+      score: r.score, hp: r.hp, streak: r.current_streak,
+    })),
+  });
+}
+
+/**
+ * Queue one answer per agent for the question just broadcast.
+ *
+ * jobId is per battle/question/participant, so a retried or duplicated
+ * broadcast cannot make an agent answer twice.
+ */
+async function scheduleAgentAnswers(battleId, q) {
+  const players = await autoPlayers(battleId);
+  for (const p of players) {
+    const accuracy = await accuracyFor({
+      userId: p.user_id, agentId: p.agent_id, topic: q.topic,
+    });
+    const thinkingMs = thinkingTimeMs(accuracy, q.time_limit_seconds);
+    await battleQueue.add("agent-answer",
+      { action: "agent-answer", battleId, questionOrder: q.question_order, participantId: p.id, thinkingMs },
+      {
+        delay: thinkingMs,
+        jobId: `answer-${battleId}-q${q.question_order}-${p.id}`,
+      });
+  }
+}
+
 // ─── reveal-question ──────────────────────────────────────────────────────────
 
 async function revealQuestion(battleId, questionOrder) {
+  // A finished battle keeps no scores. Reveals queued for questions that never
+  // got asked still fired after the battle ended — re-tallying answers on top
+  // of the final settle (a 6-question review reported 7 correct) and printing
+  // "⏰ ran out of time" under "🏁 Battle complete!" in the log.
+  const { data: liveCheck } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  if (liveCheck?.status !== "live") return;
+
   const { data: q } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", questionOrder).single();
   if (!q) return endBattle(battleId);
 
-  const { data: answers } = await db.from("battle_answers")
-    .select(`*, battle_participants!inner(user_id, agent_id, id), user_agents(agent_name, agent_emoji, agent_color)`)
+  // The agent has to be reached THROUGH the participant. battle_answers has no
+  // agent_id, so embedding user_agents directly asked PostgREST for a foreign
+  // key that does not exist — it answered PGRST200 and the client turned that
+  // into `answers = null`. Every answer was therefore invisible here: scores
+  // stayed 0, and every learner was logged as having run out of time even when
+  // they had answered. Nothing exposed it while no answer was ever recorded.
+  const { data: answers, error: answersErr } = await db.from("battle_answers")
+    .select(`*, battle_participants!inner(user_id, agent_id, id, user_agents(agent_name, agent_emoji, agent_color))`)
     .eq("question_id", q.id);
+  if (answersErr) console.error("[battle-worker] could not read answers:", answersErr.message);
 
   const { data: participants } = await db.from("battle_participants").select("*").eq("battle_id", battleId);
   const options = JSON.parse(q.options_json);
@@ -197,7 +318,12 @@ async function revealQuestion(battleId, questionOrder) {
   const { data: btype } = await db.from("battles").select("battle_type").eq("id", battleId).maybeSingle();
   const isReviewBattle = btype?.battle_type === "review";
 
-  for (const p of (participants ?? [])) {
+  // The teacher hosts the battle. Their agent used to appear in the commentary
+  // — "⏰ Agent demo_teacher1 ran out of time!" on every question — and be
+  // scored alongside the learners in a battle they were only refereeing.
+  const players = (participants ?? []).filter((p) => p.role !== "teacher");
+
+  for (const p of players) {
     const ans     = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
     const correct = ans?.is_correct;
 
@@ -213,8 +339,8 @@ async function revealQuestion(battleId, questionOrder) {
       await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
     } else if (!correct) {
       await appendLog(battleId, "answer_wrong",
-        `❌ ${ans.user_agents?.agent_name} answered wrong — chose ${options[ans.selected_index]}`,
-        p.user_id, ans.user_agents?.agent_name, ans.user_agents?.agent_emoji, questionOrder);
+        `❌ ${agentOf(ans)?.agent_name} answered wrong — chose ${options[ans.selected_index]}`,
+        p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder);
     } else {
       const streakBonus = Math.floor((ans.streak_at_time ?? 0) * 5);
       const xpGained    = q.xp_value + streakBonus;
@@ -222,13 +348,13 @@ async function revealQuestion(battleId, questionOrder) {
       await creditXP(p.user_id, p.agent_id, xpGained, "battle_correct", battleId);
       await db.from("battle_answers").update({ xp_gained: xpGained }).eq("id", ans.id);
       await appendLog(battleId, "answer_correct",
-        `✅ ${ans.user_agents?.agent_name} answered correctly — ${options[q.correct_answer_index]}`,
-        p.user_id, ans.user_agents?.agent_name, ans.user_agents?.agent_emoji, questionOrder,
+        `✅ ${agentOf(ans)?.agent_name} answered correctly — ${options[q.correct_answer_index]}`,
+        p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
         { xpGained, streak: ans.streak_at_time, responseMs: ans.response_time_ms });
       if ((ans.streak_at_time ?? 0) >= 2) {
         await appendLog(battleId, "streak",
-          `🔥 ${ans.user_agents?.agent_name} is on a ${ans.streak_at_time}× streak! +${streakBonus} bonus XP`,
-          p.user_id, ans.user_agents?.agent_name, ans.user_agents?.agent_emoji, questionOrder,
+          `🔥 ${agentOf(ans)?.agent_name} is on a ${ans.streak_at_time}× streak! +${streakBonus} bonus XP`,
+          p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
           { streak: ans.streak_at_time, bonusXp: streakBonus });
       }
     }
@@ -239,7 +365,7 @@ async function revealQuestion(battleId, questionOrder) {
   // getting a question wrong turns a check of what they know into a punishment.
   const correctCount = (answers ?? []).filter((a) => a.is_correct).length;
   if (correctCount > 0 && !isReviewBattle) {
-    for (const p of (participants ?? [])) {
+    for (const p of players) {
       const ans = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
       if (!ans?.is_correct) {
         await db.from("battle_participants").update({ hp: Math.max(0, (p.hp ?? 100) - 8) }).eq("id", p.id);
@@ -250,8 +376,8 @@ async function revealQuestion(battleId, questionOrder) {
   getIO().to(`battle:${battleId}`).emit("battle:reveal", {
     questionOrder, correctIndex: q.correct_answer_index, correctAnswer: options[q.correct_answer_index],
     answers: (answers ?? []).map((a) => ({
-      userId: a.battle_participants?.user_id, agentName: a.user_agents?.agent_name,
-      agentEmoji: a.user_agents?.agent_emoji, selectedIndex: a.selected_index,
+      userId: a.battle_participants?.user_id, agentName: agentOf(a)?.agent_name,
+      agentEmoji: agentOf(a)?.agent_emoji, selectedIndex: a.selected_index,
       isCorrect: a.is_correct, responseTimeMs: a.response_time_ms, xpGained: a.xp_gained,
     })),
   });
@@ -275,11 +401,15 @@ async function revealQuestion(battleId, questionOrder) {
 // ─── advance-question ─────────────────────────────────────────────────────────
 
 async function advanceQuestion(battleId, questionOrder) {
+  const { data: liveCheck } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  if (liveCheck?.status !== "live") return;   // ended early — ask nothing more
+
   const { data: q } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", questionOrder).single();
   if (!q) return endBattle(battleId);
 
   getIO().to(`battle:${battleId}`).emit("battle:question", buildQuestionPayload(q));
   await appendLog(battleId, "question_start", `━━━ Q${questionOrder}: ${q.topic} ━━━`, null, null, null, questionOrder, { questionOrder, topic: q.topic });
+  await scheduleAgentAnswers(battleId, q);
   await battleQueue.add("reveal-question",
     { action: "reveal-question", battleId, questionOrder },
     { delay: (q.time_limit_seconds || 15) * 1000, jobId: `reveal-${battleId}-q${questionOrder}` }
@@ -303,6 +433,31 @@ async function endBattle(battleId) {
     peak_viewers: (await db.from("battle_viewers").select("id", { count: "exact", head: true }).eq("battle_id", battleId)).count ?? 0,
   }).eq("id", battleId);
 
+  // ── Settle the scores from the ANSWERS, not the running counters ─────────
+  // The counters are maintained by revealQuestion, one question at a time. End
+  // a battle early — the teacher's "End now", or the last question ending it —
+  // and the reveals still queued never run, so those answers are never counted:
+  // a learner who answered 4 correctly was recorded with 3, and the XP and mark
+  // sheet followed the wrong number. battle_answers is the record of what was
+  // actually answered, so the final tally comes from there.
+  const { data: settle } = await db.from("battle_answers")
+    .select("participant_id, is_correct").eq("battle_id", battleId);
+  const tally = new Map();
+  for (const a of (settle ?? [])) {
+    const t = tally.get(a.participant_id) ?? { correct: 0, wrong: 0 };
+    a.is_correct ? t.correct++ : t.wrong++;
+    tally.set(a.participant_id, t);
+  }
+  const { data: preSeats } = await db.from("battle_participants")
+    .select("id, role").eq("battle_id", battleId);
+  for (const p of (preSeats ?? [])) {
+    if (p.role === "teacher") continue;
+    const t = tally.get(p.id) ?? { correct: 0, wrong: 0 };
+    await db.from("battle_participants")
+      .update({ score: t.correct, correct_answers: t.correct, wrong_answers: t.wrong })
+      .eq("id", p.id);
+  }
+
   const { data: seats } = await db.from("battle_participants")
     .select(`*, user_agents(agent_name, agent_emoji, agent_color)`)
     .eq("battle_id", battleId).order("score", { ascending: false }).order("hp", { ascending: false });
@@ -314,26 +469,36 @@ async function endBattle(battleId) {
   // Nobody noticed while the scoreboard was invisible to them.
   const participants = (seats ?? []).filter((p) => p.role !== "teacher");
 
-  // A REVIEW has no winner and no placing — dividing a prize pool by rank when
-  // there is one learner would hand them the winner's share for turning up, and
-  // "1st of 1" is not information. XP already earned per correct answer during
-  // the review stands; nothing is added for placing.
+  // A REVIEW has no OPPONENT, so nobody beat anybody — is_winner stays false.
+  // But the work is real and it counts: the learner earns from the same pool,
+  // scaled by how much of the paper they actually got right, and that XP flows
+  // to the leaderboard exactly as a battle's does. Paying a flat prize for
+  // turning up would make a review the cheapest XP on the platform; paying
+  // nothing would make it the only work that does not count.
   const isReview = battleInfo?.battle_type === "review";
 
-  const pool   = isReview ? 0
-               : battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool
+  const pool   = battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool
                : battleInfo?.xp_prize;
   const xpDist = isReview ? {} : computeXpDistribution(participants ?? [], pool ?? 0);
 
   for (let i = 0; i < (participants ?? []).length; i++) {
     const p = participants[i];
-    const xpEarned = xpDist[p.id] ?? 0;
+    const share = (p.correct_answers ?? 0) / Math.max(1, battleInfo?.total_questions ?? 0);
+    const xpEarned = isReview
+      ? Math.round((pool ?? 0) * Math.min(1, share))
+      : (xpDist[p.id] ?? 0);
+
     await db.from("battle_participants").update({
+      // A rank of 1 in a field of one is not a boast, but it IS what every
+      // "my battles" list and leaderboard join expects to find — leaving it
+      // null kept reviews out of the learner's own history.
       is_winner:  isReview ? false : i === 0,
-      final_rank: isReview ? null  : i + 1,
+      final_rank: i + 1,
       xp_earned:  xpEarned,
     }).eq("id", p.id);
-    if (xpEarned > 0) await creditXP(p.user_id, p.agent_id, xpEarned, "battle_win", battleId);
+    if (xpEarned > 0) {
+      await creditXP(p.user_id, p.agent_id, xpEarned, isReview ? "study_review" : "battle_win", battleId);
+    }
   }
 
   const winner   = participants?.[0];

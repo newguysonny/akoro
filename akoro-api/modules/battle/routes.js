@@ -930,7 +930,55 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  res200(res, (data ?? []).map((b) => toCard(b, { mine: b.created_by === req.user.id })));
+
+  // A finished battle's card wants to say who won and by what. toCard never
+  // carried any of it, so the learner app rendered its result line from three
+  // undefined fields: "undefined won · undefined–undefined". Load the finished
+  // ones' participants — one query for all of them — and attach the result.
+  const finished = (data ?? []).filter((b) => b.status === "completed").map((b) => b.id);
+  const resultByBattle = new Map();
+  if (finished.length) {
+    const { data: rows } = await db.from("battle_participants")
+      .select("battle_id, user_id, role, score, correct_answers, is_winner, final_rank, xp_earned, user_agents(agent_name, agent_emoji, agent_color)")
+      .in("battle_id", finished).order("final_rank");
+    for (const r of (rows ?? [])) {
+      if (r.role === "teacher") continue;                 // the host is not a result
+      const list = resultByBattle.get(r.battle_id) ?? [];
+      list.push(r);
+      resultByBattle.set(r.battle_id, list);
+    }
+  }
+
+  res200(res, (data ?? []).map((b) => {
+    const card = toCard(b, { mine: b.created_by === req.user.id });
+    const players = resultByBattle.get(b.id);
+    if (!players?.length) return card;
+
+    const asAgent = (p) => p && {
+      id:    p.user_id,
+      name:  p.user_agents?.agent_name ?? "Agent",
+      emoji: p.user_agents?.agent_emoji ?? "🤖",
+      color: p.user_agents?.agent_color ?? null,
+      score: p.score ?? 0,
+      isYou: p.user_id === req.user.id,
+    };
+    const mine = players.find((p) => p.user_id === req.user.id);
+
+    return {
+      ...card,
+      agentA: asAgent(players[0]),
+      agentB: asAgent(players[1]),
+      winner: players.find((p) => p.is_winner)?.user_id ?? null,
+      // A review has no winner — what it has is a mark. The card needs to be
+      // able to tell the difference rather than announcing a champion.
+      review: b.battle_type === "review" && mine
+        ? { correct: mine.correct_answers ?? 0, total: b.total_questions ?? 0 }
+        : null,
+      myScore:    mine?.score ?? null,
+      myRank:     mine?.final_rank ?? null,
+      myXpEarned: mine?.xp_earned ?? 0,
+    };
+  }));
 }));
 
 /**
@@ -1623,11 +1671,11 @@ router.post("/battles/:battleId/answer", authenticateToken, asyncHandler(async (
     xp_gained: xpGained, streak_at_time: newStreak,
   });
 
+  // Streaks only — revealQuestion owns the correct/wrong tally, and counting it
+  // here too double-counted every answer.
   await db.from("battle_participants").update({
-    current_streak:  newStreak,
-    max_streak:      Math.max(participant.max_streak ?? 0, newStreak),
-    correct_answers: (participant.correct_answers ?? 0) + (isCorrect ? 1 : 0),
-    wrong_answers:   (participant.wrong_answers ?? 0)   + (isCorrect ? 0 : 1),
+    current_streak: newStreak,
+    max_streak:     Math.max(participant.max_streak ?? 0, newStreak),
   }).eq("id", participant.id);
 
   // ── Update knowledge confidence ─────────────────────────────────────────

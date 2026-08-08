@@ -93,11 +93,38 @@ check('a wrong answer shows what they chose AND what was right',
 check('topics are broken down weakest first', Array.isArray(res.json?.byTopic),
   JSON.stringify(res.json?.byTopic ?? []).slice(0, 120));
 
-console.log('\n· Nobody won it');
+console.log('\n· It pays XP and counts toward the ranking');
+// A review is real work. Paying a flat prize for turning up would make it the
+// cheapest XP on the platform; paying nothing would make it the only work that
+// does not count. So: the pool, scaled by how much of the paper was right.
+const { rows: paid } = await sql.query(
+  `select p.xp_earned, p.final_rank, p.correct_answers, b.xp_prize, b.total_questions
+   from battle_participants p join battles b on b.id = p.battle_id
+   where p.battle_id = $1 and p.role <> 'teacher'`, [id]);
+const row = paid[0];
+const expectXp = Math.round(row.xp_prize * Math.min(1, row.correct_answers / row.total_questions));
+check('XP is proportional to the score', row.xp_earned === expectXp,
+  `earned ${row.xp_earned}, expected ${expectXp} (${row.correct_answers}/${row.total_questions} of ${row.xp_prize})`);
+check('it is ranked, so it shows in their history', row.final_rank === 1, `rank=${row.final_rank}`);
+
+// The ledger also carries a battle_correct row per right answer — that is the
+// existing per-question XP and is not what this checks.
+const { rows: ledger } = await sql.query(
+  `select amount, source from xp_ledger where reference_id = $1 and source = 'study_review'`, [id]);
+check('and it reaches the XP ledger the leaderboard reads',
+  ledger.length === 1 && ledger[0].amount === expectXp, JSON.stringify(ledger));
+
+check('the tally is not double-counted',
+  row.correct_answers <= row.total_questions,
+  `${row.correct_answers} correct out of ${row.total_questions} questions`);
+
+console.log('\n· But nobody WON it');
 const { rows: seats } = await sql.query(
   'select role, is_winner, final_rank from battle_participants where battle_id = $1', [id]);
 check('no winner flag anywhere', seats.every(s => !s.is_winner), JSON.stringify(seats));
-check('no ranking', seats.every(s => s.final_rank === null), JSON.stringify(seats));
+// Ranked, but not won — those are different claims, and only the second is
+// meaningless in a field of one.
+check('no winner is declared', seats.every(s => !s.is_winner), JSON.stringify(seats));
 
 await sql.end();
 score();

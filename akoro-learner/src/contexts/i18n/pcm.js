@@ -586,6 +586,8 @@ export const PCM = {
   'battles.vs':           'VS',
   'battles.started_ago':  '⏱ E start {min} mins ago',
   'battles.result':       '{winner} win · {a}–{b} · XP don share',
+  'battles.review_result': 'Review done · {correct} out of {total} correct',
+  'battles.your_score':    'Your score: {score}',
 
   /* ── Agent dynamic messages ── */
   'agent.greeting':       "Heyy {user}! 👋 Na me be {name} {emoji}, your personal learning agent.\n\nI fit help you create study sessions, quiz yourself, track your progress, or yarn about any topic. Wetin you wan do today?",

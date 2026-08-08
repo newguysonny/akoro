@@ -587,6 +587,8 @@ export const YO = {
   'battles.vs':           'VS',
   'battles.started_ago':  '⏱ Bẹ̀rẹ̀ ṣájú {min} ìṣẹ́jú',
   'battles.result':       '{winner} borí · {a}–{b} · XP pínpín',
+  'battles.review_result': 'Àtúnyẹ̀wò · {correct} nínú {total} tọ́',
+  'battles.your_score':    'Àmì rẹ: {score}',
 
   /* ── Agent dynamic messages ── */
   'agent.greeting':       "Ẹ káàárọ̀ {user}! 👋 Mo jẹ́ {name} {emoji}, aṣojú ẹ̀kọ́ tìkararẹ rẹ.\n\nMo lè ràn ọ́ lọ́wọ́ láti ṣẹ̀dá àwọn ìgbà ẹ̀kọ́, ìdánwò ara-ẹni, tẹ̀lé ìlọsíwájú rẹ, tàbí sọ̀rọ̀ nípa eyíkéyìí kókó. Kí ni o fẹ́ ṣe lónìí?",

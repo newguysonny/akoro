@@ -40,6 +40,36 @@ function ChallengeRow({ challenge, onTap }) {
 }
 
 
+/**
+ * The one line a finished battle gets.
+ *
+ * This used to be built from b.winner / b.agentA / b.agentB, none of which the
+ * API has ever sent — so every completed card read "undefined won ·
+ * undefined–undefined · XP distributed". They are sent now, but a card can
+ * still arrive before them (an older cached payload, a battle with no
+ * participants left), so nothing here assumes they exist: no data, no line.
+ */
+function resultLine(b, t) {
+  // A review has no winner. What it has is a mark.
+  if (b.review) {
+    return t('battles.review_result')
+      .replace('{correct}', b.review.correct)
+      .replace('{total}', b.review.total);
+  }
+  const A = b.agentA, B = b.agentB;
+  if (!A) return null;
+  const winner = b.winner === A.id ? A : b.winner === B?.id ? B : null;
+  if (!winner || !B) {
+    // Finished, but not as a duel we can narrate — show the learner their own
+    // score rather than inventing a scoreline.
+    return b.myScore != null ? t('battles.your_score').replace('{score}', b.myScore) : null;
+  }
+  return t('battles.result')
+    .replace('{winner}', winner.name)
+    .replace('{a}', A.score)
+    .replace('{b}', B.score);
+}
+
 function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
   const { t } = useLang();
   const [viewFilter, setViewFilter] = useState("active");
@@ -146,7 +176,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   {b.status==="scheduled"&&<span style={{ fontSize:10,color:BRAND,fontWeight:700 }}>🗓 {b.startsIn}</span>}
                   {b.status==="lobby"&&<span style={{ fontSize:10,color:GOLD,fontWeight:700 }}>⏳ Waiting for players to accept</span>}
                 </div>
-                {b.status==="completed"&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><span style={{ fontSize:14 }}>🏆</span><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{t('battles.result').replace('{winner}',b.winner===b.agentA?.id?b.agentA?.name:b.agentB?.name).replace('{a}',b.agentA?.score).replace('{b}',b.agentB?.score)}</span></div>)}
+                {b.status==="completed"&&resultLine(b,t)&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><span style={{ fontSize:14 }}>{b.review?"📋":"🏆"}</span><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{resultLine(b,t)}</span></div>)}
                 <div style={{ display:"flex",gap:7 }}>
                   {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📺</span>{t('battles.watch_live')}</button>}
                   {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>👁</span>{t('battles.preview')}</button>}

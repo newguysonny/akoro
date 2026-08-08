@@ -568,6 +568,8 @@ export const HA = {
   'battles.vs':           'VS',
   'battles.started_ago':  '⏱ An fara mintina {min} da suka wuce',
   'battles.result':       '{winner} ya ci · {a}–{b} · An raba XP',
+  'battles.review_result': 'An duba · {correct} daga {total} daidai',
+  'battles.your_score':    'Makinka: {score}',
 
   /* ── Agent dynamic messages ── */
   'agent.greeting':       "Sannu {user}! 👋 Ni ne {name} {emoji}, wakilin koyon kanka.\n\nZan iya taimaka maka ƙirƙira zaman karatu, gwada kanka, bin ci gaban ka, ko tattauna kowane batu. Me kake son yi yau?",

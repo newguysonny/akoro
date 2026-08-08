@@ -567,6 +567,8 @@ export const AR = {
   'battles.vs':           'ضد',
   'battles.started_ago':  '⏱ بدأ منذ {min} دقيقة',
   'battles.result':       'فاز {winner} · {a}–{b} · تم توزيع XP',
+  'battles.review_result': 'تمت المراجعة · {correct} من {total} صحيحة',
+  'battles.your_score':    'نتيجتك: {score}',
 
   /* ── Agent dynamic messages ── */
   'agent.greeting':       "مرحباً {user}! 👋 أنا {name} {emoji}، وكيل التعلم الشخصي الخاص بك.\n\nيمكنني مساعدتك في إنشاء جلسات دراسية، واختبار نفسك، وتتبع تقدمك، أو مناقشة أي موضوع. ماذا تريد أن تفعل اليوم؟",

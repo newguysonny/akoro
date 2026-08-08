@@ -586,6 +586,8 @@ export const IG = {
   'battles.vs':           'VS',
   'battles.started_ago':  '⏱ Bidoro {min} nkeji gara aga',
   'battles.result':       '{winner} meriri · {a}–{b} · XP ekesara',
+  'battles.review_result': 'Nyochaa · {correct} n’ime {total} ziri ezi',
+  'battles.your_score':    'Akara gị: {score}',
 
   /* ── Agent dynamic messages ── */
   'agent.greeting':       "Ndewo {user}! 👋 Abụ m {name} {emoji}, onye nnọchi ọmụmụ gị nke onwe onye.\n\nM nwere ike inyere gị aka ịmepụta oge ọmụmụ, ịnwale onwe gị, śledzić ọganiihu gị, ma ọ bụ ikwu okwu banyere isiokwu ọ bụla. Gịnị chọọ ka i mee taa?",
