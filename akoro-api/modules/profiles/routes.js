@@ -1531,6 +1531,90 @@ router.get("/directory/schools", authenticateToken, asyncHandler(async (req, res
 
 // GET /api/profiles/directory/teachers — instructors a learner can join.
 // Includes the school each teacher is approved into (for grouping).
+/**
+ * GET /api/profiles/onboarding-prefill
+ *
+ * What we already know about a learner their teacher added.
+ *
+ * A teacher who puts a learner in JSS1 has already told us their school, their
+ * year, their study level, the subjects they take and who teaches them. Asking
+ * the learner to type all of it again is asking them to guess at answers the
+ * system holds — and to get them subtly wrong ("JSS1" vs "JSS 1"), which then
+ * fails to match anything.
+ *
+ * So this returns the derived values for the form to fill in. It does NOT skip
+ * onboarding: the learner still sees every field, still names their agent, and
+ * can change anything. `source` says where each value came from so the UI can
+ * tell them, rather than silently pre-filling and hoping they notice.
+ *
+ * Empty object when they aren't in a class — a self-signing-up learner is
+ * unchanged.
+ */
+router.get("/onboarding-prefill", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: rows } = await db.from("classroom_students")
+    .select("classroom_id, classrooms!inner(id, name, teacher_id, school_id)")
+    .eq("user_id", req.user.id).eq("status", "active").limit(20);
+
+  const rooms = (rows ?? []).map((r) => r.classrooms).filter(Boolean);
+  if (!rooms.length) return res200(res, {});
+
+  // "JSS1", "JSS 1", "Primary 4", "SSS 2" → the level and the form's own label.
+  const readLevel = (name) => {
+    const m = String(name || "").trim().match(/^\s*(primary|pry|jss|js|sss|ss)\s*([0-9]+)/i);
+    if (!m) return null;
+    const kind = m[1].toLowerCase(), n = m[2];
+    if (kind === "primary" || kind === "pry") return { studyLevel: "Primary",          yearGroup: `Primary ${n}` };
+    if (kind === "jss" || kind === "js")      return { studyLevel: "Junior Secondary", yearGroup: `JSS ${n}` };
+    return { studyLevel: "Senior Secondary", yearGroup: `SSS ${n}` };
+  };
+
+  // A learner can be in several rooms — a real class like JSS1 alongside a
+  // catch-all like "Westwood Academy · Class A". Taking whichever came back
+  // first filled the form from the one that says nothing. Prefer the room that
+  // actually names a year, then one attached to a school.
+  const room = rooms.find((r) => readLevel(r.name) && r.school_id)
+            ?? rooms.find((r) => readLevel(r.name))
+            ?? rooms.find((r) => r.school_id)
+            ?? rooms[0];
+
+  const raw = String(room.name || "").trim();
+  const { studyLevel = null, yearGroup = null } = readLevel(raw) ?? {};
+
+  const [{ data: school }, { data: teacher }] = await Promise.all([
+    room.school_id
+      ? db.from("school_profiles").select("id, name").eq("id", room.school_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    room.teacher_id
+      ? db.from("users").select("id, full_name").eq("id", room.teacher_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  // Subjects come from the academic structure, which lines up with the room by
+  // school and name — there is no foreign key between them.
+  let subjects = [];
+  if (room.school_id) {
+    const { data: cls } = await db.schema("mgmt").from("classes")
+      .select("id").eq("school_id", room.school_id).ilike("name", raw).limit(1);
+    if (cls?.length) {
+      const { data: cs } = await db.schema("mgmt").from("class_subjects")
+        .select("subjects:subject_id(name)").eq("class_id", cls[0].id);
+      subjects = [...new Set((cs ?? []).map((r) => r.subjects?.name).filter(Boolean))];
+    }
+  }
+
+  res200(res, {
+    className:  raw,
+    yearGroup, studyLevel,
+    schoolName: school?.name ?? null,
+    teacherId:  teacher?.id ?? null,
+    teacherName: teacher?.full_name ?? null,
+    subjects,
+    source: school?.name
+      ? `your school, ${school.name}`
+      : teacher?.full_name ? `your teacher, ${teacher.full_name}` : "your class",
+  });
+}));
+
 router.get("/directory/teachers", authenticateToken, asyncHandler(async (req, res) => {
   const { data: teachers } = await db.from("users")
     .select("id, full_name, username, avatar_url").eq("role", "instructor").eq("is_active", true).order("full_name", { ascending: true }).limit(500);
