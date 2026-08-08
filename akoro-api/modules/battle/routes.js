@@ -712,11 +712,16 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   if (!opponents.length) return res400(res, "None of those classmates can battle yet — they need to be in this class and have an agent.");
 
   // ── Create ───────────────────────────────────────────────────────────────
-  // One opponent is a duel only between CLASSMATES. A teacher picking one
-  // learner is setting them work, not challenging them to a fight — so it stays
-  // a classroom battle that starts on its own rather than an invitation the
-  // teacher would have to wait for.
-  const isDuel      = myRole === "member" && opponents.length === 1;
+  // One opponent is a duel only between CLASSMATES: a classmate is IN the
+  // battle, so the two of them make a pair. A teacher hosts rather than
+  // competes, so a teacher picking one learner leaves that learner with nobody
+  // to face — and the battle sat in its lobby saying "waiting for players to
+  // accept" for ever, even after the one learner had accepted. Say so at the
+  // point of creation instead of building something that can never run.
+  const isDuel = myRole === "member" && opponents.length === 1;
+  if (!isDuel && opponents.length < 2) {
+    return res400(res, "A battle needs two learners to compete. Pick at least one more, or send it to the whole class.");
+  }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
   // acceptDeadline: unscheduled invitations do not expire.
@@ -1144,7 +1149,13 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   };
 
   // ── Create ───────────────────────────────────────────────────────────────
-  const isDuel      = opponents.length === 1;
+  // A learner challenging one person is a duel. An instructor is the host, not
+  // a competitor, so one opponent leaves nobody to compete against — the same
+  // dead end the class route had.
+  const isDuel = !isInstructor && opponents.length === 1;
+  if (!isDuel && opponents.length < 2) {
+    return res400(res, "A battle needs two learners to compete. Pick at least one more, or send it to the whole course.");
+  }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
   // A deadline only where there is a start time to be a deadline. See
   // acceptDeadline: unscheduled invitations do not expire.
@@ -1318,6 +1329,20 @@ async function maybeStartEarly(battle) {
   const players  = (all ?? []).filter((s) => s.role !== "teacher" && s.joined_at && !s.declined_at).length;
 
   const startsAt = battle.scheduled_start ? new Date(battle.scheduled_start).getTime() : null;
+
+  // Everyone answered, but there are not two of them left. Nothing more is
+  // coming — and an unscheduled battle has no deadline to end the wait — so it
+  // would sit on "waiting for players to accept" for ever. Close it, and say
+  // why, rather than leaving a dead battle in the list.
+  if (answered && players < 2 && !startsAt) {
+    await db.from("battles").update({ status: "cancelled" }).eq("id", battle.id);
+    await notifyUser(battle.created_by, "battle_cancelled",
+      `Battle cancelled: ${battle.title}`,
+      players ? "Only one learner accepted, so there was nobody to compete against."
+              : "Everyone invited declined.", battle.id);
+    return { started: false, cancelled: true, invited, players };
+  }
+
   // A scheduled battle keeps its time even when everyone is ready early — the
   // teacher picked that hour for a reason.
   if (!answered || players < 2 || (startsAt && startsAt > Date.now())) {
@@ -1424,7 +1449,9 @@ router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(
     // for either. Without this the battle sat in its lobby for the full invite
     // window while everyone who said yes waited on someone who had said no.
     const { data: battle } = await db.from("battles")
-      .select("id, scheduled_start").eq("id", p.battle_id).maybeSingle();
+      // title and created_by too: maybeStartEarly may now close the battle and
+      // has to name it in the notification it sends the creator.
+      .select("id, scheduled_start, title, created_by").eq("id", p.battle_id).maybeSingle();
     const { invited: seats } = await maybeStartEarly(battle);
     const accepted = seats.filter((s) => s.joined_at).length;
     // Nobody left to compete: cancel rather than run an empty battle at the

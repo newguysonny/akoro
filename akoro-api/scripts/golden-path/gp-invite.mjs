@@ -174,4 +174,26 @@ check('the teacher is not on the scoreboard',
     && !hbRes.json.scoreboard.some(p => p.userId === hbRes.json.battle?.created_by),
   (hbRes.json?.scoreboard ?? []).map(p => `${p.rank}:${p.username}`).join(' '));
 
+console.log('\n· A battle needs two competitors, and says so up front');
+// A teacher hosts rather than competes, so picking ONE learner leaves that
+// learner with nobody to face. The battle was created anyway and then sat on
+// "waiting for players to accept" for ever — the one learner had already
+// accepted, and an unscheduled battle has no deadline to end the wait.
+const solo = await call(teacher, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
+  title: 'Only one learner', subject: 'Mathematics',
+  total_questions: 10, question_source: 'bank', user_ids: [a.id],
+});
+check('a single-learner battle is refused, not left hanging',
+  solo.status === 400 && /two learners/.test(solo.json?.error ?? ''),
+  `${solo.status} ${solo.json?.error ?? ''}`);
+
+// But two classmates are still a duel — that pair IS two competitors.
+const pair = await call(learnerA, 'POST', `/api/battle/classes/${jss1.id}/battles/invite`, {
+  title: 'Still a duel', subject: 'Mathematics',
+  total_questions: 10, question_source: 'bank', user_ids: [b.id],
+});
+check('a classmate duel is untouched',
+  pair.status === 201 && pair.json?.data?.battle_type === '1v1',
+  `${pair.status} type=${pair.json?.data?.battle_type}`);
+
 score();
