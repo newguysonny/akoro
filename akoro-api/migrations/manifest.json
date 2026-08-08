@@ -102,7 +102,8 @@
     "2026-task-output-types-2.sql",
     "2026-class-battles.sql",
     "2026-battle-invitations.sql",
-    "2026-battle-open-invites.sql"
+    "2026-battle-open-invites.sql",
+    "2026-refresh-rotation-grace.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

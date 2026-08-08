@@ -65,19 +65,32 @@ function forgetExpiry() {
   try { localStorage.removeItem(EXP_KEY); } catch { /* private mode */ }
 }
 
-function refreshSession() {
+/**
+ * ONE refresh per tab, whoever asks.
+ *
+ * AuthContext used to POST /api/auth/refresh itself, on its own 13-minute
+ * timer, while this module did the same on a 401 — two in-flight requests
+ * carrying the SAME refresh cookie. Rotation spends a token on first use, so
+ * the loser presented a spent one, the server called it replay and revoked the
+ * whole family, and the user was signed out everywhere. Exporting this makes
+ * both paths share one promise, so a tab can no longer race itself.
+ *
+ * (Two TABS still can; the server's grace window covers that.)
+ */
+export function refreshSession() {
   if (!refreshing) {
     refreshing = fetch(`${API}/api/auth/refresh`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
       body: '{}',
     }).then(async (r) => {
-      if (r.ok) rememberExpiry(await r.json().catch(() => null));
+      const json = r.ok ? await r.json().catch(() => null) : null;
+      if (json) rememberExpiry(json);
       // The STATUS, not just ok/not-ok: a 429 or a 502 means we never got an
       // answer, and bouncing someone to /signin for that throws away a session
       // the server would still honour.
-      return { ok: r.ok, status: r.status };
-    }).catch(() => ({ ok: false, status: 0 }))
+      return { ok: r.ok, status: r.status, json };
+    }).catch(() => ({ ok: false, status: 0, json: null }))
       .finally(() => { refreshing = null; });
   }
   return refreshing;

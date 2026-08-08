@@ -130,7 +130,19 @@ function forgetExpiry() {
   try { localStorage.removeItem(EXP_KEY); } catch { /* private mode */ }
 }
 
-function refreshSession() {
+/**
+ * ONE refresh per tab, whoever asks.
+ *
+ * AuthContext used to POST /api/auth/refresh itself, on its own 13-minute
+ * timer, while this module did the same on a 401 — two in-flight requests
+ * carrying the SAME refresh cookie. Rotation spends a token on first use, so
+ * the loser presented a spent one, the server called it replay and revoked the
+ * whole family, and the user was signed out everywhere. Exporting this makes
+ * both paths share one promise, so a tab can no longer race itself.
+ *
+ * (Two TABS still can; the server's grace window covers that.)
+ */
+export function refreshSession() {
   if (!refreshing) {
     // A bearer session refreshes with the token in the body; a cookie session
     // refreshes with the cookie. /auth/refresh accepts either.

@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API, rememberExpiry } from '../services/api.js';
+import { API, rememberExpiry, refreshSession } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
@@ -100,24 +100,26 @@ export function AuthProvider({ children }) {
     finally { setLoading(false); }
   }, [saveUser]);
 
+  /**
+   * Delegates to services/api.js so there is exactly ONE refresh in flight per
+   * tab. This used to POST the endpoint itself, which meant this timer and the
+   * 401-retry path could both be carrying the same refresh cookie — and since
+   * rotation spends a token on first use, the loser looked like a replay and
+   * the server revoked every session the user had.
+   */
   const refresh = useCallback(async () => {
-    try {
-      const { data } = await authFetch('/api/auth/refresh', {});
-      if (data?.user) saveUser(data.user);
+    const r = await refreshSession();
+    if (r.ok) {
+      const u = r.json?.data?.user ?? r.json?.user;
+      if (u) saveUser(u);
       return true;
-    } catch (err) {
-      // Only a real REJECTION ends a session. The proactive refresh runs every
-      // 13 minutes, so treating any failure as fatal meant one dropped request,
-      // one 429, one 502, one laptop waking from sleep signed the teacher out
-      // mid-lesson — with a 30-day refresh cookie still sitting there, valid.
-      //
-      // 401/403 means the server looked and said no. Anything else — a network
-      // throw, a rate limit, a gateway error — means we simply didn't get an
-      // answer, and the session should survive until we do.
-      if (err?.status === 401 || err?.status === 403) { clearUser(); return false; }
-      console.warn('[auth] refresh could not complete, keeping the session:', err?.message);
-      return false;
     }
+    // Only a real REJECTION ends a session. A 429, a 502 or a dropped
+    // connection means we never got an answer — the 30-day refresh cookie is
+    // still valid and the next attempt should use it, so the session stays.
+    if (r.status === 401 || r.status === 403) { clearUser(); return false; }
+    console.warn(`[auth] refresh could not complete (status ${r.status}), keeping the session`);
+    return false;
   }, [saveUser, clearUser]);
 
   const logout = useCallback(async () => {

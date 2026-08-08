@@ -74,6 +74,17 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10);
 // therefore the "remember me for inactive users" window — default 30 days.
 const ACCESS_TTL_SECS  = Math.max(300,  parseInt(process.env.ACCESS_TTL_SECS  ?? String(15 * 60),        10)); // 15 min
 const REFRESH_TTL_SECS = Math.max(3600, parseInt(process.env.REFRESH_TTL_SECS ?? String(30 * 24 * 3600), 10)); // 30 days
+
+/**
+ * How long after a refresh token is spent a second use of it is still treated
+ * as the same client racing itself rather than as a stolen token.
+ *
+ * Long enough to cover a slow network round-trip and two tabs waking together;
+ * short enough that a token lifted from a device is useless by the time anyone
+ * could use it. 30 seconds. Set REFRESH_GRACE_SECS=0 to restore the old
+ * behaviour of revoking the family on any reuse.
+ */
+const REFRESH_GRACE_MS = Math.max(0, parseInt(process.env.REFRESH_GRACE_SECS ?? "30", 10)) * 1000;
 const ALLOWED_ALGS     = ["RS256"];       // whitelist — never HS256 / none
 
 // Fall back to HS256 with a secret in dev when no RSA keys provided
@@ -374,10 +385,15 @@ const RefreshStore = {
       return data;
     } catch { return null; }
   },
-  // Mark a token as used (to detect replay)
-  markUsed: async (jti) => {
-    try { await db.from("refresh_tokens").update({ used: true }).eq("jti", jti); }
-    catch { /* ignore */ }
+  // Mark a token as used, and record WHEN and by what it was replaced.
+  // The timestamp is what separates a concurrent refresh from a replayed
+  // token; without it every double-refresh looked like an attack.
+  markUsed: async (jti, replacedBy = null) => {
+    try {
+      await db.from("refresh_tokens")
+        .update({ used: true, used_at: new Date().toISOString(), replaced_by: replacedBy })
+        .eq("jti", jti);
+    } catch { /* ignore */ }
   },
   // Revoke entire family (replay attack detected)
   revokeFamily: async (family) => {
@@ -711,40 +727,73 @@ const authHandlers = {
   // POST /api/auth/refresh  — rotate refresh token
   refresh: asyncHandler(async (req, res) => {
     const portal = portalOf(req);
+    // Every 401 from here signs somebody out, and until now they were
+    // indistinguishable in the logs — "no cookie", "expired", "revoked family"
+    // and "user deactivated" all arrived as a bare 401. Name the reason so a
+    // logout reported from the field can be diagnosed from the logs instead of
+    // guessed at.
+    const deny = (reason, message, detail = {}) => {
+      console.warn("[auth/refresh] denied", JSON.stringify({
+        reason, portal,
+        cookies: Object.keys(req.cookies ?? {}).filter((k) => k.startsWith("akoro_")),
+        ua: (req.get("user-agent") ?? "").slice(0, 80),
+        ...detail,
+      }));
+      return res401(res, message);
+    };
     const refreshToken = req.cookies?.[refreshCookieName(portal)] || req.cookies?.akoro_refresh || req.body?.refreshToken;
-    if (!refreshToken) return res401(res, "Refresh token required");
+    if (!refreshToken) return deny("no_cookie", "Refresh token required");
 
     let decoded;
     try {
       decoded = verifyToken(refreshToken);
     } catch {
       clearAuthCookies(res, portal);
-      return res401(res, "Invalid or expired refresh token");
+      return deny("unverifiable", "Invalid or expired refresh token");
     }
 
-    if (decoded.type !== "refresh") return res401(res, "Not a refresh token");
+    if (decoded.type !== "refresh") return deny("wrong_type", "Not a refresh token");
 
     const stored = await RefreshStore.find(decoded.jti);
     if (!stored) {
       // Token not found — possible replay after expiry
       clearAuthCookies(res, portal);
-      return res401(res, "Refresh token not found");
+      return deny("not_in_store", "Refresh token not found", { jti: decoded.jti });
     }
 
     if (stored.used) {
-      // ⚠ REPLAY DETECTED — revoke entire family
-      await RefreshStore.revokeFamily(stored.family);
-      clearAuthCookies(res, portal);
-      return res401(res, "Refresh token reuse detected — all sessions revoked");
-    }
+      // Reuse of a spent token is either an attack or the app refreshing twice
+      // at once — and treating both as an attack is what was signing people
+      // out. The app races itself routinely: AuthContext's 13-minute timer and
+      // api.js's 401-retry dedupe separately, two tabs each run their own
+      // timer, and a retried request resends the same cookie. Each of those
+      // revoked the whole family and bounced the user to sign-in, on every
+      // device they owned.
+      //
+      // A token spent SECONDS ago by the legitimate holder is a race. A token
+      // spent long ago and presented again is theft. The window tells them
+      // apart. Tokens spent before used_at existed have NULL, which reads as
+      // long ago — strict behaviour, correctly.
+      const spentAt = stored.used_at ? new Date(stored.used_at).getTime() : 0;
+      const withinGrace = spentAt > 0 && Date.now() - spentAt <= REFRESH_GRACE_MS;
 
-    // Mark old token as used, then issue new pair
-    await RefreshStore.markUsed(decoded.jti);
+      if (!withinGrace) {
+        // ⚠ REPLAY DETECTED — revoke entire family
+        await RefreshStore.revokeFamily(stored.family);
+        clearAuthCookies(res, portal);
+        return deny("replay", "Refresh token reuse detected — all sessions revoked",
+          { jti: decoded.jti, family: stored.family, spentMsAgo: spentAt ? Date.now() - spentAt : null });
+      }
+      // Fall through: issue this caller a fresh token in the SAME family. The
+      // session survives, rotation continues, and the only thing given up is
+      // that two tokens in one family are briefly live — bounded by the window.
+      console.warn(`[auth] concurrent refresh for family ${stored.family} (${Date.now() - spentAt}ms apart) — issuing a new token rather than revoking`);
+    }
 
     const { data: user } = await db.from("users").select("*").eq("id", stored.user_id).maybeSingle();
     if (!user || !user.is_active) {
       clearAuthCookies(res, portal);
-      return res401(res, "User not found");
+      return deny("user_inactive", "User not found", { userId: stored.user_id });
     }
 
     // New refresh token inherits the same family
@@ -753,6 +802,10 @@ const authHandlers = {
     const newRefreshExp = Math.floor(Date.now() / 1000) + REFRESH_TTL_SECS;
 
     await RefreshStore.save(newRefreshJti, user.id, stored.family, newRefreshExp);
+    // Spend the old token only once the replacement exists, and name the
+    // replacement — so a crash between the two cannot leave a family with no
+    // live token, which would log the user out just as surely.
+    await RefreshStore.markUsed(decoded.jti, newRefreshJti);
     setAccessCookie(res, accessToken, portal);
     setRefreshCookie(res, newRefreshToken, portal);
     clearLegacyCookies(res);
