@@ -323,10 +323,29 @@ async function endBattle(battleId) {
 
 // ─── expire-battle ────────────────────────────────────────────────────────────
 
+/**
+ * The invite window closed. Only a battle that never got going is expired —
+ * the status filter means a live or finished battle is untouched, so this is an
+ * accept deadline, not a time limit on play.
+ *
+ * The guard below is belt and braces. The start job is queued to fire slightly
+ * BEFORE this one for exactly that reason, but if it were delayed, retried, or
+ * lost, expiring a battle that a class had already accepted would throw away
+ * real work. If there are enough players, start it instead.
+ */
 async function expireBattle(battleId) {
-  const { data } = await db.from("battles").update({ status: "expired" }).in("status", ["lobby", "scheduled"]).eq("id", battleId).select("id").single();
+  const { data: battle } = await db.from("battles").select("status").eq("id", battleId).maybeSingle();
+  if (!battle || !["lobby", "scheduled"].includes(battle.status)) return;
+
+  const { data: seats } = await db.from("battle_participants")
+    .select("role, joined_at, declined_at").eq("battle_id", battleId);
+  const players = (seats ?? []).filter((p) => p.role !== "teacher" && p.joined_at && !p.declined_at).length;
+  if (players >= 2) return startBattle(battleId);
+
+  const { data } = await db.from("battles").update({ status: "expired" })
+    .in("status", ["lobby", "scheduled"]).eq("id", battleId).select("id").maybeSingle();
   if (data) {
-    getIO().to(`battle:${battleId}`).emit("battle:log", { eventType: "system", message: "⏰ This battle expired before it could start.", timestamp: new Date().toLocaleTimeString() });
+    global.io?.to(`battle:${battleId}`).emit("battle:log", { eventType: "system", message: "⏰ This battle expired before it could start.", timestamp: new Date().toLocaleTimeString() });
   }
 }
 

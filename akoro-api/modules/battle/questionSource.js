@@ -27,7 +27,30 @@ import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
 import { chargeForAI, schoolBillTo, InsufficientCoins } from "../../lib/coins.js";
 
 /** One battle_questions row, however it was produced. */
-const row = (battleId, order, q) => ({
+/**
+ * perQuestionSeconds — turn the battle's Duration into a clock per question.
+ *
+ * The engine paces a battle by battle_questions.time_limit_seconds and NOTHING
+ * else; it never reads the battle's own time_limit_seconds. That was hardcoded
+ * to 15 here, so the Duration field on the create form changed nothing at all:
+ * every battle ran at 15 seconds a question, and a teacher who asked for 15
+ * minutes over 15 questions got a battle that was over in under four.
+ *
+ * Duration is now what it looks like — the time the whole battle should take,
+ * shared out across its questions.
+ *
+ * Floors at 8s because below that a learner cannot read the stem, let alone
+ * think; caps at 180s so a mistyped duration can't leave a class watching one
+ * question for an hour. Falls back to 15s when there is nothing to divide.
+ */
+export function perQuestionSeconds(totalSeconds, questionCount) {
+  const total = Number(totalSeconds);
+  const count = Number(questionCount);
+  if (!Number.isFinite(total) || !Number.isFinite(count) || total <= 0 || count <= 0) return 15;
+  return Math.min(180, Math.max(8, Math.floor(total / count)));
+}
+
+const row = (battleId, order, q, seconds = 15) => ({
   battle_id:            battleId,
   question_order:       order,
   question_text:        q.stem,
@@ -35,7 +58,7 @@ const row = (battleId, order, q) => ({
   correct_answer_index: q.correctIndex,
   topic:                q.topic || null,
   xp_value:             q.xp ?? 35,
-  time_limit_seconds:   15,
+  time_limit_seconds:   seconds,
 });
 
 /**
@@ -235,6 +258,10 @@ export async function buildQuestions({
   battleId, source = "auto", total = 15,
   subject, topic, difficulty = "intermediate", classLabel,
   courseId = null, userId,
+  // The battle's Duration. Divided across however many questions actually get
+  // placed — not across `total`, because a battle that could only be filled
+  // with 9 of 15 questions still has the whole duration to spend.
+  durationSeconds = null,
 }) {
   const bankOf = courseId
     ? () => fromCourseBank({ courseId, topic, subject, difficulty, limit: total })
@@ -273,8 +300,14 @@ export async function buildQuestions({
   }
 
   questions = questions.slice(0, total);
+  const secs = perQuestionSeconds(durationSeconds, questions.length);
   if (questions.length) {
-    await db.from("battle_questions").insert(questions.map((q, i) => row(battleId, i + 1, q)));
+    await db.from("battle_questions").insert(questions.map((q, i) => row(battleId, i + 1, q, secs)));
   }
-  return { placed: questions.length, fromBank: questions.length - generated, generated, charged };
+  return {
+    placed: questions.length, fromBank: questions.length - generated, generated, charged,
+    // So the caller can correct the battle's stored duration when fewer
+    // questions were placed than asked for, and report the real pace.
+    secondsPerQuestion: secs,
+  };
 }

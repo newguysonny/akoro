@@ -53,7 +53,7 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
-import { buildQuestions } from "./questionSource.js";
+import { buildQuestions, perQuestionSeconds } from "./questionSource.js";
 import { InsufficientCoins } from "../../lib/coins.js";
 
 // ─── Lazy-load battle queue ───────────────────────────────────────────────────
@@ -107,6 +107,20 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 const now = () => new Date().toISOString();
 
+/**
+ * How far BEFORE the invite window closes a waiting battle starts.
+ *
+ * The invite window does two things at the same instant: it is when the battle
+ * gives up waiting and runs with whoever accepted, and it is when expire-battle
+ * marks an unstarted battle 'expired'. Queued at the identical timestamp, those
+ * two jobs raced — and if expire won, a battle three learners had accepted was
+ * declared expired instead of being played.
+ *
+ * Ten seconds is enough to order them deterministically without being a delay
+ * anybody notices.
+ */
+const START_BEFORE_EXPIRY_MS = 10_000;
+
 async function isEligible(userId, courseId) {
   const { data: course } = await db.from("courses").select("instructor_id").eq("id", courseId).single();
   if (!course) return { eligible: false, isInstructor: false, course: null };
@@ -150,7 +164,7 @@ async function notifyUser(userId, type, title, content, relatedId) {
   global.io?.to(`user:${userId}`).emit("notification", { type, title, content, relatedId });
 }
 
-async function assignQuestions(battleId, courseId, topic, subject, difficulty, total) {
+async function assignQuestions(battleId, courseId, topic, subject, difficulty, total, durationSeconds = null) {
   let query = db.from("question_bank").select("*")
     .eq("course_id", courseId).eq("is_active", true).eq("difficulty", difficulty ?? "intermediate");
   if (topic)   query = query.eq("topic", topic);
@@ -175,7 +189,10 @@ async function assignQuestions(battleId, courseId, topic, subject, difficulty, t
       battle_id: battleId, question_order: i + 1,
       question_text: q.question_text, options_json: q.options_json,
       correct_answer_index: q.correct_answer_index,
-      topic: q.topic, xp_value: q.xp_value, time_limit_seconds: 15,
+      // The battle's Duration, shared across the questions — this was a hard 15
+      // regardless of what the creator asked for.
+      topic: q.topic, xp_value: q.xp_value,
+      time_limit_seconds: perQuestionSeconds(durationSeconds, picked.length),
     });
     try { await db.rpc("increment_question_uses", { q_id: q.id }); } catch {}
   }
@@ -309,7 +326,7 @@ router.post("/courses/:courseId/battles/challenge", authenticateToken, asyncHand
     { battle_id: battle.id, user_id: opponent_id,  agent_id: oppAgent.id, role: "opponent" },
   ]);
 
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions);
+  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
@@ -385,7 +402,7 @@ router.post("/courses/:courseId/battles/open", authenticateToken, asyncHandler(a
     battle_id: battle.id, user_id: req.user.id, agent_id: myAgent.id, role: "creator", joined_at: now(),
   });
 
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions);
+  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
@@ -454,7 +471,7 @@ router.post("/courses/:courseId/battles/classroom", authenticateToken, requireRo
   }
 
   await db.from("battles").update({ total_participants: (students?.length ?? 0) + 1 }).eq("id", battle.id);
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions);
+  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id },
@@ -685,6 +702,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     fill = await buildQuestions({
       battleId: battle.id, source: question_source, total: total_questions,
       subject, topic, difficulty, classLabel: room?.name, userId: req.user.id,
+      durationSeconds: time_limit_seconds,
     });
   } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);
@@ -701,8 +719,18 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
       ? `Only ${fill.placed} ${subject} questions in the bank. Switch Questions to "Generate with AI" to fill the rest.`
       : `Could not put together enough ${subject} questions (got ${fill.placed}). Try a different subject or topic.`);
   }
-  if (fill.placed < total_questions) {
-    await db.from("battles").update({ total_questions: fill.placed }).eq("id", battle.id);
+  // Keep the stored duration honest. The QUESTIONS carry the real clock, so the
+  // battle's length is however many were placed times their per-question
+  // budget. It can differ from what was typed in two ways: fewer questions than
+  // asked for, or a per-question share clamped into the 8–180s range — a
+  // teacher asking for 1 minute over 30 questions gets 8s each, so the battle
+  // takes four minutes, and the card must say four rather than one.
+  const realLength = fill.placed * fill.secondsPerQuestion;
+  if (fill.placed < total_questions || realLength !== time_limit_seconds) {
+    await db.from("battles").update({
+      total_questions:    fill.placed,
+      time_limit_seconds: realLength,
+    }).eq("id", battle.id);
   }
 
   await db.from("battle_participants").insert({
@@ -735,7 +763,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     // a class that all accepts within a minute battles within a minute.
     const delay = isScheduled
       ? new Date(scheduled_for).getTime() - Date.now()
-      : new Date(expiresAt).getTime() - Date.now();
+      : new Date(expiresAt).getTime() - Date.now() - START_BEFORE_EXPIRY_MS;
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: Math.max(0, delay), jobId: `start-${battle.id}` });
   }
@@ -1104,6 +1132,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
     fill = await buildQuestions({
       battleId: battle.id, source: question_source, total: total_questions,
       courseId, subject: subject || topic || "General", topic, difficulty, userId: req.user.id,
+      durationSeconds: time_limit_seconds,
     });
   } catch (e) {
     await db.from("battles").delete().eq("id", battle.id);
@@ -1120,8 +1149,18 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
       ? `Only ${fill.placed} questions in this course's bank. Switch Questions to "Generate with AI" to fill the rest.`
       : `Could not put together enough questions (got ${fill.placed}). Try a different topic.`);
   }
-  if (fill.placed < total_questions) {
-    await db.from("battles").update({ total_questions: fill.placed }).eq("id", battle.id);
+  // Keep the stored duration honest. The QUESTIONS carry the real clock, so the
+  // battle's length is however many were placed times their per-question
+  // budget. It can differ from what was typed in two ways: fewer questions than
+  // asked for, or a per-question share clamped into the 8–180s range — a
+  // teacher asking for 1 minute over 30 questions gets 8s each, so the battle
+  // takes four minutes, and the card must say four rather than one.
+  const realLength = fill.placed * fill.secondsPerQuestion;
+  if (fill.placed < total_questions || realLength !== time_limit_seconds) {
+    await db.from("battles").update({
+      total_questions:    fill.placed,
+      time_limit_seconds: realLength,
+    }).eq("id", battle.id);
   }
 
   const q = await getBattleQueue();
@@ -1133,7 +1172,7 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
   if (!isDuel) {
     const delay = isScheduled
       ? new Date(scheduled_for).getTime() - Date.now()
-      : new Date(expiresAt).getTime() - Date.now();
+      : new Date(expiresAt).getTime() - Date.now() - START_BEFORE_EXPIRY_MS;
     await q.add("start-battle", { action: "start-battle", battleId: battle.id },
       { delay: Math.max(0, delay), jobId: `start-${battle.id}` });
   }
@@ -1937,7 +1976,7 @@ router.post("/courses/:courseId/battles/session", authenticateToken, requireRole
   }
 
   await db.from("battles").update({ total_participants: (students?.length ?? 0) + 1 }).eq("id", battle.id);
-  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions);
+  await assignQuestions(battle.id, courseId, topic, subject, difficulty, total_questions, time_limit_seconds);
 
   const q = await getBattleQueue();
   await q.add("expire-battle", { action: "expire-battle", battleId: battle.id }, { delay: new Date(expiresAt).getTime() - Date.now() });

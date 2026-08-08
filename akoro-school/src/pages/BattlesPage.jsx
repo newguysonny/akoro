@@ -191,6 +191,20 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           <Inp label="Duration (min)" type="number" min="1" value={form.duration} onChange={e => setField('duration', e.target.value)} />
           <Inp label="XP prize" type="number" min="0" value={form.xpPrize} onChange={e => setField('xpPrize', e.target.value)} />
         </div>
+        {/* Duration is shared across the questions, so say what each one gets.
+            The number on its own told a teacher nothing — and until now it did
+            nothing either: every battle ran at a hard 15 seconds a question
+            whatever was typed here. */}
+        <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT, marginTop: -6 }}>
+          {(() => {
+            const q = parseInt(form.totalQuestions, 10);
+            const m = parseInt(form.duration, 10);
+            if (!q || !m) return 'Duration is shared across the questions.';
+            const secs = Math.min(180, Math.max(8, Math.floor((m * 60) / q)));
+            const clamped = secs !== Math.floor((m * 60) / q);
+            return `≈ ${secs}s per question${clamped ? ' (clamped to the 8–180s range)' : ''}`;
+          })()}
+        </div>
 
         {!editing && (
           <div>
