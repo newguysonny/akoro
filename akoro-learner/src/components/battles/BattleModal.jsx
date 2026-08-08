@@ -418,8 +418,57 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
 
               {isLive && !question && <div style={{ ...panel, textAlign: 'center', color: 'rgba(255,255,255,.4)', fontSize: 12.5 }}>Next question loading…</div>}
 
+              {/* Review result — a review has no winner, so the panel below
+                  rendered nothing at all for one: a finished review showed no
+                  score and no XP, just an empty arena. */}
+              {isCompleted && isReview && results?.type === 'review' && (
+                <div style={{ ...panel, textAlign: 'center' }}>
+                  <div style={{ fontSize: 34 }}>📋</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 4 }}>
+                    {results.score?.correct} of {results.score?.total} correct
+                  </div>
+                  <div style={{
+                    fontSize: 26, fontWeight: 900, marginTop: 2,
+                    color: (results.score?.percent ?? 0) >= 50 ? '#4ADE80' : '#F87171',
+                  }}>{results.score?.percent}%</div>
+                  {(results.score?.unanswered > 0) && (
+                    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', marginTop: 3 }}>
+                      {results.score.unanswered} not answered in time
+                    </div>
+                  )}
+                  {results.battle?.duration_formatted && (
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 2 }}>
+                      Duration {results.battle.duration_formatted}
+                    </div>
+                  )}
+                  {/* The per-question XP the agent earned along the way, plus
+                      what the review paid at the end — one number, because a
+                      learner does not care which half it came from. */}
+                  {(myXp + (results.learner?.xpEarned ?? 0)) > 0 && (
+                    <div style={{ display: 'inline-block', marginTop: 8, padding: '4px 14px', borderRadius: 20, background: 'rgba(232,136,74,.20)', color: '#E8884A', fontWeight: 800, fontSize: 13 }}>
+                      +{myXp + (results.learner?.xpEarned ?? 0)} XP earned
+                    </div>
+                  )}
+                  {/* Weakest topics first — the one thing a learner can act on. */}
+                  {results.byTopic?.length > 1 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 12 }}>
+                      {results.byTopic.slice(0, 4).map(t => (
+                        <span key={t.topic} style={{
+                          fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+                          background: t.percent >= 50 ? 'rgba(16,185,129,.16)' : 'rgba(239,68,68,.14)',
+                          color: t.percent >= 50 ? '#6EF7C8' : '#FCA5A5',
+                        }}>{t.topic} {t.correct}/{t.total}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 10 }}>
+                    Every question is in the Questions tab
+                  </div>
+                </div>
+              )}
+
               {/* Winner */}
-              {isCompleted && winner && (
+              {isCompleted && winner && !isReview && (
                 <div style={{ ...panel, textAlign: 'center' }}>
                   <TrophyIcon size={38} color={GOLD} />
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>{winner.agentName} wins!</div>

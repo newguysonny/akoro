@@ -526,12 +526,21 @@ async function endBattle(battleId) {
   );
 
   getIO().to(`battle:${battleId}`).emit("battle:over", {
-    winner: { userId: winner?.user_id, agentName: winner?.user_agents?.agent_name, agentEmoji: winner?.user_agents?.agent_emoji, score: winner?.score, xpEarned: xpDist[winner?.id] },
+    // No winner in a review — sending participants[0] as one would have the
+    // arena announce "X wins!" for a solo paper the moment it finished, before
+    // the mark sheet arrived to say otherwise.
+    winner: isReview ? null : { userId: winner?.user_id, agentName: winner?.user_agents?.agent_name, agentEmoji: winner?.user_agents?.agent_emoji, score: winner?.score, xpEarned: xpDist[winner?.id] },
     finalScores: (participants ?? []).map((p, i) => ({
       rank: i + 1, userId: p.user_id, agentName: p.user_agents?.agent_name,
       agentEmoji: p.user_agents?.agent_emoji, score: p.score, hp: p.hp, xpEarned: xpDist[p.id] ?? 0,
     })),
     durationSeconds: durSecs, durationFormatted: `${mm}:${ss}`,
+    // So the arena can switch to the mark-sheet panel without waiting for the
+    // results fetch to tell it what kind of battle it was watching.
+    battleType: battleInfo?.battle_type ?? null,
+    reviewScore: isReview
+      ? { correct: winner?.score ?? 0, total: battleInfo?.total_questions ?? 0 }
+      : null,
   });
 
   await battleQueue.add("refresh-leaderboard", { action: "refresh-leaderboard", courseId: battleInfo?.course_id, scope: "classroom" }, { delay: 2000 });

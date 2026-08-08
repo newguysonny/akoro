@@ -1819,6 +1819,10 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
         userId: learner.userId, username: learner.username,
         fullName: (participants ?? []).find((p) => p.user_id === learner.userId)?.users?.full_name ?? null,
         agentName: learner.agentName, agentEmoji: learner.agentEmoji,
+        // What the review actually paid. A completed review had no result panel
+        // at all — no winner means the battle panel rendered nothing — so the
+        // learner saw a finished review and no idea what they got for it.
+        xpEarned: seat?.xp_earned ?? 0,
       },
       score: {
         correct, total,

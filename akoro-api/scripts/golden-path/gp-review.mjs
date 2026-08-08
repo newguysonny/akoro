@@ -105,6 +105,18 @@ check('a wrong answer shows what they chose AND what was right',
 check('topics are broken down weakest first', Array.isArray(res.json?.byTopic),
   JSON.stringify(res.json?.byTopic ?? []).slice(0, 120));
 
+console.log('\n· The learner gets a result panel — a review had none at all');
+// The arena's completion panel keys off a winner, and a review has none, so a
+// finished review showed an empty arena: no score, no XP, nothing.
+check('the result names the learner and what they earned',
+  res.json?.learner?.fullName && Number.isFinite(res.json?.learner?.xpEarned),
+  `${res.json?.learner?.fullName} · ${res.json?.learner?.xpEarned} XP`);
+check('and carries a score the panel can show',
+  Number.isFinite(res.json?.score?.percent) && Number.isFinite(res.json?.score?.correct),
+  JSON.stringify(res.json?.score));
+check('with a duration', !!res.json?.battle?.duration_formatted,
+  res.json?.battle?.duration_formatted);
+
 console.log('\n· It pays XP and counts toward the ranking');
 // A review is real work. Paying a flat prize for turning up would make it the
 // cheapest XP on the platform; paying nothing would make it the only work that
