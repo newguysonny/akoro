@@ -97,11 +97,57 @@ async function creditXP(userId, agentId, amount, source, referenceId) {
 // ─── start-battle ─────────────────────────────────────────────────────────────
 
 async function startBattle(battleId) {
-  await db.from("battles").update({ status: "live", actual_start: now() }).eq("id", battleId);
-  const { data: battle } = await db.from("battles").select("title, battle_type").eq("id", battleId).single();
-  const { data: participants } = await db.from("battle_participants")
-    .select(`user_id, role, user_agents(agent_name, agent_emoji, agent_color, agent_bg)`)
+  const { data: battle } = await db.from("battles")
+    .select("title, battle_type, status, created_by").eq("id", battleId).single();
+  // The invite window may have closed on a cancelled or already-finished
+  // battle; starting one of those would resurrect it.
+  if (!battle || !["lobby", "scheduled"].includes(battle.status)) return;
+
+  const { data: seats } = await db.from("battle_participants")
+    .select(`user_id, role, joined_at, declined_at, user_agents(agent_name, agent_emoji, agent_color, agent_bg)`)
     .eq("battle_id", battleId);
+
+  // Only those who actually took their seat compete. A teacher's battle is now
+  // an invitation, so at start time some of the invited may never have answered
+  // — running them anyway would score learners on a battle they never agreed
+  // to and never saw. They are dropped, not failed.
+  const runners  = (seats ?? []).filter((p) => p.role === "teacher");
+  const competing = (seats ?? []).filter((p) => p.role !== "teacher" && p.joined_at && !p.declined_at);
+
+  if (competing.length < 2) {
+    await db.from("battles").update({ status: "cancelled" }).eq("id", battleId);
+    if (battle.created_by) {
+      // `content`, not `message` — the column is content, and PostgREST accepts
+      // the insert regardless, so a wrong key here loses the notification in
+      // silence rather than erroring.
+      await db.from("notifications").insert({
+        user_id: battle.created_by, type: "battle_cancelled",
+        title:   `Battle cancelled: ${battle.title}`,
+        content: competing.length
+          ? "Only one learner accepted, so there was nobody to compete against."
+          : "Nobody accepted the invitation before it expired.",
+        related_id: battleId,
+      });
+    }
+    // The battle is already cancelled and the teacher already told; a missing
+    // socket must not throw here and have the job retried against a battle
+    // that is no longer in a startable state.
+    global.io?.to(`battle:${battleId}`).emit("battle:cancelled", { battleId, reason: "not_enough_players" });
+    return;
+  }
+
+  // Clear out the seats nobody claimed so results, ranks and the XP split are
+  // computed over the people who actually played.
+  const dropped = (seats ?? []).filter(
+    (p) => p.role !== "teacher" && !competing.includes(p));
+  for (const p of dropped) {
+    await db.from("battle_participants").delete().eq("battle_id", battleId).eq("user_id", p.user_id);
+  }
+
+  const participants = [...runners, ...competing];
+  await db.from("battles").update({
+    status: "live", actual_start: now(), total_participants: participants.length,
+  }).eq("id", battleId);
 
   for (const p of (participants ?? [])) {
     await db.from("battle_viewers").upsert({ battle_id: battleId, user_id: p.user_id, is_participant: true }, { onConflict: "battle_id,user_id" });

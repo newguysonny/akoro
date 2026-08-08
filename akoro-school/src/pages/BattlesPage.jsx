@@ -261,8 +261,91 @@ function DiffBadge({ difficulty }) {
   return <Badge color={cfg.color} bg={cfg.bg}>{cfg.label}</Badge>;
 }
 
+/* ── Participants drawer ────────────────────────────────────────────────── */
+/**
+ * Who was invited, who accepted, who declined, and — once it has run — how they
+ * did. The card only ever showed a participant COUNT, which for an invitation
+ * is the wrong number: it counts seats, not people who agreed to sit in them.
+ * Same shape as the Self Study drawer, deliberately.
+ */
+function ParticipantsModal({ open, onClose, battleId }) {
+  const [data,  setData]  = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open || !battleId) { setData(null); setError(null); return; }
+    let live = true;
+    apiGet(`/api/battle/battles/${battleId}/participants`)
+      .then(d => { if (live) setData(d?.data ?? null); })
+      .catch(e => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [open, battleId]);
+
+  const STATE = {
+    accepted: { color: GREEN, bg: '#DCFCE7', label: 'Accepted' },
+    declined: { color: RED,   bg: '#FEE2E2', label: 'Declined' },
+    invited:  { color: MUTED, bg: LIGHT,     label: 'No answer yet' },
+  };
+  const s = data?.summary;
+  const ran = data && ['live', 'completed'].includes(data.status);
+
+  return (
+    <Modal open={open} onClose={onClose} title={data?.title || 'Participants'} width={500}>
+      {error ? (
+        <div style={{ fontSize: 13, color: RED, fontFamily: FONT, padding: '10px 0' }}>{error}</div>
+      ) : !data ? (
+        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
+      ) : (
+        <div style={{ fontFamily: FONT }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+            <Badge color={GREEN} bg="#DCFCE7">{s.accepted} accepted</Badge>
+            {s.pending  > 0 && <Badge color={MUTED} bg={LIGHT}>{s.pending} not answered</Badge>}
+            {s.declined > 0 && <Badge color={RED} bg="#FEE2E2">{s.declined} declined</Badge>}
+            <Badge color={BLUE} bg="#EFF6FF">{s.invited} invited</Badge>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
+            {data.participants.filter(p => p.role !== 'teacher').map(p => {
+              const st = STATE[p.state] || STATE.invited;
+              return (
+                <div key={p.userId} style={{
+                  display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px',
+                  border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE,
+                }}>
+                  <span style={{ fontSize: 16 }}>{p.emoji || '🧑‍🎓'}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
+                      {p.fullName}{p.isWinner && <span title="Winner"> 🏆</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: MUTED }}>@{p.username}</div>
+                  </div>
+                  {/* Once it has run, the score IS the status — showing
+                      "Accepted" next to a finished battle says nothing. */}
+                  {ran && p.state === 'accepted'
+                    ? <Badge color={PURPLE} bg={`${PURPLE}14`}>{p.score} pts · {p.correct}✓</Badge>
+                    : <Badge color={st.color} bg={st.bg}>{st.label}</Badge>}
+                </div>
+              );
+            })}
+            {s.invited === 0 && (
+              <div style={{ fontSize: 12, color: MUTED, padding: '10px 0' }}>Nobody was invited to this battle.</div>
+            )}
+          </div>
+
+          {s.pending > 0 && !ran && (
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 12, lineHeight: 1.5 }}>
+              Learners who never answer are left out when the battle starts — they are not
+              scored for it.
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /* ── Battle Card ────────────────────────────────────────────────────────── */
-function BattleCard({ battle, onStart, onEdit, onDelete }) {
+function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants }) {
   const isLive     = battle.status === 'live';
   const isFinished = ['completed', 'cancelled', 'expired'].includes(battle.status);
   const editable   = !['live', 'completed'].includes(battle.status) && battle.mine;
@@ -305,7 +388,14 @@ function BattleCard({ battle, onStart, onEdit, onDelete }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
         <StatusPill status={battle.status} />
         <DiffBadge difficulty={battle.difficulty} />
-        <Badge color={BLUE} bg="#EFF6FF"><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</Badge>
+        <button
+          type="button"
+          onClick={() => onViewParticipants(battle)}
+          title="View participants"
+          style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
+        >
+          <Badge color={BLUE} bg="#EFF6FF"><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</Badge>
+        </button>
         <Badge color={MUTED} bg={LIGHT}><Clock size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>
         <Badge color={AMBER} bg="#FFF7ED"><Zap size={10} style={{ marginRight: 2 }} />{battle.xpPool} XP</Badge>
       </div>
@@ -326,6 +416,7 @@ function BattleCard({ battle, onStart, onEdit, onDelete }) {
           >
             {isLive ? <><Target size={14} /> In Progress</> : <><Play size={14} /> Start Now</>}
           </Btn>
+          <Btn size="sm" variant="secondary" onClick={() => onViewParticipants(battle)} title="View participants"><Users size={13} /></Btn>
           {editable && (
             <>
               <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>
@@ -337,10 +428,18 @@ function BattleCard({ battle, onStart, onEdit, onDelete }) {
 
       {isFinished && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED, fontFamily: FONT }}>
+          <button
+            type="button"
+            onClick={() => onViewParticipants(battle)}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12,
+              color: MUTED, fontFamily: FONT, background: 'none', border: 'none',
+              padding: 0, cursor: 'pointer', textAlign: 'left',
+            }}
+          >
             <Trophy size={14} color={AMBER} />
-            {battle.participantCount} participants
-          </div>
+            {battle.participantCount} participants — see results
+          </button>
           {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>}
           {deletable && <Btn size="sm" variant="secondary" onClick={() => onDelete(battle)} title="Delete"><Trash2 size={13} /></Btn>}
         </div>
@@ -360,6 +459,7 @@ export default function BattlesPage() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal,   setModal]   = useState(false);
+  const [viewing, setViewing] = useState(null);   // battle id whose roster is open
   const [editing, setEditing] = useState(null);
   const [toast,   setToast]   = useState(null);
   const [filter,  setFilter]  = useState('all');
@@ -558,11 +658,13 @@ export default function BattlesPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {filtered.map(b => (
-            <BattleCard key={b.id} battle={b} onStart={handleStart} onEdit={openEdit} onDelete={handleDelete} />
+            <BattleCard key={b.id} battle={b} onStart={handleStart} onEdit={openEdit}
+                        onDelete={handleDelete} onViewParticipants={(x) => setViewing(x.id)} />
           ))}
         </div>
       )}
 
+      <ParticipantsModal open={!!viewing} onClose={() => setViewing(null)} battleId={viewing} />
       <BattleModal
         open={modal}
         onClose={() => { setModal(false); setEditing(null); }}

@@ -368,12 +368,18 @@ export default function LearnerDashboard() {
       if (status === 'live') {
         setLiveBattleModal(battle);
         setToast(`⚡ Challenge accepted — the battle is starting!`);
+      } else if (r.invited > 1) {
+        // A class battle set by a teacher: accepting takes your seat, it does
+        // not start the battle. Saying "starting!" here would send the learner
+        // looking for a battle that is still waiting on their classmates.
+        setToast(`✅ You're in — ${r.accepted} of ${r.invited} accepted so far.`);
       } else {
         setToast(`🗓 Battle scheduled — find it in Battles › Scheduled.`);
       }
     } catch (e) {
       setAcceptedIds(prev => { const n = new Set(prev); n.delete(c.id); return n; });
-      setToast('Could not accept the challenge. Please retry.');
+      // The server says WHY — expired, already resolved, not your challenge.
+      setToast(e?.message || 'Could not accept the challenge. Please retry.');
     }
   };
 
