@@ -144,14 +144,16 @@ function refreshSession() {
       body: rt ? JSON.stringify({ refreshToken: rt }) : '{}',
     })
       .then(async (r) => {
-        if (!r.ok) return false;
-        if (rt) {
-          const j = await r.json().catch(() => ({}));
-          if (j.accessToken) setSiteTokens({ accessToken: j.accessToken, refreshToken: j.refreshToken || rt });
-        }
-        return true;
+        // The STATUS, not just ok/not-ok: a 429 or a 502 means we never got an
+        // answer, and bouncing someone to /signin for that throws away a session
+        // the server would still honour.
+        if (!r.ok) return { ok: false, status: r.status };
+        const j = await r.json().catch(() => ({}));
+        if (rt && j.accessToken) setSiteTokens({ accessToken: j.accessToken, refreshToken: j.refreshToken || rt });
+        rememberExpiry(j);
+        return { ok: true, status: r.status };
       })
-      .catch(() => false)
+      .catch(() => ({ ok: false, status: 0 }))
       .finally(() => { refreshing = null; });
   }
   return refreshing;
@@ -203,8 +205,14 @@ async function authedFetch(url, opts) {
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
-  const ok = await refreshSession();
-  if (!ok) { endSession(); return res; }
+  const r2 = await refreshSession();
+  // Only end the session when the server actually rejected the refresh. A
+  // network drop, a rate limit or a gateway error leaves a valid refresh cookie
+  // in place — retrying later is right; signing out is not.
+  if (!r2.ok) {
+    if (r2.status === 401 || r2.status === 403) endSession();
+    return res;
+  }
   try { return await fetch(url, withAuth(opts)); }
   catch (e) {
     reportConnection(false, typeof navigator !== 'undefined' && navigator.onLine === false);

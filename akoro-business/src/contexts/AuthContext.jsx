@@ -27,7 +27,13 @@ async function authFetch(path, body) {
     throw new Error(`Cannot reach the API at ${API}. Check VITE_API_URL and the backend's CORS_ORIGIN.`);
   }
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `${path} failed`);
+  if (!res.ok) {
+    // The STATUS is what tells refresh() whether the session is really gone or
+    // the request merely didn't land. Without it every failure looked fatal.
+    const err = new Error(json.message || `${path} failed`);
+    err.status = res.status;
+    throw err;
+  }
   // Sign-in is where the first expiry comes from — without it the next visit
   // after 15 minutes still discovers the dead token once per request.
   rememberExpiry(json);
@@ -67,7 +73,19 @@ export function AuthProvider({ children }) {
       const { data } = await authFetch('/api/auth/refresh', {});
       if (data?.user) saveUser(data.user);
       return true;
-    } catch { clearUser(); return false; }
+    } catch (err) {
+      // Only a real REJECTION ends a session. The proactive refresh runs every
+      // 13 minutes, so treating any failure as fatal meant one dropped request,
+      // one 429, one 502, one laptop waking from sleep signed the teacher out
+      // mid-lesson — with a 30-day refresh cookie still sitting there, valid.
+      //
+      // 401/403 means the server looked and said no. Anything else — a network
+      // throw, a rate limit, a gateway error — means we simply didn't get an
+      // answer, and the session should survive until we do.
+      if (err?.status === 401 || err?.status === 403) { clearUser(); return false; }
+      console.warn('[auth] refresh could not complete, keeping the session:', err?.message);
+      return false;
+    }
   }, [saveUser, clearUser]);
 
   // Google sign-in is a full-page redirect (not a fetch) — the backend sets the
