@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Target, Search, Trash2, Pencil, Radio } from 'lucide-react';
+import { Plus, Swords, Users, Clock, Trophy, Play, Zap, Target, Search, Trash2, Pencil, Radio, ClipboardList } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, StatusPill, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet } from '../services/api.js';
@@ -88,10 +88,17 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!editing && form.kind === 'class') {
+    if (!editing && (form.kind === 'class' || form.kind === 'review')) {
       if (!form.classId) return setError('Pick a class.');
-      if (!form.subject) return setError('Pick a subject — a class battle draws its questions from one.');
+      if (!form.subject) return setError('Pick a subject — the questions are drawn from one.');
     } else if (!form.courseId) return setError('Pick a course.');
+    // A review is one learner being checked, not a group being set work.
+    if (!editing && form.kind === 'review') {
+      const picked = form.audience.selected.length + parseHandles(form.audience.typed).length;
+      if (form.audience.mode !== 'picked' || picked !== 1) {
+        return setError('A study review is for one learner — choose exactly one.');
+      }
+    }
     if (!form.title.trim()) return setError('Give the battle a title.');
     if (!editing) {
       const aud = form.audience;
@@ -125,6 +132,9 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
               {[
                 { key: 'course', label: '📘 Course battle', hint: courses.length ? "From a course's question bank" : 'No courses yet', off: !courses.length },
                 { key: 'class',  label: '🏫 Class battle',  hint: classesLoading ? 'Loading…' : classes.length ? 'From a class subject' : 'No classes yet', off: !classesLoading && !classes.length },
+                // Not a contest: one learner, no opponent, no winner — a mark
+                // sheet at the end saying what they knew.
+                { key: 'review', label: '📋 Study review',  hint: classesLoading ? 'Loading…' : classes.length ? 'One learner, mark sheet' : 'No classes yet', off: !classesLoading && !classes.length },
               ].map(o => (
                 <button key={o.key} type="button" disabled={o.off}
                   onClick={() => setField('kind', o.key)}
@@ -143,7 +153,7 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           </div>
         )}
 
-        {form.kind === 'course' || editing ? (
+        {(form.kind === 'course' || editing) ? (
           <Sel label="Course *" value={form.courseId} onChange={e => setField('courseId', e.target.value)} disabled={!!editing}>
             <option value="">Select a course…</option>
             {courses.map(c => <option key={c.id} value={c.id}>{c.title || c.name}</option>)}
@@ -176,11 +186,14 @@ function BattleModal({ open, onClose, onSubmit, courses, editing }) {
           <AudiencePicker
             value={form.audience}
             onChange={(v) => setField('audience', v)}
-            modes={['course', 'picked']}
-            allLabel={form.kind === 'class'
+            // A review has no "everyone" — it is one learner by definition, so
+            // offering the whole class here would be offering something the
+            // server will refuse.
+            modes={form.kind === 'review' ? ['picked'] : ['course', 'picked']}
+            allLabel={form.kind !== 'course'
               ? { label: 'Everyone in the class', hint: 'All active members' }
               : { label: 'Everyone on the course', hint: 'All active enrolments' }}
-            rosterUrl={form.kind === 'class'
+            rosterUrl={form.kind !== 'course'
               ? (form.classId ? `/api/battle/classes/${form.classId}/roster` : null)
               : (form.courseId ? `/api/battle/courses/${form.courseId}/roster` : null)}
             requireAgent
@@ -360,10 +373,104 @@ function ParticipantsModal({ open, onClose, battleId }) {
   );
 }
 
+
+/* ── Mark sheet (study review) ──────────────────────────────────────────── */
+/**
+ * A review has no winner, so a scoreboard says nothing about it. What a teacher
+ * wants is the paper back: every question, what the learner chose, what was
+ * right — plus where the gaps cluster, which is the thing they would otherwise
+ * tally by hand.
+ */
+function MarkSheetModal({ open, onClose, battleId }) {
+  const [data, setData]   = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open || !battleId) { setData(null); setError(null); return; }
+    let live = true;
+    apiGet(`/api/battle/battles/${battleId}/results`)
+      .then(d => { if (live) setData(d); })
+      .catch(e => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [open, battleId]);
+
+  const s = data?.score;
+
+  return (
+    <Modal open={open} onClose={onClose} title={data?.learner?.fullName ? `${data.learner.fullName} — mark sheet` : 'Mark sheet'} width={620}>
+      {error ? (
+        <div style={{ fontSize: 13, color: RED, fontFamily: FONT, padding: '10px 0' }}>{error}</div>
+      ) : !data ? (
+        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
+      ) : data.type !== 'review' ? (
+        <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT }}>This battle is not a study review.</div>
+      ) : (
+        <div style={{ fontFamily: FONT }}>
+          {/* The number first — it is the answer to "how did they do?" */}
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 14px',
+            borderRadius: 12, background: LIGHT, marginBottom: 14,
+          }}>
+            <span style={{ fontSize: 26, fontWeight: 900, color: s.percent >= 50 ? GREEN : RED }}>{s.percent}%</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{s.correct} of {s.total} correct</span>
+            <span style={{ flex: 1 }} />
+            {s.unanswered > 0 && <Badge color={MUTED} bg={WHITE}>{s.unanswered} unanswered</Badge>}
+            {data.battle?.duration_formatted && (
+              <Badge color={MUTED} bg={WHITE}><Clock size={10} style={{ marginRight: 3 }} />{data.battle.duration_formatted}</Badge>
+            )}
+          </div>
+
+          {data.byTopic?.length > 1 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 7, letterSpacing: .3 }}>BY TOPIC — WEAKEST FIRST</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                {data.byTopic.map(t => (
+                  <Badge key={t.topic} color={t.percent >= 50 ? GREEN : RED} bg={t.percent >= 50 ? '#DCFCE7' : '#FEE2E2'}>
+                    {t.topic} {t.correct}/{t.total}
+                  </Badge>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize: 11, fontWeight: 800, color: MUTED, marginBottom: 7, letterSpacing: .3 }}>EVERY QUESTION</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 380, overflowY: 'auto' }}>
+            {data.markSheet.map(r => (
+              <div key={r.order} style={{
+                border: `1px solid ${r.isCorrect ? GREEN + '55' : BORDER}`, borderRadius: 10, padding: '10px 12px',
+                background: r.isCorrect ? '#F0FDF4' : WHITE,
+              }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: r.isCorrect ? GREEN : RED }}>
+                    {r.isCorrect ? '✓' : '✗'} Q{r.order}
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }}>{r.question}</span>
+                  {r.topic && <span style={{ fontSize: 10, color: MUTED }}>{r.topic}</span>}
+                </div>
+                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.6 }}>
+                  {/* "No answer" is not the same as a wrong answer, and a
+                      teacher reading the sheet needs to see which it was. */}
+                  {!r.answered
+                    ? <span style={{ color: MUTED }}>No answer given</span>
+                    : <>Chose <b style={{ color: r.isCorrect ? GREEN : RED }}>{r.chosenAnswer}</b></>}
+                  {!r.isCorrect && <> · Correct answer <b style={{ color: GREEN }}>{r.correctAnswer}</b></>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /* ── Battle Card ────────────────────────────────────────────────────────── */
 function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onWatch }) {
   const isLive     = battle.status === 'live';
   const isFinished = ['completed', 'cancelled', 'expired'].includes(battle.status);
+  // A review has one learner and no winner, so the contest wording on this card
+  // ("participants", the trophy) would misdescribe it.
+  const isReview   = battle.type === 'review';
   const editable   = !['live', 'completed'].includes(battle.status) && battle.mine;
   const deletable  = battle.status !== 'live' && battle.mine;
   const scheduled  = battle.scheduledAt ? new Date(battle.scheduledAt) : null;
@@ -393,7 +500,8 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           background: isLive ? `linear-gradient(135deg, ${AMBER}, #D4651E)` : `${PURPLE}18`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Swords size={20} color={isLive ? WHITE : PURPLE} />
+          {isReview ? <ClipboardList size={20} color={isLive ? WHITE : PURPLE} />
+                    : <Swords size={20} color={isLive ? WHITE : PURPLE} />}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: FONT }}>{battle.title}</div>
@@ -410,7 +518,9 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
           title="View participants"
           style={{ border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
         >
-          <Badge color={BLUE} bg="#EFF6FF"><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</Badge>
+          <Badge color={BLUE} bg="#EFF6FF">
+            {isReview ? <>📋 Review</> : <><Users size={10} style={{ marginRight: 2 }} />{battle.participantCount}</>}
+          </Badge>
         </button>
         <Badge color={MUTED} bg={LIGHT}><Clock size={10} style={{ marginRight: 2 }} />{battle.durationMin}min</Badge>
         <Badge color={AMBER} bg="#FFF7ED"><Zap size={10} style={{ marginRight: 2 }} />{battle.xpPool} XP</Badge>
@@ -456,7 +566,7 @@ function BattleCard({ battle, onStart, onEdit, onDelete, onViewParticipants, onW
             }}
           >
             <Trophy size={14} color={AMBER} />
-            {battle.participantCount} participants — see results
+            {isReview ? 'View mark sheet' : `${battle.participantCount} participants — see results`}
           </button>
           <Btn size="sm" variant="secondary" onClick={() => onWatch(battle)} title="Review the battle"><Radio size={13} /></Btn>
           {editable && <Btn size="sm" variant="secondary" onClick={() => onEdit(battle)} title="Edit"><Pencil size={13} /></Btn>}
@@ -480,6 +590,7 @@ export default function BattlesPage() {
   const [modal,   setModal]   = useState(false);
   const [viewing, setViewing] = useState(null);   // battle id whose roster is open
   const [watching, setWatching] = useState(null); // battle being watched live
+  const [marking, setMarking]   = useState(null); // review whose mark sheet is open
   const [editing, setEditing] = useState(null);
   const [bankOpen, setBankOpen] = useState(false);
   const [toast,   setToast]   = useState(null);
@@ -555,7 +666,9 @@ export default function BattlesPage() {
       const res = await createBattle({
         kind: form.kind, courseId: form.courseId, classId: form.classId,
         question_source: form.questionSource,
-        ...(form.kind === 'class' ? { subject: form.subject } : {}),
+        ...(form.kind !== 'course' ? { subject: form.subject } : {}),
+        // The server decides what a review IS; the form only says which it is.
+        ...(form.kind === 'review' ? { mode: 'review' } : {}),
         title: form.title.trim(),
         description: form.description || null,
         topic: form.topic || null,
@@ -685,7 +798,9 @@ export default function BattlesPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {filtered.map(b => (
             <BattleCard key={b.id} battle={b} onStart={handleStart} onEdit={openEdit}
-                        onDelete={handleDelete} onViewParticipants={(x) => setViewing(x.id)}
+                        onDelete={handleDelete}
+                        onViewParticipants={(x) => (x.type === 'review' && x.status === 'completed'
+                          ? setMarking(x.id) : setViewing(x.id))}
                         onWatch={setWatching} />
           ))}
         </div>
@@ -701,6 +816,7 @@ export default function BattlesPage() {
       {watching && (
         <WatchBattleModal battle={watching} onClose={() => setWatching(null)} onEnded={load} />
       )}
+      <MarkSheetModal open={!!marking} onClose={() => setMarking(null)} battleId={marking} />
       <ParticipantsModal open={!!viewing} onClose={() => setViewing(null)} battleId={viewing} />
       <QuestionBankModal open={bankOpen} onClose={() => setBankOpen(false)} />
       <NoAgentModal open={!!noAgent} context="battle" onClose={() => setNoAgent(null)} onCreated={noAgent} />

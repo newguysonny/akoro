@@ -144,6 +144,9 @@ const acceptDeadline = (scheduledFor) => {
 };
 
 /** Has an invitation with a deadline passed? No deadline never has. */
+const fmtDuration = (secs) =>
+  `${String(Math.floor((secs ?? 0) / 60)).padStart(2, "0")}:${String((secs ?? 0) % 60).padStart(2, "0")}`;
+
 const deadlinePassed = (expiresAt) => !!expiresAt && new Date(expiresAt) < new Date();
 
 async function isEligible(userId, courseId) {
@@ -664,6 +667,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
     expires_in_minutes = 60, scheduled_for = null,
     usernames = [], user_ids = [], whole_class = false,
     question_source = "auto",          // 'bank' | 'ai' | 'auto'
+    mode = "battle",                   // 'battle' | 'review'
   } = req.body;
 
   if (!title)   return res400(res, "title is required");
@@ -718,8 +722,19 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
   // to face — and the battle sat in its lobby saying "waiting for players to
   // accept" for ever, even after the one learner had accepted. Say so at the
   // point of creation instead of building something that can never run.
-  const isDuel = myRole === "member" && opponents.length === 1;
-  if (!isDuel && opponents.length < 2) {
+  // A STUDY REVIEW is one learner working through a paper on their own — no
+  // opponent, no winner, a mark sheet at the end. It is the one shape the
+  // two-competitors rule must not block, and it must not become a duel either.
+  const isReview = mode === "review";
+  if (isReview && opponents.length !== 1) {
+    return res400(res, "A study review is for one learner. Pick exactly one.");
+  }
+  if (isReview && myRole === "member") {
+    return res403(res, "Only a teacher can set a study review.");
+  }
+
+  const isDuel = !isReview && myRole === "member" && opponents.length === 1;
+  if (!isReview && !isDuel && opponents.length < 2) {
     return res400(res, "A battle needs two learners to compete. Pick at least one more, or send it to the whole class.");
   }
   const isScheduled = !!scheduled_for && new Date(scheduled_for) > new Date();
@@ -729,7 +744,7 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 
   const { data: battle, error } = await db.from("battles").insert({
     course_id: null, classroom_id: classroomId,
-    battle_type: isDuel ? "1v1" : "classroom",
+    battle_type: isReview ? "review" : isDuel ? "1v1" : "classroom",
     title, description: description ?? null,
     topic: topic ?? null, subject, difficulty,
     total_questions, time_limit_seconds, xp_prize, xp_pool: xp_prize,
@@ -844,8 +859,10 @@ router.post("/classes/:classroomId/battles/invite", authenticateToken, asyncHand
 
   res201(res, {
     success: true, battle_id: battle.id,
-    battle_type: isDuel ? "1v1" : "classroom",
-    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    // Report what was WRITTEN, not a second guess at it. This re-derived the
+    // type and so answered "classroom" for a review.
+    battle_type: battle.battle_type,
+    status: battle.status,
     invited: opponents.length, expires_at: expiresAt,
     questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
     skipped: {
@@ -1275,8 +1292,8 @@ router.post("/courses/:courseId/battles/invite", authenticateToken, asyncHandler
 
   res201(res, {
     success: true, battle_id: battle.id,
-    battle_type: isDuel ? "1v1" : "classroom",
-    status: (isScheduled && !isDuel) ? "scheduled" : "lobby",
+    battle_type: battle.battle_type,
+    status: battle.status,
     invited: opponents.length, expires_at: expiresAt, skipped: named,
     questions: fill.placed, fromBank: fill.fromBank, generated: fill.generated, coinsCharged: fill.charged,
   });
@@ -1328,13 +1345,19 @@ async function maybeStartEarly(battle) {
   const answered = invited.every((s) => s.joined_at || s.declined_at);
   const players  = (all ?? []).filter((s) => s.role !== "teacher" && s.joined_at && !s.declined_at).length;
 
+  // A study review is ONE learner working through a paper. Two is the minimum
+  // for a contest, not for this — and the "everyone answered but fewer than
+  // two are playing" branch below would otherwise cancel a review the instant
+  // its single learner accepted it.
+  const minPlayers = battle.battle_type === "review" ? 1 : 2;
+
   const startsAt = battle.scheduled_start ? new Date(battle.scheduled_start).getTime() : null;
 
   // Everyone answered, but there are not two of them left. Nothing more is
   // coming — and an unscheduled battle has no deadline to end the wait — so it
   // would sit on "waiting for players to accept" for ever. Close it, and say
   // why, rather than leaving a dead battle in the list.
-  if (answered && players < 2 && !startsAt) {
+  if (answered && players < minPlayers && !startsAt) {
     await db.from("battles").update({ status: "cancelled" }).eq("id", battle.id);
     await notifyUser(battle.created_by, "battle_cancelled",
       `Battle cancelled: ${battle.title}`,
@@ -1345,7 +1368,7 @@ async function maybeStartEarly(battle) {
 
   // A scheduled battle keeps its time even when everyone is ready early — the
   // teacher picked that hour for a reason.
-  if (!answered || players < 2 || (startsAt && startsAt > Date.now())) {
+  if (!answered || players < minPlayers || (startsAt && startsAt > Date.now())) {
     return { started: false, invited, players };
   }
 
@@ -1451,7 +1474,7 @@ router.post("/challenges/:challengeId/decline", authenticateToken, asyncHandler(
     const { data: battle } = await db.from("battles")
       // title and created_by too: maybeStartEarly may now close the battle and
       // has to name it in the notification it sends the creator.
-      .select("id, scheduled_start, title, created_by").eq("id", p.battle_id).maybeSingle();
+      .select("id, scheduled_start, title, created_by, battle_type").eq("id", p.battle_id).maybeSingle();
     const { invited: seats } = await maybeStartEarly(battle);
     const accepted = seats.filter((s) => s.joined_at).length;
     // Nobody left to compete: cancel rather than run an empty battle at the
@@ -1714,10 +1737,82 @@ router.get("/battles/:battleId/results", authenticateToken, asyncHandler(async (
     };
   });
 
+  // ── A REVIEW returns a MARK SHEET, not a scoreboard ──────────────────────
+  // Nobody won; the question is what this learner knew. So: every question in
+  // order, what they chose, what was right, and the total. A ranking of one is
+  // not information, and calling them the winner of a solo review would be
+  // actively misleading.
+  if (battle.battle_type === "review") {
+    const learner = scoreboard[0] ?? null;
+    const seat = (participants ?? []).find((p) => p.role !== "teacher");
+
+    const { data: questions } = await db.from("battle_questions")
+      .select("*").eq("battle_id", battle.id).order("question_order");
+
+    const { data: answers } = seat
+      ? await db.from("battle_answers").select("*").eq("participant_id", seat.id)
+      : { data: [] };
+    const byQuestion = new Map((answers ?? []).map((a) => [a.question_id, a]));
+
+    const sheet = (questions ?? []).map((q) => {
+      const options = JSON.parse(q.options_json);
+      const a = byQuestion.get(q.id);
+      return {
+        order:         q.question_order,
+        question:      q.question_text,
+        topic:         q.topic ?? null,
+        options,
+        correctIndex:  q.correct_answer_index,
+        correctAnswer: options[q.correct_answer_index],
+        // null answer = ran out of time. That is different from a wrong
+        // answer on a mark sheet, and a teacher reading it needs to see which.
+        chosenIndex:   a?.selected_index ?? null,
+        chosenAnswer:  a?.selected_index != null ? options[a.selected_index] : null,
+        isCorrect:     a ? !!a.is_correct : false,
+        answered:      !!a,
+        responseMs:    a?.response_time_ms ?? null,
+      };
+    });
+
+    const total   = sheet.length;
+    const correct = sheet.filter((r) => r.isCorrect).length;
+    const missed  = sheet.filter((r) => !r.answered).length;
+
+    // Where they actually went wrong, so the teacher does not have to tally it
+    // by hand off the sheet.
+    const byTopic = {};
+    for (const r of sheet) {
+      const k = r.topic || "General";
+      byTopic[k] ??= { topic: k, total: 0, correct: 0 };
+      byTopic[k].total++;
+      if (r.isCorrect) byTopic[k].correct++;
+    }
+
+    return res.json({
+      type: "review",
+      battle: { ...battle, duration_formatted: fmtDuration(battle.duration_seconds ?? 0) },
+      learner: learner && {
+        userId: learner.userId, username: learner.username,
+        fullName: (participants ?? []).find((p) => p.user_id === learner.userId)?.users?.full_name ?? null,
+        agentName: learner.agentName, agentEmoji: learner.agentEmoji,
+      },
+      score: {
+        correct, total,
+        wrong:      total - correct - missed,
+        unanswered: missed,
+        percent:    total ? Math.round((correct / total) * 100) : 0,
+      },
+      byTopic: Object.values(byTopic)
+        .map((t) => ({ ...t, percent: t.total ? Math.round((t.correct / t.total) * 100) : 0 }))
+        .sort((x, y) => x.percent - y.percent),   // weakest first — that is the useful order
+      markSheet: sheet,
+    });
+  }
+
   const winner = scoreboard[0];
   const dur = battle.duration_seconds ?? 0;
   res.json({
-    battle: { ...battle, duration_formatted: `${String(Math.floor(dur / 60)).padStart(2, "0")}:${String(dur % 60).padStart(2, "0")}` },
+    battle: { ...battle, duration_formatted: fmtDuration(dur) },
     winner: { userId: winner?.userId, agentName: winner?.agentName, score: winner?.score, xpEarned: winner?.xpEarned },
     scoreboard,
   });

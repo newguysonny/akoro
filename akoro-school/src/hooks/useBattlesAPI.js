@@ -13,10 +13,12 @@ export function useBattlesAPI() {
   // One creator for both kinds; the scope travels in the path. A course battle
   // takes its questions from that course's bank, a class battle from the
   // past-questions bank for the subject — the API decides, not the caller.
+  // 'review' is class-scoped like 'class' — it draws its questions from a
+  // class subject. The server tells them apart by `mode` in the body.
   const createBattle = ({ kind, courseId, classId, ...data }) =>
-    kind === 'class'
-      ? apiPost(`/api/battle/classes/${classId}/battles/invite`, data)
-      : apiPost(`/api/battle/courses/${courseId}/battles/invite`, data);
+    kind === 'course'
+      ? apiPost(`/api/battle/courses/${courseId}/battles/invite`, data)
+      : apiPost(`/api/battle/classes/${classId}/battles/invite`, data);
 
   const getClasses = () => apiGet('/api/battle/my-classes');
   const getClassRoster = (classId) => apiGet(`/api/battle/classes/${classId}/roster`);

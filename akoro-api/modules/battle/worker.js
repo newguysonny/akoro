@@ -114,7 +114,11 @@ async function startBattle(battleId) {
   const runners  = (seats ?? []).filter((p) => p.role === "teacher");
   const competing = (seats ?? []).filter((p) => p.role !== "teacher" && p.joined_at && !p.declined_at);
 
-  if (competing.length < 2) {
+  // A REVIEW is one learner working through a paper — "not enough players" is
+  // its normal state, not a failure. It needs one, and only one.
+  const minPlayers = battle.battle_type === "review" ? 1 : 2;
+
+  if (competing.length < minPlayers) {
     await db.from("battles").update({ status: "cancelled" }).eq("id", battleId);
     if (battle.created_by) {
       // `content`, not `message` — the column is content, and PostgREST accepts
@@ -123,9 +127,11 @@ async function startBattle(battleId) {
       await db.from("notifications").insert({
         user_id: battle.created_by, type: "battle_cancelled",
         title:   `Battle cancelled: ${battle.title}`,
-        content: competing.length
-          ? "Only one learner accepted, so there was nobody to compete against."
-          : "Nobody accepted the invitation before it expired.",
+        content: battle.battle_type === "review"
+          ? "The learner did not accept the review before it expired."
+          : competing.length
+            ? "Only one learner accepted, so there was nobody to compete against."
+            : "Nobody accepted the invitation before it expired.",
         related_id: battleId,
       });
     }
@@ -158,7 +164,10 @@ async function startBattle(battleId) {
     participants: (participants ?? []).map((p) => ({ ...p, hp: 100, score: 0 })),
   });
   // `competing`, not `participants` — the teacher is in the room, not the fight.
-  await appendLog(battleId, "battle_start", `⚔️ Battle started! ${competing.length} agents competing.`);
+  await appendLog(battleId, "battle_start",
+    battle.battle_type === "review"
+      ? `📋 Study review started — ${competing.length} learner working through the questions.`
+      : `⚔️ Battle started! ${competing.length} agents competing.`);
 
   const { data: firstQ } = await db.from("battle_questions").select("*").eq("battle_id", battleId).eq("question_order", 1).single();
   if (!firstQ) return endBattle(battleId);
@@ -185,12 +194,21 @@ async function revealQuestion(battleId, questionOrder) {
   const { data: participants } = await db.from("battle_participants").select("*").eq("battle_id", battleId);
   const options = JSON.parse(q.options_json);
 
+  const { data: btype } = await db.from("battles").select("battle_type").eq("id", battleId).maybeSingle();
+  const isReviewBattle = btype?.battle_type === "review";
+
   for (const p of (participants ?? [])) {
     const ans     = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
     const correct = ans?.is_correct;
 
     if (!ans) {
-      await db.from("battle_participants").update({ hp: Math.max(0, (p.hp ?? 100) - 8), wrong_answers: (p.wrong_answers ?? 0) + 1 }).eq("id", p.id);
+      // A missed question still counts as wrong on the mark sheet; only the HP
+      // loss is a contest mechanic, so a review keeps the count and drops the
+      // damage. (isReviewBattle is read once, above the loop.)
+      await db.from("battle_participants").update({
+        ...(isReviewBattle ? {} : { hp: Math.max(0, (p.hp ?? 100) - 8) }),
+        wrong_answers: (p.wrong_answers ?? 0) + 1,
+      }).eq("id", p.id);
       const { data: agent } = await db.from("user_agents").select("agent_name, agent_emoji").eq("id", p.agent_id).single();
       await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
     } else if (!correct) {
@@ -216,9 +234,11 @@ async function revealQuestion(battleId, questionOrder) {
     }
   }
 
-  // HP damage to wrong-answerers when opponents got it right
+  // HP damage to wrong-answerers when opponents got it right. Skipped for a
+  // review: there is no opponent, and draining a learner's health bar for
+  // getting a question wrong turns a check of what they know into a punishment.
   const correctCount = (answers ?? []).filter((a) => a.is_correct).length;
-  if (correctCount > 0) {
+  if (correctCount > 0 && !isReviewBattle) {
     for (const p of (participants ?? [])) {
       const ans = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
       if (!ans?.is_correct) {
@@ -236,10 +256,16 @@ async function revealQuestion(battleId, questionOrder) {
     })),
   });
 
-  const { data: battleInfo } = await db.from("battles").select("total_questions").eq("id", battleId).single();
+  const { data: battleInfo } = await db.from("battles").select("total_questions, battle_type").eq("id", battleId).single();
   const { count: aliveCount } = await db.from("battle_participants").select("id", { count: "exact", head: true }).eq("battle_id", battleId).gt("hp", 0);
 
-  if (questionOrder >= (battleInfo?.total_questions ?? 0) || (aliveCount ?? 0) <= 1) {
+  // "One agent left standing" ends a contest. A REVIEW has one learner by
+  // definition, so that test is always true for it — the review would end after
+  // question one. It runs to the end of the paper instead.
+  const isReview   = battleInfo?.battle_type === "review";
+  const lastStanding = !isReview && (aliveCount ?? 0) <= 1;
+
+  if (questionOrder >= (battleInfo?.total_questions ?? 0) || lastStanding) {
     await battleQueue.add("end-battle", { action: "end-battle", battleId }, { delay: 3000 });
   } else {
     await advanceQuestion(battleId, questionOrder + 1);
@@ -268,7 +294,7 @@ async function endBattle(battleId) {
 
   await db.from("battles").update({ status: "completed", actual_end: now() }).eq("id", battleId);
 
-  const { data: battleInfo } = await db.from("battles").select("xp_prize, xp_pool, battle_type, course_id, actual_start, actual_end").eq("id", battleId).single();
+  const { data: battleInfo } = await db.from("battles").select("xp_prize, xp_pool, battle_type, course_id, actual_start, actual_end, total_questions").eq("id", battleId).single();
   const durSecs = battleInfo?.actual_start && battleInfo?.actual_end
     ? Math.round((new Date(battleInfo.actual_end) - new Date(battleInfo.actual_start)) / 1000) : 0;
 
@@ -288,14 +314,26 @@ async function endBattle(battleId) {
   // Nobody noticed while the scoreboard was invisible to them.
   const participants = (seats ?? []).filter((p) => p.role !== "teacher");
 
-  const pool   = battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool : battleInfo?.xp_prize;
-  const xpDist = computeXpDistribution(participants ?? [], pool ?? 0);
+  // A REVIEW has no winner and no placing — dividing a prize pool by rank when
+  // there is one learner would hand them the winner's share for turning up, and
+  // "1st of 1" is not information. XP already earned per correct answer during
+  // the review stands; nothing is added for placing.
+  const isReview = battleInfo?.battle_type === "review";
+
+  const pool   = isReview ? 0
+               : battleInfo?.battle_type === "classroom" ? battleInfo.xp_pool
+               : battleInfo?.xp_prize;
+  const xpDist = isReview ? {} : computeXpDistribution(participants ?? [], pool ?? 0);
 
   for (let i = 0; i < (participants ?? []).length; i++) {
     const p = participants[i];
     const xpEarned = xpDist[p.id] ?? 0;
-    await db.from("battle_participants").update({ is_winner: i === 0, final_rank: i + 1, xp_earned: xpEarned }).eq("id", p.id);
-    await creditXP(p.user_id, p.agent_id, xpEarned, "battle_win", battleId);
+    await db.from("battle_participants").update({
+      is_winner:  isReview ? false : i === 0,
+      final_rank: isReview ? null  : i + 1,
+      xp_earned:  xpEarned,
+    }).eq("id", p.id);
+    if (xpEarned > 0) await creditXP(p.user_id, p.agent_id, xpEarned, "battle_win", battleId);
   }
 
   const winner   = participants?.[0];
@@ -304,7 +342,9 @@ async function endBattle(battleId) {
   const ss = String(durSecs % 60).padStart(2, "0");
 
   await appendLog(battleId, "battle_end",
-    `🏁 Battle complete! ${winner?.user_agents?.agent_name} wins ${winner?.score ?? 0}–${runnerUp?.score ?? 0}`,
+    isReview
+      ? `📋 Review complete — ${winner?.score ?? 0} of ${battleInfo?.total_questions ?? 0} correct. Mark sheet ready.`
+      : `🏁 Battle complete! ${winner?.user_agents?.agent_name} wins ${winner?.score ?? 0}–${runnerUp?.score ?? 0}`,
     winner?.user_id, winner?.user_agents?.agent_name, winner?.user_agents?.agent_emoji, null,
     { finalScores: (participants ?? []).map((p, i) => ({ rank: i + 1, agentName: p.user_agents?.agent_name, score: p.score, xpEarned: xpDist[p.id] ?? 0 })) }
   );
