@@ -14,6 +14,8 @@
 import db               from "../../../db.js";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
+import { safeFetch, BlockedAddressError } from "../../../lib/safeFetch.js";
+import { untrusted } from "../../../lib/untrusted.js";
 
 const MODEL = OPENAI_MODEL;
 
@@ -89,16 +91,19 @@ async function runNotify(row, input, ctx) {
 }
 
 // Block SSRF to internal/metadata hosts: only https/http to a public host.
+/**
+ * A cheap up-front check so an obviously wrong URL is rejected at CONFIG time
+ * with a clear message.
+ *
+ * It is NOT the security boundary — it cannot be. It validates a hostname
+ * string, while the socket connects to an address resolved afterwards, and it
+ * says nothing about where a redirect leads. Both of those are handled at
+ * connect time in lib/safeFetch.js, which is what actually runs the request.
+ */
 function assertSafeWebhookUrl(raw) {
   let u;
   try { u = new URL(raw); } catch { throw new Error("Invalid webhook URL"); }
   if (!/^https?:$/.test(u.protocol)) throw new Error("Webhook URL must be http(s)");
-  const host = u.hostname.toLowerCase();
-  const blocked = host === "localhost" || host === "0.0.0.0" || host.endsWith(".local") || host.endsWith(".internal");
-  // IPv4 private / loopback / link-local (incl. cloud metadata 169.254.169.254)
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  const privIp = m && (() => { const [a, b] = [Number(m[1]), Number(m[2])]; return a === 127 || a === 10 || a === 0 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) || a >= 224; })();
-  if (blocked || privIp || host === "[::1]" || host.startsWith("[fd") || host.startsWith("[fe80")) throw new Error("Webhook URL host is not allowed");
 }
 
 async function runHttpWebhook(row, input, ctx) {
@@ -115,23 +120,29 @@ async function runHttpWebhook(row, input, ctx) {
     ? JSON.parse(fillTemplate(JSON.stringify(cfg.payloadTemplate), input))
     : input;
 
-  const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), (cfg.timeoutMs ?? 10000));
-
   let responseText = "";
   let status = 0;
   try {
-    const resp = await fetch(url, {
-      method,
-      headers,
-      body:   method !== "GET" ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
+    // safeFetch, not fetch: it validates the address the socket is actually
+    // given (closing DNS rebinding) and refuses redirects outright, which
+    // fetch would have followed straight to a metadata endpoint.
+    const resp = await safeFetch(url, {
+      method, headers,
+      body: method !== "GET" ? body : null,
+      timeoutMs: cfg.timeoutMs ?? 10000,
     });
     status = resp.status;
-    responseText = await resp.text();
-    if (!resp.ok) throw new Error(`Webhook returned ${status}: ${responseText.slice(0, 200)}`);
-  } finally {
-    clearTimeout(timeout);
+    responseText = resp.text;
+    if (status < 200 || status >= 300) {
+      throw new Error(`Webhook returned ${status}: ${responseText.slice(0, 200)}`);
+    }
+  } catch (e) {
+    if (e instanceof BlockedAddressError) {
+      // Name it plainly — a misconfigured webhook and a blocked one are
+      // different problems and should not read the same.
+      throw new Error(`Webhook blocked: ${e.message}`);
+    }
+    throw e;
   }
 
   let parsed;
@@ -148,7 +159,16 @@ async function runHttpWebhook(row, input, ctx) {
     delivered:  false,
   });
 
-  return { success: true, status, response: parsed };
+  // Whatever this returns is written by someone else's system and goes back
+  // into the agent's context as a tool result, where it reads like anything
+  // else the agent has been told. Frame it as data.
+  return {
+    success: true, status,
+    response: untrusted(
+      typeof parsed === "string" ? parsed : JSON.stringify(parsed),
+      { source: `webhook response from ${new URL(url).host}`, limit: 4000 },
+    ),
+  };
 }
 
 async function runCreateBattle(row, input, ctx) {
