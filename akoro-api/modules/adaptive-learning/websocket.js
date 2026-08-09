@@ -246,13 +246,6 @@ function fmtSessionEnd({ evaluation, controlReport, finalState, agentPairId,
 // (same format as teachingSession.js REST endpoint)
 // =============================================================
 
-const PHASE_PLAN_WS = [
-  "Phase 1 → what do they know",
-  "Phase 2 → must-know parts",
-  "Phase 3 → teach it back",
-  "Phase 4 → push further",
-];
-
 const NANA_RENDER_STYLE = {
   bubbleBg:     "rgba(124,58,237,0.10)",
   bubbleBorder: "#7C3AED",
@@ -280,22 +273,19 @@ function resultToTypedBlocks(result, agentPairId) {
 
   // Subtopic advance — full header sequence
   if (result.subtopicAdvanced && result.currentSubtopic) {
+    // Header only. The objectives ride on it rather than following as their own
+    // checklist, and the phase plan is not shown at all — it steers the
+    // teaching agent, and the phase badge on its messages already tells the
+    // learner where they are.
     blocks.push({
       type:    "subtopic-hdr",
       subtopic: result.currentSubtopic,
       idx:     result.subtopicIdx     ?? 0,
+      items:   result.subtopicObjectives ?? [],
       total:   result.totalSubtopics  ?? 1,
       topic:   result.topic    ?? "",
       subject: result.subject  ?? "",
     });
-    blocks.push({ type: "plan", phases: PHASE_PLAN_WS });
-    if (result.subtopicObjectives?.length) {
-      blocks.push({
-        type:     "objectives",
-        subtopic: result.currentSubtopic,
-        items:    result.subtopicObjectives,
-      });
-    }
   }
 
   // Sargeant assessment gate

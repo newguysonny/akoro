@@ -2,6 +2,96 @@ import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon } from '../common/Icons.jsx';
 
+// ── Subtopic header, with the objectives folded into it ──────────────────
+//
+// This used to be a static header plus a separate "Objectives" checklist
+// underneath. They were the same array: the header drew one segment per
+// must-know part, and the checklist printed those same parts as a numbered
+// list. Two renderings of one thing, one of which grew as long as the topic.
+//
+// Now the segments ARE the objectives — steppable with < >, one shown at a
+// time. Fill carries the state a learner needs: solid means done or in hand,
+// faint means not reached yet, and a ring marks whichever one they are looking
+// at. Browsing ahead never changes where the session actually is.
+function SubtopicHeader({ block, opacity }) {
+  const items   = Array.isArray(block.items) && block.items.length ? block.items : [block.subtopic].filter(Boolean);
+  const total   = items.length || block.total || 1;
+  const active  = Math.min(block.idx || 0, total - 1);   // where the SESSION is
+  const [view, setView] = useState(active);              // where the LEARNER is looking
+
+  // The session moving on pulls the view along, unless they have deliberately
+  // stepped away to read ahead — in which case yanking it back mid-read would
+  // be the rudest possible behaviour.
+  const followed = useRef(true);
+  useEffect(() => { if (followed.current) setView(active); }, [active]);
+
+  const go = (d) => {
+    const next = Math.max(0, Math.min(total - 1, view + d));
+    followed.current = next === active;
+    setView(next);
+  };
+
+  const arrow = (dir, disabled) => (
+    <button
+      onClick={() => go(dir)}
+      disabled={disabled}
+      aria-label={dir < 0 ? "Previous objective" : "Next objective"}
+      style={{
+        width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: disabled ? "default" : "pointer",
+        background: disabled ? "rgba(255,255,255,.04)" : "rgba(255,255,255,.10)",
+        border: "0.5px solid rgba(255,255,255,.16)", color: disabled ? "rgba(255,255,255,.22)" : "#C7D2FE",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 12, lineHeight: 1, padding: 0, fontWeight: 700,
+      }}>
+      {dir < 0 ? "\u2039" : "\u203A"}
+    </button>
+  );
+
+  return (
+    <div style={{ background:"#1E1B4B", borderRadius:10, padding:"10px 13px", margin:"10px 0 4px", opacity }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+        <div style={{ fontSize:10, color:"#A5B4FC", fontWeight:600 }}>
+          {block.topic}{block.subject ? ` \u00B7 ${block.subject}` : ""}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+          <span style={{ fontSize:10, color:"#A5B4FC", fontVariantNumeric:"tabular-nums" }}>
+            {view + 1}/{total}
+          </span>
+          {arrow(-1, view === 0)}
+          {arrow(1, view === total - 1)}
+        </div>
+      </div>
+
+      <div style={{ fontSize:13, fontWeight:800, color:"#fff", marginTop:4, lineHeight:1.4 }}>
+        {items[view] ?? block.subtopic}
+      </div>
+
+      {/* Reading ahead is allowed, but it must never look like progress. */}
+      {view !== active && (
+        <div style={{ fontSize:9.5, color:"#FBBF24", marginTop:3, fontWeight:600 }}>
+          {view > active ? "Coming up" : "Already covered"} \u2014 you\u2019re on {active + 1}
+        </div>
+      )}
+
+      <div style={{ display:"flex", gap:3, marginTop:7 }}>
+        {items.map((label, i) => (
+          <button
+            key={i}
+            onClick={() => { followed.current = i === active; setView(i); }}
+            title={label}
+            aria-label={`Objective ${i + 1}: ${label}`}
+            style={{
+              flex:1, height:5, borderRadius:3, padding:0, cursor:"pointer",
+              background: i <= active ? "#818CF8" : "rgba(255,255,255,0.15)",
+              border: i === view ? "1px solid #F9FAFB" : "1px solid transparent",
+              boxSizing:"border-box",
+            }}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Inline replayable voice player ───────────────────────────────
 // Used by user (recorded audio) and agent (streamed TTS) bubbles so any
 // spoken turn can be played back. `tint` colours the control to match the
@@ -62,53 +152,15 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
   );
 
   /* ── subtopic-hdr ── */
-  if (block.type === "subtopic-hdr") return (
-    <div style={{ background:"#1E1B4B", borderRadius:10, padding:"10px 13px", margin:"10px 0 4px",
-      display:"flex", alignItems:"center", justifyContent:"space-between", opacity }}>
-      <div>
-        <div style={{ fontSize:10, color:"#A5B4FC", fontWeight:600, marginBottom:2 }}>
-          {block.topic} · {block.subject}
-        </div>
-        <div style={{ fontSize:13, fontWeight:800, color:"#fff" }}>{block.subtopic}</div>
-      </div>
-      <div style={{ textAlign:"right" }}>
-        <div style={{ fontSize:10, color:"#A5B4FC", marginBottom:4 }}>Subtopic progress</div>
-        <div style={{ display:"flex", gap:3 }}>
-          {Array.from({ length: block.total || 1 }).map((_,i) => (
-            <div key={i} style={{ width:16, height:4, borderRadius:2,
-              background: i <= (block.idx||0) ? "#818CF8" : "rgba(255,255,255,0.15)" }}/>
-          ))}
-        </div>
-        <div style={{ fontSize:10, color:"#A5B4FC", marginTop:3 }}>{(block.idx||0)+1}/{block.total||1}</div>
-      </div>
-    </div>
-  );
+  if (block.type === "subtopic-hdr") return <SubtopicHeader block={block} opacity={opacity} />;
 
-  /* ── plan strip ── */
-  if (block.type === "plan") return (
-    <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:4,
-      padding:"5px 10px", background:"rgba(108,59,255,.18)", borderRadius:8, margin:"2px 0 6px", opacity }}>
-      <span style={{ fontSize:10, fontWeight:700, color:"#A78BFA", marginRight:2 }}>NaNa plan:</span>
-      {(block.phases || ["Phase 1 → what do they know","Phase 2 → must-know parts","Phase 3 → teach it back","Phase 4 → push further"]).map((p,i,arr)=>(
-        <span key={i} style={{ fontSize:10, color:"#C4B5FD", fontWeight:600 }}>
-          {p}{i < arr.length-1 && <span style={{ color:"rgba(255,255,255,.28)", margin:"0 3px" }}>·</span>}
-        </span>
-      ))}
-    </div>
-  );
-
-  /* ── objectives strip ── */
-  if (block.type === "objectives") return (
-    <div style={{ padding:"6px 10px", background:"rgba(16,185,129,.10)", border:"0.5px solid rgba(16,185,129,.30)",
-      borderRadius:8, margin:"2px 0 6px", opacity }}>
-      <div style={{ fontSize:10, fontWeight:700, color:"#6EE7B7", marginBottom:4 }}>
-        📌 Objectives — {block.subtopic}
-      </div>
-      {(block.items || []).map((obj,i)=>(
-        <div key={i} style={{ fontSize:10.5, color:"#A7F3D0", lineHeight:1.5 }}>{i+1}. {obj}</div>
-      ))}
-    </div>
-  );
+  /* The "NaNa plan" strip and the "Objectives" checklist used to render here.
+     Both are gone. The plan listed the four phases the teaching agent works
+     through — machinery, not something a learner acts on, and the phase badge
+     on the guide's own messages already says where they are. The objectives
+     checklist was the subtopic progress bar written out longhand: identical
+     array, identical order. It lives on the header now, one at a time, so the
+     two are one thing instead of two. Old sessions replay without them. */
 
   /* ── guide (NaNa Esumai) ── */
   if (block.type === "guide") return (

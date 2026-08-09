@@ -39,13 +39,6 @@ const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
 const query      = (text, params) => pool.query(text, params);
 
-const PHASE_PLAN = [
-  "Phase 1 → what do they know",
-  "Phase 2 → must-know parts",
-  "Phase 3 → teach it back",
-  "Phase 4 → push further",
-];
-
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
    Priority: block_history column (exact) → session_phase_progress (derived).
@@ -91,18 +84,20 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
     ];
 
     for (const prog of progress || []) {
-      // Subtopic header + plan + objectives at start of each subtopic
+      // One header per subtopic, carrying its objectives.
+      //
+      // This used to emit three blocks: the header, a "NaNa plan" strip listing
+      // the four phases, and the objectives as a separate checklist. The plan
+      // is machinery the learner does not act on, and the checklist was the
+      // header's own progress bar written out longhand — same array, same
+      // order. The header pages through them now.
       if (prog.phase === "1") {
         blocks.push({
           type: "subtopic-hdr", faded: true,
           subtopic: prog.subtopic, idx: prog.subtopic_idx,
+          items: objectives[prog.subtopic] || [],
           total: subtopics.length, topic, subject,
         });
-        blocks.push({ type: "plan", phases: PHASE_PLAN, faded: true });
-        const objs = objectives[prog.subtopic] || [];
-        if (objs.length) {
-          blocks.push({ type: "objectives", subtopic: prog.subtopic, items: objs, faded: true });
-        }
         blocks.push({
           type: "guide", agent: "NaNa Esumai", emoji: "🧠", faded: true,
           phase: `Phase 1 — ${prog.subtopic}`,

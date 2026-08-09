@@ -221,22 +221,24 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
     const openingBlocks = [
       {
+        // The must-know parts ride ON the header now.
+        //
+        // They used to be rendered twice: once as the header's progress bar and
+        // again, in full, as a separate "Objectives" checklist directly beneath
+        // it. Same array, same order, same length — the checklist was the bar
+        // spelled out. The header can page through them instead.
         type:     "subtopic-hdr",
         subtopic: mustKnow[0] || topic,
+        items:    mustKnow,
         idx:      0,
         total:    mustKnow.length || 1,
         topic,
         subject:  this.subject || "",
       },
-      { type: "plan", phases: [
-        "Phase 1 → what do they know",
-        "Phase 2 → must-know parts",
-        "Phase 3 → teach it back",
-        "Phase 4 → push further",
-      ] },
-      ...(mustKnow.length
-        ? [{ type: "objectives", subtopic: mustKnow[0] || topic, items: mustKnow }]
-        : []),
+      // No "plan" block. The four phases are how the teaching agent steers the
+      // session, not something a learner needs to read — they were a table of
+      // contents for machinery. The PHASE_1 badge stays on the guide's own
+      // messages, which is where knowing the phase actually helps.
       {
         type:  "guide",
         agent: guideName,
