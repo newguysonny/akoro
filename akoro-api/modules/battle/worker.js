@@ -300,7 +300,17 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   // same per-topic confidence, so with nothing writing to it every agent would
   // be frozen at whatever its owner knew the day this shipped, and no battle
   // would teach anyone anything.
-  await updateKnowledgeConfidence(p.user_id, q.topic, q.subject, isCorrect)
+  // topic = what the BATTLE was about, subtopic = what this QUESTION was about.
+  // A six-question battle on "Family" now leaves one topic with six subtopics
+  // under it, instead of six unrelated top-level topics that nothing could roll
+  // up or compare.
+  const { data: bTopic } = await db.from("battles").select("topic, title, subject").eq("id", battleId).maybeSingle();
+  const headline = bTopic?.topic || bTopic?.title || q.subject || "General";
+  await updateKnowledgeConfidence(
+    p.user_id, headline, q.subject ?? bTopic?.subject, isCorrect,
+    // Only when it says something the topic does not — a question whose topic
+    // IS the battle's topic has no subtopic to record.
+    q.topic && q.topic !== headline ? q.topic : "")
     .catch((e) => console.warn("[battle-worker] knowledge update failed:", e?.message ?? e));
 
   // Push the running scoreboard so anyone watching sees it move as they answer,

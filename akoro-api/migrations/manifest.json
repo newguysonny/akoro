@@ -111,7 +111,8 @@
     "2026-alerts.sql",
     "2026-eval-runs.sql",
     "2026-battle-answer-basis.sql",
-    "2026-hybrid-retrieval.sql"
+    "2026-hybrid-retrieval.sql",
+    "2026-knowledge-hierarchy.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

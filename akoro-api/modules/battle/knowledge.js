@@ -28,7 +28,7 @@ const now = () => new Date().toISOString();
  * Updates edu.student_knowledge and edu.agent_knowledge in the edu schema.
  * Both tables have a 'confidence' column added in MIGRATIONS_v31.sql.
  */
-export async function updateKnowledgeConfidence(userId, topic, subject, isCorrect) {
+export async function updateKnowledgeConfidence(userId, topic, subject, isCorrect, subtopic = "") {
   if (!topic) return;
 
   try {
@@ -41,10 +41,14 @@ export async function updateKnowledgeConfidence(userId, topic, subject, isCorrec
     const delta = isCorrect ? 0.05 : -0.05;
 
     // Try to update existing student_knowledge record
+    // Keyed on the pair now. A battle question on "Family Roles" inside a
+    // battle on "Family" writes topic='Family', subtopic='Family Roles' — so
+    // the six subtopics of one battle are siblings under a topic rather than
+    // six unrelated top-level entries that nothing can roll up.
     const { data: existing } = await db
       .schema("edu").from("student_knowledge")
       .select("id, confidence, topic")
-      .eq("agent_id", agent.id).eq("topic", topic).single();
+      .eq("agent_id", agent.id).eq("topic", topic).eq("subtopic", subtopic ?? "").maybeSingle();
 
     if (existing) {
       // Update confidence — clamp between 0.0 and 1.0
@@ -70,12 +74,13 @@ export async function updateKnowledgeConfidence(userId, topic, subject, isCorrec
         student_id:      userId,
         agent_id:        agent.id,
         topic,
+        subtopic:        subtopic ?? "",
         subject:         subject ?? null,
         // A battle answer is not knowledge — it is the record of having met the
         // topic. Saying so plainly matters now that the agent ANSWERS from this
         // table: a placeholder that read like a note would be recalled as one,
         // and the agent would cite "got this wrong once" as its reasoning.
-        content:         `Met "${topic}" in a battle and answered ${isCorrect ? "correctly" : "incorrectly"}. No notes on this yet.`,
+        content:         `Met "${subtopic || topic}" in a battle and answered ${isCorrect ? "correctly" : "incorrectly"}. No notes on this yet.`,
         source:          "session",
         // Tagged so recall SKIPS it. The agent now answers from this table, and
         // a placeholder handed to it as a note would have it reasoning from
@@ -95,10 +100,64 @@ export async function updateKnowledgeConfidence(userId, topic, subject, isCorrec
       // raised once, at the end, by flagBattleReviewTopics below, which can see
       // the whole battle and knows what was actually weak.
     }
+    // The hierarchical model too.
+    //
+    // edu.knowledge_confidence is the table that has always modelled
+    // subject -> topic -> subtopic properly, with assessment counts and
+    // misconceptions — and battles never touched it, so a learner assessed
+    // entirely through battles had a mastery record of nothing at all while
+    // teaching sessions filled it in for everyone else.
+    await recordAssessment({ userId, topic, subtopic, subject, isCorrect })
+      .catch((e) => console.warn("[battle] mastery update failed:", e.message));
   } catch (e) {
     // Non-fatal — battle continues even if knowledge update fails
     console.warn("[battle] Knowledge confidence update failed:", e.message);
   }
+}
+
+/**
+ * One assessment against edu.knowledge_confidence.
+ *
+ * NOTE THE SCALE. confidence here is a PERCENTAGE, 0..100 — it is not the same
+ * column as edu.student_knowledge.confidence, which is a fraction 0..1. They
+ * measure different things (mastery of a subtopic vs how much to weight a note
+ * in retrieval) and mixing them silently produces a learner who is either
+ * 100x confident or 1% confident.
+ */
+async function recordAssessment({ userId, topic, subtopic, subject, isCorrect }) {
+  const sid = String(userId);
+  const sub = subtopic || topic;
+
+  const { data: row } = await db.schema("edu").from("knowledge_confidence")
+    .select("id, confidence, assess_count, passed_count")
+    .eq("student_id", sid).eq("topic", topic).eq("subtopic", sub).maybeSingle();
+
+  if (!row) {
+    // A first sighting starts from the observation rather than from a default:
+    // one correct answer is weak evidence of mastery, one wrong answer is weak
+    // evidence of its absence, and both beat pretending to know nothing.
+    await db.schema("edu").from("knowledge_confidence").insert({
+      student_id: sid, topic, subtopic: sub, subject: subject ?? "General",
+      confidence: isCorrect ? 45 : 15, prev_confidence: 20,
+      assess_count: 1, passed_count: isCorrect ? 1 : 0,
+      last_assessed: now(),
+      next_review_due: new Date(Date.now() + (isCorrect ? 7 : 1) * 86_400_000).toISOString(),
+    });
+    return;
+  }
+
+  // Moves proportionally to how far there is left to go, so mastery approaches
+  // its ceiling instead of hitting it after a lucky run of four.
+  const prev = Number(row.confidence ?? 20);
+  const next = isCorrect ? prev + (100 - prev) * 0.25 : prev * 0.75;
+  await db.schema("edu").from("knowledge_confidence").update({
+    prev_confidence: prev,
+    confidence: Math.max(0, Math.min(100, Number(next.toFixed(2)))),
+    assess_count: (row.assess_count ?? 0) + 1,
+    passed_count: (row.passed_count ?? 0) + (isCorrect ? 1 : 0),
+    last_assessed: now(), updated_at: now(),
+    next_review_due: new Date(Date.now() + (isCorrect ? 7 : 1) * 86_400_000).toISOString(),
+  }).eq("id", row.id);
 }
 
 /**
@@ -179,8 +238,13 @@ export async function flagBattleReviewTopics(battleId) {
       // The real numbers, not the sentinel. Confidence is read AFTER the battle
       // wrote its per-answer updates, and the before is reconstructed from what
       // the battle did to it, so the card's "x% (was y%)" is true.
+      // Read by SUBTOPIC now — the weak items are question topics, and those
+      // are stored as subtopics under the battle's topic since
+      // 2026-knowledge-hierarchy.sql. Reading them as topics found nothing and
+      // silently fell back to the 0.3 default, so every card said the same
+      // number regardless of how the learner had actually done.
       const { data: known } = await db.schema("edu").from("student_knowledge")
-        .select("topic, confidence").eq("agent_id", agent.id).in("topic", weak);
+        .select("topic, subtopic, confidence").eq("agent_id", agent.id).in("subtopic", weak);
       const confs = (known ?? []).map((k) => Number(k.confidence)).filter(Number.isFinite);
       const after = confs.length ? Math.max(0, confs.reduce((a, b) => a + b, 0) / confs.length) : 0.3;
       // Each wrong answer moved confidence by 0.05, so undoing that many steps

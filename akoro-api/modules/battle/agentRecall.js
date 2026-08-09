@@ -116,7 +116,7 @@ export async function recall({ studentId, embedding, topic, queryText = null, su
     return rerank({
       query: [topic, queryText].filter(Boolean).join(" — "),
       candidates: kept,
-      textOf: (n) => `(${n.topic ?? "untitled"}) ${n.content ?? ""}`,
+      textOf: (n) => `(${[n.topic, n.subtopic].filter(Boolean).join(" — ")}) ${n.content ?? ""}`,
       topK: limit,
       userId: studentId,
     });
@@ -166,8 +166,14 @@ export async function answerFromRecall({
     return { index: null, basis: "unknown", cited: null, why: "nothing in memory on this" };
   }
 
-  const noteBlock = notes.map((n, i) =>
-    `[${i + 1}] (${n.topic ?? "untitled"}) ${String(n.content ?? "").slice(0, 700)}`).join("\n\n");
+  const noteBlock = notes.map((n, i) => {
+    // Label with both levels when they differ: "Family — Family Roles" tells the
+    // model which of six sibling notes it is looking at, where "Family" six
+    // times over tells it nothing.
+    const label = n.subtopic && n.subtopic !== n.topic
+      ? `${n.topic} — ${n.subtopic}` : (n.topic ?? "untitled");
+    return `[${i + 1}] (${label}) ${String(n.content ?? "").slice(0, 700)}`;
+  }).join("\n\n");
   const optionBlock = options.map((o, i) =>
     `${String.fromCharCode(65 + i)}. ${typeof o === "string" ? o : (o?.text ?? "")}`).join("\n");
 

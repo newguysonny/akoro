@@ -18,6 +18,7 @@ const supabase = createClient(
 );
 
 import { openai } from "../../../../lib/aiModel.js";
+import { mergeKnowledge } from "./mergeKnowledge.js";
 
 // ── Embed helper ──────────────────────────────────────────────
 export async function embed(text) {
@@ -158,23 +159,32 @@ export async function saveAgentKnowledge({
   sessionId,
   subject,
   topic,
+  subtopic   = "",
   content,
   chunkType  = "taught",
   confidence = 0.50,
 }) {
-  // Check for existing knowledge on this subject+topic
+  // Keyed on (agent, topic, subtopic) — NOT on subject.
+  //
+  // The old lookup included subject, which is free text drifting between
+  // "Maths" and "Mathematics": a change of spelling made the row invisible and
+  // a second one was inserted beside it. It also used .single(), which returns
+  // null when it matches MORE than one row, so once two existed a third was
+  // created every session.
   const { data: existing } = await supabase
     .schema("edu").from("agent_knowledge")
-    .select("id, times_seen, confidence, decay_rate")
-    .eq("agent_id", agentId)
-    .eq("subject", subject || "general")
-    .ilike("topic", topic)
-    .single();
-
-  const embedding = await embed(content + " " + topic);
+    .select("id, times_seen, confidence, decay_rate, content")
+    .eq("agent_id", agentId).eq("topic", topic).eq("subtopic", subtopic ?? "")
+    .maybeSingle();
 
   if (existing) {
-    // Reinforce: confidence goes up, decay_rate improves slightly
+    // Reinforce: confidence goes up, decay_rate improves slightly.
+    //
+    // And the CONTENT IS MERGED, not overwritten. This update used to pass the
+    // new content straight through, so teaching one aspect of a topic already
+    // covered deleted everything else known about it — while times_seen and
+    // confidence both rose to say the opposite.
+    const { content: merged } = await mergeKnowledge(existing.content, content, { userId: studentId });
     const newConf      = Math.min(0.98, existing.confidence + 0.05);
     const newDecayRate = Math.max(0.04, (existing.decay_rate || 0.10) * 0.95);
 
@@ -185,7 +195,9 @@ export async function saveAgentKnowledge({
     await supabase
       .schema("edu").from("agent_knowledge")
       .update({
-        content,
+        content:         merged,
+        embedding:       await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim()),
+        embedded_at:     new Date(),
         confidence:      newConf,
         times_seen:      existing.times_seen + 1,
         last_seen_at:    new Date(),
@@ -214,13 +226,15 @@ export async function saveAgentKnowledge({
       session_id:      sessionId,
       subject:         subject || "general",
       topic,
+      subtopic:        subtopic ?? "",
       content,
       chunk_type:      chunkType,
       confidence,
       decay_rate:      0.10,
       priority,
       next_review_due: nextDue,
-      embedding,
+      embedding:       await embed(`${content} ${topic} ${subtopic ?? ""}`.trim()),
+      embedded_at:     new Date(),
     })
     .select("id")
     .single();
@@ -304,33 +318,59 @@ export async function saveStudentKnowledge({
   studentId,
   agentId,
   topic,
+  subtopic   = "",
   subject,
   content,
   source     = "session",
   confidence = 0.60,
   tags       = [],
 }) {
-  const embedding = await embed(content + " " + topic);
-
-  const { error } = await supabase
+  // Read-then-write rather than upsert.
+  //
+  // The upsert this replaces declared onConflict "student_id,topic" against a
+  // constraint that did not exist, so every call returned 42P10 and both
+  // callers swallowed it into a console.warn. This table — the one battle
+  // agents recall from — was therefore never written by a teaching session at
+  // all. The constraint exists now (2026-knowledge-hierarchy.sql), but the
+  // write still cannot be a blind upsert: an upsert REPLACES, and replacing is
+  // the second bug this fixes.
+  const key = { studentId, topic, subtopic: subtopic ?? "" };
+  const { data: existing } = await supabase
     .schema("edu").from("student_knowledge")
-    .upsert(
-      {
-        student_id:  studentId,
-        agent_id:    agentId,
-        topic,
-        subject:     subject || "general",
-        content,
-        source,
-        confidence,
-        tags,
-        embedding,
-        updated_at:  new Date(),
-      },
-      { onConflict: "student_id,topic" }
-    );
+    .select("id, content, confidence")
+    .eq("student_id", key.studentId).eq("topic", key.topic).eq("subtopic", key.subtopic)
+    .maybeSingle();
 
+  if (existing) {
+    const { content: merged, action } = await mergeKnowledge(existing.content, content, { userId: studentId });
+    // Nothing new was said. Re-embedding identical text is a bill for no
+    // change, so the row is left exactly as it is.
+    if (action === "unchanged" && merged === existing.content) return { action, id: existing.id };
+
+    const embedding = await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim());
+    const { error } = await supabase
+      .schema("edu").from("student_knowledge")
+      .update({
+        content: merged, subject: subject || "general", source, tags,
+        confidence: Math.min(1, Math.max(Number(existing.confidence ?? 0.5), confidence)),
+        embedding, embedded_at: new Date(), updated_at: new Date(),
+      }).eq("id", existing.id);
+    if (error) throw error;
+    return { action, id: existing.id };
+  }
+
+  const embedding = await embed(`${content} ${topic} ${subtopic ?? ""}`.trim());
+  const { data, error } = await supabase
+    .schema("edu").from("student_knowledge")
+    .insert({
+      student_id: studentId, agent_id: agentId,
+      topic, subtopic: subtopic ?? "", subject: subject || "general",
+      content, source, confidence, tags, embedding,
+      embedded_at: new Date(), updated_at: new Date(),
+    })
+    .select("id").single();
   if (error) throw error;
+  return { action: "saved", id: data?.id };
 }
 
 // =============================================================
