@@ -107,6 +107,15 @@ const TEACHER_INTENTS = {
   create_battle:      ["study review", "check what", "battle", "challenge",
                        "competition", "speed round", "quiz game", "duel"],
   attendance_rollcall:["attendance", "roll call", "rollcall", "register"],
+  // These four are catalog tools with no phrasings of their own — a teacher
+  // asking for a worksheet fell through to "general", whose tool list is
+  // EVERY tool. The model could still find the right one, but it was choosing
+  // from twenty rather than two. Listed before export_report so "report
+  // comment" is not eaten by its bare "report".
+  worksheet_fill:     ["worksheet", "handout", "practice sheet"],
+  exam_prep:          ["exam prep", "exam-prep", "waec", "jamb", "neco", "past paper practice"],
+  interactive_material:["interactive material", "interactive slides", "slide deck", "slides"],
+  report_writing:     ["report comment", "end of term report", "end-of-term report", "termly report"],
   grade_submissions:  ["grade", "mark", "score", "evaluate", "assess submission"],
   schedule_session:   ["schedule a class", "book a class", "live class", "session", "zoom", "meet"],
   export_report:      ["report", "analytics", "progress", "overview", "export", "csv"],
