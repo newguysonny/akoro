@@ -342,9 +342,22 @@ function TeachAgentModal({ session, config, onClose, onSessionStarted }) {
       });
 
       ws.on("voice_error", ({ message }) => {
+        // Shown, not logged.
+        //
+        // This was a console.warn and a silent flip-off, which is why a
+        // server-side voice failure was indistinguishable from a dead button —
+        // and why a misconfigured transcription session went unnoticed for
+        // months. The server sends a real reason; the learner should read it.
         console.warn("[voice stream]", message);
         setVoiceStreaming(false);
         setInterimText("");
+        setVoiceLevel(0);
+        voiceMediaRef.current?.stop();
+        voiceMediaRef.current = null;
+        setBlocks(prev => [...prev, {
+          type: "system-divider",
+          label: message || "Voice couldn't start. You can keep typing.",
+        }]);
       });
 
       // ── Streaming TTS events ───────────────────────────────────
