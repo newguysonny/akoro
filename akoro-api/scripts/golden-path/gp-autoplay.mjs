@@ -108,6 +108,15 @@ const liveCard = (await call(asLearner, 'GET', '/api/battle/my-battles')).json?.
 check('the card carries startedAgo', Number.isFinite(liveCard?.startedAgo),
   `startedAgo=${liveCard?.startedAgo}`);
 
+console.log('\n· And it survives a learner with hundreds of battles');
+// /my-battles used to list every battle id in the query string. At 410 battles
+// that is a ~15KB URL and the request just failed — 500, empty Battles tab, for
+// exactly the learners who play most. Two bounded queries now, merged.
+const all = await call(asLearner, 'GET', '/api/battle/my-battles');
+check('my-battles answers', all.status === 200, `status=${all.status}`);
+check('and is capped rather than unbounded', (all.json?.data ?? []).length <= 100,
+  `${all.json?.data?.length ?? 0} cards`);
+
 console.log('\n· Health reports whether live battles are actually playing');
 // "It doesn't play" has several causes that look identical from outside: no
 // agents scheduled, a queue that is not draining, or simply being early. The

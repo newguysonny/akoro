@@ -920,14 +920,35 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
   const ids = [...new Set((parts ?? []).map((p) => p.battle_id))];
   const mySeat = new Map((parts ?? []).map((p) => [p.battle_id, p]));
 
-  let q = db.from("battles")
-    .select("*, users!battles_created_by_fkey(full_name, avatar_url)")
-    .order("created_at", { ascending: false }).limit(100);
-  q = ids.length ? q.or(`id.in.(${ids.join(",")}),created_by.eq.${req.user.id}`)
-                 : q.eq("created_by", req.user.id);
+  // Two queries, not one filter listing every id.
+  //
+  // This used to build `id.in.(<every battle id>)` — one URL carrying every
+  // battle the learner had ever been in. At 410 battles that is a ~15KB query
+  // string, and the request simply failed: /my-battles answered 500 and the
+  // Battles tab was empty for exactly the learners who use it most. A learner
+  // is limited to 100 cards anyway, so listing hundreds of ids to fetch them
+  // was never necessary.
+  //
+  // Newest first in both, merged and re-cut to the same 100.
+  const PAGE = 100;
+  const [seated, created] = await Promise.all([
+    ids.length
+      ? db.from("battles").select("*, users!battles_created_by_fkey(full_name, avatar_url)")
+          .in("id", ids.slice(0, 300))       // most recent seats; PostgREST takes these as a body-safe list
+          .order("created_at", { ascending: false }).limit(PAGE)
+      : Promise.resolve({ data: [] }),
+    db.from("battles").select("*, users!battles_created_by_fkey(full_name, avatar_url)")
+      .eq("created_by", req.user.id)
+      .order("created_at", { ascending: false }).limit(PAGE),
+  ]);
+  if (seated.error)  throw new Error(seated.error.message);
+  if (created.error) throw new Error(created.error.message);
 
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
+  const byId = new Map();
+  for (const b of [...(seated.data ?? []), ...(created.data ?? [])]) byId.set(b.id, b);
+  const data = [...byId.values()]
+    .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
+    .slice(0, PAGE);
 
   // A finished battle's card wants to say who won and by what. toCard never
   // carried any of it, so the learner app rendered its result line from three

@@ -47,6 +47,36 @@ Logins are rate limited to 5 per 15 minutes per IP — which is the limiter
 working, since it was inert until recently. Restart the API between full runs;
 the store is in-process.
 
+## Battle fields — what the endpoints actually require
+
+Taken from the routes, not from the tool's own claims. gp-chat-battle.mjs
+asserts both halves of this table.
+
+| Field            | Class battle | Learners (in a class) | Course battle | Study review |
+|------------------|--------------|-----------------------|---------------|--------------|
+| `title`          | required     | required              | required      | required     |
+| `audience`       | required     | required              | required      | required     |
+| `className`      | required     | required              | —             | required     |
+| `subject`        | **required** | **required**          | optional      | **required** |
+| `usernames`      | —            | two or more           | —             | exactly one  |
+| `courseId`       | —            | —                     | required*     | —            |
+| `topic`          | optional†    | optional†             | optional‡     | optional†    |
+| `difficulty`     | intermediate | intermediate          | intermediate  | intermediate |
+| `totalQuestions` | 15           | 15                    | 15            | 15           |
+| `durationMinutes`| 15           | 15                    | 15            | 15           |
+| `xpPrize`        | 200          | 200                   | 200           | 200          |
+| `questionSource` | auto         | auto                  | auto          | auto         |
+| `scheduledFor`   | now          | now                   | now           | now          |
+
+\* or the course the task is attached to.
+† recorded, and steers AI generation, but does NOT narrow the past-questions
+bank — that is searched by SUBJECT, which is why subject is the mandatory one.
+‡ FILTERS the course's own bank, so a topic that course has no questions for
+comes back empty.
+
+At least 5 questions must be findable or creation is refused. `questionSource`
+'bank' refuses rather than generating; 'ai' generates the lot and costs coins.
+
 ## If gp-tools reports "Connection error"
 
 That is the stand-in model being down, not a regression — every AI path fails

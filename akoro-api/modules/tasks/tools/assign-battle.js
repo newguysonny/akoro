@@ -25,36 +25,61 @@ const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env
 export const assignBattleDefinition = {
   name: "assign_battle",
   description:
-    "Create a battle or a study review, like the Battles form. Three kinds: a CLASS battle " +
-    "(name the class and a subject — questions come from the past-questions bank), a COURSE " +
-    "battle (name the course — questions come from that course's bank), or a STUDY REVIEW of " +
-    "ONE named learner, which produces a mark sheet instead of a winner. Use this when the " +
-    "teacher says 'create a battle', 'set a challenge', 'quiz competition', 'speed round', or " +
-    "'review <learner> on <topic>', 'check what <learner> knows'. A battle is agent against " +
-    "agent, so it needs at least TWO learners; if only one is named, that is a study review.",
+    "Create a battle or a study review, like the Battles form.\n" +
+    "\n" +
+    "KINDS\n" +
+    "  class    — everyone in a class (name the class AND a subject). Questions come " +
+    "from the past-questions bank for that subject.\n" +
+    "  learners — two or more named learners. Name the class they are in, or the course.\n" +
+    "  course   — everyone enrolled on a course. Questions come from that course's bank.\n" +
+    "  review   — ONE named learner, checked with a mark sheet instead of a winner.\n" +
+    "\n" +
+    "A battle is agent against agent, so it needs at least TWO learners. If the teacher " +
+    "names only one, that is a study review — say so rather than creating a battle.\n" +
+    "\n" +
+    "REQUIRED: title, audience. Plus className AND subject for class/learners-in-a-class " +
+    "and review; plus courseId (or the task's own course) for course battles.\n" +
+    "Everything else has a sensible default — do not invent values the teacher did not give.\n" +
+    "\n" +
+    "Use it for 'create a battle', 'set a challenge', 'quiz competition', 'speed round', " +
+    "'review <learner> on <topic>', 'check what <learner> knows'.\n" +
+    "\n" +
+    "Good: {audience:'class', className:'JSS1', subject:'Basic Science', topic:'Photosynthesis', " +
+    "title:'Photosynthesis Showdown', totalQuestions:10}\n" +
+    "Good: {audience:'learners', className:'JSS1', subject:'Mathematics', " +
+    "usernames:['priya','amaka'], title:'Fractions face-off'}\n" +
+    "Good: {audience:'review', className:'JSS1', subject:'Mathematics', topic:'Fractions', " +
+    "usernames:['priya'], title:'Fractions review'}",
   input_schema: {
     type: "object",
     properties: {
-      courseId:  { type: "string", description: "The course the battle belongs to — its question bank supplies the questions. Omit to use the course this task is attached to." },
-      title:     { type: "string", description: "Battle title, e.g. 'Photosynthesis Showdown'" },
-      topic:     { type: "string", description: "Topic to draw questions on" },
-      subject:   { type: "string", description: "Subject, e.g. Mathematics. REQUIRED for a class battle — its questions are drawn from this subject." },
+      title:     { type: "string", description: "REQUIRED. What learners see, e.g. 'Photosynthesis Showdown'." },
       audience:  {
         type: "string",
-        enum: ["course", "class", "learners", "review"],
+        enum: ["class", "learners", "course", "review"],
         description:
-          "Who it is for. 'course' = everyone enrolled; 'class' = everyone in the class; " +
-          "'learners' = two or more named learners (a battle needs two to compete); " +
-          "'review' = ONE named learner, checked with a mark sheet rather than a winner.",
+          "REQUIRED. 'class' = everyone in the class; 'learners' = two or more named " +
+          "learners; 'course' = everyone enrolled; 'review' = exactly one learner, marked.",
       },
-      className: { type: "string", description: "Class name, e.g. 'JSS1'. Needed for 'class' and 'review', and for naming learners within a class rather than a course." },
-      usernames: { type: "array", items: { type: "string" }, description: "Usernames for 'learners' (two or more) or 'review' (exactly one)" },
-      difficulty:      { type: "string", enum: ["easy", "intermediate", "hard"] },
-      totalQuestions:  { type: "number", description: "Default 15" },
-      durationMinutes: { type: "number", description: "Default 15" },
-      xpPrize:         { type: "number", description: "Default 200" },
-      scheduledFor:    { type: "string", description: "ISO timestamp to start it later. Omit to send it now." },
-      questionSource:  { type: "string", enum: ["auto", "bank", "ai"], description: "Where questions come from. 'auto' (default) uses the bank and generates the shortfall." },
+      className: { type: "string", description: "The class, e.g. 'JSS1'. REQUIRED for 'class' and 'review', and for naming learners within a class rather than a course." },
+      subject:   { type: "string", description: "REQUIRED for anything class-based — the past-questions bank is searched by subject, so this is what decides which questions exist. e.g. 'Mathematics', 'Basic Science'." },
+      usernames: { type: "array", items: { type: "string" }, description: "REQUIRED for 'learners' (two or more) and 'review' (exactly one)." },
+      courseId:  { type: "string", description: "For 'course' battles. Omit to use the course this task is attached to." },
+      topic:     {
+        type: "string",
+        description:
+          "Optional, and it does different things: for a CLASS battle from the bank it is " +
+          "recorded but does not narrow the questions (the bank is searched by subject); for " +
+          "a COURSE battle it FILTERS that course's bank, so a topic the course has no " +
+          "questions for will come back empty; and it always steers AI-generated questions. " +
+          "Give it when the teacher names one, e.g. 'on photosynthesis'.",
+      },
+      difficulty:      { type: "string", enum: ["easy", "intermediate", "hard"], description: "Optional. Default intermediate." },
+      totalQuestions:  { type: "number", description: "Optional. Default 15. At least 5 must be findable or the battle is refused." },
+      durationMinutes: { type: "number", description: "Optional. Default 15. Shared across the questions — 15 minutes over 15 questions gives each one a minute." },
+      xpPrize:         { type: "number", description: "Optional. Default 200." },
+      scheduledFor:    { type: "string", description: "Optional ISO timestamp to start it later. Omit to send it now; learners accept and it starts once they have all answered." },
+      questionSource:  { type: "string", enum: ["auto", "bank", "ai"], description: "Optional. Default 'auto' — the bank first, AI for the shortfall. 'bank' refuses rather than generating; 'ai' generates the lot and costs coins." },
     },
     required: ["title", "audience"],
   },
@@ -132,7 +157,14 @@ export async function executeAssignBattle(rawInput, ctx) {
     if (!input.className) return { success: false, error: "Which class? Name it in the task, e.g. 'for JSS1'." };
     room = await findClassroom(input.className, ctx.teacherId);
     if (!room) return { success: false, error: `No class called "${input.className}" — check the name under Academics → Classes.` };
-    if (!input.subject) return { success: false, error: `Which subject? A class battle draws its questions from one — name it, e.g. "Mathematics".` };
+    // Subject is the one field with no sensible default: the past-questions
+    // bank is searched BY subject, so without it there is nothing to draw from.
+    // The endpoint refuses it too, but answering here names what is missing
+    // instead of returning the endpoint's message through a failed run.
+    if (!input.subject) {
+      return { success: false, error:
+        `Which subject? ${input.audience === "review" ? "A review" : "A class battle"} draws its questions from one — name it, e.g. "Mathematics" or "Basic Science".` };
+    }
 
     if (input.audience === "class") {
       target.whole_class = true;

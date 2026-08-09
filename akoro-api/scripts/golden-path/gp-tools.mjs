@@ -23,8 +23,10 @@ check('output is rendered markdown', !!hooks.json?.data?.content, `${hooks.json?
 console.log('\n═══ B. TASK AGENT LOOP — the whole point of tasks ═══');
 
 const cases = [
-  { label: 'battle',     title: 'Every Monday, create a battle for JSS1',
-    description: 'Set a class battle for JSS1 on last week\'s topic. 8 questions, medium.',
+  // A real request names the subject — the bank is searched by it, so "a battle
+  // for JSS1" is not something the endpoint can act on without guessing.
+  { label: 'battle',     title: 'Every Monday, set JSS1 a Mathematics battle',
+    description: 'Class battle for JSS1. Subject Mathematics, topic fractions, 8 questions, medium difficulty.',
     expectType: 'create_battle', expectTool: 'assign_battle', outputType: 'battle' },
   { label: 'self study', title: 'Assign self study on the water cycle to JSS1',
     description: 'Basic Science. Due Friday.',

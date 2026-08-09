@@ -93,5 +93,38 @@ const whole = await executeAssignBattle({
 }, ctx);
 check('whole class', whole.success === true, whole.success ? `invited ${whole.invited}` : whole.error);
 
+console.log('\n· What is MANDATORY is refused clearly, not passed downstream');
+// The endpoints require: title, a target, and — for anything class-based — a
+// subject, because the past-questions bank is searched by subject and there is
+// nothing to draw from without it.
+const noSubject = await executeAssignBattle({
+  title: 'Chat — no subject', audience: 'class', className: 'JSS1',
+  totalQuestions: 8, questionSource: 'bank',
+}, ctx);
+check('a class battle without a subject says which field is missing',
+  noSubject.success === false && /which subject/i.test(noSubject.error ?? ''), noSubject.error);
+
+const noClass = await executeAssignBattle({
+  title: 'Chat — no class', audience: 'class', subject: 'Mathematics',
+  totalQuestions: 8, questionSource: 'bank',
+}, ctx);
+check('and a class battle without a class does too',
+  noClass.success === false && /which class/i.test(noClass.error ?? ''), noClass.error);
+
+console.log('\n· What is OPTIONAL really does default');
+// Only the mandatory fields — everything else should fill itself in.
+const bare = await executeAssignBattle({
+  title: 'Chat — defaults only', audience: 'class', className: 'JSS1', subject: 'Mathematics',
+}, ctx);
+check('a battle with only the required fields is created', bare.success === true,
+  bare.success ? `invited ${bare.invited}` : bare.error);
+if (bare.battleId) {
+  const { data: b } = await db.from('battles')
+    .select('total_questions, time_limit_seconds, xp_prize, difficulty').eq('id', bare.battleId).single();
+  check('and it carries the documented defaults',
+    b?.difficulty === 'intermediate' && b?.xp_prize === 200 && b?.time_limit_seconds === 15 * 60,
+    JSON.stringify(b));
+}
+
 console.log(`\nCHAT BATTLES: ${pass} passed, ${fail} failed`);
 process.exit(0);
