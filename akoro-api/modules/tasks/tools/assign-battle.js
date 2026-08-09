@@ -25,12 +25,13 @@ const API_BASE = process.env.INTERNAL_API_URL || `http://127.0.0.1:${process.env
 export const assignBattleDefinition = {
   name: "assign_battle",
   description:
-    "Create a battle for learners. Two kinds, like the Battles form: a CLASS battle " +
-    "(name the class and a subject — questions come from the past-questions bank) or a " +
-    "COURSE battle (name the course — questions come from that course's bank). Use this when " +
-    "the teacher says 'create a battle', 'set a challenge', 'quiz competition', 'speed round' " +
-    "or similar. One named learner produces a 1-v-1 challenge they accept or decline; two or " +
-    "more produces a group battle everyone is entered into.",
+    "Create a battle or a study review, like the Battles form. Three kinds: a CLASS battle " +
+    "(name the class and a subject — questions come from the past-questions bank), a COURSE " +
+    "battle (name the course — questions come from that course's bank), or a STUDY REVIEW of " +
+    "ONE named learner, which produces a mark sheet instead of a winner. Use this when the " +
+    "teacher says 'create a battle', 'set a challenge', 'quiz competition', 'speed round', or " +
+    "'review <learner> on <topic>', 'check what <learner> knows'. A battle is agent against " +
+    "agent, so it needs at least TWO learners; if only one is named, that is a study review.",
   input_schema: {
     type: "object",
     properties: {
@@ -40,11 +41,14 @@ export const assignBattleDefinition = {
       subject:   { type: "string", description: "Subject, e.g. Mathematics. REQUIRED for a class battle — its questions are drawn from this subject." },
       audience:  {
         type: "string",
-        enum: ["course", "class", "learners"],
-        description: "Who it is for: everyone on the course, a whole class, or named learners",
+        enum: ["course", "class", "learners", "review"],
+        description:
+          "Who it is for. 'course' = everyone enrolled; 'class' = everyone in the class; " +
+          "'learners' = two or more named learners (a battle needs two to compete); " +
+          "'review' = ONE named learner, checked with a mark sheet rather than a winner.",
       },
-      className: { type: "string", description: "Class name when audience is 'class', e.g. 'JSS1'. A class battle needs this and a subject." },
-      usernames: { type: "array", items: { type: "string" }, description: "Usernames when audience is 'learners'" },
+      className: { type: "string", description: "Class name, e.g. 'JSS1'. Needed for 'class' and 'review', and for naming learners within a class rather than a course." },
+      usernames: { type: "array", items: { type: "string" }, description: "Usernames for 'learners' (two or more) or 'review' (exactly one)" },
       difficulty:      { type: "string", enum: ["easy", "intermediate", "hard"] },
       totalQuestions:  { type: "number", description: "Default 15" },
       durationMinutes: { type: "number", description: "Default 15" },
@@ -61,7 +65,7 @@ const paramsSchema = z.object({
   title:           z.string(),
   topic:           z.string().optional(),
   subject:         z.string().optional(),
-  audience:        z.enum(["course", "class", "learners"]),
+  audience:        z.enum(["course", "class", "learners", "review"]),
   className:       z.string().optional(),
   usernames:       z.array(z.string()).default([]),
   difficulty:      z.enum(["easy", "intermediate", "hard"]).default("intermediate"),
@@ -118,12 +122,37 @@ export async function executeAssignBattle(rawInput, ctx) {
   const target = { whole_class: false, classroom_id: null, usernames: [] };
   let path, room = null;
 
-  if (input.audience === "class") {
+  // A CLASS is named, so this is a class battle — whether it is for everyone in
+  // it or for named learners within it. Only 'learners' used to reach here at
+  // all through the course branch, so "set a battle for Priya and Ada in JSS1"
+  // demanded a course and listed the teacher's twelve courses back at them,
+  // even though the class and the subject were right there in the request.
+  if (input.audience === "class" || input.audience === "review" ||
+      (input.audience === "learners" && input.className)) {
     if (!input.className) return { success: false, error: "Which class? Name it in the task, e.g. 'for JSS1'." };
     room = await findClassroom(input.className, ctx.teacherId);
     if (!room) return { success: false, error: `No class called "${input.className}" — check the name under Academics → Classes.` };
     if (!input.subject) return { success: false, error: `Which subject? A class battle draws its questions from one — name it, e.g. "Mathematics".` };
-    target.whole_class = true;
+
+    if (input.audience === "class") {
+      target.whole_class = true;
+    } else {
+      if (!input.usernames.length) {
+        return { success: false, error: "Which learners? List their usernames in the task." };
+      }
+      target.usernames = input.usernames;
+      // A battle is agent vs agent, so it needs two. A REVIEW is the one shape
+      // that takes exactly one — say which they meant rather than letting the
+      // endpoint refuse it with a message about picking more people.
+      if (input.audience === "learners" && input.usernames.length < 2) {
+        return { success: false, error:
+          `A battle needs two learners to compete. Name another, or ask for a study review of ${input.usernames[0]} instead.` };
+      }
+      if (input.audience === "review" && input.usernames.length !== 1) {
+        return { success: false, error: "A study review is for one learner. Name exactly one." };
+      }
+      if (input.audience === "review") target.mode = "review";
+    }
     path = `/api/battle/classes/${room.id}/battles/invite`;
   } else {
     // Course battle. Prefer what the model said, fall back to the task's own
@@ -142,8 +171,15 @@ export async function executeAssignBattle(rawInput, ctx) {
       };
     }
     if (input.audience === "course") target.whole_class = true;
-    else {
+    else if (input.audience === "review") {
+      return { success: false, error:
+        "A study review is set on a class, not a course. Name the class, e.g. 'review Priya in JSS1 on fractions'." };
+    } else {
       if (!input.usernames.length) return { success: false, error: "Which learners? List their usernames in the task." };
+      if (input.usernames.length < 2) {
+        return { success: false, error:
+          `A battle needs two learners to compete. Name another, or ask for a study review of ${input.usernames[0]} instead.` };
+      }
       target.usernames = input.usernames;
     }
     path = `/api/battle/courses/${courseId}/battles/invite`;

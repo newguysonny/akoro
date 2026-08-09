@@ -104,7 +104,8 @@ const TEACHER_INTENTS = {
   assign_self_study:  ["self study", "self-study", "assign study", "study assignment", "independent study"],
   run_teaching_tool:  ["podcast", "misconception", "real-world", "real world connection", "lesson hook",
                        "vocabulary", "essay grade", "grade this essay", "lesson plan", "assignment creator"],
-  create_battle:      ["battle", "challenge", "competition", "speed round", "quiz game", "duel"],
+  create_battle:      ["study review", "check what", "battle", "challenge",
+                       "competition", "speed round", "quiz game", "duel"],
   attendance_rollcall:["attendance", "roll call", "rollcall", "register"],
   grade_submissions:  ["grade", "mark", "score", "evaluate", "assess submission"],
   schedule_session:   ["schedule a class", "book a class", "live class", "session", "zoom", "meet"],
@@ -114,6 +115,21 @@ const TEACHER_INTENTS = {
 };
 
 const STUDENT_ROLES = new Set(["student", "learner"]);
+
+/**
+ * "Review <learner>" is a study review; "grade and review their work" is not.
+ *
+ * The task type decides which TOOLS the model is shown, so routing this wrongly
+ * is not cosmetic — a review that lands on generate_quiz can never call
+ * assign_battle, and the teacher gets a quiz they did not ask for.
+ *
+ * This runs only AFTER the keyword maps have had their say, and only rescues
+ * what they would otherwise drop on the floor. A bare "review" keyword in the
+ * map took marking phrasings with it ("grade and review student work" became a
+ * battle); leaving it to the end means an intent that genuinely matched wins.
+ */
+const REVIEWY   = /\breview(ing)?\b|\bcheck what\b/;
+const MARKINGY  = /\b(grade|grading|mark|marking|score|scoring|evaluate)\b|\b(submission|homework|essay|script)s?\b/;
 
 export async function extractIntent(title, description, role) {
   const text = `${title} ${description ?? ""}`.toLowerCase();
@@ -129,6 +145,11 @@ export async function extractIntent(title, description, role) {
     for (const [type, keywords] of Object.entries(map)) {
       if (keywords.some((k) => text.includes(k))) return { taskType: type, payload: {} };
     }
+  }
+  // Nothing matched. If it reads like "review Priya on fractions", that is a
+  // study review — assign_battle creates one — rather than nothing at all.
+  if (!STUDENT_ROLES.has(role) && REVIEWY.test(text) && !MARKINGY.test(text)) {
+    return { taskType: "create_battle", payload: {} };
   }
   return { taskType: "general", payload: {} };
 }
