@@ -20,7 +20,12 @@ export const TOOL_GATES = {
   send_reminder:      "send-reminder",
   schedule_session:   "schedule-session",
   export_report:      "export-report",
-  create_battle:      "create-battle",
+  // create_battle is retired — the tool inserted battles with no participants.
+  // Its replacement, assign_battle, is deliberately NOT gated here: gating it
+  // would take chat battle creation away from every instructor who has it
+  // today, which is a pricing decision and not a side effect of deleting a
+  // broken tool. The 'create-battle' catalog item is still listed and still
+  // sells; nobody has bought it (0 unlocks), so nothing is owed to anyone.
   grade_submissions:  "grading",
   // Catalog-backed orchestrated tools
   lesson_plan_fill:     "lesson-plan",

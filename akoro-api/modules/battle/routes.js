@@ -911,32 +911,27 @@ function toCard(b, extra = {}) {
 
 // GET /api/battle/my-battles — every battle I take part in or created
 router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
-  // My own seat in each battle, not just which battles I have one in. The card
-  // needs it: a battle I have been invited to but not answered belongs in
-  // Challenges, not in Battles › Active, and the two lists had no way to tell
-  // those apart — so an unanswered invitation appeared in both at once.
-  const { data: parts } = await db.from("battle_participants")
-    .select("battle_id, role, joined_at, declined_at").eq("user_id", req.user.id);
-  const ids = [...new Set((parts ?? []).map((p) => p.battle_id))];
-  const mySeat = new Map((parts ?? []).map((p) => [p.battle_id, p]));
-
-  // Two queries, not one filter listing every id.
+  // ── Which battles are mine, and what is my seat in each? ────────────────
   //
-  // This used to build `id.in.(<every battle id>)` — one URL carrying every
-  // battle the learner had ever been in. At 410 battles that is a ~15KB query
-  // string, and the request simply failed: /my-battles answered 500 and the
-  // Battles tab was empty for exactly the learners who use it most. A learner
-  // is limited to 100 cards anyway, so listing hundreds of ids to fetch them
-  // was never necessary.
+  // Query BATTLES and filter on the embedded seat, not the other way round.
+  // Three shapes were tried before this one worked:
+  //   · `id.in.(<every battle id>)` — ~15KB of uuids in the query string at 410
+  //     battles, and the request 500'd outright
+  //   · the same list sliced to 300 — hid whichever battles fell outside the
+  //     slice, including the one just created, since seat rows come back in no
+  //     particular order
+  //   · selecting FROM battle_participants and ordering by battles.created_at —
+  //     PostgREST cannot order a result by an embedded table's column, so the
+  //     rows came back unordered and the limit cut arbitrary ones
   //
-  // Newest first in both, merged and re-cut to the same 100.
+  // Ordering happens on battles, which is the table being limited, so this
+  // stays bounded and correct however long a learner's history gets.
   const PAGE = 100;
   const [seated, created] = await Promise.all([
-    ids.length
-      ? db.from("battles").select("*, users!battles_created_by_fkey(full_name, avatar_url)")
-          .in("id", ids.slice(0, 300))       // most recent seats; PostgREST takes these as a body-safe list
-          .order("created_at", { ascending: false }).limit(PAGE)
-      : Promise.resolve({ data: [] }),
+    db.from("battles")
+      .select("*, users!battles_created_by_fkey(full_name, avatar_url), battle_participants!inner(role, joined_at, declined_at, user_id)")
+      .eq("battle_participants.user_id", req.user.id)
+      .order("created_at", { ascending: false }).limit(PAGE),
     db.from("battles").select("*, users!battles_created_by_fkey(full_name, avatar_url)")
       .eq("created_by", req.user.id)
       .order("created_at", { ascending: false }).limit(PAGE),
@@ -944,8 +939,19 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
   if (seated.error)  throw new Error(seated.error.message);
   if (created.error) throw new Error(created.error.message);
 
-  const byId = new Map();
-  for (const b of [...(seated.data ?? []), ...(created.data ?? [])]) byId.set(b.id, b);
+  // My own seat, not just the fact that I have one: a battle I have been
+  // invited to but not answered belongs in Challenges, not Battles › Active,
+  // and the two lists had no way to tell those apart.
+  const mySeat = new Map();
+  const byId   = new Map();
+  for (const b of (seated.data ?? [])) {
+    const seat = (b.battle_participants ?? []).find((p) => p.user_id === req.user.id);
+    if (seat) mySeat.set(b.id, seat);
+    delete b.battle_participants;          // the embed is plumbing, not card data
+    byId.set(b.id, b);
+  }
+  for (const b of (created.data ?? [])) byId.set(b.id, b);
+
   const data = [...byId.values()]
     .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
     .slice(0, PAGE);
