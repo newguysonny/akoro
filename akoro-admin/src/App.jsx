@@ -17,6 +17,7 @@ import BlogPostEditorPage   from './pages/BlogPostEditorPage.jsx';
 import CareersAdminPage     from './pages/CareersAdminPage.jsx';
 import AnalyticsPage        from './pages/AnalyticsPage.jsx';
 import AiSpendPage          from './pages/AiSpendPage.jsx';
+import EvalsPage            from './pages/EvalsPage.jsx';
 import PaymentsPage         from './pages/PaymentsPage.jsx';
 import PayoutsPage          from './pages/PayoutsPage.jsx';
 import ReviewsPage          from './pages/ReviewsPage.jsx';
@@ -109,6 +110,7 @@ export default function App() {
           <Route path="/content/careers"   element={<AdminRoute><CareersAdminPage /></AdminRoute>} />
           <Route path="/analytics"         element={<AdminRoute><AnalyticsPage /></AdminRoute>} />
           <Route path="/ai-spend"          element={<AdminRoute><AiSpendPage /></AdminRoute>} />
+          <Route path="/evals"             element={<AdminRoute><EvalsPage /></AdminRoute>} />
           <Route path="/payments"          element={<AdminRoute><PaymentsPage /></AdminRoute>} />
           <Route path="/payouts"           element={<AdminRoute><PayoutsPage /></AdminRoute>} />
           <Route path="/reviews"           element={<AdminRoute><ReviewsPage /></AdminRoute>} />

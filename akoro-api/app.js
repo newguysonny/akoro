@@ -392,6 +392,12 @@ if (process.env.REDIS_URL) {
   import("./modules/battle/worker.js")
     .then(() => console.log("[battle] worker started at boot"))
     .catch((e) => console.error("[battle] worker failed to start:", e.message));
+
+  // Eval runs. Same guard: a suite is minutes of model calls, so it runs on a
+  // queue and the admin page polls.
+  import("./lib/evalWorker.js")
+    .then((m) => m.startEvalWorker())
+    .catch((e) => console.error("[evals] worker failed to start:", e.message));
 }
 
 // Alert rules — spend, latency, failures, and work that has silently stopped.

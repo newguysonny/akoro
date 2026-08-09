@@ -183,7 +183,14 @@ function styleBlock(exemplars) {
  * Charged after the call, so a failed generation is free. Returns
  * { questions, charged }.
  */
-export async function generate({ subject, topic, difficulty, count, classLabel, userId, exemplars = [] }) {
+export async function generate({
+  subject, topic, difficulty, count, classLabel, userId, exemplars = [],
+  // Which model writes them. Defaults to the platform's, but an eval run needs
+  // to point the SAME generation path at a different tier — comparing models is
+  // the only way "cheaper without quality loss" is more than an assertion.
+  model = OPENAI_MODEL,
+  feature = "battle_generate",
+}) {
   const style = styleBlock(exemplars);
   const syllabus = await curriculumGrounding(subject, topic);
   const level = classLabel ? ` for ${classLabel} students` : " for Nigerian junior-secondary students";
@@ -206,8 +213,8 @@ export async function generate({ subject, topic, difficulty, count, classLabel, 
   const resp = await openai.chat.completions.create({
     // Runs outside a request, so nothing sets the feature for it — without
     // this its cost lands in the unattributable "ai" bucket.
-    __feature: "battle_generate",
-    model: OPENAI_MODEL, max_tokens: Math.min(4000, 260 * count + 500), temperature: 0.7,
+    __feature: feature,
+    model, max_tokens: Math.min(4000, 260 * count + 500), temperature: 0.7,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
   });
 
@@ -228,16 +235,23 @@ export async function generate({ subject, topic, difficulty, count, classLabel, 
   }
 
   let charged = 0;
-  try {
-    const billTo = await schoolBillTo(userId);
-    const r = await chargeForAI({
-      userId, feature: "battle_questions", model: OPENAI_MODEL,
-      usage: resp.usage || {}, ref: subject, billTo,
-    });
-    charged = r?.charged || 0;
-  } catch (e) {
-    if (e instanceof InsufficientCoins) throw e;   // the caller turns this into copy
-    console.error("[battle/questions] charge failed:", e.message);
+  // An eval is diagnostic, not a service anyone asked for: charging the admin
+  // who pressed Run would bill them for checking whether the platform still
+  // works, and a wallet at zero would fail the suite for a reason that has
+  // nothing to do with the model. The OpenAI cost is still recorded — the call
+  // is tagged feature='eval', which is where the run's real cost comes from.
+  if (feature !== "eval") {
+    try {
+      const billTo = await schoolBillTo(userId);
+      const r = await chargeForAI({
+        userId, feature: "battle_questions", model,
+        usage: resp.usage || {}, ref: subject, billTo,
+      });
+      charged = r?.charged || 0;
+    } catch (e) {
+      if (e instanceof InsufficientCoins) throw e;   // the caller turns this into copy
+      console.error("[battle/questions] charge failed:", e.message);
+    }
   }
 
   return { questions: out, charged };

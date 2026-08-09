@@ -100,6 +100,28 @@ validation, DB writes, coin charging, artifact persistence, every failure
 branch. What it CANNOT prove: whether a real model picks the right tool or
 writes good questions. That needs a live key.
 
+## The half a stand-in model cannot cover (evals)
+
+That last gap is what `lib/evals/` is for, and it is a different kind of test:
+it costs money, it is not deterministic, and a failure means the MODEL changed
+its mind rather than that someone broke the code. So it does not run here.
+
+    node scripts/evals/run.mjs                       # list suites and estimates
+    node scripts/evals/run.mjs routing gpt-4o-mini   # exits non-zero on failure
+
+Two suites. `questions` asks whether generated questions can be marked — the
+answer key inside the options, no duplicates, how many survive `normalise()`.
+`routing` asks whether the model picks the right tool for what a teacher typed,
+using the cases in `docs/CHAT-COMMANDS.md` so documentation and test cannot
+drift. Both refuse to run without `OPENAI_API_KEY`: against the stand-in model
+every case would pass for the wrong reason, and a green board that proves
+nothing is worse than an error, because someone will quote it.
+
+Admins can run the same suites from the Evals page, which is the only control
+in that app that spends. `gp-evals.mjs` covers everything around the model call
+— permissions, the estimate, the refusal, one-run-at-a-time, cancellation,
+failures-first results — without spending anything.
+
 Coins are real. A run costs a few, and a wallet at zero fails every AI test
 with "Insufficient coin balance" — top up the test accounts, don't chase it as
 a bug.
