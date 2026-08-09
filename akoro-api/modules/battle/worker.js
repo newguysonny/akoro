@@ -10,7 +10,8 @@ import { Worker, Queue } from "bullmq";
 import Redis             from "ioredis";
 import db                from "../../db.js";
 import { bullRedisOptions } from "../../lib/redisOptions.js";
-import { accuracyFor, thinkingTimeMs, chooseAnswer, autoPlayers } from "./agentPlayer.js";
+import { thinkingTimeMs, autoPlayers } from "./agentPlayer.js";
+import { embedQuestion, recall, recallStrength, answerFromRecall, guess } from "./agentRecall.js";
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
@@ -222,18 +223,38 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
     .select("id").eq("participant_id", p.id).eq("question_id", q.id).maybeSingle();
   if (already) return;
 
-  const { data: bq } = await db.from("battles").select("difficulty").eq("id", battleId).maybeSingle();
-  const options  = JSON.parse(q.options_json);
-  const accuracy = await accuracyFor({
-    userId: p.user_id, agentId: p.agent_id, topic: q.topic, difficulty: bq?.difficulty,
-  });
-  const picked = chooseAnswer(accuracy, options.length, q.correct_answer_index);
+  const options = JSON.parse(q.options_json);
+
+  // What the learner taught this agent about this question — nothing else.
+  //
+  // This is a real recall, not a probability: the question is embedded, the
+  // learner's own notes are searched, and the model is shown ONLY those notes.
+  // A correct answer therefore means their notes contained the answer. When
+  // they do not, the agent says so and guesses, and the log says which it was.
+  const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
+  const notes = await recall({ studentId: p.user_id, embedding, topic: q.topic });
+
+  let picked, basis = "unknown", cited = null, why = "nothing in memory on this";
+  try {
+    const ans = await answerFromRecall({
+      question: q.question_text, options, notes, userId: p.user_id,
+    });
+    basis = ans.basis; cited = ans.cited; why = ans.why;
+    picked = ans.index;
+  } catch (e) {
+    // A model failure is not knowledge the learner lacks, so it must not be
+    // recorded as one — but the question still has to resolve or the battle
+    // stalls on it.
+    console.warn("[battle-worker] recall answer failed:", e.message);
+    basis = "unknown"; why = "could not reach my memory";
+  }
+  if (picked == null) picked = guess(options.length);
 
   const isCorrect   = picked === q.correct_answer_index;
   const newStreak   = isCorrect ? (p.current_streak ?? 0) + 1 : 0;
   const streakBonus = isCorrect ? Math.floor(newStreak * 5) : 0;
 
-  await db.from("battle_answers").insert({
+  const { error: answerErr } = await db.from("battle_answers").insert({
     battle_id: battleId, participant_id: p.id, question_id: q.id,
     selected_index: picked, is_correct: isCorrect,
     // The thinking time this agent was given, carried on the job — battle_questions
@@ -241,7 +262,20 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
     response_time_ms: thinkingMs ?? null,
     xp_gained: isCorrect ? q.xp_value + streakBonus : 0,
     streak_at_time: newStreak,
+    // Whether this came from the learner's notes or was a guess. Without it a
+    // right answer from memory and a lucky guess are the same row, and the
+    // whole point of answering from the knowledge bank is that they are not.
+    answer_basis: basis,
+    recalled_topic: cited,
   });
+  // Loudly. An unchecked insert here is how a whole battle silently scores 0–0:
+  // every agent "answers", nothing is written, and the log fills with "ran out
+  // of time" for agents that did not. Two inserts in this subsystem have
+  // already failed for months behind a swallowed error.
+  if (answerErr) {
+    console.error("[battle-worker] ANSWER NOT RECORDED:", answerErr.message);
+    return;
+  }
 
   // Streaks only. The correct/wrong TALLY belongs to revealQuestion, which sees
   // the whole question at once and is the only place that can count a
@@ -285,11 +319,15 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
  */
 async function scheduleAgentAnswers(battleId, q) {
   const players = await autoPlayers(battleId);
+  // One embedding for the question, shared by every agent searching against it.
+  // Per agent it would be the same vector computed N times and billed N times.
+  const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
   for (const p of players) {
-    const accuracy = await accuracyFor({
-      userId: p.user_id, agentId: p.agent_id, topic: q.topic,
-    });
-    const thinkingMs = thinkingTimeMs(accuracy, q.time_limit_seconds);
+    // Pacing only. An agent with notes on the topic answers sooner, so the log
+    // still reads like a race — but what it ANSWERS is decided later, by
+    // reading the notes, not by this number.
+    const notes = await recall({ studentId: p.user_id, embedding, topic: q.topic, limit: 3 });
+    const thinkingMs = thinkingTimeMs(recallStrength(notes), q.time_limit_seconds);
     await battleQueue.add("agent-answer",
       { action: "agent-answer", battleId, questionOrder: q.question_order, participantId: p.id, thinkingMs },
       {
@@ -337,6 +375,12 @@ async function revealQuestion(battleId, questionOrder) {
   for (const p of players) {
     const ans     = (answers ?? []).find((a) => a.battle_participants?.user_id === p.user_id);
     const correct = ans?.is_correct;
+    // Where the answer came from. This is the loop the whole feature exists for:
+    // a learner watching their agent guess on a topic learns exactly what to go
+    // and teach it, and a right answer that says which note carried it is worth
+    // far more than a bare tick.
+    const guessed = ans?.answer_basis === "unknown";
+    const from    = ans?.recalled_topic ? ` — from my notes on ${ans.recalled_topic}` : "";
 
     if (!ans) {
       // A missed question still counts as wrong on the mark sheet; only the HP
@@ -350,7 +394,9 @@ async function revealQuestion(battleId, questionOrder) {
       await appendLog(battleId, "answer_timeout", `⏰ ${agent?.agent_name} ran out of time!`, p.user_id, agent?.agent_name, agent?.agent_emoji, questionOrder);
     } else if (!correct) {
       await appendLog(battleId, "answer_wrong",
-        `❌ ${agentOf(ans)?.agent_name} answered wrong — chose ${options[ans.selected_index]}`,
+        guessed
+          ? `❓ ${agentOf(ans)?.agent_name} had nothing on this — guessed ${options[ans.selected_index]}`
+          : `❌ ${agentOf(ans)?.agent_name} answered wrong — chose ${options[ans.selected_index]}${from}`,
         p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder);
     } else {
       const streakBonus = Math.floor((ans.streak_at_time ?? 0) * 5);
@@ -359,7 +405,9 @@ async function revealQuestion(battleId, questionOrder) {
       await creditXP(p.user_id, p.agent_id, xpGained, "battle_correct", battleId);
       await db.from("battle_answers").update({ xp_gained: xpGained }).eq("id", ans.id);
       await appendLog(battleId, "answer_correct",
-        `✅ ${agentOf(ans)?.agent_name} answered correctly — ${options[q.correct_answer_index]}`,
+        guessed
+          ? `🍀 ${agentOf(ans)?.agent_name} guessed ${options[q.correct_answer_index]} — and got lucky`
+          : `✅ ${agentOf(ans)?.agent_name} answered correctly — ${options[q.correct_answer_index]}${from}`,
         p.user_id, agentOf(ans)?.agent_name, agentOf(ans)?.agent_emoji, questionOrder,
         { xpGained, streak: ans.streak_at_time, responseMs: ans.response_time_ms });
       if ((ans.streak_at_time ?? 0) >= 2) {

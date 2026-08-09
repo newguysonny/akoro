@@ -9,62 +9,21 @@
 // by whoever happened to sort first. That is what a completed battle looked
 // like: "Priya's Agent wins 0–0".
 //
-// What an agent answers with is NOT a coin flip. Every battle answer already
-// updates edu.student_knowledge — a per-topic confidence for that learner, which
-// rises when they get a topic right and falls when they get it wrong. That table
-// is the honest description of what the learner's agent knows, so it is what
-// decides the answer here. An agent is good at what its owner is good at.
+// WHAT an agent answers no longer lives here. It used to: this file turned the
+// learner's per-topic confidence into a probability and rolled dice — right
+// with chance p, otherwise a random wrong option — without ever reading the
+// question. Those two functions are gone rather than deprecated, because a
+// probability that produces plausible battle logs is exactly the kind of thing
+// that gets quietly reinstated when something is slow or expensive.
 //
-// This includes a STUDY REVIEW. The agent's odds come from that learner's own
-// per-topic confidence, so what the review measures is unchanged — the mark
-// sheet still reports what the learner knows, read through the agent that
-// represents them rather than typed in by hand.
+// Answering is now a recall from the learner's own notes: see agentRecall.js.
+// What remains here is pacing and eligibility — when an agent answers, and
+// which agents answer at all.
 
 import db from "../../db.js";
 
 /** Clamp helper — confidence is a probability and must behave like one. */
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
-
-/**
- * How likely is this agent to get this question right?
- *
- * Starts from the learner's confidence in the question's topic, then:
- *  · difficulty moves it — a hard question is hard for everybody
- *  · experience nudges it — total_xp is the only measure of an agent's
- *    track record we have, and it saturates so a veteran is not infallible
- *
- * Bounded well inside 0..1: an agent that always knows is not a contest, and
- * one that never does is not a learner.
- */
-export async function accuracyFor({ userId, agentId, topic, difficulty }) {
-  let confidence = 0.5;
-
-  if (topic) {
-    try {
-      const { data: agent } = await db.schema("edu").from("student_agents")
-        .select("id").eq("student_id", userId).maybeSingle();
-      if (agent) {
-        const { data: known } = await db.schema("edu").from("student_knowledge")
-          .select("confidence").eq("agent_id", agent.id).eq("topic", topic).maybeSingle();
-        // Negative confidence means "met this and struggled" — it is a real
-        // signal, not a missing value, so it maps to a low chance rather than
-        // being discarded back to the 0.5 default.
-        if (known?.confidence != null) confidence = clamp(Number(known.confidence), 0.05, 1);
-      }
-    } catch { /* edu schema unavailable — fall back to the default */ }
-  }
-
-  const byDifficulty = { easy: 0.15, intermediate: 0, hard: -0.15 }[difficulty ?? "intermediate"] ?? 0;
-
-  let experience = 0;
-  try {
-    const { data: a } = await db.from("user_agents").select("total_xp").eq("id", agentId).maybeSingle();
-    // 0 at no XP, approaching +0.1 — a ceiling, so XP cannot buy certainty.
-    experience = 0.1 * (1 - Math.exp(-(a?.total_xp ?? 0) / 5000));
-  } catch { /* ignore */ }
-
-  return clamp(confidence + byDifficulty + experience, 0.08, 0.93);
-}
 
 /**
  * How long before it answers, in ms.
@@ -75,28 +34,15 @@ export async function accuracyFor({ userId, agentId, topic, difficulty }) {
  * lands inside the question's own clock, because an answer after the reveal is
  * no answer at all.
  */
-export function thinkingTimeMs(accuracy, questionSeconds) {
+export function thinkingTimeMs(strength, questionSeconds) {
   const window = Math.max(2, (questionSeconds || 15)) * 1000;
-  // 25%–80% of the window, faster the more confident, plus jitter so two
-  // equally-confident agents still differ.
-  const base = window * (0.8 - 0.45 * accuracy);
+  // 25%–80% of the window, faster the stronger the recall, plus jitter so two
+  // equally-prepared agents still differ. `strength` is how much the learner
+  // wrote on this topic, NOT how likely the answer is to be right — that is
+  // decided afterwards, by reading the notes.
+  const base = window * (0.8 - 0.45 * strength);
   const jitter = (Math.random() - 0.5) * window * 0.25;
   return Math.round(clamp(base + jitter, window * 0.15, window * 0.9));
-}
-
-/**
- * Choose an option index.
- *
- * Right with probability `accuracy`. When wrong, it picks among the DISTRACTORS
- * — never the correct answer, or "wrong" would silently be right some of the
- * time and the accuracy above would not mean what it says.
- */
-export function chooseAnswer(accuracy, optionCount, correctIndex) {
-  if (Math.random() < accuracy) return correctIndex;
-  const wrong = [];
-  for (let i = 0; i < optionCount; i++) if (i !== correctIndex) wrong.push(i);
-  if (!wrong.length) return correctIndex;
-  return wrong[Math.floor(Math.random() * wrong.length)];
 }
 
 /**

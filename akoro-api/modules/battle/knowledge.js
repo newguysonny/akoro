@@ -59,11 +59,30 @@ export async function updateKnowledgeConfidence(userId, topic, subject, isCorrec
     } else {
       // Topic not in student's knowledge base — insert with negative confidence
       // Negative score = "encountered but struggled" — triggers review priority
+      // This insert had been failing on every battle since it was written, and
+      // failing silently — student_id and content are both NOT NULL and neither
+      // was supplied, so PostgREST rejected the row and the catch below turned
+      // it into a warning nobody read. The effect: battles could only ever
+      // adjust topics the learner had already been TAUGHT, and never recorded a
+      // topic met for the first time. A battle on something new left no trace.
       const initialConf = isCorrect ? 0.40 : -0.10;
       await db.schema("edu").from("student_knowledge").insert({
+        student_id:      userId,
         agent_id:        agent.id,
         topic,
         subject:         subject ?? null,
+        // A battle answer is not knowledge — it is the record of having met the
+        // topic. Saying so plainly matters now that the agent ANSWERS from this
+        // table: a placeholder that read like a note would be recalled as one,
+        // and the agent would cite "got this wrong once" as its reasoning.
+        content:         `Met "${topic}" in a battle and answered ${isCorrect ? "correctly" : "incorrectly"}. No notes on this yet.`,
+        source:          "session",
+        // Tagged so recall SKIPS it. The agent now answers from this table, and
+        // a placeholder handed to it as a note would have it reasoning from
+        // "got this wrong once" — which is a fact about the learner, not
+        // knowledge about the topic. It carries no embedding either, so vector
+        // search cannot surface it; the tag stops the topic-match pass too.
+        tags:            ["battle-encounter"],
         confidence:      initialConf,
         decay_rate:      0.10,
         next_review_due: new Date(Date.now() + (isCorrect ? 7 : 1) * 86_400_000).toISOString(),

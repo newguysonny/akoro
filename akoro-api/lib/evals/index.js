@@ -11,8 +11,9 @@ import db from "../../db.js";
 import { questionsSuite } from "./questions.js";
 import { routingSuite }   from "./routing.js";
 import { agentSuite }     from "./agent.js";
+import { recallSuite }    from "./recall.js";
 
-export const SUITES = [questionsSuite, routingSuite, agentSuite];
+export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite];
 export const suiteByKey = (key) => SUITES.find((s) => s.key === key) ?? null;
 
 /**

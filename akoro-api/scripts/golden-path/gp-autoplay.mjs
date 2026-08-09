@@ -70,7 +70,29 @@ const { rows: seats } = await sql.query(
           a.agent_name
    from battle_participants p join user_agents a on a.id = p.agent_id
    where p.battle_id = $1 order by p.final_rank`, [id]);
-check('nobody scored 0–0 this time', seats.some(s => (s.score ?? 0) > 0),
+// Answers, not scores.
+//
+// This used to assert somebody scored, which worked while agents rolled dice at
+// roughly even odds. They now answer by RECALLING the learner's own notes, and
+// the stand-in model cannot judge which option a note supports — so every
+// answer here is an honest "my notes do not cover this", followed by a guess.
+// Two agents guessing over four options are quite often both wrong, and the old
+// assertion would fail for a battle that worked perfectly.
+//
+// What must still hold is what the suite was really built to protect: every
+// agent ANSWERED every question, rather than sitting there timing out.
+const { rows: answered } = await sql.query(
+  `select count(*)::int n from battle_answers where battle_id = $1`, [id]);
+const { rows: qCount } = await sql.query(
+  `select count(*)::int n from battle_questions where battle_id = $1`, [id]);
+const competitors = seats.filter(s => s.role !== 'teacher').length;
+check('every agent answered every question',
+  answered[0].n === qCount[0].n * competitors,
+  `${answered[0].n} answers for ${qCount[0].n} questions × ${competitors} agents`);
+check('and each answer records where it came from',
+  (await sql.query(`select count(*)::int n from battle_answers where battle_id = $1 and answer_basis is null`, [id])).rows[0].n === 0,
+  'no null answer_basis');
+check('nobody sat out the whole battle', seats.some(s => (s.correct_answers ?? 0) + (s.wrong_answers ?? 0) > 0),
   seats.map(s => `${s.agent_name}:${s.score}`).join(' '));
 check('there is a real winner', seats.filter(s => s.is_winner).length === 1,
   seats.map(s => `${s.agent_name}:${s.is_winner ? 'W' : '-'}`).join(' '));
