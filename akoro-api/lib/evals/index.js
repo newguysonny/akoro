@@ -10,8 +10,9 @@
 import db from "../../db.js";
 import { questionsSuite } from "./questions.js";
 import { routingSuite }   from "./routing.js";
+import { agentSuite }     from "./agent.js";
 
-export const SUITES = [questionsSuite, routingSuite];
+export const SUITES = [questionsSuite, routingSuite, agentSuite];
 export const suiteByKey = (key) => SUITES.find((s) => s.key === key) ?? null;
 
 /**
@@ -82,7 +83,28 @@ export async function runSuite({ suite, model, runId, userId = null, onCase = nu
   const costAfter = await evalSpend(started);
   const costUsd = Math.max(0, Number((costAfter - costBefore).toFixed(8)));
 
-  return { passed, failed, total: suite.cases.length, ms: Date.now() - started, costUsd };
+  return {
+    passed, failed, total: suite.cases.length,
+    ms: Date.now() - started, costUsd,
+    ...verdict(suite, passed, suite.cases.length),
+  };
+}
+
+/**
+ * Pass rate against the suite's own bar.
+ *
+ * A raw count is a measurement, not a decision. Some suites can tolerate a miss
+ * — a loop has more ways to be almost-right — and one cannot tolerate any,
+ * because a mis-keyed question marks a correct learner wrong permanently. Each
+ * suite carries its own number and says why, next to the goldens it judges.
+ *
+ * Returned with every run so the threshold is recorded as it was AT THE TIME:
+ * raising the bar later must not retroactively fail runs that were fine.
+ */
+export function verdict(suite, passed, total) {
+  const threshold = Number.isFinite(suite.threshold) ? suite.threshold : 1;
+  const rate = total ? passed / total : 0;
+  return { threshold, rate: Number(rate.toFixed(4)), metThreshold: rate >= threshold };
 }
 
 async function wasCancelled(runId) {

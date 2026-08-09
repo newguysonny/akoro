@@ -47,7 +47,9 @@ export async function buildContext(task) {
   };
 }
 
-function buildSystemPrompt(agent, course) {
+// Exported so the agent eval builds the SAME system prompt production does.
+// A suite that invents its own prompt measures the prompt it invented.
+export function buildSystemPrompt(agent, course) {
   const base = agent.systemPrompt ?? agent.system_prompt ??
     `You are ${agent.name ?? agent.agent_name}, a helpful AI teaching assistant on Akoro Learning Platform.`;
 
@@ -62,7 +64,7 @@ function buildSystemPrompt(agent, course) {
     `\n\nAlways be helpful, accurate, and professional. When you need more information, ask. When you have everything, act.`;
 }
 
-function buildTaskPrompt(task, files, fileTexts, course) {
+export function buildTaskPrompt(task, files, fileTexts, course) {
   let prompt = `Task: ${task.title}`;
   if (task.description) prompt += `\n\nDetails: ${task.description}`;
   if (course)           prompt += `\n\nCourse: ${course.title} (${course.subject})`;

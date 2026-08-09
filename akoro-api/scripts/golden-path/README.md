@@ -109,13 +109,37 @@ its mind rather than that someone broke the code. So it does not run here.
     node scripts/evals/run.mjs                       # list suites and estimates
     node scripts/evals/run.mjs routing gpt-4o-mini   # exits non-zero on failure
 
-Two suites. `questions` asks whether generated questions can be marked — the
+Three suites. `questions` asks whether generated questions can be marked — the
 answer key inside the options, no duplicates, how many survive `normalise()`.
 `routing` asks whether the model picks the right tool for what a teacher typed,
 using the cases in `docs/CHAT-COMMANDS.md` so documentation and test cannot
-drift. Both refuse to run without `OPENAI_API_KEY`: against the stand-in model
-every case would pass for the wrong reason, and a green board that proves
-nothing is worse than an error, because someone will quote it.
+drift. `agent` puts the model in the real task loop with tools that answer back
+and asks whether it finishes the job. All refuse to run without
+`OPENAI_API_KEY`: against the stand-in model every case would pass for the wrong
+reason, and a green board that proves nothing is worse than an error, because
+someone will quote it.
+
+**Goldens are data.** `lib/evals/data/*.json` — a case can be added without a
+deploy, and the diff on a golden reads as a change of intent rather than a
+change of program.
+
+**Each suite carries its own bar**, versioned in that same file next to a note
+saying why. `questions` passes only at 100%: every check is structural, and a
+mis-keyed question marks a correct learner wrong, permanently, in a
+competition. `agent` passes at 80%: a loop has more ways to be almost-right,
+and holding it to 100% would make the suite noise. The CLI exits non-zero when
+a suite is BELOW ITS BAR — not on any individual failure, which is what the
+tolerance is for. The bar is stored on each run, so raising a threshold later
+does not repaint finished runs red.
+
+**The `agent` suite runs the real loop.** `modules/tasks/lib/agentLoop.js` was
+lifted out of the task worker precisely so the suite could run it rather than a
+copy — a copy would pass while the real loop drifted. The only seam is
+`callTool`: the worker passes real executors, the suite passes stubs that record
+instead of acting. Nothing it runs touches the database, sends a notification or
+spends a coin. What is scored is the trace — which tools were asked for, with
+what arguments, how many times, and whether the loop ended because the model was
+finished or because it ran out of rope.
 
 Admins can run the same suites from the Evals page, which is the only control
 in that app that spends. `gp-evals.mjs` covers everything around the model call

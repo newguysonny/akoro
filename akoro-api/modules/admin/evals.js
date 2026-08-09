@@ -22,7 +22,7 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 router.get("/evals/suites", adminOnly, asyncHandler(async (req, res) => {
   // Last run per (suite, model) — the comparison that decides a model swap.
   const { data: recent } = await db.schema("edu").from("eval_runs")
-    .select("suite, model, status, cases_passed, cases_total, cost_usd, ms, created_at")
+    .select("suite, model, status, cases_passed, cases_total, cost_usd, ms, created_at, threshold, met_threshold")
     .eq("status", "done").order("created_at", { ascending: false }).limit(60);
 
   const lastBy = new Map();
@@ -39,6 +39,10 @@ router.get("/evals/suites", adminOnly, asyncHandler(async (req, res) => {
     suites: SUITES.map((s) => ({
       key: s.key, title: s.title, purpose: s.purpose,
       cases: s.cases.length,
+      // The bar, and why it is where it is. Shown on the card so nobody has to
+      // guess whether 9/10 is a pass for this suite.
+      threshold: s.threshold ?? 1,
+      thresholdNote: s.thresholdNote ?? null,
       estimates: Object.fromEntries(EVAL_MODELS.map((m) => [m, estimateUsd(s, m)])),
       lastRuns: EVAL_MODELS
         .map((m) => lastBy.get(`${s.key}|${m}`))
@@ -46,6 +50,9 @@ router.get("/evals/suites", adminOnly, asyncHandler(async (req, res) => {
         .map((r) => ({
           model: r.model, passed: r.cases_passed, total: r.cases_total,
           rate: r.cases_total ? Number((r.cases_passed / r.cases_total).toFixed(3)) : null,
+          // The verdict as recorded, not recomputed against today's bar —
+          // raising the threshold must not rewrite history.
+          met: r.met_threshold, threshold: r.threshold == null ? null : Number(r.threshold),
           costUsd: Number(r.cost_usd ?? 0), ms: r.ms, at: r.created_at,
         })),
     })),
@@ -91,6 +98,7 @@ router.post("/evals/run", adminOnly, asyncHandler(async (req, res) => {
     success: true,
     runId: run.id,
     cases: suite.cases.length,
+    threshold: suite.threshold ?? 1,
     estimatedUsd: estimateUsd(suite, model),
   });
 }));

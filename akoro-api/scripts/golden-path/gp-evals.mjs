@@ -36,9 +36,20 @@ const admin = await login('admin', 'admin', EMAIL, PASS);
 console.log('\n· What can be run, and what it would cost');
 const suites = await call(admin, 'GET', '/api/admin/evals/suites');
 check('the catalog answers', suites.status === 200, `${suites.status} ${suites.json?.error ?? ''}`);
-check('both suites are listed',
-  (suites.json?.suites ?? []).length >= 2,
+check('every suite is listed',
+  (suites.json?.suites ?? []).length >= 3,
   (suites.json?.suites ?? []).map(s => s.key).join(', '));
+// The bar is what turns a measurement into a decision, so it has to reach the
+// page — a card that cannot say whether 9/10 is a pass is just a number.
+check('each carries its own threshold, and says why',
+  (suites.json?.suites ?? []).every(s => s.threshold > 0 && s.threshold <= 1 && s.thresholdNote?.length > 20),
+  (suites.json?.suites ?? []).map(s => `${s.key}:${s.threshold}`).join(' '));
+// Not one shared number: question generation tolerates nothing because a
+// mis-keyed question is permanent, and the loop tolerates a miss because it has
+// more ways to be almost-right. A single bar would be wrong for both.
+check('and the bars are not all the same',
+  new Set((suites.json?.suites ?? []).map(s => s.threshold)).size > 1,
+  [...new Set((suites.json?.suites ?? []).map(s => s.threshold))].join(', '));
 check('every suite says what it proves and how many cases',
   (suites.json?.suites ?? []).every(s => s.purpose?.length > 40 && s.cases > 0),
   (suites.json?.suites ?? []).map(s => `${s.key}:${s.cases}`).join(' '));
@@ -90,6 +101,19 @@ if (!liveKey) {
      VALUES ($1,'a','a passing case',true,'x','x','fine',10),
             ($1,'b','a failing case',false,'5 markable questions','3 usable','answer key out of range',20)`,
     [runId]);
+
+  // A run keeps the bar it was judged against. Raising a suite's threshold
+  // later must not repaint finished runs red — history would stop being
+  // readable, and a real regression would be indistinguishable from a stricter
+  // rule.
+  await sql.query(
+    `UPDATE edu.eval_runs SET status='done', cases_passed=9, cases_failed=1, cases_total=10,
+       threshold=0.8, met_threshold=true WHERE id=$1`, [runId]);
+  const kept = await call(admin, 'GET', `/api/admin/evals/${runId}`);
+  check('a finished run keeps the bar it was judged against',
+    Number(kept.json?.run?.threshold) === 0.8 && kept.json?.run?.met_threshold === true,
+    `threshold=${kept.json?.run?.threshold} met=${kept.json?.run?.met_threshold}`);
+  await sql.query(`UPDATE edu.eval_runs SET status='running' WHERE id=$1`, [runId]);
 
   const detail = await call(admin, 'GET', `/api/admin/evals/${runId}`);
   check('a run reads back with its results', detail.status === 200 && (detail.json?.results ?? []).length === 2,

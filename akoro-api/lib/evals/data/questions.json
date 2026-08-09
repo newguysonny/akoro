@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Goldens for the question-generation suite: subjects the past-questions bank",
+    "actually covers, so exemplar style transfer is exercised the way it is in",
+    "production rather than against an empty bank.",
+    "",
+    "perCase is how many questions each case asks for. Kept here rather than in",
+    "code because it changes what the run costs.",
+    "",
+    "threshold is versioned with the goldens on purpose — adding a harder case",
+    "should force a decision about the bar in the same commit."
+  ],
+  "perCase": 5,
+  "threshold": 1.0,
+  "thresholdNote": "No tolerance. Every check here is structural — the answer key inside the options, no duplicates — and a failure means a learner can be marked wrong for a correct answer, permanently, in a competition. There is no acceptable rate of that.",
+  "cases": [
+    { "subject": "Mathematics",      "topic": "Fractions",        "difficulty": "easy" },
+    { "subject": "Mathematics",      "topic": "Simple interest",  "difficulty": "intermediate" },
+    { "subject": "Mathematics",      "topic": "Algebra",          "difficulty": "hard" },
+    { "subject": "English Language", "topic": "Comprehension",    "difficulty": "intermediate" },
+    { "subject": "Basic Science",    "topic": "Photosynthesis",   "difficulty": "easy" },
+    { "subject": "Basic Science",    "topic": "The water cycle",  "difficulty": "intermediate" },
+    { "subject": "Social Studies",   "topic": "Citizenship",      "difficulty": "intermediate" },
+
+    {
+      "subject": "Mathematics", "topic": "Quadratic equations", "difficulty": "hard",
+      "note": "Hard maths is where a model most often writes a stem whose real answer is not among the options it wrote."
+    },
+    {
+      "subject": "English Language", "topic": "Figures of speech", "difficulty": "hard",
+      "note": "Distractors here are the trap: 'metaphor' and 'simile' are both defensible for a careless stem, and a question with two right answers marks a correct learner wrong."
+    },
+    {
+      "subject": "Basic Science", "topic": "The solar system", "difficulty": "easy",
+      "note": "A topic with a small pool of facts — the case most likely to produce duplicate stems across five questions."
+    }
+  ]
+}

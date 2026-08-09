@@ -35,9 +35,18 @@ const pct  = (p, t) => (t ? `${Math.round((p / t) * 100)}%` : '—');
 const secs = (m) => (m == null ? '—' : `${(Number(m) / 1000).toFixed(1)}s`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 
-/* A suite is a gate, not a dashboard: anything short of green means a case that
-   used to work no longer does, so there is no "mostly fine" band here. */
-const rateTone = (p, t) => (!t ? MUTED : p === t ? GREEN : p / t >= 0.8 ? AMBER : RED);
+/* A suite is a gate, so the colour follows the VERDICT, not the raw count.
+   Each suite carries its own bar — question generation tolerates nothing,
+   because a mis-keyed question marks a correct learner wrong permanently; the
+   agent loop tolerates a miss, because a loop has more ways to be almost-right
+   and holding it to 100% would make the suite noise. Judged against the bar
+   recorded ON THE RUN, never today's, or raising the standard would repaint
+   every past run red. */
+const verdictTone = (met, p, t) => {
+  if (met === true)  return GREEN;
+  if (met === false) return RED;
+  return !t ? MUTED : p === t ? GREEN : AMBER;   // pre-threshold runs
+};
 
 export default function EvalsPage() {
   const [meta, setMeta]       = useState(null);
@@ -183,8 +192,13 @@ function SuiteCard({ suite, models, onRun, disabled, activeNote }) {
             {suite.purpose}
           </div>
           <div style={{ fontFamily: FONT, fontSize: 12, color: MUTED2, marginTop: 6 }}>
-            {suite.cases} cases · about {usd(suite.estimates[model])} on {model}
+            {suite.cases} cases · passes at {Math.round((suite.threshold ?? 1) * 100)}% · about {usd(suite.estimates[model])} on {model}
           </div>
+          {suite.thresholdNote && (
+            <div style={{ fontFamily: FONT, fontSize: 12, color: MUTED, marginTop: 4, lineHeight: 1.5, fontStyle: 'italic' }}>
+              {suite.thresholdNote}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select value={model} onChange={(e) => setModel(e.target.value)}
@@ -211,9 +225,14 @@ function SuiteCard({ suite, models, onRun, disabled, activeNote }) {
             return (
               <div key={m} style={{ padding: '8px 12px', borderRadius: 8, background: LIGHT, minWidth: 140 }}>
                 <div style={{ fontFamily: FONT, fontSize: 11, color: MUTED2 }}>{m}</div>
-                <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: rateTone(r.passed, r.total) }}>
+                <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: verdictTone(r.met, r.passed, r.total) }}>
                   {r.passed}/{r.total} <span style={{ fontSize: 12, fontWeight: 600 }}>({pct(r.passed, r.total)})</span>
                 </div>
+                {r.met === false && (
+                  <div style={{ fontFamily: FONT, fontSize: 11, color: RED, fontWeight: 700 }}>
+                    below bar{r.threshold != null ? ` (${Math.round(r.threshold * 100)}%)` : ''}
+                  </div>
+                )}
                 <div style={{ fontFamily: FONT, fontSize: 11, color: MUTED }}>
                   {usd(r.costUsd)} · {secs(r.ms)} · {when(r.at)}
                 </div>
@@ -236,7 +255,8 @@ function ConfirmDialog({ c, onCancel, onGo, busy }) {
            style={{ background: WHITE, borderRadius: 14, padding: 22, maxWidth: 440, width: '100%' }}>
         <div style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, color: INK }}>Run this suite?</div>
         <div style={{ fontFamily: FONT, fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 10 }}>
-          <b>{c.suite.title}</b> — {c.suite.cases} cases against <b>{c.model}</b>.
+          <b>{c.suite.title}</b> — {c.suite.cases} cases against <b>{c.model}</b>, passing at{' '}
+          {Math.round((c.suite.threshold ?? 1) * 100)}%.
           This calls the live model once per case and is billed to the platform.
         </div>
         <div style={{ marginTop: 14, padding: '10px 12px', background: LIGHT, borderRadius: 8,
@@ -301,8 +321,9 @@ function RunTable({ runs, onOpen, onCancel }) {
                     {live
                       ? `${st.label} · ${(r.cases_passed ?? 0) + (r.cases_failed ?? 0)}/${r.cases_total ?? '?'}`
                       : r.status === 'done'
-                        ? <span style={{ color: rateTone(r.cases_passed, r.cases_total) }}>
+                        ? <span style={{ color: verdictTone(r.met_threshold, r.cases_passed, r.cases_total) }}>
                             {r.cases_passed}/{r.cases_total} passed
+                            {r.met_threshold === false && ' · below bar'}
                           </span>
                         : st.label}
                   </span>
@@ -354,7 +375,12 @@ function RunDrawer({ run, results, onClose, onCancel }) {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '18px 0' }}>
           <Stat label="Passed" value={`${run.cases_passed ?? 0}/${run.cases_total ?? 0}`}
-                tone={rateTone(run.cases_passed, run.cases_total)} />
+                tone={verdictTone(run.met_threshold, run.cases_passed, run.cases_total)} />
+          {run.threshold != null && (
+            <Stat label={`Bar ${Math.round(run.threshold * 100)}%`}
+                  value={run.met_threshold ? 'Met' : 'Below'}
+                  tone={run.met_threshold ? GREEN : RED} />
+          )}
           <Stat label="Cost"  value={usd(run.cost_usd)} />
           <Stat label="Time"  value={secs(run.ms)} />
           <Stat label="Status" value={(STATUS[run.status] ?? STATUS.queued).label}

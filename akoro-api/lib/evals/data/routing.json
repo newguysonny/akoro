@@ -1,0 +1,105 @@
+{
+  "_comment": [
+    "Goldens for the tool-routing suite. Data, not code, so a case can be added",
+    "without a deploy and so the diff on a golden reads as a change of intent",
+    "rather than a change of program.",
+    "",
+    "Cases are the ones in docs/CHAT-COMMANDS.md — what is documented and what is",
+    "tested cannot drift apart.",
+    "",
+    "Argument matchers: '/pattern/flags' is a regex, an array is membership, a",
+    "number means 'this many entries' (for usernames), anything else is a",
+    "case-insensitive string equality.",
+    "",
+    "threshold is the bar this suite is judged against, versioned WITH the",
+    "goldens on purpose: adding a case the model fails should force a decision",
+    "about the bar in the same commit, not silently turn the board red."
+  ],
+  "threshold": 0.9,
+  "thresholdNote": "Routing is the capability a model swap breaks first, and a wrong tool is a wrong action, not a worse sentence. One miss in ten is tolerable; two is a regression.",
+  "cases": [
+    {
+      "text": "Set JSS1 a Mathematics battle on fractions — 10 questions, medium",
+      "tool": "assign_battle",
+      "args": { "audience": ["class", "learners"], "className": "JSS1", "subject": "/math/i" }
+    },
+    {
+      "text": "Create a class battle for JSS1: Basic Science, photosynthesis, 15 questions",
+      "tool": "assign_battle",
+      "args": { "className": "JSS1", "subject": "/science/i" }
+    },
+    {
+      "text": "Battle between priya and amaka in JSS1 on Mathematics — long division",
+      "tool": "assign_battle",
+      "args": { "audience": ["learners"], "usernames": 2 }
+    },
+    {
+      "text": "Study review for priya — JSS1 Mathematics, fractions, 8 questions",
+      "tool": "assign_battle",
+      "args": { "audience": ["review"], "usernames": 1 }
+    },
+    {
+      "text": "Review amaka on Basic Science, topic photosynthesis",
+      "tool": "assign_battle",
+      "args": { "audience": ["review"], "usernames": 1 }
+    },
+    {
+      "text": "Assign self study on the water cycle to JSS1 — Basic Science, due Friday",
+      "tool": "assign_self_study",
+      "args": { "subject": "/science/i" }
+    },
+    {
+      "text": "Self study for priya and amaka: Mathematics, fractions",
+      "tool": "assign_self_study",
+      "args": { "usernames": 2 }
+    },
+    {
+      "text": "Make a podcast about photosynthesis for JSS1 Basic Science, 5 minutes",
+      "tool": "run_teaching_tool",
+      "args": { "tool": "podcast" }
+    },
+    {
+      "text": "Common misconceptions about fractions for JSS1 Mathematics",
+      "tool": "run_teaching_tool",
+      "args": { "tool": "misconceptions" }
+    },
+    {
+      "text": "Lesson hooks for the water cycle, JSS1 Basic Science",
+      "tool": "run_teaching_tool",
+      "args": { "tool": "lesson-hooks" }
+    },
+
+    {
+      "_group": "Edge cases. The suite was all happy-path phrasings, which measures",
+      "_group2": "only the easy half. These are the ones a cheaper tier gets wrong.",
+      "text": "JSS1 needs practice on fractions",
+      "tool": "assign_battle",
+      "args": { "className": "JSS1" },
+      "note": "No verb naming a tool. The class and topic are there; the model has to infer the action."
+    },
+    {
+      "text": "the water cycle for jss1 basic science, self study, due friday",
+      "tool": "assign_self_study",
+      "args": { "subject": "/science/i" },
+      "note": "All lower case, no punctuation, tool named mid-sentence rather than first."
+    },
+    {
+      "text": "Can you set up a Mathematics battle on simple interest for JSS1? 12 questions if possible",
+      "tool": "assign_battle",
+      "args": { "className": "JSS1", "subject": "/math/i" },
+      "note": "Phrased as a question. A model that answers 'yes I can' instead of acting fails, correctly."
+    },
+    {
+      "text": "priya keeps getting fractions wrong, give her something to work through on her own",
+      "tool": "assign_self_study",
+      "args": { "usernames": 1 },
+      "note": "Names no tool and no subject in the usual position. 'on her own' is the only signal for self study over a battle."
+    },
+    {
+      "text": "I want to test just amaka on photosynthesis and see her marks",
+      "tool": "assign_battle",
+      "args": { "audience": ["review"], "usernames": 1 },
+      "note": "A review, described by what it produces (marks for one learner) rather than by name."
+    }
+  ]
+}

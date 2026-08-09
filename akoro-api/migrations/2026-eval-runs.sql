@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS edu.eval_results (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- The bar this run was judged against, and the verdict.
+--
+-- Stored ON THE RUN rather than read from the suite at display time, because
+-- the bar moves. A run that passed at 0.8 must keep reading as a pass after
+-- someone raises the suite to 0.9, or the history rewrites itself every time
+-- the standard changes and nobody can tell a real regression from a stricter
+-- rule. `met_threshold` is the release gate: cases_passed/cases_total is the
+-- measurement, this is the decision.
+ALTER TABLE edu.eval_runs ADD COLUMN IF NOT EXISTS threshold     NUMERIC(4, 3);
+ALTER TABLE edu.eval_runs ADD COLUMN IF NOT EXISTS met_threshold BOOLEAN;
+
 CREATE INDEX IF NOT EXISTS idx_eval_runs_suite_time ON edu.eval_runs (suite, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_eval_runs_active     ON edu.eval_runs (status) WHERE status IN ('queued', 'running');
 -- Failures first is how the results are always read, so index for it.

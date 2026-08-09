@@ -63,8 +63,14 @@ export function startEvalWorker() {
         status: "done",
         cases_passed: res.passed, cases_failed: res.failed, cases_total: res.total,
         cost_usd: res.costUsd, ms: res.ms,
+        // The bar as it stood for this run. Raising it later must not rewrite
+        // history into a string of failures.
+        threshold: res.threshold, met_threshold: res.metThreshold,
       });
-      console.log(`[evals] ${run.suite} on ${run.model}: ${res.passed}/${res.total} passed · $${res.costUsd}`);
+      console.log(
+        `[evals] ${run.suite} on ${run.model}: ${res.passed}/${res.total} passed ` +
+        `(${Math.round(res.rate * 100)}%, bar ${Math.round(res.threshold * 100)}%) ` +
+        `— ${res.metThreshold ? "MET" : "BELOW BAR"} · $${res.costUsd}`);
     } catch (e) {
       await finish(runId, { status: "failed", error: e.message?.slice(0, 500) });
       console.error(`[evals] run ${runId} failed:`, e.message);

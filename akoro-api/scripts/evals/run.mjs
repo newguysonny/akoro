@@ -29,7 +29,7 @@ const model  = args[1] ?? EVAL_MODELS[0];
 if (!which) {
   console.log("\nSuites:\n");
   for (const s of SUITES) {
-    console.log(`  ${s.key.padEnd(12)} ${s.cases.length} cases · about $${estimateUsd(s, model)} on ${model}`);
+    console.log(`  ${s.key.padEnd(12)} ${s.cases.length} cases · bar ${Math.round((s.threshold ?? 1) * 100)}% · about $${estimateUsd(s, model)} on ${model}`);
     console.log(`  ${" ".repeat(12)} ${s.purpose.replace(/\s+/g, " ").slice(0, 120)}…\n`);
   }
   console.log(`Models: ${EVAL_MODELS.join(", ")}\n`);
@@ -84,13 +84,23 @@ for (const suite of chosen) {
       status: "done", finished_at: new Date().toISOString(),
       cases_passed: res.passed, cases_failed: res.failed,
       cost_usd: res.costUsd, ms: res.ms,
+      threshold: res.threshold, met_threshold: res.metThreshold,
     }).eq("id", runId);
   }
 
-  const rate = res.total ? Math.round((res.passed / res.total) * 100) : 0;
-  console.log(`\n  ${res.passed}/${res.total} passed (${rate}%) · ${(res.ms / 1000).toFixed(1)}s · $${res.costUsd}\n`);
-  if (res.failed) anyFailed = true;
+  // The verdict, not the count. A suite that tolerates one miss should not go
+  // red for one miss, and a suite that tolerates none should not go green for
+  // "only one".
+  const pct = Math.round(res.rate * 100);
+  const bar = Math.round(res.threshold * 100);
+  const mark = res.metThreshold ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mBELOW BAR\x1b[0m";
+  console.log(`\n  ${mark}  ${res.passed}/${res.total} (${pct}%, bar ${bar}%) · ${(res.ms / 1000).toFixed(1)}s · $${res.costUsd}`);
+  if (!res.metThreshold && suite.thresholdNote) console.log(`  \x1b[2m${suite.thresholdNote}\x1b[0m`);
+  console.log();
+  if (!res.metThreshold) anyFailed = true;
 }
 
-// Non-zero on failure so this can gate a deploy without anyone reading it.
+// Non-zero when a suite is BELOW ITS BAR, so this can gate a deploy without
+// anyone reading it. Individual failures inside a tolerance do not stop a
+// release; that is what the tolerance is for.
 process.exit(anyFailed ? 1 : 0);

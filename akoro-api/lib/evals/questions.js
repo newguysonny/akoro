@@ -20,21 +20,16 @@
 // different job, and one worth deferring until real learners have complained
 // about real questions.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { generate } from "../../modules/battle/questionSource.js";
 
-// Subjects the past-questions bank actually covers, so exemplar style transfer
-// is exercised the way it is in production rather than on an empty bank.
-const CASES = [
-  { subject: "Mathematics",      topic: "Fractions",        difficulty: "easy" },
-  { subject: "Mathematics",      topic: "Simple interest",  difficulty: "intermediate" },
-  { subject: "Mathematics",      topic: "Algebra",          difficulty: "hard" },
-  { subject: "English Language", topic: "Comprehension",    difficulty: "intermediate" },
-  { subject: "Basic Science",    topic: "Photosynthesis",   difficulty: "easy" },
-  { subject: "Basic Science",    topic: "The water cycle",  difficulty: "intermediate" },
-  { subject: "Social Studies",   topic: "Citizenship",      difficulty: "intermediate" },
-];
-
-const PER_CASE = 5;      // questions requested per case
+// Goldens live in data/questions.json — data, not code, so a subject or a
+// nastier topic can be added without a deploy, and so the threshold sits
+// beside the cases it judges.
+const DATA     = JSON.parse(readFileSync(fileURLToPath(new URL("./data/questions.json", import.meta.url)), "utf8"));
+const CASES    = DATA.cases;
+const PER_CASE = DATA.perCase;
 
 /**
  * One case = one generation request, judged as a batch.
@@ -94,6 +89,8 @@ export const questionsSuite = {
     "Can generated questions actually be marked? Checks the answer key is among the options, " +
     "no duplicates, and how many survive normalise(). A wrong key marks a correct learner wrong, " +
     "permanently — this is the one model output nobody reads before it counts.",
+  threshold: DATA.threshold,
+  thresholdNote: DATA.thresholdNote,
   // Roughly what one run costs: a generation call per case, ~1.5k output tokens.
   estimatedCalls: CASES.length,
   cases: CASES.map((c) => ({

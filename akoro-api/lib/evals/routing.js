@@ -17,45 +17,20 @@
 // The cases are the ones in docs/CHAT-COMMANDS.md, so what is documented and
 // what is tested cannot drift apart.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { openai } from "../aiModel.js";
 import { getToolsForTaskType } from "../../modules/tasks/tools/index.js";
 import { extractIntent } from "../../modules/tasks/lib/context.js";
+import { argMatches } from "./match.js";
 
-// Each case: what a teacher types, and the tool that must be chosen.
-// `args` names arguments that must be present and correct — a tool call with
-// the right name and the wrong class is not a success.
-const CASES = [
-  { text: "Set JSS1 a Mathematics battle on fractions — 10 questions, medium",
-    tool: "assign_battle", args: { audience: ["class", "learners"], className: "JSS1", subject: /math/i } },
-  { text: "Create a class battle for JSS1: Basic Science, photosynthesis, 15 questions",
-    tool: "assign_battle", args: { className: "JSS1", subject: /science/i } },
-  { text: "Battle between priya and amaka in JSS1 on Mathematics — long division",
-    tool: "assign_battle", args: { audience: ["learners"], usernames: 2 } },
-  { text: "Study review for priya — JSS1 Mathematics, fractions, 8 questions",
-    tool: "assign_battle", args: { audience: ["review"], usernames: 1 } },
-  { text: "Review amaka on Basic Science, topic photosynthesis",
-    tool: "assign_battle", args: { audience: ["review"], usernames: 1 } },
-  { text: "Assign self study on the water cycle to JSS1 — Basic Science, due Friday",
-    tool: "assign_self_study", args: { subject: /science/i } },
-  { text: "Self study for priya and amaka: Mathematics, fractions",
-    tool: "assign_self_study", args: { usernames: 2 } },
-  { text: "Make a podcast about photosynthesis for JSS1 Basic Science, 5 minutes",
-    tool: "run_teaching_tool", args: { tool: "podcast" } },
-  { text: "Common misconceptions about fractions for JSS1 Mathematics",
-    tool: "run_teaching_tool", args: { tool: "misconceptions" } },
-  { text: "Lesson hooks for the water cycle, JSS1 Basic Science",
-    tool: "run_teaching_tool", args: { tool: "lesson-hooks" } },
-];
-
-/** Does the model's chosen argument match what the request plainly said? */
-function argMatches(expected, actual) {
-  if (expected instanceof RegExp) return typeof actual === "string" && expected.test(actual);
-  if (Array.isArray(expected))    return expected.includes(actual);
-  // A number means "this many entries", for usernames.
-  if (typeof expected === "number") return Array.isArray(actual) && actual.length === expected;
-  if (typeof expected === "string") return String(actual ?? "").toLowerCase() === expected.toLowerCase();
-  return true;
-}
+// Goldens live in data/routing.json — data, not code, so a case can be added
+// without a deploy and the diff reads as a change of intent. Each case: what a
+// teacher types, and the tool that must be chosen. `args` names arguments that
+// must be present and correct — a tool call with the right name and the wrong
+// class is not a success.
+const DATA  = JSON.parse(readFileSync(fileURLToPath(new URL("./data/routing.json", import.meta.url)), "utf8"));
+const CASES = DATA.cases;
 
 export const routingSuite = {
   key: "routing",
@@ -64,6 +39,8 @@ export const routingSuite = {
     "Given what a teacher types, does the model call the right tool with the right arguments? " +
     "gp-commands checks the keyword router; this checks the model's judgement after it — the " +
     "capability that degrades first, and most quietly, on a cheaper tier.",
+  threshold: DATA.threshold,
+  thresholdNote: DATA.thresholdNote,
   estimatedCalls: CASES.length,
   cases: CASES.map((c, i) => ({
     key: `route-${i + 1}`,
