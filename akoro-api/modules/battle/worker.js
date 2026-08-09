@@ -11,7 +11,7 @@ import Redis             from "ioredis";
 import db                from "../../db.js";
 import { bullRedisOptions } from "../../lib/redisOptions.js";
 import { accuracyFor, thinkingTimeMs, chooseAnswer, autoPlayers } from "./agentPlayer.js";
-import { updateKnowledgeConfidence } from "./knowledge.js";
+import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 
 const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
@@ -542,6 +542,18 @@ async function endBattle(battleId) {
       ? { correct: winner?.score ?? 0, total: battleInfo?.total_questions ?? 0 }
       : null,
   });
+
+  // Revisions, once, now that the whole battle can be seen.
+  //
+  // This used to happen inside the per-answer confidence update, which meant a
+  // fifteen-question battle raised up to fifteen revision cards WHILE THE
+  // LEARNER WAS STILL PLAYING — one per question, each naming that question's
+  // topic. Raised here it is one card per learner, listing the sub-topics they
+  // were actually weak on across the whole battle.
+  //
+  // After the emit deliberately: the arena should show the result the instant
+  // the battle ends, and a revision write is not worth a frame of delay.
+  await flagBattleReviewTopics(battleId);
 
   await battleQueue.add("refresh-leaderboard", { action: "refresh-leaderboard", courseId: battleInfo?.course_id, scope: "classroom" }, { delay: 2000 });
 }
