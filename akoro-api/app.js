@@ -393,6 +393,12 @@ if (process.env.REDIS_URL) {
     .then(() => console.log("[battle] worker started at boot"))
     .catch((e) => console.error("[battle] worker failed to start:", e.message));
 }
+
+// Alert rules — spend, latency, failures, and work that has silently stopped.
+// Needs no Redis: it reads the telemetry tables on a cron.
+import("./lib/alertWorker.js")
+  .then((m) => m.startAlertWorker())
+  .catch((e) => console.error("[alerts] worker failed to start:", e.message));
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module

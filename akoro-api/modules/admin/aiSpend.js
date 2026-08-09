@@ -22,6 +22,7 @@
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { currentAlerts, evaluateAll } from "../../lib/alerts.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -87,6 +88,35 @@ router.get("/ai-spend", adminOnly, asyncHandler(async (req, res) => {
     },
     byFeature, byModel, series, failures,
   });
+}));
+
+/**
+ * GET /api/admin/alerts — the current state of every rule.
+ *
+ * Every rule, not only the firing ones: a page that shows an empty list cannot
+ * distinguish "nothing is wrong" from "nothing is being checked", and those are
+ * very different situations to be looking at during an incident.
+ */
+router.get("/alerts", adminOnly, asyncHandler(async (req, res) => {
+  const rules = await currentAlerts();
+  res.json({
+    success: true,
+    firing: rules.filter((r) => r.firing).length,
+    rules,
+  });
+}));
+
+/**
+ * POST /api/admin/alerts/check — run the rules now.
+ *
+ * `?deliver=1` actually sends. Default is a dry run, because the common reason
+ * to press this is "did I set the threshold right?", and finding out should not
+ * mean emailing everyone.
+ */
+router.post("/alerts/check", adminOnly, asyncHandler(async (req, res) => {
+  const deliver = req.query.deliver === "1" || req.body?.deliver === true;
+  const results = await evaluateAll({ deliver });
+  res.json({ success: true, delivered: deliver, results });
 }));
 
 export default router;

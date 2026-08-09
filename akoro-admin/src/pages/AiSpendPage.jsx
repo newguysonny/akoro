@@ -49,12 +49,18 @@ export default function AiSpendPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [toast, setToast]     = useState(null);
+  const [alerts, setAlerts]   = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const d = await apiGet(`/api/admin/ai-spend?hours=${hours}`);
-      setData(d);
+      // Both together: an incident is the moment you least want to click twice,
+      // and a spend figure without the alert state beside it is half the story.
+      const [d, a] = await Promise.all([
+        apiGet(`/api/admin/ai-spend?hours=${hours}`),
+        apiGet('/api/admin/alerts').catch(() => null),
+      ]);
+      setData(d); setAlerts(a);
     } catch (e) {
       // 503 means the reporting migration has not run — that is a different
       // problem from "no usage", and saying so saves a wasted investigation.
@@ -98,6 +104,50 @@ export default function AiSpendPage() {
           background: '#FEF2F2', border: `1px solid ${RED}33`, color: RED,
           borderRadius: 12, padding: '13px 16px', fontFamily: FONT, fontSize: 13.5, marginBottom: 20,
         }}>{error}</div>
+      )}
+
+      {/* ── Alerts ───────────────────────────────────────────────────────
+          Firing rules first and loud; when nothing is firing, still say how
+          many rules are watching — an empty space cannot tell you whether
+          nothing is wrong or nothing is being checked. */}
+      {alerts && (
+        <div style={{ marginBottom: 20 }}>
+          {alerts.firing > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {alerts.rules.filter(r => r.firing).map(r => (
+                <div key={r.key} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 11,
+                  background: r.severity === 'critical' ? '#FEF2F2' : '#FFF7ED',
+                  border: `1px solid ${r.severity === 'critical' ? RED : AMBER}33`,
+                  borderLeft: `3px solid ${r.severity === 'critical' ? RED : AMBER}`,
+                  borderRadius: 12, padding: '12px 15px', fontFamily: FONT,
+                }}>
+                  <AlertTriangle size={16} color={r.severity === 'critical' ? RED : AMBER} style={{ marginTop: 1, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{r.title}</div>
+                    <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>{r.detail}</div>
+                  </div>
+                  {r.since && (
+                    <span style={{ fontSize: 11.5, color: MUTED2, whiteSpace: 'nowrap' }}>
+                      since {new Date(r.since).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT,
+              fontSize: 12.5, color: MUTED, background: LIGHT,
+              border: `1px solid ${BORDER}`, borderRadius: 10, padding: '9px 13px',
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: GREEN }} />
+              {alerts.rules.filter(r => r.enabled).length} rules watching · nothing firing
+              {alerts.rules.some(r => !r.enabled) &&
+                ` · ${alerts.rules.filter(r => !r.enabled).length} not configured`}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── The four numbers ─────────────────────────────────────────────── */}

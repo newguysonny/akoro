@@ -66,9 +66,26 @@ const silly = await call(admin, 'GET', '/api/admin/ai-spend?hours=99999');
 check('an absurd window is clamped, not honoured', silly.json?.windowHours === 24 * 90,
   `${silly.json?.windowHours} hours`);
 
+console.log('\n· Alerts: state for every rule, and a dry run');
+const alerts = await call(admin, 'GET', '/api/admin/alerts');
+check('the alerts endpoint answers', alerts.status === 200, `${alerts.status}`);
+// Every rule, not only the firing ones — an empty list cannot distinguish
+// "nothing is wrong" from "nothing is being checked".
+check('every rule is listed with its state',
+  (alerts.json?.rules ?? []).length > 0 && alerts.json.rules.every(r => r.title && r.severity && 'firing' in r),
+  `${alerts.json?.rules?.length ?? 0} rules, ${alerts.json?.firing ?? 0} firing`);
+
+const dry = await call(admin, 'POST', '/api/admin/alerts/check', {});
+check('a manual check runs', dry.status === 200 && Array.isArray(dry.json?.results),
+  `${dry.json?.results?.length ?? 0} results`);
+// Pressing "check" to verify a threshold must not email everyone.
+check('and does NOT deliver by default', dry.json?.delivered === false, `delivered=${dry.json?.delivered}`);
+
 console.log('\n· And it is admin-only');
 const nosy = await call(teacher, 'GET', '/api/admin/ai-spend?hours=24');
-check('an instructor is refused', nosy.status === 403 || nosy.status === 401, `status=${nosy.status}`);
+check('an instructor is refused the spend data', nosy.status === 403 || nosy.status === 401, `status=${nosy.status}`);
+const nosyAlerts = await call(teacher, 'GET', '/api/admin/alerts');
+check('and the alerts', nosyAlerts.status === 403 || nosyAlerts.status === 401, `status=${nosyAlerts.status}`);
 
 await sql.query('DELETE FROM users WHERE email = $1', [EMAIL]);
 await sql.end();
