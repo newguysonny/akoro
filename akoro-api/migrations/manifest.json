@@ -105,7 +105,8 @@
     "2026-battle-open-invites.sql",
     "2026-refresh-rotation-grace.sql",
     "2026-battle-unstartable-cleanup.sql",
-    "2026-battle-study-review.sql"
+    "2026-battle-study-review.sql",
+    "2026-ai-call-log.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

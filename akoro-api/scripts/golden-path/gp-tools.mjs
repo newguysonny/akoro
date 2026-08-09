@@ -7,6 +7,7 @@
  * persistence — and not the model's judgement.
  */
 import { call, login, check, score } from './golden.mjs';
+import db from '../../db.js';
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -81,6 +82,28 @@ const chat = await call(priya, 'POST', '/api/adaptive/chat/tutor',
   { message: 'Explain photosynthesis simply', studentId: null });
 check('tutor chat answers', chat.status === 200 && !!(chat.json?.reply || chat.json?.response),
   chat.status !== 200 ? JSON.stringify(chat.json).slice(0, 140) : String(chat.json.reply || chat.json.response).slice(0, 60));
+
+console.log('\n═══ E. TELEMETRY ═══');
+// Cost and tokens were recorded only by the wallet DEBIT, so a call with no
+// payer — system, cron, background — left no trace at all, and latency was
+// recorded nowhere. Of cost, latency and quality, one axis was measured, one
+// was missing, and the measured one had a hole in it.
+await new Promise(r => setTimeout(r, 800));   // the write is fire-and-forget
+const { data: rows } = await db.schema('edu').from('ai_call_log')
+  .select('feature, model, ms, tokens_in, cost_usd, ok, user_id')
+  .order('id', { ascending: false }).limit(200);
+
+check('every model call is recorded', (rows ?? []).length > 0, `${rows?.length ?? 0} rows`);
+check('with latency on every one', (rows ?? []).every(r => Number.isFinite(r.ms)),
+  `${(rows ?? []).filter(r => !Number.isFinite(r.ms)).length} missing ms`);
+check('with the model named', (rows ?? []).every(r => !!r.model));
+check('and cost for the ones that returned usage',
+  (rows ?? []).filter(r => r.ok).every(r => r.cost_usd != null || r.tokens_in === 0),
+  `${(rows ?? []).filter(r => r.ok && r.cost_usd == null).length} priced null`);
+// The point of the table: it sees calls the wallet never could.
+check('including calls with no payer to bill',
+  (rows ?? []).some(r => r.user_id === null),
+  `${(rows ?? []).filter(r => r.user_id === null).length} unbilled calls captured`);
 
 const s = score();
 console.log(`\nAI TOOL PATHS: ${s.pass} passed, ${s.fail} failed`);
