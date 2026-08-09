@@ -204,6 +204,9 @@ export async function generate({ subject, topic, difficulty, count, classLabel, 
     `{"questions":[{"stem":"...","options":[{"label":"A","text":"..."}],"answer":"B","explanation":"one sentence","topic":"...","difficulty":"${difficulty}"}]}`;
 
   const resp = await openai.chat.completions.create({
+    // Runs outside a request, so nothing sets the feature for it — without
+    // this its cost lands in the unattributable "ai" bucket.
+    __feature: "battle_generate",
     model: OPENAI_MODEL, max_tokens: Math.min(4000, 260 * count + 500), temperature: 0.7,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
   });

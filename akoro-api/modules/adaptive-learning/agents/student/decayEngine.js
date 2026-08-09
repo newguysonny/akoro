@@ -611,6 +611,9 @@ export class DecayEngine {
   async _getMustKnowForTopic(subject, topic) {
     try {
       const res = await openai.chat.completions.create({
+        // Runs on a nightly cron, outside any request, so nothing sets the
+        // feature for it — without this its cost is unattributable.
+        __feature: "decay_engine",
         model: "gpt-4.1-mini",
         temperature: 0.2,
         response_format: { type: "json_object" },

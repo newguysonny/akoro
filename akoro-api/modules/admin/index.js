@@ -6,6 +6,7 @@ import marketingRouter from "./marketing.js";
 import websiteTemplatesRouter from "./websiteTemplates.js";
 import agentsRouter from "./agents.js";
 import appCenterRouter from "./appCenter.js";
+import aiSpendRouter from "./aiSpend.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -15,5 +16,6 @@ router.use("/", marketingRouter);
 router.use("/", websiteTemplatesRouter);
 router.use("/", agentsRouter);
 router.use("/", appCenterRouter);
+router.use("/", aiSpendRouter);
 
 export default router;

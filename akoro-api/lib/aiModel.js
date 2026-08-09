@@ -159,8 +159,16 @@ export const openai = new Proxy(rawClient, {
   },
 });
 
-/** Convenience wrapper for background jobs that must name the payer explicitly. */
-export async function meteredChat({ userId, feature = "ai", ref = null, ...params }) {
+/**
+ * Convenience wrapper for background jobs that must name the payer explicitly.
+ *
+ * `feature` defaults to UNDEFINED, not "ai". meteredCreate resolves it as
+ * `__feature ?? store.feature`, so a hardcoded default here does not fall back
+ * to the ambient context — it OVERWRITES it. Every request-path call routed
+ * through this helper was therefore relabelled from its real feature to the
+ * catch-all, which is how "ai" became the joint-largest line on the dashboard.
+ */
+export async function meteredChat({ userId, feature, ref = null, ...params }) {
   return meteredCreate({ ...params, __userId: userId, __feature: feature, __ref: ref });
 }
 
@@ -168,7 +176,8 @@ export async function meteredChat({ userId, feature = "ai", ref = null, ...param
  * llmComplete — one-shot chat completion returning plain text.
  * Mirrors the old Anthropic single-prompt helpers so call sites stay small.
  */
-export async function llmComplete(prompt, { system, maxTokens = 2048, temperature, userId, feature = "ai" } = {}) {
+// feature is deliberately undefined by default — see meteredChat.
+export async function llmComplete(prompt, { system, maxTokens = 2048, temperature, userId, feature } = {}) {
   const messages = [];
   if (system) messages.push({ role: "system", content: system });
   messages.push({ role: "user", content: prompt });
