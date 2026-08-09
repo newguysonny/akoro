@@ -232,7 +232,13 @@ async function agentAnswer(battleId, questionOrder, participantId, thinkingMs = 
   // A correct answer therefore means their notes contained the answer. When
   // they do not, the agent says so and guesses, and the log says which it was.
   const embedding = await embedQuestion(`${q.topic ? q.topic + ": " : ""}${q.question_text}`);
-  const notes = await recall({ studentId: p.user_id, embedding, topic: q.topic });
+  const notes = await recall({
+    studentId: p.user_id, embedding, topic: q.topic,
+    // The question drives the lexical half of the search, and the subject
+    // narrows it — a Mathematics question has no business retrieving a Social
+    // Studies note, however close the vectors happen to sit.
+    queryText: q.question_text, subject: q.subject,
+  });
 
   let picked, basis = "unknown", cited = null, why = "nothing in memory on this";
   try {
@@ -326,7 +332,10 @@ async function scheduleAgentAnswers(battleId, q) {
     // Pacing only. An agent with notes on the topic answers sooner, so the log
     // still reads like a race — but what it ANSWERS is decided later, by
     // reading the notes, not by this number.
-    const notes = await recall({ studentId: p.user_id, embedding, topic: q.topic, limit: 3 });
+    const notes = await recall({
+      studentId: p.user_id, embedding, topic: q.topic,
+      queryText: q.question_text, subject: q.subject, limit: 3,
+    });
     const thinkingMs = thinkingTimeMs(recallStrength(notes), q.time_limit_seconds);
     await battleQueue.add("agent-answer",
       { action: "agent-answer", battleId, questionOrder: q.question_order, participantId: p.id, thinkingMs },

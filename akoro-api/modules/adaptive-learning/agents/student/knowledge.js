@@ -97,13 +97,15 @@ export async function incrementAgentStats(agentId, { turnsAdded, knowledgeAdded,
 // Now grouped by subject + topic, with confidence per topic
 // =============================================================
 
-export async function retrieveAgentKnowledge(agentId, query, limit = 6) {
+export async function retrieveAgentKnowledge(agentId, query, limit = 6, subject = null) {
   const embedding = await embed(query);
 
   const { data, error } = await supabase.rpc("match_agent_knowledge", {
     p_agent_id:        agentId,
     p_query_embedding: embedding,
     p_match_count:     limit,
+    p_query_text:      query,
+    p_subject:         subject,
   });
 
   if (error) throw error;
@@ -278,13 +280,20 @@ export async function getTopicsBySubject(agentId, subject) {
 // RAG SOURCE 2: STUDENT PERSONAL KNOWLEDGE
 // =============================================================
 
-export async function retrieveStudentKnowledge(studentId, query, limit = 5) {
+export async function retrieveStudentKnowledge(studentId, query, limit = 5, subject = null) {
   const embedding = await embed(query);
 
   const { data, error } = await supabase.rpc("match_student_knowledge", {
     p_student_id:      studentId,
     p_query_embedding: embedding,
     p_match_count:     limit,
+    // Hybrid: the raw query drives a full-text arm alongside the vector, fused
+    // by RRF in SQL. Embeddings are weakest on exactly what study notes are
+    // made of — formulae, definitions, units, names — and the lexical arm is
+    // what catches those.
+    p_query_text:      query,
+    p_subject:         subject,
+    p_exclude_tags:    ["battle-encounter"],
   });
 
   if (error) throw error;
@@ -328,7 +337,7 @@ export async function saveStudentKnowledge({
 // RAG SOURCE 3: TEACHER TRAINING CHUNKS
 // =============================================================
 
-export async function retrieveTeacherChunks(teacherId, query, limit = 4) {
+export async function retrieveTeacherChunks(teacherId, query, limit = 4, subject = null) {
   if (!teacherId) return [];
 
   const embedding = await embed(query);
@@ -337,6 +346,10 @@ export async function retrieveTeacherChunks(teacherId, query, limit = 4) {
     p_teacher_id:      teacherId,
     p_query_embedding: embedding,
     p_match_count:     limit,
+    p_query_text:      query,
+    // training_chunks has no subject column — the ingest writes it into
+    // metadata, and the RPC reads it from there.
+    p_subject:         subject,
   });
 
   if (error) { console.warn("[TeacherChunks]", error.message); return []; }
@@ -363,12 +376,15 @@ export async function retrieveCombinedContext({
     ? retrieveAgentKnowledgeByTopic(agentId, subject, topic, agentLimit)
     : subject
     ? retrieveAgentKnowledgeBySubject(agentId, subject, query, agentLimit)
-    : retrieveAgentKnowledge(agentId, query, agentLimit);
+    : retrieveAgentKnowledge(agentId, query, agentLimit, subject);
 
   const [agentChunks, studentChunks, teacherChunks] = await Promise.all([
     agentChunksPromise,
-    retrieveStudentKnowledge(studentId, query, studentLimit),
-    retrieveTeacherChunks(teacherId, query, teacherLimit),
+    // Subject narrows every source, not just the agent's own. Retrieving a
+    // Social Studies note for a Mathematics question wasted a slot in the
+    // prompt and gave the model something plausible to go wrong with.
+    retrieveStudentKnowledge(studentId, query, studentLimit, subject),
+    retrieveTeacherChunks(teacherId, query, teacherLimit, subject),
   ]);
 
   const sections = [];

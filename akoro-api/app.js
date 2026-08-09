@@ -400,6 +400,13 @@ if (process.env.REDIS_URL) {
     .catch((e) => console.error("[evals] worker failed to start:", e.message));
 }
 
+// Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
+// a failed inline call) and rows get edited after being embedded; both leave
+// search quietly wrong, and nothing used to report either.
+import("./lib/embeddingSweeper.js")
+  .then((m) => m.startEmbeddingSweeper())
+  .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
+
 // Alert rules — spend, latency, failures, and work that has silently stopped.
 // Needs no Redis: it reads the telemetry tables on a cron.
 import("./lib/alertWorker.js")

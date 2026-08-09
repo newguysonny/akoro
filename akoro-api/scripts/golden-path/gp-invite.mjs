@@ -253,4 +253,36 @@ if (stranger) {
   check('an uninvited classmate is still refused', denied.status === 403, `status=${denied.status}`);
 }
 
+// ── Scale ────────────────────────────────────────────────────────────────────
+// The Challenges tab must survive a learner with a long history.
+//
+// It did not. The endpoint collected every unanswered seat and asked for those
+// battles by id — `id.in.(<400 uuids>)`, a fifteen-kilobyte URL. The request
+// failed, the result was destructured without checking for an error, and the
+// endpoint answered 200 with an empty list: a permanently blank tab with
+// nothing anywhere saying why. /my-battles had the identical bug before it.
+//
+// Asserted against the real count in the database, because "returned some rows"
+// would pass for a query that silently truncated.
+console.log('\n· A learner with hundreds of battles still sees their challenges');
+const pg = (await import('pg')).default;
+const sql = new pg.Client({ host: 'localhost', port: 5433, user: 'postgres', database: 'akoro' });
+await sql.connect();
+const { rows: [truth] } = await sql.query(
+  `SELECT count(*)::int n FROM battle_participants p JOIN battles b ON b.id = p.battle_id
+   WHERE p.user_id = $1 AND p.role IN ('opponent','participant')
+     AND p.joined_at IS NULL AND p.declined_at IS NULL
+     AND b.status IN ('lobby','scheduled')
+     AND (b.expires_at IS NULL OR b.expires_at > now())`, [a.id]);
+await sql.end();
+const bulk = await call(learnerA, 'GET', '/api/battle/my-challenges');
+check('the endpoint answers rather than failing into an empty list',
+  bulk.status === 200 && Array.isArray(bulk.json?.data),
+  `status=${bulk.status}, ${bulk.json?.data?.length ?? 0} cards`);
+// The failure mode was 200-with-nothing, so an empty list is only acceptable
+// when the database agrees it should be empty.
+check('and is not silently empty when the database says otherwise',
+  truth.n === 0 || (bulk.json?.data ?? []).length > 0,
+  `db says ${truth.n} pending, endpoint returned ${bulk.json?.data?.length ?? 0}`);
+
 score();

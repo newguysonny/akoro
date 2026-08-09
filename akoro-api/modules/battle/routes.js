@@ -1025,20 +1025,33 @@ router.get("/my-battles", authenticateToken, asyncHandler(async (req, res) => {
  * like any other, so anyone with an unanswered seat belongs in this list.
  */
 router.get("/my-challenges", authenticateToken, asyncHandler(async (req, res) => {
-  const { data: parts } = await db.from("battle_participants")
-    .select("battle_id, joined_at, declined_at, role")
-    .eq("user_id", req.user.id).in("role", ["opponent", "participant"]);
-  const pending = (parts ?? []).filter((p) => !p.joined_at && !p.declined_at).map((p) => p.battle_id);
-  if (!pending.length) return res200(res, []);
-
-  const { data } = await db.from("battles")
-    .select("*, users!battles_created_by_fkey(full_name, avatar_url)")
-    .in("id", pending).in("status", ["lobby", "scheduled"])
+  // Filtered on the EMBEDDED seat, not by collecting ids and asking for them.
+  //
+  // The previous version read every seat this user has ever held, kept the
+  // unanswered ones, and passed them back as `id.in.(...)`. A learner with a
+  // few hundred battles behind them produced a fifteen-kilobyte URL, the
+  // request failed, and — because the result was destructured without checking
+  // for an error — the endpoint answered 200 with an empty list. Their
+  // Challenges tab was permanently empty and nothing anywhere said why. This is
+  // the third time this shape has bitten: /my-battles had exactly the same bug.
+  const { data, error } = await db.from("battles")
+    .select("*, users!battles_created_by_fkey(full_name, avatar_url), battle_participants!inner(user_id, role, joined_at, declined_at)")
+    .eq("battle_participants.user_id", req.user.id)
+    .in("battle_participants.role", ["opponent", "participant"])
+    // Unanswered: neither accepted nor declined.
+    .is("battle_participants.joined_at", null)
+    .is("battle_participants.declined_at", null)
+    .in("status", ["lobby", "scheduled"])
     // `or`, not `.gt` — a NULL expires_at means no deadline, and a plain
     // greater-than drops NULLs, which would have hidden every open invitation
     // the moment they stopped having one.
     .or(`expires_at.is.null,expires_at.gt.${now()}`)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  // Loudly. Answering 200 with [] when the query failed is what made the last
+  // one invisible for so long.
+  if (error) throw new Error(`my-challenges: ${error.message}`);
 
   res200(res, (data ?? []).map((b) => toCard(b)));
 }));

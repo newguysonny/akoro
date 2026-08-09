@@ -84,8 +84,13 @@ const placeholder = await recall({ studentId: me.id, embedding: null, topic: 'GP
 // It records that the learner MET the topic, which is a fact about them, not
 // knowledge about fractions. Handed over as a note the agent would reason from
 // "got this wrong once".
-check('an encounter placeholder is not recalled as a note', placeholder.length === 0,
-  `${placeholder.length} notes: ${placeholder.map(n => n.content?.slice(0, 30)).join(' | ')}`);
+//
+// Checked by absence of THAT row rather than by an empty result: the lexical
+// arm matches on any shared word, and every fixture here shares the "GP Recall"
+// prefix, so a neighbouring note legitimately comes back.
+check('an encounter placeholder is not recalled as a note',
+  !placeholder.some(n => /answered incorrectly/.test(n.content ?? '')),
+  `${placeholder.length} notes: ${placeholder.map(n => n.topic).join(' | ') || 'none'}`);
 
 console.log('\n· Recall strength paces the answer, it does not decide it');
 const { thinkingTimeMs } = await import('../../modules/battle/agentPlayer.js');

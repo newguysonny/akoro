@@ -119,4 +119,25 @@ router.post("/alerts/check", adminOnly, asyncHandler(async (req, res) => {
   res.json({ success: true, delivered: deliver, results });
 }));
 
+/** GET /api/admin/embeddings — what is missing or stale in the vector stores. */
+router.get("/embeddings", adminOnly, asyncHandler(async (req, res) => {
+  const { embeddingHealth } = await import("../../lib/embeddingSweeper.js");
+  const stores = await embeddingHealth();
+  res.json({
+    success: true,
+    stores,
+    // The number that matters: rows nothing can find. A store with missing
+    // embeddings is not degraded, it is partly invisible, and before this there
+    // was no way to see that from outside.
+    totalMissing: stores.reduce((n, s) => n + (s.missing ?? 0), 0),
+  });
+}));
+
+/** POST /api/admin/embeddings/sweep — fill some in now instead of waiting. */
+router.post("/embeddings/sweep", adminOnly, asyncHandler(async (req, res) => {
+  const { sweepOnce } = await import("../../lib/embeddingSweeper.js");
+  const batch = Math.min(200, Math.max(1, parseInt(req.body?.batch, 10) || 25));
+  res.json({ success: true, did: await sweepOnce({ batch }) });
+}));
+
 export default router;

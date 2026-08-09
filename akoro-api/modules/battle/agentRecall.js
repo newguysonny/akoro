@@ -22,12 +22,23 @@
 
 import db from "../../db.js";
 import { openai } from "../../lib/aiModel.js";
+import { rerank, rerankEnabled } from "../../lib/rerank.js";
 
 /** The model that answers. Small on purpose — this is a lookup, not an essay. */
 const ANSWER_MODEL = process.env.BATTLE_ANSWER_MODEL || "gpt-4o-mini";
 
-/** How many notes to put in front of it. */
-const RECALL_LIMIT = 6;
+/** How many notes end up in front of the model. */
+const RECALL_LIMIT = 4;
+
+/**
+ * How many are retrieved before reranking narrows them.
+ *
+ * Retrieval is tuned for recall and reranking for precision: fusion reliably
+ * gets the right note into a wide set and unreliably gets it into the top
+ * three, and the top three is what actually gets read. Fetching 12 to keep 4
+ * costs one extra model call and nothing in retrieval time.
+ */
+const RECALL_WIDE = 12;
 
 /**
  * Below this cosine similarity a note is not about this question.
@@ -57,53 +68,62 @@ export async function embedQuestion(text) {
 /**
  * What does this learner know that bears on this question?
  *
- * Vector search first, because topics are free text written by whatever
- * generated the question — "Family Roles" and "Family roles" are different
- * strings and the same idea, and an exact match would miss most of what the
- * learner actually wrote. The topic match is a second pass for the case where
- * the wording diverges but the label agrees.
+ * One call now, not two. This used to run a vector search and then a separate
+ * exact-label pass in JS, unioning whatever each returned — which meant the two
+ * arms could not be RANKED against each other, only concatenated, and a note
+ * that was the best lexical hit sat behind six mediocre vector hits.
+ *
+ * The fusion is in SQL now (see 2026-hybrid-retrieval.sql): vector rank and
+ * full-text rank combined by Reciprocal Rank Fusion. The lexical arm matters
+ * more here than the usual RAG intuition suggests, because school notes are
+ * full of the things embeddings are worst at — a formula, a definition, a unit,
+ * a named person. "P x R x T / 100" and "simple interest formula" are barely
+ * related as vectors and identical to a learner.
+ *
+ * Subject is passed through as a filter. Without it a Mathematics question
+ * could pull back a Social Studies note purely because the vectors sat close,
+ * and the only thing stopping it being used was the similarity floor below.
  */
-export async function recall({ studentId, embedding, topic, limit = RECALL_LIMIT }) {
-  const found = new Map();   // id -> note
+export async function recall({ studentId, embedding, topic, queryText = null, subject = null, limit = RECALL_LIMIT }) {
+  try {
+    const { data, error } = await db.rpc("match_student_knowledge", {
+      p_student_id: studentId,
+      p_query_embedding: embedding,
+      p_match_count: rerankEnabled("battle") ? Math.max(limit, RECALL_WIDE) : limit,
+      // The question itself drives the lexical arm; the topic label is included
+      // because it is often the most specific phrase available.
+      p_query_text: [topic, queryText].filter(Boolean).join(" ").slice(0, 2000) || null,
+      p_subject: subject,
+      // Placeholders recording that a learner MET a topic in a battle. They are
+      // not knowledge about it, and the lexical arm surfaces them eagerly
+      // because they repeat the topic name back — verified: without this the
+      // placeholder ranked above real notes for its own topic.
+      p_exclude_tags: ["battle-encounter"],
+    });
+    if (error) { console.warn("[battle/recall] search failed:", error.message); return []; }
 
-  if (embedding) {
-    try {
-      const { data } = await db.rpc("match_student_knowledge", {
-        p_student_id: studentId,
-        p_query_embedding: embedding,
-        p_match_count: limit,
-      });
-      for (const r of (data ?? [])) {
-        if (Number(r.similarity ?? 0) < MIN_SIMILARITY) continue;
-        found.set(r.id, { ...r, via: "similarity" });
-      }
-    } catch (e) {
-      console.warn("[battle/recall] vector search failed:", e.message);
-    }
+    // The floor still applies, but only to rows the vector arm found. A row
+    // that surfaced lexically has no meaningful similarity to threshold — it
+    // matched on words, which is its own evidence.
+    const kept = (data ?? []).filter((r) =>
+      r.vector_rank == null || Number(r.similarity ?? 0) >= MIN_SIMILARITY);
+
+    if (!rerankEnabled("battle") || kept.length <= limit) return kept.slice(0, limit);
+
+    // Second pass. Fusion ranks by how well a note MATCHES the question;
+    // this ranks by whether it ANSWERS it, which is the thing that decides
+    // whether the learner is marked right.
+    return rerank({
+      query: [topic, queryText].filter(Boolean).join(" — "),
+      candidates: kept,
+      textOf: (n) => `(${n.topic ?? "untitled"}) ${n.content ?? ""}`,
+      topK: limit,
+      userId: studentId,
+    });
+  } catch (e) {
+    console.warn("[battle/recall] search threw:", e.message);
+    return [];
   }
-
-  // Same label, different words. Cheap, and it rescues the case where the
-  // learner's note is terse enough that the embedding does not place it near a
-  // wordy question.
-  if (topic && found.size < limit) {
-    try {
-      const { data } = await db.schema("edu").from("student_knowledge")
-        .select("id, topic, content, source, confidence, tags")
-        .eq("student_id", studentId).ilike("topic", topic)
-        .limit((limit - found.size) + 4);
-      for (const r of (data ?? [])) {
-        // Placeholders written when a battle met a topic the learner had never
-        // been taught. They record the encounter, not the subject, and handing
-        // one to the model as a note would have the agent reasoning from "got
-        // this wrong once".
-        if ((r.tags ?? []).includes("battle-encounter")) continue;
-        if (found.size >= limit) break;
-        if (!found.has(r.id)) found.set(r.id, { ...r, similarity: null, via: "topic" });
-      }
-    } catch { /* nothing to add */ }
-  }
-
-  return [...found.values()];
 }
 
 /**

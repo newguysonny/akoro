@@ -23,17 +23,28 @@
       "key": "reads-the-note",
       "name": "Answers from a note that plainly says it",
       "notes": [
-        { "topic": "Photosynthesis", "content": "Plants take in carbon dioxide through tiny holes in their leaves called stomata, and give out oxygen. It happens in the chloroplasts and needs sunlight." }
+        {
+          "topic": "Photosynthesis",
+          "content": "Plants take in carbon dioxide through tiny holes in their leaves called stomata, and give out oxygen. It happens in the chloroplasts and needs sunlight."
+        }
       ],
       "question": "Which gas do plants take in during photosynthesis?",
-      "options": ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+      "options": [
+        "Oxygen",
+        "Carbon dioxide",
+        "Nitrogen",
+        "Hydrogen"
+      ],
       "expect": "B"
     },
     {
       "key": "reads-a-note-in-the-learners-own-words",
       "name": "Answers from a scrappy, learner-written note",
       "notes": [
-        { "topic": "Family Types", "content": "blended family = when two families join, so the children can be from the parents past relationships. not the same as nuclear which is just mum dad and their own kids" }
+        {
+          "topic": "Family Types",
+          "content": "blended family = when two families join, so the children can be from the parents past relationships. not the same as nuclear which is just mum dad and their own kids"
+        }
       ],
       "question": "In a blended family, which of the following is true?",
       "options": [
@@ -49,22 +60,44 @@
       "key": "picks-the-right-note-of-several",
       "name": "Uses the relevant note, not the first one",
       "notes": [
-        { "topic": "The water cycle", "content": "Evaporation is when the sun heats water and it turns into vapour and rises." },
-        { "topic": "Simple interest", "content": "Simple interest = P x R x T / 100. P is the principal, R the rate per year, T the time in years." },
-        { "topic": "Fractions", "content": "To add fractions you need the same denominator first." }
+        {
+          "topic": "The water cycle",
+          "content": "Evaporation is when the sun heats water and it turns into vapour and rises."
+        },
+        {
+          "topic": "Simple interest",
+          "content": "Simple interest = P x R x T / 100. P is the principal, R the rate per year, T the time in years."
+        },
+        {
+          "topic": "Fractions",
+          "content": "To add fractions you need the same denominator first."
+        }
       ],
       "question": "What is the simple interest on ₦5,000 at 4% per year for 2 years?",
-      "options": ["₦200", "₦400", "₦4,000", "₦500"],
+      "options": [
+        "₦200",
+        "₦400",
+        "₦4,000",
+        "₦500"
+      ],
       "expect": "B"
     },
     {
       "key": "refuses-when-notes-are-silent",
       "name": "Will not answer from its own knowledge",
       "notes": [
-        { "topic": "Fractions", "content": "To add fractions you need the same denominator first. 1/2 + 1/4 = 3/4." }
+        {
+          "topic": "Fractions",
+          "content": "To add fractions you need the same denominator first. 1/2 + 1/4 = 3/4."
+        }
       ],
       "question": "What is the capital of Nigeria?",
-      "options": ["Lagos", "Abuja", "Kano", "Ibadan"],
+      "options": [
+        "Lagos",
+        "Abuja",
+        "Kano",
+        "Ibadan"
+      ],
       "expect": "UNKNOWN",
       "note": "The model knows this perfectly well. It must not say so — the learner's notes are silent, so the agent does not know it. This is the single most important case in the suite."
     },
@@ -72,10 +105,18 @@
       "key": "refuses-on-a-near-miss",
       "name": "A note on the same topic that does not answer the question",
       "notes": [
-        { "topic": "Photosynthesis", "content": "Photosynthesis happens in the leaves of green plants and needs sunlight to work." }
+        {
+          "topic": "Photosynthesis",
+          "content": "Photosynthesis happens in the leaves of green plants and needs sunlight to work."
+        }
       ],
       "question": "Which gas do plants give out during photosynthesis?",
-      "options": ["Carbon dioxide", "Oxygen", "Nitrogen", "Methane"],
+      "options": [
+        "Carbon dioxide",
+        "Oxygen",
+        "Nitrogen",
+        "Methane"
+      ],
       "expect": "UNKNOWN",
       "note": "The hardest refusal. The note is ABOUT photosynthesis and reads as relevant, but says nothing about which gas is given out. This is where a model most wants to help by filling the gap."
     },
@@ -83,10 +124,18 @@
       "key": "refuses-when-the-note-is-off-topic",
       "name": "A retrieved note about something else entirely",
       "notes": [
-        { "topic": "Family Roles", "content": "In many homes the father is seen as the provider and the mother looks after the home, though this is changing." }
+        {
+          "topic": "Family Roles",
+          "content": "In many homes the father is seen as the provider and the mother looks after the home, though this is changing."
+        }
       ],
       "question": "What is 3/4 of 20?",
-      "options": ["12", "15", "16", "5"],
+      "options": [
+        "12",
+        "15",
+        "16",
+        "5"
+      ],
       "expect": "UNKNOWN",
       "note": "Retrieval is not perfect and will sometimes hand over a nearby-but-wrong note. When it does, the agent must not use it to look competent."
     },
@@ -94,7 +143,10 @@
       "key": "answers-when-the-note-is-partial-but-sufficient",
       "name": "A note that answers it without spelling it out",
       "notes": [
-        { "topic": "Nuclear family", "content": "A nuclear family is made up of the parents and their own children living together. No grandparents, aunts or cousins in the house." }
+        {
+          "topic": "Nuclear family",
+          "content": "A nuclear family is made up of the parents and their own children living together. No grandparents, aunts or cousins in the house."
+        }
       ],
       "question": "Which of the following is a characteristic of a nuclear family?",
       "options": [
@@ -110,10 +162,18 @@
       "key": "wrong-note-wrong-answer",
       "name": "Recalls what the learner wrote, even when it is wrong",
       "notes": [
-        { "topic": "Photosynthesis", "content": "Plants take in oxygen and give out carbon dioxide, same as animals do." }
+        {
+          "topic": "Photosynthesis",
+          "content": "Plants take in oxygen and give out carbon dioxide, same as animals do."
+        }
       ],
       "question": "Which gas do plants take in during photosynthesis?",
-      "options": ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+      "options": [
+        "Oxygen",
+        "Carbon dioxide",
+        "Nitrogen",
+        "Hydrogen"
+      ],
       "expect": "A",
       "note": "The learner's note is factually wrong. The agent must still answer A — it is that learner's memory, not a tutor. Correcting the note here would hide the misconception, mark the learner right for something they have wrong, and remove the only signal that would have raised it for revision."
     },
@@ -122,14 +182,22 @@
       "name": "Nothing in memory",
       "notes": [],
       "question": "What is the boiling point of water at sea level?",
-      "options": ["50°C", "100°C", "0°C", "212°C"],
+      "options": [
+        "50°C",
+        "100°C",
+        "0°C",
+        "212°C"
+      ],
       "expect": "UNKNOWN"
     },
     {
       "key": "note-covers-one-option-only",
       "name": "Rules in the option the note names",
       "notes": [
-        { "topic": "Family Benefits", "content": "Being in a close family gives you a sense of belonging and people to turn to when things go wrong." }
+        {
+          "topic": "Family Benefits",
+          "content": "Being in a close family gives you a sense of belonging and people to turn to when things go wrong."
+        }
       ],
       "question": "What is one major benefit of a close-knit family?",
       "options": [
@@ -139,6 +207,64 @@
         "Less communication."
       ],
       "expect": "C"
+    },
+    {
+      "key": "rerank-buries-the-plausible-distractor",
+      "name": "Picks the note that answers, not the one that matches",
+      "notes": [
+        {
+          "topic": "Photosynthesis",
+          "content": "Photosynthesis is how green plants make their food. It is very important for life on earth and happens in the leaves. We did an experiment with a leaf and iodine in class on Tuesday."
+        },
+        {
+          "topic": "Photosynthesis",
+          "content": "Plants take in carbon dioxide and give out oxygen."
+        }
+      ],
+      "question": "Which gas do plants give out during photosynthesis?",
+      "options": [
+        "Carbon dioxide",
+        "Oxygen",
+        "Nitrogen",
+        "Hydrogen"
+      ],
+      "expect": "B",
+      "note": "Both notes are about photosynthesis and the longer one matches the question's wording far better. Only the short one answers it. This is exactly the discrimination reranking exists to make, and the case retrieval alone gets wrong."
+    },
+    {
+      "key": "many-notes-one-answer",
+      "name": "Finds the one useful note among many",
+      "notes": [
+        {
+          "topic": "Fractions",
+          "content": "To add fractions you need the same denominator first."
+        },
+        {
+          "topic": "Fractions",
+          "content": "A proper fraction has a numerator smaller than its denominator."
+        },
+        {
+          "topic": "Simple interest",
+          "content": "I = P x R x T / 100 where P is the principal, R the rate per year and T the time in years."
+        },
+        {
+          "topic": "Fractions",
+          "content": "Equivalent fractions are worth the same, like 1/2 and 2/4."
+        },
+        {
+          "topic": "Percentages",
+          "content": "To find a percentage of an amount, divide by 100 and multiply."
+        }
+      ],
+      "question": "What is the simple interest on 5,000 at 4% per year for 2 years?",
+      "options": [
+        "200",
+        "400",
+        "4,000",
+        "500"
+      ],
+      "expect": "B",
+      "note": "Four of five notes are near-misses from the same subject. A model that skims will reach for the percentages note and compute something plausible."
     }
   ]
 }
