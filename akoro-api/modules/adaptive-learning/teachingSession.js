@@ -17,6 +17,7 @@
  */
 
 import { Router }          from "express";
+import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import db                    from "../../db.js";
 import { NaNaEsumai }        from "./agents/nana-esumai/guide.js";
 import { authenticateToken } from "../auth/routes.js";
@@ -181,8 +182,8 @@ router.get("/sessions/:sessionId/history", authenticateToken, async (req, res) =
       ];
     }
 
-    const subtopics  = JSON.parse(session.subtopics  || "[]");
-    const objectives = JSON.parse(session.objectives || "{}");
+    const subtopics  = jsonbArray(session.subtopics);
+    const objectives = jsonbObject(session.objectives);
 
     res.json({
       success:       true,
@@ -194,6 +195,15 @@ router.get("/sessions/:sessionId/history", authenticateToken, async (req, res) =
       daysSince,
       status:        session.status,
       hasHistory:    historyBlocks.length > 0,
+      // Where they actually got to. Without these a continuation replays the
+      // transcript and then restarts the teaching from the first phase of the
+      // first subtopic, which is the whole of "the previous data is not there"
+      // — the words came back, the progress did not.
+      resumeAt: {
+        subtopicIdx: Number(session.current_subtopic_idx) || 0,
+        phase:       `PHASE_${String(session.current_phase || "1").replace(/^PHASE_/, "")}`,
+        subtopic:    subtopics[Number(session.current_subtopic_idx) || 0] || null,
+      },
     });
 
   } catch (err) {

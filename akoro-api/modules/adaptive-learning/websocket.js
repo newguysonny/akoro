@@ -111,9 +111,27 @@ async function appendSessionBlocks(orchestrator, newBlocks) {
     const { data } = await db.schema("edu").from("adaptive_sessions")
       .select("block_history").eq("id", id).single();
     const existing = Array.isArray(data?.block_history) ? data.block_history : [];
+
+    // WHERE THEY GOT TO, not just what was said.
+    //
+    // current_phase and current_subtopic_idx were written once at creation as
+    // "1" and 0 and never touched again, so the stored row always claimed the
+    // learner was on the first phase of the first subtopic no matter how far
+    // they had come. Continuing a session read that back and restarted them at
+    // the beginning — the transcript was there, the progress was not.
+    //
+    // subtopics is refreshed too: the ladder is resolved after the row is
+    // created, so the row was written with whatever was known at insert time,
+    // which for a resolved-later ladder is an empty array.
+    const sess = orchestrator?.session ?? {};
     await db.schema("edu").from("adaptive_sessions").update({
-      block_history: [...existing, ...newBlocks],
-      updated_at:    new Date().toISOString(),
+      block_history:        [...existing, ...newBlocks],
+      current_phase:        String(sess.phase ?? "1").replace(/^PHASE_/, ""),
+      current_subtopic_idx: Number.isInteger(sess.mustKnowIndex) ? sess.mustKnowIndex : 0,
+      ...(Array.isArray(sess.mustKnowParts) && sess.mustKnowParts.length
+        ? { subtopics: sess.mustKnowParts }
+        : {}),
+      updated_at:           new Date().toISOString(),
     }).eq("id", id);
   } catch (e) {
     console.warn("[adaptive_sessions append]", e.message);
@@ -564,6 +582,7 @@ export function setupWebSocket(io) {
         let historyBlocks = [];
         let decayPayload  = null;
         let sessionType   = "free_teaching";
+        let resumeFrom    = null;
 
         // ── Continuation: load block history from DB ─────────
         if (mode === "continuation" && prevSessionId) {
@@ -571,9 +590,19 @@ export function setupWebSocket(io) {
           try {
             const { data: prevSession } = await db.schema("edu")
               .from("adaptive_sessions")
-              .select("block_history, updated_at, completed_at")
+              .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
               .eq("id", prevSessionId)
               .single();
+
+            // The position, not just the transcript. Loading only the words
+            // meant a continuation showed the previous lesson greyed out and
+            // then began teaching subtopic 1 again.
+            if (prevSession) {
+              resumeFrom = {
+                subtopicIdx: Number(prevSession.current_subtopic_idx) || 0,
+                phase: `PHASE_${String(prevSession.current_phase || "1").replace(/^PHASE_/, "")}`,
+              };
+            }
 
             if (prevSession?.block_history?.length) {
               const completedAt = prevSession.completed_at || prevSession.updated_at;
@@ -615,6 +644,10 @@ export function setupWebSocket(io) {
             previousSessionId: prevSessionId ?? null,
           },
         });
+
+        // Read by initialize() once the ladder is resolved, so the session
+        // starts where the last one stopped rather than at step one.
+        orchestrator.resumeFrom = resumeFrom;
 
         // Resolve the lesson ladder from the most trustworthy source available
         // (school scheme of work → exam-syllabus grounding → AI). Cached per

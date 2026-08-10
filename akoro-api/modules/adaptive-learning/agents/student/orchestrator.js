@@ -135,6 +135,25 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     }
     this.session.mustKnowParts = mustKnow;
 
+    // Pick up where they left off.
+    //
+    // A continuation used to replay the old transcript and then start teaching
+    // from the first phase of the first subtopic, because nothing carried the
+    // position across. The learner saw their previous words greyed out above a
+    // lesson that had forgotten all of it — which is what "the previous data is
+    // not there" describes, even though the words were right there.
+    //
+    // Clamped to the ladder actually resolved for this session: a stored index
+    // of 4 against a three-step ladder would otherwise put them past the end.
+    if (this.resumeFrom) {
+      const idx = Number(this.resumeFrom.subtopicIdx);
+      if (Number.isInteger(idx) && idx > 0) {
+        this.session.mustKnowIndex = Math.min(idx, Math.max(0, mustKnow.length - 1));
+      }
+      const ph = String(this.resumeFrom.phase || "").toUpperCase();
+      if (/^PHASE_[1-4]$/.test(ph)) this.session.phase = ph;
+    }
+
     // Topic boundary
     const boundary = this.guideOrchestrator.control?.getTopicBoundary
       ? await this.guideOrchestrator.control.getTopicBoundary(topic)

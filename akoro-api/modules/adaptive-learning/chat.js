@@ -12,6 +12,7 @@
 // =============================================================
 
 import express from "express";
+import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
@@ -70,8 +71,8 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
     }
 
     // 2. Derive blocks from session_phase_progress
-    const subtopics  = JSON.parse(session.subtopics  || "[]");
-    const objectives = JSON.parse(session.objectives || "{}");
+    const subtopics  = jsonbArray(session.subtopics);
+    const objectives = jsonbObject(session.objectives);
 
     const { data: progress } = await db.schema("edu")
       .from("session_phase_progress")

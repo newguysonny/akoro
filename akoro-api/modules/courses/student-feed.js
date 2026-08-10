@@ -14,6 +14,7 @@
  */
 
 import { Router }         from "express";
+import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import db                 from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 
@@ -206,9 +207,7 @@ router.get("/sessions", authenticateToken, async (req, res) => {
     console.log(`[sessions] agent rows=${agentRows?.length ?? 0} agentErr=${agentErr?.message ?? null}`);
 
     const agentSessions = (agentRows ?? []).map((row, i) => {
-      const subtopics  = Array.isArray(row.subtopics)
-        ? row.subtopics
-        : JSON.parse(row.subtopics || "[]");
+      const subtopics  = jsonbArray(row.subtopics);
       const isComplete = row.status === "complete";
       return {
         id:             row.id,
