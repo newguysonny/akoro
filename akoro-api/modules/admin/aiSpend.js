@@ -140,4 +140,56 @@ router.post("/embeddings/sweep", adminOnly, asyncHandler(async (req, res) => {
   res.json({ success: true, did: await sweepOnce({ batch }) });
 }));
 
+/**
+ * GET /api/admin/voice/diagnose — open a real transcription session and report.
+ *
+ * Voice failed three times in a row, and each time the only evidence available
+ * was a learner saying "nothing happens". Every layer swallowed the reason: the
+ * client logged it to a console nobody has open, the socket close code was
+ * discarded, and the one place the truth existed — OpenAI's handshake response
+ * — was never surfaced anywhere.
+ *
+ * This opens the same session the teaching session opens, using the same code,
+ * and returns exactly what happened. No microphone, no frontend deploy, no
+ * learner needed. If it says ok:true the transport works and any remaining
+ * problem is in the browser; if it says ok:false the message is the answer.
+ */
+router.get("/voice/diagnose", adminOnly, asyncHandler(async (req, res) => {
+  const { createRealtimeTranscriber } = await import("../../modules/voice/openaiRealtime.js");
+  const started = Date.now();
+
+  const outcome = await new Promise((resolve) => {
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+
+    let conn;
+    try {
+      conn = createRealtimeTranscriber({
+        onOpen:  () => done({ ok: true,  stage: "configured",
+                              detail: "Session opened and confirmed — transcription is working." }),
+        onError: (e) => done({ ok: false, stage: "failed", detail: e?.message ?? String(e) }),
+      });
+    } catch (e) {
+      return done({ ok: false, stage: "threw", detail: e?.message ?? String(e) });
+    }
+
+    // Longer than the transcriber's own 8s confirmation window, so its more
+    // specific error wins the race rather than this catch-all.
+    setTimeout(() => { try { conn?.close(); } catch { /* going anyway */ } 
+      done({ ok: false, stage: "timeout", detail: "No response from the transcription service." }); }, 12_000);
+  });
+
+  res.json({
+    success: true,
+    ...outcome,
+    ms: Date.now() - started,
+    // The settings that have each broken this at least once.
+    using: {
+      url: process.env.REALTIME_STT_URL || "wss://api.openai.com/v1/realtime?intent=transcription",
+      model: process.env.REALTIME_STT_MODEL || "gpt-4o-mini-transcribe",
+      keyPresent: !!process.env.OPENAI_API_KEY,
+    },
+  });
+}));
+
 export default router;

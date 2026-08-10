@@ -33,6 +33,7 @@ let behaviour = 'confirm';           // confirm | silent | reject
 wss.on('connection', (ws, req) => {
   state.url  = req.url;
   state.auth = req.headers.authorization ?? null;
+  state.beta = req.headers['openai-beta'] ?? null;
   ws.on('message', (raw) => {
     let msg; try { msg = JSON.parse(raw.toString()); } catch { return; }
     state.sent.push(msg);
@@ -49,7 +50,7 @@ process.env.OPENAI_API_KEY   = process.env.OPENAI_API_KEY || 'sk-test-local';
 
 const { createRealtimeTranscriber } = await import('../../modules/voice/openaiRealtime.js');
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
-const reset = () => { state.sent = []; state.url = null; state.auth = null; };
+const reset = () => { state.sent = []; state.url = null; state.auth = null; state.beta = null; };
 
 console.log('\n═══ REALTIME VOICE HANDSHAKE ═══\n');
 
@@ -63,6 +64,13 @@ await wait(400);
 check('the URL carries no ?model=', !/[?&]model=/.test(state.url ?? ''), state.url);
 check('and asks for a transcription session', /intent=transcription/.test(state.url ?? ''), state.url);
 check('the key is sent as a bearer token', /^Bearer /.test(state.auth ?? ''), state.auth ? 'Bearer …' : 'none');
+// The beta interface was removed on 2026-05-07 and GA models REJECT a
+// connection carrying its header — the handshake is refused, the session never
+// exists, and the learner sees the voice button switch itself off the instant
+// they press it. It survived the previous fix in this file because it looked
+// like harmless legacy.
+check('no OpenAI-Beta header — GA refuses connections that send it',
+  !state.beta, state.beta ? `sent: ${state.beta}` : 'absent');
 
 const upd = state.sent.find(m => m.type === 'session.update');
 check('a session update is sent on open', !!upd, upd ? 'sent' : 'nothing sent');

@@ -50,11 +50,20 @@ export function createRealtimeTranscriber({
     return { sendAudio() {}, close() {} };
   }
 
+  // NO OpenAI-Beta header.
+  //
+  // It used to send `OpenAI-Beta: realtime=v1`, and that is now fatal rather
+  // than merely redundant: the beta interface was removed on 2026-05-07 and GA
+  // models REJECT a connection carrying the header. The socket is refused at
+  // the handshake, so the session dies before it exists — which from the
+  // learner's side is a voice button that switches itself off the instant it is
+  // pressed.
+  //
+  // The previous fix in this file corrected the URL and the session shape and
+  // left this line alone, because it looked like harmless legacy. It was the
+  // remaining half of the failure.
   const ws = new WebSocket(REALTIME_URL, {
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      "OpenAI-Beta": "realtime=v1",
-    },
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
   });
 
   let closed    = false;
