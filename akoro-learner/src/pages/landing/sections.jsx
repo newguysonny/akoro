@@ -71,11 +71,12 @@ function ProblemSolution() {
 /* ══════════════ HOW IT WORKS ══════════════ */
 const HIW_VT = 'ak-hiw-morph';
 function HowItWorks() {
+  const { t } = useLang();
   const steps = [
-    { num: '01', glyph: '◎', icon: <Target size={26} color={B}/>, title: 'Pick a topic', desc: 'Choose from curriculum subjects or create your own. Set subtopics and learning objectives so your agent starts calibrated, not cold — you decide exactly what it should master.' },
-    { num: '02', glyph: '✦', icon: <Brain size={26} color={B}/>, title: 'Teach your agent', desc: 'Explain concepts by chat or voice. NaNa Esumai guides every step — she listens, asks probing questions, and flags misconceptions in real time, so teaching forces you to truly understand.' },
-    { num: '03', glyph: '❖', icon: <Repeat2 size={26} color={B}/>, title: 'Get assessed by Sargeant', desc: 'Sargeant tests your agent on everything you taught. Your confidence score updates after every assessment — surfacing exactly what to revise, right before you would have forgotten it.' },
-    { num: '04', glyph: '▲', icon: <Trophy size={26} color={B}/>, title: 'Rise the ranks', desc: 'Climb classroom and inter-school leaderboards. Challenge friends, earn XP, and prove your knowledge in live agent battles — mastery becomes something you can see and compete on.' },
+    { num: '01', glyph: '◎', icon: <Target size={26} color={B}/>, title: t('landing.hiw_t1'), desc: t('landing.hiw_d1') },
+    { num: '02', glyph: '✦', icon: <Brain size={26} color={B}/>, title: t('landing.hiw_t2'), desc: t('landing.hiw_d2') },
+    { num: '03', glyph: '❖', icon: <Repeat2 size={26} color={B}/>, title: t('landing.hiw_t3'), desc: t('landing.hiw_d3') },
+    { num: '04', glyph: '▲', icon: <Trophy size={26} color={B}/>, title: t('landing.hiw_t4'), desc: t('landing.hiw_d4') },
   ];
   const [open, setOpen] = useState(null);
   const [slow, setSlow] = useState(false);
@@ -133,12 +134,12 @@ function HowItWorks() {
       `}</style>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <SL center>How it works</SL>
+          <SL center>{t('landing.hiw_eyebrow')}</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
             From first session to <em style={{ color: B, fontStyle: 'italic' }}>top of class</em>
           </h2>
           <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 520, margin: '12px auto 0', lineHeight: 1.7 }}>
-            Four simple steps that turn passive studying into active mastery. <span style={{ color: '#9490A0' }}>Tap a step to expand.</span>
+            Four simple steps that turn passive studying into active mastery. <span style={{ color: '#9490A0' }}>{t('landing.hiw_hint')}</span>
           </p>
         </div>
 
@@ -153,7 +154,7 @@ function HowItWorks() {
               </div>
               <div className="fsyne" style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: B }}>STEP {num}</div>
               <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1A1A2E', lineHeight: 1.3 }}>{title}</h3>
-              <span style={{ marginTop: 'auto', fontSize: 13, fontWeight: 700, color: B }}>Learn more →</span>
+              <span style={{ marginTop: 'auto', fontSize: 13, fontWeight: 700, color: B }}>{t('landing.learn_more')}</span>
             </button>
           ))}
         </div>
@@ -168,7 +169,7 @@ function HowItWorks() {
               </div>
             </div>
             <p style={{ fontSize: 16, color: '#4A4658', lineHeight: 1.75, maxWidth: 680 }}>{cur.desc}</p>
-            <button onClick={closeStep} style={{ marginTop: 18, background: `${B}0D`, border: `1px solid ${B}22`, color: B, fontWeight: 700, fontSize: 13.5, borderRadius: 100, padding: '9px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>Collapse ↩</button>
+            <button onClick={closeStep} style={{ marginTop: 18, background: `${B}0D`, border: `1px solid ${B}22`, color: B, fontWeight: 700, fontSize: 13.5, borderRadius: 100, padding: '9px 18px', cursor: 'pointer', fontFamily: 'inherit' }}>{t('landing.collapse')}</button>
           </div>
         )}
 
@@ -182,6 +183,7 @@ function HowItWorks() {
 
 /* ══════════════ COURSES (lazy-loaded from backend only) ══════════════ */
 function Courses() {
+  const { t } = useLang();
   const navigate = useNavigate();
   const [mainTab, setMainTab] = useState('recorded');
   const [subTab, setSubTab]   = useState('all');
@@ -249,11 +251,11 @@ function Courses() {
     <section id="courses" ref={sectionRef} className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 36 }}>
-          <SL>Courses</SL>
+          <SL>{t('landing.courses_eyebrow')}</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em', marginBottom: 10 }}>
             Subjects your agent <em style={{ color: B, fontStyle: 'italic' }}>masters</em> with you
           </h2>
-          <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 500, lineHeight: 1.65 }}>Self-paced courses and live sessions on Zoom, Meet & Teams — one platform for all your learning.</p>
+          <p style={{ fontSize: 17, color: '#6B6B80', maxWidth: 500, lineHeight: 1.65 }}>{t('landing.courses_blurb')}</p>
         </div>
 
         {/* Main tabs */}
@@ -275,15 +277,15 @@ function Courses() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
               {['all','stem','languages','business','arts'].map(t => (
                 <button key={t} onClick={() => setSubTab(t)} style={{ padding: '7px 16px', borderRadius: 99, border: `1.5px solid ${subTab === t ? B : '#DDD8CF'}`, background: subTab === t ? B : '#fff', color: subTab === t ? '#fff' : '#6B6B80', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .2s' }}>
-                  {t === 'all' ? 'All subjects' : t === 'stem' ? 'STEM' : t.charAt(0).toUpperCase() + t.slice(1)}
+                  {t === 'all' ? t('landing.all_subjects') : t === 'stem' ? 'STEM' : t.charAt(0).toUpperCase() + t.slice(1)}
                 </button>
               ))}
             </div>
             {!loading && displayCourses.length === 0 && (
               <div style={{ textAlign: 'center', padding: '64px 24px', color: '#9490A0' }}>
                 <BookOpen size={40} color="#DDD8CF" style={{ marginBottom: 16 }}/>
-                <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>No courses yet</p>
-                <p style={{ fontSize: 14 }}>Courses will appear here once instructors publish them.</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>{t('landing.no_courses')}</p>
+                <p style={{ fontSize: 14 }}>{t('landing.no_courses_sub')}</p>
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 20 }}>
@@ -339,8 +341,8 @@ function Courses() {
             {!loading && displayLive.length === 0 && (
               <div style={{ textAlign: 'center', padding: '64px 24px', color: '#9490A0' }}>
                 <Radio size={40} color="#DDD8CF" style={{ marginBottom: 16 }}/>
-                <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>No live classes scheduled</p>
-                <p style={{ fontSize: 14 }}>Check back soon — instructors post upcoming sessions here.</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>{t('landing.no_live')}</p>
+                <p style={{ fontSize: 14 }}>{t('landing.no_live_sub')}</p>
               </div>
             )}
             {displayLive.map((s, i) => (
@@ -370,9 +372,9 @@ function Courses() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
-                      {s.status === 'live'     && <Btn v="green" sz="sm"><Radio size={13}/>Join now</Btn>}
+                      {s.status === 'live'     && <Btn v="green" sz="sm"><Radio size={13}/>{t('landing.join_now')}</Btn>}
                       {s.status === 'upcoming' && <Btn v="primary" sz="sm"><CalendarDays size={13}/>RSVP</Btn>}
-                      {s.status === 'recorded' && <Btn v="outline" sz="sm"><MonitorPlay size={13}/>Watch replay</Btn>}
+                      {s.status === 'recorded' && <Btn v="outline" sz="sm"><MonitorPlay size={13}/>{t('landing.watch_replay')}</Btn>}
                       <span style={{ fontSize: 11, color: '#9490A0', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><ExternalLink size={10}/>Open in {s.platform}</span>
                     </div>
                   </div>
@@ -382,11 +384,11 @@ function Courses() {
             <Reveal>
               <div style={{ borderRadius: 18, padding: '24px 28px', border: `1.5px dashed ${B}40`, background: `${B}04`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
                 <div>
-                  <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 4 }}>For teachers</div>
-                  <h4 className="fs" style={{ fontSize: 20, color: '#1A1A2E', marginBottom: 4 }}>Want to host a live class?</h4>
-                  <p style={{ fontSize: 14, color: '#6B6B80' }}>Schedule on Zoom, Google Meet, or Teams. Your students see it here automatically.</p>
+                  <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 4 }}>{t('landing.for_teachers')}</div>
+                  <h4 className="fs" style={{ fontSize: 20, color: '#1A1A2E', marginBottom: 4 }}>{t('landing.host_live')}</h4>
+                  <p style={{ fontSize: 14, color: '#6B6B80' }}>{t('landing.host_live_sub')}</p>
                 </div>
-                <Btn v="primary">Schedule a class <ArrowRight size={14}/></Btn>
+                <Btn v="primary">{t('landing.schedule_class')} <ArrowRight size={14}/></Btn>
               </div>
             </Reveal>
           </div>
@@ -400,22 +402,23 @@ function Courses() {
 
 /* ══════════════ OUTCOMES ══════════════ */
 function Outcomes() {
+  const { t } = useLang();
   const metrics = [
-    { val: '89%', label: 'knowledge retention rate' },
-    { val: '3.4×', label: 'faster exam readiness' },
-    { val: '78%', label: 'course completion rate' },
-    { val: '₦2M+', label: 'avg salary boost (career learners)' },
+    { val: '89%', label: t('landing.stat_retention') },
+    { val: '3.4×', label: t('landing.stat_exam') },
+    { val: '78%', label: t('landing.stat_completion') },
+    { val: '₦2M+', label: t('landing.stat_salary') },
   ];
   const testimonials = [
-    { stars: 5, quote: 'I failed Further Maths twice before Akoro. The agent battles made me actually want to study. Passed with a B2 at WASSCE.', emoji: '👦🏾', bg: '#D4EAD8', name: 'Chukwuemeka Obi', role: 'SS3 Student, Lagos', result: 'D7 → B2 in 4 months' },
-    { stars: 5, quote: 'As a teacher with 60 students, the class dashboard is a game-changer. I know who\'s falling behind before the exam — not after.', emoji: '👩🏾‍🏫', bg: '#E4D4F0', name: 'Mrs. Adaeze Nwosu', role: 'Physics Teacher, Enugu', result: '60% → 91% pass rate' },
-    { stars: 5, quote: 'I prepped for IELTS alongside a full-time job. 20 mins a day via spaced repetition got me from 6.0 to 7.5.', emoji: '👨🏾‍💼', bg: '#F0E4C8', name: 'Kofi Mensah', role: 'Engineer, Accra → UK', result: 'IELTS 6.0 → 7.5' },
+    { stars: 5, quote: t('landing.quote_1'), emoji: '👦🏾', bg: '#D4EAD8', name: 'Chukwuemeka Obi', role: t('landing.role_1'), result: t('landing.result_1') },
+    { stars: 5, quote: t('landing.quote_2'), emoji: '👩🏾‍🏫', bg: '#E4D4F0', name: 'Mrs. Adaeze Nwosu', role: t('landing.role_2'), result: t('landing.result_2') },
+    { stars: 5, quote: t('landing.quote_3'), emoji: '👨🏾‍💼', bg: '#F0E4C8', name: 'Kofi Mensah', role: t('landing.role_3'), result: 'IELTS 6.0 → 7.5' },
   ];
   return (
     <section id="outcomes" className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <SL center>Results</SL>
+          <SL center>{t('landing.results_eyebrow')}</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
             Numbers that matter, not <em style={{ color: B, fontStyle: 'italic' }}>vanity metrics</em>
           </h2>
@@ -457,32 +460,33 @@ function Outcomes() {
 
 /* ══════════════ PRICING ══════════════ */
 function Pricing() {
+  const { t } = useLang();
   const navigate = useNavigate();
   const [yearly, setYearly]   = useState(false);
   const [tab, setTab]          = useState('individual');
 
   const indiv = [{
     tier: 'Pro', monthlyPrice: 18000, yearlyPrice: 12960, unit: '/mo', featured: true,
-    desc: 'For classrooms, teachers, instructors, and tutors who want real results.',
-    badge: 'For educators & classrooms',
-    features: [[true,'1 AI agent (NaNa Esumai)'],[true,'1 classroom'],[true,'Up to 20 students / learners'],[true,'Unlimited subjects'],[true,'Unlimited agent battles'],[true,'Full knowledge map'],[true,'WAEC/JAMB/NECO curriculum sync'],[true,'Offline access'],[true,'Verifiable certificates']],
-    cta: 'Start 14-day free trial →', v: 'primary',
+    desc: t('landing.tier_pro_desc'),
+    badge: t('landing.tier_pro_unit'),
+    features: [[true,t('landing.f_agent')],[true,t('landing.f_classroom1')],[true,t('landing.f_students20')],[true,t('landing.f_subjects')],[true,t('landing.f_battles')],[true,t('landing.f_knowledge_map')],[true,t('landing.f_curriculum')],[true,t('landing.f_offline')],[true,t('landing.f_certificates')]],
+    cta: t('landing.start_trial'), v: 'primary',
   }];
 
   const enterprise = [
     {
       tier: 'Starter', monthlyPrice: 85000, yearlyPrice: 61200, unit: '/mo', featured: false,
-      desc: 'For growing schools and tutoring centres.',
-      badge: 'Per school · up to 150 students',
-      features: [[true,'Everything in Pro'],[true,'3 classrooms'],[true,'Teacher management tools'],[true,'Custom syllabus upload'],[true,'Inter-class battle leagues'],[true,'Dedicated support'],[false,'Custom School Management System'],[false,'API access']],
-      cta: 'Get started →', v: 'outline',
+      desc: t('landing.tier_starter_desc'),
+      badge: t('landing.tier_starter_unit'),
+      features: [[true,t('landing.f_everything_pro')],[true,t('landing.f_classrooms3')],[true,t('landing.f_teacher_tools')],[true,t('landing.f_syllabus_upload')],[true,t('landing.f_leagues')],[true,t('landing.f_support')],[false,t('landing.f_sms')],[false,t('landing.f_api')]],
+      cta: t('landing.get_started'), v: 'outline',
     },
     {
       tier: 'Enterprise Pro', monthlyPrice: null, yearlyPrice: null, unit: '', featured: true,
-      desc: 'Full institutional deployment for large schools and networks.',
-      badge: 'Custom pricing · unlimited students',
-      features: [[true,'Everything in Starter'],[true,'Custom School Management System'],[true,'Unlimited classrooms'],[true,'Multi-school / district management'],[true,'Custom branding & white-label'],[true,'Priority SLA & onboarding'],[true,'API access & integrations'],[true,'NDPR / FERPA compliance suite']],
-      cta: 'Contact sales →', v: 'dark',
+      desc: t('landing.tier_ent_desc'),
+      badge: t('landing.tier_ent_unit'),
+      features: [[true,t('landing.f_everything_starter')],[true,t('landing.f_sms')],[true,'Unlimited classrooms'],[true,'Multi-school / district management'],[true,t('landing.f_whitelabel')],[true,'Priority SLA & onboarding'],[true,t('landing.f_api_integrations')],[true,'NDPR / FERPA compliance suite']],
+      cta: t('landing.contact_sales'), v: 'dark',
     },
   ];
 
@@ -492,7 +496,7 @@ function Pricing() {
     <section id="pricing" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <SL center>Pricing</SL>
+          <SL center>{t('landing.pricing_eyebrow')}</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
             Honest pricing. No <em style={{ color: B, fontStyle: 'italic' }}>surprises.</em>
           </h2>
@@ -509,12 +513,12 @@ function Pricing() {
 
         {/* Yearly toggle */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 36, fontSize: 14, fontWeight: 500 }}>
-          <span style={{ color: !yearly ? '#1A1A2E' : '#9490A0' }}>Monthly</span>
+          <span style={{ color: !yearly ? '#1A1A2E' : '#9490A0' }}>{t('landing.monthly')}</span>
           <button onClick={() => setYearly(v => !v)} style={{ width: 46, height: 24, borderRadius: 99, background: yearly ? B : '#DDD8CF', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .2s' }}>
             <div style={{ position: 'absolute', width: 16, height: 16, background: '#fff', borderRadius: '50%', top: 4, left: yearly ? 26 : 4, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }}/>
           </button>
-          <span style={{ color: yearly ? '#1A1A2E' : '#9490A0' }}>Yearly</span>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: '#E8F8EE', color: '#2AA76E', opacity: yearly ? 1 : 0.4, transition: 'opacity .2s' }}>Save 28%</span>
+          <span style={{ color: yearly ? '#1A1A2E' : '#9490A0' }}>{t('landing.yearly')}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: '#E8F8EE', color: '#2AA76E', opacity: yearly ? 1 : 0.4, transition: 'opacity .2s' }}>{t('landing.save_28')}</span>
         </div>
 
         {/* Individual — single centred card */}
@@ -524,7 +528,7 @@ function Pricing() {
               {indiv.map(plan => (
                 <Reveal key={plan.tier}>
                   <div style={{ position: 'relative', borderRadius: 24, padding: '40px 36px', border: `1.5px solid ${B}`, background: '#fff', boxShadow: '0 4px 24px rgba(0,0,0,.06)' }}>
-                    <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: B, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 16px', borderRadius: 99, whiteSpace: 'nowrap' }}>Most popular</div>
+                    <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: B, color: '#fff', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 16px', borderRadius: 99, whiteSpace: 'nowrap' }}>{t('landing.most_popular')}</div>
                     <div className="fsyne" style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 8 }}>{plan.tier}</div>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, background: '#F0ECE6', fontSize: 10, fontWeight: 600, color: '#6B6B80', marginBottom: 12 }}><School size={10}/>{plan.badge}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 6 }}>
@@ -555,8 +559,8 @@ function Pricing() {
               <div style={{ borderRadius: 16, padding: '18px 20px', border: `1px solid ${B}25`, background: `${B}06`, display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 10, background: `${B}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Building2 size={15} color={B}/></div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>Enterprise Licensing</div>
-                  <p style={{ fontSize: 12.5, color: '#6B6B80', lineHeight: 1.65 }}>License Akoro for your school, tutoring centre, or district. Includes school-wide dashboards, teacher tools, inter-class battles, and optionally a full Custom School Management System.</p>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1A1A2E', marginBottom: 4 }}>{t('landing.enterprise_licensing')}</div>
+                  <p style={{ fontSize: 12.5, color: '#6B6B80', lineHeight: 1.65 }}>{t('landing.enterprise_blurb')}</p>
                 </div>
               </div>
             </Reveal>
@@ -592,8 +596,8 @@ function Pricing() {
 
         <Reveal>
           <div style={{ marginTop: 24, textAlign: 'center', padding: '16px 20px', borderRadius: 16, background: '#fff', border: '1px solid #EDE8E1', fontSize: 14, color: '#6B6B80' }}>
-            <Shield size={14} style={{ display: 'inline', marginRight: 6, color: B }}/><strong style={{ color: '#1A1A2E' }}>30-day money-back guarantee</strong> — if Akoro doesn't improve your scores, we'll refund every penny.{' '}
-            <span style={{ color: B, cursor: 'pointer', textDecoration: 'underline' }}>Financial aid available</span> for students in need.
+            <Shield size={14} style={{ display: 'inline', marginRight: 6, color: B }}/><strong style={{ color: '#1A1A2E' }}>{t('landing.money_back')}</strong> — if Akoro doesn't improve your scores, we'll refund every penny.{' '}
+            <span style={{ color: B, cursor: 'pointer', textDecoration: 'underline' }}>{t('landing.financial_aid')}</span> for students in need.
           </div>
         </Reveal>
 
@@ -611,6 +615,7 @@ function Pricing() {
 
 /* ══════════════ INSTRUCTORS (lazy-loaded from backend only) ══════════════ */
 function Instructors() {
+  const { t } = useLang();
   const [instructors, setInstructors] = useState([]);
   const [loading, setLoading]         = useState(false);
   const [fetched, setFetched]         = useState(false);
@@ -636,7 +641,7 @@ function Instructors() {
     <section id="instructors" ref={sectionRef} className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 48 }}>
-          <SL>Instructors</SL>
+          <SL>{t('landing.instructors_eyebrow')}</SL>
           <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,50px)', color: '#1A1A2E', letterSpacing: '-0.02em' }}>
             Taught by people who <em style={{ color: B, fontStyle: 'italic' }}>actually know</em> their subject
           </h2>
@@ -650,8 +655,8 @@ function Instructors() {
         {!loading && instructors.length === 0 && fetched && (
           <div style={{ textAlign: 'center', padding: '64px 24px', color: '#9490A0' }}>
             <GraduationCap size={40} color="#DDD8CF" style={{ marginBottom: 16 }}/>
-            <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>No instructors yet</p>
-            <p style={{ fontSize: 14 }}>Instructors will appear here once they join the platform.</p>
+            <p style={{ fontSize: 16, fontWeight: 600, color: '#6B6B80', marginBottom: 6 }}>{t('landing.no_instructors')}</p>
+            <p style={{ fontSize: 14 }}>{t('landing.no_instructors_sub')}</p>
           </div>
         )}
         <div className="ak-four-col" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(230px,1fr))', gap: 18 }}>
@@ -675,8 +680,8 @@ function Instructors() {
         </div>
         <Reveal delay={0.3}>
           <div style={{ textAlign: 'center', marginTop: 44 }}>
-            <p style={{ fontSize: 15, color: '#6B6B80', marginBottom: 18 }}>Are you an educator? Join our growing community of instructors.</p>
-            <Btn v="outline" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signup`; }}>Apply as an Instructor <ArrowRight size={14}/></Btn>
+            <p style={{ fontSize: 15, color: '#6B6B80', marginBottom: 18 }}>{t('landing.educator_cta')}</p>
+            <Btn v="outline" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signup`; }}>{t('landing.apply_instructor')} <ArrowRight size={14}/></Btn>
           </div>
         </Reveal>
       </div>

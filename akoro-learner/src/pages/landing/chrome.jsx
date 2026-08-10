@@ -3,6 +3,7 @@
  * footer, sticky bar).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import {
   Brain, Zap, Swords, BarChart3, Mic, School, WifiOff, Trophy,
@@ -28,6 +29,7 @@ import { INSTRUCTOR_URL, B, B2, G, GL, R, BG, FontStyle, useReveal, Reveal, SL, 
 
 /* ── Header ── */
 function Header({ onDrawer }) {
+  const { t } = useLang();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => { const fn = () => setScrolled(window.scrollY > 30); window.addEventListener('scroll', fn); return () => window.removeEventListener('scroll', fn); }, []);
@@ -56,8 +58,8 @@ function Header({ onDrawer }) {
       </nav>
       <div className="ak-header-ctas" style={{ alignItems: 'center', gap: 10 }}>
         <span className="ak-desktop-ctas" style={{ display: 'flex', gap: 10 }}>
-          <Btn v="ghost" sz="sm" onClick={() => navigate('/signin')}>Log in</Btn>
-          <Btn v="primary" sz="sm" onClick={() => navigate('/signup')}>Start free <ArrowRight size={13}/></Btn>
+          <Btn v="ghost" sz="sm" onClick={() => navigate('/signin')}>{t('landing.log_in')}</Btn>
+          <Btn v="primary" sz="sm" onClick={() => navigate('/signup')}>{t('landing.start_free')} <ArrowRight size={13}/></Btn>
         </span>
         <button onClick={onDrawer} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1.5px solid #E2DDD6', background: 'transparent', cursor: 'pointer', color: '#6B6B80', transition: 'border-color .2s' }}
           onMouseEnter={e => e.currentTarget.style.borderColor = B}
@@ -71,6 +73,7 @@ function Header({ onDrawer }) {
 
 /* ══════════════ DRAWER ══════════════ */
 function Drawer({ open, onClose }) {
+  const { t } = useLang();
   const navigate = useNavigate();
   const nav = [
     { icon: BookOpen,    label: 'Courses',      id: '#courses' },
@@ -104,7 +107,7 @@ function Drawer({ open, onClose }) {
         </nav>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24, paddingTop: 20, borderTop: '1px solid #EDE8E1' }}>
           <Btn v="outline" onClick={() => { onClose(); navigate('/signin'); }} style={{ width: '100%', justifyContent: 'center' }}>Log in</Btn>
-          <Btn v="primary" onClick={() => { onClose(); navigate('/signup'); }} style={{ width: '100%', justifyContent: 'center' }}>Start for free <ArrowRight size={13}/></Btn>
+          <Btn v="primary" onClick={() => { onClose(); navigate('/signup'); }} style={{ width: '100%', justifyContent: 'center' }}>{t('landing.start_for_free')} <ArrowRight size={13}/></Btn>
         </div>
       </div>
     </>
@@ -114,6 +117,7 @@ function Drawer({ open, onClose }) {
 
 /* ══════════════ QUICK INFO ══════════════ */
 function QuickInfo({ onSignup }) {
+  const { t } = useLang();
   const stats = [
     { icon: <Cpu size={20} color="#C4B5FD"/>, label: 'Active Agents',   val: '12,400+', sub: 'students worldwide' },
     { icon: <Brain size={20} color="#C4B5FD"/>, label: 'Avg Retention', val: '89%',     sub: 'vs 17% passive video' },
@@ -148,6 +152,7 @@ function QuickInfo({ onSignup }) {
 
 /* ── Final CTA / Footer / Sticky bar ── */
 function FinalCTA({ onSignup }) {
+  const { t } = useLang();
   const navigate = useNavigate();
   return (
     <section style={{ position: 'relative', padding: '96px 24px', textAlign: 'center', overflow: 'hidden', background: `linear-gradient(180deg,${B2} 0%,#3A12A8 100%)`, fontFamily: "'DM Sans',sans-serif" }}>
@@ -156,17 +161,17 @@ function FinalCTA({ onSignup }) {
           <h2 className="fs" style={{ fontSize: 'clamp(32px,5vw,58px)', color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.08, marginBottom: 14, fontWeight: 800 }}>
             Your agent is waiting.<br/>Start learning for real.
           </h2>
-          <p style={{ fontSize: 17, color: 'rgba(255,255,255,.8)', marginBottom: 36, lineHeight: 1.65 }}>Free to start. No credit card. Cancel anytime.</p>
+          <p style={{ fontSize: 17, color: 'rgba(255,255,255,.8)', marginBottom: 36, lineHeight: 1.65 }}>{t('landing.free_to_start')}</p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-            <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}>🎓 Learner Login <ArrowRight size={16}/></Btn>
-            <Btn v="outline" sz="lg" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signin`; }} style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}><School size={16}/> Instructor Login</Btn>
+            <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}>🎓 {t('landing.learner_login')} <ArrowRight size={16}/></Btn>
+            <Btn v="outline" sz="lg" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signin`; }} style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}><School size={16}/> {t('landing.instructor_login')}</Btn>
           </div>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Shield size={11} color="#C4B5FD"/>30-day money-back</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Shield size={11} color="#C4B5FD"/>{t('landing.money_back_short')}</span>
             <span>·</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Lock size={11} color="#C4B5FD"/>NDPR & GDPR compliant</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Lock size={11} color="#C4B5FD"/>{t('landing.compliant')}</span>
             <span>·</span>
-            <span>Cancel anytime</span>
+            <span>{t('landing.cancel_anytime')}</span>
           </p>
         </div>
       </Reveal>
@@ -176,10 +181,11 @@ function FinalCTA({ onSignup }) {
 
 /* ══════════════ FOOTER ══════════════ */
 function Footer() {
+  const { t } = useLang();
   const cols = [
-    { title: 'Product',     links: [['How it works','#'],['Courses','#'],['Live Classes','#'],['Pricing','#'],['Agent Battles','#'],['Certifications','#']] },
-    { title: 'For Schools', links: [['Enterprise Starter','#'],['Enterprise Pro','#'],['School Dashboard','#'],['Pilot Programme','#'],['NDPR Compliance','#'],['Case Studies','#']] },
-    { title: 'Company',     links: [['About Us','/about'],['Blog','#'],['Careers','/careers'],['Press','#'],['Contact','/contact'],['Partners','#'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
+    { title: t('landing.col_product'),     links: [['How it works','#'],['Courses','#'],['Live Classes','#'],['Pricing','#'],['Agent Battles','#'],['Certifications','#']] },
+    { title: t('landing.col_schools'), links: [['Enterprise Starter','#'],['Enterprise Pro','#'],['School Dashboard','#'],['Pilot Programme','#'],['NDPR Compliance','#'],['Case Studies','#']] },
+    { title: t('landing.col_company'),     links: [['About Us','/about'],['Blog','#'],['Careers','/careers'],['Press','#'],['Contact','/contact'],['Partners','#'],['Privacy Policy','/privacy'],['Terms of Service','/terms']] },
   ];
   const socials = [
     { icon: <FaXTwitter size={14}/>,   label: 'X' },
@@ -197,7 +203,7 @@ function Footer() {
               <AkoroLogo size={32} radius={9}/>
               <span className="fs" style={{ fontSize: 19, color: '#1A1A2E' }}>Akoro</span>
             </div>
-            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>AI Learning Agents — teach your agent, NaNa Esumai guides every session and teaches you back.</p>
+            <p style={{ fontSize: 13.5, color: '#7A7880', lineHeight: 1.7, maxWidth: 240, marginBottom: 20 }}>{t('landing.footer_tagline')}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {socials.map(({ icon, label }) => (
                 <button key={label} style={{ width: 34, height: 34, borderRadius: 8, background: '#fff', border: '1px solid #DDD8CF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7A7880', transition: 'all .18s' }}
@@ -248,6 +254,7 @@ function Footer() {
 
 /* ══════════════ STICKY BAR ══════════════ */
 function StickyBar({ onSignup }) {
+  const { t } = useLang();
   const [visible, setVisible] = useState(false);
   const [gone, setGone]       = useState(false);
   useEffect(() => { const fn = () => { if (!gone) setVisible(window.scrollY > 600); }; window.addEventListener('scroll', fn); return () => window.removeEventListener('scroll', fn); }, [gone]);
@@ -256,7 +263,7 @@ function StickyBar({ onSignup }) {
     <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 800, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 24px', background: '#fff', borderTop: '1px solid #E2DDD6', boxShadow: '0 -4px 20px rgba(0,0,0,.08)', transform: visible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform .3s', flexWrap: 'wrap', fontFamily: "'DM Sans',sans-serif" }}>
       <p style={{ fontSize: 14, color: '#3A3A52', fontWeight: 500 }}><span style={{ color: B, fontWeight: 700 }}>14-day free trial</span> — no credit card. 30-day money-back guarantee.</p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Btn v="ghost" sz="sm" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>Learn more</Btn>
+        <Btn v="ghost" sz="sm" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>{t('landing.learn_more_short')}</Btn>
         <Btn v="primary" sz="sm" onClick={onSignup}>Start for free <ArrowRight size={13}/></Btn>
         <button onClick={() => setGone(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9490A0', padding: 4, display: 'flex', alignItems: 'center' }}><X size={15}/></button>
       </div>
