@@ -82,7 +82,8 @@
     "2026-vouchers-marketplace-media.sql",
     "2026-vouchers-products.sql",
     "2026-vouchers-products-menu.sql",
-    "2026-fix-adaptive-session-agent-fk.sql"
+    "2026-fix-adaptive-session-agent-fk.sql",
+    "2026-student-knowledge-unique.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
