@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen, Clock,
-  FileText, UserCircle, Grid3x3, PieChart, PenTool, AlertTriangle, ArrowLeftRight, TrendingUp,
+  FileText, UserCircle, Grid3x3, PieChart, PenTool, AlertTriangle, ArrowLeftRight, TrendingUp, Play,
 } from 'lucide-react';
+import ToolWorkbench from '../components/ToolWorkbench.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, BLUE, PURPLE, FONT } from '../constants.js';
@@ -90,7 +91,7 @@ function SchoolAppCard({ app, busy, onBuy }) {
 }
 
 /* ── Tool / asset card ───────────────────────────────────────────── */
-function AppCard({ item, busy, onBuy }) {
+function AppCard({ item, busy, onBuy, onOpen }) {
   const [hover, setHover] = useState(false);
   return (
     <div
@@ -122,13 +123,26 @@ function AppCard({ item, busy, onBuy }) {
       </div>
 
       {item.owned ? (
-        <button disabled style={{
-          width: '100%', padding: '11px', borderRadius: 10, border: 'none',
-          background: `${GREEN}15`, color: GREEN, fontSize: 13, fontWeight: 800,
-          fontFamily: FONT, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-        }}>
-          <Check size={15} /> Unlocked
-        </button>
+        /* Owning a tool used to end at a disabled badge. Where the workbench
+           can run the item, this opens it; where it cannot, the badge stays,
+           because an Open button that goes nowhere is worse than no button. */
+        onOpen ? (
+          <button onClick={() => onOpen(item)} style={{
+            width: '100%', padding: '11px', borderRadius: 10, border: `1px solid ${GREEN}40`,
+            background: `${GREEN}12`, color: GREEN, fontSize: 13, fontWeight: 800,
+            fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          }}>
+            <Play size={14} /> Open
+          </button>
+        ) : (
+          <button disabled style={{
+            width: '100%', padding: '11px', borderRadius: 10, border: 'none',
+            background: `${GREEN}15`, color: GREEN, fontSize: 13, fontWeight: 800,
+            fontFamily: FONT, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          }}>
+            <Check size={15} /> Unlocked
+          </button>
+        )
       ) : (
         <button onClick={() => onBuy(item)} disabled={busy} style={{
           width: '100%', padding: '11px', borderRadius: 10, border: 'none',
@@ -154,6 +168,11 @@ export default function AppsCenterPage() {
   const [busyId, setBusyId]   = useState(null);
   const [toast, setToast]     = useState('');
   const [cat, setCat]         = useState('all');
+  // Which catalog keys the workbench can actually run. /api/teaching/tools
+  // already admits school roles, and the catalog shares its key namespace, so
+  // a school can run the same nine tools an instructor can.
+  const [runnable, setRunnable] = useState(new Set());
+  const [openKey, setOpenKey]   = useState(null);
   const [query, setQuery]     = useState('');
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
@@ -167,6 +186,12 @@ export default function AppsCenterPage() {
     } catch (e) {
       showToast(e.message || 'Could not load catalog');
     } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    apiGet('/api/teaching/tools')
+      .then((r) => setRunnable(new Set((r.data || []).map((t) => t.key))))
+      .catch(() => { /* no workbench access — every card keeps its badge */ });
   }, []);
 
   useEffect(() => {
@@ -214,6 +239,14 @@ export default function AppsCenterPage() {
   }, [cat, q, mgmt, tools, assets]);
 
   const unlocked = [...tools, ...assets, ...mgmt].filter((i) => i.owned).length;
+
+  if (openKey) {
+    return (
+      <PageLayout title="Workbench" subtitle="Run a tool you have unlocked">
+        <ToolWorkbench toolKey={openKey} onBack={() => setOpenKey(null)} />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout title="Apps Center" subtitle="Browse and unlock tools & assets for your agent">
@@ -285,7 +318,13 @@ export default function AppsCenterPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
           {catalog.map((item) => item._kind === 'mgmt'
             ? <SchoolAppCard key={`mgmt-${item.id}`} app={item} busy={busyId === item.id} onBuy={buy} />
-            : <AppCard key={`${item._kind}-${item.id}`} item={item} busy={busyId === item.id} onBuy={buy} />)}
+            : <AppCard
+                key={`${item._kind}-${item.id}`}
+                item={item}
+                busy={busyId === item.id}
+                onBuy={buy}
+                onOpen={item.owned && runnable.has(item.key) ? () => setOpenKey(item.key) : null}
+              />)}
         </div>
       )}
 

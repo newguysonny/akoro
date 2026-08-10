@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen } from 'lucide-react';
+import { Search, ArrowRight, Check, Lock, Loader2, LayoutGrid, Wrench, BookOpen, Play } from 'lucide-react';
+import ToolWorkbench from '../components/ToolWorkbench.jsx';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, GREEN, FONT } from '../constants.js';
@@ -14,7 +15,7 @@ const CATEGORIES = [
 ];
 
 /* ── Tool / asset card ───────────────────────────────────────────── */
-function AppCard({ item, busy, onBuy }) {
+function AppCard({ item, busy, onBuy, onOpen }) {
   const [hover, setHover] = useState(false);
   return (
     <div
@@ -46,13 +47,27 @@ function AppCard({ item, busy, onBuy }) {
       </div>
 
       {item.owned ? (
-        <button disabled style={{
-          width: '100%', padding: '11px', borderRadius: 10, border: 'none',
-          background: `${GREEN}15`, color: GREEN, fontSize: 13, fontWeight: 800,
-          fontFamily: FONT, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-        }}>
-          <Check size={15} /> Unlocked
-        </button>
+        /* "Unlocked ✓" used to be a disabled badge — the page sold you a tool
+           and then gave you nowhere to use it. If the item is one the workbench
+           can run, this opens it; if not, it stays a badge, because promising
+           an action we cannot perform is worse than the badge was. */
+        onOpen ? (
+          <button onClick={() => onOpen(item)} style={{
+            width: '100%', padding: '11px', borderRadius: 10, border: `1px solid ${GREEN}40`,
+            background: `${GREEN}12`, color: GREEN, fontSize: 13, fontWeight: 800,
+            fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          }}>
+            <Play size={14} /> Open
+          </button>
+        ) : (
+          <button disabled style={{
+            width: '100%', padding: '11px', borderRadius: 10, border: 'none',
+            background: `${GREEN}15`, color: GREEN, fontSize: 13, fontWeight: 800,
+            fontFamily: FONT, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          }}>
+            <Check size={15} /> Unlocked
+          </button>
+        )
       ) : (
         <button onClick={() => onBuy(item)} disabled={busy} style={{
           width: '100%', padding: '11px', borderRadius: 10, border: 'none',
@@ -77,6 +92,13 @@ export default function AppCenterPage() {
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast]   = useState('');
   const [cat, setCat]       = useState('all');
+  // Which catalog keys the workbench can run. The catalog and the teaching
+  // tools share one key namespace — lockState() looks platform_tools up BY the
+  // teaching-tool key — so a catalog item is runnable exactly when a tool of
+  // the same key exists. Asked rather than assumed, so a catalog entry with no
+  // runner keeps the old badge instead of an Open button that goes nowhere.
+  const [runnable, setRunnable] = useState(new Set());
+  const [openKey, setOpenKey]   = useState(null);
   const [query, setQuery]   = useState('');
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
@@ -89,6 +111,12 @@ export default function AppCenterPage() {
     } catch (e) {
       showToast(e.message || 'Could not load catalog');
     } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    apiGet('/api/teaching/tools')
+      .then((r) => setRunnable(new Set((r.data || []).map((t) => t.key))))
+      .catch(() => { /* no workbench access — every card keeps its badge */ });
   }, []);
 
   useEffect(() => {
@@ -127,6 +155,14 @@ export default function AppCenterPage() {
 
   const total    = tools.length + assets.length;
   const unlocked = [...tools, ...assets].filter((i) => i.owned).length;
+
+  if (openKey) {
+    return (
+      <PageLayout title="Workbench" subtitle="Run a tool you have unlocked">
+        <ToolWorkbench toolKey={openKey} onBack={() => setOpenKey(null)} />
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout title="App Center" subtitle="Browse and unlock tools & assets for your agent">
@@ -195,7 +231,15 @@ export default function AppCenterPage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 18 }}>
-          {catalog.map((item) => <AppCard key={`${item._kind}-${item.id}`} item={item} busy={busyId === item.id} onBuy={buy} />)}
+          {catalog.map((item) => (
+            <AppCard
+              key={`${item._kind}-${item.id}`}
+              item={item}
+              busy={busyId === item.id}
+              onBuy={buy}
+              onOpen={item.owned && runnable.has(item.key) ? () => setOpenKey(item.key) : null}
+            />
+          ))}
         </div>
       )}
 
