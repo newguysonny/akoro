@@ -95,7 +95,13 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
         blocks.push({
           type: "subtopic-hdr", faded: true,
           subtopic: prog.subtopic, idx: prog.subtopic_idx,
-          items: objectives[prog.subtopic] || [],
+          // The SUBTOPIC list, not this subtopic's objectives.
+          //
+          // It was the latter, which conflated two different lists: items came
+          // from objectives[subtopic] (three entries for one step) while idx and
+          // total counted subtopics (one of six). The header paged through three
+          // things while claiming to be on step 4 of 6.
+          items: subtopics,
           total: subtopics.length, topic, subject,
         });
         blocks.push({

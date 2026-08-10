@@ -36,8 +36,22 @@ function KindChip({ kind }) {
 // faint means not reached yet, and a ring marks whichever one they are looking
 // at. Browsing ahead never changes where the session actually is.
 function SubtopicHeader({ block, opacity }) {
-  const items   = Array.isArray(block.items) && block.items.length ? block.items : [block.subtopic].filter(Boolean);
-  const map     = Array.isArray(block.map) ? block.map : [];
+  // Two shapes arrive here.
+  //
+  // A current backend sends `items` — every step of the ladder — and the header
+  // is navigable. An older one sends only `subtopic` and `total`, and used to
+  // draw a plain progress bar of `total` segments.
+  //
+  // Falling back to [subtopic] collapsed that bar to a SINGLE segment and left
+  // two dead arrows beside it: strictly worse than what it replaced, and
+  // indistinguishable from the feature being missing. So without items the
+  // header renders exactly the bar it always did, and no controls it cannot
+  // honour.
+  const hasItems = Array.isArray(block.items) && block.items.length > 0;
+  const items    = hasItems ? block.items
+                            : Array.from({ length: Math.max(1, block.total || 1) },
+                                         (_, i) => (i === (block.idx || 0) ? block.subtopic : ""));
+  const map      = Array.isArray(block.map) ? block.map : [];
   const total   = items.length || block.total || 1;
   const active  = Math.min(block.idx || 0, total - 1);   // where the SESSION is
   const [view, setView] = useState(active);              // where the LEARNER is looking
@@ -80,15 +94,15 @@ function SubtopicHeader({ block, opacity }) {
           <span style={{ fontSize:10, color:"#A5B4FC", fontVariantNumeric:"tabular-nums" }}>
             {view + 1}/{total}
           </span>
-          {arrow(-1, view === 0)}
-          {arrow(1, view === total - 1)}
+          {hasItems && arrow(-1, view === 0)}
+          {hasItems && arrow(1, view === total - 1)}
         </div>
       </div>
 
       <div style={{ display:"flex", alignItems:"baseline", gap:7, marginTop:5, flexWrap:"wrap" }}>
         {map[view]?.kind && <KindChip kind={map[view].kind}/>}
         <div style={{ fontSize:13, fontWeight:800, color:"#fff", lineHeight:1.4, flex:1, minWidth:"60%" }}>
-          {items[view] ?? block.subtopic}
+          {items[view] || block.subtopic}
         </div>
       </div>
 
@@ -124,11 +138,12 @@ function SubtopicHeader({ block, opacity }) {
         {items.map((label, i) => (
           <button
             key={i}
-            onClick={() => { followed.current = i === active; setView(i); }}
-            title={label}
-            aria-label={`Objective ${i + 1}: ${label}`}
+            onClick={hasItems ? () => { followed.current = i === active; setView(i); } : undefined}
+            disabled={!hasItems}
+            title={label || undefined}
+            aria-label={hasItems ? `Objective ${i + 1}: ${label}` : `Step ${i + 1} of ${total}`}
             style={{
-              flex:1, height:5, borderRadius:3, padding:0, cursor:"pointer",
+              flex:1, height:5, borderRadius:3, padding:0, cursor: hasItems ? "pointer" : "default",
               background: i <= active ? "#818CF8" : "rgba(255,255,255,0.15)",
               border: i === view ? "1px solid #F9FAFB" : "1px solid transparent",
               boxSizing:"border-box",
