@@ -2,6 +2,7 @@
  * Landing page — content sections.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -29,7 +30,10 @@ import { INSTRUCTOR_URL, B, B2, G, GL, R, BG, FontStyle, useReveal, Reveal, SL, 
 
 /* ── Content sections ── */
 function ProblemSolution() {
+  const { t } = useLang();
   const card = (style) => ({ borderRadius: 24, padding: '36px 32px', height: '100%', ...style });
+  // `line` — NOT `t`. The map callback was named `t`, which shadows the
+  // translator the moment this component starts using one.
   const row = (icon, text, good) => (
     <div key={text} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: 15, color: good ? '#2A2A3E' : '#6B6B80', marginBottom: 14 }}>
       {good ? <CheckCircle2 size={16} color={B} style={{ flexShrink: 0, marginTop: 2 }}/> : <XCircle size={16} color="#C9C5BE" style={{ flexShrink: 0, marginTop: 2 }}/>}
@@ -40,22 +44,22 @@ function ProblemSolution() {
     <section id="problem" className="ak-section-pad" style={{ padding: '96px 24px', background: '#fff', fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
         <div style={{ marginBottom: 48 }}>
-          <SL>The problem</SL>
-          <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,48px)', color: '#1A1A2E', letterSpacing: '-0.02em', lineHeight: 1.15, maxWidth: 480 }}>Education is stuck in the wrong century.</h2>
+          <SL>{t('landing.problem_eyebrow')}</SL>
+          <h2 className="fs" style={{ fontSize: 'clamp(28px,4vw,48px)', color: '#1A1A2E', letterSpacing: '-0.02em', lineHeight: 1.15, maxWidth: 480 }}>{t('landing.problem_title')}</h2>
         </div>
         <div className="ak-two-col" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 20 }}>
           <Reveal>
             <div style={card({ background: '#FAF8F5', border: '1px solid #EDE8E1' })}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: '#F0ECE6', border: '1px solid #DDD8CF', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 20 }}><AlertCircle size={10}/>The old way</div>
-              <h3 className="fs" style={{ fontSize: 26, color: '#1A1A2E', lineHeight: 1.25, marginBottom: 24 }}>Passive, forgettable, one-size-fits-all</h3>
-              {["Sit through 2-hour video lectures you'll forget by morning", "No feedback loop — you don't know what you don't know", '83% of online learners quit before finishing', "Generic AI tutors that don't know your curriculum", 'Pay for content you never finish'].map(t => row(null, t, false))}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: '#F0ECE6', border: '1px solid #DDD8CF', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9490A0', marginBottom: 20 }}><AlertCircle size={10}/>{t('landing.old_way')}</div>
+              <h3 className="fs" style={{ fontSize: 26, color: '#1A1A2E', lineHeight: 1.25, marginBottom: 24 }}>{t('landing.old_way_sub')}</h3>
+              {['landing.old_1','landing.old_2','landing.old_3','landing.old_4','landing.old_5'].map(k => row(null, t(k), false))}
             </div>
           </Reveal>
           <Reveal delay={0.1}>
             <div style={card({ background: `linear-gradient(140deg,${B}08,${B}03)`, border: `1px solid ${B}25` })}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: `${B}14`, border: `1px solid ${B}30`, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 20 }}><Sparkles size={10}/>The Akoro way</div>
-              <h3 className="fs" style={{ fontSize: 26, color: '#1A1A2E', lineHeight: 1.25, marginBottom: 24 }}>Active, adaptive, deeply personal</h3>
-              {['Teach your agent — NaNa Esumai guides every session, then she teaches you back — bidirectional', 'Spaced repetition knows exactly when to re-test you', 'Agent battles turn studying into competitive sport', 'Aligned to your exact school syllabus', '89% retention vs 17% from passive video — proven'].map(t => row(null, t, true))}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: `${B}14`, border: `1px solid ${B}30`, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: B, marginBottom: 20 }}><Sparkles size={10}/>{t('landing.akoro_way')}</div>
+              <h3 className="fs" style={{ fontSize: 26, color: '#1A1A2E', lineHeight: 1.25, marginBottom: 24 }}>{t('landing.akoro_way_sub')}</h3>
+              {['landing.new_1','landing.new_2','landing.new_3','landing.new_4','landing.new_5'].map(k => row(null, t(k), true))}
             </div>
           </Reveal>
         </div>
@@ -682,16 +686,17 @@ function Instructors() {
 
 /* ══════════════ FAQ ══════════════ */
 function FAQ() {
+  const { t } = useLang();
   const [open, setOpen] = useState(0);
   const faqs = [
-    ['How much time per week do I need?', 'As little as 20 minutes a day. Our spaced repetition engine is designed for busy schedules — short daily sessions beat occasional long ones.'],
-    ['Do I get a certificate when I finish?', 'Yes — Pro and Enterprise plans include verifiable digital certificates. Free tier earns achievement badges but not formal certificates.'],
-    ['Can I switch or cancel my plan anytime?', 'Absolutely. No contracts. Cancel from settings in 30 seconds. You keep access until the end of your billing period.'],
-    ['Is this aligned to WAEC, JAMB, NECO?', 'Yes — we support WAEC, JAMB, NECO, Cambridge IGCSE/A-Level, KCSE, and IB. Schools on Enterprise can also upload custom syllabi and past questions.'],
-    ['How is my data protected?', 'NDPR, FERPA, and GDPR aligned. We never sell student data. TLS 1.3 in transit, AES-256 at rest.'],
+    [t('landing.faq_q1'), t('landing.faq_a1')],
+    [t('landing.faq_q2'), t('landing.faq_a2')],
+    [t('landing.faq_q3'), t('landing.faq_a3')],
+    [t('landing.faq_q4'), t('landing.faq_a4')],
+    [t('landing.faq_q5'), t('landing.faq_a5')],
     ['What\'s the difference between Enterprise Starter and Enterprise Pro?', 'Starter gives you up to 3 classrooms and teacher tools. Enterprise Pro adds a Custom School Management System, unlimited classrooms, multi-school management, and white-labelling.'],
-    ['Does it work offline?', 'Yes — Pro and Enterprise plans cache lessons on-device and sync when you reconnect. Built for Nigerian students with unreliable internet.'],
-    ['How do live classes work?', 'Teachers schedule sessions on Zoom, Google Meet, or Microsoft Teams and link them to Akoro. Students see the schedule, join directly, and recordings are available after.'],
+    [t('landing.faq_q6'), t('landing.faq_a6')],
+    [t('landing.faq_q7'), t('landing.faq_a7')],
   ];
   return (
     <section id="faq" className="ak-section-pad" style={{ padding: '96px 24px', background: '#FAF8F5', fontFamily: "'DM Sans',sans-serif" }}>
