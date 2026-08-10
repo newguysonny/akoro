@@ -128,8 +128,28 @@ CREATE INDEX IF NOT EXISTS idx_agent_knowledge_needs_embed
 -- CREATE OR REPLACE would leave the old arity behind as an overload for
 -- PostgREST to pick between.
 
-DROP FUNCTION IF EXISTS public.match_student_knowledge(uuid, vector, integer);
-DROP FUNCTION IF EXISTS public.match_student_knowledge(uuid, vector, integer, text, text, text[]);
+-- ── Clear every overload before recreating ───────────────────────────────────
+-- Dropping by explicit signature is not enough. It requires knowing every
+-- arity that has ever existed, and production carried one this file did not
+-- name — so the old function survived, CREATE added a second, and the
+-- unqualified COMMENT below then failed with
+--
+--     function name "public.match_student_knowledge" is not unique
+--
+-- halting the deploy. A migration cannot assume it knows the shape of the
+-- database it is arriving at; it can only assert the shape it leaves behind.
+DO $drop$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('match_student_knowledge', 'match_agent_knowledge', 'match_training_chunks')
+  LOOP
+    EXECUTE format('DROP FUNCTION IF EXISTS %s', r.sig);
+  END LOOP;
+END $drop$;
 
 CREATE FUNCTION public.match_student_knowledge(
   p_student_id      uuid,
@@ -186,9 +206,6 @@ LANGUAGE sql STABLE AS $function$
   LIMIT p_match_count;
 $function$;
 
-DROP FUNCTION IF EXISTS public.match_agent_knowledge(uuid, vector, integer);
-DROP FUNCTION IF EXISTS public.match_agent_knowledge(uuid, vector, integer, text, text);
-
 CREATE FUNCTION public.match_agent_knowledge(
   p_agent_id        uuid,
   p_query_embedding vector,
@@ -233,9 +250,6 @@ LANGUAGE sql STABLE AS $function$
   ORDER BY fused DESC
   LIMIT p_match_count;
 $function$;
-
-DROP FUNCTION IF EXISTS public.match_training_chunks(uuid, vector, integer);
-DROP FUNCTION IF EXISTS public.match_training_chunks(uuid, vector, integer, text, text);
 
 CREATE FUNCTION public.match_training_chunks(
   p_teacher_id      uuid,
@@ -284,7 +298,7 @@ LANGUAGE sql STABLE AS $function$
   LIMIT p_match_count;
 $function$;
 
-COMMENT ON FUNCTION public.match_student_knowledge IS
+COMMENT ON FUNCTION public.match_student_knowledge(uuid, vector, integer, text, text, text[]) IS
   'Hybrid retrieval over a learner''s own notes: vector + full-text, fused by Reciprocal Rank Fusion (k=60), with optional subject filter and tag exclusion. Either arm alone still returns rows.';
 
 -- Verify:

@@ -12,8 +12,9 @@ import { questionsSuite } from "./questions.js";
 import { routingSuite }   from "./routing.js";
 import { agentSuite }     from "./agent.js";
 import { recallSuite }    from "./recall.js";
+import { ladderSuite }    from "./ladder.js";
 
-export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite];
+export const SUITES = [questionsSuite, routingSuite, agentSuite, recallSuite, ladderSuite];
 export const suiteByKey = (key) => SUITES.find((s) => s.key === key) ?? null;
 
 /**

@@ -80,9 +80,13 @@ export class NaNaEsumai {
    * because everything downstream indexes it that way, and the map rides
    * alongside for anything that wants the structure.
    */
-  async generateSubtopics(topic, subject, groundingContext = "") {
+  async generateSubtopics(topic, subject, groundingContext = "", opts = {}) {
     const res = await openai.chat.completions.create({
-      model: "gpt-4.1-mini", temperature: 0.25,
+      // The eval suite points this same path at a different tier — comparing
+      // models on "does the ladder start at the beginning" is the only way that
+      // property is more than an assertion.
+      model: opts.model || "gpt-4.1-mini", temperature: 0.25,
+      __feature: opts.feature || undefined, __userId: opts.userId || undefined,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content:

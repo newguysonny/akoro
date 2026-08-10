@@ -116,7 +116,28 @@ CREATE INDEX IF NOT EXISTS idx_student_knowledge_topic_roll
   ON edu.student_knowledge (student_id, topic, subtopic);
 
 -- ── Retrieval, carrying the subtopic through ─────────────────────────────────
-DROP FUNCTION IF EXISTS public.match_student_knowledge(uuid, vector, integer, text, text, text[]);
+-- Sweep every overload, do not name them.
+--
+-- Naming them is what broke the SECOND production deploy. 2026-base-schema.sql
+-- recreates the original three-argument function on every run, and the
+-- seven-argument one below survives from the previous deploy — so by the time
+-- this file ran there were arities no explicit DROP list had been told about.
+-- One got left behind, CREATE added another beside it, and the next unqualified
+-- COMMENT ON FUNCTION halted the deploy with "function name is not unique".
+--
+-- A migration cannot know the shape of the database it arrives at. It can only
+-- guarantee the shape it leaves.
+DO $drop$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_student_knowledge'
+  LOOP
+    EXECUTE format('DROP FUNCTION IF EXISTS %s', r.sig);
+  END LOOP;
+END $drop$;
 
 CREATE FUNCTION public.match_student_knowledge(
   p_student_id      uuid,
