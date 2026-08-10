@@ -104,7 +104,9 @@ async function createSessionRecord(orchestrator, { studentId, topic, subject, op
     return data.id;
   } catch (e) {
     // Loud: a failure here is why a session would never appear in the list.
-    console.error("[adaptive_sessions create] FAILED — session will not be listed:", e.message);
+    console.error("[adaptive_sessions create] FAILED — session will not be listed:",
+      e.code || "", e.message, e.details || "");
+    orchestrator.saveError = { message: e.message, code: e.code || null };
     return null;
   }
 }
@@ -738,6 +740,13 @@ export function setupWebSocket(io) {
         // Persist in background — never blocks the session
         createSessionRecord(orchestrator, {
           studentId, topic, subject, openingBlocks: init.openingBlocks,
+        }).then(rowId => {
+          socket.emit("session_saved", {
+            sessionId: id,
+            saved:     !!rowId,
+            rowId:     rowId || null,
+            error:     rowId ? null : (orchestrator.saveError || { message: "unknown" }),
+          });
         }).catch(e => console.warn("[createSessionRecord]", e.message));
 
       } catch (err) {

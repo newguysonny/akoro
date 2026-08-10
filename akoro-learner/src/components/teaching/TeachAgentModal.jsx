@@ -233,6 +233,13 @@ function TeachAgentModal({ session, config, onClose, onSessionStarted }) {
       });
 
       // Backward compat
+      // Persistence result for this session. The lesson runs off the in-memory
+      // orchestrator, so a failed save is invisible without this — which is
+      // precisely how sessions went missing from the Sessions tab.
+      ws.on("session_saved", d => {
+        if (!d?.saved) console.error("[session] NOT saved — it will not appear in Sessions:", d?.error);
+      });
+
       ws.on("student_session_ready", d => { setSessionId(d.sessionId); onSessionStarted?.(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
 
       // Summary delivered over the socket (replaces REST /teaching/summary).
