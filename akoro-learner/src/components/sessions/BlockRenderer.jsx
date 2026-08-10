@@ -282,7 +282,14 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
   /* ── sargeant ── */
   if (block.type === "sargeant") return (
     <div style={{ border:`1.5px solid rgba(239,68,68,.40)`, borderRadius:12,
-      overflow:"hidden", margin:"6px 0 8px", opacity }}>
+      /* flexShrink:0 is load-bearing, not cosmetic.
+         The blocks list is a flex COLUMN, and a flex item whose overflow is
+         anything but visible has an automatic minimum size of ZERO — so this
+         card could be compressed to nothing under vertical pressure, leaving
+         only its 1.5px border on screen. That is what a "drift warning that
+         renders as just a red line" was. Every card here that clips its own
+         overflow needs this. */
+      overflow:"hidden", flexShrink:0, margin:"6px 0 8px", opacity }}>
       <div style={{ background:"linear-gradient(135deg,#7F1D1D,#991B1B)", padding:"7px 13px",
         display:"flex", alignItems:"center", gap:8 }}>
         <span style={{ fontSize:14 }}>⚡</span>
@@ -302,7 +309,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
     const pct   = block.confidence ?? 0;
     const color = pct >= 70 ? "#10B981" : pct >= 50 ? "#F59E0B" : "#EF4444";
     return (
-      <div style={{ border:`1.5px solid ${color}40`, borderRadius:12, overflow:"hidden",
+      <div style={{ border:`1.5px solid ${color}40`, borderRadius:12, overflow:"hidden", flexShrink:0,
         margin:"6px 0 10px", opacity }}>
         <div style={{ background:color, padding:"7px 13px", display:"flex",
           alignItems:"center", justifyContent:"space-between" }}>
@@ -332,7 +339,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
     const drop = (block.prevConfidence || 0) - (block.confidence || 0);
     return (
       <div style={{ border:"1.5px solid rgba(245,158,11,.45)", borderRadius:12,
-        overflow:"hidden", margin:"10px 0 8px", opacity }}>
+        overflow:"hidden", flexShrink:0, margin:"10px 0 8px", opacity }}>
         <div style={{ background:"linear-gradient(135deg,rgba(120,53,15,.80),rgba(146,64,14,.80))",
           padding:"7px 13px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:7 }}>

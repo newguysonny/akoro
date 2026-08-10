@@ -16,6 +16,7 @@
  */
 import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
+import { readFileSync } from "node:fs";
 import BlockRenderer from "../src/components/sessions/BlockRenderer.jsx";
 
 const fails = [];
@@ -52,6 +53,19 @@ check("the progress bar keeps its six segments",
   `${(bare.match(/aria-label="Step \d+ of \d+"/g) || []).length} segments`);
 check("no arrows it cannot honour", !bare.includes("Previous objective") && !bare.includes("Next objective"));
 check("the current subtopic still reads", bare.includes("Only one"));
+
+console.log("\n· Cards cannot be crushed to a line");
+// The blocks list is a flex COLUMN. A flex item whose overflow is anything but
+// visible has an automatic minimum size of ZERO, so it can be compressed to
+// nothing under vertical pressure — leaving only its border on screen. That is
+// what the "drift warning renders as just a red line" report was. Any card that
+// clips its own overflow has to opt out of shrinking.
+const src = readFileSync("src/components/sessions/BlockRenderer.jsx", "utf8");
+const clipping = src.split(/\n/).map((l, i) => ({ l, i: i + 1 })).filter(({ l }) => /overflow:\s*"hidden"/.test(l));
+const unguarded = clipping.filter(({ l }) => !/flexShrink:\s*0/.test(l) && !/height:\s*\d/.test(l));
+check("every clipping card opts out of flex shrinking",
+  unguarded.length === 0,
+  unguarded.length ? unguarded.map(u => `line ${u.i}`).join(", ") : `${clipping.length} checked`);
 
 console.log(fails.length ? `\n✗ ${fails.length} failed\n` : "\n✓ subtopic header renders correctly\n");
 process.exit(fails.length ? 1 : 0);

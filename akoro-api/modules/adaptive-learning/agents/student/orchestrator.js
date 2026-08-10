@@ -283,38 +283,27 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const studentId = this.studentId;
     const state     = await getStudentState(agentId);
 
-    // 1. Control drift check + Student Agent reply IN PARALLEL
-    const [drift, studentReply] = await Promise.all([
-      this.guideOrchestrator.control?.checkForDrift
-        ? this.guideOrchestrator.control.checkForDrift(
-            [...history.slice(-4), { role: "human_teacher", content: humanMessage }],
-            topic
-          )
-        : Promise.resolve({ isDrifting: false, driftLevel: "none", statusMessage: "On topic." }),
-
+    // 1. The Student Agent replies.
+    //
+    // There used to be a second call beside this one: a separate agent checking
+    // for topic drift, whose verdict could discard the reply below before
+    // anyone saw it. It was wrong about it constantly — it read "Hello" as
+    // off-topic and told a learner to get back to work on their opening
+    // message — and being wrong was expensive twice over: the drift check was
+    // billed, the reply it threw away was billed, and a teaching turn was spent
+    // producing nothing but a red warning.
+    //
+    // Staying on topic is now NaNa's job, decided from context she already has,
+    // and expressed as a nudge inside a normal teaching turn. See her prompt.
+    const studentReply = await (
       this.studentAgent.reply(
         humanMessage, topic,
         state.cognitive,
         history,
         STUDENT_PHASES[phase],
         onStudentChunk || null
-      ),
-    ]);
-
-    // Hard drift — redirect
-    if (drift.isDrifting) {
-      const redirectMsg = this.guideOrchestrator.control?.generateRedirectMessage
-        ? this.guideOrchestrator.control.generateRedirectMessage(drift, topic)
-        : `⚠️ Let's stay focused on ${topic}.`;
-      return {
-        type:                 "drift_warning",
-        sargeantMessage:      redirectMsg,
-        studentAgentResponse: null,
-        guideMessage:         null,
-        adaptiveEngine:       null,
-        driftInfo:            drift,
-      };
-    }
+      )
+    );
 
     // 2. Analyze understanding
     const analysis = await this.studentAgent.analyzeUnderstanding(studentReply, topic, history);
@@ -383,12 +372,15 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       lastAction: guideResult.nextAction,
     });
 
-    // 9. Control status line
+    // 9. Status line
+    //
+    // Nothing is announced for staying on topic — a learner who is doing fine
+    // does not need to be told so by a second voice, and "✅ On topic." on every
+    // turn was noise that made the red warning harder to notice when it did
+    // matter. Wandering is now handled inside NaNa's tip instead.
     const guideName   = this.guideOrchestrator.guide?.name   || "Guide";
     const controlName = this.guideOrchestrator.control?.name || "Control";
-    const controlStatusLine =
-      drift.driftLevel === "edge" ? `⚠️ ${drift.edgeNote || "Edge expansion."}` :
-      drift.driftLevel === "none" ? `✅ ${drift.statusMessage || "On topic."}` : null;
+    const controlStatusLine = null;
 
     // 10. History
     history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
@@ -430,7 +422,9 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       subtopicIdx:        this.session.mustKnowIndex,
       totalSubtopics:     (mustKnowParts || []).length || 1,
       subtopicObjectives: subtopicAdvanced ? (mustKnowParts || []) : [],
-      driftInfo:       drift,
+      // Kept in the payload so anything reading it still finds the shape it
+      // expects; the judgement now lives in guideResult.offTopic.
+      driftInfo:       { isDrifting: !!guideResult?.offTopic, driftLevel: guideResult?.offTopic ? "edge" : "none" },
       agentPairId:     "student-session",
       sessionType:     this.sessionType,
       turnXP,

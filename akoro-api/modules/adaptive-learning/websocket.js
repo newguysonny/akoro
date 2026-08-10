@@ -262,14 +262,10 @@ function resultToTypedBlocks(result, agentPairId) {
   const agentName  = result.studentAgentName || "Agent";
   const confidence = result.adaptiveEngine?.understanding ?? 0;
 
-  // Drift / sargeant warning
-  if (result.type === "drift_warning") {
-    return [{
-      type:  "sargeant",
-      phase: "Drift warning",
-      text:  result.sargeantMessage || "⚠️ Off-topic detected. Please stay focused.",
-    }];
-  }
+  // No drift block. A wandering learner is steered inside NaNa's own tip now,
+  // as part of a turn that still teaches — rather than by a red alarm from a
+  // second agent that replaced the whole turn with a scolding. Sargeant still
+  // appears below for the assessment gate, which is a different job.
 
   // Subtopic advance — full header sequence
   if (result.subtopicAdvanced && result.currentSubtopic) {

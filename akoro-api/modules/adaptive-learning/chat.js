@@ -337,7 +337,7 @@ function fmtSessionEnd({ evaluation, controlReport, finalState, agentPairId,
 
 function buildTurnBlocks(result, agentPairId) {
   if (result.type === "drift_warning") {
-    return [result.sargeantMessage || "⚠️ Off-topic detected."];
+    return [result.guideMessage || result.sargeantMessage || "Let\u2019s bring that back to the topic."];
   }
   const blocks = [];
   if (result.phaseChanged && result.phaseLabel)     blocks.push(fmtPhaseHeader(result.phaseLabel));

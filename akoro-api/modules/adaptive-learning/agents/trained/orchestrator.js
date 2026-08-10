@@ -189,24 +189,12 @@ export class TrainedOrchestrator extends BaseOrchestrator {
       recentHistory,
     });
 
-    const [drift, studentReply] = await Promise.all([
-      this.control.checkForDrift(
-        [...history.slice(-4), { role: "human_teacher", content: humanMessage }],
-        topic
-      ),
-      this._streamOrComplete(studentSystemPrompt, humanMessage, 0.65, onStudentChunk),
-    ]);
-
-    if (drift.isDrifting) {
-      return {
-        type:                 "drift_warning",
-        sargeantMessage:      this.control.generateRedirectMessage(drift, topic),
-        studentAgentResponse: null,
-        guideMessage:         null,
-        adaptiveEngine:       null,
-        driftInfo:            drift,
-      };
-    }
+    // No separate drift check. It ran beside this call, and its verdict could
+    // discard the reply before anyone saw it — a turn spent, two calls billed,
+    // one thrown away, and a red warning where teaching should have been. The
+    // guide steers inside its own tip now. See nana-esumai/guide.js.
+    const studentReply = await this._streamOrComplete(
+      studentSystemPrompt, humanMessage, 0.65, onStudentChunk);
 
     // 2. Analyze understanding
     const analysis = await this._analyzeUnderstanding(studentReply, topic, history);
@@ -271,8 +259,9 @@ export class TrainedOrchestrator extends BaseOrchestrator {
 
     // 7. Control status
     const controlStatusLine =
-      drift.driftLevel === "edge" ? `⚠️ ${drift.edgeNote || "Edge expansion."}` :
-      drift.driftLevel === "none" ? `✅ ${drift.statusMessage || "On topic."}` : null;
+      // Nothing announced for staying on topic: "✅ On topic." on every turn was
+      // noise, and noise is what made the warning easy to miss when it mattered.
+      null;
 
     history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
     history.push({ role: "student_agent", content: studentReply,  timestamp: new Date() });
@@ -297,7 +286,7 @@ export class TrainedOrchestrator extends BaseOrchestrator {
       subtopicAdvanced,
       currentSubtopic: mustKnowParts[this.session.mustKnowIndex] || null,
       currentPhase:    this.session.phase,
-      driftInfo:       drift,
+      driftInfo:       { isDrifting: !!guideResult?.offTopic, driftLevel: guideResult?.offTopic ? "edge" : "none" },
       agentPairId:     this._profile.id,
     };
   }
