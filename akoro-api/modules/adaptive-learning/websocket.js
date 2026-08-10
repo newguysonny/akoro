@@ -636,6 +636,10 @@ export function setupWebSocket(io) {
             orchestrator.presetMustKnow = ladder.subtopics;
             orchestrator.session = orchestrator.session || {};
             orchestrator.session.objectives = ladder.objectives || {};
+            // The path, not just the stops: what each step builds on and what
+            // it unlocks, so the learner can see where they are in the topic
+            // rather than only what is in front of them.
+            orchestrator.session.knowledgeMap = ladder.map || [];
           }
         } catch (e) { console.warn("[resolveLadder]", e.message); }
 

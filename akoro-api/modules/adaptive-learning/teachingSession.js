@@ -45,7 +45,7 @@ router.post("/configure", authenticateToken, async (req, res) => {
     if (!topic?.trim() || !subject?.trim())
       return res.status(400).json({ error: "topic and subject are required" });
 
-    const subtopics = await nana.generateSubtopics(topic, subject);
+    const { subtopics } = await nana.generateSubtopics(topic, subject);
 
     const objectivesArr = await Promise.all(
       subtopics.map(st => nana.generateObjectives(st, topic, subject))

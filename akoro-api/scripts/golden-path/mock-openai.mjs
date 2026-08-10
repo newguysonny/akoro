@@ -61,7 +61,18 @@ function contentFor(prompt) {
   if (p.includes('"turns"'))                             // podcast
     return JSON.stringify({ title: 'Mock episode', summary: 'A short one.',
       turns: [{ speaker: 'Ade', text: 'Welcome!' }, { speaker: 'Ngozi', text: 'Today: photosynthesis.' }] });
-  if (p.includes('"subtopics"'))                         // self-study plan
+  if (p.includes('"steps"'))                             // lesson ladder / knowledge map
+    // Shaped like a real ladder — foundation first, each step naming the one
+    // before it — so the normalisation and ordering code is exercised rather
+    // than short-circuited by an empty list.
+    return JSON.stringify({ steps: [
+      { title: 'What water is',    kind: 'foundation', buildsOn: null,             whyNow: 'Name the substance.' },
+      { title: 'Evaporation',      kind: 'mechanism',  buildsOn: 'What water is',  whyNow: 'Explain how water leaves a puddle.' },
+      { title: 'Condensation',     kind: 'mechanism',  buildsOn: 'Evaporation',    whyNow: 'Explain how clouds form.' },
+      { title: 'Precipitation',    kind: 'application', buildsOn: 'Condensation',  whyNow: 'Explain rain.' },
+      { title: 'The water cycle',  kind: 'synthesis',  buildsOn: 'Precipitation',  whyNow: 'Trace a drop all the way round.' },
+    ] });
+  if (p.includes('"subtopics"'))                         // self-study plan (legacy shape)
     return JSON.stringify({ subtopics: ['Evaporation', 'Condensation', 'Precipitation'],
       objectives: { Evaporation: ['Explain how water becomes vapour'] } });
   if (p.includes('subtopic'))

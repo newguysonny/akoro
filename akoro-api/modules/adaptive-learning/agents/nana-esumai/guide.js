@@ -12,6 +12,42 @@
 
 import { openai } from "../base-orchestrator.js";
 
+/**
+ * Turn whatever the model returned into a ladder that holds its shape.
+ *
+ * Exported and pure so it can be tested without a model — this is the part that
+ * can be wrong in a way nobody would notice, since a mis-ordered ladder still
+ * renders perfectly.
+ *
+ * Guarantees, whatever arrives:
+ *   · every entry has a non-empty title
+ *   · the first depends on nothing
+ *   · every other depends on an EARLIER step, never a later one — a forward
+ *     dependency is a loop the learner cannot climb
+ *   · kind is one of the four, defaulting to mechanism
+ */
+export function normaliseLadder(rawSteps) {
+  const steps = (Array.isArray(rawSteps) ? rawSteps : [])
+    .filter((s) => s && typeof s.title === "string" && s.title.trim());
+
+  return {
+    subtopics: steps.map((s) => s.title.trim()),
+    map: steps.map((s, i) => ({
+      title: s.title.trim(),
+      kind: ["foundation", "mechanism", "application", "synthesis"].includes(s.kind) ? s.kind : "mechanism",
+      // An INDEX, not the title the model gave. It returns the previous step's
+      // wording, which drifts by a word and then matches nothing; and a
+      // dependency pointing forwards is silently repaired to the step before,
+      // because "builds on something you have not learned yet" is not a thing.
+      buildsOn: i === 0 ? null : (() => {
+        const named = steps.findIndex((x) => x.title?.trim() === String(s.buildsOn ?? "").trim());
+        return named >= 0 && named < i ? named : i - 1;
+      })(),
+      whyNow: typeof s.whyNow === "string" ? s.whyNow.trim() : "",
+    })),
+  };
+}
+
 export class NaNaEsumai {
 
   static profile = {
@@ -25,31 +61,58 @@ export class NaNaEsumai {
   constructor() { this.name = "NaNa Esumai"; }
 
   /* ── Generate subtopics for a topic ──────────────────────── */
+  /**
+   * Build the lesson ladder — an ORDERED knowledge map, not a list of parts.
+   *
+   * The previous prompt asked for a progression and mostly got a table of
+   * contents. On "The water cycle" it opened with "States of Water: Solid,
+   * Liquid, and Gas" — which is not the beginning. A learner who does not yet
+   * know what water IS, or that it is made of something, cannot be taught that
+   * it has three states; the ladder started on the second rung and left the
+   * first one missing.
+   *
+   * So each rung is now asked for explicitly, with what it BUILDS ON and why it
+   * comes where it does. Making the model state the dependency is what forces
+   * the order to be real: it cannot claim rung 4 builds on rung 3 if it does
+   * not, and writing the reason down is what surfaces a missing foundation.
+   *
+   * Returns { subtopics, map } — subtopics stays a plain array of strings
+   * because everything downstream indexes it that way, and the map rides
+   * alongside for anything that wants the structure.
+   */
   async generateSubtopics(topic, subject, groundingContext = "") {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.25,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content:
-          `You are a curriculum expert designing a SHORT, STRUCTURED lesson ladder.\n` +
-          `Break the topic into 5-6 bite-sized subtopics that build strictly from the ground up:\n` +
-          `  1. Start with the FOUNDATION — the prerequisite idea/vocabulary a complete beginner needs first.\n` +
-          `  2. Then the BASICS — the core rule or mechanism, in its simplest form.\n` +
-          `  3. Then build progressively: apply it, combine it, handle edge cases.\n` +
-          `  4. End with the most ADVANCED idea a learner at this level should reach.\n` +
-          `Rules:\n` +
-          `- Each subtopic must be teachable in one short lesson (5-10 minutes).\n` +
-          `- Each must depend ONLY on the ones before it — never assume later knowledge.\n` +
-          `- Keep titles concrete and specific (not "Introduction" or "Advanced concepts").\n` +
-          `JSON only: { "subtopics": ["subtopic1", "subtopic2", ...] }` },
+          `You are a curriculum expert building a KNOWLEDGE MAP: an ordered path through a topic ` +
+          `where each step is teachable in 5-10 minutes and depends only on the steps before it.\n\n` +
+          `START AT THE REAL BEGINNING. The first step is almost never the topic's headline idea — it is ` +
+          `the vocabulary or substance the headline idea is ABOUT. For "The water cycle" the first step is ` +
+          `what water is and what it is made of, NOT "the three states of water": a learner who does not ` +
+          `know what water is cannot be taught that it has states. Ask yourself what a learner must already ` +
+          `know for step 1 to make sense; if the answer is anything, that is the real step 1.\n\n` +
+          `Then build: name the thing → how it behaves → what it does in one place → how the parts connect → ` +
+          `the whole picture.\n\n` +
+          `For EACH step give:\n` +
+          `  title      — concrete and specific. Never "Introduction", "Basics" or "Advanced concepts".\n` +
+          `  kind       — one of: foundation | mechanism | application | synthesis\n` +
+          `  buildsOn   — the title of the step it depends on, or null for the first\n` +
+          `  whyNow     — one short sentence: what the learner can do after this that they could not before\n\n` +
+          `6-8 steps. Exactly one synthesis step, and it is the last.\n` +
+          `JSON only: { "steps": [{ "title": "...", "kind": "...", "buildsOn": null, "whyNow": "..." }] }` },
         { role: "user",   content:
           (groundingContext
-            ? `${groundingContext}\n\nBuild the ladder STRICTLY from the syllabus references above — use their wording and scope. Do not introduce material they don't cover.\n\n`
+            ? `${groundingContext}\n\nBuild the map STRICTLY from the syllabus references above — use their wording and scope. Do not introduce material they don't cover.\n\n`
             : "") +
           `Topic: ${topic}\nSubject: ${subject}` },
       ],
     });
-    return JSON.parse(res.choices[0].message.content).subtopics || [];
+
+    let steps = [];
+    try { steps = JSON.parse(res.choices[0].message.content).steps || []; } catch { steps = []; }
+    return normaliseLadder(steps);
   }
 
   /* ── Generate learning objectives per subtopic ───────────── */

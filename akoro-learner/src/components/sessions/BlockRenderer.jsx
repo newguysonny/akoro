@@ -2,6 +2,28 @@ import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon } from '../common/Icons.jsx';
 
+/* Where a step sits in the arc of the topic. Four kinds, because that is the
+   shape of learning something: name it, see how it works, use it, tie it
+   together. Colour rather than a number, so a learner can see at a glance that
+   they are still in the foundations — or that they have reached the end. */
+const KINDS = {
+  foundation:  { label: "Foundation", fg: "#FCD34D", bg: "rgba(252,211,77,.14)" },
+  mechanism:   { label: "How it works", fg: "#7DD3FC", bg: "rgba(125,211,252,.14)" },
+  application: { label: "Use it",      fg: "#86EFAC", bg: "rgba(134,239,172,.14)" },
+  synthesis:   { label: "Put together", fg: "#C4B5FD", bg: "rgba(196,181,253,.16)" },
+};
+
+function KindChip({ kind }) {
+  const k = KINDS[kind];
+  if (!k) return null;
+  return (
+    <span style={{ fontSize:9, fontWeight:800, letterSpacing:".04em", textTransform:"uppercase",
+      color:k.fg, background:k.bg, borderRadius:5, padding:"2px 6px", whiteSpace:"nowrap" }}>
+      {k.label}
+    </span>
+  );
+}
+
 // ── Subtopic header, with the objectives folded into it ──────────────────
 //
 // This used to be a static header plus a separate "Objectives" checklist
@@ -15,6 +37,7 @@ import { ZapIcon, ChevDownIcon } from '../common/Icons.jsx';
 // at. Browsing ahead never changes where the session actually is.
 function SubtopicHeader({ block, opacity }) {
   const items   = Array.isArray(block.items) && block.items.length ? block.items : [block.subtopic].filter(Boolean);
+  const map     = Array.isArray(block.map) ? block.map : [];
   const total   = items.length || block.total || 1;
   const active  = Math.min(block.idx || 0, total - 1);   // where the SESSION is
   const [view, setView] = useState(active);              // where the LEARNER is looking
@@ -62,9 +85,33 @@ function SubtopicHeader({ block, opacity }) {
         </div>
       </div>
 
-      <div style={{ fontSize:13, fontWeight:800, color:"#fff", marginTop:4, lineHeight:1.4 }}>
-        {items[view] ?? block.subtopic}
+      <div style={{ display:"flex", alignItems:"baseline", gap:7, marginTop:5, flexWrap:"wrap" }}>
+        {map[view]?.kind && <KindChip kind={map[view].kind}/>}
+        <div style={{ fontSize:13, fontWeight:800, color:"#fff", lineHeight:1.4, flex:1, minWidth:"60%" }}>
+          {items[view] ?? block.subtopic}
+        </div>
       </div>
+
+      {/* The path, not just the stop. "Builds on X" is what turns a list into a
+          route: it says why this step is here and what it assumes you already
+          have, so a learner who is lost knows exactly which step to go back to. */}
+      {(map[view]?.whyNow || map[view]?.buildsOn != null) && (
+        <div style={{ marginTop:5, display:"flex", flexDirection:"column", gap:2 }}>
+          {map[view]?.buildsOn != null && items[map[view].buildsOn] && (
+            <button
+              onClick={() => { followed.current = false; setView(map[view].buildsOn); }}
+              style={{ background:"none", border:"none", padding:0, textAlign:"left", cursor:"pointer",
+                fontSize:10, color:"#A5B4FC", fontWeight:600 }}>
+              \u21b0 builds on {map[view].buildsOn + 1}. {items[map[view].buildsOn]}
+            </button>
+          )}
+          {map[view]?.whyNow && (
+            <div style={{ fontSize:10.5, color:"#C7D2FE", lineHeight:1.45, opacity:.9 }}>
+              {map[view].whyNow}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Reading ahead is allowed, but it must never look like progress. */}
       {view !== active && (

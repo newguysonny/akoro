@@ -112,7 +112,8 @@
     "2026-eval-runs.sql",
     "2026-battle-answer-basis.sql",
     "2026-hybrid-retrieval.sql",
-    "2026-knowledge-hierarchy.sql"
+    "2026-knowledge-hierarchy.sql",
+    "2026-knowledge-map.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

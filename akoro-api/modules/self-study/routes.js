@@ -138,7 +138,7 @@ router.post("/plan", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
   const { topic, subject } = req.body;
   if (!topic?.trim() || !subject?.trim()) return bad(res, "topic and subject are required");
 
-  const subtopics = await nana.generateSubtopics(topic, subject);
+  const { subtopics } = await nana.generateSubtopics(topic, subject);
   const lists = await Promise.all(subtopics.map((st) => nana.generateObjectives(st, topic, subject)));
   const objectives = {};
   subtopics.forEach((st, i) => { objectives[st] = lists[i]; });

@@ -230,6 +230,10 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         type:     "subtopic-hdr",
         subtopic: mustKnow[0] || topic,
         items:    mustKnow,
+        // Parallel to items — same order, same length. Empty for a
+        // teacher-authored scheme of work, where the ordering is theirs and
+        // needs no explanation from us.
+        map:      this.session?.knowledgeMap || [],
         idx:      0,
         total:    mustKnow.length || 1,
         topic,
