@@ -110,6 +110,137 @@ function DocOutput({ doc }) {
   );
 }
 
+
+/* ── The three outputs that are not documents ────────────────────
+   Six tools return `doc`. Three do not, and each has its own shape declared on
+   the server: podcast returns a two-speaker script, vocabulary returns term
+   cards, essay-grader returns scored criteria. Rendering all four is what makes
+   the workbench usable for nine tools rather than six — the other three were
+   falling through to a JSON dump, which is a developer's view of a teacher's
+   worksheet. */
+
+function ScriptOutput({ doc }) {
+  // Two speakers, alternating. Colouring by speaker rather than by turn index
+  // means the eye tracks who is talking, which is the only thing a script is
+  // read for.
+  const speakers = [...new Set((doc.turns || []).map((t) => t.speaker))];
+  return (
+    <div>
+      <h3 style={{ fontFamily: FONT, fontSize: 19, fontWeight: 800, color: INK, margin: 0 }}>{doc.title}</h3>
+      {doc.summary && <p style={{ fontFamily: FONT, fontSize: 13.5, color: MUTED, margin: '4px 0 16px' }}>{doc.summary}</p>}
+      <div style={{ display: 'grid', gap: 10 }}>
+        {(doc.turns || []).map((t, i) => {
+          const mine = speakers.indexOf(t.speaker) === 0;
+          return (
+            <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`,
+              borderLeft: `3px solid ${mine ? AMBER : GREEN}`, borderRadius: 10, padding: '11px 14px' }}>
+              <div style={{ fontFamily: FONT, fontSize: 11.5, fontWeight: 800, letterSpacing: '.04em',
+                color: mine ? AMBER : GREEN, marginBottom: 4 }}>{t.speaker}</div>
+              <p style={{ fontFamily: FONT, fontSize: 14, lineHeight: 1.6, color: MUTED, margin: 0 }}>{t.text}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VocabOutput({ doc }) {
+  return (
+    <div>
+      <h3 style={{ fontFamily: FONT, fontSize: 19, fontWeight: 800, color: INK, margin: '0 0 16px' }}>{doc.title}</h3>
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
+        {(doc.cards || []).map((c, i) => (
+          <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: INK, marginBottom: 6 }}>{c.term}</div>
+            <p style={{ fontFamily: FONT, fontSize: 13.5, lineHeight: 1.55, color: MUTED, margin: '0 0 8px' }}>{c.definition}</p>
+            {c.example && (
+              <p style={{ fontFamily: FONT, fontSize: 13, lineHeight: 1.5, color: MUTED2, margin: '0 0 6px', fontStyle: 'italic' }}>
+                {c.example}
+              </p>
+            )}
+            {c.tip && (
+              <div style={{ fontFamily: FONT, fontSize: 12.5, color: INK, background: LIGHT,
+                border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 10px' }}>{c.tip}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GradesOutput({ doc }) {
+  // A mark out of a total, not a percentage: that is what goes in the register,
+  // and converting it here would only make the teacher convert it back.
+  const bar = (score, outOf) => Math.max(0, Math.min(100, ((score || 0) / (outOf || 1)) * 100));
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      {(doc.grades || []).map((g, i) => (
+        <div key={i} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '16px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: INK }}>{g.label || `Essay ${i + 1}`}</span>
+            <span style={{ fontFamily: FONT, fontSize: 17, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>
+              {g.score}<span style={{ fontSize: 13, color: MUTED2 }}> / {g.outOf}</span>
+            </span>
+          </div>
+
+          {(g.breakdown || []).map((b, j) => (
+            <div key={j} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+                <span style={{ fontFamily: FONT, fontSize: 13, color: INK }}>{b.criterion}</span>
+                <span style={{ fontFamily: FONT, fontSize: 12.5, color: MUTED, fontVariantNumeric: 'tabular-nums' }}>
+                  {b.score}/{b.outOf}
+                </span>
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: LIGHT, overflow: 'hidden' }}>
+                <div style={{ width: `${bar(b.score, b.outOf)}%`, height: '100%',
+                  background: bar(b.score, b.outOf) >= 70 ? GREEN : AMBER }}/>
+              </div>
+              {b.comment && (
+                <p style={{ fontFamily: FONT, fontSize: 12.5, color: MUTED, margin: '4px 0 0', lineHeight: 1.5 }}>{b.comment}</p>
+              )}
+            </div>
+          ))}
+
+          {[['Strengths', g.strengths, GREEN], ['To improve', g.improvements, AMBER]].map(([label, items, colour]) =>
+            (items || []).length ? (
+              <div key={label} style={{ marginTop: 10 }}>
+                <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.06em',
+                  textTransform: 'uppercase', color: colour, marginBottom: 4 }}>{label}</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {items.map((x, k) => (
+                    <li key={k} style={{ fontFamily: FONT, fontSize: 13.5, lineHeight: 1.55, color: MUTED }}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null)}
+
+          {g.feedback && (
+            <p style={{ fontFamily: FONT, fontSize: 13.5, lineHeight: 1.6, color: MUTED,
+              marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BORDER}` }}>{g.feedback}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Pick the renderer from the SHAPE, not from the tool key. A past run loaded
+   from /outputs/:id carries the document without the tool that made it. */
+export function Output({ doc }) {
+  if (Array.isArray(doc?.turns))  return <ScriptOutput doc={doc}/>;
+  if (Array.isArray(doc?.grades)) return <GradesOutput doc={doc}/>;
+  if (Array.isArray(doc?.cards) && doc.cards.some((c) => c.term)) return <VocabOutput doc={doc}/>;
+  if (Array.isArray(doc?.cards))  return <DocOutput doc={doc}/>;
+  return (
+    <pre style={{ fontFamily: FONT, fontSize: 13, whiteSpace: 'pre-wrap', color: MUTED,
+      background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16 }}>
+      {JSON.stringify(doc, null, 2)}
+    </pre>
+  );
+}
+
 /* ── The workbench ───────────────────────────────────────────────── */
 export default function ToolWorkbench({ toolKey, onBack }) {
   const [tool, setTool]       = useState(null);
@@ -248,12 +379,7 @@ export default function ToolWorkbench({ toolKey, onBack }) {
 
       {result && (
         <div style={{ marginBottom: 24 }}>
-          {result.cards ? <DocOutput doc={result}/> : (
-            <pre style={{ fontFamily: FONT, fontSize: 14, whiteSpace: 'pre-wrap', color: MUTED,
-              background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16 }}>
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          )}
+          <Output doc={result}/>
         </div>
       )}
 
