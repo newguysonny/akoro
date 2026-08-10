@@ -158,7 +158,9 @@ export default function LearnerDashboard() {
   const loadAgentSessions = useCallback(() => {
     apiGet("/api/adaptive/teaching/sessions")
       .then(d=>{ setAgentSessions(d.sessions || []); })
-      .catch(()=>{});
+      // An empty Sessions tab and a failing Sessions fetch looked identical
+      // before this — say which one it is.
+      .catch(e=>{ console.warn("[sessions] load failed:", e?.message || e); });
   },[]);
 
   // WebSocket — live class alerts + challenge notifications + decay alerts
