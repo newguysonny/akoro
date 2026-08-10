@@ -447,7 +447,7 @@ export const PT = {
   'settings.enter_field':      'Introduz {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'REVISÃO DE ESQUECIMENTO',
+  'teaching.mode_decay':          'REVISÃO',
   'teaching.mode_teach':          'APRENDA ENSINANDO',
   'teaching.switching':           'Trocando…',
   'teaching.switch':              'Trocar',

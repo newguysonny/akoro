@@ -533,7 +533,7 @@ export const EN = {
   'stats.understanding':                'understanding',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'DECAY RE-TEACH',
+  'teaching.mode_decay':          'REVISION',
   'teaching.mode_teach':          'LEARN BY TEACHING',
   'teaching.connecting':          'Connecting…',
   'teaching.reconnecting':        'Reconnecting…',
@@ -548,7 +548,7 @@ export const EN = {
   'teaching.audio':               'Audio',
   'teaching.voice':               'Voice',
   'teaching.explain_ph':          'Explain to {name}…',
-  'teaching.reteach_turns':       'Re-teach turns',
+  'teaching.reteach_turns':       'Revision turns',
   'teaching.continuation_turns':  'Continuation turns',
   'teaching.teaching_turns':      'Teaching turns',
   'teaching.end_session_q':       'End this session?',

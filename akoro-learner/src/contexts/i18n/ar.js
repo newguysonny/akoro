@@ -440,7 +440,7 @@ export const AR = {
   'settings.enter_field':      'أدخل {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'إعادة التعليم بعد النسيان',
+  'teaching.mode_decay':          'إعادة التعليم',
   'teaching.mode_teach':          'تعلّم بالتعليم',
   'teaching.switching':           'جارٍ التبديل…',
   'teaching.switch':              'تبديل',

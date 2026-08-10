@@ -459,7 +459,7 @@ export const IG = {
   'settings.enter_field':      'Tinye {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          "NKUZI ỌZỌ N'IZIỌCHA",
+  'teaching.mode_decay':          'NKUZI ỌZỌ',
   'teaching.mode_teach':          "MỤTA N'IGE NKUZI",
   'teaching.switching':           'Na-agbanwe…',
   'teaching.switch':              'Gbanwee',

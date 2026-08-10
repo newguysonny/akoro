@@ -447,7 +447,7 @@ export const ES = {
   'settings.enter_field':      'Introduce {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'REPASO DE OLVIDO',
+  'teaching.mode_decay':          'REPASO',
   'teaching.mode_teach':          'APRENDE ENSEÑANDO',
   'teaching.switching':           'Cambiando…',
   'teaching.switch':              'Cambiar',
@@ -460,7 +460,7 @@ export const ES = {
   'teaching.audio':               'Audio',
   'teaching.voice':               'Voz',
   'teaching.explain_ph':          'Explícale a {name}…',
-  'teaching.reteach_turns':       'Turnos de re-enseñanza',
+  'teaching.reteach_turns':       'Turnos de repaso',
   'teaching.continuation_turns':  'Turnos de continuación',
   'teaching.teaching_turns':      'Turnos de enseñanza',
   'teaching.end_session_q':       '¿Finalizar esta sesión?',

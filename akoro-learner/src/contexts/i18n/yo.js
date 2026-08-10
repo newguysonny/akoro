@@ -460,7 +460,7 @@ export const YO = {
   'settings.enter_field':      'Tẹ {field} sii',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'ÀTÚNKỌ́ ÌGBÀGBÉ',
+  'teaching.mode_decay':          'ÀTÚNKỌ́',
   'teaching.mode_teach':          'KÀ NÍ ṢÍKỌ́',
   'teaching.switching':           'Ń yípadà…',
   'teaching.switch':              'Yípadà',

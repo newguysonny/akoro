@@ -459,7 +459,7 @@ export const PCM = {
   'settings.enter_field':      'Enter {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'DECAY RE-TEACH',
+  'teaching.mode_decay':          'REVISION',
   'teaching.mode_teach':          'LEARN BY TEACHING',
   'teaching.switching':           'E dey change…',
   'teaching.switch':              'Change am',
@@ -472,7 +472,7 @@ export const PCM = {
   'teaching.audio':               'Audio',
   'teaching.voice':               'Voice',
   'teaching.explain_ph':          'Explain to {name}…',
-  'teaching.reteach_turns':       'Re-teach turns',
+  'teaching.reteach_turns':       'Revision turns',
   'teaching.continuation_turns':  'Continuation turns',
   'teaching.teaching_turns':      'Teaching turns',
   'teaching.end_session_q':       'You wan end dis session?',

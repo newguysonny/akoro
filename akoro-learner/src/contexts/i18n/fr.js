@@ -441,7 +441,7 @@ export const FR = {
   'settings.enter_field':      'Saisis {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'RÉVISION D\'OUBLI',
+  'teaching.mode_decay':          'RÉVISION',
   'teaching.mode_teach':          'APPRENDS EN ENSEIGNANT',
   'teaching.switching':           'Changement…',
   'teaching.switch':              'Changer',

@@ -441,7 +441,7 @@ export const HA = {
   'settings.enter_field':      'Shigar da {field}',
 
   /* ── Teaching session chat ── */
-  'teaching.mode_decay':          'SAKE KOYARWA BAYAN MANTA',
+  'teaching.mode_decay':          'SAKE KOYARWA',
   'teaching.mode_teach':          'KOYO TA HANYAR KOYARWA',
   'teaching.switching':           'Ana canzawa…',
   'teaching.switch':              'Canza',

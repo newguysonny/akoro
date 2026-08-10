@@ -93,7 +93,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
           <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>{t('sheet.session_stats')}</p>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
             {[{icon:"📌",val:`${session.topics||0} topics`,label:t('sheet.to_review')},
-              {icon:"🔁",val:`${session.revisions||0} re-teaches`,label:t('sheet.completed_so_far')},
+              {icon:"🔁",val:`${session.revisions||0} revisions`,label:t('sheet.completed_so_far')},
               {icon:"⭐",val:`${session.reviews||0} assessments`,label:t('sheet.passed_sargeant')}
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>

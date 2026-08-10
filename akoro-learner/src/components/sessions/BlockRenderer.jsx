@@ -345,7 +345,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
           <div style={{ display:"flex", alignItems:"center", gap:7 }}>
             <span style={{ fontSize:14 }}>{block.agentEmoji || "🤖"}</span>
             <span style={{ fontSize:12, fontWeight:800, color:"#FDE68A" }}>
-              {block.agentName || "Agent"} — knowledge decay detected
+              {block.agentName || "Agent"} — needs revision
             </span>
           </div>
           <span style={{ fontSize:12, fontWeight:900, color:"#FCA5A5" }}>
@@ -389,7 +389,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
       borderRadius:16, border:"1.5px solid rgba(108,59,255,.35)", margin:"8px 0", opacity }}>
       <div style={{ fontSize:36, marginBottom:8 }}>🎉</div>
       <div style={{ fontSize:15, fontWeight:800, color:"#F1F5F9", marginBottom:4 }}>
-        {block.isDecay ? "Re-teach Complete!" : "Session Complete!"}
+        {block.isDecay ? "Revision Complete!" : "Session Complete!"}
       </div>
       <div style={{ fontSize:12, color:"rgba(255,255,255,.55)", lineHeight:1.6 }}>{block.text}</div>
     </div>
