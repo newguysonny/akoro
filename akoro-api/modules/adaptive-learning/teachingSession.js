@@ -161,6 +161,45 @@ router.get("/sessions", authenticateToken, async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════
+   GET /teaching/sessions/diagnose
+   Why is the Sessions tab empty? Answers it without guessing:
+   who the token says I am, how many rows exist for me, what
+   statuses they carry (the list filters to active|complete), and
+   whether a bare insert into edu.adaptive_sessions succeeds at all.
+   The probe row is deleted again — this is read-only in effect.
+═══════════════════════════════════════════════════════════════ */
+router.get("/sessions/diagnose", authenticateToken, async (req, res) => {
+  const studentId = req.user?.id;
+  const out = { studentId, email: req.user?.email || null };
+
+  const { data: mine, error: mineErr } = await db.schema("edu")
+    .from("adaptive_sessions")
+    .select("id, status, topic, updated_at")
+    .eq("student_id", studentId)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  out.readError = mineErr?.message || null;
+  out.rowsForMe = mine?.length || 0;
+  out.byStatus  = (mine || []).reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {});
+  out.listed    = (mine || []).filter(r => ["active", "complete"].includes(r.status)).length;
+  out.newest    = mine?.[0] || null;
+
+  // Can we write at all? This is the exact failure that kept the table empty.
+  const { data: probe, error: writeErr } = await db.schema("edu")
+    .from("adaptive_sessions")
+    .insert({ student_id: studentId, topic: "__diagnose__", subject: "__diagnose__", status: "active" })
+    .select("id").single();
+  out.writeOk    = !writeErr;
+  out.writeError = writeErr ? { message: writeErr.message, code: writeErr.code, details: writeErr.details } : null;
+  if (probe?.id) {
+    await db.schema("edu").from("adaptive_sessions").delete().eq("id", probe.id);
+    out.probeCleanedUp = true;
+  }
+
+  res.json(out);
+});
+
+/* ═══════════════════════════════════════════════════════════════
    ENDPOINT 8: GET /adaptive/sessions/:sessionId/history
    Returns faded block history for a continuation session.
    Called when "Continue Teaching" CTA is tapped in SessionSheet.

@@ -59,29 +59,43 @@ function scheduleSessionReap(sessionId) {
 // sessions. The DB row id is stashed on the orchestrator as `dbSessionId`.
 async function createSessionRecord(orchestrator, { studentId, topic, subject, openingBlocks }) {
   if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;   // already saved
+  const row = {
+    student_id:             studentId,
+    student_agent_id:       orchestrator.studentAgentRecord?.id || null,
+    // topic + subject are NOT NULL — never let a missing value silently drop
+    // the whole session row (which is what kept sessions off the list).
+    topic:                  topic || "Untitled session",
+    subject:                subject || "General",
+    // These columns are JSONB — send real arrays/objects. Sending
+    // JSON.stringify(...) stored a JSON *string* scalar ("[]") instead of an
+    // array, which then read back wrong downstream.
+    subtopics:              Array.isArray(orchestrator.session?.mustKnowParts) ? orchestrator.session.mustKnowParts : [],
+    objectives:             {},
+    current_subtopic_idx:   0,
+    current_phase:          "1",
+    status:                 "active",
+    started_at:             new Date().toISOString(),
+    updated_at:             new Date().toISOString(),
+    session_history:        [],
+    objectives_covered:     {},
+    confidence_by_subtopic: {},
+    block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
+  };
+
   try {
-    const { data, error } = await db.schema("edu").from("adaptive_sessions").insert({
-      student_id:             studentId,
-      student_agent_id:       orchestrator.studentAgentRecord?.id || null,
-      // topic + subject are NOT NULL — never let a missing value silently drop
-      // the whole session row (which is what kept sessions off the list).
-      topic:                  topic || "Untitled session",
-      subject:                subject || "General",
-      // These columns are JSONB — send real arrays/objects. Sending
-      // JSON.stringify(...) stored a JSON *string* scalar ("[]") instead of an
-      // array, which then read back wrong downstream.
-      subtopics:              Array.isArray(orchestrator.session?.mustKnowParts) ? orchestrator.session.mustKnowParts : [],
-      objectives:             {},
-      current_subtopic_idx:   0,
-      current_phase:          "1",
-      status:                 "active",
-      started_at:             new Date().toISOString(),
-      updated_at:             new Date().toISOString(),
-      session_history:        [],
-      objectives_covered:     {},
-      confidence_by_subtopic: {},
-      block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
-    }).select("id").single();
+    let { data, error } = await db.schema("edu").from("adaptive_sessions")
+      .insert(row).select("id").single();
+
+    // The session row is what makes a session visible in the Sessions tab, so
+    // never let one optional column take the whole row down with it.
+    // student_agent_id is a decoration; student_id/topic/subject are the row.
+    // (Its FK pointed at public.user_agents while we write edu.student_agents
+    // ids — that silently killed EVERY insert.)
+    if (error && row.student_agent_id) {
+      console.warn("[adaptive_sessions create] retrying without student_agent_id:", error.message);
+      ({ data, error } = await db.schema("edu").from("adaptive_sessions")
+        .insert({ ...row, student_agent_id: null }).select("id").single());
+    }
     if (error) throw error;
     orchestrator.dbSessionId = data.id;
     // Remember the identity so a later fallback save (cancel/disconnect before

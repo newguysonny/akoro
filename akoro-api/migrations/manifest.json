@@ -113,7 +113,8 @@
     "2026-battle-answer-basis.sql",
     "2026-hybrid-retrieval.sql",
     "2026-knowledge-hierarchy.sql",
-    "2026-knowledge-map.sql"
+    "2026-knowledge-map.sql",
+    "2026-fix-adaptive-session-agent-fk.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
