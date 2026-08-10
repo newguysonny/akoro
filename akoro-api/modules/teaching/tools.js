@@ -193,6 +193,37 @@ Produce these cards in order:
 Timings must add up to the period length.`,
   },
   {
+    // The ninth tool. The school portal has had an Activities Creator in its
+    // content hub for a while, but that endpoint is gated to school roles and
+    // grounds every generation in the school's name and brand voice — an
+    // instructor has no school to ground it in, so they could not use it at
+    // all. This is the same idea, scoped to a teacher: one activity, not a
+    // whole period, and it inherits the purchase/lock state the other eight
+    // already have.
+    key: "activity", name: "Activities Creator", emoji: "✨", output: "doc",
+    blurb: "One classroom activity — objective, materials, steps, differentiation and how to assess it.",
+    fields: [F.topic, F.subject, F.klass,
+      { name: "format", label: "Format", type: "select", options: ["Group work", "Pair work", "Individual", "Whole class", "Practical / experiment", "Game"], default: "Group work" },
+      { name: "duration", label: "How long", type: "select", options: ["10 minutes", "15 minutes", "20 minutes", "30 minutes", "Full period"], default: "20 minutes" },
+      { name: "materials", label: "What you have", placeholder: "Optional — e.g. only a board and exercise books", long: true },
+      F.notes],
+    maxTokens: 2400,
+    // The materials constraint is the whole point of asking for it. A plan that
+    // needs printouts and tablets is not an activity for a class that has a
+    // board and exercise books, and it is worse than no plan because the
+    // teacher finds out at the front of the room.
+    system: `${HOUSE} The activity must be runnable with the materials the teacher says they have; if they name none, assume only a board, chalk or markers, and exercise books. Every step says what the TEACHER does and what the STUDENTS do. ${DOC_RULE}`,
+    prompt: (i) => `Design one ${String(i.format || "group work").toLowerCase()} activity lasting ${i.duration || "20 minutes"}.
+Topic: "${i.topic}"${i.subject ? ` · Subject: ${i.subject}` : ""}${i.class ? ` · Class: ${i.class}` : ""}
+${i.materials ? `Available materials: ${i.materials}\n` : "Assume no printing and no devices.\n"}${i.notes ? `Context: ${i.notes}\n` : ""}
+Produce these cards in order:
+1. "The Activity" — blocks: "Objective" (text), "Materials" (chips), "Setup" (text).
+2. "Run It" — blocks: "Timing" (text), "Teacher Does" (bullets), "Students Do" (bullets).
+3. "Differentiation" — blocks: "If they struggle" (bullets), "If they finish early" (bullets).
+4. "Assessment" — blocks: "What Good Looks Like" (bullets), "Quick Check" (text).
+Timings must add up to the stated length.`,
+  },
+  {
     key: "assignment", name: "Assignment Creator", emoji: "✍️", output: "doc",
     blurb: "Homework or classwork with a marking scheme, at the difficulty you choose.",
     fields: [F.topic, F.subject, F.klass,
