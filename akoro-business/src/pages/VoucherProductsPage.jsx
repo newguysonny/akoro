@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Pencil, Archive, RotateCcw, X } from 'lucide-react';
+import { Plus, Trash2, Pencil, Archive, RotateCcw, X, Upload } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
-import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
+import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, ACCENT, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
@@ -92,6 +92,19 @@ function ProductModal({ startupId, product, onClose, onSaved }) {
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [imgBusy, setImgBusy] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';   // let the same file be picked again after an error
+    if (!file) return;
+    setImgBusy(true); setErr('');
+    try {
+      const r = await apiUpload(`/api/vouchers/startups/${startupId}/products/upload`, file);
+      setForm((f) => ({ ...f, image_url: r.url }));
+    } catch (e2) { setErr(e2.message || 'Could not upload image'); }
+    finally { setImgBusy(false); }
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -115,13 +128,23 @@ function ProductModal({ startupId, product, onClose, onSaved }) {
         <label style={lbl}>Name</label>
         <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required style={inp} placeholder="e.g. ₦1,000 Voucher" />
 
-        <label style={lbl}>Image URL</label>
-        <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} style={inp} placeholder="https://..." />
-        {form.image_url && (
-          <div style={{ marginTop: 8, width: 72, height: 72, borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
-            <img src={form.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+        <label style={lbl}>Image</label>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          {(form.image_url || imgBusy) && (
+            <div style={{ flex: 'none', width: 56, height: 56, borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}`, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {imgBusy
+                ? <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>…</span>
+                : <img src={form.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} style={inp} placeholder="https://... or upload below" />
+            <label style={{ ...uploadBtn, marginTop: 8, opacity: imgBusy ? 0.6 : 1, pointerEvents: imgBusy ? 'none' : 'auto' }}>
+              <Upload size={13} /> {imgBusy ? 'Uploading…' : 'Upload from device'}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={pickImage} style={{ display: 'none' }} />
+            </label>
           </div>
-        )}
+        </div>
 
         <label style={lbl}>Description</label>
         <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} maxLength={200}
@@ -155,3 +178,4 @@ const iconBtn = { background: 'none', border: 'none', cursor: 'pointer', color: 
 const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
 const lbl = { display: 'block', fontSize: 11.5, fontWeight: 700, color: MUTED2, margin: '12px 0 4px' };
 const inp = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13.5, fontFamily: FONT, outline: 'none' };
+const uploadBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${BORDER}`, background: LIGHT, color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };

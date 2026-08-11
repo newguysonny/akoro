@@ -5,6 +5,7 @@
  * view redemptions/analytics.
  */
 import { Router } from "express";
+import multer from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import db, { vdb } from "./db.js";
 import { serverError } from "./lib/httpError.js";
@@ -13,9 +14,19 @@ import { getStartupBalance, debitWithdrawal, refundWithdrawal, startupTransactio
 import { createTransferRecipient, initiateTransfer } from "./lib/paystack.js";
 import { enqueueWebhook, generateWebhookSecret } from "./lib/webhooks.js";
 import { drainWebhookQueue } from "./webhookWorker.js";
+import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
 
 const router = Router();
 router.use(authenticateToken);
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WebP or GIF allowed"));
+  },
+}).single("file");
 
 const slugify = (s) => String(s || "").toLowerCase().trim()
   .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || `startup-${Date.now()}`;
@@ -161,6 +172,46 @@ function validProductBody(body) {
     description: body?.description?.trim() || null, image_url: body?.image_url?.trim() || null,
   };
 }
+
+// POST /api/vouchers/startups/upload-cover — upload a cover/logo image from
+// the device, returns { url } for cover_image_url. User-scoped rather than
+// startup-scoped so it also works from CreateStartupPage, before a startup
+// row exists yet.
+router.post("/upload-cover", (req, res, next) => {
+  imageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+    await ensureBucket().catch(() => {});
+    const ext  = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `startup-covers/${req.user.id}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+    const url  = await uploadPublicFile(path, req.file.buffer, req.file.mimetype);
+    res.status(201).json({ success: true, url });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// POST /api/vouchers/startups/:id/products/upload — upload a product image
+// from the device, returns { url } for the image_url field.
+router.post("/:id/products/upload", (req, res, next) => {
+  imageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+    await ensureBucket().catch(() => {});
+    const ext  = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `voucher-products/${startup.id}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+    const url  = await uploadPublicFile(path, req.file.buffer, req.file.mimetype);
+    res.status(201).json({ success: true, url });
+  } catch (e) { serverError(res, e, req); }
+});
 
 // POST /api/vouchers/startups/:id/products — create a voucher product.
 router.post("/:id/products", async (req, res) => {

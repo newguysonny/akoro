@@ -211,6 +211,19 @@ export async function apiPatch(path, body) {
   const r = await request(path, { ...BASE_OPTS, method: 'PATCH', body: JSON.stringify(body ?? {}) });
   return handle(r, `PATCH ${path} failed`);
 }
+// FormData — no Content-Type header, so the browser sets the multipart
+// boundary itself. Portal header + credentials still travel like every other
+// request, and it still gets the transparent 401-refresh-retry.
+export async function apiUpload(path, file, field = 'file') {
+  const fd = new FormData();
+  fd.append(field, file);
+  const r = await request(path, {
+    method: 'POST', credentials: 'include',
+    headers: { 'X-Akoro-Portal': 'business' },
+    body: fd,
+  });
+  return handle(r, `UPLOAD ${path} failed`);
+}
 export async function apiDelete(path) {
   const r = await request(path, { ...BASE_OPTS, method: 'DELETE' });
   return handle(r, `DELETE ${path} failed`);

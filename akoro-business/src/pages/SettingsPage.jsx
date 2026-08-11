@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Upload } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
-import { apiPatch } from '../services/api.js';
+import { apiPatch, apiUpload } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT, CATEGORIES } from '../constants.js';
 
 export default function SettingsPage() {
@@ -16,6 +16,19 @@ export default function SettingsPage() {
   const [coverUrl, setCoverUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
+  const [imgBusy, setImgBusy] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImgBusy(true);
+    try {
+      const r = await apiUpload('/api/vouchers/startups/upload-cover', file);
+      setCoverUrl(r.url);
+    } catch (e2) { setToast(e2.message || 'Could not upload image'); setTimeout(() => setToast(''), 2500); }
+    finally { setImgBusy(false); }
+  };
 
   useEffect(() => {
     if (current) {
@@ -63,8 +76,12 @@ export default function SettingsPage() {
           <select value={category} onChange={(e) => setCategory(e.target.value)} style={inp}>
             {Object.entries(CATEGORIES).map(([key, c]) => <option key={key} value={key}>{c.icon} {c.label}</option>)}
           </select>
-          <label style={lbl}>Cover photo URL</label>
-          <input value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://..." style={inp} />
+          <label style={lbl}>Cover photo</label>
+          <input value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://... or upload below" style={inp} />
+          <label style={{ ...uploadBtn, marginTop: 8, opacity: imgBusy ? 0.6 : 1, pointerEvents: imgBusy ? 'none' : 'auto' }}>
+            <Upload size={13} /> {imgBusy ? 'Uploading…' : 'Upload from device'}
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={pickImage} style={{ display: 'none' }} />
+          </label>
           {coverUrl && (
             <div style={{ marginTop: 8, width: '100%', aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
               <img src={coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -94,3 +111,4 @@ const cardTitle = { fontSize: 13.5, fontWeight: 800, color: INK, marginBottom: 1
 const lbl = { display: 'block', fontSize: 11.5, fontWeight: 700, color: MUTED2, margin: '10px 0 4px' };
 const inp = { width: '100%', padding: '9px 12px', borderRadius: 9, border: `1px solid ${BORDER}`, fontSize: 13, fontFamily: FONT, outline: 'none' };
 const primaryBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT };
+const uploadBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${BORDER}`, background: '#F9FAFB', color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };
