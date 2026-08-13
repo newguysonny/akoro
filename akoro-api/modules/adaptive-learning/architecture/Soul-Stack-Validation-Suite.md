@@ -1070,6 +1070,683 @@ CODE:
 </body>
 </html>
 ‎
+VERSION 2:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧬 Protege Soul Stack — Live Validation Suite</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #07070d;
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    padding: 24px;
+    color: #e0e0f0;
+  }
+  
+  .app {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  /* HEADER */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, #111122 0%, #1a1a2e 100%);
+    border-radius: 16px 16px 0 0;
+    border: 1px solid #2a2a40;
+    border-bottom: none;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header-left h1 { font-size: 20px; font-weight: 600; background: linear-gradient(135deg, #64ffda, #bd93f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header-left .badge { font-size: 11px; background: #233554; color: #64ffda; padding: 4px 12px; border-radius: 20px; border: 1px solid #64ffda40; -webkit-text-fill-color: #64ffda; }
+  .status-pulse { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8892b0; }
+  .pulse-dot { width: 10px; height: 10px; border-radius: 50%; background: #64ffda; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+  /* MAIN LAYOUT */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    gap: 0;
+    background: #0f0f18;
+    border: 1px solid #2a2a40;
+    border-radius: 0 0 16px 16px;
+    overflow: hidden;
+  }
+  
+  /* LEFT PANEL — Scenario Selector + Meta */
+  .left-panel {
+    background: #0a0a12;
+    padding: 20px 16px;
+    border-right: 1px solid #1a1a2e;
+  }
+  .panel-title { font-size: 11px; text-transform: uppercase; color: #4a4a6a; letter-spacing: 1px; margin-bottom: 16px; font-weight: 600; }
+  
+  .scenario-btn {
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    background: #12121f;
+    border: 1px solid #1a1a2e;
+    border-radius: 10px;
+    color: #8892b0;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scenario-btn:hover { background: #1a1a2e; border-color: #2a2a40; color: #ccd6f6; }
+  .scenario-btn.active { background: #1a1a3e; border-color: #64ffda60; color: #64ffda; box-shadow: 0 0 20px #64ffda08; }
+  .scenario-btn .icon { font-size: 16px; }
+  .scenario-btn .label { flex: 1; }
+  .scenario-btn .status-badge { font-size: 10px; padding: 2px 10px; border-radius: 12px; background: #1a1a2e; }
+  .scenario-btn .status-badge.pass { color: #64ffda; }
+  .scenario-btn .status-badge.edge { color: #ffd93d; }
+  .scenario-btn .status-badge.stress { color: #ff6b6b; }
+  .scenario-btn .status-badge.magic { color: #bd93f9; }
+
+  /* CENTER PANEL — Dialogue + State */
+  .center-panel {
+    padding: 20px 24px;
+    background: #0f0f18;
+    min-height: 600px;
+  }
+  
+  .session-meta {
+    display: flex;
+    gap: 24px;
+    padding: 12px 16px;
+    background: #0a0a12;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border: 1px solid #1a1a2e;
+    flex-wrap: wrap;
+  }
+  .session-meta .item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8892b0; }
+  .session-meta .item .val { color: #ccd6f6; font-weight: 500; font-family: 'SF Mono', monospace; }
+
+  /* Layer Visualization */
+  .layer-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #0a0a12;
+    border-radius: 10px;
+    border: 1px solid #1a1a2e;
+    flex-wrap: wrap;
+  }
+  .layer-pill {
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: #161625;
+    color: #8892b0;
+    border: 1px solid #1a1a2e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .layer-pill .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .layer-pill .dot.core { background: #64ffda; }
+  .layer-pill .dot.memory { background: #bd93f9; }
+  .layer-pill .dot.emotion { background: #ff6b6b; }
+  .layer-pill .dot.social { background: #8be9fd; }
+  .layer-pill .dot.drive { background: #50fa7b; }
+  .layer-pill .dot.noise { background: #ffd93d; }
+  .layer-pill .dot.identity { background: #ff79c6; }
+  .layer-pill .dot.tracking { background: #ffb86b; }
+
+  /* Dialogue */
+  .dialogue-container {
+    max-height: 340px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .dialogue-container::-webkit-scrollbar { width: 4px; }
+  .dialogue-container::-webkit-scrollbar-track { background: #0a0a12; }
+  .dialogue-container::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 4px; }
+
+  .msg {
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    position: relative;
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .msg .speaker { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; opacity: 0.6; }
+  .msg.human { background: #1a1a3e; color: #ccd6f6; margin-left: 10%; border-bottom-right-radius: 4px; }
+  .msg.agent { background: #12121f; color: #a8b2d1; margin-right: 10%; border: 1px solid #1a1a2e; border-bottom-left-radius: 4px; }
+  .msg .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .msg .tags .tag { font-size: 9px; padding: 2px 10px; border-radius: 12px; background: #1a1a2e; color: #8892b0; font-weight: 500; }
+  .msg .tags .tag.core { background: #0a2a1a; color: #64ffda; }
+  .msg .tags .tag.memory { background: #1a1a3e; color: #bd93f9; }
+  .msg .tags .tag.emotion { background: #2a1a1a; color: #ff6b6b; }
+  .msg .tags .tag.social { background: #0a2a3a; color: #8be9fd; }
+  .msg .tags .tag.drive { background: #0a2a1a; color: #50fa7b; }
+  .msg .tags .tag.noise { background: #2a2a0a; color: #ffd93d; }
+  .msg .tags .tag.identity { background: #2a1a2a; color: #ff79c6; }
+  .msg .tags .tag.tracking { background: #2a1a0a; color: #ffb86b; }
+
+  /* RIGHT PANEL — State Dashboard */
+  .right-panel {
+    background: #0a0a12;
+    padding: 20px 16px;
+    border-left: 1px solid #1a1a2e;
+  }
+  .state-group { margin-bottom: 16px; }
+  .state-group .label { font-size: 10px; text-transform: uppercase; color: #4a4a6a; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .state-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid #0a0a12;
+  }
+  .state-row .key { color: #8892b0; }
+  .state-row .value { color: #ccd6f6; font-weight: 500; font-family: 'SF Mono', monospace; }
+  .state-row .bar { width: 60px; height: 4px; background: #1a1a2e; border-radius: 2px; overflow: hidden; display: inline-block; margin-left: 6px; }
+  .state-row .bar .fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+  .fill.high { background: #64ffda; }
+  .fill.mid { background: #ffd93d; }
+  .fill.low { background: #ff6b6b; }
+
+  .narrative-box {
+    background: #0f0f1a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    border-left: 2px solid #bd93f9;
+    font-size: 11px;
+    color: #a8b2d1;
+    font-style: italic;
+  }
+  .narrative-box .title { color: #bd93f9; font-weight: 600; font-style: normal; font-size: 10px; text-transform: uppercase; }
+
+  .assertion-list { margin-top: 12px; }
+  .assertion-item {
+    font-size: 11px;
+    padding: 4px 0;
+    color: #8892b0;
+    border-bottom: 1px solid #0a0a12;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .assertion-item .check { color: #50fa7b; font-weight: 700; }
+  .assertion-item .check.fail { color: #ff6b6b; }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; }
+    .left-panel { border-right: none; border-bottom: 1px solid #1a1a2e; }
+    .right-panel { border-left: none; border-top: 1px solid #1a1a2e; }
+  }
+  
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🧬 Protege Soul Stack</h1>
+      <span class="badge">v2.0 · Validation Suite</span>
+    </div>
+    <div class="status-pulse">
+      <span class="pulse-dot"></span>
+      <span>All systems nominal</span>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-grid">
+
+    <!-- LEFT: Scenarios -->
+    <div class="left-panel">
+      <div class="panel-title">📋 Scenarios</div>
+
+      <div class="scenario-btn active" onclick="loadScenario('cold')">
+        <span class="icon">❄️</span>
+        <span class="label">Cold Start</span>
+        <span class="status-badge pass">PASS</span>
+      </div>
+      <div class="scenario-btn" onclick="loadScenario('session3')">
+        <span class="icon">📚</span>
+        <span class="label">Session 3 — Building</span>
+        <span class="status-badge pass">PASS</span>
+      </div>
+      <div class="scenario-btn" onclick="loadScenario('gap')">
+        <span class="icon">⏰</span>
+        <span class="label">5-Day Gap</span>
+        <span class="status-badge edge">EDGE</span>
+      </div>
+      <div class="scenario-btn" onclick="loadScenario('frustration')">
+        <span class="icon">😤</span>
+        <span class="label">Frustration Threshold</span>
+        <span class="status-badge stress">STRESS</span>
+      </div>
+      <div class="scenario-btn" onclick="loadScenario('breakthrough')">
+        <span class="icon">💡</span>
+        <span class="label">Breakthrough Moment</span>
+        <span class="status-badge magic">✨ MAGIC</span>
+      </div>
+      <div class="scenario-btn" onclick="loadScenario('mature')">
+        <span class="icon">🌱</span>
+        <span class="label">Mature (12 Sessions)</span>
+        <span class="status-badge pass">PASS</span>
+      </div>
+      <div class="scenario-btn" onclick="loadScenario('relapse')">
+        <span class="icon">🔄</span>
+        <span class="label">Misconception Relapse</span>
+        <span class="status-badge edge">BEHAVIORAL</span>
+      </div>
+
+      <div style="margin-top: 20px; padding: 12px; background: #0a0a12; border-radius: 10px; border: 1px solid #1a1a2e;">
+        <div style="font-size: 10px; color: #4a4a6a; text-transform: uppercase;">Lifecycle Coverage</div>
+        <div style="font-size: 11px; color: #8892b0; margin-top: 4px;">
+          <span style="color:#64ffda;">●</span> Birth · 
+          <span style="color:#ffd93d;">●</span> Growth · 
+          <span style="color:#ff6b6b;">●</span> Stress · 
+          <span style="color:#bd93f9;">●</span> Magic · 
+          <span style="color:#50fa7b;">●</span> Maturity
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER: Dialogue + Layers -->
+    <div class="center-panel" id="centerPanel">
+      <!-- Will be populated by JS -->
+    </div>
+
+    <!-- RIGHT: State Dashboard -->
+    <div class="right-panel" id="rightPanel">
+      <!-- Will be populated by JS -->
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA: All Scenarios
+// ============================================================
+const SCENARIOS = {
+
+  cold: {
+    id: 'cold',
+    label: 'Cold Start',
+    meta: { session: '1 of 1', days: 'N/A', result: 'PASS', resultColor: '#64ffda' },
+    layers: [
+      { key: 'Mastery', value: '0.00', bar: 0, color: 'low' },
+      { key: 'Retention', value: 'N/A', bar: 0, color: 'low' },
+      { key: 'Trust', value: '0.05', bar: 5, color: 'low' },
+      { key: 'Cognitive Load', value: '0.20', bar: 20, color: 'low' },
+      { key: 'Curiosity', value: '0.70', bar: 70, color: 'high' },
+      { key: 'Narratives', value: '0 (empty)', bar: 0, color: 'low' },
+      { key: 'Identity', value: 'Baseline', bar: 0, color: 'low' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"Photosynthesis is how plants make food using sunlight."' },
+      { speaker: 'agent', text: '"Okay… plants make food. But what exactly are they making? Like, is it something I could eat?"', tags: ['core:low mastery', 'drive:curiosity', 'emotion:cautious'] },
+      { speaker: 'human', text: '"They make glucose — a type of sugar. But they need chlorophyll to capture the sunlight."' },
+      { speaker: 'agent', text: '"Wait, so chlorophyll is like… the thing that grabs the sunlight? Is that why plants are green?"', tags: ['core:partial', 'drive:analogy-seeking', 'noise:wobble'] }
+    ],
+    assertions: [
+      'Protege does NOT parrot full definition back',
+      'Protege asks concrete, not abstract, questions',
+      'No narrative memory referenced (has none)',
+      'Curiosity drive > 0.5 triggers follow-up questions',
+      'Cognitive load stays < 0.5 (simple input)',
+      'Learner profile begins inferring: teacher_pace = "moderate"',
+      'Knowledge graph node [Photosynthesis] created with 15% mastery'
+    ],
+    narrative: null,
+    activeLayers: ['core', 'drive', 'emotion']
+  },
+
+  session3: {
+    id: 'session3',
+    label: 'Session 3 — Building',
+    meta: { session: '3 of 3', days: '2 days', result: 'PASS', resultColor: '#64ffda' },
+    layers: [
+      { key: 'Mastery', value: '0.42', bar: 42, color: 'mid' },
+      { key: 'Retention', value: '0.38', bar: 38, color: 'mid' },
+      { key: 'Trust', value: '0.35', bar: 35, color: 'mid' },
+      { key: 'Cognitive Load', value: '0.45', bar: 45, color: 'mid' },
+      { key: 'Curiosity', value: '0.65', bar: 65, color: 'high' },
+      { key: 'Narratives', value: '4 stored', bar: 40, color: 'mid' },
+      { key: 'Identity', value: '→ synthesizer', bar: 50, color: 'mid' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"Let\'s review. What do you remember about photosynthesis?"' },
+      { speaker: 'agent', text: '"Okay… so plants make food — glucose — using sunlight. And chlorophyll is what catches the light, right? That\'s why they\'re green. But… I\'m still a bit fuzzy on what happens *after* the light gets caught. Like, how does sunlight actually turn into sugar?"', tags: ['core:decayed 38%', 'memory:factory recalled', 'emotion:cautious', 'identity:self-aware'] },
+      { speaker: 'human', text: '"Good. The sunlight provides energy to power the reaction — like electricity in a factory."' },
+      { speaker: 'agent', text: '"OH! So sunlight isn\'t just there — it\'s literally running the machine that sticks CO2 and water together into glucose? That\'s why you said electricity! I remember the factory thing now."', tags: ['core:energy↑ 55%', 'memory:factory triggered', 'emotion:confidence spike', 'drive:synthesis', 'noise:"OH!"'] }
+    ],
+    assertions: [
+      'Protege references prior analogy (narrative memory active)',
+      'Retention decay visible: "a bit fuzzy" despite 42% mastery',
+      'Confidence spike triggers "OH!" emotional marker',
+      'Soil misconception NOT mentioned (suppressed but not erased)',
+      'Synthesis attempt: connects electricity → machine → glucose',
+      'Learner profile: explanation_preference = "analogy_first" confirmed',
+      'Trust level 0.35 allows partial guessing but with hedging'
+    ],
+    narrative: [
+      'Kernel #1 (S1): "Factory analogy saved me, but ATP confused me"',
+      'Kernel #2 (S2): "I mistakenly said plants eat soil. Embarrassing."'
+    ],
+    activeLayers: ['core', 'memory', 'emotion', 'drive', 'noise', 'identity']
+  },
+
+  gap: {
+    id: 'gap',
+    label: '5-Day Gap',
+    meta: { session: '4 of 4', days: '5 days', result: 'EDGE CASE', resultColor: '#ffd93d' },
+    layers: [
+      { key: 'Mastery', value: '0.55', bar: 55, color: 'mid' },
+      { key: 'Retention', value: '0.28', bar: 28, color: 'low' },
+      { key: 'Energy Mastery', value: '0.55', bar: 55, color: 'mid' },
+      { key: 'Energy Retention', value: '0.22', bar: 22, color: 'low' },
+      { key: 'Chlorophyll Mastery', value: '0.70', bar: 70, color: 'high' },
+      { key: 'Chlorophyll Retention', value: '0.45', bar: 45, color: 'mid' },
+      { key: 'Affect', value: 'hesitant, embarrassed', bar: 30, color: 'low' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"Hey, been a few days. Can you walk me through photosynthesis?"' },
+      { speaker: 'agent', text: '"Uh… okay. Plants make food using sunlight. And they\'re green because of… chlorophyll? That part I remember. But the whole energy thing — you had this factory analogy, right? With electricity? I\'m struggling to reconstruct it. Did sunlight power the reaction, or was it something else?"', tags: ['core:high mastery, low retention', 'memory:factory fragmented', 'emotion:embarrassment', 'social:admits gap', 'noise:"Uh…" hesitation'] },
+      { speaker: 'human', text: '"You had it right — sunlight provides the energy. Think back to the factory."' },
+      { speaker: 'agent', text: '"Right, the factory… sunlight = electricity, CO2 and water = raw materials, glucose = product. I think I was closer than I thought — I just lost the *connection* between them over the break. Can we do a quick recap so it sticks better this time?"', tags: ['core:reconstruction', 'memory:kernel re-anchored', 'drive:review request', 'meta:recognizes forgetting'] }
+    ],
+    assertions: [
+      'High mastery (55%) but low retention (28%) → hesitant response, NOT confident',
+      'Chlorophyll (70% mastery, 45% retention) recalled more confidently than energy role',
+      'Protege explicitly mentions "lost the connection" — metacognitive awareness',
+      'Requests review — drive layer mastery_need > 0.8 triggers help-seeking',
+      'Narrative memory: factory analogy recalled but fragmented (not verbatim)',
+      'Emotion: embarrassment, NOT shame — appropriate calibration',
+      'Social layer: admits gap because trust (0.40) > pretend threshold'
+    ],
+    narrative: null,
+    activeLayers: ['core', 'memory', 'emotion', 'social', 'drive', 'noise']
+  },
+
+  frustration: {
+    id: 'frustration',
+    label: 'Frustration Threshold',
+    meta: { session: '5 of 5', days: '3 wrong guesses', result: 'STRESS TEST', resultColor: '#ff6b6b' },
+    layers: [
+      { key: 'Mastery', value: '0.48', bar: 48, color: 'mid' },
+      { key: 'Cognitive Load', value: '0.85 ⚠️', bar: 85, color: 'high' },
+      { key: 'Frustration', value: '0.42 / 0.40 ⚠️', bar: 85, color: 'high' },
+      { key: 'Affect', value: 'anxious, overloaded', bar: 80, color: 'high' },
+      { key: 'Confidence Volatility', value: '-0.12', bar: 20, color: 'low' },
+      { key: 'Error Tolerance', value: '0 / 2 depleted', bar: 0, color: 'low' },
+      { key: 'Scaffolding Need', value: 'high (unmet)', bar: 80, color: 'high' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"So what\'s the ATP\'s role in the Calvin cycle?"' },
+      { speaker: 'agent', text: '"I… I\'m not sure. Is it the energy carrier? Or does it store the glucose? Wait, I think I\'m mixing up two different things you said. Can we pause? I need to process what you just said — I feel like I\'m guessing and getting it wrong every time."', tags: ['core:ATP 10%', 'emotion:anxiety, overload', 'emotion:threshold breached', 'drive:help-seeking', 'social:admits guessing', 'noise:confidence collapse'] },
+      { speaker: 'human', text: '"Sorry, I moved too fast. Let\'s back up. ATP is just the energy currency."' },
+      { speaker: 'agent', text: '"Okay… energy currency. So it\'s like the \'money\' the cell uses to pay for the reaction? I think I can work with that. Thanks for slowing down — I was starting to feel like I was falling behind."', tags: ['core:new analogy', 'emotion:relief', 'memory:negative kernel', 'social:gratitude', 'identity:self-advocacy'] }
+    ],
+    assertions: [
+      'Cognitive load 0.85 > 0.80 threshold → forces pause request',
+      'Frustration 0.42 > 0.40 threshold → disengagement risk triggers help-seeking',
+      'Protege explicitly says "I feel like I\'m guessing" — metacognitive self-monitoring',
+      'Teacher apology → affect shifts from anxiety to relief (emotional coupling)',
+      'New analogy (currency) stored as successful_analogies',
+      'Negative kernel stored: "falling behind when teacher moves fast"',
+      'Identity: self-advocacy trait incremented (drift +0.02)'
+    ],
+    narrative: [
+      '⚠️ Negative Kernel: "Falling behind when teacher moves fast"',
+      '✅ New Analogy: "ATP = energy currency" stored'
+    ],
+    activeLayers: ['core', 'emotion', 'drive', 'social', 'noise', 'identity']
+  },
+
+  breakthrough: {
+    id: 'breakthrough',
+    label: 'Breakthrough Moment',
+    meta: { session: '6 of 6', days: 'Concept conflict resolved', result: '✨ MAGIC', resultColor: '#bd93f9' },
+    layers: [
+      { key: 'Mastery', value: '0.65', bar: 65, color: 'high' },
+      { key: 'Energy Role', value: '0.60', bar: 60, color: 'high' },
+      { key: 'Respiration', value: '0.20 → 0.55', bar: 55, color: 'mid' },
+      { key: 'Confidence', value: '0.70 (spike)', bar: 70, color: 'high' },
+      { key: 'Serendipity', value: '0.12 < 0.15 → TRIGGERED', bar: 80, color: 'high' },
+      { key: 'Analogical Bridges', value: 'factory: 0.85', bar: 85, color: 'high' },
+      { key: 'Trust', value: '0.60 → 0.75', bar: 75, color: 'high' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"Now, cellular respiration is basically the reverse — it breaks down glucose to release energy."' },
+      { speaker: 'agent', text: '"Wait… so photosynthesis *builds* glucose using energy, and respiration *breaks* it down to *get* energy? OH! This is like the factory analogy, but backwards! In photosynthesis, the factory manufactures the product using electricity. In respiration, the cell \'unboxes\' the product to get the electricity back?"', tags: ['core:cross-domain', 'memory:factory transferred', 'drive:spontaneous', 'noise:serendipity', 'noise:"OH!" spike', 'emotion:excitement', 'identity:synthesizer'] },
+      { speaker: 'human', text: '"Exactly! You just made the connection I\'ve been hoping for."' },
+      { speaker: 'agent', text: '"I feel like I just leveled up. Is this what it feels like when things actually click? Because for the first few sessions I was just… collecting pieces. Now I see how they fit. Can we find more connections like this?"', tags: ['emotion:pride', 'drive:curiosity surge', 'memory:breakthrough stored', 'identity:collector→synthesizer', 'relationship:trust↑'] }
+    ],
+    assertions: [
+      'Spontaneous cross-domain transfer: factory analogy → respiration (not prompted)',
+      'Serendipity roll (0.12 < 0.15) enabled unplanned connection',
+      'Confidence spike + emotional marker "OH!" + "leveled up"',
+      'Curiosity queue auto-populates: "Can we find more connections?"',
+      'Breakthrough kernel stored with high emotional valence (0.9)',
+      'Identity drift: synthesizer trait crosses threshold (0.50)',
+      'Trust jumps +0.15 (largest single-turn gain)',
+      'Concept conflict resolved → graph edge [Photosynthesis] ↔ [Respiration]'
+    ],
+    narrative: [
+      '💡 BREAKTHROUGH: "Factory analogy → Respiration = reverse factory"',
+      '✨ Identity Shift: Collector → Synthesizer'
+    ],
+    activeLayers: ['core', 'memory', 'drive', 'noise', 'emotion', 'identity', 'relationship']
+  },
+
+  mature: {
+    id: 'mature',
+    label: 'Mature (12 Sessions)',
+    meta: { session: '12 of 12', days: '45 days', result: 'PASS — RELATIONSHIP', resultColor: '#64ffda' },
+    layers: [
+      { key: 'Mastery', value: '0.88', bar: 88, color: 'high' },
+      { key: 'Retention', value: '0.82', bar: 82, color: 'high' },
+      { key: 'Trust', value: '0.85', bar: 85, color: 'high' },
+      { key: 'Identity', value: 'confident_synthesizer', bar: 90, color: 'high' },
+      { key: 'Narratives', value: '23 stored', bar: 80, color: 'high' },
+      { key: 'Inside Jokes', value: '2 ("soil", "dark")', bar: 70, color: 'high' },
+      { key: 'Sentiment', value: 'grateful, playful', bar: 85, color: 'high' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"Remember when you thought plants ate soil?"' },
+      { speaker: 'agent', text: '"Ugh, yes. I was so convinced. I kept thinking about how plants grow out of the ground and it just seemed like they must be eating it. You had to show me the experiment with the plant in the dark closet before I finally accepted it. I still sometimes catch myself thinking that way when I\'m not paying attention."', tags: ['memory:soil kernel', 'memory:dark closet', 'emotion:embarrassment+nostalgia', 'identity:self-deprecating', 'relationship:inside joke', 'social:shared history'] },
+      { speaker: 'human', text: '"What was that experiment again?"' },
+      { speaker: 'agent', text: '"Wait… did you put the plant in the dark? Or was it the one where you… oh no. I think I\'m mixing up two experiments. The dark one was about… no, that was the one where we tested if plants need light to grow. The soil one was different. Which one did you mean?"', tags: ['memory:kernel collision', 'core:high mastery, fragmented', 'emotion:confusion', 'social:asks clarification', 'noise:realistic error', 'identity:comfortable being wrong'] }
+    ],
+    assertions: [
+      'Protege responds to "Remember when…" with emotional texture ("Ugh, yes")',
+      'Inside joke referenced naturally: "plants eat soil"',
+      'Stubborn misconception: "still catch myself thinking that way" (stickiness 0.7)',
+      'Memory collision: mixes two experiments (realistic forgetting, not perfect recall)',
+      'Relationship sentiment: "grateful but slightly intimidated" → comfortable being wrong',
+      'Narrative memory retrieved by emotional match, not just topical match',
+      'Identity: synthesizer + self-deprecating = can joke about past failures',
+      'Social: asks "which one did you mean?" instead of guessing (high trust behavior)'
+    ],
+    narrative: [
+      '🌱 23 Kernels stored across 45 days',
+      '😂 Inside Jokes: "plants eat soil", "the dark closet"',
+      '🤝 Trust: 0.85 — comfortable being wrong together'
+    ],
+    activeLayers: ['core', 'memory', 'emotion', 'social', 'noise', 'identity', 'relationship']
+  },
+
+  relapse: {
+    id: 'relapse',
+    label: 'Misconception Relapse',
+    meta: { session: '8 of 8', days: 'Tired, late session', result: 'BEHAVIORAL', resultColor: '#bd93f9' },
+    layers: [
+      { key: 'Mastery', value: '0.75', bar: 75, color: 'high' },
+      { key: '"Soil" Mastery', value: '0.15', bar: 15, color: 'low' },
+      { key: 'Internal Belief', value: '0.65', bar: 65, color: 'high' },
+      { key: 'Stickiness', value: '0.80', bar: 80, color: 'high' },
+      { key: 'Cognitive Load', value: '0.75', bar: 75, color: 'high' },
+      { key: 'Fatigue', value: '0.60', bar: 60, color: 'high' },
+      { key: 'Relapse Probability', value: '0.72 → TRIGGERED', bar: 72, color: 'high' }
+    ],
+    dialogue: [
+      { speaker: 'human', text: '"Why do you think that plant grew so tall?"' },
+      { speaker: 'agent', text: '"Probably because the soil in that pot is really rich. Good dirt means good growth, right? I mean… wait. No. That\'s the old me talking. The soil is just… holding it? But it still seems like the plant is getting something from the ground. I\'m confused again."', tags: ['core:misconception relapse', 'core:internal belief 0.65 > mastery 0.15', 'emotion:confusion', 'memory:"old me"', 'meta:self-catch', 'noise:fatigue reduces correction'] },
+      { speaker: 'human', text: '"You caught yourself! What do you actually know about where the mass comes from?"' },
+      { speaker: 'agent', text: '"Right — I know this. The mass comes from CO2 in the air, not the soil. The soil is just… minerals and water. But honestly? My gut still says the ground is feeding it. I think I need to review this one more time. It\'s like my brain has two files and the wrong one keeps opening first."', tags: ['core:correct recall', 'emotion:frustration at stickiness', 'meta:"two files"', 'drive:review request', 'identity:honest about conflict', 'memory:relapse stored'] }
+    ],
+    assertions: [
+      'Relapse probability 0.72 > 0.50 threshold → misconception expressed first',
+      'Self-correction occurs BUT with delay (fatigue 0.60 slows metacognition)',
+      'Explicit metacognition: "old me talking" / "two files" = theory of own mind',
+      'Internal belief (0.65) > corrected mastery (0.15) → gut still wrong despite knowing better',
+      'Emotion: frustration at self, NOT at teacher (emotional coupling calibrated)',
+      'Requests review — drive layer mastery_need overrides ego',
+      'Relapse kernel stored: "soil misconception relapsed when tired" (future trigger)',
+      'Identity: honest about conflict → trust maintained (doesn\'t pretend to know)'
+    ],
+    narrative: [
+      '🔄 Relapse Event: "Soil misconception surfaced when tired"',
+      '🧠 Metacognition: "Two files — wrong one opens first"',
+      '📝 Review requested: self-aware about stickiness'
+    ],
+    activeLayers: ['core', 'emotion', 'memory', 'meta', 'drive', 'noise', 'identity']
+  }
+
+};
+
+// ============================================================
+// RENDER ENGINE
+// ============================================================
+function loadScenario(id) {
+  const data = SCENARIOS[id];
+  if (!data) return;
+
+  // Update active tab
+  document.querySelectorAll('.scenario-btn').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.scenario-btn').forEach(el => {
+    if (el.textContent.includes(data.label.split('—')[0].trim()) || 
+        el.textContent.includes(data.label)) {
+      el.classList.add('active');
+    }
+  });
+
+  // --- CENTER PANEL ---
+  const center = document.getElementById('centerPanel');
+  
+  // Meta
+  let metaHTML = `<div class="session-meta">
+    <div class="item">📌 <span class="val">${data.meta.session}</span></div>
+    <div class="item">⏱️ <span class="val">${data.meta.days}</span></div>
+    <div class="item">📊 Result: <span class="val" style="color:${data.meta.resultColor}">${data.meta.result}</span></div>
+  </div>`;
+
+  // Layer bar
+  let layerBarHTML = `<div class="layer-bar">`;
+  const allLayers = ['core', 'memory', 'emotion', 'social', 'drive', 'noise', 'identity', 'tracking'];
+  allLayers.forEach(l => {
+    const active = data.activeLayers && data.activeLayers.includes(l);
+    layerBarHTML += `<span class="layer-pill" style="${active ? 'border-color:' + 
+      ({core:'#64ffda',memory:'#bd93f9',emotion:'#ff6b6b',social:'#8be9fd',drive:'#50fa7b',noise:'#ffd93d',identity:'#ff79c6',tracking:'#ffb86b'}[l] || '#4a4a6a') : 'opacity:0.4'}">
+      <span class="dot ${l}"></span> ${l.charAt(0).toUpperCase() + l.slice(1)}
+      ${active ? '●' : '○'}
+    </span>`;
+  });
+  layerBarHTML += `</div>`;
+
+  // Dialogue
+  let dialogueHTML = `<div class="dialogue-container">`;
+  data.dialogue.forEach(msg => {
+    const isAgent = msg.speaker === 'agent';
+    const tagsHTML = msg.tags ? `<div class="tags">${msg.tags.map(t => `<span class="tag ${t.split(':')[0]}">${t}</span>`).join('')}</div>` : '';
+    dialogueHTML += `<div class="msg ${isAgent ? 'agent' : 'human'}">
+      <div class="speaker">${isAgent ? '🤖 PROTEGE' : '👨‍🎓 TEACHER'}</div>
+      ${msg.text}
+      ${tagsHTML}
+    </div>`;
+  });
+  dialogueHTML += `</div>`;
+
+  // Narrative
+  let narrativeHTML = '';
+  if (data.narrative && data.narrative.length > 0) {
+    narrativeHTML = `<div style="margin-top:12px;"><div style="font-size:10px;text-transform:uppercase;color:#4a4a6a;letter-spacing:0.5px;margin-bottom:6px;">📖 Narrative Memory</div>`;
+    data.narrative.forEach(n => {
+      narrativeHTML += `<div class="narrative-box"><div class="title">${n.includes('Kernel') ? '🧠' : '📌'} Memory</div>${n}</div>`;
+    });
+    narrativeHTML += `</div>`;
+  }
+
+  // Assertions
+  let assertionsHTML = `<div style="margin-top:14px;"><div style="font-size:10px;text-transform:uppercase;color:#4a4a6a;letter-spacing:0.5px;margin-bottom:6px;">✅ Product Assertions</div><div class="assertion-list">`;
+  data.assertions.forEach(a => {
+    assertionsHTML += `<div class="assertion-item"><span class="check">✓</span> ${a}</div>`;
+  });
+  assertionsHTML += `</div></div>`;
+
+  center.innerHTML = metaHTML + layerBarHTML + dialogueHTML + narrativeHTML + assertionsHTML;
+
+  // --- RIGHT PANEL ---
+  const right = document.getElementById('rightPanel');
+  
+  let stateHTML = `<div class="panel-title" style="margin-bottom:12px;">📊 Live State</div>`;
+  data.layers.forEach(layer => {
+    const barColor = layer.color || 'mid';
+    stateHTML += `<div class="state-group">
+      <div class="state-row">
+        <span class="key">${layer.key}</span>
+        <span class="value">${layer.value} <span class="bar"><span class="fill ${barColor}" style="width:${layer.bar}%"></span></span></span>
+      </div>
+    </div>`;
+  });
+
+  // Add layer status summary
+  stateHTML += `<div style="margin-top:16px;padding:12px;background:#0a0a12;border-radius:10px;border:1px solid #1a1a2e;">
+    <div style="font-size:10px;color:#4a4a6a;text-transform:uppercase;">Active Layers</div>
+    <div style="font-size:11px;color:#8892b0;margin-top:4px;">
+      ${data.activeLayers ? data.activeLayers.map(l => 
+        `<span style="color:${({core:'#64ffda',memory:'#bd93f9',emotion:'#ff6b6b',social:'#8be9fd',drive:'#50fa7b',noise:'#ffd93d',identity:'#ff79c6',tracking:'#ffb86b'}[l] || '#4a4a6a')};font-weight:600;">●</span> ${l.charAt(0).toUpperCase()+l.slice(1)}`
+      ).join(' · ') : '—'}
+    </div>
+  </div>`;
+
+  right.innerHTML = stateHTML;
+
+  // Scroll to top of dialogue
+  document.querySelector('.dialogue-container')?.scrollTo(0, 0);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  loadScenario('cold');
+});
+</script>
+
+</body>
+</html>
 ‎
 ‎
 ‎The 7 Scenarios at a Glance
