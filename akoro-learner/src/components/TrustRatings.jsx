@@ -1,23 +1,49 @@
-import React, { useRef, useEffect, useCallback } from "react";
-import { Star } from "lucide-react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 
-const PLATFORMS = [
-  { name: "g2.com", score: "5/5", stars: 5, tracking: "" },
-  { name: "Google", score: "4.9/5", stars: 4.9, tracking: "" },
-  { name: "FACEBOOK", score: "5/5", stars: 5, tracking: "tracking-[0.12em]" },
-  { name: "Capterra", score: "4.8/5", stars: 4.8, tracking: "" },
-];
-
+// Add a `logo` path (e.g. "/logos/salesforce.png") to use an image.
+// Leave `logo` empty/undefined and it falls back to the text name automatically.
 const PARTNER_LOGOS = [
-  "Salesforce",
-  "Slack",
-  "Notion",
-  "Zoom",
-  "HubSpot",
-  "Dropbox",
-  "Zendesk",
-  "Asana",
+  { name: "PAYSTACK", logo: "/partners/paystack.png" },
+  { name: "VAAS", logo: "/partners/vaas.png" },
+  { name: "KPEMU", logo: "/partners/kpemu.png" },
+  { name: "Slack", logo: "" },
+  { name: "Notion", logo: "" },
+  { name: "Zoom", logo: "" },
+  { name: "HubSpot", logo: "" },
+  { name: "Dropbox", logo: "" },
+  { name: "Zendesk", logo: "" },
+  { name: "Asana", logo: "" },
 ];
+
+// Add a `logo` path per school to use its real logo.
+// Leave `logo` empty/undefined and it falls back to the school name as text.
+const SCHOOLS = [
+  { name: "Chrisland School", logo: "" },
+  { name: "St. Francis Xavier", logo: "" },
+  { name: "Greenwood House", logo: "" },
+  { name: "Corona Schools", logo: "" },
+  { name: "Whitesands School", logo: "" },
+  { name: "Loyola Jesuit College", logo: "" },
+];
+
+function LogoMark({ name, logo, imgClassName, textClassName }) {
+  const [failed, setFailed] = useState(false);
+  const hasImage = Boolean(logo) && !failed;
+
+  if (hasImage) {
+    return (
+      <img
+        src={logo}
+        alt={name}
+        onError={() => setFailed(true)}
+        className={imgClassName}
+        draggable={false}
+      />
+    );
+  }
+
+  return <span className={textClassName}>{name}</span>;
+}
 
 function PartnerCarousel() {
   const trackRef = useRef(null);
@@ -69,47 +95,19 @@ function PartnerCarousel() {
       onTouchEnd={resumeSoon}
       className="flex gap-10 overflow-x-auto px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
     >
-      {loopLogos.map((name, i) => (
+      {loopLogos.map((item, i) => (
         <div
-          key={`${name}-${i}`}
+          key={`${item.name}-${i}`}
           className="shrink-0 flex items-center justify-center min-w-[140px] h-14"
         >
-          <span className="text-xl sm:text-2xl font-bold text-[#B3B3B3] whitespace-nowrap select-none">
-            {name}
-          </span>
+          <LogoMark
+            name={item.name}
+            logo={item.logo}
+            imgClassName="max-h-10 max-w-[140px] w-auto object-contain grayscale opacity-70"
+            textClassName="text-xl sm:text-2xl font-bold text-[#B3B3B3] whitespace-nowrap select-none"
+          />
         </div>
       ))}
-    </div>
-  );
-}
-
-function StarRow({ stars }) {
-  return (
-    <div className="flex justify-center gap-1">
-      {[...Array(5)].map((_, i) => {
-        const fillPct = Math.max(0, Math.min(1, stars - i)) * 100;
-        return (
-          <div key={i} className="relative w-6 h-6 sm:w-7 sm:h-7">
-            <Star
-              size={28}
-              className="absolute inset-0 w-full h-full text-[#E5E1D8]"
-              fill="#E5E1D8"
-              strokeWidth={0}
-            />
-            <div
-              className="absolute inset-0 overflow-hidden"
-              style={{ width: `${fillPct}%` }}
-            >
-              <Star
-                size={28}
-                className="w-full h-full text-[#F5B84D]"
-                fill="#F5B84D"
-                strokeWidth={0}
-              />
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -131,25 +129,24 @@ export default function TrustRatings({ onDemo }) {
 
       <button
         onClick={onDemo}
-        className="inline-block mx-auto mb-14 px-10 py-[18px] rounded-full bg-[#F5A94E] text-[#1A1A2E] font-extrabold text-sm sm:text-base uppercase tracking-wide shadow-[0_8px_24px_rgba(245,169,78,0.4)] transition-transform duration-200 hover:-translate-y-0.5"
+        className="inline-block mx-auto px-10 py-[18px] rounded-full bg-[#F5A94E] text-[#1A1A2E] font-extrabold text-sm sm:text-base uppercase tracking-wide shadow-[0_8px_24px_rgba(245,169,78,0.4)] transition-transform duration-200 hover:-translate-y-0.5"
       >
         Request a personalized demo
       </button>
 
-      <div className="grid grid-cols-2 gap-x-6 gap-y-12 max-w-md mx-auto">
-        {PLATFORMS.map((p) => (
-          <div key={p.name}>
-            <div
-              className={`text-2xl sm:text-3xl font-extrabold text-[#9B9B9B] mb-4 ${p.tracking}`}
-            >
-              {p.name}
-            </div>
-            <div className="mb-2">
-              <StarRow stars={p.stars} />
-            </div>
-            <div className="text-lg sm:text-xl text-[#1A1A2E] font-medium">
-              {p.score}
-            </div>
+      <p className="mt-8 mb-10 text-sm sm:text-base font-semibold uppercase tracking-wide text-[#8A8A8A]">
+        Trusted by Teachers, Instructors and Students at top Schools
+      </p>
+
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-10 max-w-2xl mx-auto items-center">
+        {SCHOOLS.map((item) => (
+          <div key={item.name} className="flex items-center justify-center h-16">
+            <LogoMark
+              name={item.name}
+              logo={item.logo}
+              imgClassName="max-h-14 max-w-[160px] w-auto object-contain"
+              textClassName="text-xl sm:text-2xl font-extrabold text-[#9B9B9B] text-center leading-tight"
+            />
           </div>
         ))}
       </div>
