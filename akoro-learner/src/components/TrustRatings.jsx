@@ -3,9 +3,9 @@ import React, { useRef, useEffect, useCallback, useState } from "react";
 // Add a `logo` path (e.g. "/logos/salesforce.png") to use an image.
 // Leave `logo` empty/undefined and it falls back to the text name automatically.
 const PARTNER_LOGOS = [
-  { name: "PAYSTACK", logo: "" },
-  { name: "VAAS", logo: "" },
-  { name: "KPEMU", logo: "" },
+  { name: "PAYSTACK", logo: "/partners/paystack.png" },
+  { name: "VAAS", logo: "/partners/vaas.png" },
+  { name: "KPEMU", logo: "/partners/kpemu.png" },
   { name: "Slack", logo: "" },
   { name: "Notion", logo: "" },
   { name: "Zoom", logo: "" },
