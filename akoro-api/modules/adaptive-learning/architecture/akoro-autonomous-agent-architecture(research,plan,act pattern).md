@@ -53,3 +53,22 @@ OpenCode launches full parallel subagent instances for research because a coding
 2. Extract the Skills layer (already planned) — but now explicitly frame each Skill function as the "Plan" phase: it takes research output in, returns a decision + the todo list for what Act will do.
 3. Pick one workflow — `exam_prep` is still the right first candidate — and wire it through all three phases for real, replacing the simulated timeouts.
 4. Only for consequential workflows, add the explicit gate: don't call the Act-phase tool until the plan step has been shown (chat message or UI card) and, where money/grades are involved, confirmed.
+
+
+
+Here's the full picture, straight from the source (not the docs, which are stubs) — `.opencode/skills/`, `packages/core/src/plugin/skill.ts`, and `packages/opencode/src/tool/skill.txt`.
+
+**The actual skills OpenCode uses on itself (2 real ones):**
+
+| Skill | Triggers on | What it does |
+|---|---|---|
+| **`effect`** | Any Effect v4/effect-smol TypeScript work in the repo | Tells the agent to stop relying on training-data memory of Effect (which is likely stale/wrong for v2/v3 vs v4), clone the actual `effect-smol` source into `.opencode/references/`, and grep that source for real APIs before writing any Effect code. Also fixes testing conventions (`testEffect`, `it.live` for real filesystem/git/network behavior). |
+| **`rtl-aware-development`** | Implementing/reviewing RTL/LTR behavior — CSS, menus, scrolling, icons, Electron title bars | A genuinely detailed style guide: use logical CSS properties (`padding-inline-start`) over physical ones (`padding-left`), isolate mixed-direction text with `<bdi>`, don't naively mirror everything (back/forward arrows yes, brand logos/clocks/charts no), handle the fact that RTL `scrollLeft` can be negative. |
+
+**Plus one built-in, framework-level skill** (`customize-opencode`, defined directly in `plugin/skill.ts`, not as a `.opencode/skills/` folder): triggers only when the user is editing OpenCode's *own* config — `opencode.json`, files under `.opencode/`, or creating agents/subagents/commands/skills/plugins/MCP servers/permission rules. Explicitly scoped to never fire on the user's actual application code.
+
+**How triggering actually works** — this is the mechanism worth stealing conceptually: skill *descriptions* (not names) get listed in the system prompt, and there's a dedicated `skill` tool whose entire job is: *"Load a specialized skill when the task at hand matches one of the skills listed in the system prompt... The skill name must match one of the skills listed in your system prompt."* So the model itself reads the description, decides relevance, and calls `skill(name)` to pull the full `SKILL.md` content into context on demand — it's not preloaded, it's fetched only when the description matches.
+
+**Worth being honest about:** two more `SKILL.md` files exist (`cloudflare`, `agents-sdk`) but they live under `test/fixture/skills/` — they're test fixtures for verifying the skill-loading mechanism itself, not skills OpenCode actually uses when coding on its own repo. So the real, active count is 2 domain skills + 1 framework-config skill, not 4.
+
+**For Akoro:** this is a cleaner, cheaper pattern than a hardcoded workflow-per-intent list — instead of your `extractIntent()` keyword match deciding everything up front, you could define a small set of `SKILL.md`-style files (e.g. a "WAEC syllabus conventions" skill, a "Nigerian curriculum grading scale" skill) with trigger descriptions, list them in the tutoring agent's system prompt, and let the model itself decide when to pull one in via a `skill()` tool call — visible in the same step-trace UI, as a `"Loading WAEC syllabus skill"` step.
