@@ -132,6 +132,9 @@ export default function LearnerDashboard() {
   // Tracks the material or session the learner last opened, across all tabs
   // except the AI chat. Higher-ed gated like the records feature it leans on.
   const [now, nowActs] = useNowStudying(userProfile?.id);
+  // Is the AI chat SURFACE showing? (Agent tab also hosts tasks/stats/self-study,
+  // where the Now-Studying bar should still appear — only chat hides it.)
+  const [chatActive, setChatActive] = useState(false);
 
   // Records live in localStorage; these helpers read/update one record's
   // progress without a full state mirror (the modal re-reads on open).
@@ -191,11 +194,50 @@ export default function LearnerDashboard() {
     if (now.item?.id === r.id) nowActs.setProgress(r.id, p);
   }, [now.item, nowActs, setRecordProgress]);
 
-  // Bar visibility: every tab except the AI chat, and never under a
+  // Bar visibility: every tab except the AI chat surface, and never under a
   // full-screen sheet that has its own layout.
   const showNowBar = higherEd && !!now.item && !now.dismissed
-    && tab !== "agent" && !selectedSession && !selectedChallenge
+    && !(tab === "agent" && chatActive) && !selectedSession && !selectedChallenge
     && !teachSession && !configOpen && !recordsOpen;
+
+  // ── Minimize — park a live session on the Now-Studying bar ──────────────
+  const minimizeSessionSheet = () => {
+    const live = [...agentSessions, ...sessions].find(x => x.id === selectedSession?.id);
+    if (live) nowActs.setProgress(live.id, live.progress || 0);
+    setSelectedSession(null);
+    setToast(t('now.minimized_toast'));
+  };
+  const minimizeTeachSession = () => {
+    const ts = teachSession;
+    if (ts) {
+      nowActs.setCurrent({
+        type: 'session',
+        id: ts.id || (ts.selfStudyId ? `self-${ts.selfStudyId}` : `teach-${ts.topic || 'session'}`),
+        title: ts.title || ts.topic || t('now.teaching'),
+        sub: (SUBJECTS[ts.subject]?.label) || ts.subject || t('now.teaching'),
+        emoji: ts.agentEmoji || agentProfile.emoji || '🤖',
+        progress: ts.progress || 0,
+      });
+    }
+    setTeachSession(null);
+    setToast(t('now.minimized_toast'));
+  };
+  const minimizeDecaySession = () => {
+    const d = decaySession;
+    if (d) {
+      nowActs.setCurrent({
+        type: 'session',
+        id: `decay-${d.id || d.topic || 'session'}`,
+        title: `${t('now.relearn')} ${d.topic || ''}`.trim(),
+        sub: d.subject || '',
+        emoji: '🔁',
+        progress: 0,
+      });
+    }
+    setDecaySession(null);
+    loadAgentSessions();
+    setToast(t('now.minimized_toast'));
+  };
 
   // Bar ▶ — resume. Sessions reopen (live copy preferred, snapshot fallback);
   // records re-run the record open flow.
@@ -836,7 +878,7 @@ export default function LearnerDashboard() {
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}
           {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
-          {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}
+          {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}/>}
         </div>
 
         {/* Now studying — Spotify-style mini-bar (higher-ed, all tabs but chat) */}
@@ -913,6 +955,7 @@ export default function LearnerDashboard() {
         {/* TeachAgentModal — now receives config OR session */}
         {teachSession && (
           <TeachAgentModal
+            onMinimize={minimizeTeachSession}
             session={teachSession?.topic ? null : teachSession}
             config={teachSession?.topic ? teachSession : null}
             // A self-study attempt has to know which session it became, or the
@@ -932,6 +975,7 @@ export default function LearnerDashboard() {
         {/* DecaySessionModal — triggered from agent alerts tab */}
         {decaySession && (
           <DecaySessionModal
+            onMinimize={minimizeDecaySession}
             alert={decaySession}
             agentProfile={agentProfile}
             onClose={() => { setDecaySession(null); loadAgentSessions(); }}
@@ -950,6 +994,7 @@ export default function LearnerDashboard() {
         )}
 
         {selectedSession && <SessionSheet
+          onMinimize={minimizeSessionSheet}
           session={selectedSession}
           decayAlert={decayBySession[selectedSession.id] || (selectedSession.decayAlertId && decayAlerts.find(a=>a.id===selectedSession.decayAlertId)) || null}
           agentProfile={agentProfile}

@@ -100,19 +100,24 @@
     </style>
   </head>
   <body>
-    <!-- Level-switch splash: hidden unless a reload was staged (see Settings →
-         study level / school type). main.jsx fades it out once the app boots. -->
+    <!-- Boot splash: shows for staged reloads (level/language/theme switch)
+         AND every cold start of an APP route (PWA launch) — never on the
+         public marketing pages. main.jsx fades it out once the app boots. -->
     <div id="akoro-splash" aria-hidden="true">
       <img class="ak-splash-logo" src="/logo/akoro-icon-dark.svg" alt="" />
       <div class="ak-splash-text">Loading...</div>
     </div>
     <script>
       (function() {
+        var show = false;
         try {
-          if (localStorage.getItem('akoro_level_reload')) {
-            document.getElementById('akoro-splash').style.display = 'flex';
-          }
-        } catch (e) { /* private mode — no splash, no reload staging */ }
+          show = !!localStorage.getItem('akoro_boot_splash');
+        } catch (e) { /* private mode — fall through to route check */ }
+        if (!show) {
+          // App routes only; marketing pages (/, /pricing, /blog, …) skip it.
+          show = /^\/(app|onboarding|settings|notifications|wallet|cart|checkout|orders|draw|assessment|fde-admin|course\/|agent\/)/.test(location.pathname);
+        }
+        if (show) document.getElementById('akoro-splash').style.display = 'flex';
       })();
     </script>
     <div id="root"></div>

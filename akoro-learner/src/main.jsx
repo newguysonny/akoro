@@ -76,11 +76,11 @@ if (isTenantHost) {
   // Replay any writes queued while offline (on boot + whenever we reconnect).
   initOfflineSync();
 
-  // Level-switch splash: Settings staged `akoro_level_reload` and reloaded
-  // the page; index.html is showing the branded boot screen. Fade it out
-  // once the app has painted and had a beat to restore the session, then
-  // clear the flag. Hard cap so a slow boot can never stick on the splash.
-  const stagedReload = (() => { try { return !!localStorage.getItem('akoro_level_reload'); } catch { return false; } })();
+  // Boot splash: index.html showed it for staged reloads (level/language/
+  // theme switch) and app-route cold starts (PWA launch). Fade it out once
+  // the app has painted and had a beat to restore the session, then clear
+  // any staged flag. Hard cap so a slow boot can never stick on the splash.
+  const stagedReload = (() => { try { return !!localStorage.getItem('akoro_boot_splash'); } catch { return false; } })();
   const dismissLevelSplash = () => {
     const s = document.getElementById('akoro-splash');
     if (!s || s.dataset.closing === '1') return;
@@ -89,11 +89,13 @@ if (isTenantHost) {
     s.style.opacity = '0';
     setTimeout(() => {
       s.remove();
-      try { localStorage.removeItem('akoro_level_reload'); } catch { /* noop */ }
+      try { localStorage.removeItem('akoro_boot_splash'); } catch { /* noop */ }
     }, 320);
   };
-  if (stagedReload) {
-    setTimeout(dismissLevelSplash, 800);
+  if (typeof document !== 'undefined' && document.getElementById('akoro-splash')) {
+    // Staged reloads get a longer hold (the whole point is a deliberate
+    // re-entry); ordinary cold starts dismiss as soon as the app is up.
+    setTimeout(dismissLevelSplash, stagedReload ? 800 : 450);
     setTimeout(dismissLevelSplash, 4000);   // safety net
   }
 

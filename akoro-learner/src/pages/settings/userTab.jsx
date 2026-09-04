@@ -194,13 +194,15 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       showToast('Saved locally ✓');
     }
 
-    /* Level switches rebuild the whole UI tier (the school ↔ higher-ed
-       gating reads studyLevel/schoolType), so a plain state update isn't
+    /* Level, language and theme switches all re-derive the whole app (the
+       school ↔ higher-ed tier reads studyLevel/schoolType; language and
+       theme come from storage at boot), so a plain state update isn't
        enough — stage the branded boot splash and hard-reload so every
-       screen, hook and cache re-derives from the new level. Runs on the
-       saved-locally path too: the queued write replays after the reload. */
-    if ((field === 'studyLevel' || field === 'schoolType') && val && val !== profile[field]) {
-      try { localStorage.setItem('akoro_level_reload', String(Date.now())); } catch { /* private mode */ }
+       screen re-renders from the new setting. Runs on the saved-locally
+       path too: the queued write replays after the reload. */
+    if (['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
+        && val && val !== profile[field]) {
+      try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
       setTimeout(() => window.location.reload(), 650);   // let the toast breathe
     }
   }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);

@@ -69,7 +69,7 @@ function ThoughtBlock({ thinking, streaming }) {
   );
 }
 
-function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
+function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActive }) {
   const { t } = useLang();
   const initName  = agentNameProp  || '';
   const initEmoji = agentEmojiProp || '🤖';
@@ -320,6 +320,14 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   }, [agentNameProp, agentEmojiProp]);
 
   useEffect(()=>{ if(feedRef.current) feedRef.current.scrollTop=feedRef.current.scrollHeight; },[messages,loading]);
+
+  // Tell the dashboard whether the CHAT surface is showing (vs tasks/stats/
+  // self-study sub-tabs): the Now-Studying bar hides on chat only, per spec.
+  // Unmount also reports false so the bar returns when we leave this tab.
+  useEffect(() => {
+    onChatActive?.(innerTab === "chat");
+    return () => onChatActive?.(false);
+  }, [innerTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendMessage=async(overrideText)=>{
     // Attachments can be sent with an empty message — a friendly default text

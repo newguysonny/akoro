@@ -100,7 +100,7 @@ export default function DiscoverHub({ onOpenCourses }) {
 
       {/* Type cards grid */}
       {visible.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(158px, 1fr))', gap: 10, padding: '10px 16px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '10px 16px 0' }}>
           {visible.map((ty) => (
             <div key={ty.key} onClick={() => activate(ty)} role="button" aria-label={ty.label}
               style={{ position: 'relative', cursor: 'pointer', borderRadius: 18, padding: '14px 13px',
