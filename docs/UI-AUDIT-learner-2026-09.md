@@ -121,14 +121,14 @@ All behind `@supports`, per the design-system doc's own rules.
 
 ## Suggested order of work
 
-| Step | Effort | Impact |
-|---|---|---|
-| 1. Global `:focus-visible` + reduced-motion block | ~1h | A11y, feel |
-| 2. Token scales commit (radius/type/space/z/status/motion) | ~2h | Foundation for everything |
-| 3. Dark-mode P0 sweep (non-marketing surfaces, ~60 sites) | ~1 day | Correctness users see daily |
-| 4. Touch-target pass (top offenders) | ~half day | Mobile feel |
-| 5. `popover`/anchor-positioning for sheets + toasts | ~2 days | Deletes z-index class of bugs |
-| 6. Scroll-driven reveals + `linear()` springs | ~1 day | Perceived polish |
+| Step | Effort | Impact | Status |
+|---|---|---|---|
+| 1. Global `:focus-visible` + reduced-motion block | ~1h | A11y, feel | ✅ done (`f65e2dc`) |
+| 2. Token scales commit (radius/type/space/z/status/motion) | ~2h | Foundation for everything | ✅ done (`f65e2dc`) |
+| 3. Dark-mode P0 sweep (non-marketing surfaces, ~60 sites) | ~1 day | Correctness users see daily | 🔨 **in progress** — dashboard + discovery done; course-details page (self-contained light palette, ~50 hexes) and small in-app pages remain |
+| 4. Touch-target pass (top offenders) | ~half day | Mobile feel | ⬜ |
+| 5. `popover`/anchor-positioning for sheets + toasts | ~2 days | Deletes z-index class of bugs | ⬜ |
+| 6. Scroll-driven reveals + `linear()` springs | ~1 day | Perceived polish | ⬜ |
 
 ---
 

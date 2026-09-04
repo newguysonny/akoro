@@ -570,7 +570,7 @@ export default function LearnerDashboard() {
                   : <div style={{ width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:15,fontWeight:900,border:"2px solid #EDE9FE" }}>
                       {(userProfile?.fullName||userProfile?.username||"?").trim().charAt(0).toUpperCase()}
                     </div>}
-                <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"#9CA3AF",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
+                <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
               </div>
               <div>
                 <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,lineHeight:1.2 }}>{userProfile?.fullName||userProfile?.username||"…"}</p>
@@ -579,12 +579,12 @@ export default function LearnerDashboard() {
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
               <button onClick={()=>navigate("/wallet")} title={coinLow?"Low balance — tap to top up":"Coin balance"}
-                style={{ display:"flex",alignItems:"center",gap:5,background:coinLow?"#FEECEC":"#FFF7E6",border:`1px solid ${coinLow?"#F5B5B5":"#FFE2A8"}`,borderRadius:100,height:34,padding:"0 12px",cursor:"pointer" }}>
+                style={{ display:"flex",alignItems:"center",gap:5,background:coinLow?`${RED}14`:`${GOLD}1F`,border:`1px solid ${coinLow?`${RED}55`:`${GOLD}55`}`,borderRadius:100,height:34,padding:"0 12px",cursor:"pointer" }}>
                 <span style={{ fontSize:14,lineHeight:1 }}>🪙</span>
-                <span style={{ fontSize:12.5,fontWeight:900,color:coinLow?"#C0322B":"#B45309" }}>{(coinBalance||0).toLocaleString()}</span>
+                <span style={{ fontSize:12.5,fontWeight:900,color:coinLow?"var(--ak-danger-text)":"var(--ak-warn-text)" }}>{(coinBalance||0).toLocaleString()}</span>
               </button>
               <button onClick={()=>navigate("/cart")} title="Cart"
-                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>
+                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:`${BRAND}12`,border:`1px solid ${BRAND}3D`,borderRadius:100,width:34,height:34,cursor:"pointer" }}>
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
                 {cartCount>0&&(
                   <span style={{ position:"absolute",top:-3,right:-3,background:RED,color:"#fff",borderRadius:"50%",minWidth:16,height:16,padding:"0 4px",fontSize:9,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>
@@ -593,7 +593,7 @@ export default function LearnerDashboard() {
                 )}
               </button>
               <button onClick={()=>navigate("/notifications")} title="Notifications"
-                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0EBFF",border:"1px solid #DDD3FF",borderRadius:100,width:34,height:34,cursor:"pointer" }}>
+                style={{ position:"relative",display:"flex",alignItems:"center",justifyContent:"center",background:`${BRAND}12`,border:`1px solid ${BRAND}3D`,borderRadius:100,width:34,height:34,cursor:"pointer" }}>
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                 {notifUnread>0&&(
                   <span style={{ position:"absolute",top:-3,right:-3,background:RED,color:"#fff",borderRadius:"50%",minWidth:16,height:16,padding:"0 4px",fontSize:9,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",border:"2px solid #fff" }}>
@@ -601,16 +601,16 @@ export default function LearnerDashboard() {
                   </span>
                 )}
               </button>
-              <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:"#F0EBFF",borderRadius:100,padding:4,cursor:"pointer",border:"1px solid #DDD3FF" }}>
-                <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"#9CA3AF",fontSize:11,fontWeight:700,transition:"all .22s ease" }}>{isOnline?"● Online":"Online"}</div>
+              <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:"pointer",border:`1px solid ${BRAND}3D` }}>
+                <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease" }}>{isOnline?"● Online":"Online"}</div>
               </div>
             </div>
           </div>
           {(tab==="sessions"||tab==="challenges")&&(
           <div style={{ display:"flex" }}>
             {[{key:"sessions",label:t('dash.my_sessions'),count:totalUnread,countColor:BRAND},{key:"challenges",label:t('dash.challenges'),count:pendingChallenges,countColor:RED}].map(({key,label,count,countColor})=>(
-              <button key={key} onClick={()=>goTab(key)} style={{ flex:1,padding:"10px 0 12px",background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:tab===key?800:600,color:tab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${tab===key?BRAND:"transparent"}`,transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Nunito',sans-serif" }}>
-                {label}{count>0&&<span style={{ background:tab===key?countColor:"#E5E7EB",color:tab===key?"#fff":"#6B7280",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800 }}>{count}</span>}
+              <button key={key} onClick={()=>goTab(key)} style={{ flex:1,padding:"10px 0 12px",background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:tab===key?800:600,color:tab===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${tab===key?BRAND:"transparent"}`,transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"'Nunito',sans-serif" }}>
+                {label}{count>0&&<span style={{ background:tab===key?countColor:"var(--ak-tag-bg)",color:tab===key?"#fff":"var(--ak-text-sub)",borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:800 }}>{count}</span>}
               </button>
             ))}
           </div>
@@ -635,8 +635,8 @@ export default function LearnerDashboard() {
                   {key:"live",   label:t('sessions.live_classes'),  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
                   {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length + agentExtras},
                 ].map(({key,label,icon,count})=>(
-                  <button key={key} onClick={()=>setSessionTab(key)} style={{ flex:1,padding:"10px 4px 11px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:sessionTab===key?800:600,color:sessionTab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${sessionTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-                    <span style={{ fontSize:13 }}>{icon}</span>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"#F3F4F6",color:sessionTab===key?"#fff":"#9CA3AF",borderRadius:8,padding:"1px 6px" }}>{count}</span>
+                  <button key={key} onClick={()=>setSessionTab(key)} style={{ flex:1,padding:"10px 4px 11px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:sessionTab===key?800:600,color:sessionTab===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${sessionTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
+                    <span style={{ fontSize:13 }}>{icon}</span>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"var(--ak-tag-bg)",color:sessionTab===key?"#fff":"var(--ak-text-sub)",borderRadius:8,padding:"1px 6px" }}>{count}</span>
                   </button>
                 ))}
               </div>
@@ -644,7 +644,7 @@ export default function LearnerDashboard() {
               {/* ── Live Classes sub-tabs ── */}
               {sessionTab==="live"&&(
                 <>
-                  <div style={{ display:"flex",gap:7,padding:"10px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",background:"#FAFBFF",flexShrink:0 }}>
+                  <div style={{ display:"flex",gap:7,padding:"10px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-bg)",flexShrink:0 }}>
                     {[
                       {key:"live",          label:t('sessions.live_now'),      icon:"🔴"},
                       {key:"starting-soon", label:t('sessions.starting_soon'), icon:"⏰"},
@@ -660,12 +660,12 @@ export default function LearnerDashboard() {
                           style={{ flexShrink:0,display:"flex",alignItems:"center",gap:5,
                             padding:"6px 13px",borderRadius:20,cursor:"pointer",fontFamily:"'Nunito',sans-serif",
                             fontWeight:active?800:600,fontSize:11.5,
-                            border:`1.5px solid ${active?(isAlert?RED:BRAND):"#E5E7EB"}`,
+                            border:`1.5px solid ${active?(isAlert?RED:BRAND):"var(--ak-border2)"}`,
                             background:active?(isAlert?`${RED}10`:`${BRAND}10`):"#fff",
-                            color:active?(isAlert?RED:BRAND):"#6B7280",transition:"all .2s" }}>
+                            color:active?(isAlert?RED:BRAND):"var(--ak-text-sub)",transition:"all .2s" }}>
                           {isAlert&&active&&<div style={{ width:6,height:6,borderRadius:"50%",background:RED,animation:"pulse-dot 1s ease-in-out infinite" }}/>}
                           <span>{icon}</span>{label}
-                          {cnt>0&&<span style={{ fontSize:9,fontWeight:900,background:active?(isAlert?RED:BRAND):"#F3F4F6",color:active?"#fff":isAlert?RED:"#9CA3AF",borderRadius:8,padding:"1px 5px" }}>{cnt}</span>}
+                          {cnt>0&&<span style={{ fontSize:9,fontWeight:900,background:active?(isAlert?RED:BRAND):"var(--ak-tag-bg)",color:active?"#fff":isAlert?RED:"var(--ak-text-sub)",borderRadius:8,padding:"1px 5px" }}>{cnt}</span>}
                         </button>
                       );
                     })}
@@ -674,7 +674,7 @@ export default function LearnerDashboard() {
                   <div style={{ display:"flex",gap:7,padding:"8px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",flexShrink:0 }}>
                     {[{key:"all",label:"All",icon:"📚"},{key:"maths",label:"Maths",icon:SUBJECTS.maths.icon},{key:"english",label:"English",icon:SUBJECTS.english.icon},{key:"science",label:"Science",icon:SUBJECTS.science.icon}].map(({key,label,icon})=>{
                       const color=SUBJECT_COLORS[key]||BRAND, active=liveSubjectFilter===key;
-                      return <button key={key} onClick={()=>setLiveSubjectFilter(key)} style={{ flexShrink:0,padding:"5px 13px",borderRadius:20,cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontWeight:active?800:600,fontSize:11.5,border:`1.5px solid ${active?color:"#E5E7EB"}`,background:active?`${color}10`:"#fff",color:active?color:"#6B7280",transition:"all .2s",display:"flex",alignItems:"center",gap:5 }}><span>{icon}</span>{label}</button>;
+                      return <button key={key} onClick={()=>setLiveSubjectFilter(key)} style={{ flexShrink:0,padding:"5px 13px",borderRadius:20,cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontWeight:active?800:600,fontSize:11.5,border:`1.5px solid ${active?color:"var(--ak-border2)"}`,background:active?`${color}10`:"var(--ak-surface)",color:active?color:"var(--ak-text-sub)",transition:"all .2s",display:"flex",alignItems:"center",gap:5 }}><span>{icon}</span>{label}</button>;
                     })}
                   </div>
                 </>
@@ -688,7 +688,7 @@ export default function LearnerDashboard() {
                     <span style={{ fontSize:52,opacity:.2 }}>
                       {sessionTab==="live"?liveSubTab==="starting-soon"?"🔴":"📡":"📚"}
                     </span>
-                    <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>
+                    <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>
                       {sessionTab==="live"
                         ?(liveSubTab==="starting-soon"?t('sessions.none_starting'):liveSubTab==="today"?t('sessions.none_today'):liveSubTab==="tomorrow"?t('sessions.none_tomorrow'):t('sessions.none_week'))
                         :t('sessions.not_found')}
@@ -706,7 +706,7 @@ export default function LearnerDashboard() {
               {sessionTab==="agent"&&(
                 <div style={{ display:"flex",flexDirection:"column",flex:1 }}>
                   {/* Sub-tab bar */}
-                  <div style={{ display:"flex",borderBottom:"1px solid #F3F4F6",background:"#fff",flexShrink:0 }}>
+                  <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                     {[
                       {key:"sessions",  label:t('sessions.sessions'),  icon:"📚", count:agentSessionsFiltered.length},
                       {key:"selfstudy", label:"Self study",            icon:"📖", count:selfStudyCount},
@@ -718,14 +718,14 @@ export default function LearnerDashboard() {
                         <button key={key} onClick={()=>setAgentSubTab(key)}
                           style={{ flex:1,padding:"9px 4px 10px",background:"none",border:"none",cursor:"pointer",
                             fontSize:11.5,fontWeight:active?800:600,
-                            color:active?(isRevision?RED:BRAND):"#9CA3AF",
+                            color:active?(isRevision?RED:BRAND):"var(--ak-text-muted)",
                             borderBottom:`2.5px solid ${active?(isRevision?RED:BRAND):"transparent"}`,
                             transition:"all .2s",fontFamily:"'Nunito',sans-serif",
                             display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
                           <span style={{ fontSize:13 }}>{icon}</span>{label}
                           {count>0&&<span style={{ fontSize:9.5,fontWeight:900,
-                            background:active?(isRevision?RED:BRAND):"#F3F4F6",
-                            color:active?"#fff":isRevision?RED:"#9CA3AF",
+                            background:active?(isRevision?RED:BRAND):"var(--ak-tag-bg)",
+                            color:active?"#fff":isRevision?RED:"var(--ak-text-sub)",
                             borderRadius:8,padding:"1px 6px" }}>{count}</span>}
                         </button>
                       );
@@ -743,9 +743,9 @@ export default function LearnerDashboard() {
                         <button key={key} onClick={()=>setAgentSubjectFilter(key)}
                           style={{ flexShrink:0,padding:"5px 13px",borderRadius:20,cursor:"pointer",
                             fontFamily:"'Nunito',sans-serif",fontWeight:active?800:600,fontSize:11.5,
-                            border:`1.5px solid ${active?color:"#E5E7EB"}`,
+                            border:`1.5px solid ${active?color:"var(--ak-border2)"}`,
                             background:active?`${color}10`:"#fff",
-                            color:active?color:"#6B7280",transition:"all .2s",
+                            color:active?color:"var(--ak-text-sub)",transition:"all .2s",
                             display:"flex",alignItems:"center",gap:5 }}>
                           <span>{icon}</span>{label}
                         </button>
@@ -757,7 +757,7 @@ export default function LearnerDashboard() {
                     agentSessionsFiltered.length===0
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
                         <span style={{ fontSize:52,opacity:.2 }}>📚</span>
-                        <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>{t('sessions.empty')}</p>
+                        <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>{t('sessions.empty')}</p>
                         <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.empty_hint')}</p>
                       </div>
                       :agentSessionsFiltered.map(s=>(
@@ -784,7 +784,7 @@ export default function LearnerDashboard() {
                     decayAsSessions.length===0
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
                         <span style={{ fontSize:52,opacity:.2 }}>✅</span>
-                        <p style={{ fontSize:15,fontWeight:800,color:"#9CA3AF" }}>{t('sessions.no_revisions')}</p>
+                        <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>{t('sessions.no_revisions')}</p>
                         <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.all_up_to_date')}</p>
                       </div>
                       :decayAsSessions.map(s=>(
@@ -803,14 +803,14 @@ export default function LearnerDashboard() {
               <div style={{ padding:"12px 18px 10px",borderBottom:"1px solid var(--ak-border)" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:6 }}><ZapIcon size={13} color={RED}/><span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text-sec)" }}>{t('challenges.peer')}</span></div>
                 <div style={{ display:"flex",gap:10 }}>
-                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:RED,animation:"pulse-dot 1.2s ease-in-out infinite" }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>{t('challenges.immediate')}</span></div>
-                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:BRAND }}/><span style={{ fontSize:10.5,fontWeight:700,color:"#6B7280" }}>{t('challenges.scheduled')}</span></div>
+                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:RED,animation:"pulse-dot 1.2s ease-in-out infinite" }}/><span style={{ fontSize:10.5,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('challenges.immediate')}</span></div>
+                  <div style={{ display:"flex",alignItems:"center",gap:5 }}><div style={{ width:8,height:8,borderRadius:"50%",background:BRAND }}/><span style={{ fontSize:10.5,fontWeight:700,color:"var(--ak-text-sub)" }}>{t('challenges.scheduled')}</span></div>
                 </div>
               </div>
               {challenges.filter(c=>!acceptedIds.has(c.id)).length===0?(
                 <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:12 }}>
                   <span style={{ fontSize:48,opacity:.25 }}>✅</span>
-                  <p style={{ fontSize:14,fontWeight:800,color:"#9CA3AF",textAlign:"center" }}>{t('challenges.all_accepted')}</p>
+                  <p style={{ fontSize:14,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('challenges.all_accepted')}</p>
                   <p style={{ fontSize:12,fontWeight:600,color:"#D1D5DB",textAlign:"center" }}>{t('challenges.check_battles')}</p>
                   <button onClick={()=>goTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenges.go_to_battles')}</button>
                 </div>
@@ -854,7 +854,7 @@ export default function LearnerDashboard() {
             // "Learn" (key "sessions") stays active on the Challenges sub-tab too.
             const navActive = tab===key || (key==="sessions" && tab==="challenges");
             return (
-              <div key={key} onClick={()=>goTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"#9CA3AF",minWidth:56,padding:"2px 0" }}>
+              <div key={key} onClick={()=>goTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"var(--ak-text-muted)",minWidth:56,padding:"2px 0" }}>
                 <div style={{ position:"relative" }}>
                   <span style={{ fontSize:22 }}>{icon}</span>
                   {key==="sessions"&&totalUnread>0&&<div style={{ position:"absolute",top:-3,right:-6,width:14,height:14,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center" }}><span style={{ fontSize:8,fontWeight:900,color:"#fff" }}>{totalUnread}</span></div>}
