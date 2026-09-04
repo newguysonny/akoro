@@ -80,9 +80,41 @@
       @keyframes fade-in   { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
       @keyframes spin      { to { transform: rotate(360deg); } }
       @keyframes pulse     { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+      /* Level-switch splash — staged by Settings before location.reload().
+         Dark brand splash regardless of theme (momentary, like a console
+         boot screen); the app's real theme takes over the moment it paints. */
+      @keyframes splash-breathe { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(.92); opacity:.75; } }
+      #akoro-splash {
+        position: fixed; inset: 0; z-index: 99999;
+        display: none; flex-direction: column;
+        align-items: center; justify-content: center; gap: 18px;
+        background: #0A0A0E;
+        font-family: 'Nunito', sans-serif;
+      }
+      #akoro-splash .ak-splash-logo { width: 72px; height: 72px; animation: splash-breathe 1.5s ease-in-out infinite; }
+      #akoro-splash .ak-splash-text { color: #E6EDF3; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+      @media (prefers-reduced-motion: reduce) {
+        #akoro-splash .ak-splash-logo { animation: none; }
+      }
     </style>
   </head>
   <body>
+    <!-- Level-switch splash: hidden unless a reload was staged (see Settings →
+         study level / school type). main.jsx fades it out once the app boots. -->
+    <div id="akoro-splash" aria-hidden="true">
+      <img class="ak-splash-logo" src="/logo/akoro-icon-dark.svg" alt="" />
+      <div class="ak-splash-text">Loading...</div>
+    </div>
+    <script>
+      (function() {
+        try {
+          if (localStorage.getItem('akoro_level_reload')) {
+            document.getElementById('akoro-splash').style.display = 'flex';
+          }
+        } catch (e) { /* private mode — no splash, no reload staging */ }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

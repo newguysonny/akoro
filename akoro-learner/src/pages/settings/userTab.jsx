@@ -10,7 +10,7 @@ import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
 import {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, rowBase,
-  COUNTRIES, GUIDES, SCHOOL_TYPES, YEARS, LANGUAGES,
+  COUNTRIES, GUIDES, SCHOOL_TYPES, STUDY_LEVELS, YEARS, LANGUAGES,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
@@ -193,6 +193,16 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     } catch {
       showToast('Saved locally ✓');
     }
+
+    /* Level switches rebuild the whole UI tier (the school ↔ higher-ed
+       gating reads studyLevel/schoolType), so a plain state update isn't
+       enough — stage the branded boot splash and hard-reload so every
+       screen, hook and cache re-derives from the new level. Runs on the
+       saved-locally path too: the queued write replays after the reload. */
+    if ((field === 'studyLevel' || field === 'schoolType') && val && val !== profile[field]) {
+      try { localStorage.setItem('akoro_level_reload', String(Date.now())); } catch { /* private mode */ }
+      setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+    }
   }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);
 
   return (
@@ -249,6 +259,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
 
       <Section title={t('settings.learn_study')}>
+        <Row icon="ti-school" label={t('settings.study_level')} value={profile.studyLevel||t('settings.not_set')}
+          onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
         <Row icon="ti-chalkboard" label={t('settings.teaching_guide')}
           value={`${profile.guideEmoji||'🧠'} ${profile.teachingGuide||'NaNa Esumai'}`}
           onClick={()=>openSheet('teachingGuide',t('settings.teaching_guide'),'select',guides.length ? guides : GUIDES)}/>
