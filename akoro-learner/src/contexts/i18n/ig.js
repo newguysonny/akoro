@@ -642,7 +642,7 @@ export const IG = {
   'dhub.card_guide':         'Ntuziaka mmụta',
   'dhub.card_guide_desc':    'Mụọ na ndị nnọchite onye nkuzi a zụrụ',
   'dhub.card_live':          'Okwu ndi obibi',
-  'dhub.card_live_desc':     'Sonye na nnọkọ edobere',
+  'dhub.card_live_desc':    'Okwu ndi na-akụzi nke oge adịghị anya',
 
   /* ── Ukwen "Tinye ndekọ" (dashbọọdụ mahadum/kọleji) ── */
   'records.title':           'Tinye ndekọ',

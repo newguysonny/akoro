@@ -747,8 +747,7 @@ export default function LearnerDashboard() {
                   <DiscoveryTab initialQuery={discoverQuery}/>
                 </>
               : <DiscoverHub
-                  onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
-                  onOpenLive={()=>{ goTab("sessions"); setSessionTab("live"); }}/>
+                  onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}/>
               )
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}

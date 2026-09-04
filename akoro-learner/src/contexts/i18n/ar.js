@@ -623,7 +623,7 @@ export const AR = {
   'dhub.card_guide':         'دليل التعليم',
   'dhub.card_guide_desc':    'تعلم مع وكلاء معلمين مدرَّبين',
   'dhub.card_live':          'حصص مباشرة',
-  'dhub.card_live_desc':     'انضم إلى حصص مجدولة',
+  'dhub.card_live_desc':    'حصص يدرّسها معلم مباشرة',
 
   /* ── لوحة «إضافة سجل» (لوحة التعليم العالي) ── */
   'records.title':           'إضافة سجل',

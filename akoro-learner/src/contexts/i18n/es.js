@@ -630,7 +630,7 @@ export const ES = {
   'dhub.card_guide':         'Guía de enseñanza',
   'dhub.card_guide_desc':    'Aprende con agentes profesores entrenados',
   'dhub.card_live':          'Clases en directo',
-  'dhub.card_live_desc':     'Únete a sesiones programadas',
+  'dhub.card_live_desc':    'Clases impartidas en directo, en tiempo real',
 
   /* ── Hoja "Añadir registro" (dashboard de educación superior) ── */
   'records.title':           'Añadir un registro',

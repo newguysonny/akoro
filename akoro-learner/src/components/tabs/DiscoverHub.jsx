@@ -4,9 +4,10 @@
  * Higher-ed learners' Discover landing: a search box plus a grid of
  * discovery-type cards. The hub is a router, not a feed — only the
  * Courses card opens the course catalogue (DiscoveryTab); every other
- * type either jumps to its own area of the app (Live classes → the
- * Learn tab's live view) or answers "coming soon" until its backend
- * ships (Notes/Materials, Pharm D, Teaching guide).
+ * type — Notes/Materials, Pharm D, Teaching guide AND Live classes —
+ * answers "coming soon" until its own destination ships. (The hub's
+ * Live classes is its own product, deliberately NOT the Learn tab's
+ * live sessions view, which is a different thing.)
  *
  * Gated by isHigherEdUI() in LearnerDashboard — school learners keep
  * the current DiscoveryTab feed directly.
@@ -42,13 +43,13 @@ const TYPES = (t) => ([
     kw: 'teaching guide teacher agents tutors trained',
   },
   {
-    key: 'live', icon: '📡', accent: RED, soon: false,
+    key: 'live', icon: '📡', accent: RED, soon: true,
     label: t('dhub.card_live'), desc: t('dhub.card_live_desc'),
-    kw: 'live classes sessions schedule today week',
+    kw: 'live classes real time tutors stream broadcast',
   },
 ]);
 
-export default function DiscoverHub({ onOpenCourses, onOpenLive }) {
+export default function DiscoverHub({ onOpenCourses }) {
   const { t } = useLang();
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState(null);
@@ -60,7 +61,6 @@ export default function DiscoverHub({ onOpenCourses, onOpenLive }) {
 
   const activate = (ty) => {
     if (ty.key === 'courses') onOpenCourses?.(query.trim());
-    else if (ty.key === 'live') onOpenLive?.();
     else setToast({ msg: `${ty.label} — ${t('dhub.coming_soon')}`, color: GOLD });
   };
 
@@ -122,7 +122,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenLive }) {
                 <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '3px 0 0', lineHeight: 1.4 }}>{ty.desc}</p>
               </div>
               <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 900, color: ty.primary ? BRAND : 'var(--ak-text-muted)' }}>
-                {ty.primary ? t('dhub.cta_browse') : ty.soon ? t('dhub.cta_soon') : t('dhub.cta_open')}
+                {ty.primary ? t('dhub.cta_browse') : t('dhub.cta_soon')}
                 <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </div>
             </div>

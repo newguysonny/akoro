@@ -624,7 +624,7 @@ export const HA = {
   'dhub.card_guide':         'Jagoran koyarwa',
   'dhub.card_guide_desc':    'Koya da manyan malaman AI masu horo',
   'dhub.card_live':          'Darussan kai tsaye',
-  'dhub.card_live_desc':     'Shiga zaman da aka shirya',
+  'dhub.card_live_desc':    'Darussa da ake koyarwa kai tsaye',
 
   /* ── Fanelen "Ƙara rikodin" (dashboard na manyan makarantu) ── */
   'records.title':           'Ƙara rikodi',

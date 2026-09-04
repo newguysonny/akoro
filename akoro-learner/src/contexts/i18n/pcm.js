@@ -642,7 +642,7 @@ export const PCM = {
   'dhub.card_guide':         'Teaching guide',
   'dhub.card_guide_desc':    'Learn with trained teacher agents',
   'dhub.card_live':          'Live classes',
-  'dhub.card_live_desc':     'Join scheduled live sessions',
+  'dhub.card_live_desc':    'Live class wey teacher dey teach am live',
 
   /* ── "Add record" sheet (higher-ed dashboard) ── */
   'records.title':           'Add a record',

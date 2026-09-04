@@ -643,7 +643,7 @@ export const YO = {
   'dhub.card_guide':         'Ìtọ́sọ́nà ìkọ́ni',
   'dhub.card_guide_desc':    'Kọ́ ẹ̀kọ́ pẹ̀lú àwọn aṣojú olùkọ́ tí a kọ́',
   'dhub.card_live':          'Àwọn kíláàsì aláìlopọ̀',
-  'dhub.card_live_desc':     'Darapọ̀ mọ́ àwọn ìpàdé tí a ṣètò',
+  'dhub.card_live_desc':    'Àwọn kíláàsì tí olùkọ́ ń kọ́ ní fífrí',
 
   /* ── Àpò "Fi àkọsílẹ̀ kún un" (dáìbọ́tì ilé-ẹ̀kọ́ gíga) ── */
   'records.title':           'Fi àkọsílẹ̀ kún un',
