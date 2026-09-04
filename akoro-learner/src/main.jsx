@@ -4,6 +4,10 @@ import { io } from 'socket.io-client';
 import App from './App.jsx';
 import { API, initOfflineSync } from './services/api.js';
 import { isChunkError, recoverFromStaleChunk } from './utils/chunkRetry.js';
+// Tabler icons webfont — the app's `<i class="ti ti-*">` glyphs were written
+// against this set but the font was never loaded, so every icon rendered
+// invisible. Bundled locally (woff2), no runtime CDN.
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
 
 // Global net for stale-chunk failures after a deploy — covers dynamic imports

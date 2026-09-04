@@ -80,3 +80,7 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Alias: settings subject-map uses "ti-clock-history", which Tabler renamed
+   to "history" — point it at the same glyph so the row isn't blank. */
+.ti-clock-history:before { content: "\ebea"; }
