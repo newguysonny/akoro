@@ -643,6 +643,11 @@ export const IG = {
   'dhub.card_guide_desc':    'Mụọ na ndị nnọchite onye nkuzi a zụrụ',
   'dhub.card_live':          'Okwu ndi obibi',
   'dhub.card_live_desc':    'Okwu ndi na-akụzi nke oge adịghị anya',
+  'now.resume':              'Gaa n’ihu ọmụmụ',
+  'now.dismiss':             'ZoO',
+  'records.mark_done':       'Me ka ọ dị nnọ',
+  'records.done_label':      'Emechara',
+  'records.viewer_soon':     'Onlele ngwa ngwa na-abịa — njikọ na-emeghe na tab ọzọ.',
 
   /* ── Ukwen "Tinye ndekọ" (dashbọọdụ mahadum/kọleji) ── */
   'records.title':           'Tinye ndekọ',

@@ -624,6 +624,11 @@ export const AR = {
   'dhub.card_guide_desc':    'تعلم مع وكلاء معلمين مدرَّبين',
   'dhub.card_live':          'حصص مباشرة',
   'dhub.card_live_desc':    'حصص يدرّسها معلم مباشرة',
+  'now.resume':              'متابعة الدراسة',
+  'now.dismiss':             'إخفاء',
+  'records.mark_done':       'وضع علامة تم',
+  'records.done_label':      'تم',
+  'records.viewer_soon':     'عارض داخل التطبيق قريبًا — الروابط تُفتح في تبويب جديد.',
 
   /* ── لوحة «إضافة سجل» (لوحة التعليم العالي) ── */
   'records.title':           'إضافة سجل',

@@ -625,6 +625,11 @@ export const HA = {
   'dhub.card_guide_desc':    'Koya da manyan malaman AI masu horo',
   'dhub.card_live':          'Darussan kai tsaye',
   'dhub.card_live_desc':    'Darussa da ake koyarwa kai tsaye',
+  'now.resume':              'Ci gaba da karatu',
+  'now.dismiss':             'Boyewa',
+  'records.mark_done':       'Alama an kammala',
+  'records.done_label':      'An kammala',
+  'records.viewer_soon':     'Mai dubawa nan ba da jimila — hanyoyin haɗi suna buɗewa a wani shafi.',
 
   /* ── Fanelen "Ƙara rikodin" (dashboard na manyan makarantu) ── */
   'records.title':           'Ƙara rikodi',

@@ -644,6 +644,11 @@ export const YO = {
   'dhub.card_guide_desc':    'Kọ́ ẹ̀kọ́ pẹ̀lú àwọn aṣojú olùkọ́ tí a kọ́',
   'dhub.card_live':          'Àwọn kíláàsì aláìlopọ̀',
   'dhub.card_live_desc':    'Àwọn kíláàsì tí olùkọ́ ń kọ́ ní fífrí',
+  'now.resume':              'Tún bẹ̀rẹ̀ ẹ̀kọ́',
+  'now.dismiss':             'Fi pamọ́',
+  'records.mark_done':       'Àmì pé ní',
+  'records.done_label':      'Tí pé',
+  'records.viewer_soon':     'Àwòrí-iwò Díẹ̀ ṣíṣẹ́ ń bọ̀ — àwọn ìjápọ̀ ń ṣí nínú ìkìlọ̀ mìírán.',
 
   /* ── Àpò "Fi àkọsílẹ̀ kún un" (dáìbọ́tì ilé-ẹ̀kọ́ gíga) ── */
   'records.title':           'Fi àkọsílẹ̀ kún un',

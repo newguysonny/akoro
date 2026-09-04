@@ -571,6 +571,11 @@ export const FR = {
   'dhub.card_guide_desc':    'Apprenez avec des agents professeurs entraînés',
   'dhub.card_live':          'Cours en direct',
   'dhub.card_live_desc':    'Cours dispensés en direct, en temps réel',
+  'now.resume':              'Reprendre l’étude',
+  'now.dismiss':             'Masquer',
+  'records.mark_done':       'Marquer comme terminé',
+  'records.done_label':      'Terminé',
+  'records.viewer_soon':     'Visionneuse intégrée bientôt disponible — les liens s’ouvrent dans un onglet.',
 
   /* ── Feuille « Ajouter une fiche » (tableau de bord du supérieur) ── */
   'records.title':           'Ajouter une fiche',

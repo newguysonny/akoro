@@ -667,6 +667,11 @@ export const EN = {
   'dhub.card_guide_desc':    'Learn with trained teacher agents',
   'dhub.card_live':          'Live classes',
   'dhub.card_live_desc':    'Live-taught classes, in real time',
+  'now.resume':              'Resume studying',
+  'now.dismiss':             'Dismiss',
+  'records.mark_done':       'Mark done',
+  'records.done_label':      'Done',
+  'records.viewer_soon':     'In-app viewer coming soon — links open in a new tab.',
 
   /* ── Add-a-record sheet (higher-ed dashboard) ── */
   'records.title':           'Add a record',

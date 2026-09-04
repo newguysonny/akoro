@@ -631,6 +631,11 @@ export const PT = {
   'dhub.card_guide_desc':    'Aprenda com agentes professores treinados',
   'dhub.card_live':          'Aulas ao vivo',
   'dhub.card_live_desc':    'Aulas ministradas ao vivo, em tempo real',
+  'now.resume':              'Retomar o estudo',
+  'now.dismiss':             'Dispensar',
+  'records.mark_done':       'Marcar como concluído',
+  'records.done_label':      'Concluído',
+  'records.viewer_soon':     'Visualizador integrado em breve — links abrem em outra aba.',
 
   /* ── Folha "Adicionar registro" (painel de ensino superior) ── */
   'records.title':           'Adicionar um registro',

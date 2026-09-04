@@ -643,6 +643,11 @@ export const PCM = {
   'dhub.card_guide_desc':    'Learn with trained teacher agents',
   'dhub.card_live':          'Live classes',
   'dhub.card_live_desc':    'Live class wey teacher dey teach am live',
+  'now.resume':              'Continue studying',
+  'now.dismiss':             'Hide am',
+  'records.mark_done':       'Mark am done',
+  'records.done_label':      'Done',
+  'records.viewer_soon':     'In-app viewer go soon land — links dey open for new tab.',
 
   /* ── "Add record" sheet (higher-ed dashboard) ── */
   'records.title':           'Add a record',

@@ -15,6 +15,7 @@ import { XIcon } from '../common/Icons.jsx';
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
 const GOLD  = '#F59E0B';
+const GREEN = '#10B981';
 
 const MAX_FILES      = 4;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB per file
@@ -35,7 +36,7 @@ const saveRecords = (uid, list) => {
 
 const KIND_ICON = { upload: '📎', link: '🔗', paste: '📋' };
 
-export default function AddRecordModal({ open, onClose, user }) {
+export default function AddRecordModal({ open, onClose, user, onOpenRecord, onToggleDone }) {
   const { t } = useLang();
   const [tab, setTab]           = useState('upload');
   const [records, setRecords]   = useState([]);
@@ -144,20 +145,28 @@ export default function AddRecordModal({ open, onClose, user }) {
           <p style={{ fontSize:12, fontWeight:900, color:'var(--ak-text)', margin:'0 0 8px' }}>{t('records.mine')}{records.length > 0 && <span style={{ color:BRAND }}> · {records.length}</span>}</p>
           {records.length === 0 ? (
             <p style={{ fontSize:12, color:'var(--ak-text-muted)', textAlign:'center', padding:'14px 0 4px' }}>{t('records.empty')}</p>
-          ) : records.map(r => (
-            <div key={r.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 10px', borderRadius:11, background:'var(--ak-surface-hover)', border:'1px solid var(--ak-border)', marginBottom:6 }}>
+          ) : records.map(r => {
+            const done = (r.progress || 0) >= 100;
+            return (
+            <div key={r.id} onClick={() => onOpenRecord?.(r)}
+              style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 10px', borderRadius:11, background:'var(--ak-surface-hover)', border:'1px solid var(--ak-border)', marginBottom:6, cursor:onOpenRecord?'pointer':'default' }}>
               <span style={{ fontSize:15, flexShrink:0 }}>{KIND_ICON[r.kind] || '📄'}</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontSize:12.5, fontWeight:800, color:'var(--ak-text)', margin:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.name}</p>
+                <p style={{ fontSize:12.5, fontWeight:800, color:done?'var(--ak-text-muted)':'var(--ak-text)', margin:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', textDecoration:done?'line-through':'none' }}>{r.name}</p>
                 <p style={{ fontSize:10, color:'var(--ak-text-muted)', margin:'1px 0 0' }}>
-                  {r.size ? `${(r.size/1024).toFixed(0)} KB · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
+                  {done ? `✓ ${t('records.done_label')} · ` : ''}{r.size ? `${(r.size/1024).toFixed(0)} KB · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
                 </p>
               </div>
-              <button onClick={() => removeRecord(r.id)} aria-label={t('records.remove')} style={{ background:'none', border:'none', cursor:'pointer', padding:4, flexShrink:0, opacity:.55 }}>
+              <button onClick={(e) => { e.stopPropagation(); onToggleDone?.(r); }} title={t('records.mark_done')} aria-label={t('records.mark_done')}
+                style={{ width:24, height:24, borderRadius:'50%', flexShrink:0, border:done?'none':'1.5px solid var(--ak-border2)', background:done?GREEN:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {done && <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); removeRecord(r.id); }} aria-label={t('records.remove')} style={{ background:'none', border:'none', cursor:'pointer', padding:4, flexShrink:0, opacity:.55 }}>
                 <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={RED} strokeWidth="2.4" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </>

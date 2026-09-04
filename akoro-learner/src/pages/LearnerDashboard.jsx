@@ -28,6 +28,8 @@ import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon } from '../components/common/Icons.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
+import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
+import { useNowStudying } from '../utils/nowStudying.js';
 import { isHigherEdUI } from '../utils/studyLevel.js';
 import React from 'react';
 
@@ -125,6 +127,88 @@ export default function LearnerDashboard() {
     } catch { setRecordCount(0); }
   }, [userProfile?.id]);
   useEffect(() => { if (higherEd) refreshRecordCount(); }, [higherEd, refreshRecordCount]);
+
+  // ── Now studying — Spotify-style mini-bar ────────────────────────────────
+  // Tracks the material or session the learner last opened, across all tabs
+  // except the AI chat. Higher-ed gated like the records feature it leans on.
+  const [now, nowActs] = useNowStudying(userProfile?.id);
+
+  // Records live in localStorage; these helpers read/update one record's
+  // progress without a full state mirror (the modal re-reads on open).
+  const loadRecordsLocal = useCallback(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(`akoro_records_${userProfile?.id || 'me'}`) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch { return []; }
+  }, [userProfile?.id]);
+  const setRecordProgress = useCallback((id, progress) => {
+    const list = loadRecordsLocal().map(r => r.id === id
+      ? { ...r, progress: Math.max(0, Math.min(100, progress)), last_opened_at: new Date().toISOString() }
+      : r);
+    try { localStorage.setItem(`akoro_records_${userProfile?.id || 'me'}`, JSON.stringify(list)); } catch { /* private mode */ }
+  }, [loadRecordsLocal, userProfile?.id]);
+
+  // Opening a session tracks it as "now studying" — the bar then follows the
+  // learner across tabs until they dismiss it or open something else.
+  const openSessionTracked = useCallback((s) => {
+    if (!s) return;
+    setSelectedSession(s);
+    nowActs.setCurrent({
+      type: 'session',
+      id: s.id,
+      title: s.title || 'Study session',
+      sub: (SUBJECTS[s.subject]?.label) || s.topic || 'Session',
+      emoji: (SUBJECTS[s.subject]?.icon) || '📚',
+      progress: s.progress || 0,
+      snapshot: s,
+    });
+  }, [nowActs]);
+
+  // Opening a record tracks it too; links open in a new tab right away — the
+  // in-app viewer for uploads/pastes is future work, so say so instead of
+  // pretending the file opened.
+  const openRecordTracked = useCallback((r) => {
+    if (!r) return;
+    const kindLabel = r.kind === 'link' ? t('records.tab_link') : r.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload');
+    nowActs.setCurrent({
+      type: 'record',
+      id: r.id,
+      title: r.name,
+      sub: kindLabel,
+      emoji: r.kind === 'link' ? '🔗' : r.kind === 'paste' ? '📋' : '📎',
+      progress: r.progress || 0,
+    });
+    if (!r.progress) { setRecordProgress(r.id, 10); nowActs.setProgress(r.id, 10); }
+    if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
+    else setToast({ msg: t('records.viewer_soon'), color: GOLD });
+    setRecordsOpen(false);
+  }, [nowActs, setRecordProgress, t]);
+
+  // Self-reported completion for records (there's no playback to measure).
+  const toggleRecordDone = useCallback((r) => {
+    const p = (r.progress || 0) >= 100 ? 10 : 100;
+    setRecordProgress(r.id, p);
+    if (now.item?.id === r.id) nowActs.setProgress(r.id, p);
+  }, [now.item, nowActs, setRecordProgress]);
+
+  // Bar visibility: every tab except the AI chat, and never under a
+  // full-screen sheet that has its own layout.
+  const showNowBar = higherEd && !!now.item && !now.dismissed
+    && tab !== "agent" && !selectedSession && !selectedChallenge
+    && !teachSession && !configOpen && !recordsOpen;
+
+  // Bar ▶ — resume. Sessions reopen (live copy preferred, snapshot fallback);
+  // records re-run the record open flow.
+  const openNowItem = () => {
+    if (!now.item) return;
+    if (now.item.type === 'session') {
+      const live = [...agentSessions, ...sessions].find(x => x.id === now.item.id);
+      openSessionTracked(live || now.item.snapshot || { id: now.item.id, title: now.item.title, progress: now.item.progress || 0 });
+    } else {
+      const r = loadRecordsLocal().find(x => x.id === now.item.id);
+      if (r) openRecordTracked(r);
+    }
+  };
 
   useEffect(()=>{
     let alive = true;
@@ -534,7 +618,7 @@ export default function LearnerDashboard() {
         </div>
 
         {/* SCROLLABLE CONTENT */}
-        <div style={{ flex:1,overflowY:"auto",paddingBottom:72 }}>
+        <div style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
           <div style={{ padding:"10px 12px 0" }}><InstallBanner/></div>
           <TeacherNudge/>
           {tab==="sessions"&&(
@@ -612,7 +696,7 @@ export default function LearnerDashboard() {
                   </div>
                   :filtered.map(s=>(
                     <SessionCard key={s.id} session={s}
-                      onTap={setSelectedSession}
+                      onTap={openSessionTracked}
                       decayAlert={decayBySession[s.id]||null}
                       agentProfile={agentProfile}/>
                   ))
@@ -678,7 +762,7 @@ export default function LearnerDashboard() {
                       </div>
                       :agentSessionsFiltered.map(s=>(
                         <SessionCard key={s.id} session={s}
-                          onTap={setSelectedSession}
+                          onTap={openSessionTracked}
                           decayAlert={decayBySession[s.id]||null}
                           agentProfile={agentProfile}/>
                       ))
@@ -705,7 +789,7 @@ export default function LearnerDashboard() {
                       </div>
                       :decayAsSessions.map(s=>(
                         <SessionCard key={s.id} session={s}
-                          onTap={setSelectedSession}
+                          onTap={openSessionTracked}
                           decayAlert={decayBySession[s.id]||decayAlerts.find(a=>a.id===s.decayAlertId)||null}
                           agentProfile={agentProfile}/>
                       ))
@@ -755,6 +839,15 @@ export default function LearnerDashboard() {
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}
         </div>
 
+        {/* Now studying — Spotify-style mini-bar (higher-ed, all tabs but chat) */}
+        {showNowBar && (
+          <NowStudyingBar
+            item={now.item}
+            onOpen={openNowItem}
+            onAdd={()=>{ setRecordsOpen(true); refreshRecordCount(); }}
+            onDismiss={nowActs.dismiss}/>
+        )}
+
         {/* BOTTOM NAV */}
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
           {NAV_ITEMS.map(({key,icon,label})=>{
@@ -774,9 +867,10 @@ export default function LearnerDashboard() {
           })}
         </div>
 
-        {/* FAB — now opens ConfigModal first */}
+        {/* FAB — now opens ConfigModal first. Sits above the now-studying bar
+            when the bar is up (bar is ~56px over the nav). */}
         {!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
-          <div onClick={()=>setConfigOpen(true)} style={{ position:"fixed",bottom:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
+          <div onClick={()=>setConfigOpen(true)} style={{ position:"fixed",bottom:showNowBar?150:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
             <MicIcon size={15} color="#fff"/>
             <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>{t('dash.start_session')}</span>
           </div>
@@ -785,7 +879,7 @@ export default function LearnerDashboard() {
         {/* + FAB — add a record (upload / link / paste). Higher-ed learners only:
             sixth form, university, college, other. Sits just above Start Session. */}
         {higherEd&&!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&!recordsOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
-          <div onClick={()=>{setRecordsOpen(true);refreshRecordCount();}} title={t('records.title')} aria-label={t('records.title')} style={{ position:"fixed",bottom:126,right:18,zIndex:900,width:40,height:40,borderRadius:"50%",background:"var(--ak-surface)",border:`1.5px solid ${BRAND}66`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`0 3px 14px ${BRAND}33`,transition:"transform .15s" }}>
+          <div onClick={()=>{setRecordsOpen(true);refreshRecordCount();}} title={t('records.title')} aria-label={t('records.title')} style={{ position:"fixed",bottom:showNowBar?198:126,right:18,zIndex:900,width:40,height:40,borderRadius:"50%",background:"var(--ak-surface)",border:`1.5px solid ${BRAND}66`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`0 3px 14px ${BRAND}33`,transition:"transform .15s" }}>
             <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             {recordCount>0&&<div style={{ position:"absolute",top:-4,right:-4,minWidth:16,height:16,borderRadius:9,background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",border:"1.5px solid var(--ak-surface)" }}><span style={{ fontSize:8.5,fontWeight:900,color:"#fff" }}>{recordCount}</span></div>}
           </div>
@@ -812,6 +906,8 @@ export default function LearnerDashboard() {
           open={recordsOpen}
           onClose={() => { setRecordsOpen(false); refreshRecordCount(); }}
           user={userProfile}
+          onOpenRecord={openRecordTracked}
+          onToggleDone={toggleRecordDone}
         />
 
         {/* TeachAgentModal — now receives config OR session */}
@@ -857,7 +953,13 @@ export default function LearnerDashboard() {
           session={selectedSession}
           decayAlert={decayBySession[selectedSession.id] || (selectedSession.decayAlertId && decayAlerts.find(a=>a.id===selectedSession.decayAlertId)) || null}
           agentProfile={agentProfile}
-          onClose={()=>setSelectedSession(null)}
+          onClose={()=>{
+            // Hand any progress the session earned back to the now-studying
+            // bar — the live list holds the freshest progress value.
+            const live = [...agentSessions, ...sessions].find(x => x.id === selectedSession.id);
+            if (live) nowActs.setProgress(live.id, live.progress || 0);
+            setSelectedSession(null);
+          }}
           onAssess={s => { setSelectedSession(null); setAssessSession(s); }}
           onStartTeach={s=>{
             setSelectedSession(null);
