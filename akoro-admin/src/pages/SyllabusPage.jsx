@@ -5,6 +5,7 @@ import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
 import SyllabusEditor from './syllabus/SyllabusEditor.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const EXAMS = ['WASSCE', 'JAMB', 'NECO', 'GCE', 'Other'];
 
@@ -134,7 +135,7 @@ export default function SyllabusPage() {
   };
 
   const remove = async (slug, name) => {
-    if (!window.confirm(`Delete the “${name}” syllabus? This removes its topics and embeddings.`)) return;
+    if (!await confirmDialog(`Delete the “${name}” syllabus? This removes its topics and embeddings.`)) return;
     try { await apiDelete(`/api/adaptive/syllabus/${slug}`); setSubjects((s) => s.filter((x) => x.slug !== slug)); show('Deleted'); }
     catch (e) { show(e.message || 'Delete failed', 'error'); }
   };

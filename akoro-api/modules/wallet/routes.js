@@ -11,6 +11,7 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import db from "../../db.js";
+import { serverError } from "../../lib/httpError.js";
 import { authenticateToken } from "../auth/routes.js";
 import {
   ensureAccount, getBalance, payerAccountsForUser, creditTopup,
@@ -21,6 +22,7 @@ import {
   coinsToKobo, nairaToCoins, coinsToUsd, coinsForUsage,
 } from "../../lib/aiPricing.js";
 import { initializeTransaction } from "../adaptive-learning/marketplace/paystackService.js";
+import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
 
 const router = Router();
 const SCHOOL_ROLES = ["school", "school_admin", "admin"];
@@ -59,21 +61,29 @@ router.get("/", authenticateToken, async (req, res) => {
       }
     }
     const primary = accounts[0];
+    // Activity must cover EVERY wallet this user can see, not just their own.
+    // accounts[0] is always the personal account, so a school admin — whose
+    // page shows the SCHOOL balance — saw personal transactions only: a
+    // school-targeted top-up or voucher redemption updated the balance but
+    // never appeared in the list. Each row is tagged so the UI can label it.
+    const byId = Object.fromEntries(accounts.map((a) => [a.id, a.kind]));
     const { data: txns } = await db.from("coin_transactions")
-      .select("id, delta, balance_after, type, feature, model, tokens_in, tokens_out, ref, created_at")
-      .eq("account_id", primary.id).order("created_at", { ascending: false }).limit(25);
+      .select("id, account_id, delta, balance_after, type, feature, model, tokens_in, tokens_out, ref, created_at")
+      .in("account_id", accounts.map((a) => a.id))
+      .order("created_at", { ascending: false }).limit(25);
+    const recent = (txns || []).map((t) => ({ ...t, accountKind: byId[t.account_id] || "user" }));
     res.json({
       success: true,
       data: {
         balance: primary.balance,
         accounts: accounts.map((a) => ({ id: a.id, kind: a.kind, balance: a.balance })),
-        recent: txns || [],
+        recent,
         coinValueUsd: COIN_USD,
         lowBalanceThreshold: LOW_BALANCE,
         low: (accounts.reduce((s, a) => s + Number(a.balance || 0), 0)) < LOW_BALANCE,
       },
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── GET /api/wallet/transactions?account=&limit=&offset= ──────────────────────
@@ -91,7 +101,7 @@ router.get("/transactions", authenticateToken, async (req, res) => {
       .eq("account_id", accountId).order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
     res.json({ success: true, data: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── GET /api/wallet/pricing — coin economics + example costs ──────────────────
@@ -137,7 +147,46 @@ router.post("/topup/init", authenticateToken, async (req, res) => {
       callback_url: `${walletFrontend(req)}/wallet?ref=${reference}`,
     });
     res.json({ success: true, data: { authorization_url: init.authorization_url, reference, coins, amountNaira: kobo / 100 } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
+});
+
+// ── POST /api/wallet/redeem-voucher  { code } ─────────────────────────────────
+// Top up with a voucher code bought from an agent. The code is redeemed
+// server-side against the voucher API (the secret key never leaves the
+// backend); 1 voucher credit = 1 coin.
+router.post("/redeem-voucher", authenticateToken, async (req, res) => {
+  const code = String(req.body?.code || "").trim().toUpperCase();
+  if (!code) return res.status(400).json({ error: "Enter a voucher code" });
+  if (!voucherRedeemConfigured()) return res.status(503).json({ error: "Voucher redemption isn't configured on this server" });
+
+  // Same targeting rules as /topup/init. Without this a school admin
+  // redeeming from the school wallet page — where top-ups fund the SCHOOL —
+  // would silently credit their personal wallet instead.
+  const target = req.body?.target === "school" ? "school" : "user";
+  let ownerType = "user", ownerId = req.user.id;
+  if (target === "school") {
+    if (!SCHOOL_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Only school admins can top up the school wallet" });
+    const sid = await mySchoolId(req.user.id);
+    if (!sid) return res.status(404).json({ error: "No school found for this account" });
+    ownerType = "school"; ownerId = sid;
+  }
+
+  try {
+    const { credits, transactionId } = await redeemVoucher({ code, customerId: req.user.id });
+    if (credits < 1) return res.status(400).json({ error: "That voucher carries no credits" });
+
+    // Idempotent on the voucher's own transaction id, so a retried request
+    // (or a double-tap) can never credit the same voucher twice.
+    const { balance } = await creditTopup({
+      ownerType, ownerId, coins: credits,
+      ref: `voucher_${transactionId}`, by: req.user.id,
+    });
+    res.json({ success: true, data: { coins: credits, balance, target } });
+  } catch (e) {
+    if (e instanceof VoucherError) return res.status(e.status === 429 ? 429 : 400).json({ error: e.message, reason: e.reason });
+    console.error("[wallet/redeem-voucher]", e.message);
+    res.status(500).json({ error: "Could not redeem that code — please try again" });
+  }
 });
 
 // ── POST /api/wallet/allocate  { student_user_id, coins } (school admins) ─────
@@ -153,7 +202,7 @@ router.post("/allocate", authenticateToken, async (req, res) => {
     res.json({ success: true, data: { schoolBalance: r.schoolBalance, allocated: amount } });
   } catch (e) {
     if (e instanceof InsufficientCoins) return res.status(402).json({ error: "Insufficient school balance", code: "INSUFFICIENT_COINS", needed: e.needed, balance: e.balance });
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -164,7 +213,7 @@ router.get("/admin/overview", authenticateToken, async (req, res) => {
     const { data, error } = await db.rpc("coin_overview");
     if (error) throw new Error(error.message);
     res.json({ success: true, data: { ...data, coinValueUsd: COIN_USD } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── Admin: grant/adjust coins on any account  { owner_type, owner_id, coins } ──
@@ -185,7 +234,7 @@ router.post("/admin/grant", authenticateToken, async (req, res) => {
     const { data: bal } = await db.rpc("coin_debit", { p_account: acc.id, p_amount: -amount, p_type: "adjust", p_meta: meta });
     if (bal == null) return res.status(402).json({ error: "Account balance too low to deduct that amount" });
     res.json({ success: true, data: { balance: bal, adjusted: amount } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── Webhook fulfillment — credit a coin top-up (idempotent by reference) ──────

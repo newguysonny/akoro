@@ -19,7 +19,26 @@ export default function WalletPage() {
   const [coins, setCoins] = useState(2000);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherErr, setVoucherErr] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
+
+  const redeemVoucher = async (e) => {
+    e.preventDefault();
+    const code = voucherCode.trim();
+    if (!code) return setVoucherErr('Enter a voucher code');
+    setBusy(true); setVoucherErr('');
+    try {
+      const r = await apiPost('/api/wallet/redeem-voucher', { code });
+      const d = r?.data ?? r;
+      showToast(`Voucher redeemed — +${fmt(d.coins)} coins 🎉`);
+      setVoucherCode(''); setVoucherOpen(false);
+      refresh();
+    } catch (e2) {
+      setVoucherErr(e2?.message || 'Could not redeem that code');
+    } finally { setBusy(false); }
+  };
 
   useEffect(() => {
     apiGet('/api/wallet/pricing').then((r) => setPricing(r.data)).catch(() => {});
@@ -78,6 +97,30 @@ export default function WalletPage() {
               e.g. {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins}`).join(' · ')} coins
             </div>
           )}
+
+          {/* Voucher redemption — a code bought from an agent, offline */}
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--ak-border)' }}>
+            {!voucherOpen ? (
+              <button onClick={() => { setVoucherOpen(true); setVoucherErr(''); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px dashed var(--ak-border2)', background: 'transparent', cursor: 'pointer', fontFamily: "'Nunito',sans-serif", fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)' }}>
+                <span style={{ fontSize: 16 }}>🎟️</span> Top up with a voucher code
+              </button>
+            ) : (
+              <form onSubmit={redeemVoucher}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8 }}>🎟️ Redeem a voucher code</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} autoFocus
+                    placeholder="XXXX-XXXX-XXXX"
+                    style={{ ...inp, flex: 1, minWidth: 170, fontFamily: 'monospace', letterSpacing: 0.5 }} />
+                  <button type="submit" disabled={busy} style={primaryBtn}>{busy ? 'Redeeming…' : 'Redeem'}</button>
+                  <button type="button" onClick={() => { setVoucherOpen(false); setVoucherErr(''); }}
+                    style={{ padding: '10px 14px', borderRadius: 11, border: '1px solid var(--ak-border)', background: 'transparent', color: 'var(--ak-text-sub)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>Cancel</button>
+                </div>
+                {voucherErr && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{voucherErr}</div>}
+                <div style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', marginTop: 8 }}>Bought a code from an Akoro agent? Enter it here to add coins instantly.</div>
+              </form>
+            )}
+          </div>
         </div>
 
         {/* History */}

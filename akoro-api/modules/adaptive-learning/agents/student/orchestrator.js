@@ -135,6 +135,25 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     }
     this.session.mustKnowParts = mustKnow;
 
+    // Pick up where they left off.
+    //
+    // A continuation used to replay the old transcript and then start teaching
+    // from the first phase of the first subtopic, because nothing carried the
+    // position across. The learner saw their previous words greyed out above a
+    // lesson that had forgotten all of it — which is what "the previous data is
+    // not there" describes, even though the words were right there.
+    //
+    // Clamped to the ladder actually resolved for this session: a stored index
+    // of 4 against a three-step ladder would otherwise put them past the end.
+    if (this.resumeFrom) {
+      const idx = Number(this.resumeFrom.subtopicIdx);
+      if (Number.isInteger(idx) && idx > 0) {
+        this.session.mustKnowIndex = Math.min(idx, Math.max(0, mustKnow.length - 1));
+      }
+      const ph = String(this.resumeFrom.phase || "").toUpperCase();
+      if (/^PHASE_[1-4]$/.test(ph)) this.session.phase = ph;
+    }
+
     // Topic boundary
     const boundary = this.guideOrchestrator.control?.getTopicBoundary
       ? await this.guideOrchestrator.control.getTopicBoundary(topic)
@@ -221,22 +240,28 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
     const openingBlocks = [
       {
+        // The must-know parts ride ON the header now.
+        //
+        // They used to be rendered twice: once as the header's progress bar and
+        // again, in full, as a separate "Objectives" checklist directly beneath
+        // it. Same array, same order, same length — the checklist was the bar
+        // spelled out. The header can page through them instead.
         type:     "subtopic-hdr",
         subtopic: mustKnow[0] || topic,
+        items:    mustKnow,
+        // Parallel to items — same order, same length. Empty for a
+        // teacher-authored scheme of work, where the ordering is theirs and
+        // needs no explanation from us.
+        map:      this.session?.knowledgeMap || [],
         idx:      0,
         total:    mustKnow.length || 1,
         topic,
         subject:  this.subject || "",
       },
-      { type: "plan", phases: [
-        "Phase 1 → what do they know",
-        "Phase 2 → must-know parts",
-        "Phase 3 → teach it back",
-        "Phase 4 → push further",
-      ] },
-      ...(mustKnow.length
-        ? [{ type: "objectives", subtopic: mustKnow[0] || topic, items: mustKnow }]
-        : []),
+      // No "plan" block. The four phases are how the teaching agent steers the
+      // session, not something a learner needs to read — they were a table of
+      // contents for machinery. The PHASE_1 badge stays on the guide's own
+      // messages, which is where knowing the phase actually helps.
       {
         type:  "guide",
         agent: guideName,
@@ -277,38 +302,27 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const studentId = this.studentId;
     const state     = await getStudentState(agentId);
 
-    // 1. Control drift check + Student Agent reply IN PARALLEL
-    const [drift, studentReply] = await Promise.all([
-      this.guideOrchestrator.control?.checkForDrift
-        ? this.guideOrchestrator.control.checkForDrift(
-            [...history.slice(-4), { role: "human_teacher", content: humanMessage }],
-            topic
-          )
-        : Promise.resolve({ isDrifting: false, driftLevel: "none", statusMessage: "On topic." }),
-
+    // 1. The Student Agent replies.
+    //
+    // There used to be a second call beside this one: a separate agent checking
+    // for topic drift, whose verdict could discard the reply below before
+    // anyone saw it. It was wrong about it constantly — it read "Hello" as
+    // off-topic and told a learner to get back to work on their opening
+    // message — and being wrong was expensive twice over: the drift check was
+    // billed, the reply it threw away was billed, and a teaching turn was spent
+    // producing nothing but a red warning.
+    //
+    // Staying on topic is now NaNa's job, decided from context she already has,
+    // and expressed as a nudge inside a normal teaching turn. See her prompt.
+    const studentReply = await (
       this.studentAgent.reply(
         humanMessage, topic,
         state.cognitive,
         history,
         STUDENT_PHASES[phase],
         onStudentChunk || null
-      ),
-    ]);
-
-    // Hard drift — redirect
-    if (drift.isDrifting) {
-      const redirectMsg = this.guideOrchestrator.control?.generateRedirectMessage
-        ? this.guideOrchestrator.control.generateRedirectMessage(drift, topic)
-        : `⚠️ Let's stay focused on ${topic}.`;
-      return {
-        type:                 "drift_warning",
-        sargeantMessage:      redirectMsg,
-        studentAgentResponse: null,
-        guideMessage:         null,
-        adaptiveEngine:       null,
-        driftInfo:            drift,
-      };
-    }
+      )
+    );
 
     // 2. Analyze understanding
     const analysis = await this.studentAgent.analyzeUnderstanding(studentReply, topic, history);
@@ -377,12 +391,15 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       lastAction: guideResult.nextAction,
     });
 
-    // 9. Control status line
+    // 9. Status line
+    //
+    // Nothing is announced for staying on topic — a learner who is doing fine
+    // does not need to be told so by a second voice, and "✅ On topic." on every
+    // turn was noise that made the red warning harder to notice when it did
+    // matter. Wandering is now handled inside NaNa's tip instead.
     const guideName   = this.guideOrchestrator.guide?.name   || "Guide";
     const controlName = this.guideOrchestrator.control?.name || "Control";
-    const controlStatusLine =
-      drift.driftLevel === "edge" ? `⚠️ ${drift.edgeNote || "Edge expansion."}` :
-      drift.driftLevel === "none" ? `✅ ${drift.statusMessage || "On topic."}` : null;
+    const controlStatusLine = null;
 
     // 10. History
     history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
@@ -424,7 +441,9 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       subtopicIdx:        this.session.mustKnowIndex,
       totalSubtopics:     (mustKnowParts || []).length || 1,
       subtopicObjectives: subtopicAdvanced ? (mustKnowParts || []) : [],
-      driftInfo:       drift,
+      // Kept in the payload so anything reading it still finds the shape it
+      // expects; the judgement now lives in guideResult.offTopic.
+      driftInfo:       { isDrifting: !!guideResult?.offTopic, driftLevel: guideResult?.offTopic ? "edge" : "none" },
       agentPairId:     "student-session",
       sessionType:     this.sessionType,
       turnXP,

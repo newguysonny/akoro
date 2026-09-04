@@ -12,6 +12,8 @@
  * them against the school's data (mgmt.*), and it answers from the results.
  */
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
+import { ipKeyGenerator } from "express-rate-limit";
 import db from "../../db.js";
 import { openai, OPENAI_MODEL, llmComplete } from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -141,12 +143,34 @@ async function runTool(name, args, ctx) {
 }
 
 // ── Chat loop (function-calling) ──────────────────────────────────────────────
+// The public site's assistant introduces itself with the school's OWN agent
+// name — the one chosen at onboarding (public.user_agents for the school-admin
+// account), so the website and the in-app assistant are the same character.
+// An explicit override on the website settings wins if one is set.
+async function resolveAiName(school) {
+  try {
+    const { data: site } = await db.schema("edu").from("school_website")
+      .select("ai_chat_name").eq("school_id", school.id).maybeSingle();
+    if (site?.ai_chat_name?.trim()) return site.ai_chat_name.trim();
+
+    const { data: sp } = await db.from("school_profiles")
+      .select("admin_user_id").eq("id", school.id).maybeSingle();
+    if (sp?.admin_user_id) {
+      const { data: agent } = await db.from("user_agents")
+        .select("agent_name").eq("user_id", sp.admin_user_id).maybeSingle();
+      if (agent?.agent_name?.trim()) return agent.agent_name.trim();
+    }
+  } catch { /* fall through to the neutral default */ }
+  return "Akoro";
+}
+
 async function conciergeChat({ role, school, user, message, history }) {
   const tools = role === "guest" ? GUEST_TOOLS : role === "parent" ? PARENT_TOOLS : [];
+  const aiName = await resolveAiName(school);
   const persona = {
-    guest: `You are the admissions assistant for ${school.name}. Warmly help prospective families: answer questions about the school, programmes, tuition and admissions using get_school_info, offer to book a campus tour, and capture their contact details for follow-up. Be encouraging and concise; never invent fees or policies you can't confirm — offer to have the school follow up instead.`,
-    parent: `You are the parent assistant for ${school.name}, helping ${user?.full_name || "a parent"}. Use the tools to answer about THEIR children only — progress, fees, school calendar, and teaching materials/resources for their child's subjects. When sharing materials, list them clearly with any links. Be warm, clear and reassuring. For fee payments, give the payment link.`,
-  }[role] || `You are the assistant for ${school.name}.`;
+    guest: `You are ${aiName}, the admissions assistant for ${school.name}. Introduce yourself by name when you first greet someone. Warmly help prospective families: answer questions about the school, programmes, tuition and admissions using get_school_info, offer to book a campus tour, and capture their contact details for follow-up. Be encouraging and concise; never invent fees or policies you can't confirm — offer to have the school follow up instead.`,
+    parent: `You are ${aiName}, the parent assistant for ${school.name}, helping ${user?.full_name || "a parent"}. Use the tools to answer about THEIR children only — progress, fees, school calendar, and teaching materials/resources for their child's subjects. When sharing materials, list them clearly with any links. Be warm, clear and reassuring. For fee payments, give the payment link.`,
+  }[role] || `You are ${aiName}, the assistant for ${school.name}.`;
 
   const messages = [{ role: "system", content: persona }, ...(history || []).slice(-8), { role: "user", content: message }];
   const toolExecutions = [];
@@ -167,13 +191,25 @@ async function conciergeChat({ role, school, user, message, history }) {
 }
 
 // ── PUBLIC guest endpoint (admissions counselor) ──────────────────────────────
-router.post("/site/guest-chat", async (req, res) => {
+// Unauthenticated and backed by an LLM, so it is the one endpoint on this
+// router that anyone on the internet can spend our money on. Tighter than the
+// router-wide limit, keyed by IP since there is no user.
+const guestChatLimit = rateLimit({
+  windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  message: { success: false, error: "Too many messages — please wait a moment." },
+});
+
+router.post("/site/guest-chat", guestChatLimit, async (req, res) => {
   try {
     const { host, message, history } = req.body || {};
     if (!message?.trim()) return res.status(400).json({ error: "message required" });
+    // Cap what an anonymous caller can push into a prompt.
+    const text = String(message).trim().slice(0, 2000);
+    const past = Array.isArray(history) ? history.slice(-8) : [];
     const school = await resolveSchoolByHost(host);
     if (!school) return res.status(404).json({ error: "This website isn't connected to a school yet." });
-    const out = await conciergeChat({ role: "guest", school, user: null, message: message.trim(), history });
+    const out = await conciergeChat({ role: "guest", school, user: null, message: text, history: past });
     res.json({ success: true, ...out });
   } catch (e) { console.error("[guest-chat]", e); res.status(500).json({ error: "Something went wrong." }); }
 });
@@ -250,7 +286,10 @@ router.get("/ai/context", authenticateToken, async (req, res) => {
     if (!school) return res.json({ success: true, role: null });
     const { data: user } = await db.from("users").select("id, email, full_name").eq("id", req.user.id).maybeSingle();
     const role = await roleInSchool(user, school);
-    res.json({ success: true, role, schoolName: school.name });
+    // The chat UI greets and labels itself with the school's own agent name,
+    // so it must come from the same resolver the personas use.
+    const aiName = await resolveAiName(school);
+    res.json({ success: true, role, schoolName: school.name, aiName });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

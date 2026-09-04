@@ -17,6 +17,7 @@
  */
 
 import { Router }          from "express";
+import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import db                    from "../../db.js";
 import { NaNaEsumai }        from "./agents/nana-esumai/guide.js";
 import { authenticateToken } from "../auth/routes.js";
@@ -45,7 +46,7 @@ router.post("/configure", authenticateToken, async (req, res) => {
     if (!topic?.trim() || !subject?.trim())
       return res.status(400).json({ error: "topic and subject are required" });
 
-    const subtopics = await nana.generateSubtopics(topic, subject);
+    const { subtopics } = await nana.generateSubtopics(topic, subject);
 
     const objectivesArr = await Promise.all(
       subtopics.map(st => nana.generateObjectives(st, topic, subject))
@@ -128,7 +129,7 @@ router.get("/sessions", authenticateToken, async (req, res) => {
         title:          s.topic,
         topic:          s.topic,
         subject:        SUBJECTS[s.subject?.toLowerCase()] || s.subject || "science",
-        avatar:         `https://i.pravatar.cc/150?img=${(i % 30) + 10}`,
+        avatar:         null,
         tutor:          "AI Agent",
         level:          "Adaptive",
         startsAt:       completedAt,
@@ -177,11 +178,11 @@ router.get("/sessions/diagnose", authenticateToken, async (req, res) => {
     .eq("student_id", studentId)
     .order("updated_at", { ascending: false })
     .limit(50);
-  out.readError  = mineErr?.message || null;
-  out.rowsForMe  = mine?.length || 0;
-  out.byStatus   = (mine || []).reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {});
-  out.listed     = (mine || []).filter(r => ["active", "complete"].includes(r.status)).length;
-  out.newest     = mine?.[0] || null;
+  out.readError = mineErr?.message || null;
+  out.rowsForMe = mine?.length || 0;
+  out.byStatus  = (mine || []).reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {});
+  out.listed    = (mine || []).filter(r => ["active", "complete"].includes(r.status)).length;
+  out.newest    = mine?.[0] || null;
 
   // Can we write at all? This is the exact failure that kept the table empty.
   const { data: probe, error: writeErr } = await db.schema("edu")
@@ -220,8 +221,8 @@ router.get("/sessions/:sessionId/history", authenticateToken, async (req, res) =
       ];
     }
 
-    const subtopics  = JSON.parse(session.subtopics  || "[]");
-    const objectives = JSON.parse(session.objectives || "{}");
+    const subtopics  = jsonbArray(session.subtopics);
+    const objectives = jsonbObject(session.objectives);
 
     res.json({
       success:       true,
@@ -233,6 +234,15 @@ router.get("/sessions/:sessionId/history", authenticateToken, async (req, res) =
       daysSince,
       status:        session.status,
       hasHistory:    historyBlocks.length > 0,
+      // Where they actually got to. Without these a continuation replays the
+      // transcript and then restarts the teaching from the first phase of the
+      // first subtopic, which is the whole of "the previous data is not there"
+      // — the words came back, the progress did not.
+      resumeAt: {
+        subtopicIdx: Number(session.current_subtopic_idx) || 0,
+        phase:       `PHASE_${String(session.current_phase || "1").replace(/^PHASE_/, "")}`,
+        subtopic:    subtopics[Number(session.current_subtopic_idx) || 0] || null,
+      },
     });
 
   } catch (err) {

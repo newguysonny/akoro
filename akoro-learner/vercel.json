@@ -1,27 +1,48 @@
 {
   "buildCommand": "bash scripts/build-with-chat.sh",
   "rewrites": [
-    { "source": "/ai-chat/:path*", "destination": "/ai-chat/chat.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/ai-chat/:path*",
+      "destination": "/ai-chat/chat.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/sw.js",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     },
     {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     },
     {
       "source": "/",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "claude": true
+    }
+  }
 }

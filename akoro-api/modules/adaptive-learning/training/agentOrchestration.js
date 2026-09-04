@@ -100,11 +100,17 @@ export async function deriveAndSaveOrchestrationConfig({
 
   if (error) throw new Error(`Orchestration config save failed: ${error.message}`);
 
-  // Also store render_style on teacher_profiles for fast lookup
-  await db.schema("edu").from("teacher_profiles")
-    .update({ render_style: renderStyle, updated_at: new Date() })
-    .eq("agent_id", agentId)
-    .catch(() => {});
+  // Also store render_style on teacher_profiles for fast lookup.
+  // try/catch rather than .catch(): a Supabase builder is a thenable with no
+  // .catch, so the trailing one threw TypeError and took this endpoint with it.
+  try {
+    const { error: rsErr } = await db.schema("edu").from("teacher_profiles")
+      .update({ render_style: renderStyle, updated_at: new Date() })
+      .eq("agent_id", agentId);
+    if (rsErr) console.warn("[orchestration] render_style mirror failed:", rsErr.message);
+  } catch (e) {
+    console.warn("[orchestration] render_style mirror threw:", e.message);
+  }
 
   return { ...config, render_style: renderStyle };
 }

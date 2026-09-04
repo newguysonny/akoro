@@ -1,5 +1,5 @@
 import React from 'react';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, AVATAR_FALLBACK } from '../../constants.js';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -22,7 +22,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
             {agentProfile?.emoji || "🤖"}
           </div>
         ) : (
-          <img src={session.avatar} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50` }}/>
+          <img src={session.avatar || AVATAR_FALLBACK} alt="" style={{ width:48,height:48,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}50` }}/>
         )}
         <div style={{ position:"absolute",bottom:1,right:1,width:12,height:12,borderRadius:"50%",
           background:isDecay?RED:pri.dot,border:"2px solid var(--ak-surface)",

@@ -31,6 +31,7 @@ import { fulfillMarketplaceEvent } from "../adaptive-learning/marketplace/routes
 import { fulfillTransferEvent } from "../courses/payouts.js";
 import { fulfillCoinTopup } from "../wallet/routes.js";
 import { fulfillVoucherWalletTopup } from "../vouchers/index.js";
+import { fulfillVoucherTransferEvent } from "../vouchers/transferEvents.js";
 import { logPaymentEvent } from "./paymentAudit.js";
 
 const router = Router();
@@ -102,8 +103,20 @@ router.post("/", async (req, res) => {
 
     if (type?.startsWith("transfer.")) {
       let outcome = "ignored";
-      try { outcome = (await fulfillTransferEvent(type, data)) ? "fulfilled" : "no_match"; }
-      catch (e) { outcome = "error"; console.error("[paystack-webhook] transfer fulfillment failed:", e); }
+      // Two INDEPENDENT handlers — they own different tables. They must not
+      // share a try: a throw in one would skip the other entirely, and since
+      // we still return 200 Paystack would never retry, silently dropping
+      // that payout. Each failure is isolated and logged.
+      let voucherHandled = false;
+      try { voucherHandled = await fulfillVoucherTransferEvent(type, data); }
+      catch (e) { outcome = "error"; console.error("[paystack-webhook] voucher transfer fulfilment failed:", e); }
+
+      let payoutHandled = false;
+      if (!voucherHandled) {
+        try { payoutHandled = await fulfillTransferEvent(type, data); }
+        catch (e) { outcome = "error"; console.error("[paystack-webhook] instructor payout fulfilment failed:", e); }
+      }
+      if (outcome !== "error") outcome = (voucherHandled || payoutHandled) ? "fulfilled" : "no_match";
       await logPaymentEvent({ eventType: `${type}.fulfillment`, reference, source: "paystack_webhook", outcome });
       return res.status(200).json({ received: true });
     }

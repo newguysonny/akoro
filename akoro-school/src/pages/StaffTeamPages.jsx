@@ -10,6 +10,7 @@
  * dedicated page with a Back button, and each dedicated page is a staff table
  * (add / edit / delete / log out) scoped to that group.
  */
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Crown, GraduationCap, ClipboardList, HeartHandshake, Users,
@@ -22,6 +23,7 @@ import ResourcePage from '../components/mgmt/ResourcePage.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { apiPost } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -156,6 +158,9 @@ function StaffName({ row }) {
 export function StaffGroupPage() {
   const navigate = useNavigate();
   const params = useParams();
+  // Declared before the early return below — hooks must run in the same order
+  // on every render.
+  const [notice, setNotice] = useState(null);
   const sectionKey = params.staffClass;                    // 'academic' | 'non-academic'
   const section = SECTIONS[sectionKey];
   const group = section?.groups.find((g) => slug(g.name) === params.group);
@@ -172,16 +177,35 @@ export function StaffGroupPage() {
   // staff_class stored as 'academic' | 'non_academic'
   const staffClassValue = section.key === 'academic' ? 'academic' : 'non_academic';
 
+  // A result banner beats two alert() boxes: the outcome stays on screen next
+  // to the row it refers to instead of having to be dismissed to be read.
   const logout = async (row) => {
-    if (!window.confirm(`Log out ${row.first_name} ${row.last_name}? Their app sessions will end immediately.`)) return;
+    if (!await confirmDialog({ title: 'Log this staff member out?', message: `${row.first_name} ${row.last_name} will be signed out of every device immediately and will need to sign in again.`, confirmLabel: 'Log out', danger: false })) return;
     try {
       const res = await apiPost(`/api/school/mgmt/staff/${row.id}/logout`, {});
-      window.alert(res.loggedOut ? 'Staff logged out — all their sessions were revoked.' : (res.message || 'No active login account for this staff.'));
-    } catch (e) { window.alert(e.message || 'Could not log out this staff.'); }
+      setNotice({
+        type: res.loggedOut ? 'success' : 'info',
+        text: res.loggedOut
+          ? `${row.first_name} was logged out — every session revoked.`
+          : (res.message || 'That staff member has no login account to sign out.'),
+      });
+    } catch (e) { setNotice({ type: 'error', text: e.message || 'Could not log this staff member out.' }); }
   };
 
   return (
     <PageLayout title={group.name} subtitle={`${section.label} · manage staff in this group`}>
+      {notice && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '11px 14px', borderRadius: 12,
+          background: notice.type === 'error' ? '#FEE2E2' : notice.type === 'success' ? '#DCFCE7' : '#FEF3C7',
+          border: `1px solid ${notice.type === 'error' ? '#FECACA' : notice.type === 'success' ? '#BBF7D0' : '#FDE68A'}`,
+        }}>
+          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: notice.type === 'error' ? '#991B1B' : notice.type === 'success' ? '#166534' : '#92400E' }}>
+            {notice.text}
+          </span>
+          <button onClick={() => setNotice(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 15, fontWeight: 900, color: 'inherit', opacity: .6 }}>×</button>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <BackButton onClick={() => navigate(section.path)} label={`Back to ${section.label}`} />
       </div>

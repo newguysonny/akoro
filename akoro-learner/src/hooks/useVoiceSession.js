@@ -14,9 +14,11 @@
  */
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { startMicCapture } from "../utils/micCapture.js";
 
 export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   const [listening, setListening] = useState(false);
+  const [level, setLevel] = useState(0);   // 0..1 mic loudness, for a meter
   const [interim,   setInterim]   = useState("");
   const [speaking,  setSpeaking]  = useState(false);   // agent TTS is playing
   const [voiceError, setVoiceError] = useState("");    // surfaced STT/TTS error
@@ -104,60 +106,21 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
     primeAudio();     // user gesture — unlock TTS playback for this session
     stopSpeaking();   // barge-in
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      // Shared with TeachAgentModal — see utils/micCapture.js. The two used to
+      // have separate copies of this and only one of them was right.
+      captureRef.current = await startMicCapture({
+        isReady: () => readyRef.current && !!wsRef.current?.connected,
+        onChunk: (audio) => wsRef.current.emit("voice_audio_chunk", { audio }),
+        onLevel: setLevel,
       });
-      // Prefer a 24k context (what the server expects); some mobile browsers
-      // reject a custom sampleRate, so fall back to the device default and
-      // downsample each buffer to 24k before sending.
-      const AC = window.AudioContext || window.webkitAudioContext;
-      let ctx;
-      try { ctx = new AC({ sampleRate: 24000 }); } catch { ctx = new AC(); }
-      const src  = ctx.createMediaStreamSource(stream);
-      const proc = ctx.createScriptProcessor(4096, 1, 1);
-
-      const toRate = 24000;
-      const downsample = (buf, fromRate) => {
-        if (fromRate === toRate) return buf;
-        const ratio = fromRate / toRate;
-        const out = new Float32Array(Math.round(buf.length / ratio));
-        for (let i = 0; i < out.length; i++) {
-          const start = Math.round(i * ratio), end = Math.min(buf.length, Math.round((i + 1) * ratio));
-          let sum = 0, n = 0;
-          for (let j = start; j < end; j++) { sum += buf[j]; n++; }
-          out[i] = n ? sum / n : 0;
-        }
-        return out;
-      };
-
-      proc.onaudioprocess = (e) => {
-        if (!readyRef.current || !wsRef.current?.connected) return;
-        const f32 = downsample(e.inputBuffer.getChannelData(0), ctx.sampleRate);
-        const i16 = new Int16Array(f32.length);
-        for (let i = 0; i < f32.length; i++) {
-          const s = Math.max(-1, Math.min(1, f32[i]));
-          i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        const bytes = new Uint8Array(i16.buffer);
-        let bin = "";
-        for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
-        wsRef.current.emit("voice_audio_chunk", { audio: btoa(bin) });
-      };
-
-      src.connect(proc); proc.connect(ctx.destination);
-      captureRef.current = {
-        stop() {
-          readyRef.current = false;
-          try { proc.disconnect(); src.disconnect(); } catch {}
-          stream.getTracks().forEach(t => t.stop());
-          ctx.close().catch(() => {});
-        },
-      };
 
       wsRef.current?.emit("start_voice_stream");
       setListening(true); setInterim("");
-    } catch {
+    } catch (e) {
       setListening(false);
+      setVoiceError(/denied|not allowed|permission/i.test(e?.message ?? "")
+        ? "Microphone blocked. Allow mic access for this site and try again."
+        : "Couldn't start the microphone. Check no other app is using it.");
     }
   }, [listening, wsRef, stopSpeaking, primeAudio]);
 
@@ -220,5 +183,5 @@ export function useVoiceSession({ wsRef, onTranscript, ttsVoice = "alloy" }) {
   // Cleanup on unmount.
   useEffect(() => () => { captureRef.current?.stop(); stopSpeaking(); }, [stopSpeaking]);
 
-  return { listening, interim, speaking, voiceError, startListening, stopListening, speak, stopSpeaking, primeAudio };
+  return { listening, level, interim, speaking, voiceError, startListening, stopListening, speak, stopSpeaking, primeAudio };
 }

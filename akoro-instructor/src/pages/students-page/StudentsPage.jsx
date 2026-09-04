@@ -12,12 +12,13 @@ import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
 import {
-  AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
+  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
 } from '../../constants.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
 import { EnrolModal } from './parts.jsx';
 import JoinRequests from './JoinRequests.jsx';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const PAGE_SIZE = 12;
 const csvCell = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -94,7 +95,7 @@ export default function StudentsPage() {
   };
   const bulkRemove = async () => {
     const targets = filtered.filter(s => checked[rowId(s)]);
-    if (!targets.length || !window.confirm(`Remove ${targets.length} student${targets.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    if (!targets.length || !await confirmDialog(`Remove ${targets.length} student${targets.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
     for (const s of targets) await handleRemove(s.enrollmentId);
     setChecked({});
   };
@@ -115,7 +116,7 @@ export default function StudentsPage() {
   return (
     <PageLayout
       title="Students"
-      subtitle={`${loading ? '…' : students.length} enrolled learners`}
+      subtitle={`${loading ? '…' : students.length} learner${students.length === 1 ? '' : 's'}`}
       action={
         <Btn size="sm" onClick={() => setModal(true)}>
           <Plus size={14} /> Add Student
@@ -183,6 +184,7 @@ export default function StudentsPage() {
               <th style={{ ...th, width: 34 }}><input type="checkbox" checked={allOnPage} onChange={e => toggleAll(e.target.checked)} /></th>
               <th style={th}>STUDENT</th>
               <th style={th}>EMAIL</th>
+              <th style={th}>CLASS</th>
               <th style={th}>PROGRESS</th>
               <th style={th}>STATUS</th>
               <th style={{ ...th, textAlign: 'right' }}>ACTIONS</th>
@@ -202,6 +204,25 @@ export default function StudentsPage() {
                     </div>
                   </td>
                   <td style={{ ...td, color: MUTED }}>{s.email || '—'}</td>
+                  {/* A learner belongs to a class first; courses are extra. Both
+                      are shown, because "no class" is worth noticing. */}
+                  <td style={{ ...td, whiteSpace: 'normal' }}>
+                    {(s.classes?.length ? s.classes.map(c => c.name) : (s.className ? [s.className] : [])).map(n => (
+                      <span key={n} style={{
+                        display: 'inline-block', marginRight: 4, marginBottom: 2, padding: '2px 8px',
+                        borderRadius: 20, background: `${PURPLE}14`, color: PURPLE,
+                        fontSize: 11, fontWeight: 700,
+                      }}>{n}</span>
+                    ))}
+                    {!s.classes?.length && !s.className && (
+                      <span style={{ fontSize: 11.5, color: MUTED2 }}>No class</span>
+                    )}
+                    {s.coursesEnrolled > 0 && (
+                      <span style={{ display: 'block', fontSize: 10.5, color: MUTED, marginTop: 2 }}>
+                        {s.coursesEnrolled} course{s.coursesEnrolled === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </td>
                   <td style={td}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
                       <div style={{ flex: 1, height: 6, borderRadius: 99, background: LIGHT, overflow: 'hidden' }}>

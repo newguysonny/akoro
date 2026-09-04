@@ -5,14 +5,28 @@
  * view redemptions/analytics.
  */
 import { Router } from "express";
+import multer from "multer";
 import { authenticateToken } from "../auth/routes.js";
 import db, { vdb } from "./db.js";
+import { serverError } from "./lib/httpError.js";
 import { issueApiKey } from "./lib/apiKeys.js";
 import { getStartupBalance, debitWithdrawal, refundWithdrawal, startupTransactions, ensureStartupWallet, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
 import { createTransferRecipient, initiateTransfer } from "./lib/paystack.js";
+import { enqueueWebhook, generateWebhookSecret } from "./lib/webhooks.js";
+import { drainWebhookQueue } from "./webhookWorker.js";
+import { ensureBucket, uploadPublicFile } from "../school/templateStorage.js";
 
 const router = Router();
 router.use(authenticateToken);
+
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only JPG, PNG, WebP or GIF allowed"));
+  },
+}).single("file");
 
 const slugify = (s) => String(s || "").toLowerCase().trim()
   .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || `startup-${Date.now()}`;
@@ -56,7 +70,7 @@ router.post("/", async (req, res) => {
     }).select("*").single();
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, startup: data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/mine — startups I own.
@@ -64,7 +78,7 @@ router.get("/mine", async (req, res) => {
   try {
     const { data } = await vdb().from("startups").select("*").eq("owner_user_id", req.user.id).order("created_at", { ascending: false });
     res.json({ success: true, startups: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // PATCH /api/vouchers/startups/:id — update rate / webhook / status.
@@ -91,7 +105,7 @@ router.patch("/:id", async (req, res) => {
     const { data, error } = await vdb().from("startups").update(patch).eq("id", startup.id).select("*").single();
     if (error) throw new Error(error.message);
     res.json({ success: true, startup: data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // DELETE /api/vouchers/startups/:id — for cleaning up duplicates/mistakes.
@@ -113,7 +127,7 @@ router.delete("/:id", async (req, res) => {
     const { error } = await vdb().from("startups").delete().eq("id", startup.id);
     if (error) throw new Error(error.message);
     res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/startups/:id/discount-tiers — replace the tier ladder.
@@ -135,7 +149,7 @@ router.post("/:id/discount-tiers", async (req, res) => {
     }
     const { data } = await vdb().from("discount_tiers").select("*").eq("startup_id", startup.id).order("min_credits");
     res.json({ success: true, tiers: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // ── Voucher products — fixed-denomination SKUs (e.g. "₦1,000 Voucher") ───────
@@ -159,6 +173,46 @@ function validProductBody(body) {
   };
 }
 
+// POST /api/vouchers/startups/upload-cover — upload a cover/logo image from
+// the device, returns { url } for cover_image_url. User-scoped rather than
+// startup-scoped so it also works from CreateStartupPage, before a startup
+// row exists yet.
+router.post("/upload-cover", (req, res, next) => {
+  imageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+    await ensureBucket().catch(() => {});
+    const ext  = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `startup-covers/${req.user.id}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+    const url  = await uploadPublicFile(path, req.file.buffer, req.file.mimetype);
+    res.status(201).json({ success: true, url });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// POST /api/vouchers/startups/:id/products/upload — upload a product image
+// from the device, returns { url } for the image_url field.
+router.post("/:id/products/upload", (req, res, next) => {
+  imageUpload(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
+    await ensureBucket().catch(() => {});
+    const ext  = (req.file.originalname?.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `voucher-products/${startup.id}/${Date.now()}-${Math.floor(Math.random() * 1e6)}.${ext}`;
+    const url  = await uploadPublicFile(path, req.file.buffer, req.file.mimetype);
+    res.status(201).json({ success: true, url });
+  } catch (e) { serverError(res, e, req); }
+});
+
 // POST /api/vouchers/startups/:id/products — create a voucher product.
 router.post("/:id/products", async (req, res) => {
   const startup = await ownedStartup(req, res);
@@ -169,7 +223,7 @@ router.post("/:id/products", async (req, res) => {
     const { data, error } = await vdb().from("voucher_products").insert({ startup_id: startup.id, ...parsed }).select("*").single();
     if (error) throw new Error(error.message);
     res.status(201).json({ success: true, product: data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/products — list (owner sees archived too).
@@ -179,7 +233,7 @@ router.get("/:id/products", async (req, res) => {
   try {
     const { data } = await vdb().from("voucher_products").select("*").eq("startup_id", startup.id).order("created_at", { ascending: false });
     res.json({ success: true, products: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // PATCH /api/vouchers/startups/:id/products/:productId — edit or archive.
@@ -204,7 +258,7 @@ router.patch("/:id/products/:productId", async (req, res) => {
     const { data, error } = await vdb().from("voucher_products").update(patch).eq("id", req.params.productId).eq("startup_id", startup.id).select("*").single();
     if (error) throw new Error(error.message);
     res.json({ success: true, product: data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // DELETE /api/vouchers/startups/:id/products/:productId — only if no order
@@ -221,7 +275,71 @@ router.delete("/:id/products/:productId", async (req, res) => {
     const { error } = await vdb().from("voucher_products").delete().eq("id", req.params.productId).eq("startup_id", startup.id);
     if (error) throw new Error(error.message);
     res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
+});
+
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+// GET /api/vouchers/startups/:id/webhooks — the signing secret + delivery log.
+router.get("/:id/webhooks", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 200);
+    const { data } = await vdb().from("webhook_deliveries")
+      .select("id, event, url, status, attempts, max_attempts, last_status_code, last_error, next_attempt_at, delivered_at, created_at")
+      .eq("startup_id", startup.id).order("created_at", { ascending: false }).limit(limit);
+    res.json({
+      success: true,
+      webhook_url: startup.webhook_url || null,
+      // Unlike an API key, the signing secret must stay retrievable — the
+      // receiver needs it to verify every future delivery, not just once.
+      webhook_secret: startup.webhook_secret || null,
+      deliveries: data || [],
+    });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// POST /api/vouchers/startups/:id/webhooks/rotate-secret
+router.post("/:id/webhooks/rotate-secret", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const secret = generateWebhookSecret();
+    await vdb().from("startups").update({ webhook_secret: secret }).eq("id", startup.id);
+    res.json({ success: true, webhook_secret: secret });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// POST /api/vouchers/startups/:id/webhooks/test — send a sample event now.
+router.post("/:id/webhooks/test", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  if (!startup.webhook_url) return res.status(400).json({ error: "Set a webhook URL first (Settings)" });
+  try {
+    const id = await enqueueWebhook(startup.id, "webhook.test", {
+      message: "This is a test event from Akoro Vouchers.",
+      transaction_id: "test_00000000", credits: 100, customer_id: "test_customer",
+    });
+    // Deliver immediately rather than waiting for the next worker tick — a
+    // "Send test" button that appears to do nothing for a minute is useless.
+    drainWebhookQueue().catch(() => {});
+    res.json({ success: true, deliveryId: id });
+  } catch (e) { serverError(res, e, req); }
+});
+
+// POST /api/vouchers/startups/:id/webhooks/:deliveryId/retry — requeue one.
+router.post("/:id/webhooks/:deliveryId/retry", async (req, res) => {
+  const startup = await ownedStartup(req, res);
+  if (!startup) return;
+  try {
+    const { data, error } = await vdb().from("webhook_deliveries")
+      .update({ status: "pending", next_attempt_at: new Date().toISOString(), attempts: 0, last_error: null, updated_at: new Date().toISOString() })
+      .eq("id", req.params.deliveryId).eq("startup_id", startup.id).select("id").maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return res.status(404).json({ error: "Delivery not found" });
+    drainWebhookQueue().catch(() => {});
+    res.json({ success: true });
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/startups/:id/api-keys — mint a new key (shown once).
@@ -231,7 +349,7 @@ router.post("/:id/api-keys", async (req, res) => {
   try {
     const key = await issueApiKey(startup.id, req.body?.label || null, req.user.id);
     res.status(201).json({ success: true, key });   // rawKey only ever appears in THIS response
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/api-keys — list (never returns the raw key).
@@ -271,7 +389,7 @@ router.get("/:id/api-keys", async (req, res) => {
       monthly_spend_usd: +(spendByKey[k.id] || 0).toFixed(2),
     }));
     res.json({ success: true, keys: enriched });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/api-keys/:keyId/logs — per-key request log.
@@ -285,7 +403,7 @@ router.get("/:id/api-keys/:keyId/logs", async (req, res) => {
       .eq("startup_id", startup.id).eq("api_key_id", req.params.keyId)
       .order("created_at", { ascending: false }).limit(limit);
     res.json({ success: true, logs: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // PATCH /api/vouchers/startups/:id/api-keys/:keyId — revoke or reactivate.
@@ -300,7 +418,7 @@ router.patch("/:id/api-keys/:keyId", async (req, res) => {
       .eq("id", req.params.keyId).eq("startup_id", startup.id).select("id, key_prefix, status").single();
     if (error) throw new Error(error.message);
     res.json({ success: true, key: data });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // DELETE /api/vouchers/startups/:id/api-keys/:keyId — permanently remove the
@@ -314,7 +432,7 @@ router.delete("/:id/api-keys/:keyId", async (req, res) => {
     const { error } = await vdb().from("api_keys").delete().eq("id", req.params.keyId).eq("startup_id", startup.id);
     if (error) throw new Error(error.message);
     res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/batches — generation history: which agent
@@ -341,7 +459,7 @@ router.get("/:id/batches", async (req, res) => {
       success: true,
       batches: (batches || []).map((b) => ({ ...b, agent: agentsById[b.agent_id] || null })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/codes/lookup?code=XXXX-XXXX-XXXX — support
@@ -358,7 +476,7 @@ router.get("/:id/codes/lookup", async (req, res) => {
     if (!row) return res.status(404).json({ error: "No code matching that value for this startup" });
     const { data: agent } = row.agent_id ? await db.from("users").select("id, full_name, email").eq("id", row.agent_id).maybeSingle() : { data: null };
     res.json({ success: true, code: { ...row, agent } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/redemptions — audit list.
@@ -371,7 +489,7 @@ router.get("/:id/redemptions", async (req, res) => {
       .select("id, customer_id, redeemed_at, codes(code, credits, agent_id)")
       .eq("startup_id", startup.id).order("redeemed_at", { ascending: false }).limit(limit);
     res.json({ success: true, redemptions: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/analytics — quick summary.
@@ -391,7 +509,7 @@ router.get("/:id/analytics", async (req, res) => {
       success: true,
       analytics: { totalCodes: totalCodes || 0, usedCodes: usedCodes || 0, activeApiKeys: activeKeys || 0, grossSalesUsd, creditsSold },
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/wallet — settlement balance + ledger.
@@ -401,7 +519,7 @@ router.get("/:id/wallet", async (req, res) => {
   try {
     const [balance, recent] = await Promise.all([getStartupBalance(startup.id), startupTransactions(startup.id, { limit: 30 })]);
     res.json({ success: true, balance, platformFeePct: PLATFORM_FEE_PCT, recent });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/startups/:id/wallet/transactions
@@ -413,7 +531,7 @@ router.get("/:id/wallet/transactions", async (req, res) => {
     const offset = parseInt(req.query.offset ?? "0", 10);
     const rows = await startupTransactions(startup.id, { limit, offset });
     res.json({ success: true, transactions: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/startups/:id/withdraw — payout via Paystack transfer.
@@ -450,27 +568,49 @@ router.post("/:id/withdraw", async (req, res) => {
       throw e;
     }
 
+    // ONLY the Paystack calls sit in the refund-triggering try. Bookkeeping
+    // after a successful transfer must never land here: if that write threw,
+    // the old code refunded the wallet even though the money had already
+    // left — paying the startup twice.
+    let recipient, transfer;
     try {
-      const recipient = await createTransferRecipient({ name: accountName || startup.name, accountNumber, bankCode });
-      const transfer = await initiateTransfer({
+      recipient = await createTransferRecipient({ name: accountName || startup.name, accountNumber, bankCode });
+      transfer = await initiateTransfer({
         amount_kobo: amountKobo, recipientCode: recipient.recipientCode,
         reason: `Akoro Vouchers settlement — ${startup.name}`, reference: `vwithdraw_${wd.id}`,
       });
-      const status = transfer.status === "success" ? "paid" : "processing";
+    } catch (e) {
+      // Transfer never started — put the money back.
+      try {
+        await refundWithdrawal(startup.id, amountUsd, wd.id);
+      } catch (refundErr) {
+        // Debited, not transferred, not refunded. Never swallow this — a
+        // human has to make the startup whole.
+        console.error(`[vouchers/withdraw] ‼️ REFUND FAILED withdrawal=${wd.id} startup=${startup.id} $${amountUsd} — manual correction required:`, refundErr.message);
+      }
+      console.error("[vouchers/withdraw] transfer failed:", e.message);
+      await vdb().from("withdrawals")
+        .update({ status: "failed", failure_reason: String(e.message || "transfer failed").slice(0, 300) })
+        .eq("id", wd.id);
+      // Paystack's own message is useful to the business ("Invalid account
+      // number"), but bound it and never let anything else through.
+      return res.status(502).json({ error: "Payout failed — please check your bank details and try again." });
+    }
+
+    const status = transfer.status === "success" ? "paid" : "processing";
+    try {
       await vdb().from("withdrawals").update({
         status, paystack_recipient_code: recipient.recipientCode, paystack_transfer_code: transfer.transferCode,
         paid_at: status === "paid" ? new Date().toISOString() : null,
       }).eq("id", wd.id);
-      res.status(201).json({ success: true, withdrawalId: wd.id, status, amountUsd });
     } catch (e) {
-      // Transfer failed outright (not just pending) — refund and mark failed.
-      await refundWithdrawal(startup.id, amountUsd, wd.id).catch(() => {});
-      await vdb().from("withdrawals").update({ status: "failed", failure_reason: e.message }).eq("id", wd.id);
-      res.status(502).json({ error: `Payout failed: ${e.message}` });
+      // Money HAS moved. Do not refund — just make the mismatch findable.
+      console.error(`[vouchers/withdraw] ‼️ transfer ${transfer.transferCode} succeeded but withdrawal ${wd.id} could not be updated:`, e.message);
     }
+    res.status(201).json({ success: true, withdrawalId: wd.id, status, amountUsd });
   } catch (e) {
     console.error("[vouchers/withdraw]", e.message);
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -481,7 +621,7 @@ router.get("/:id/withdrawals", async (req, res) => {
   try {
     const { data } = await vdb().from("withdrawals").select("*").eq("startup_id", startup.id).order("created_at", { ascending: false }).limit(50);
     res.json({ success: true, withdrawals: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 export default router;

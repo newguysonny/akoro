@@ -94,6 +94,22 @@ function ToggleCard({ mod, on, onChange }) {
   );
 }
 
+function LockedCard({ mod, onGet }) {
+  return (
+    <div style={{ background: WHITE, border: `1px dashed ${BORDER}`, borderRadius: 14, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 9, background: LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <mod.icon size={16} color={MUTED2} />
+        </div>
+        <span style={{ fontSize: 14, fontWeight: 800, color: MUTED, fontFamily: FONT }}>{mod.label}</span>
+      </div>
+      <button onClick={onGet} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 13px', borderRadius: 9, border: `1px solid ${AMBER}`, background: `${AMBER}12`, color: AMBER, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+        <ShieldCheck size={12} /> Get it in the Apps Center
+      </button>
+    </div>
+  );
+}
+
 export default function ModuleManagementPage() {
   const navigate = useNavigate();
   const [modules, setModules] = useState({});
@@ -101,23 +117,29 @@ export default function ModuleManagementPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [search, setSearch] = useState('');
+  const [access, setAccess] = useState({});
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
 
   useEffect(() => {
     apiGet('/api/school/settings')
-      .then((res) => setModules(res.data?.modules || {}))
+      .then((res) => { setModules(res.data?.modules || {}); setAccess(res.data?.moduleAccess || {}); })
       .catch((e) => showToast(e.message || 'Could not load modules'))
       .finally(() => setLoading(false));
   }, []);
 
-  const isOn = (key) => modules[key] !== false; // default active unless explicitly disabled
+  // A module is toggleable only once the school owns it. Anything not bought is
+  // shown here anyway — hiding it would leave a teacher wondering where the
+  // feature went — but as a locked card that points at the Apps Center.
+  const owns = (key) => access[key] === true;
+  const isOn = (key) => owns(key) && modules[key] !== false;
   const toggle = (key) => setModules((prev) => ({ ...prev, [key]: !isOn(key) }));
 
   const q = search.trim().toLowerCase();
   const matches = (m) => !q || m.label.toLowerCase().includes(q);
   const coreShown = CORE_MODULES.filter(matches);
-  const toggleShown = TOGGLE_MODULES.filter(matches);
+  const ownedShown = TOGGLE_MODULES.filter((m) => matches(m) && owns(m.key));
+  const lockedShown = TOGGLE_MODULES.filter((m) => matches(m) && !owns(m.key));
 
   const save = async () => {
     setSaving(true);
@@ -166,15 +188,28 @@ export default function ModuleManagementPage() {
 
             {loading ? (
               <div style={{ padding: '50px 0', textAlign: 'center', color: MUTED2 }}><Loader2 size={20} style={{ animation: 'spin .8s linear infinite' }} /></div>
-            ) : (coreShown.length + toggleShown.length === 0) ? (
+            ) : (coreShown.length + ownedShown.length + lockedShown.length === 0) ? (
               <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED2, fontSize: 13, fontFamily: FONT }}>No modules match “{search}”.</div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
-                {coreShown.map((m) => <CoreCard key={m.key} mod={m} />)}
-                {toggleShown.map((m) => (
-                  <ToggleCard key={m.key} mod={m} on={isOn(m.key)} onChange={() => toggle(m.key)} />
-                ))}
-              </div>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
+                  {coreShown.map((m) => <CoreCard key={m.key} mod={m} />)}
+                  {ownedShown.map((m) => (
+                    <ToggleCard key={m.key} mod={m} on={isOn(m.key)} onChange={() => toggle(m.key)} />
+                  ))}
+                </div>
+
+                {lockedShown.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .6, color: MUTED2, margin: '22px 0 10px', fontFamily: FONT }}>
+                      NOT INSTALLED — AVAILABLE IN THE APPS CENTER
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14 }}>
+                      {lockedShown.map((m) => <LockedCard key={m.key} mod={m} onGet={() => navigate('/apps')} />)}
+                    </div>
+                  </>
+                )}
+              </>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 22, paddingTop: 18, borderTop: `1px solid ${BORDER}` }}>

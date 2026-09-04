@@ -5,6 +5,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiDelete } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, LIGHT, GREEN, RED, ACCENT, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 export default function ManageBusinessesPage() {
   const { startups, current, currentId, setCurrentId, refresh } = useStartup();
@@ -13,7 +14,7 @@ export default function ManageBusinessesPage() {
   const [err, setErr] = useState('');
 
   const remove = async (s) => {
-    if (!window.confirm(`Delete "${s.name}"? This can't be undone — only possible because it has no voucher history yet.`)) return;
+    if (!await confirmDialog(`Delete "${s.name}"? This can't be undone — only possible because it has no voucher history yet.`)) return;
     setBusyId(s.id); setErr('');
     try {
       await apiDelete(`/api/vouchers/startups/${s.id}`);

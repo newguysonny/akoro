@@ -1,5 +1,5 @@
 import React from 'react';
-import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, AVATAR_FALLBACK } from '../../constants.js';
 import { PlayIcon, PhoneIcon, MessageIcon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -39,7 +39,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
             {agentProfile?.emoji||"🤖"}
           </div>
         ) : (
-          <img src={session.avatar} alt="" style={{ width:46,height:46,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}` }}/>
+          <img src={session.avatar || AVATAR_FALLBACK} alt="" style={{ width:46,height:46,borderRadius:"50%",objectFit:"cover",border:`2px solid ${sc}` }}/>
         )}
         <div style={{ flex:1 }}>
           <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{session.title}</p>
@@ -93,7 +93,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
           <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>{t('sheet.session_stats')}</p>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
             {[{icon:"📌",val:`${session.topics||0} topics`,label:t('sheet.to_review')},
-              {icon:"🔁",val:`${session.revisions||0} re-teaches`,label:t('sheet.completed_so_far')},
+              {icon:"🔁",val:`${session.revisions||0} revisions`,label:t('sheet.completed_so_far')},
               {icon:"⭐",val:`${session.reviews||0} assessments`,label:t('sheet.passed_sargeant')}
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -174,7 +174,7 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
           style={{ width:"100%",padding:"12px",borderRadius:14,border:"1.5px solid rgba(245,158,11,.4)",
             background:"rgba(245,158,11,.1)",fontSize:13,fontWeight:800,color:"#F59E0B",cursor:"pointer",
             fontFamily:"'Nunito',sans-serif",marginBottom:10 }}>
-          ⚡ Take proctored assessment
+          ⚡ Take live assessment
         </button>
       )}
 

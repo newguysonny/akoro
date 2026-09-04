@@ -7,6 +7,7 @@
  * Nothing elsewhere in the codebase imports from modules/vouchers/.
  */
 import { Router } from "express";
+import "./webhookWorker.js";                   // side-effect: schedules outbound webhook delivery
 import validateRouter  from "./validate.js";   // public — API-key auth (startups)
 import startupsRouter  from "./startups.js";   // Akoro-authenticated (startup owners)
 import agentRouter      from "./agent.js";      // Akoro-authenticated (agents)

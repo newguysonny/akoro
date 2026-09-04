@@ -25,13 +25,13 @@ import { fileURLToPath }          from "url";
 import { MulterError }            from "multer";
 import {
   strictLimit, refreshLimit, standardLimit, teachingLimit, aiLimit,
-  requestLogger,
+  internalLimit, attachRateLimitIdentity, requestLogger,
 } from "./middleware/security.js";
 
 import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { schoolBillTo }            from "./lib/coins.js";
-import { SITE_BASE_DOMAINS }       from "./modules/school/tenant.js";
+import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
@@ -45,8 +45,12 @@ import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
+import selfStudyModule            from "./modules/self-study/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
+import teachingToolsModule        from "./modules/teaching/tools.js";
+import pastQuestionsModule        from "./modules/past-questions/routes.js";
+import curriculumModule           from "./modules/curriculum/routes.js";
 import schoolModule               from "./modules/school/index.js";
 import { studentFeedRouter,
          battleFeedRouter }       from "./modules/courses/student-feed.js";
@@ -84,7 +88,28 @@ const allowedOrigins = config.server.corsOrigin === '*'
 // (<slug>.<domain>) can call the API without being listed one by one.
 const originHost = (o) => { try { return new URL(o).hostname.toLowerCase(); } catch { return ''; } };
 const stripWww = (h) => h.replace(/^www\./, '');
-const listedHosts = new Set(allowedOrigins === '*' ? [] : allowedOrigins.map(originHost).filter(Boolean).map(stripWww));
+// The platform's OWN front-ends. These are configured as env URLs and are not
+// tenant sites, so they belong in the credentialed set even when CORS_ORIGIN
+// doesn't spell them out. Missing them is what broke the AI-chat hand-off: the
+// school portal sits at a subdomain of the base domain, so the wildcard matched
+// it for access but the credentials rule — correctly — did not.
+const PLATFORM_APP_URLS = [
+  process.env.FRONTEND_URL, process.env.MAIN_SITE_URL,
+  process.env.SCHOOL_FRONTEND_URL, process.env.INSTRUCTOR_FRONTEND_URL,
+  process.env.INSTRUCTOR_APP_URL, process.env.ADMIN_FRONTEND_URL,
+  process.env.AGENT_FRONTEND_URL, process.env.BUSINESS_FRONTEND_URL,
+  process.env.VOUCHERS_FRONTEND_URL,
+].filter(Boolean);
+
+// Hostnames are no longer guessed. isTenantHost() answers from the actual
+// school slugs and verified custom domains, so any subdomain of the base domain
+// that ISN'T a school is one of our apps — whatever it happens to be named.
+// The cache is warmed at boot and refreshed in the background.
+
+const listedHosts = new Set(
+  allowedOrigins === '*' ? [] :
+  [...allowedOrigins, ...PLATFORM_APP_URLS].map(originHost).filter(Boolean).map(stripWww)
+);
 function isAllowedOrigin(origin) {
   if (!origin) return true;                 // curl / mobile / same-origin
   const bare = stripWww(originHost(origin));
@@ -97,6 +122,43 @@ const corsOriginFn = (origin, cb) => isAllowedOrigin(origin)
   ? cb(null, true)
   : cb(new Error(`CORS: origin ${origin} not allowed`));
 
+// CREDENTIALS are granted only to the explicitly listed portal origins.
+//
+// Tenant school sites (<slug>.<base domain>) are allowed to call the API, but
+// WITHOUT cookies. They must not be credentialed: a school admin can put
+// arbitrary <script> in header_scripts/footer_scripts and page HTML on their
+// own site, so a credentialed wildcard would let that script call the API as
+// ANY signed-in visitor — a parent, a teacher, or an admin of another school —
+// and read the response. School sites only need public endpoints, so this
+// costs them nothing.
+const isListedOrigin = (origin) => {
+  if (!origin) return true;                       // curl / mobile / same-origin
+  const bare = stripWww(originHost(origin));
+  if (!bare) return false;
+  if (listedHosts.has(bare)) return true;         // explicitly configured
+  if (isTenantHost(bare)) return false;           // a school's own site — never credentialed
+  // Ours: an app on the base domain, under whatever name it is deployed.
+  return SITE_BASE_DOMAINS.some((b) => bare === b || bare.endsWith(`.${b}`));
+};
+// One line per origin, the first time it is seen, so a wrongly-classified host
+// shows up in the deploy log instead of only in someone's browser console.
+const seenOrigins = new Set();
+const corsDelegate = (req, cb) => {
+  const origin = req.headers.origin;
+  if (origin && !seenOrigins.has(origin)) {
+    seenOrigins.add(origin);
+    const bare = stripWww(originHost(origin));
+    console.log(`[cors] ${origin} → allowed=${isAllowedOrigin(origin)} credentials=${isListedOrigin(origin)}` +
+      ` (listed=${listedHosts.has(bare)} tenant=${isTenantHost(bare)})`);
+  }
+  cb(null, {
+    origin: allowedOrigins === '*' ? true : isAllowedOrigin(origin),
+    credentials: allowedOrigins === '*' ? true : isListedOrigin(origin),
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Akoro-Portal", "X-Internal-Secret"],
+  });
+};
+
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
@@ -104,7 +166,15 @@ redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
 redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
 const io = new SocketServer(httpServer, {
-  cors:       { origin: allowedOrigins === '*' ? '*' : corsOriginFn, credentials: true, methods: ["GET", "POST"] },
+  // Sockets authenticate from the handshake COOKIE, so the same rule as HTTP
+  // credentials applies: portal origins only. A tenant school site must never
+  // be able to open a socket as whoever is visiting it.
+  cors: {
+    origin: allowedOrigins === '*' ? '*' : ((origin, cb) => isListedOrigin(origin)
+      ? cb(null, true)
+      : cb(new Error(`CORS: socket origin ${origin} not allowed`))),
+    credentials: true, methods: ["GET", "POST"],
+  },
   transports: ["websocket", "polling"],
 });
 io.adapter(createAdapter(redisPub, redisSub));
@@ -154,12 +224,7 @@ app.use(helmet({
   contentSecurityPolicy: false,   // configured separately per-page if needed
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-app.use(cors({
-  origin: allowedOrigins === '*' ? '*' : corsOriginFn,
-  credentials: true,
-  methods:     ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization","X-Akoro-Portal","X-Internal-Secret"],
-}));
+app.use(cors(corsDelegate));
 app.use(cookieParser());
 // Paystack webhook signature validation needs the RAW request body. The raw
 // parser must run BEFORE the global JSON parser (body-parser skips bodies
@@ -217,6 +282,93 @@ app.get("/internal/preflight", (req, res) => {
 //   standardLimit — read APIs      (100 req/min, by user or IP)
 //   teachingLimit — adaptive       (50 req/min, by user or IP)
 //   aiLimit       — AI operations  (10 req/min, by user or IP)
+//   internalLimit — background jobs (300 req/min, all jobs pooled)
+//
+// "by user" only became true when this was added: the limiters are mounted
+// here, authenticateToken lives inside each router, so req.user did not exist
+// when the key was computed and every limiter fell back to per-IP. Behind a
+// proxy that is ONE bucket for the whole platform. This verifies the token's
+// signature (no DB) just to answer "whose quota is this?".
+/**
+ * Proxy trust — deliberately opt-in.
+ *
+ * req.ip is the socket peer unless Express is told how many proxies sit in
+ * front. On a platform edge that means every visitor shares one address, so
+ * every IP-keyed limit (login: 5 per 15 min) is one bucket for everybody.
+ *
+ * The fix is a HOP COUNT, never `true`: trusting the whole chain lets a caller
+ * spoof X-Forwarded-For and pick their own bucket, which is worse than sharing
+ * one. Left unset by default so this change can't silently make things less
+ * safe. The diagnostic below reads the hop count off a real request and tells
+ * you the number to use — guessing it gets you an intermediate proxy, not the
+ * visitor.
+ */
+if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== "") {
+  const hops = Number(process.env.TRUST_PROXY);
+  app.set("trust proxy", Number.isFinite(hops) ? hops : process.env.TRUST_PROXY);
+  console.log(`[security] trust proxy = ${process.env.TRUST_PROXY}`);
+}
+
+/**
+ * One-shot diagnostic: print what the first API request actually looks like,
+ * and work out the hop count rather than guessing it.
+ *
+ * X-Forwarded-For is built left-to-right: the leftmost entry is the original
+ * client, and each proxy appends the address it received the request from. So
+ * the number of entries IS the number of hops to trust — with two entries,
+ * TRUST_PROXY=1 yields the intermediate proxy, not the visitor.
+ */
+let ipProbed = false;
+app.use("/api", (req, _res, next) => {
+  if (!ipProbed) {
+    ipProbed = true;
+    const xff  = req.headers["x-forwarded-for"];
+    const hops = xff ? String(xff).split(",").length : 0;
+
+    console.log("[security] first request — req.ip=%s socket=%s x-forwarded-for=%s trustProxy=%s",
+      req.ip, req.socket?.remoteAddress, xff ?? "(none)", app.get("trust proxy") ?? "(unset)");
+
+    if (!process.env.TRUST_PROXY && hops) {
+      console.warn(`[security] X-Forwarded-For has ${hops} hop(s) but TRUST_PROXY is unset — ` +
+        "IP-keyed limits (login, refresh) are keying on the proxy, i.e. ONE bucket for every " +
+        `visitor. Set TRUST_PROXY=${hops} and redeploy.`);
+    } else if (process.env.TRUST_PROXY) {
+      // Two ways the count can be wrong, and only one of them LOOKS wrong.
+      const trusted = Number(process.env.TRUST_PROXY);
+      if (Number.isFinite(trusted) && hops > trusted) {
+        // The case that slipped through the first time: req.ip resolved to a
+        // proxy with a perfectly ordinary public address, so nothing looked
+        // amiss — it was simply the wrong machine. Compare the counts rather
+        // than judging the address. (A client can pad X-Forwarded-For, so this
+        // is phrased as a prompt to check, not a verdict.)
+        console.warn(`[security] TRUST_PROXY=${trusted} but X-Forwarded-For has ${hops} hop(s), so ` +
+          `req.ip=${req.ip} is a proxy rather than the visitor — everyone behind it shares one ` +
+          `rate-limit bucket. If ${hops} hops is your normal setup, set TRUST_PROXY=${hops}.`);
+      } else if (isNonRoutable(req.ip)) {
+        console.warn(`[security] TRUST_PROXY=${process.env.TRUST_PROXY} but req.ip=${req.ip} is a ` +
+          `private or carrier-NAT address, so it is not the visitor. X-Forwarded-For has ` +
+          `${hops} hop(s) — try TRUST_PROXY=${hops}.`);
+      }
+    }
+  }
+  next();
+});
+
+/** Private, loopback and carrier-grade-NAT ranges — never a real visitor. */
+function isNonRoutable(ip) {
+  if (!ip) return true;
+  const v4 = String(ip).replace(/^::ffff:/, "");
+  return /^(10\.|127\.|192\.168\.|169\.254\.|::1$|fc|fd)/.test(v4)
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(v4)
+      || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(v4);   // 100.64.0.0/10
+}
+
+app.use("/api", attachRateLimitIdentity);
+// Background jobs call this same API over loopback as the user who scheduled
+// the work. They skip the per-user limiters and are counted here instead, so a
+// cron firing six assignments cannot trip a 10/min ceiling — while a runaway
+// loop still hits one.
+app.use("/api", internalLimit);
 // Unified Paystack webhook — verifies the signature once from the raw body and
 // dispatches to every fulfillment domain (course/cart, agent/tool, payouts).
 // The mount path is derived from PAYSTACK_WEBHOOK_URL (its path component) so it
@@ -240,10 +392,37 @@ if (process.env.REDIS_URL) {
   import("./modules/battle/worker.js")
     .then(() => console.log("[battle] worker started at boot"))
     .catch((e) => console.error("[battle] worker failed to start:", e.message));
+
+  // Eval runs. Same guard: a suite is minutes of model calls, so it runs on a
+  // queue and the admin page polls.
+  import("./lib/evalWorker.js")
+    .then((m) => m.startEvalWorker())
+    .catch((e) => console.error("[evals] worker failed to start:", e.message));
 }
+
+// Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
+// a failed inline call) and rows get edited after being embedded; both leave
+// search quietly wrong, and nothing used to report either.
+import("./lib/embeddingSweeper.js")
+  .then((m) => m.startEmbeddingSweeper())
+  .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
+
+// Alert rules — spend, latency, failures, and work that has silently stopped.
+// Needs no Redis: it reads the telemetry tables on a cron.
+import("./lib/alertWorker.js")
+  .then((m) => m.startAlertWorker())
+  .catch((e) => console.error("[alerts] worker failed to start:", e.message));
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
+// Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module
+// behind aiLimit capped a teacher at 10 requests a minute for listing and
+// assigning, which a single afternoon of setting work would blow straight past.
+app.use("/api/self-study/plan", aiLimit);
+app.use("/api/self-study", standardLimit, selfStudyModule);
 app.use("/api/instructor/tools", standardLimit, instructorToolsModule);  // platform tools/assets catalog + purchase
+app.use("/api/teaching/tools",   aiLimit,       teachingToolsModule);  // teaching tool suite — LLM + TTS, so aiLimit
+app.use("/api/past-questions",   standardLimit, pastQuestionsModule);  // WAEC/NECO/JAMB/NCEE question bank
+app.use("/api/curriculum",       standardLimit, curriculumModule);     // NERDC & co. curriculum bank
 app.use("/api/instructor", standardLimit, instructorModule);
 app.use("/api/school",     standardLimit, schoolModule);        // school partner portal
 app.use("/api/voice",      aiLimit,       voiceModule);
@@ -282,6 +461,14 @@ process.on("SIGINT",  () => shutdown("SIGINT"));
 // ─── Start ────────────────────────────────────────────────────────────────────
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
+
+  // Warm the tenant-host cache, then keep it fresh. Until it loads, every
+  // unknown subdomain is treated as a school site and denied credentials — so
+  // a slow or failed load costs a broken page, never an open door.
+  refreshTenantHosts()
+    .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
+    .catch(() => {});
+  setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
   console.log(`
 [API]  Akoro API  [${config.instanceId.slice(0, 8)}]  --  http://localhost:${config.server.port}
 

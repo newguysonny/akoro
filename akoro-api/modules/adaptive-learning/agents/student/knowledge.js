@@ -18,6 +18,7 @@ const supabase = createClient(
 );
 
 import { openai } from "../../../../lib/aiModel.js";
+import { mergeKnowledge } from "./mergeKnowledge.js";
 
 // ── Embed helper ──────────────────────────────────────────────
 export async function embed(text) {
@@ -97,13 +98,15 @@ export async function incrementAgentStats(agentId, { turnsAdded, knowledgeAdded,
 // Now grouped by subject + topic, with confidence per topic
 // =============================================================
 
-export async function retrieveAgentKnowledge(agentId, query, limit = 6) {
+export async function retrieveAgentKnowledge(agentId, query, limit = 6, subject = null) {
   const embedding = await embed(query);
 
   const { data, error } = await supabase.rpc("match_agent_knowledge", {
     p_agent_id:        agentId,
     p_query_embedding: embedding,
     p_match_count:     limit,
+    p_query_text:      query,
+    p_subject:         subject,
   });
 
   if (error) throw error;
@@ -156,23 +159,32 @@ export async function saveAgentKnowledge({
   sessionId,
   subject,
   topic,
+  subtopic   = "",
   content,
   chunkType  = "taught",
   confidence = 0.50,
 }) {
-  // Check for existing knowledge on this subject+topic
+  // Keyed on (agent, topic, subtopic) — NOT on subject.
+  //
+  // The old lookup included subject, which is free text drifting between
+  // "Maths" and "Mathematics": a change of spelling made the row invisible and
+  // a second one was inserted beside it. It also used .single(), which returns
+  // null when it matches MORE than one row, so once two existed a third was
+  // created every session.
   const { data: existing } = await supabase
     .schema("edu").from("agent_knowledge")
-    .select("id, times_seen, confidence, decay_rate")
-    .eq("agent_id", agentId)
-    .eq("subject", subject || "general")
-    .ilike("topic", topic)
-    .single();
-
-  const embedding = await embed(content + " " + topic);
+    .select("id, times_seen, confidence, decay_rate, content")
+    .eq("agent_id", agentId).eq("topic", topic).eq("subtopic", subtopic ?? "")
+    .maybeSingle();
 
   if (existing) {
-    // Reinforce: confidence goes up, decay_rate improves slightly
+    // Reinforce: confidence goes up, decay_rate improves slightly.
+    //
+    // And the CONTENT IS MERGED, not overwritten. This update used to pass the
+    // new content straight through, so teaching one aspect of a topic already
+    // covered deleted everything else known about it — while times_seen and
+    // confidence both rose to say the opposite.
+    const { content: merged } = await mergeKnowledge(existing.content, content, { userId: studentId });
     const newConf      = Math.min(0.98, existing.confidence + 0.05);
     const newDecayRate = Math.max(0.04, (existing.decay_rate || 0.10) * 0.95);
 
@@ -183,7 +195,9 @@ export async function saveAgentKnowledge({
     await supabase
       .schema("edu").from("agent_knowledge")
       .update({
-        content,
+        content:         merged,
+        embedding:       await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim()),
+        embedded_at:     new Date(),
         confidence:      newConf,
         times_seen:      existing.times_seen + 1,
         last_seen_at:    new Date(),
@@ -212,13 +226,15 @@ export async function saveAgentKnowledge({
       session_id:      sessionId,
       subject:         subject || "general",
       topic,
+      subtopic:        subtopic ?? "",
       content,
       chunk_type:      chunkType,
       confidence,
       decay_rate:      0.10,
       priority,
       next_review_due: nextDue,
-      embedding,
+      embedding:       await embed(`${content} ${topic} ${subtopic ?? ""}`.trim()),
+      embedded_at:     new Date(),
     })
     .select("id")
     .single();
@@ -278,13 +294,20 @@ export async function getTopicsBySubject(agentId, subject) {
 // RAG SOURCE 2: STUDENT PERSONAL KNOWLEDGE
 // =============================================================
 
-export async function retrieveStudentKnowledge(studentId, query, limit = 5) {
+export async function retrieveStudentKnowledge(studentId, query, limit = 5, subject = null) {
   const embedding = await embed(query);
 
   const { data, error } = await supabase.rpc("match_student_knowledge", {
     p_student_id:      studentId,
     p_query_embedding: embedding,
     p_match_count:     limit,
+    // Hybrid: the raw query drives a full-text arm alongside the vector, fused
+    // by RRF in SQL. Embeddings are weakest on exactly what study notes are
+    // made of — formulae, definitions, units, names — and the lexical arm is
+    // what catches those.
+    p_query_text:      query,
+    p_subject:         subject,
+    p_exclude_tags:    ["battle-encounter"],
   });
 
   if (error) throw error;
@@ -295,40 +318,66 @@ export async function saveStudentKnowledge({
   studentId,
   agentId,
   topic,
+  subtopic   = "",
   subject,
   content,
   source     = "session",
   confidence = 0.60,
   tags       = [],
 }) {
-  const embedding = await embed(content + " " + topic);
-
-  const { error } = await supabase
+  // Read-then-write rather than upsert.
+  //
+  // The upsert this replaces declared onConflict "student_id,topic" against a
+  // constraint that did not exist, so every call returned 42P10 and both
+  // callers swallowed it into a console.warn. This table — the one battle
+  // agents recall from — was therefore never written by a teaching session at
+  // all. The constraint exists now (2026-knowledge-hierarchy.sql), but the
+  // write still cannot be a blind upsert: an upsert REPLACES, and replacing is
+  // the second bug this fixes.
+  const key = { studentId, topic, subtopic: subtopic ?? "" };
+  const { data: existing } = await supabase
     .schema("edu").from("student_knowledge")
-    .upsert(
-      {
-        student_id:  studentId,
-        agent_id:    agentId,
-        topic,
-        subject:     subject || "general",
-        content,
-        source,
-        confidence,
-        tags,
-        embedding,
-        updated_at:  new Date(),
-      },
-      { onConflict: "student_id,topic" }
-    );
+    .select("id, content, confidence")
+    .eq("student_id", key.studentId).eq("topic", key.topic).eq("subtopic", key.subtopic)
+    .maybeSingle();
 
+  if (existing) {
+    const { content: merged, action } = await mergeKnowledge(existing.content, content, { userId: studentId });
+    // Nothing new was said. Re-embedding identical text is a bill for no
+    // change, so the row is left exactly as it is.
+    if (action === "unchanged" && merged === existing.content) return { action, id: existing.id };
+
+    const embedding = await embed(`${merged} ${topic} ${subtopic ?? ""}`.trim());
+    const { error } = await supabase
+      .schema("edu").from("student_knowledge")
+      .update({
+        content: merged, subject: subject || "general", source, tags,
+        confidence: Math.min(1, Math.max(Number(existing.confidence ?? 0.5), confidence)),
+        embedding, embedded_at: new Date(), updated_at: new Date(),
+      }).eq("id", existing.id);
+    if (error) throw error;
+    return { action, id: existing.id };
+  }
+
+  const embedding = await embed(`${content} ${topic} ${subtopic ?? ""}`.trim());
+  const { data, error } = await supabase
+    .schema("edu").from("student_knowledge")
+    .insert({
+      student_id: studentId, agent_id: agentId,
+      topic, subtopic: subtopic ?? "", subject: subject || "general",
+      content, source, confidence, tags, embedding,
+      embedded_at: new Date(), updated_at: new Date(),
+    })
+    .select("id").single();
   if (error) throw error;
+  return { action: "saved", id: data?.id };
 }
 
 // =============================================================
 // RAG SOURCE 3: TEACHER TRAINING CHUNKS
 // =============================================================
 
-export async function retrieveTeacherChunks(teacherId, query, limit = 4) {
+export async function retrieveTeacherChunks(teacherId, query, limit = 4, subject = null) {
   if (!teacherId) return [];
 
   const embedding = await embed(query);
@@ -337,6 +386,10 @@ export async function retrieveTeacherChunks(teacherId, query, limit = 4) {
     p_teacher_id:      teacherId,
     p_query_embedding: embedding,
     p_match_count:     limit,
+    p_query_text:      query,
+    // training_chunks has no subject column — the ingest writes it into
+    // metadata, and the RPC reads it from there.
+    p_subject:         subject,
   });
 
   if (error) { console.warn("[TeacherChunks]", error.message); return []; }
@@ -363,12 +416,15 @@ export async function retrieveCombinedContext({
     ? retrieveAgentKnowledgeByTopic(agentId, subject, topic, agentLimit)
     : subject
     ? retrieveAgentKnowledgeBySubject(agentId, subject, query, agentLimit)
-    : retrieveAgentKnowledge(agentId, query, agentLimit);
+    : retrieveAgentKnowledge(agentId, query, agentLimit, subject);
 
   const [agentChunks, studentChunks, teacherChunks] = await Promise.all([
     agentChunksPromise,
-    retrieveStudentKnowledge(studentId, query, studentLimit),
-    retrieveTeacherChunks(teacherId, query, teacherLimit),
+    // Subject narrows every source, not just the agent's own. Retrieving a
+    // Social Studies note for a Mathematics question wasted a slot in the
+    // prompt and gave the model something plausible to go wrong with.
+    retrieveStudentKnowledge(studentId, query, studentLimit, subject),
+    retrieveTeacherChunks(teacherId, query, teacherLimit, subject),
   ]);
 
   const sections = [];

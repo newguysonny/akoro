@@ -89,8 +89,8 @@ async function createSessionRecord(orchestrator, { studentId, topic, subject, op
     // The session row is what makes a session visible in the Sessions tab, so
     // never let one optional column take the whole row down with it.
     // student_agent_id is a decoration; student_id/topic/subject are the row.
-    // (A stale FK on student_agent_id — it once pointed at public.user_agents
-    // while we write edu.student_agents ids — silently killed EVERY insert.)
+    // (Its FK pointed at public.user_agents while we write edu.student_agents
+    // ids — that silently killed EVERY insert.)
     if (error && row.student_agent_id) {
       console.warn("[adaptive_sessions create] retrying without student_agent_id:", error.message);
       ({ data, error } = await db.schema("edu").from("adaptive_sessions")
@@ -104,7 +104,9 @@ async function createSessionRecord(orchestrator, { studentId, topic, subject, op
     return data.id;
   } catch (e) {
     // Loud: a failure here is why a session would never appear in the list.
-    console.error("[adaptive_sessions create] FAILED — session will not be listed:", e.message);
+    console.error("[adaptive_sessions create] FAILED — session will not be listed:",
+      e.code || "", e.message, e.details || "");
+    orchestrator.saveError = { message: e.message, code: e.code || null };
     return null;
   }
 }
@@ -125,9 +127,27 @@ async function appendSessionBlocks(orchestrator, newBlocks) {
     const { data } = await db.schema("edu").from("adaptive_sessions")
       .select("block_history").eq("id", id).single();
     const existing = Array.isArray(data?.block_history) ? data.block_history : [];
+
+    // WHERE THEY GOT TO, not just what was said.
+    //
+    // current_phase and current_subtopic_idx were written once at creation as
+    // "1" and 0 and never touched again, so the stored row always claimed the
+    // learner was on the first phase of the first subtopic no matter how far
+    // they had come. Continuing a session read that back and restarted them at
+    // the beginning — the transcript was there, the progress was not.
+    //
+    // subtopics is refreshed too: the ladder is resolved after the row is
+    // created, so the row was written with whatever was known at insert time,
+    // which for a resolved-later ladder is an empty array.
+    const sess = orchestrator?.session ?? {};
     await db.schema("edu").from("adaptive_sessions").update({
-      block_history: [...existing, ...newBlocks],
-      updated_at:    new Date().toISOString(),
+      block_history:        [...existing, ...newBlocks],
+      current_phase:        String(sess.phase ?? "1").replace(/^PHASE_/, ""),
+      current_subtopic_idx: Number.isInteger(sess.mustKnowIndex) ? sess.mustKnowIndex : 0,
+      ...(Array.isArray(sess.mustKnowParts) && sess.mustKnowParts.length
+        ? { subtopics: sess.mustKnowParts }
+        : {}),
+      updated_at:           new Date().toISOString(),
     }).eq("id", id);
   } catch (e) {
     console.warn("[adaptive_sessions append]", e.message);
@@ -140,7 +160,7 @@ async function completeSessionRecord(orchestrator) {
   try {
     // Read prior status + student so ranking XP is awarded exactly once.
     const { data: prior } = await db.schema("edu").from("adaptive_sessions")
-      .select("status, student_id").eq("id", id).maybeSingle();
+      .select("status, student_id, subject").eq("id", id).maybeSingle();
 
     await db.schema("edu").from("adaptive_sessions").update({
       status:       "complete",
@@ -151,7 +171,7 @@ async function completeSessionRecord(orchestrator) {
     if (prior && prior.status !== "complete" && prior.student_id) {
       try {
         const { awardXP, XP } = await import("../ranking/routes.js");
-        awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND }).catch(() => {});
+        awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND, subject: prior.subject || null }).catch(() => {});
       } catch { /* ranking module unavailable — non-fatal */ }
     }
   } catch (e) {
@@ -260,13 +280,6 @@ function fmtSessionEnd({ evaluation, controlReport, finalState, agentPairId,
 // (same format as teachingSession.js REST endpoint)
 // =============================================================
 
-const PHASE_PLAN_WS = [
-  "Phase 1 → what do they know",
-  "Phase 2 → must-know parts",
-  "Phase 3 → teach it back",
-  "Phase 4 → push further",
-];
-
 const NANA_RENDER_STYLE = {
   bubbleBg:     "rgba(124,58,237,0.10)",
   bubbleBorder: "#7C3AED",
@@ -283,33 +296,26 @@ function resultToTypedBlocks(result, agentPairId) {
   const agentName  = result.studentAgentName || "Agent";
   const confidence = result.adaptiveEngine?.understanding ?? 0;
 
-  // Drift / sargeant warning
-  if (result.type === "drift_warning") {
-    return [{
-      type:  "sargeant",
-      phase: "Drift warning",
-      text:  result.sargeantMessage || "⚠️ Off-topic detected. Please stay focused.",
-    }];
-  }
+  // No drift block. A wandering learner is steered inside NaNa's own tip now,
+  // as part of a turn that still teaches — rather than by a red alarm from a
+  // second agent that replaced the whole turn with a scolding. Sargeant still
+  // appears below for the assessment gate, which is a different job.
 
   // Subtopic advance — full header sequence
   if (result.subtopicAdvanced && result.currentSubtopic) {
+    // Header only. The objectives ride on it rather than following as their own
+    // checklist, and the phase plan is not shown at all — it steers the
+    // teaching agent, and the phase badge on its messages already tells the
+    // learner where they are.
     blocks.push({
       type:    "subtopic-hdr",
       subtopic: result.currentSubtopic,
       idx:     result.subtopicIdx     ?? 0,
+      items:   result.subtopicObjectives ?? [],
       total:   result.totalSubtopics  ?? 1,
       topic:   result.topic    ?? "",
       subject: result.subject  ?? "",
     });
-    blocks.push({ type: "plan", phases: PHASE_PLAN_WS });
-    if (result.subtopicObjectives?.length) {
-      blocks.push({
-        type:     "objectives",
-        subtopic: result.currentSubtopic,
-        items:    result.subtopicObjectives,
-      });
-    }
   }
 
   // Sargeant assessment gate
@@ -592,6 +598,7 @@ export function setupWebSocket(io) {
         let historyBlocks = [];
         let decayPayload  = null;
         let sessionType   = "free_teaching";
+        let resumeFrom    = null;
 
         // ── Continuation: load block history from DB ─────────
         if (mode === "continuation" && prevSessionId) {
@@ -599,9 +606,19 @@ export function setupWebSocket(io) {
           try {
             const { data: prevSession } = await db.schema("edu")
               .from("adaptive_sessions")
-              .select("block_history, updated_at, completed_at")
+              .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
               .eq("id", prevSessionId)
               .single();
+
+            // The position, not just the transcript. Loading only the words
+            // meant a continuation showed the previous lesson greyed out and
+            // then began teaching subtopic 1 again.
+            if (prevSession) {
+              resumeFrom = {
+                subtopicIdx: Number(prevSession.current_subtopic_idx) || 0,
+                phase: `PHASE_${String(prevSession.current_phase || "1").replace(/^PHASE_/, "")}`,
+              };
+            }
 
             if (prevSession?.block_history?.length) {
               const completedAt = prevSession.completed_at || prevSession.updated_at;
@@ -644,6 +661,10 @@ export function setupWebSocket(io) {
           },
         });
 
+        // Read by initialize() once the ladder is resolved, so the session
+        // starts where the last one stopped rather than at step one.
+        orchestrator.resumeFrom = resumeFrom;
+
         // Resolve the lesson ladder from the most trustworthy source available
         // (school scheme of work → exam-syllabus grounding → AI). Cached per
         // topic so a teacher review improves it for every future learner, and
@@ -660,6 +681,10 @@ export function setupWebSocket(io) {
             orchestrator.presetMustKnow = ladder.subtopics;
             orchestrator.session = orchestrator.session || {};
             orchestrator.session.objectives = ladder.objectives || {};
+            // The path, not just the stops: what each step builds on and what
+            // it unlocks, so the learner can see where they are in the topic
+            // rather than only what is in front of them.
+            orchestrator.session.knowledgeMap = ladder.map || [];
           }
         } catch (e) { console.warn("[resolveLadder]", e.message); }
 
@@ -715,6 +740,13 @@ export function setupWebSocket(io) {
         // Persist in background — never blocks the session
         createSessionRecord(orchestrator, {
           studentId, topic, subject, openingBlocks: init.openingBlocks,
+        }).then(rowId => {
+          socket.emit("session_saved", {
+            sessionId: id,
+            saved:     !!rowId,
+            rowId:     rowId || null,
+            error:     rowId ? null : (orchestrator.saveError || { message: "unknown" }),
+          });
         }).catch(e => console.warn("[createSessionRecord]", e.message));
 
       } catch (err) {

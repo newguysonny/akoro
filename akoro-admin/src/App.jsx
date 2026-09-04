@@ -7,13 +7,17 @@ import UsersPage            from './pages/UsersPage.jsx';
 import InstructorsPage      from './pages/InstructorsPage.jsx';
 import SchoolsPage          from './pages/SchoolsPage.jsx';
 import CoursesPage          from './pages/CoursesPage.jsx';
+import AppCenterPage        from './pages/AppCenterPage.jsx';
 import AgentsPage           from './pages/AgentsPage.jsx';
+import PastQuestionsPage    from './pages/PastQuestionsPage.jsx';
 import SyllabusPage         from './pages/SyllabusPage.jsx';
 import WebsiteTemplatesPage from './pages/WebsiteTemplatesPage.jsx';
 import BlogAdminPage        from './pages/BlogAdminPage.jsx';
 import BlogPostEditorPage   from './pages/BlogPostEditorPage.jsx';
 import CareersAdminPage     from './pages/CareersAdminPage.jsx';
 import AnalyticsPage        from './pages/AnalyticsPage.jsx';
+import AiSpendPage          from './pages/AiSpendPage.jsx';
+import EvalsPage            from './pages/EvalsPage.jsx';
 import PaymentsPage         from './pages/PaymentsPage.jsx';
 import PayoutsPage          from './pages/PayoutsPage.jsx';
 import ReviewsPage          from './pages/ReviewsPage.jsx';
@@ -95,14 +99,18 @@ export default function App() {
           <Route path="/instructors"       element={<AdminRoute><InstructorsPage /></AdminRoute>} />
           <Route path="/schools"           element={<AdminRoute><SchoolsPage /></AdminRoute>} />
           <Route path="/courses"           element={<AdminRoute><CoursesPage /></AdminRoute>} />
+          <Route path="/app-center"        element={<AdminRoute><AppCenterPage /></AdminRoute>} />
           <Route path="/agents"            element={<AdminRoute><AgentsPage /></AdminRoute>} />
           <Route path="/syllabus"          element={<AdminRoute><SyllabusPage /></AdminRoute>} />
+          <Route path="/past-questions"    element={<AdminRoute><PastQuestionsPage /></AdminRoute>} />
           <Route path="/website-templates" element={<AdminRoute><WebsiteTemplatesPage /></AdminRoute>} />
           <Route path="/content/blog"      element={<AdminRoute><BlogAdminPage /></AdminRoute>} />
           <Route path="/content/blog/new"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
           <Route path="/content/blog/:id"  element={<AdminRoute><BlogPostEditorPage /></AdminRoute>} />
           <Route path="/content/careers"   element={<AdminRoute><CareersAdminPage /></AdminRoute>} />
           <Route path="/analytics"         element={<AdminRoute><AnalyticsPage /></AdminRoute>} />
+          <Route path="/ai-spend"          element={<AdminRoute><AiSpendPage /></AdminRoute>} />
+          <Route path="/evals"             element={<AdminRoute><EvalsPage /></AdminRoute>} />
           <Route path="/payments"          element={<AdminRoute><PaymentsPage /></AdminRoute>} />
           <Route path="/payouts"           element={<AdminRoute><PayoutsPage /></AdminRoute>} />
           <Route path="/reviews"           element={<AdminRoute><ReviewsPage /></AdminRoute>} />

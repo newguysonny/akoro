@@ -158,7 +158,8 @@ export default function SigninPage() {
             padding: '10px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600, color: RED,
           }}>
             {formErr
-              || (urlError === 'google_failed' ? 'Google sign-in failed. Try again.'
+              || (urlError === 'session_expired' ? 'Your session timed out for security. Please sign in again.'
+              : urlError === 'google_failed' ? 'Google sign-in failed. Try again.'
               : urlError === 'not_instructor' ? 'This portal is for schools only. Your account does not have access.'
               : urlError)}
           </div>

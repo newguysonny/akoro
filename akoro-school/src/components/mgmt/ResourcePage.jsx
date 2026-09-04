@@ -18,15 +18,24 @@ export const inputStyle = {
   outline: 'none', fontSize: 13, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box',
 };
 
-export function FieldInput({ field, value, onChange, optionLists }) {
+export function FieldInput({ field, value, onChange, optionLists, optionErrors = {} }) {
   const v = value ?? '';
   if (field.type === 'select') {
     const opts = field.options || optionLists[field.key] || [];
+    const failed = optionErrors[field.key];
     return (
-      <select value={v} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-        <option value="">— select —</option>
-        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      <>
+        <select value={v} onChange={(e) => onChange(e.target.value)}
+          style={{ ...inputStyle, cursor: 'pointer', borderColor: failed ? '#FCA5A5' : undefined }}>
+          <option value="">{failed ? '— could not load —' : '— select —'}</option>
+          {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {failed && (
+          <div style={{ fontSize: 11, color: '#B91C1C', fontWeight: 700, marginTop: 4 }}>
+            These options didn't load. Reload the page to try again.
+          </div>
+        )}
+      </>
     );
   }
   if (field.type === 'textarea') return <textarea rows={3} value={v} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} style={{ ...inputStyle, resize: 'vertical' }} />;
@@ -66,6 +75,7 @@ export default function ResourcePage({
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [optionLists, setOptionLists] = useState({});
+  const [optionErrors, setOptionErrors] = useState({});
   const [toast, setToast] = useState('');
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 2600); };
@@ -94,7 +104,12 @@ export default function ResourcePage({
           label: f.optionsFrom.labelFn ? f.optionsFrom.labelFn(r) : r[f.optionsFrom.labelKey || 'name'],
         }));
         setOptionLists((prev) => ({ ...prev, [f.key]: opts }));
-      }).catch(() => {});
+      }).catch(() => {
+        // An empty dropdown and a dropdown that failed to load look identical,
+        // and the second one makes the user believe the school has no classes
+        // (or teachers, or subjects) rather than that a request failed.
+        setOptionErrors((prev) => ({ ...prev, [f.key]: true }));
+      });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resource]);
@@ -161,6 +176,7 @@ export default function ResourcePage({
         {listFilters.map((f) => (
           <select key={f.key} value={filters[f.key] || ''} onChange={(e) => setFilters((p) => ({ ...p, [f.key]: e.target.value }))} style={{ ...inputStyle, width: 'auto', minWidth: 140, cursor: 'pointer' }}>
             <option value="">{f.label}: All</option>
+            {optionErrors[f.key] && <option value="" disabled>— could not load —</option>}
             {(f.options || optionLists[f.key] || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         ))}
@@ -230,7 +246,7 @@ export default function ResourcePage({
                   <label style={{ fontSize: 12, fontWeight: 700, color: INK, display: 'block', marginBottom: 5 }}>
                     {f.label} {f.required && <span style={{ color: RED }}>*</span>}
                   </label>
-                  <FieldInput field={f} value={form[f.key]} onChange={(v) => setForm((p) => ({ ...p, [f.key]: v }))} optionLists={optionLists} />
+                  <FieldInput field={f} value={form[f.key]} onChange={(v) => setForm((p) => ({ ...p, [f.key]: v }))} optionLists={optionLists} optionErrors={optionErrors} />
                 </div>
               ))}
             </div>

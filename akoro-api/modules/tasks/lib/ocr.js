@@ -42,6 +42,9 @@ async function fetchText(url) {
 
 async function extractWithVision(fileUrl, fileName) {
   const response = await openai.chat.completions.create({
+    // Runs outside a request, so nothing sets the feature for it — without
+    // this its cost lands in the unattributable "ai" bucket.
+    __feature: "ocr",
     model: OPENAI_MODEL, max_tokens: 4096,
     messages: [{
       role: "user",

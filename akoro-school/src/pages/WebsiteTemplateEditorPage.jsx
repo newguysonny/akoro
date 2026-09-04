@@ -161,6 +161,7 @@ export default function WebsiteTemplateEditorPage() {
             <iframe
               title="Template preview"
               srcDoc={html}
+              sandbox=""
               style={{ width: viewportWidth, maxWidth: '100%', height: 480, border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}
             />
           </div>

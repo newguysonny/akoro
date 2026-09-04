@@ -2,11 +2,14 @@
  * TeacherToolSheet — teacher generation tools surfaced in the AI chat modal.
  *   kind = 'lesson'   → lesson plan / worksheet / quiz  (POST /ai/lesson)
  *   kind = 'website'  → newsletter / recap / social / event page (POST /ai/website-content)
+ *   kind = 'teaching' → the shared teaching tool suite (POST /api/teaching/tools/*)
  * Generates content the teacher can drop into the chat or copy into the builder.
  */
 import { useState } from 'react';
 import { X, Sparkles, Copy, Check, MessageSquarePlus, Globe } from 'lucide-react';
 import { apiPost } from '../../services/api.js';
+import TeachingTools from '../../components/teaching/TeachingTools.jsx';
+import ContentView, { contentViewStyles } from '../../components/ContentView.jsx';
 
 const FONT = "'Nunito', sans-serif";
 const BRAND = '#6C3BFF', MUTED = '#6B6B80', BORDER = '#EDE8E1', INK = '#1A1A2E';
@@ -24,6 +27,36 @@ const WEB_TYPES = [
 ];
 
 export default function TeacherToolSheet({ kind, host, onClose, onInsert }) {
+  // The teaching suite brings its own catalog, forms and output renderers, so
+  // it only borrows this sheet's chrome.
+  if (kind === 'teaching') {
+    return (
+      <Sheet title="Teaching tools" onClose={onClose}>
+        <TeachingTools compact onInsert={(text) => { onInsert?.(text); onClose(); }} />
+      </Sheet>
+    );
+  }
+  return <LegacyToolSheet kind={kind} host={host} onClose={onClose} onInsert={onInsert} />;
+}
+
+// Shared bottom-sheet chrome.
+function Sheet({ title, onClose, children }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: '20px 20px 0 0', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 18px 10px', borderBottom: `1px solid ${BORDER}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15.5, fontWeight: 900, color: INK }}>
+            <Sparkles size={17} color={BRAND} /> {title}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><X size={20} /></button>
+        </div>
+        <div style={{ padding: '14px 16px 18px', overflowY: 'auto' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function LegacyToolSheet({ kind, host, onClose, onInsert }) {
   const isLesson = kind === 'lesson';
   const types = isLesson ? LESSON_TYPES : WEB_TYPES;
   const [type, setType] = useState(types[0].k);
@@ -112,7 +145,10 @@ export default function TeacherToolSheet({ kind, host, onClose, onInsert }) {
 
           {out && (
             <div style={{ marginTop: 14 }}>
-              <div style={{ background: '#FAF8F5', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px', fontSize: 12.5, lineHeight: 1.6, color: INK, whiteSpace: 'pre-wrap', maxHeight: '40vh', overflowY: 'auto' }}>{out}</div>
+              <div style={{ background: '#FAF8F5', border: `1px solid ${BORDER}`, borderRadius: 12, maxHeight: '40vh', overflowY: 'auto' }}>
+                <style>{contentViewStyles}</style>
+                <ContentView content={out} kind={type === 'social_post' ? 'social' : null} style={{ padding: '12px 14px' }} />
+              </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <button onClick={copy} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px', fontSize: 13, fontWeight: 800, color: INK, cursor: 'pointer', fontFamily: FONT }}>
                   {copied ? <Check size={14} color="#10B981" /> : <Copy size={14} />}{copied ? 'Copied' : 'Copy'}

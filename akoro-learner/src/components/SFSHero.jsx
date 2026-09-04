@@ -46,14 +46,27 @@ export default function SFSHero() {
 
   return (
     <div className="font-sans text-[#333]">
+      {/* On phones the hero is a tall 18:16 card. From tablet up it spans the
+          full width to the right edge — capping it at 640px left a dead gutter
+          on the right of every desktop screen — so the aspect ratio gives way
+          to a viewport-relative height. */}
+      <style>{`
+        .ak-sfs-hero {
+          aspect-ratio: 18 / 16;
+          max-width: 640px;
+          border-radius: 0 0 0 clamp(120px, 40vw, 260px);
+        }
+        @media (min-width: 768px) {
+          .ak-sfs-hero {
+            max-width: none;
+            aspect-ratio: auto;
+            height: clamp(440px, 62vh, 640px);
+            border-radius: 0 0 0 clamp(160px, 18vw, 300px);
+          }
+        }
+      `}</style>
       <div className="flex justify-start bg-white pt-1 pb-8">
-        <div
-          className="relative w-full max-w-[640px] overflow-hidden"
-          style={{
-            aspectRatio: "18 / 16",
-            borderRadius: "0 0 0 clamp(120px, 40vw, 260px)",
-          }}
-        >
+        <div className="ak-sfs-hero relative w-full overflow-hidden">
           {SLIDES.map((slide, i) => {
             const isCurrent = i === current;
             const isPrev = i === prev;

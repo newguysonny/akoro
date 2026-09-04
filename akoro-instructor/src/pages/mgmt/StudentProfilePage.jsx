@@ -11,6 +11,7 @@ import { Btn, StatusPill, Toast } from '../../components/Primitives.jsx';
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, RED, FONT } from '../../constants.js';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const TABS = [
   { key: 'overview',   label: 'Overview',   icon: User },
@@ -58,7 +59,7 @@ export default function StudentProfilePage() {
   };
 
   const remove = async () => {
-    if (!student || !window.confirm('Remove this student from your courses? This cannot be undone.')) return;
+    if (!student || !await confirmDialog('Remove this student from your courses? This cannot be undone.')) return;
     try { await removeStudent(student.enrollmentId); showToast('Student removed', 'info'); setTimeout(() => navigate('/mgmt/students'), 700); }
     catch (e) { showToast(e.message || 'Could not remove', 'error'); }
   };

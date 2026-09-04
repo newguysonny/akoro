@@ -12,11 +12,14 @@ import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 import { bullRedisOptions }                        from "../../lib/redisOptions.js";
-import { openai, OPENAI_MODEL } from "../../lib/aiModel.js";
+import { OPENAI_MODEL } from "../../lib/aiModel.js";
 import { hasCoins } from "../../lib/coins.js";
+// The loop lives in lib/agentLoop.js so the eval suite can run THIS loop
+// against stub tools rather than a copy of it. What stays here is everything
+// an eval must not do: billing, DB writes, delivery.
+import { runAgentLoop } from "./lib/agentLoop.js";
 
-const MAX_TOOL_ITERATIONS = 20;
-const MODEL               = OPENAI_MODEL;
+const MODEL = OPENAI_MODEL;
 
 const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[tasks/worker Redis]", err.message));
@@ -61,57 +64,27 @@ export const taskWorker = new Worker("task-runner", async (job) => {
     }));
     const toolMap      = new Map(tools.map((t) => [t.definition.name, t]));
     const toolCtx      = { taskId: task.id, runId: run.id, teacherId: task.creator_id, courseId: task.course_id ?? null };
-    const agentSteps   = [];
-    const outputs      = [];
-    const messages     = [
-      { role: "system", content: ctx.systemPrompt },
-      { role: "user",   content: ctx.prompt },
-    ];
 
-    let iterations = 0;
-    while (iterations < MAX_TOOL_ITERATIONS) {
-      iterations++;
-      const response = await openai.chat.completions.create({
-        model: MODEL, max_tokens: 4096,
-        ...(toolDefs.length ? { tools: toolDefs } : {}),
-        messages,
-        // Background job (no request context) — name the payer explicitly so the
-        // metered client bills each iteration to the task owner's wallet.
-        __userId: payer, __feature: "agent_task", __ref: task.id,
-      });
-
-      // (Billing happens inside the metered client via __userId above.)
-      const msg    = response.choices?.[0]?.message ?? { role: "assistant", content: "" };
-      const finish = response.choices?.[0]?.finish_reason;
-      agentSteps.push({ role: "assistant", content: msg.content ?? null, toolCalls: msg.tool_calls ?? null, finishReason: finish, iteration: iterations });
-      await TaskRunDB.update(run.id, { agentSteps });
-
-      // Echo the assistant turn back (may carry tool_calls) — required before
-      // the matching tool results.
-      messages.push(msg);
-
-      if (msg.content && msg.content.trim()) outputs.push({ type: "message", text: msg.content });
-
-      const toolCalls = msg.tool_calls ?? [];
-      if (!toolCalls.length) break;   // finish_reason "stop" — no tools requested
-
-      for (const call of toolCalls) {
-        const name       = call.function?.name;
+    const { steps: agentSteps, outputs } = await runAgentLoop({
+      model: MODEL,
+      messages: [
+        { role: "system", content: ctx.systemPrompt },
+        { role: "user",   content: ctx.prompt },
+      ],
+      toolDefs,
+      async callTool(name, args) {
         const registered = toolMap.get(name);
-        let content;
-        if (!registered) {
-          content = `Tool "${name}" not found`;
-        } else {
-          await deliverProgress(task, `Using tool: ${name}...`);
-          let args = {};
-          try { args = JSON.parse(call.function.arguments || "{}"); } catch { args = {}; }
-          try { content = JSON.stringify(await registered.execute(args, toolCtx)); }
-          catch (err) { content = `Tool error: ${err.message}`; }
-        }
-        // One tool message per tool_call_id, or OpenAI rejects the next call.
-        messages.push({ role: "tool", tool_call_id: call.id, content });
-      }
-    }
+        if (!registered) return `Tool "${name}" not found`;
+        return registered.execute(args, toolCtx);
+      },
+      // Persist after every model turn, so a run that dies mid-way still shows
+      // how far it got.
+      onStep: (_step, all) => TaskRunDB.update(run.id, { agentSteps: all }),
+      onToolStart: (name) => deliverProgress(task, `Using tool: ${name}...`),
+      // Background job (no request context) — name the payer explicitly so the
+      // metered client bills each iteration to the task owner's wallet.
+      meta: { __userId: payer, __feature: "agent_task", __ref: task.id },
+    });
 
     await TaskRunDB.update(run.id, { status: "done", agentSteps, completed_at: new Date() });
     await deliver(task, run, outputs);

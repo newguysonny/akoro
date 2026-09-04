@@ -8,6 +8,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import BackButton from '../components/BackButton.jsx';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const DEFAULT_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -46,7 +47,7 @@ function Screenshot({ id, name, active, badge }) {
     <div ref={ref} style={{ position: 'relative', height: 158, borderBottom: `1px solid ${BORDER}`, overflow: 'hidden', background: '#f1f1f4' }}>
       {html === null ? <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}><Loader2 size={18} color={MUTED2} style={{ animation: 'spin .8s linear infinite' }} /></div>
         : html === '' ? <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${AMBER}14, ${BLUE}14)`, fontSize: 15, fontWeight: 900, color: INK }}>{name}</div>
-        : <iframe title="preview" srcDoc={html} scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 0.85, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
+        : <iframe title="preview" srcDoc={html} sandbox="" scrolling="no" tabIndex={-1} aria-hidden style={{ width: baseW, height: baseW * 0.85, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left', pointerEvents: 'none' }} />}
       {active && (
         <span style={{ position: 'absolute', top: 10, left: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: GREEN, color: WHITE, fontSize: 10.5, fontWeight: 800, padding: '3px 9px', borderRadius: 20, boxShadow: '0 1px 4px rgba(0,0,0,.2)' }}>
           <CheckCircle2 size={11} /> Active
@@ -103,7 +104,7 @@ export default function WebsiteTemplatesPage() {
     finally { setBusyId(null); }
   };
   const remove = async (id) => {
-    if (!window.confirm('Delete this template?')) return;
+    if (!await confirmDialog('Delete this template?')) return;
     setBusyId(id);
     try { await apiDelete(`/api/school/website/templates/${id}`); setTemplates((p) => p.filter((t) => t.id !== id)); showToast('Deleted'); }
     catch (e) { showToast(e.message || 'Could not delete'); }

@@ -8,7 +8,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock, Ticket } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import { applyCoupon as applyCouponApi, checkoutCart, verifyCheckout } from '../services/cartApi.js';
 import { apiPost, API } from '../services/api.js';
@@ -23,6 +23,7 @@ const METHODS = [
   { key: 'card', label: 'Card',          sub: 'Debit / credit card',                   icon: CreditCard },
   { key: 'bank', label: 'Bank transfer', sub: 'Pay from your bank app',                 icon: Landmark },
   { key: 'ussd', label: 'USSD',          sub: 'Dial a code on your phone',              icon: Smartphone },
+  { key: 'voucher', label: 'Voucher code', sub: 'Redeem a code bought from an agent',   icon: Ticket },
 ];
 
 export default function CheckoutPage() {
@@ -55,6 +56,11 @@ export default function CheckoutPage() {
   const canCoupon = mode === 'cart' || mode === 'course';   // top-ups & guides have no coupons
 
   const [method, setMethod]     = useState('any');
+  const [voucherCode, setVoucherCode] = useState('');
+  // pay() only implements the voucher path for a CART checkout. Offering it
+  // for a single course / top-up / agent purchase let the user pick it, type
+  // a code, and get silently sent to Paystack with the code ignored.
+  const availableMethods = mode === 'cart' ? METHODS : METHODS.filter((m) => m.key !== 'voucher');
   const [code, setCode]         = useState('');
   const [coupon, setCoupon]     = useState(null);   // { coupon_code, savings_ngn?, final_ngn? }
   const [applying, setApplying] = useState(false);
@@ -177,7 +183,15 @@ export default function CheckoutPage() {
         if (d?.free || d?.success) { setToast({ msg: `${st.listing.title} unlocked! 🎉`, color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
         setToast({ msg: 'Could not start payment', color: RED });
       } else {
-        const res = await checkoutCart({ coupon_code: coupon?.coupon_code, method: isFree ? undefined : method });
+        if (!isFree && method === 'voucher' && !voucherCode.trim()) {
+          setToast({ msg: 'Enter your voucher code', color: RED });
+          return;
+        }
+        const res = await checkoutCart({
+          coupon_code: coupon?.coupon_code,
+          method: isFree ? undefined : method,
+          ...(!isFree && method === 'voucher' ? { voucher_code: voucherCode.trim() } : {}),
+        });
         const d = res?.data ?? res;
         if (d?.checkout_url) { window.location.href = d.checkout_url; return; }
         if (d?.free) { setToast({ msg: d.message || 'Access granted! 🎉', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
@@ -232,7 +246,7 @@ export default function CheckoutPage() {
           <div style={card}>
             <div style={h}>Payment method</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {METHODS.map((m) => {
+              {availableMethods.map((m) => {
                 const on = method === m.key;
                 const Icon = m.icon;
                 return (
@@ -256,6 +270,16 @@ export default function CheckoutPage() {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 8, padding: '9px 11px', borderRadius: 10, background: `${BRAND}0A`, border: `1px solid ${BRAND}22`, fontSize: 11.5, color: 'var(--ak-text-sec)', lineHeight: 1.5 }}>
                 <Clock size={13} color={BRAND} style={{ flexShrink: 0, marginTop: 1 }} />
                 {method === 'bank' ? 'Bank transfers' : 'USSD payments'} can take a moment to confirm — your access unlocks automatically once the payment clears.
+              </div>
+            )}
+            {method === 'voucher' && (
+              <div style={{ marginTop: 10 }}>
+                <input value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                  placeholder="XXXX-XXXX-XXXX"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: 11, border: '1px solid var(--ak-border)', background: 'var(--ak-bg)', color: 'var(--ak-text)', fontSize: 14, fontFamily: 'monospace', letterSpacing: 0.5, outline: 'none' }} />
+                <div style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+                  Your code is redeemed into coins, then this order is paid from your coin balance. If the code doesn’t cover the full amount, the coins stay in your wallet and you can add another code or top up.
+                </div>
               </div>
             )}
           </div>

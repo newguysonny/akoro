@@ -21,6 +21,9 @@ import { businessConfig }                 from "../../config/index.js";
 import { verifyTransaction }              from "../adaptive-learning/marketplace/paystackService.js";
 import { recordPaymentItems }             from "../webhooks/paymentAudit.js";
 import { notify }                          from "../notifications/events.js";
+import { redeemVoucher, VoucherError, voucherRedeemConfigured } from "../../lib/voucherRedeem.js";
+import { creditTopup, debitCoins, refundCoins, hasCoins } from "../../lib/coins.js";
+import { nairaToCoins }                    from "../../lib/aiPricing.js";
 
 // Build normalized payment_items rows from resolved cart line items.
 const toPaymentItems = (items) => items.map((i) => ({
@@ -542,18 +545,19 @@ const handlers = {
       }
     }
 
-    // Free cart — grant everything directly without Paystack
-    if (totalKobo === 0) {
-      const freeCourseIds  = checkoutItems.filter((i) => i.item_type === "course").map((i) => i.course_id);
-      const freeListingIds = checkoutItems.filter((i) => i.item_type === "agent").map((i) => i.listing_id);
-      // Record a zero-amount success payment so the free order still appears in
-      // the learner's order history.
-      const { data: freePayment } = await db.from("payments").insert({
-        user_id: userId, course_id: freeCourseIds[0] ?? null, amount_paid: 0, currency: "NGN",
-        payment_provider: "free", status: "success", paid_at: new Date().toISOString(),
-        provider_response: { is_cart_checkout: true, course_ids: freeCourseIds, listing_ids: freeListingIds, item_count: checkoutItems.length, free: true },
+    // Grant every item in the cart directly (no Paystack). Shared by the
+    // free-cart path and the voucher/coin-settled path — both have already
+    // "paid" by the time they get here, they just differ in how.
+    const grantEverything = async ({ provider, amountKobo, extraMeta = {} }) => {
+      const gCourseIds  = checkoutItems.filter((i) => i.item_type === "course").map((i) => i.course_id);
+      const gListingIds = checkoutItems.filter((i) => i.item_type === "agent").map((i) => i.listing_id);
+      // Record the payment so the order still appears in the learner's history.
+      const { data: payment } = await db.from("payments").insert({
+        user_id: userId, course_id: gCourseIds[0] ?? null, amount_paid: amountKobo, currency: "NGN",
+        payment_provider: provider, status: "success", paid_at: new Date().toISOString(),
+        provider_response: { is_cart_checkout: true, course_ids: gCourseIds, listing_ids: gListingIds, item_count: checkoutItems.length, ...extraMeta },
       }).select("id").single();
-      if (freePayment?.id) await recordPaymentItems(freePayment.id, toPaymentItems(checkoutItems));
+      if (payment?.id) await recordPaymentItems(payment.id, toPaymentItems(checkoutItems));
       for (const item of checkoutItems) {
         if (item.item_type === "agent") {
           await grantAgentFromCart(userId, { listingId: item.listing_id, agentId: item.agent_id, amountKobo: 0, currency: item.currency });
@@ -566,8 +570,68 @@ const handlers = {
         }
       }
       await db.from("cart_items").delete().eq("user_id", userId);
-      notify.purchaseSuccess({ userId, itemTitle: `${checkoutItems.length} item${checkoutItems.length === 1 ? "" : "s"}`, amountNgn: 0 });
+      notify.purchaseSuccess({ userId, itemTitle: `${checkoutItems.length} item${checkoutItems.length === 1 ? "" : "s"}`, amountNgn: amountKobo / 100 });
+    };
+
+    // Free cart — grant everything directly without Paystack
+    if (totalKobo === 0) {
+      await grantEverything({ provider: "free", amountKobo: 0, extraMeta: { free: true } });
       return res200(res, { free: true, enrolled_count: checkoutItems.length, message: "Access granted to all free items" });
+    }
+
+    // ── Pay with a voucher code ────────────────────────────────────────────
+    // Redeem the code into coins, then settle this order from the coin
+    // balance. Redemption is committed BEFORE we check whether it covers the
+    // order — a voucher is single-use, so on a shortfall the learner keeps the
+    // credited coins rather than losing them; we just tell them what's left to
+    // cover and leave the cart intact.
+    if (method === "voucher") {
+      const code = String(req.body?.voucher_code || "").trim().toUpperCase();
+      if (!code) return res400(res, "Enter a voucher code");
+      if (!voucherRedeemConfigured()) return res400(res, "Voucher payment isn't configured on this server");
+
+      let credited = 0;
+      try {
+        const { credits, transactionId } = await redeemVoucher({ code, customerId: userId });
+        credited = credits;
+        await creditTopup({ ownerType: "user", ownerId: userId, coins: credits, ref: `voucher_${transactionId}`, by: userId });
+      } catch (e) {
+        if (e instanceof VoucherError) return res.status(e.status === 429 ? 429 : 400).json({ success: false, message: e.message, reason: e.reason });
+        throw e;
+      }
+
+      const coinsNeeded = nairaToCoins(totalKobo / 100);
+      const { total: coinBalance } = await hasCoins(userId, 1);
+      if (coinBalance < coinsNeeded) {
+        return res.status(402).json({
+          success: false, code: "INSUFFICIENT_COINS",
+          message: `Voucher redeemed (+${credited} coins), but this order needs ${coinsNeeded} coins and you have ${coinBalance}. Add another voucher or top up the difference.`,
+          credited, balance: coinBalance, needed: coinsNeeded,
+        });
+      }
+
+      const spendRef = `cart_${userId}_${Date.now()}`;
+      const spend = await debitCoins({ userId, coins: coinsNeeded, feature: "cart_checkout", ref: spendRef });
+      try {
+        await grantEverything({ provider: "voucher", amountKobo: totalKobo, extraMeta: { method: "voucher", coins_spent: coinsNeeded } });
+      } catch (grantErr) {
+        // The coins are already gone. If granting access fails we must put
+        // them back, or the learner has paid and received nothing.
+        // Refund to the SAME accounts the debit came from — a cart charge can
+        // span the learner's wallet and their school's.
+        const failedRefunds = await refundCoins({ applied: spend.applied, feature: "cart_checkout", ref: spendRef });
+        if (failedRefunds === 0) {
+          console.error("[cart/voucher] grant failed, coins refunded:", grantErr.message);
+          return res.status(500).json({ success: false, message: "Could not complete your order — your coins were refunded. Please try again." });
+        }
+        console.error(`[cart/voucher] ‼️ GRANT FAILED and ${failedRefunds} refund(s) FAILED user=${userId} coins=${coinsNeeded} ref=${spendRef} — manual correction required`);
+        return res.status(500).json({ success: false, message: "Something went wrong completing your order. Our team has been notified — please contact support." });
+      }
+      return res200(res, {
+        free: true,   // reuse the frontend's "granted, no redirect" branch
+        paid_with: "voucher", enrolled_count: checkoutItems.length,
+        message: `Paid with voucher — access granted to ${checkoutItems.length} item${checkoutItems.length === 1 ? "" : "s"}`,
+      });
     }
 
     const { data: user } = await db.from("users").select("email, full_name").eq("id", userId).single();

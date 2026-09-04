@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Btn, Inp } from '../../components/Primitives.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
+import ContentView, { contentViewStyles } from '../../components/ContentView.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, FONT } from '../../constants.js';
 
 const TABS = [
@@ -306,6 +307,7 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
         </div>
       </div>
 
+      <style>{contentViewStyles}</style>
       {result && (
         <div style={{ marginTop: 20, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', background: LIGHT, borderBottom: `1px solid ${BORDER}` }}>
@@ -317,7 +319,7 @@ function GeneratorPanel({ kind, onToast, onGenerated }) {
               </button>
             </div>
           </div>
-          <pre style={{ margin: 0, padding: '14px 16px', fontSize: 13, lineHeight: 1.6, color: INK, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{result}</pre>
+          <ContentView content={result} kind={kind} />
         </div>
       )}
 

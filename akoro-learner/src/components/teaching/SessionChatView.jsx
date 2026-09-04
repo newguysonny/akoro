@@ -4,12 +4,38 @@ import { MicIcon, SendIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon } from '../co
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
+/* ── Mic level meter ──────────────────────────────────────────────
+   Twelve segments lit in proportion to RMS loudness. Segments rather than a
+   continuous bar because movement is the signal: a bar sliding smoothly near
+   zero still looks like it might be doing something, while a row of segments
+   that never lights past the first is unmistakably not hearing you. */
+function MicMeter({ level = 0 }) {
+  const SEGMENTS = 12;
+  const lit = Math.round(Math.max(0, Math.min(1, level)) * SEGMENTS);
+  return (
+    <div style={{ display:"flex", gap:2, alignItems:"flex-end", height:8 }} aria-hidden="true">
+      {Array.from({ length: SEGMENTS }).map((_, i) => (
+        <div key={i} style={{
+          flex:1, borderRadius:1,
+          /* Taller toward the right, so loud reads as loud at a glance. */
+          height: 3 + (i / SEGMENTS) * 5,
+          background: i < lit
+            /* Amber at the top of the range: worth knowing, not an error. */
+            ? (i > SEGMENTS - 3 ? "#FBBF24" : "#34D399")
+            : "rgba(255,255,255,.13)",
+          transition: "background 60ms linear",
+        }}/>
+      ))}
+    </div>
+  );
+}
+
 function SessionChatView({
   blocks, loading, loadingNote = '', input, onInputChange, onSend,
   topic, subject, agentName, agentEmoji, mode,
   userTurns, onSummarize, showSummarize,
   recording, onToggleRecording, seconds,
-  voiceStreaming, interimText, onToggleVoice,
+  voiceStreaming, interimText, voiceLevel = 0, onToggleVoice,
   cognitive,
   guideLabel, onSwitchAgent, switching,
   connState = "connected",
@@ -164,15 +190,21 @@ function SessionChatView({
                 animation:"pulse-dot 0.7s ease-in-out infinite" }}/>
               <span style={{ fontSize:11,fontWeight:800,color:RED }}>{t('teaching.stop')}</span>
             </div>
-            {/* Live transcript */}
+            {/* Live transcript, with a level meter above it.
+                A mic with no meter cannot be told apart from a mic that is not
+                working — "is it hearing me?" is the first thing anyone wants to
+                know, and before this the only answer was to keep talking and
+                hope words appeared. */}
             <div style={{ flex:1,background:"rgba(255,255,255,.07)",
               border:"1.5px solid rgba(255,255,255,.15)",borderRadius:12,
-              padding:"8px 12px",minHeight:40,display:"flex",alignItems:"center" }}>
+              padding:"7px 12px",minHeight:40,display:"flex",flexDirection:"column",
+              justifyContent:"center",gap:6 }}>
+              <MicMeter level={voiceLevel}/>
               {interimText
                 ? <span style={{ fontSize:13,fontWeight:600,color:"#94A3B8",
                     fontStyle:"italic",lineHeight:1.5 }}>{interimText}</span>
                 : <span style={{ fontSize:12,fontWeight:600,color:"#475569" }}>
-                    {t('teaching.listening')}
+                    {voiceLevel > 0.06 ? t('teaching.listening') : "Speak now\u2026"}
                   </span>
               }
             </div>

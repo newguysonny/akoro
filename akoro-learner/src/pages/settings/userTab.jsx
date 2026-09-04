@@ -24,11 +24,12 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
   // subscription, not just a saved flag.
   const [pushState, setPushState] = useState({ supported: false, subscribed: false, permission: 'default' });
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState('');
   useEffect(() => { if (pushSupported()) getPushStatus().then(setPushState); }, []);
 
   const togglePush = async () => {
     if (pushBusy) return;
-    setPushBusy(true);
+    setPushBusy(true); setPushError('');
     try {
       if (pushState.subscribed) { await disablePush(); }
       else { await enablePush(); }
@@ -37,7 +38,9 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
       const updated = { ...notif, push: s.subscribed };
       setNotif(updated); onSaveNotif(updated);
     } catch (e) {
-      alert(e?.message || 'Could not update push notifications.');
+      // Inline, beside the control that failed — a blocking alert here forced
+      // the user to dismiss a box just to see which switch didn't move.
+      setPushError(e?.message || 'Could not update push notifications.');
     } finally { setPushBusy(false); }
   };
 
@@ -72,6 +75,11 @@ function NotifSection({ notif, setNotif, onSaveNotif }) {
         <NotifRow icon="ti-mail"   label={t('settings.notif_email')} sub={t('settings.notif_email_sub')}     field="email"/>
         <NotifRow icon="ti-phone"  label={t('settings.notif_sms')}   sub={t('settings.notif_sms_sub')}             field="sms"/>
         <NotifRow icon="ti-bell"   label={t('settings.notif_push')}  sub={t('settings.notif_push_sub')}        field="push"/>
+        {pushError && (
+          <div style={{ margin: '0 0 6px', padding: '9px 12px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 12, fontSize: 11.5, color: '#991B1B', fontWeight: 700, lineHeight: 1.45 }}>
+            {pushError}
+          </div>
+        )}
         <NotifRow icon="ti-brand-whatsapp" label="WhatsApp"    sub={t('settings.notif_whatsapp_sub')}               field="whatsapp"/>
         {notif.whatsapp&&(
           <div style={{ ...rowBase }}>

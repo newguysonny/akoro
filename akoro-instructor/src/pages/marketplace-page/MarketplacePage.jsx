@@ -2,6 +2,7 @@
  * MarketplacePage — composes the components from ./parts.jsx.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import ToolsWorkbench from '../../components/teaching/ToolsWorkbench.jsx';
 import { Check, Lock, Loader2, Plus, Trash2, Upload, FileText } from 'lucide-react';
 import { PageLayout } from '../../components/Layout.jsx';
 import { apiGet, apiPost, API } from '../../services/api.js';
@@ -92,7 +93,7 @@ export default function MarketplacePage() {
 
   return (
     <PageLayout title="Tools & Assets" subtitle="Your unlocked tools, assets & templates">
-      <div style={{ maxWidth: 600, margin: '0 auto' }}>
+      <div style={{ maxWidth: tab === 'tools' ? 1040 : 600, margin: '0 auto' }}>
         {/* Tabs */}
         <div style={{ display: 'flex', background: '#fff', borderRadius: 12, padding: 4, marginBottom: 18, border: `1px solid ${BORDER}`, gap: 4 }}>
           {(() => {
@@ -107,6 +108,13 @@ export default function MarketplacePage() {
             }}>{label}</button>
           ))}
         </div>
+
+        {/* ── Tools tab: the working tools, laid out like the content hub ── */}
+        {tab === 'tools' && (
+          <div style={{ marginBottom: 26 }}>
+            <ToolsWorkbench />
+          </div>
+        )}
 
         {/* ── My Templates (Assets tab) ── */}
         {tab === 'assets' && (
@@ -144,7 +152,7 @@ export default function MarketplacePage() {
         {/* Summary strip */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, padding: '0 2px' }}>
           <p style={{ fontSize: 11, fontWeight: 900, color: BRAND, letterSpacing: 1.5, textTransform: 'uppercase', margin: 0 }}>
-            {tab === 'tools' ? 'Teaching Tools' : 'Exam Resources'}
+            {tab === 'tools' ? 'Other unlocked tools' : 'Exam Resources'}
           </p>
           {!loading && <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>{ownedCount} unlocked</span>}
         </div>

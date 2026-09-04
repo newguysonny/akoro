@@ -11,14 +11,171 @@ import { enqueue, allItems, remove, queueSize } from './offlineQueue.js';
 
 export const API = import.meta.env.VITE_API_URL || "https://akoro.app";
 
+/* ── Session recovery ────────────────────────────────────────────────────────
+ * The access token lives ~15 minutes. Leave a tab idle past that and the next
+ * request comes back 401 with the raw backend message ("Access token required"),
+ * which used to land in the UI as if it were a real error.
+ *
+ * Instead: on a 401 we silently spend the (30-day) refresh cookie once and
+ * replay the request, so an idle user notices nothing. Only if the refresh
+ * ALSO fails is the session genuinely over — then we clear it and send them to
+ * sign-in with an explanation, rather than showing a cryptic string.
+ *
+ * `refreshing` dedupes: when a page fires six requests at once they all 401
+ * together, and without it we'd hit /refresh six times and rotate the token
+ * out from under ourselves.
+ */
+const PORTAL_ID = 'student';
+const SESSION_USER_KEY = 'akoro_user';
+let refreshing = null;
+
+/* ── Refresh before the herd, not after it ───────────────────────────────
+   The access token lives 15 minutes. A screen that opens after that fires its
+   whole first batch of requests in parallel, every one 401s, ONE refresh runs
+   (refreshSession dedupes), and all of them retry — double the traffic on every
+   return visit, and a wall of red in the server logs for something that is
+   working exactly as designed.
+
+   The access cookie is HttpOnly and set on the API's domain, so this app cannot
+   read its expiry. The API hands it back as accessExpiresAt instead; we stash
+   it and, when it has passed, refresh FIRST. Concurrent callers all await the
+   same refreshSession() promise, so 16 requests still cost one refresh — they
+   just no longer cost 16 rejections first.
+
+   If storage is unavailable (private mode) this is a no-op and the old
+   401-then-retry path still carries the request. */
+const EXP_KEY = 'akoro_access_exp';
+
+export function rememberExpiry(json) {
+  const exp = json?.accessExpiresAt ?? json?.data?.accessExpiresAt;
+  if (!exp) return json;
+  try { localStorage.setItem(EXP_KEY, String(exp)); } catch { /* private mode */ }
+  return json;
+}
+
+function accessExpired() {
+  try {
+    const at = Number(localStorage.getItem(EXP_KEY) || 0);
+    // 0 = we've never been told; let the request go and 401 if it must.
+    return at > 0 && at <= Date.now() + 5000;   // 5s skew for a slow request
+  } catch { return false; }
+}
+
+function forgetExpiry() {
+  try { localStorage.removeItem(EXP_KEY); } catch { /* private mode */ }
+}
+
+/**
+ * ONE refresh per tab, whoever asks.
+ *
+ * AuthContext used to POST /api/auth/refresh itself, on its own 13-minute
+ * timer, while this module did the same on a 401 — two in-flight requests
+ * carrying the SAME refresh cookie. Rotation spends a token on first use, so
+ * the loser presented a spent one, the server called it replay and revoked the
+ * whole family, and the user was signed out everywhere. Exporting this makes
+ * both paths share one promise, so a tab can no longer race itself.
+ *
+ * (Two TABS still can; the server's grace window covers that.)
+ */
+export function refreshSession() {
+  if (!refreshing) {
+    refreshing = fetch(`${API}/api/auth/refresh`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
+      body: '{}',
+    }).then(async (r) => {
+      const json = r.ok ? await r.json().catch(() => null) : null;
+      if (json) rememberExpiry(json);
+      // The STATUS, not just ok/not-ok: a 429 or a 502 means we never got an
+      // answer, and bouncing someone to /signin for that throws away a session
+      // the server would still honour.
+      return { ok: r.ok, status: r.status, json };
+    }).catch(() => ({ ok: false, status: 0, json: null }))
+      .finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
+function endSession() {
+  forgetExpiry();
+  try { localStorage.removeItem(SESSION_USER_KEY); } catch { /* private mode */ }
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/signin')) {
+    window.location.href = '/signin?error=session_expired';
+  }
+}
+
+/** fetch + one transparent refresh-and-retry on 401. */
+async function authedFetch(url, opts) {
+  // Known-expired token: refresh once up front instead of letting every
+  // request in this batch discover it independently.
+  if (accessExpired()) await refreshSession();
+  const res = await fetch(url, opts);
+  if (res.status !== 401) return res;
+  // Never recurse on the auth endpoints themselves.
+  if (String(url).includes('/api/auth/')) return res;
+  const r2 = await refreshSession();
+  // Only end the session when the server actually rejected the refresh. A
+  // network drop, a rate limit or a gateway error leaves a valid refresh cookie
+  // in place — retrying later is right; signing out is not.
+  if (!r2.ok) {
+    if (r2.status === 401 || r2.status === 403) endSession();
+    return res;
+  }
+  return fetch(url, opts);
+}
+
+
 const BASE_OPTS = {
   credentials: 'include',                 // send HttpOnly auth cookies
   headers:     { 'Content-Type': 'application/json', 'X-Akoro-Portal': 'student' },
 };
 
+/* ── Errors users can act on ─────────────────────────────────────────────
+   These messages are shown to learners — in toasts, forms and sheets — so what
+   we throw IS the copy. `GET /api/x -> 500` is not copy.
+
+   It also DISCARDED the server's own message, which is the more serious half:
+   the API writes messages meant for people ("Opponent has no agent yet"), and
+   throwing away the body meant no caller could ever read, match or show one.  */
+const STATUS_COPY = {
+  400: "Something in that wasn't right. Check it and try again.",
+  401: 'Please sign in again to continue.',
+  403: "You don't have permission to do that.",
+  404: "We couldn't find that — it may have been removed.",
+  409: 'That clashes with something that already exists.',
+  413: 'That file is too large.',
+  422: 'Some of those details are not valid. Please check them.',
+  429: "That's a lot at once — wait a moment and try again.",
+  500: 'Something went wrong on our side. Please try again.',
+  502: 'Akoro is having trouble right now. Try again in a moment.',
+  503: 'Akoro is temporarily unavailable. Try again in a moment.',
+  504: 'That took too long. Please try again.',
+};
+
+async function apiError(res, method, path) {
+  let serverMsg = '';
+  try { const j = await res.json(); serverMsg = j.error || j.message || ''; } catch {}
+  const err = new Error(
+    serverMsg ||
+    STATUS_COPY[res.status] ||
+    (res.status >= 500 ? 'Something went wrong on our side. Please try again.'
+                       : 'That did not work. Please try again.')
+  );
+  err.status = res.status;
+  err.path   = path;
+  err.method = method;
+  err.detail = `${method} ${path} -> ${res.status}`;   // logs only, never shown
+  return err;
+}
+
 // A thrown fetch (no HTTP response) or a browser marked offline = network error,
 // as opposed to the server responding with a 4xx/5xx.
-const isNetworkError = (err) => (typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError';
+// `status` is only set when the server actually answered, so its presence is
+// what separates "the API said no" from "the request never arrived". Without
+// this check a 500 would be served from the offline cache, or a rejected write
+// would be queued for replay forever.
+const isNetworkError = (err) =>
+  !err?.status && ((typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError' || err?.isNetwork === true);
 
 // Tag a payload served from the offline cache so callers can show a "saved"
 // hint if they want; non-enumerable so it never changes the data's shape.
@@ -29,8 +186,8 @@ function markOffline(data) {
 
 export async function apiGet(path, { cache = true } = {}) {
   try {
-    const r = await fetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
-    if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
+    if (!r.ok) throw await apiError(r, 'GET', path);
     const json = await r.json();
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
     return json;
@@ -49,12 +206,12 @@ export async function apiGet(path, { cache = true } = {}) {
 // on reconnect, and an optimistic { queued: true } is returned instead of throwing.
 async function apiSend(method, path, body, { queueOffline = false } = {}) {
   try {
-    const r = await fetch(`${API}${path}`, {
+    const r = await authedFetch(`${API}${path}`, {
       ...BASE_OPTS,
       method,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    if (!r.ok) throw new Error(`${method} ${path} -> ${r.status}`);
+    if (!r.ok) throw await apiError(r, method, path);
     return r.json();
   } catch (err) {
     if (queueOffline && isNetworkError(err)) {
@@ -90,7 +247,7 @@ export async function flushQueue() {
   try {
     for (const it of await allItems()) {
       try {
-        await fetch(`${API}${it.path}`, {
+        await authedFetch(`${API}${it.path}`, {
           ...BASE_OPTS,
           method: it.method,
           ...(it.body !== undefined ? { body: JSON.stringify(it.body) } : {}),
@@ -124,13 +281,20 @@ export function initOfflineSync() {
  * caller can fall back to a non-streaming request.
  */
 export async function streamPost(path, body, { onDelta, onDone } = {}) {
-  const r = await fetch(`${API}${path}`, {
+  const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
     headers: { ...BASE_OPTS.headers, Accept: 'text/event-stream' },
     body:    JSON.stringify(body),
   });
-  if (!r.ok || !r.body) throw new Error(`STREAM ${path} -> ${r.status}`);
+  if (!r.ok) throw await apiError(r, 'POST', path);
+  // A 200 with no body means the stream died before it began — the caller's
+  // fallback needs a real error, not a silent hang.
+  if (!r.body) {
+    const err = new Error('The reply stopped before it started. Please try again.');
+    err.status = r.status; err.detail = `STREAM ${path} -> no body`;
+    throw err;
+  }
 
   const reader  = r.body.getReader();
   const decoder = new TextDecoder();

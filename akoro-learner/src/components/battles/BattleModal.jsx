@@ -38,7 +38,6 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const [question,     setQuestion]     = useState(null);
   const [reveal,       setReveal]       = useState(null);
   const [selected,     setSelected]     = useState(null);
-  const [answering,    setAnswering]    = useState(false);
   const [myResult,     setMyResult]     = useState(null);
   const [myXp,         setMyXp]         = useState(0);
   const [timer,        setTimer]        = useState(0);
@@ -50,6 +49,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const [totalQ,       setTotalQ]       = useState(initialBattle?.totalQ || 0);
   const [tab,          setTab]          = useState('watch');
   const [notice,       setNotice]       = useState(null);
+  const [battleType,   setBattleType]   = useState(initialBattle?.type ?? initialBattle?.battleType ?? null);
 
   const qStartRef  = useRef(0);
   const logRef     = useRef(null);
@@ -77,10 +77,18 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
         apiGet(`${B}/battles/${battleId}/log`).catch(() => null),
       ]);
       if (!alive) return;
-      if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); setViewerCount(st.viewer_count || 0); }
+      if (st) {
+        setStatus(st.status);
+        setParticipants((st.participants || []).map(mapStateP));
+        setViewerCount(st.viewer_count || 0);
+        if (st.battleType) setBattleType(st.battleType);
+      }
       if (lg?.logs?.length) setLog(lg.logs.map((e) => ({ msg: e.message, ts: e.created_at ? new Date(e.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '' })));
       if (qd?.questions?.length) {
-        setTotalQ(qd.questions.length);
+        // `total` is the battle's real length. The array now holds only the
+        // questions actually in play — unplayed ones are withheld so nobody can
+        // read ahead — so counting it would show "3 of 3" mid-battle.
+        setTotalQ(qd.total ?? qd.questions.length);
         // Seed the Questions tab with anything already answered/revealed.
         qd.questions.forEach((q) => {
           if (q.correctAnswerIndex != null || q.myAnswer != null) {
@@ -134,6 +142,9 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
     s.on('battle:log', (e) => pushLog(e.message, e.timestamp));
     s.on('battle:over', (d) => { setOver(d); setStatus('completed'); pushLog('🏁 Battle complete!'); });
 
+    // Deliberately silent: a heartbeat that misses is replaced by the next one
+    // 20s later, and telling the learner mid-battle that one ping failed would
+    // be noise about something that already fixed itself.
     const hb = setInterval(() => { apiPost(`${B}/battles/${battleId}/heartbeat`, {}).catch(() => {}); }, 20000);
     apiPost(`${B}/battles/${battleId}/heartbeat`, {}).catch(() => {});
 
@@ -152,6 +163,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
     if (status !== 'live' || !battleId) return;
     const iv = setInterval(async () => {
       const st = await apiGet(`${B}/battles/${battleId}/state`).catch(() => null);
+      if (st?.battleType) setBattleType(st.battleType);
       if (st) { setStatus(st.status); setParticipants((st.participants || []).map(mapStateP)); if (st.viewer_count != null) setViewerCount(st.viewer_count); }
       if (!questionRef.current || (selectedRef.current != null && !revealRef.current)) {
         const qd = await apiGet(`${B}/battles/${battleId}/questions`).catch(() => null);
@@ -175,6 +187,14 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log]);
 
   const iAmParticipant = participants.some((p) => p.userId === myId);
+  // Every battle is fought by the AGENTS, study review included. Yours answers
+  // from what you have actually learned — its odds come from your own per-topic
+  // confidence — and you watch. Nothing in the arena is tappable.
+  //
+  // The type comes from the SERVER (/battles/:id/state), not from the card that
+  // opened this: accepting an invitation opens the arena with only an id and a
+  // status, so the card cannot be relied on to carry it.
+  const isReview = battleType === 'review';
   const isClassroom = (initialBattle?.battleType === 'classroom') || participants.length > 2;
   const sorted = [...participants].sort((a, b) => b.score - a.score || b.hp - a.hp);
   const me  = participants.find((p) => p.userId === myId);
@@ -183,20 +203,6 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
   const teacher  = participants.find((p) => p.role === 'teacher');
   const students = participants.filter((p) => p !== teacher).sort((a, b) => b.score - a.score || b.hp - a.hp);
   const curOrder = question?.questionOrder ?? (answered.length ? Math.max(...answered.map((a) => a.order)) : 0);
-
-  const answer = async (idx) => {
-    if (selected !== null || reveal || !question || answering || !iAmParticipant) return;
-    setSelected(idx); setAnswering(true);
-    try {
-      const d = await apiPost(`${B}/battles/${battleId}/answer`, {
-        question_order: question.questionOrder, selected_index: idx, response_time_ms: Date.now() - qStartRef.current,
-      });
-      setMyResult(d);
-      if (d?.xp_gained) setMyXp((x) => x + d.xp_gained);
-    } catch (e) {
-      setMyResult({ error: /409/.test(e.message) ? 'Already answered' : /400/.test(e.message) ? 'Battle not live' : 'Could not submit' });
-    } finally { setAnswering(false); }
-  };
 
   const startBattle = async () => {
     try { await apiPost(`${B}/battles/${battleId}/start`, {}); setNotice('Starting…'); }
@@ -388,8 +394,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
                       } else if (selected === i) { border = '1.5px solid #E8884A'; bg = 'rgba(255,255,255,.12)'; }
                       const pickers = reveal?.answers?.filter((a) => a.selectedIndex === i) || [];
                       return (
-                        <button key={i} onClick={() => answer(i)} disabled={!iAmParticipant || selected !== null || !!reveal || answering}
-                          style={{ ...optBtn, border, background: bg, color, cursor: (!iAmParticipant || selected !== null || reveal) ? 'default' : 'pointer' }}>
+                        <div key={i} style={{ ...optBtn, border, background: bg, color, cursor: 'default' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ width: 22, height: 22, borderRadius: '50%', border: '1px solid rgba(255,255,255,.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,.45)', flexShrink: 0 }}>{['A', 'B', 'C', 'D', 'E'][i]}</span>{opt}
                           </span>
@@ -398,20 +403,72 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
                               {pickers.map((a, j) => <span key={j} style={{ fontSize: 10, padding: '1px 7px', borderRadius: 20, background: a.userId === myId ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.08)', color: '#fff' }}>{a.agentEmoji} {a.userId === myId ? 'You' : a.agentName}</span>)}
                             </span>
                           )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
-                  {!iAmParticipant && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>👁 You’re watching — pick nothing, just spectate</div>}
-                  {myResult?.error && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: '#FCA5A5' }}>{myResult.error}</div>}
-                  {myResult && !myResult.error && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? `✓ Correct! +${myResult.xp_gained} XP` : '✗ Wrong answer'}</div>}
+                  <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>
+                    {iAmParticipant
+                      ? (isReview ? '🤖 Your agent is working through your review' : '🤖 Your agent is answering — watch it play')
+                      : '👁 You’re watching this battle'}
+                  </div>
+                  {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? `✓ Your agent got it — +${myResult.xp_gained} XP` : '✗ Your agent got it wrong'}</div>}
                 </div>
               )}
 
               {isLive && !question && <div style={{ ...panel, textAlign: 'center', color: 'rgba(255,255,255,.4)', fontSize: 12.5 }}>Next question loading…</div>}
 
+              {/* Review result — a review has no winner, so the panel below
+                  rendered nothing at all for one: a finished review showed no
+                  score and no XP, just an empty arena. */}
+              {isCompleted && isReview && results?.type === 'review' && (
+                <div style={{ ...panel, textAlign: 'center' }}>
+                  <div style={{ fontSize: 34 }}>📋</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 4 }}>
+                    {results.score?.correct} of {results.score?.total} correct
+                  </div>
+                  <div style={{
+                    fontSize: 26, fontWeight: 900, marginTop: 2,
+                    color: (results.score?.percent ?? 0) >= 50 ? '#4ADE80' : '#F87171',
+                  }}>{results.score?.percent}%</div>
+                  {(results.score?.unanswered > 0) && (
+                    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', marginTop: 3 }}>
+                      {results.score.unanswered} not answered in time
+                    </div>
+                  )}
+                  {results.battle?.duration_formatted && (
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 2 }}>
+                      Duration {results.battle.duration_formatted}
+                    </div>
+                  )}
+                  {/* The per-question XP the agent earned along the way, plus
+                      what the review paid at the end — one number, because a
+                      learner does not care which half it came from. */}
+                  {(myXp + (results.learner?.xpEarned ?? 0)) > 0 && (
+                    <div style={{ display: 'inline-block', marginTop: 8, padding: '4px 14px', borderRadius: 20, background: 'rgba(232,136,74,.20)', color: '#E8884A', fontWeight: 800, fontSize: 13 }}>
+                      +{myXp + (results.learner?.xpEarned ?? 0)} XP earned
+                    </div>
+                  )}
+                  {/* Weakest topics first — the one thing a learner can act on. */}
+                  {results.byTopic?.length > 1 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 12 }}>
+                      {results.byTopic.slice(0, 4).map(t => (
+                        <span key={t.topic} style={{
+                          fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+                          background: t.percent >= 50 ? 'rgba(16,185,129,.16)' : 'rgba(239,68,68,.14)',
+                          color: t.percent >= 50 ? '#6EF7C8' : '#FCA5A5',
+                        }}>{t.topic} {t.correct}/{t.total}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 10 }}>
+                    Every question is in the Questions tab
+                  </div>
+                </div>
+              )}
+
               {/* Winner */}
-              {isCompleted && winner && (
+              {isCompleted && winner && !isReview && (
                 <div style={{ ...panel, textAlign: 'center' }}>
                   <TrophyIcon size={38} color={GOLD} />
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>{winner.agentName} wins!</div>
@@ -494,7 +551,7 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
             <span>·</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookIcon size={11} color="rgba(255,255,255,.35)" />Your class</span>
           </div>
-          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />You’re in this battle</span>}
+          {isLive && iAmParticipant && <span style={{ fontSize: 11, fontWeight: 700, color: '#E8884A', display: 'flex', alignItems: 'center', gap: 5 }}><ZapIcon size={11} color="#E8884A" />{isReview ? 'Your review — your agent is answering' : 'Your agent is playing'}</span>}
         </div>
       </div>
     </div>

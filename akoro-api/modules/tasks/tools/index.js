@@ -4,7 +4,6 @@ import { gradeSubmissionsDefinition, executeGradeSubmissions } from "./grade-sub
 import { fetchStudentDataDefinition, executeFetchStudentData } from "./fetch-student-data.js";
 import { scheduleSessionDefinition,  executeScheduleSession  } from "./schedule-session.js";
 import { exportReportDefinition,     executeExportReport     } from "./export-report.js";
-import { createBattleDefinition,     executeCreateBattle     } from "./create-battle.js";
 import { quizMeDefinition,           executeQuizMe           } from "./quiz-me.js";
 import { explainConceptDefinition,   executeExplainConcept   } from "./explain-concept.js";
 import { studyPlanDefinition,        executeStudyPlan        } from "./study-plan.js";
@@ -17,6 +16,12 @@ import { reportWritingDefinition,       executeReportWriting       } from "./rep
 import { examPrepDefinition,            executeExamPrep            } from "./exam-prep.js";
 import { attendanceRollcallDefinition,  executeAttendanceRollcall  } from "./attendance-rollcall.js";
 import { interactiveMaterialDefinition, executeInteractiveMaterial } from "./interactive-material.js";
+// Scheduling the things teachers actually assign, through the same endpoints
+// the UI uses — so a battle or study topic set by a schedule is the same object
+// as one set by hand.
+import { assignBattleDefinition,    executeAssignBattle    } from "./assign-battle.js";
+import { assignSelfStudyDefinition, executeAssignSelfStudy } from "./assign-self-study.js";
+import { teachingToolDefinition,    executeTeachingTool    } from "./teaching-tool.js";
 
 export const ALL_TOOLS = [
   { definition: generateQuizDefinition,     execute: executeGenerateQuiz     },
@@ -25,7 +30,6 @@ export const ALL_TOOLS = [
   { definition: fetchStudentDataDefinition, execute: executeFetchStudentData  },
   { definition: scheduleSessionDefinition,  execute: executeScheduleSession   },
   { definition: exportReportDefinition,     execute: executeExportReport      },
-  { definition: createBattleDefinition,     execute: executeCreateBattle      },
   { definition: quizMeDefinition,           execute: executeQuizMe            },
   { definition: explainConceptDefinition,   execute: executeExplainConcept    },
   { definition: studyPlanDefinition,        execute: executeStudyPlan         },
@@ -37,6 +41,9 @@ export const ALL_TOOLS = [
   { definition: examPrepDefinition,            execute: executeExamPrep            },
   { definition: attendanceRollcallDefinition,  execute: executeAttendanceRollcall  },
   { definition: interactiveMaterialDefinition, execute: executeInteractiveMaterial },
+  { definition: assignBattleDefinition,        execute: executeAssignBattle        },
+  { definition: assignSelfStudyDefinition,     execute: executeAssignSelfStudy     },
+  { definition: teachingToolDefinition,        execute: executeTeachingTool        },
 ];
 
 const tool = (name) => {
@@ -52,7 +59,15 @@ export const TOOLS_BY_TYPE = {
   fetch_student_data: [tool("fetch_student_data")],
   schedule_session:   [tool("schedule_session"),   tool("fetch_student_data")],
   export_report:      [tool("export_report"),      tool("fetch_student_data")],
-  create_battle:      [tool("create_battle"),      tool("fetch_student_data")],
+  // 'create_battle' is the TASK TYPE every battle request routes to; the tool
+  // of the same name is gone. It inserted straight into `battles` and wrote no
+  // participants at all, so what it made was a battle with no players — and it
+  // was offered to the model alongside assign_battle, leaving the choice
+  // between a working tool and a broken one to two tool descriptions.
+  create_battle:      [tool("assign_battle"), tool("fetch_student_data")],
+  assign_battle:      [tool("assign_battle"), tool("fetch_student_data")],
+  assign_self_study:  [tool("assign_self_study"), tool("fetch_student_data")],
+  run_teaching_tool:  [tool("run_teaching_tool")],
   quiz_me:            [tool("quiz_me")],
   explain_concept:    [tool("explain_concept")],
   create_study_plan:  [tool("create_study_plan")],

@@ -12,6 +12,7 @@ import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../../constants.js';
 import { BASE, Breadcrumb, th, td, iconBtn, toastEl } from './shared.jsx';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
 const PERIOD_TYPES = [
   { value: 'teaching', label: 'Teaching', c: BLUE },
@@ -90,7 +91,7 @@ export function ManagePeriodsPage() {
     } catch (e) { showToast(e.message || 'Could not save'); }
   };
   const remove = async (r) => {
-    if (!window.confirm(`Remove period "${r.name}"?`)) return;
+    if (!await confirmDialog(`Remove period "${r.name}"?`)) return;
     setBusyId(r.id);
     try { await apiDelete(`${BASE}/periods/${r.id}`); showToast('Removed'); loadPeriods(); }
     catch (e) { showToast(e.message || 'Could not remove'); } finally { setBusyId(null); }

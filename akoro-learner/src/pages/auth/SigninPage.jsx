@@ -112,7 +112,7 @@ export default function SigninPage() {
             {(formErr || urlError) && (
               <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:10,
                 padding:'10px 14px', marginBottom:16, fontSize:13, fontWeight:600, color:RED }}>
-                {formErr || (urlError==='google_failed'?t('auth.google_failed'):urlError)}
+                {formErr || (urlError==='session_expired'?'Your session timed out for security. Please sign in again.':urlError==='google_failed'?t('auth.google_failed'):urlError)}
               </div>
             )}
             <form onSubmit={handleSubmit}>

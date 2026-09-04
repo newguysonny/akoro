@@ -32,18 +32,22 @@ export function CartProvider({ children }) {
   }, []);
   const removeItem = useCallback((cartId) => setItems((prev) => prev.filter((i) => i.cartId !== cartId)), []);
   const updateQty = useCallback((cartId, quantity) => setItems((prev) => prev.map((i) => (i.cartId === cartId ? { ...i, quantity } : i))), []);
+  // Used when the cart re-checks live prices on open — the server charges its
+  // current price, so the snapshot in the cart must be corrected, persisted
+  // and re-rendered (mutating the item in place would do none of those).
+  const updatePrice = useCallback((cartId, unitPriceUsd) => setItems((prev) => prev.map((i) => (i.cartId === cartId ? { ...i, unitPriceUsd } : i))), []);
   const clear = useCallback(() => setItems([]), []);
 
   const count = items.reduce((s, i) => s + 1, 0);   // orders in the cart, not total codes
   const subtotal = items.reduce((s, i) => s + i.unitPriceUsd * i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, clear, count, subtotal }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, updatePrice, clear, count, subtotal }}>
       {children}
     </CartContext.Provider>
   );
 }
 
 export const useCart = () => useContext(CartContext) || {
-  items: [], addItem: () => {}, removeItem: () => {}, updateQty: () => {}, clear: () => {}, count: 0, subtotal: 0,
+  items: [], addItem: () => {}, removeItem: () => {}, updateQty: () => {}, updatePrice: () => {}, clear: () => {}, count: 0, subtotal: 0,
 };

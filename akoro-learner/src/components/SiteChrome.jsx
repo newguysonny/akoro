@@ -7,6 +7,7 @@
  * Exports: SiteNav, SFSHeader, SiteFooter, Btn, SITE_B
  */
 import { useState, useEffect } from 'react';
+import LanguageMenu from './LanguageMenu.jsx';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Menu, X, ArrowRight, BookOpen, Zap, Map, TrendingUp, DollarSign, Users, MessageSquare, Download, Share } from 'lucide-react';
 import { FaLinkedin, FaYoutube, FaInstagram, FaFacebook, FaXTwitter } from 'react-icons/fa6';
@@ -206,11 +207,7 @@ export function SFSHeader() {
           <span className="hidden sm:inline text-xs text-gray-300 font-medium">
             Translate
           </span>
-          <div className="flex gap-1.5 text-base leading-none">
-            <span>{"\u{1F1FA}\u{1F1F8}"}</span>
-            <span>{"\u{1F1F2}\u{1F1FD}"}</span>
-            <span>{"\u{1F1E8}\u{1F1F3}"}</span>
-          </div>
+          <LanguageMenu/>
         </div>
         <div className="flex-1" />
         <button className="h-10 px-5 text-xs font-bold tracking-wide text-white bg-[#F5A623]">

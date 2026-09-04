@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
@@ -14,6 +14,7 @@ const NAV = [
   { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/api-keys',      icon: KeyRound,        label: 'API Keys' },
   { to: '/docs',          icon: FileText,        label: 'API Docs' },
+  { to: '/webhooks',      icon: Webhook,         label: 'Webhooks' },
   { to: '/products',      icon: PackageSearch,   label: 'Voucher Products' },
   { to: '/discounts',     icon: Percent,         label: 'Discount Tiers' },
   { to: '/generated',     icon: Ticket,          label: 'Vouchers Generated' },
@@ -131,14 +132,23 @@ const dropdownActionBtn = {
 };
 
 export function PageLayout({ title, subtitle, action, children }) {
-  const { startups, loading } = useStartup();
+  const { startups, loading, error } = useStartup();
   const navigate = useNavigate();
   // /manage-businesses stays reachable at zero businesses too — otherwise
   // deleting your only business (or a fresh account before creating one)
   // makes the one page that could show/create/delete businesses itself
   // unreachable, bouncing back to /create-startup before it can render.
   const EXEMPT_PATHS = ['/create-startup', '/manage-businesses'];
-  const needsOnboarding = !loading && startups && startups.length === 0 && !EXEMPT_PATHS.includes(window.location.pathname);
+  // Belt-and-braces. Three independent conditions must ALL hold before we
+  // send someone to onboarding, because getting this wrong strands them:
+  //   loading   — a fetch is in flight (or belongs to a previous auth state)
+  //   error     — a failed fetch must not look like "zero businesses"
+  //   !== null  — [] set by the pre-login branch is NOT proof of zero
+  //               businesses; only a completed fetch is.
+  const needsOnboarding =
+    !loading && !error &&
+    Array.isArray(startups) && startups.length === 0 &&
+    !EXEMPT_PATHS.includes(window.location.pathname);
 
   useEffect(() => { if (needsOnboarding) navigate('/create-startup', { replace: true }); }, [needsOnboarding, navigate]);
   if (needsOnboarding) return null;

@@ -587,12 +587,43 @@ router.get("/settings", authenticateToken, async (req, res) => {
         personalisation:   settings?.personalisation ?? {},
         notificationPrefs: settings?.notification_prefs ?? {},
         modules:           settings?.modules ?? {},
+        // Which optional modules this school has actually bought. The sidebar
+        // needs both: `modules` is the school's own on/off switch, this is
+        // entitlement. A module shows only when it is owned AND not switched
+        // off, so turning one off never silently loses the purchase.
+        moduleAccess:      await ownedModuleKeys(req.user.id),
         backupSchedule:    settings?.backup_schedule ?? { autoBackup: true, frequency: 'daily', retentionDays: 30 },
         content:           settings?.content ?? {},
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+/**
+ * The optional modules a school owns, as { moduleKey: true }.
+ *
+ * Optional modules are sold through the same catalog as agent tools
+ * (edu.platform_tools, kind='management', key 'module-<moduleKey>'), so
+ * ownership is the same instructor_tool_access row a tool purchase writes —
+ * there is no second entitlement system to keep in step.
+ */
+async function ownedModuleKeys(userId) {
+  try {
+    const { data: rows } = await db.schema("edu").from("instructor_tool_access")
+      .select("tool_id, access_granted, platform_tools!inner(key, kind)")
+      .eq("instructor_id", userId).eq("access_granted", true)
+      .eq("platform_tools.kind", "management");
+    const out = {};
+    for (const r of rows || []) {
+      const key = r.platform_tools?.key || "";
+      if (key.startsWith("module-")) out[key.slice(7)] = true;
+    }
+    return out;
+  } catch (e) {
+    console.warn("[school] module entitlements failed:", e.message);
+    return {};
+  }
+}
 
 // ── PUT /api/school/settings/profile ─────────────────────────────────────────
 router.put("/settings/profile", authenticateToken, requireRole(SCHOOL_ROLES), async (req, res) => {
@@ -1308,6 +1339,13 @@ function templateColorStyle(colors) {
 // (student / teacher / admin). Successful login redirects to the school
 // portal's AI Chat. Self-contained ES5 — no dependencies, works inside any
 // template. Auto-opens on the /ai-chat page.
+//
+// The sign-in fetch is deliberately NOT credentialed. It sets no cookie: it
+// returns a short-lived hand-off token which the portal exchanges for a session
+// on its own origin. Asking for credentials from a tenant school domain would
+// need the API to grant credentialed CORS to every <slug> subdomain — which is
+// exactly the hole that let a script on one school's site call the API as any
+// signed-in visitor. Nothing here needs it.
 const SCHOOL_PORTAL_URL = (process.env.SCHOOL_FRONTEND_URL || "https://akoro-school.akoro.name.ng").replace(/\/$/, "");
 function aiChatWidgetHtml(apiOrigin) {
   const api = String(apiOrigin || "").replace(/\/$/, "");
@@ -1334,7 +1372,7 @@ function aiChatWidgetHtml(apiOrigin) {
     if(!em){err.textContent='Enter your email address.';err.style.display='block';return;}
     if(!pw){err.textContent='Enter your password.';err.style.display='block';return;}
     var btn=this; btn.disabled=true; btn.textContent='Signing in…';
-    fetch(API+'/api/school/site/ai-login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:location.hostname,email:em,password:pw,role:selectedRole()})})
+    fetch(API+'/api/school/site/ai-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:location.hostname,email:em,password:pw,role:selectedRole()})})
       .then(function(r){return r.json().catch(function(){return {};});})
       .then(function(d){
         if(d&&d.success){
@@ -1690,7 +1728,9 @@ router.post("/site/ai-login", strictLimit, async (req, res) => {
     const chatBase = (process.env.SCHOOL_CHAT_SAME_DOMAIN === "true" && cleanHost)
       ? `https://${cleanHost}`
       : SCHOOL_PORTAL_URL;
-    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect: `${chatBase}/ai-chat?ai=${encodeURIComponent(handoff)}` });
+    const redirect = `${chatBase}/ai-chat?ai=${encodeURIComponent(handoff)}`;
+    console.log(`[ai-login] ok school=${school.slug} role=${actualRole} origin=${req.headers.origin || "-"} redirect=${chatBase}/ai-chat`);
+    res.json({ success: true, role: actualRole, name: user.full_name || user.email, redirect });
   } catch (e) {
     console.error("[ai-login]", e);
     res.status(500).json({ success: false, code: "error", message: "Something went wrong. Please try again." });
@@ -1702,16 +1742,29 @@ router.post("/site/ai-login", strictLimit, async (req, res) => {
 // the AI-chat login redirect. Verifies it and issues the real session cookie.
 router.post("/site/ai-login/exchange", async (req, res) => {
   try {
+    const origin = req.headers.origin || "-";
     const userId = verifyHandoff(String(req.body?.token || ""));
-    if (!userId) return res.status(401).json({ success: false, message: "This sign-in link expired. Please sign in again." });
+    if (!userId) {
+      console.warn(`[ai-login exchange] REJECTED bad/expired token origin=${origin} portal=${req.headers["x-akoro-portal"] || "-"}`);
+      return res.status(401).json({ success: false, message: "This sign-in link expired. Please sign in again." });
+    }
     const { data: user } = await db.from("users").select("*").eq("id", userId).maybeSingle();
     if (!user || user.deleted_at || !user.is_active) return res.status(403).json({ success: false, message: "Account unavailable." });
     // Issue the SCHOOL-portal session cookie (akoro_access_school) — the school
     // app reads with X-Akoro-Portal: school. Without the portal arg this
     // defaulted to the student cookie, so the app never found its session and
     // bounced to /signin.
-    await issueTokenPair(res, user, "site");
-    res.json({ success: true });
+    const pair = await issueTokenPair(res, user, "site");
+    console.log(`[ai-login exchange] ok user=${user.id} origin=${origin} portal=${req.headers["x-akoro-portal"] || "-"}`);
+    // The tokens go back in the BODY as well as in cookies.
+    //
+    // When SCHOOL_CHAT_SAME_DOMAIN is on, the chat is served from the school's
+    // own domain — a tenant origin, which is deliberately not granted
+    // credentialed CORS, because a school admin can put arbitrary script on
+    // that page. So the cookie never arrives there and the page authenticates
+    // with a bearer token instead. A bearer has to be handed over; a cookie
+    // rides along on its own, which is precisely the difference that matters.
+    res.json({ success: true, accessToken: pair.accessToken, refreshToken: pair.refreshToken });
   } catch (e) {
     console.error("[ai-login exchange]", e);
     res.status(500).json({ success: false, message: "Something went wrong. Please try again." });

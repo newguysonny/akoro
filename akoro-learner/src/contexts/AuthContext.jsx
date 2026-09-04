@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API } from '../services/api.js';
+import { API, rememberExpiry, refreshSession } from '../services/api.js';
 import { cacheClear } from '../services/offlineCache.js';
 
 const AuthContext = createContext(null);
@@ -27,7 +27,16 @@ async function authFetch(path, body) {
     body:        JSON.stringify(body),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `${path} failed`);
+  if (!res.ok) {
+    // The STATUS is what tells refresh() whether the session is really gone or
+    // the request merely didn't land. Without it every failure looked fatal.
+    const err = new Error(json.message || `${path} failed`);
+    err.status = res.status;
+    throw err;
+  }
+  // Sign-in is where the first expiry comes from — without it the next visit
+  // after 15 minutes still discovers the dead token once per request.
+  rememberExpiry(json);
   return json;
 }
 
@@ -91,20 +100,26 @@ export function AuthProvider({ children }) {
     finally { setLoading(false); }
   }, [saveUser]);
 
+  /**
+   * Delegates to services/api.js so there is exactly ONE refresh in flight per
+   * tab. This used to POST the endpoint itself, which meant this timer and the
+   * 401-retry path could both be carrying the same refresh cookie — and since
+   * rotation spends a token on first use, the loser looked like a replay and
+   * the server revoked every session the user had.
+   */
   const refresh = useCallback(async () => {
-    try {
-      const { data } = await authFetch('/api/auth/refresh', {});
-      if (data?.user) saveUser(data.user);
+    const r = await refreshSession();
+    if (r.ok) {
+      const u = r.json?.data?.user ?? r.json?.user;
+      if (u) saveUser(u);
       return true;
-    } catch (err) {
-      // Offline / network failure: KEEP the cached session so an offline learner
-      // isn't bounced to sign-in — the service worker serves cached content until
-      // they reconnect. Only a real auth rejection (server responded) signs out.
-      const offline = (typeof navigator !== 'undefined' && navigator.onLine === false) || err?.name === 'TypeError';
-      if (offline) return false;
-      clearUser();
-      return false;
     }
+    // Only a real REJECTION ends a session. A 429, a 502 or a dropped
+    // connection means we never got an answer — the 30-day refresh cookie is
+    // still valid and the next attempt should use it, so the session stays.
+    if (r.status === 401 || r.status === 403) { clearUser(); return false; }
+    console.warn(`[auth] refresh could not complete (status ${r.status}), keeping the session`);
+    return false;
   }, [saveUser, clearUser]);
 
   const logout = useCallback(async () => {

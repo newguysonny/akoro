@@ -10,6 +10,7 @@ import { inputStyle } from '../../../components/mgmt/ResourcePage.jsx';
 import { apiGet, apiPost, apiDelete } from '../../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, FONT } from '../../../constants.js';
 import { BASE, iconBtn, toolBtn, toastEl } from './shared.jsx';
+import { confirmDialog } from '../../../components/ConfirmHost.jsx';
 
 const label = { display: 'block', fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 5 };
 const card = { background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' };
@@ -55,7 +56,7 @@ export function AssignClassTeacherPage() {
     } catch (e) { showToast(e.message || 'Could not assign'); } finally { setBusy(false); }
   };
   const remove = async (r) => {
-    if (!window.confirm('Remove this teacher assignment?')) return;
+    if (!await confirmDialog('Remove this teacher assignment?')) return;
     try { await apiDelete(`${BASE}/class-teachers/${r.id}`); loadAssignments(); }
     catch (e) { showToast(e.message || 'Could not remove'); }
   };

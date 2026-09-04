@@ -12,7 +12,8 @@ import CourseCurriculum from '../../components/CourseCurriculum.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
 
 /* ── Mock data ─────────────────────────────────────────────────────── */
-import { MOCK_COURSES, MOCK_SESSIONS, ScheduleSessionModal, EditCourseModal, LEARNER_URL, CourseCard, SessionRow } from './parts.jsx';
+import { ScheduleSessionModal, EditCourseModal, LEARNER_URL, CourseCard, SessionRow } from './parts.jsx';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 export default function CoursesPage() {
   const { getCourses, createCourse, updateCourse, deleteCourse, getSessions, createSession, deleteSession, commitSchedule, commitCurriculum } = useCoursesAPI();
@@ -26,6 +27,7 @@ export default function CoursesPage() {
   const [scheduleModal,  setScheduleModal]  = useState(false);
   const [curriculumFor,  setCurriculumFor]  = useState(null);
   const [editCourse,     setEditCourse]     = useState(null);
+  const [loadError,      setLoadError]      = useState('');
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -35,13 +37,19 @@ export default function CoursesPage() {
   const load = async () => {
     try {
       const [cr, sr] = await Promise.allSettled([getCourses(), getSessions()]);
-      setCourses(cr.status === 'fulfilled' ? (cr.value?.data || MOCK_COURSES) : MOCK_COURSES);
-      setSessions(sr.status === 'fulfilled' ? (sr.value?.data || MOCK_SESSIONS) : MOCK_SESSIONS);
-      if (cr.status === 'rejected') console.warn('Courses API error, using mock:', cr.reason);
+      // Sample courses shown on failure look exactly like real ones — a teacher
+      // could open, edit or delete something that does not exist. Show what
+      // loaded and name what didn't.
+      const failed = [];
+      setCourses(cr.status === 'fulfilled' ? (cr.value?.data ?? []) : []);
+      setSessions(sr.status === 'fulfilled' ? (sr.value?.data ?? []) : []);
+      if (cr.status === 'rejected') { failed.push('your courses'); console.warn('[courses]', cr.reason?.detail || cr.reason); }
+      if (sr.status === 'rejected') { failed.push('your sessions'); console.warn('[sessions]', sr.reason?.detail || sr.reason); }
+      setLoadError(failed.length ? `We couldn't load ${failed.join(' or ')}.` : '');
     } catch (err) {
-      console.warn('CoursesPage load error:', err);
-      setCourses(MOCK_COURSES);
-      setSessions(MOCK_SESSIONS);
+      console.warn('[courses] load:', err?.detail || err);
+      setCourses([]); setSessions([]);
+      setLoadError(err?.message || "We couldn't load this page.");
     } finally {
       setLoading(false);
     }
@@ -132,7 +140,7 @@ export default function CoursesPage() {
   };
 
   const handleDeleteCourse = async (course) => {
-    if (!window.confirm(`Delete "${course.title}"? This removes its sessions and enrollments and cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete "${course.title}"? This removes its sessions and enrollments and cannot be undone.`)) return;
     try {
       await deleteCourse(course.id);
       setCourses(cs => cs.filter(c => c.id !== course.id));
@@ -160,6 +168,21 @@ export default function CoursesPage() {
         </div>
       }
     >
+      {loadError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+          padding: '11px 14px', borderRadius: 12,
+          background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT,
+        }}>
+          <span style={{ fontSize: 16 }}>⚠️</span>
+          <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>{loadError}</span>
+          <button onClick={() => { setLoading(true); load(); }} style={{
+            padding: '6px 13px', borderRadius: 9, border: '1px solid #FDE68A',
+            background: WHITE, color: '#92400E', fontSize: 12, fontWeight: 800,
+            cursor: 'pointer', fontFamily: FONT,
+          }}>Retry</button>
+        </div>
+      )}
       {/* Courses grid */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: INK, margin: '0 0 16px', fontFamily: FONT }}>

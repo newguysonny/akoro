@@ -237,7 +237,13 @@ export default function AppearancePage() {
               <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2, fontFamily: FONT }}>Live Preview · Home page</span>
               {previewing && <Loader2 size={12} color={MUTED2} style={{ animation: 'spin .8s linear infinite', marginLeft: 'auto' }} />}
             </div>
-            <iframe title="Website preview" srcDoc={previewHtml} style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: WHITE }} />
+            {/* sandbox is required, not cosmetic: srcDoc inherits THIS origin,
+                so any <script> in the site's own HTML (header/footer scripts,
+                imported template markup) would run with the portal's origin and
+                its localStorage. An empty sandbox renders CSS and images while
+                keeping scripts and same-origin access off. */}
+            <iframe title="Website preview" srcDoc={previewHtml} sandbox=""
+              style={{ flex: 1, width: '100%', border: 'none', minHeight: 520, background: WHITE }} />
           </div>
         </div>
       )}

@@ -68,6 +68,9 @@ async function fromSchemeOfWork({ schoolId, classId, subject, topic }) {
 
     return {
       subtopics, objectives,
+      // A scheme of work is already an ordered path chosen by a teacher, so
+      // there is no generated map to attach — the ordering is theirs.
+      map: [],
       provenance: "scheme_of_work",
       refs: [{ source: "Your school's scheme of work", subject: hits[0]?.subjects?.name || subject, topic }],
       status: "approved",            // teacher-authored — already trusted
@@ -86,11 +89,15 @@ async function generated({ guide, subject, topic }) {
   // until a subtopic actually opens, and generating 5-6 of them up front added
   // several seconds to session start (painful on slow connections). Generate
   // them in the background and patch the cached row when they land.
-  const subtopics  = await guide.generateSubtopics(topic, subject, context);
+  const { subtopics, map } = await guide.generateSubtopics(topic, subject, context);
   const objectives = {};
 
   return {
-    subtopics, objectives, deferObjectives: { guide, topic, subject, context },
+    // `map` carries the ORDER's reasoning — what each step builds on and what
+    // it unlocks. subtopics stays a plain string array because every consumer
+    // indexes it that way; the map rides alongside for anything that wants to
+    // show the path rather than just the next rung.
+    subtopics, map, objectives, deferObjectives: { guide, topic, subject, context },
     provenance: context ? "syllabus" : "ai",
     refs: refs || [],
     status: "pending_review",       // async teacher review — never blocks
@@ -120,7 +127,8 @@ export async function resolveLadder({ studentId, topic, subject, guide }) {
         .update({ use_count: (cached.use_count || 0) + 1, updated_at: new Date().toISOString() })
         .eq("id", cached.id).then(() => {}, () => {});
       return {
-        subtopics: cached.subtopics, objectives: cached.objectives || {},
+        subtopics: cached.subtopics, map: cached.knowledge_map || [],
+        objectives: cached.objectives || {},
         provenance: cached.provenance, refs: cached.refs || [],
         status: cached.status, ladderId: cached.id, cached: true,
       };
@@ -137,7 +145,7 @@ export async function resolveLadder({ studentId, topic, subject, guide }) {
     const { data } = await db.schema("edu").from("lesson_ladders").insert({
       school_id: schoolId, class_id: classId,
       subject: subject || "General", topic_key: topicKey, topic: topic || "Untitled",
-      subtopics: built.subtopics, objectives: built.objectives,
+      subtopics: built.subtopics, knowledge_map: built.map || [], objectives: built.objectives,
       provenance: built.provenance, refs: built.refs, status: built.status,
       use_count: 1,
     }).select("id").single();

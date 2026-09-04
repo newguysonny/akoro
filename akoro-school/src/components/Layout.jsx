@@ -182,6 +182,7 @@ const NAV_SECTIONS = [
     // Academics → Classes, and Student Information respectively.
     { label: 'Battles', icon: Swords, to: '/battles' },
     { label: 'Tasks', icon: ListTodo, to: '/tasks' },
+    { label: 'AI Self Study', icon: GraduationCap, to: '/self-study' },
     { label: 'Assessments', icon: FileCheck, to: '/assessments' },
     { label: 'Review AI Lessons', icon: BookOpenCheck, to: '/lesson-review' },
     { label: 'AI Chat', icon: MessageSquare, to: '/chat' },
@@ -281,6 +282,7 @@ const NAV_SECTIONS = [
       { label: 'Menus', to: '/website-builder/menus' },
       { label: 'Template', to: '/settings-website/templates' },
       { label: 'School Website', to: '/settings-website' },
+      { label: 'AI Website Sync', to: '/settings-website/ai-sync' },
       { label: 'Appearance', to: '/website-builder/appearance' },
     ] },
     { label: 'Apps Center', icon: LayoutGrid, to: '/apps' },
@@ -361,6 +363,7 @@ export function Sidebar({ collapsed }) {
   const [open, setOpen] = useState({});
   const [query, setQuery] = useState('');
   const [modules, setModules] = useState(null);
+  const [access, setAccess] = useState(null);   // optional modules this school owns
   const toggle = (key) => setOpen((o) => ({ ...o, [key]: !o[key] }));
 
   // Load the school's enabled/disabled modules once, then keep it fresh:
@@ -370,7 +373,11 @@ export function Sidebar({ collapsed }) {
     let cancelled = false;
     const loadModules = () => {
       apiGet('/api/school/settings')
-        .then((res) => { if (!cancelled) setModules(res.data?.modules || {}); })
+        .then((res) => {
+          if (cancelled) return;
+          setModules(res.data?.modules || {});
+          setAccess(res.data?.moduleAccess || {});
+        })
         .catch(() => {});
     };
     loadModules();
@@ -383,7 +390,16 @@ export function Sidebar({ collapsed }) {
     };
   }, []);
 
-  const isModuleOn = (key) => !key || !modules || modules[key] !== false; // default on until loaded/explicitly off
+  // Two independent gates, and both must pass:
+  //   owned   — the school bought this module in the Apps Center
+  //   enabled — the school hasn't switched it off in Module Management
+  // Core areas carry no moduleKey and skip both. Until settings load, nothing
+  // is hidden, so the sidebar never flashes items away on a slow connection.
+  const isModuleOn = (key) => {
+    if (!key || !modules) return true;
+    if (access && access[key] !== true) return false;
+    return modules[key] !== false;
+  };
 
   const moduleFiltered = NAV_SECTIONS.map((sec) => ({
     ...sec,

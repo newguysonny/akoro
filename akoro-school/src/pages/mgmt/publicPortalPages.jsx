@@ -28,6 +28,7 @@ export function OnlineAdmissionsPage() {
   const [admit, setAdmit] = useState({ class_id: '', admission_no: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [okMsg, setOkMsg] = useState('');
 
   const load = () => {
     const q = status ? `?status=${status}` : '';
@@ -44,7 +45,9 @@ export function OnlineAdmissionsPage() {
     setBusy(true); setErr('');
     try {
       const r = await apiPost(`${BASE}/admissions/${view.id}/admit`, admit);
-      alert(`Admitted 🎉 Admission No: ${r.data.admission_no}`);
+      // The admission number is the one thing they need to write down, so it
+      // stays on the page rather than behind an alert they must dismiss.
+      setOkMsg(`Admitted 🎉 Admission number: ${r.data.admission_no}`);
       setView(null); setAdmit({ class_id: '', admission_no: '' }); load();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -56,6 +59,12 @@ export function OnlineAdmissionsPage() {
 
   return (
     <PageLayout title="Online Admissions" subtitle="Applications submitted on your public /apply page">
+      {okMsg && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '11px 14px', borderRadius: 12, background: '#DCFCE7', border: '1px solid #BBF7D0' }}>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: '#166534' }}>{okMsg}</span>
+          <button onClick={() => setOkMsg('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 15, fontWeight: 900, color: '#166534', opacity: .6 }}>×</button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ ...inputStyle, width: 200 }}>
           <option value="">All statuses</option>

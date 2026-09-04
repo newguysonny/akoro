@@ -12,7 +12,13 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { apiGet, apiPost, apiDelete, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../../constants.js';
 
-/* ── Mock fallback data (matches backend snake_case shape) ──────────── */
+/* Zeroes, not samples. A stat that failed to load must read as "nothing yet",
+   never as a plausible invented number. */
+const EMPTY_STATS = {
+  total_students: 0, active_courses: 0, total_courses: 0,
+  total_revenue: 0, agent_xp: 0, agent_level: 0, streak_days: 0,
+};
+
 import { MOCK_STATS, STREAM_META, SOCIAL_META, MOCK_PROFILE, MOCK_SESSIONS, StatCard, SessionItem, QuickAction, PLATFORM_KEYS, STREAM_ERRORS, StreamingPanel, SocialPanel } from './parts.jsx';
 
 export default function HomePage() {
@@ -27,6 +33,8 @@ export default function HomePage() {
   const [coins,    setCoins]    = useState(null);   // school coin balance
   const [loading,  setLoading]  = useState(true);
   const [toast,    setToast]    = useState(null);
+  const [loadError, setLoadError] = useState('');   // shown instead of inventing numbers
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     apiGet('/api/wallet').then((r) => {
@@ -50,25 +58,30 @@ export default function HomePage() {
           getSessions(),
         ]);
         if (cancelled) return;
-        setStats(statsRes.status === 'fulfilled' ? statsRes.value?.data || MOCK_STATS : MOCK_STATS);
-        setProfile(profileRes.status === 'fulfilled' ? profileRes.value?.data || MOCK_PROFILE : MOCK_PROFILE);
 
-        // Filter sessions for today
-        const allSessions = sessionsRes.status === 'fulfilled'
-          ? (sessionsRes.value?.data || MOCK_SESSIONS)
-          : MOCK_SESSIONS;
+        // Never substitute sample data for a failed call. This page shows student
+        // counts and revenue; inventing them means a teacher reads fabricated
+        // figures as fact and has no way to tell. Show what loaded, zero what
+        // didn't, and say plainly that it didn't load.
+        const failed = [];
+        if (statsRes.status === 'fulfilled')   setStats(statsRes.value?.data ?? EMPTY_STATS);
+        else { setStats(EMPTY_STATS); failed.push('your stats'); console.warn('[home] stats:', statsRes.reason?.detail || statsRes.reason); }
+
+        if (profileRes.status === 'fulfilled') setProfile(profileRes.value?.data ?? null);
+        else { failed.push('your profile'); console.warn('[home] profile:', profileRes.reason?.detail || profileRes.reason); }
+
+        const allSessions = sessionsRes.status === 'fulfilled' ? (sessionsRes.value?.data ?? []) : [];
+        if (sessionsRes.status === 'rejected') { failed.push("today's sessions"); console.warn('[home] sessions:', sessionsRes.reason?.detail || sessionsRes.reason); }
         const today = new Date().toDateString();
         setSessions(allSessions.filter(s => new Date(s.startTime).toDateString() === today));
 
-        if (statsRes.status === 'rejected') {
-          console.warn('Stats API error, using mock data:', statsRes.reason);
-        }
+        setLoadError(failed.length ? `We couldn't load ${failed.join(', ')}.` : '');
       } catch (err) {
         if (!cancelled) {
-          console.warn('HomePage load error, using mock data:', err);
-          setStats(MOCK_STATS);
-          setProfile(MOCK_PROFILE);
-          setSessions(MOCK_SESSIONS);
+          console.warn('[home] load:', err?.detail || err);
+          setStats(EMPTY_STATS);
+          setSessions([]);
+          setLoadError(err?.message || "We couldn't load your dashboard.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -76,7 +89,7 @@ export default function HomePage() {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -91,6 +104,25 @@ export default function HomePage() {
       subtitle="Here's what's happening today"
     >
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Say what didn't load, and give the one control that helps. Silence
+            here reads as "you have no students", which is a different claim. */}
+        {loadError && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+            padding: '11px 14px', borderRadius: 12,
+            background: '#FEF3C7', border: '1px solid #FDE68A', fontFamily: FONT,
+          }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#92400E' }}>
+              {loadError} These figures may be incomplete.
+            </span>
+            <button onClick={() => { setLoading(true); setReloadKey(k => k + 1); }} style={{
+              padding: '6px 13px', borderRadius: 9, border: '1px solid #FDE68A',
+              background: WHITE, color: '#92400E', fontSize: 12, fontWeight: 800,
+              cursor: 'pointer', fontFamily: FONT,
+            }}>Retry</button>
+          </div>
+        )}
         {/* Stats grid */}
         <div style={{
           display: 'grid',

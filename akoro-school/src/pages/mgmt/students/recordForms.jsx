@@ -47,20 +47,26 @@ export function HealthRecordFormPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ record_type: 'condition', title: '', recorded_on: '', details: '' });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const save = async () => {
-    if (!form.title.trim()) return alert('Title is required');
-    setBusy(true);
+    if (!form.title.trim()) return setError('Give this record a title.');
+    setBusy(true); setError('');
     try {
       await apiPost(`${BASE}/health-records`, { ...form, student_id: id });
       navigate(`/mgmt/students/${id}?tab=health`);
-    } catch (e) { alert(e.message || 'Could not save'); }
+    } catch (e) { setError(e.message || 'Could not save this record.'); }
     finally { setBusy(false); }
   };
 
   return (
     <RecordFormShell title="Add Health Record" color={RED} icon={HeartPulse} backTo={`/mgmt/students/${id}?tab=health`} onSave={save} busy={busy}>
+      {error && (
+        <div style={{ padding: '10px 13px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 11, fontSize: 12.5, fontWeight: 700, color: '#991B1B' }}>
+          {error}
+        </div>
+      )}
       <div>
         <label style={fieldLabel}>Type</label>
         <select value={form.record_type} onChange={set('record_type')} style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}>
@@ -89,20 +95,26 @@ export function BehaviorRecordFormPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ incident_type: '', polarity: 'negative', severity: 'low', points: 1, description: '', action_taken: '', recorded_on: '' });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const save = async () => {
-    if (!form.incident_type.trim()) return alert('Incident type is required');
+    if (!form.incident_type.trim()) return setError('Choose an incident type.');
     setBusy(true);
     try {
       await apiPost(`${BASE}/behavior-records`, { ...form, points: Number(form.points) || 1, student_id: id });
       navigate(`/mgmt/students/${id}?tab=behavior`);
-    } catch (e) { alert(e.message || 'Could not save'); }
+    } catch (e) { setError(e.message || 'Could not save this record.'); }
     finally { setBusy(false); }
   };
 
   return (
     <RecordFormShell title="Add Behavior Record" color={AMBER} icon={ShieldAlert} backTo={`/mgmt/students/${id}?tab=behavior`} onSave={save} busy={busy}>
+      {error && (
+        <div style={{ padding: '10px 13px', background: '#FEE2E2', border: '1px solid #FECACA', borderRadius: 11, fontSize: 12.5, fontWeight: 700, color: '#991B1B' }}>
+          {error}
+        </div>
+      )}
       <div>
         <label style={fieldLabel}>Incident Type</label>
         <input value={form.incident_type} onChange={set('incident_type')} placeholder="e.g. Helped a classmate" style={{ ...inputStyle, width: '100%' }} />

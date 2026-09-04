@@ -10,7 +10,7 @@
 CREATE TABLE IF NOT EXISTS edu.platform_tools (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   key         text        NOT NULL UNIQUE,             -- stable slug, e.g. 'lesson-plan'
-  kind        text        NOT NULL CHECK (kind IN ('tool','asset')),
+  kind        text        NOT NULL,   -- constrained below; see the DO block
   name        text        NOT NULL,
   description text        NOT NULL DEFAULT '',
   emoji       text        NOT NULL DEFAULT '🛠️',
@@ -22,6 +22,29 @@ CREATE TABLE IF NOT EXISTS edu.platform_tools (
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- ── kind CHECK, built from the UNION of known and existing values ───────────
+-- It was inline on the column as ('tool','asset'), and CREATE TABLE IF NOT
+-- EXISTS never revisits an existing table — so the constraint froze at whatever
+-- the table was born with. On a FRESH database that meant
+-- 2026-school-modules-catalog.sql, which inserts kind='management' rows, failed
+-- outright: a brand-new environment could not deploy past migration 15 of 130,
+-- while every existing one carried on fine and hid it.
+--
+-- Rebuilt from the union so it can never narrow, and so adding a kind later
+-- only means naming it here.
+DO $$
+DECLARE v_kinds text[];
+BEGIN
+  SELECT array_agg(DISTINCT k ORDER BY k) INTO v_kinds
+  FROM (SELECT unnest(ARRAY['tool','asset','management']) AS k
+        UNION SELECT DISTINCT kind FROM edu.platform_tools WHERE kind IS NOT NULL) t;
+
+  ALTER TABLE edu.platform_tools DROP CONSTRAINT IF EXISTS platform_tools_kind_check;
+  EXECUTE format(
+    'ALTER TABLE edu.platform_tools ADD CONSTRAINT platform_tools_kind_check CHECK (kind = ANY (%L))',
+    v_kinds);
+END $$;
 
 -- ── Ownership: which instructor has unlocked which tool/asset ────────────────
 CREATE TABLE IF NOT EXISTS edu.instructor_tool_access (

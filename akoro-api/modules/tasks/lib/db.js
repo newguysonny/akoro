@@ -36,7 +36,19 @@ export const TaskDB = {
     let q = db.from("tasks").select("*").eq("creator_id", creatorId);
     if (status) q = q.eq("status", status);
     const { data } = await q.order("created_at", { ascending: false });
-    return data ?? [];
+    const tasks = data ?? [];
+    if (!tasks.length) return tasks;
+
+    // The cron lives in task_schedules, but the edit form needs it alongside the
+    // task — otherwise reopening a recurring task shows "does not repeat".
+    const recurring = tasks.filter((t) => t.is_recurring).map((t) => t.id);
+    if (!recurring.length) return tasks;
+    const { data: schedules } = await db.from("task_schedules")
+      .select("task_id, cron_expr, timezone").in("task_id", recurring);
+    const byTask = new Map((schedules ?? []).map((s) => [s.task_id, s]));
+    return tasks.map((t) => byTask.has(t.id)
+      ? { ...t, cron_expr: byTask.get(t.id).cron_expr, timezone: byTask.get(t.id).timezone ?? t.timezone }
+      : t);
   },
 
   async updateStatus(id, status, extra = {}) {
@@ -63,6 +75,14 @@ export const TaskDB = {
     const { data, error } = await db.from("tasks").update({ status: "cancelled" }).eq("id", id).select().single();
     if (error) throw new Error(error.message);
     return data;
+  },
+
+  // Hard delete. task_runs / task_outputs / task_files / task_schedules all
+  // reference tasks(id) ON DELETE CASCADE, so the children go with it.
+  async remove(id) {
+    const { error } = await db.from("tasks").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    return true;
   },
 
   async findOverdue() {
@@ -178,6 +198,11 @@ export const TaskScheduleDB = {
     const { data, error } = await db.from("task_schedules").update(updates).eq("id", id).select().single();
     if (error) throw new Error(error.message);
     return data;
+  },
+
+  async removeByTask(taskId) {
+    await db.from("task_schedules").delete().eq("task_id", taskId);
+    return true;
   },
 };
 

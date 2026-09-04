@@ -12,6 +12,7 @@
 // =============================================================
 
 import express from "express";
+import { jsonbArray, jsonbObject } from "../../lib/jsonb.js";
 import { authenticateToken } from "../auth/routes.js";
 import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
@@ -21,6 +22,8 @@ import db from "../../db.js";
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
 import { getSyllabusContext, getSyllabusGrounding } from "./syllabus.js";
+import { getPastQuestionGrounding } from "../past-questions/routes.js";
+import { getCurriculumGrounding } from "../curriculum/routes.js";
 import {
   getOrCreateStudentAgent,
   getAgentGrowthHistory,
@@ -36,13 +39,6 @@ import { activeSessions } from "./websocket.js";
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
 const query      = (text, params) => pool.query(text, params);
-
-const PHASE_PLAN = [
-  "Phase 1 → what do they know",
-  "Phase 2 → must-know parts",
-  "Phase 3 → teach it back",
-  "Phase 4 → push further",
-];
 
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
@@ -75,8 +71,8 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
     }
 
     // 2. Derive blocks from session_phase_progress
-    const subtopics  = JSON.parse(session.subtopics  || "[]");
-    const objectives = JSON.parse(session.objectives || "{}");
+    const subtopics  = jsonbArray(session.subtopics);
+    const objectives = jsonbObject(session.objectives);
 
     const { data: progress } = await db.schema("edu")
       .from("session_phase_progress")
@@ -89,18 +85,26 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
     ];
 
     for (const prog of progress || []) {
-      // Subtopic header + plan + objectives at start of each subtopic
+      // One header per subtopic, carrying its objectives.
+      //
+      // This used to emit three blocks: the header, a "NaNa plan" strip listing
+      // the four phases, and the objectives as a separate checklist. The plan
+      // is machinery the learner does not act on, and the checklist was the
+      // header's own progress bar written out longhand — same array, same
+      // order. The header pages through them now.
       if (prog.phase === "1") {
         blocks.push({
           type: "subtopic-hdr", faded: true,
           subtopic: prog.subtopic, idx: prog.subtopic_idx,
+          // The SUBTOPIC list, not this subtopic's objectives.
+          //
+          // It was the latter, which conflated two different lists: items came
+          // from objectives[subtopic] (three entries for one step) while idx and
+          // total counted subtopics (one of six). The header paged through three
+          // things while claiming to be on step 4 of 6.
+          items: subtopics,
           total: subtopics.length, topic, subject,
         });
-        blocks.push({ type: "plan", phases: PHASE_PLAN, faded: true });
-        const objs = objectives[prog.subtopic] || [];
-        if (objs.length) {
-          blocks.push({ type: "objectives", subtopic: prog.subtopic, items: objs, faded: true });
-        }
         blocks.push({
           type: "guide", agent: "NaNa Esumai", emoji: "🧠", faded: true,
           phase: `Phase 1 — ${prog.subtopic}`,
@@ -334,7 +338,7 @@ function fmtSessionEnd({ evaluation, controlReport, finalState, agentPairId,
 
 function buildTurnBlocks(result, agentPairId) {
   if (result.type === "drift_warning") {
-    return [result.sargeantMessage || "⚠️ Off-topic detected."];
+    return [result.guideMessage || result.sargeantMessage || "Let\u2019s bring that back to the topic."];
   }
   const blocks = [];
   if (result.phaseChanged && result.phaseLabel)     blocks.push(fmtPhaseHeader(result.phaseLabel));
@@ -766,10 +770,27 @@ router.post("/tutor", async (req, res) => {
     // Ground the tutor in the uploaded exam syllabus when the question relates
     // to it (semantic match; empty for off-syllabus questions). `refs` are the
     // human-facing source chips shown under the reply.
-    const { context: syllabusCtx, refs: syllabusRefs } =
-      await getSyllabusGrounding(message.trim(), { limit: 5 }).catch(() => ({ context: "", refs: [] }));
+    // Ground in BOTH the syllabus (what should be taught) and the past-question
+    // bank (how it is actually examined) — they answer different halves of
+    // "will this be in the exam?". Fetched together; either may come back empty.
+    // Teachers additionally get the CURRICULUM — what a class is meant to be
+    // taught and how — which is the question they ask and students don't.
+    const wantsCurriculum = role === "instructor";
+    const [
+      { context: syllabusCtx, refs: syllabusRefs },
+      { context: pastCtx, refs: pastRefs },
+      { context: curriculumCtx, refs: curriculumRefs },
+    ] = await Promise.all([
+      getSyllabusGrounding(message.trim(), { limit: 5 }).catch(() => ({ context: "", refs: [] })),
+      getPastQuestionGrounding(message.trim(), { limit: 3 }).catch(() => ({ context: "", refs: [] })),
+      wantsCurriculum
+        ? getCurriculumGrounding(message.trim(), { limit: 3 }).catch(() => ({ context: "", refs: [] }))
+        : Promise.resolve({ context: "", refs: [] }),
+    ]);
     const systemContent = tutorSystemPrompt({ agentName, role }) +
-      (syllabusCtx ? `\n\n${syllabusCtx}` : "");
+      (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
+      (pastCtx ? `\n\n${pastCtx}` : "") +
+      (curriculumCtx ? `\n\n${curriculumCtx}` : "");
 
     const messages = [
       { role: "system", content: systemContent },
@@ -786,7 +807,7 @@ router.post("/tutor", async (req, res) => {
       });
       const reply = completion.choices?.[0]?.message?.content?.trim()
         || "I'm here to help with your studies — ask me anything about your subjects!";
-      return res.json({ success: true, reply, syllabus: syllabusRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+      return res.json({ success: true, reply, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
     }
 
     // ── Streaming path (SSE) ──────────────────────────────────────────────

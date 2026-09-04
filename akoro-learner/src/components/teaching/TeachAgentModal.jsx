@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import { startMicCapture } from '../../utils/micCapture.js';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API, apiGet } from '../../services/api.js';
@@ -8,7 +9,7 @@ import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function TeachAgentModal({ session, config, onClose }) {
+function TeachAgentModal({ session, config, onClose, onSessionStarted }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
@@ -122,6 +123,7 @@ function TeachAgentModal({ session, config, onClose }) {
 
   const [voiceStreaming, setVoiceStreaming] = useState(false);
   const [interimText,    setInterimText]   = useState("");     // audio chunks
+  const [voiceLevel,     setVoiceLevel]    = useState(0);      // 0..1 mic loudness, for the meter
   const [cogState,       setCogState]      = useState(null);   // live cognitive state
 
   // Mid-session teacher switching
@@ -196,6 +198,7 @@ function TeachAgentModal({ session, config, onClose }) {
       ws.on("session_preparing", d => setPrepNote(`Preparing your lesson on ${d.topic}…`));
       ws.on("session_ready", d => {
         setSessionId(d.sessionId);
+        onSessionStarted?.(d.sessionId);
         sessionIdRef.current = d.sessionId;
         setWsReady(true);
         setInitLoading(false); setPrepNote('');
@@ -230,7 +233,14 @@ function TeachAgentModal({ session, config, onClose }) {
       });
 
       // Backward compat
-      ws.on("student_session_ready", d => { setSessionId(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
+      // Persistence result for this session. The lesson runs off the in-memory
+      // orchestrator, so a failed save is invisible without this — which is
+      // precisely how sessions went missing from the Sessions tab.
+      ws.on("session_saved", d => {
+        if (!d?.saved) console.error("[session] NOT saved — it will not appear in Sessions:", d?.error);
+      });
+
+      ws.on("student_session_ready", d => { setSessionId(d.sessionId); onSessionStarted?.(d.sessionId); sessionIdRef.current = d.sessionId; setWsReady(true); setInitLoading(false); });
 
       // Summary delivered over the socket (replaces REST /teaching/summary).
       ws.on("session_summary", ({ summary }) => { setSummary(summary); setLoading(false); });
@@ -339,9 +349,22 @@ function TeachAgentModal({ session, config, onClose }) {
       });
 
       ws.on("voice_error", ({ message }) => {
+        // Shown, not logged.
+        //
+        // This was a console.warn and a silent flip-off, which is why a
+        // server-side voice failure was indistinguishable from a dead button —
+        // and why a misconfigured transcription session went unnoticed for
+        // months. The server sends a real reason; the learner should read it.
         console.warn("[voice stream]", message);
         setVoiceStreaming(false);
         setInterimText("");
+        setVoiceLevel(0);
+        voiceMediaRef.current?.stop();
+        voiceMediaRef.current = null;
+        setBlocks(prev => [...prev, {
+          type: "system-divider",
+          label: message || "Voice couldn't start. You can keep typing.",
+        }]);
       });
 
       // ── Streaming TTS events ───────────────────────────────────
@@ -471,7 +494,13 @@ function TeachAgentModal({ session, config, onClose }) {
   };
 
   // ── Voice streaming (OpenAI realtime transcription) ────────────
-  // Captures raw PCM16 mono @ 24kHz — the format OpenAI realtime expects.
+  //
+  // Capture lives in utils/micCapture.js. It used to be inline here, forcing
+  // new AudioContext({ sampleRate: 24000 }) with no fallback — which mobile
+  // browsers reject outright, so the constructor threw, the catch below logged
+  // a console warning, and tapping the mic did nothing whatsoever. There was a
+  // correct implementation in useVoiceSession.js the whole time; this file just
+  // had its own copy. Now there is one.
   const toggleVoiceStream = async () => {
     if (voiceStreaming) {
       voiceMediaRef.current?.stop();
@@ -479,51 +508,31 @@ function TeachAgentModal({ session, config, onClose }) {
       wsRef.current?.emit("stop_voice_stream");
       setVoiceStreaming(false);
       setInterimText("");
+      setVoiceLevel(0);
       return;
     }
     stopTts(); // barge-in: stop agent speech before going live
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      voiceMediaRef.current = await startMicCapture({
+        isReady: () => voiceReadyRef.current && !!wsRef.current?.connected,
+        onChunk: (audio) => wsRef.current.emit("voice_audio_chunk", { audio }),
+        onLevel: setVoiceLevel,
       });
-      const ctx    = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-      const source = ctx.createMediaStreamSource(stream);
-      const proc   = ctx.createScriptProcessor(4096, 1, 1);
-
-      proc.onaudioprocess = (e) => {
-        if (!voiceReadyRef.current || !wsRef.current?.connected) return;
-        const f32 = e.inputBuffer.getChannelData(0);
-        const i16 = new Int16Array(f32.length);
-        for (let i = 0; i < f32.length; i++) {
-          const s = Math.max(-1, Math.min(1, f32[i]));
-          i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        const bytes = new Uint8Array(i16.buffer);
-        let bin = "";
-        for (let i = 0; i < bytes.length; i += 8192) {
-          bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
-        }
-        wsRef.current.emit("voice_audio_chunk", { audio: btoa(bin) });
-      };
-
-      source.connect(proc);
-      proc.connect(ctx.destination);
-
-      voiceMediaRef.current = {
-        stop() {
-          voiceReadyRef.current = false;
-          try { proc.disconnect(); source.disconnect(); } catch {}
-          stream.getTracks().forEach(t => t.stop());
-          ctx.close().catch(() => {});
-        },
-      };
-
-      // Open OpenAI realtime on backend — chunks flow once voice_stream_ready fires
+      // Chunks flow once voice_stream_ready fires.
       wsRef.current?.emit("start_voice_stream");
       setVoiceStreaming(true);
       setInterimText("");
-    } catch {
-      console.warn("[voice stream] mic unavailable or WS offline");
+    } catch (e) {
+      // Said out loud. The old catch wrote one line to a console nobody has
+      // open, so a denied microphone and a broken feature looked identical:
+      // you tapped the button and nothing happened.
+      setVoiceStreaming(false);
+      setBlocks(prev => [...prev, {
+        type: "system-divider",
+        label: /denied|not allowed|permission/i.test(e?.message ?? "")
+          ? "Microphone blocked. Allow mic access for this site, then tap the mic again."
+          : "Couldn't start the microphone. Check no other app is using it, then try again.",
+      }]);
     }
   };
 
@@ -683,6 +692,7 @@ function TeachAgentModal({ session, config, onClose }) {
         seconds={seconds}
         voiceStreaming={voiceStreaming}
         interimText={interimText}
+        voiceLevel={voiceLevel}
         onToggleVoice={toggleVoiceStream}
         cognitive={cogState}
         guideLabel={`${guide.emoji} ${guide.name}`}

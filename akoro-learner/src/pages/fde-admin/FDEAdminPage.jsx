@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
 
 // ─── palette / tokens ────────────────────────────────────────────────────────
@@ -20,7 +21,8 @@ export default function FDEAdminPage() {
   const [schools,  setSchools]  = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState(null);
+  const [error,    setError]    = useState(null);        // load failure — replaces the list
+  const [actionErr, setActionErr] = useState('');       // save/delete/toggle — sits above it
 
   const [filterScope,    setFilterScope]    = useState("all");
   const [filterExecutor, setFilterExecutor] = useState("all");
@@ -49,7 +51,7 @@ export default function FDEAdminPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleSave = async (form) => {
-    setSaving(true);
+    setSaving(true); setActionErr('');
     try {
       if (modal?.editing) {
         await apiPatch(`/api/tasks/admin/tools/${modal.editing.id}`, {
@@ -64,25 +66,29 @@ export default function FDEAdminPage() {
       setModal(null);
       await load();
     } catch (e) {
-      alert(e.message);
+      setActionErr(e.message || 'Could not save the tool.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (tool) => {
-    if (!confirm(`Delete tool "${tool.name}"? This cannot be undone.`)) return;
+    if (!(await confirmDialog({
+      title: `Delete "${tool.name}"?`,
+      message: 'This tool is removed from every agent that can currently use it.',
+      confirmLabel: 'Delete tool',
+    }))) return;
     try {
       await apiDelete(`/api/tasks/admin/tools/${tool.id}`);
       setTools(ts => ts.filter(t => t.id !== tool.id));
-    } catch (e) { alert(e.message); }
+    } catch (e) { setActionErr(e.message || 'Could not delete the tool.'); }
   };
 
   const handleToggle = async (tool) => {
     try {
       const res = await apiPatch(`/api/tasks/admin/tools/${tool.id}`, { enabled: !tool.enabled });
       setTools(ts => ts.map(t => t.id === tool.id ? res.tool : t));
-    } catch (e) { alert(e.message); }
+    } catch (e) { setActionErr(e.message || 'Could not change that setting.'); }
   };
 
   const visible = tools.filter(t => {
@@ -179,6 +185,12 @@ export default function FDEAdminPage() {
             <div />
           </div>
 
+          {actionErr && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "10px 0", padding: "10px 13px", background: "#FEE2E2", border: "1px solid #FECACA", borderRadius: 12 }}>
+              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "#991B1B" }}>{actionErr}</span>
+              <button onClick={() => setActionErr('')} style={{ border: "none", background: "transparent", color: "#991B1B", cursor: "pointer", fontSize: 14, fontWeight: 900 }}>×</button>
+            </div>
+          )}
           {loading && <div style={{ padding: 32, textAlign: "center", color: "var(--ak-text-muted)" }}>Loading…</div>}
           {error   && <div style={{ padding: 32, textAlign: "center", color: "#DC2626" }}>Error: {error}</div>}
           {!loading && !error && visible.length === 0 && (

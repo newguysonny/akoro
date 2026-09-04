@@ -29,12 +29,19 @@ export class BaseOrchestrator {
   /* ── Shared helpers ─────────────────────────────────────── */
 
   async _loadStudentAgent(agentId) {
-    const { data } = await db.schema("edu")
-      .from("student_agents")
-      .select("id, name, level, total_sessions, knowledge_score, subjects_learned")
-      .eq("id", agentId)
-      .single()
-      .catch(() => ({ data: null }));
+    // try/catch, NOT .catch() — a Supabase builder is a thenable with no
+    // .catch method, so chaining one throws synchronously before the query is
+    // sent. Same defect as the decay path; it just had not been reached yet.
+    let data = null;
+    try {
+      ({ data } = await db.schema("edu")
+        .from("student_agents")
+        .select("id, name, level, total_sessions, knowledge_score, subjects_learned")
+        .eq("id", agentId)
+        .maybeSingle());
+    } catch (e) {
+      console.warn("[orchestrator] student agent lookup failed:", e.message);
+    }
     return data || { id: agentId, name: "Student Agent", level: 1, total_sessions: 0, knowledge_score: 0 };
   }
 

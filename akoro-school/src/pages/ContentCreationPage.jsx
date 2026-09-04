@@ -11,6 +11,7 @@ import BackButton from '../components/BackButton.jsx';
 import { apiGet, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, BLUE, PURPLE, RED, FONT } from '../constants.js';
 import { AiPostPill, BLOG_LABEL, fmtDateTime } from './content/parts.jsx';
+import ContentView, { contentViewStyles } from '../components/ContentView.jsx';
 
 const KIND_TITLE = { blog: 'Blog Post', social: 'Social Post', activity: 'Activity' };
 
@@ -111,11 +112,14 @@ export default function ContentCreationPage() {
               )}
             </div>
 
-            <pre style={{ margin: 0, padding: '18px 20px', fontSize: 13.5, lineHeight: 1.7, color: INK, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: LIGHT }}>{c.content}</pre>
+            <div style={{ background: LIGHT }}>
+              <ContentView content={c.content} kind={c.kind} />
+            </div>
           </div>
         )}
       </div>
 
+      <style>{contentViewStyles}</style>
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: INK, color: WHITE, padding: '9px 20px', borderRadius: 20, fontSize: 12.5, fontWeight: 700, zIndex: 9999, whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.2)' }}>{toast}</div>
       )}

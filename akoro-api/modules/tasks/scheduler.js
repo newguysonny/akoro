@@ -58,11 +58,21 @@ async function scheduleRecurring(task, cronExpr, timezone, jobData) {
   return job.id ?? `cron-${task.id}`;
 }
 
-export async function cancelTask(bullJobId) {
-  if (!bullJobId) return;
+export async function cancelTask(bullJobId, taskId) {
   try {
-    const job = await taskQueue.getJob(bullJobId);
-    if (job) await job.remove();
+    if (bullJobId) {
+      const job = await taskQueue.getJob(bullJobId);
+      if (job) await job.remove();
+    }
+    // A recurring task's delayed jobs are spawned by a repeatable entry, which
+    // survives removing any single job — so drop the repeat itself too, or the
+    // "deleted" task keeps firing on its cron.
+    if (taskId) {
+      const repeats = await taskQueue.getRepeatableJobs();
+      for (const r of repeats) {
+        if (r.name === `task-${taskId}`) await taskQueue.removeRepeatableByKey(r.key);
+      }
+    }
   } catch (e) {
     console.warn("[tasks/scheduler] Cancel failed:", e.message);
   }

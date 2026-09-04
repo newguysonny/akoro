@@ -30,7 +30,7 @@ const TIERS = [
     features: [
       'Custom school website (drag-and-drop builder)',
       'Basic AI chat widget that answers FAQs 24/7',
-      'Free <slug>.akoro.name.ng subdomain',
+      'Free akoro.name.ng subdomain',
       '1 admin account',
       'Mobile-ready, installable as an app (PWA)',
     ],

@@ -175,7 +175,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
   // ── Consent / identity capture screen ──────────────────────
   if (phase === "consent") {
     return (
-      <Shell onClose={onClose} title="Proctored Assessment">
+      <Shell onClose={onClose} title="Live Assessment">
         <div style={{ maxWidth:460, margin:"0 auto", padding:"8px 4px", textAlign:"center" }}>
           <div style={{ borderRadius:18, overflow:"hidden", background:"#000", marginBottom:16,
             border:"2px solid rgba(255,255,255,.1)", aspectRatio:"4/3" }}>
@@ -184,7 +184,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
           </div>
           <h2 style={{ fontSize:18, fontWeight:900, color:"#F1F5F9", margin:"0 0 8px" }}>{topic}</h2>
           <p style={{ fontSize:13, fontWeight:600, color:"#94A3B8", lineHeight:1.6, margin:"0 0 18px" }}>
-            Sergeant will assess you on <b style={{ color:"#CBD5E1" }}>{topic}</b>. This session is proctored:
+            Sergeant will assess you on <b style={{ color:"#CBD5E1" }}>{topic}</b>. This is a live, supervised session:
             keep your face in frame, stay alone, and no phones or notes. We'll capture a reference photo to verify your identity.
           </p>
           <button onClick={registerAndStart} disabled={status !== "running" || refSaving}
@@ -222,7 +222,7 @@ function AssessmentRoom({ topic, subject, objectives = [], questionCount = 5, on
           <Stat label="Hints used" value={summary.hintsUsed} color="#CBD5E1" />
           {summary.cheatEvents?.length > 0 && (
             <div style={{ background:"rgba(248,113,113,.08)", border:"1px solid rgba(248,113,113,.2)", borderRadius:12, padding:"12px" }}>
-              <p style={{ fontSize:10.5, fontWeight:800, color:RED, margin:"0 0 8px", letterSpacing:.3 }}>PROCTORING FLAGS</p>
+              <p style={{ fontSize:10.5, fontWeight:800, color:RED, margin:"0 0 8px", letterSpacing:.3 }}>SESSION ALERTS</p>
               {summary.cheatEvents.slice(0,8).map((e,i) => (
                 <p key={i} style={{ fontSize:11.5, fontWeight:600, color:"#FCA5A5", margin:"0 0 3px" }}>
                   · {e.type.replace(/_/g," ")} ({e.severity})

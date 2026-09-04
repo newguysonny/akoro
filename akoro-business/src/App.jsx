@@ -18,6 +18,7 @@ import WalletPage from './pages/WalletPage.jsx';
 import RedemptionsPage from './pages/RedemptionsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import DocsPage from './pages/DocsPage.jsx';
+import WebhooksPage from './pages/WebhooksPage.jsx';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/products"       element={<ProtectedRoute><VoucherProductsPage /></ProtectedRoute>} />
       <Route path="/generated"      element={<ProtectedRoute><VouchersGeneratedPage /></ProtectedRoute>} />
       <Route path="/docs"           element={<ProtectedRoute><DocsPage /></ProtectedRoute>} />
+      <Route path="/webhooks"       element={<ProtectedRoute><WebhooksPage /></ProtectedRoute>} />
       <Route path="/wallet"         element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       <Route path="/redemptions"    element={<ProtectedRoute><RedemptionsPage /></ProtectedRoute>} />
       <Route path="/settings"       element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

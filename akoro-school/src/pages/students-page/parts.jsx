@@ -4,15 +4,16 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, X, User, Mail, Calendar, BookOpen, TrendingUp,
-  Trash2, ChevronRight, Copy, Check, Upload, Link2, UserPlus,
+  Trash2, ChevronRight, Copy, Check, Upload, Download, Link2, UserPlus,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/Layout.jsx';
 import { Btn, Modal, Inp, StatusPill, Toast } from '../../components/Primitives.jsx';
+import { apiGet } from '../../services/api.js';
 import { useStudentsAPI } from '../../hooks/useStudentsAPI.js';
 import { useCoursesAPI }  from '../../hooks/useCoursesAPI.js';
 import {
-  AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
+  AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT,
 } from '../../constants.js';
 
 /* ── Enrol Modal — tabs: Manual | Invite Link | Bulk CSV ─────────────── */
@@ -26,7 +27,9 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const fileRef = useRef(null);
 
   // Manual form
-  const [manual, setManual] = useState({ email: '', fullName: '', courseIds: [] });
+  const [classes, setClasses] = useState([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [manual, setManual] = useState({ email: '', fullName: '', classId: '', courseIds: [] });
   const setM = (k, v) => setManual(f => ({ ...f, [k]: v }));
   const toggleManualCourse = (id) =>
     setManual(f => ({ ...f, courseIds: f.courseIds.includes(id) ? f.courseIds.filter(x => x !== id) : [...f.courseIds, id] }));
@@ -44,16 +47,32 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   const [copied, setCopied] = useState(false);
 
   // CSV form
-  const [csv, setCsv]       = useState({ courseId: '', file: null });
+  const [csv, setCsv]       = useState({ courseId: '', classId: '', file: null });
   const [csvResult, setCsvR] = useState(null);
+
+  // The classes this teacher can add to. Loaded here rather than passed in,
+  // because the page above only ever knew about courses.
+  useEffect(() => {
+    if (!open) return;
+    setClassesLoading(true);
+    apiGet('/api/instructor/classrooms')
+      .then(d => {
+        const list = d?.data ?? [];
+        setClasses(list);
+        setManual(f => ({ ...f, classId: f.classId || list[0]?.id || '' }));
+        setCsv(f => ({ ...f, classId: f.classId || list[0]?.id || '' }));
+      })
+      .catch(() => setClasses([]))
+      .finally(() => setClassesLoading(false));
+  }, [open]);
 
   useEffect(() => {
     if (open) {
       setTab('manual'); setLoad(false); setError(''); setOk('');
-      setManual({ email: '', fullName: '', courseIds: [] });
+      setManual(f => ({ email: '', fullName: '', classId: f.classId || '', courseIds: [] }));
       setInv({ courseIds: [], expiresInDays: 7, emails: '' });
       setUrl(''); setCopied(false);
-      setCsv({ courseId: '', file: null }); setCsvR(null);
+      setCsv(f => ({ courseId: '', classId: f.classId || '', file: null })); setCsvR(null);
     }
   }, [open]);
 
@@ -62,23 +81,47 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   /* Manual submit */
   const submitManual = async (e) => {
     e.preventDefault(); reset();
-    if (!manual.email)              { setError('Email is required'); return; }
-    if (!manual.courseIds.length)   { setError('Please select at least one course'); return; }
+    if (!manual.email) { setError('Email is required'); return; }
+    if (!manual.classId && !manual.courseIds.length) {
+      setError('Pick a class, or at least one course.'); return;
+    }
     setLoad(true);
     const errors = [];
-    for (const courseId of manual.courseIds) {
+    let addedToClass = false;
+    let enrolled = 0;
+
+    // One call per course, but the CLASS only needs adding once — send it with
+    // the first request and omit it after, or every course would re-upsert the
+    // same membership.
+    const courseList = manual.courseIds.length ? manual.courseIds : [null];
+    for (let i = 0; i < courseList.length; i++) {
       try {
-        await addStudent({ email: manual.email, fullName: manual.fullName, courseId });
+        const r = await addStudent({
+          email: manual.email,
+          fullName: manual.fullName,
+          courseId: courseList[i],
+          classroomId: i === 0 ? (manual.classId || null) : null,
+        });
+        const d = r?.data ?? r;
+        if (d?.addedToClass) addedToClass = true;
+        if (d?.enrolled) enrolled += 1;
       } catch (err) { errors.push(err.message); }
     }
     setLoad(false);
-    if (errors.length === manual.courseIds.length) {
+
+    if (!addedToClass && !enrolled) {
       setError(errors[0] || 'Failed to add student');
-    } else {
-      const n = manual.courseIds.length - errors.length;
-      setOk(`Student added to ${n} course${n > 1 ? 's' : ''}! They'll receive a welcome email to set their password.${errors.length ? ` (${errors.length} skipped: ${errors[0]})` : ''}`);
-      onDone?.();
+      return;
     }
+    // Say what actually happened. "Added to 2 courses" while the class silently
+    // failed is how this went unnoticed in the first place.
+    const className = classes.find(c => c.id === manual.classId)?.name;
+    const bits = [];
+    if (addedToClass && className) bits.push(`added to ${className}`);
+    if (enrolled) bits.push(`enrolled in ${enrolled} course${enrolled > 1 ? 's' : ''}`);
+    setOk(`Student ${bits.join(' and ')}. They'll receive a welcome email to set their password.` +
+          (errors.length ? ` (${errors.length} skipped: ${errors[0]})` : ''));
+    onDone?.();
   };
 
   /* Invite link generate */
@@ -113,16 +156,49 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
   /* CSV submit */
   const submitCSV = async (e) => {
     e.preventDefault(); reset();
-    if (!csv.file)     { setError('Please choose a CSV file'); return; }
-    if (!csv.courseId) { setError('Please select a course'); return; }
+    if (!csv.file) { setError('Please choose a CSV file'); return; }
+    if (!csv.classId && !csv.courseId) {
+      setError('Pick a class, or a course — the students have to be added to something.'); return;
+    }
     setLoad(true);
     try {
-      const result = await importCSV(csv.file, csv.courseId);
+      const result = await importCSV(csv.file, csv.courseId || null, csv.classId || null);
       setCsvR(result);
       onDone?.();
     } catch (err) {
       setError(err.message || 'Import failed');
     } finally { setLoad(false); }
+  };
+
+  /* A STARTER file, not a finished one: the teacher opens it, replaces the two
+     example rows with their register, and uploads it back. Generated in the
+     browser rather than hosted so it can never drift from the format the
+     importer actually parses (name, email, phone).
+
+     Two details that matter for a file people open in Excel:
+       • a UTF-8 BOM, or Excel mangles any name with an accent in it
+       • CRLF line endings, which Excel and Numbers both expect
+     And it keeps example rows rather than shipping headers alone, because the
+     importer rejects a file with no data rows — a header-only template would
+     fail on upload and look like the feature was broken. */
+  const downloadTemplate = () => {
+    const csvText = '\uFEFF' + [
+      'name,email,phone',
+      'Zainab Bello,zainab.bello@example.com,+2348012345678',
+      'Ifeanyi Obi,ifeanyi.obi@example.com,',
+    ].join('\r\n') + '\r\n';
+
+    const url = URL.createObjectURL(new Blob([csvText], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'akoro-students-template.csv';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoked on the next tick — Safari cancels the download if the URL is
+    // released in the same frame as the click.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const TAB_STYLE = (active) => ({
@@ -138,7 +214,7 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>
-          Enrol in Course(s) *
+          Enrol in Course(s) <span style={{ fontWeight: 500, color: MUTED }}>— optional</span>
         </label>
         <button
           type="button"
@@ -241,10 +317,40 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
             onChange={e => setM('fullName', e.target.value)}
             placeholder="Jane Doe"
           />
+          {/* Class first: it is what a student BELONGS to. A course is
+              something they may or may not also be taking. */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>
+              Class
+            </label>
+            <select
+              value={manual.classId}
+              onChange={e => setM('classId', e.target.value)}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 10,
+                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
+                fontFamily: FONT, color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+              }}
+            >
+              <option value="">{classesLoading ? 'Loading classes…' : 'No class'}</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}
+                </option>
+              ))}
+            </select>
+            {!classesLoading && !classes.length && (
+              <p style={{ fontSize: 11, color: MUTED2, fontFamily: FONT, margin: '5px 0 0' }}>
+                No classes yet — create one under Academics → Classes.
+              </p>
+            )}
+          </div>
+
           <CourseChecklist selected={manual.courseIds} onToggle={toggleManualCourse} onToggleAll={toggleAllManualCourses} />
           <p style={{ fontSize: 12, color: MUTED, margin: 0 }}>
-            If the student doesn't have an Akoro account yet, one will be created automatically
-            and they can set their password via the welcome email.
+            Courses are optional — a student can be in a class without taking any.
+            If they don't have an Akoro account yet, one is created automatically and
+            they set their password via the welcome email.
           </p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
             <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
@@ -328,6 +434,30 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
         <form onSubmit={submitCSV} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Feedback />
 
+          {/* Same order as Manual: the class is what they join, the course is
+              extra. A register is usually a class register. */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, display: 'block', marginBottom: 6 }}>
+              Add to class
+            </label>
+            <select
+              value={csv.classId}
+              onChange={e => setCsv(f => ({ ...f, classId: e.target.value }))}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 10,
+                border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 14,
+                fontFamily: FONT, color: INK, background: WHITE, cursor: 'pointer', boxSizing: 'border-box',
+              }}
+            >
+              <option value="">{classesLoading ? 'Loading classes…' : 'No class'}</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <CourseSelect value={csv.courseId} onChange={v => setCsv(f => ({ ...f, courseId: v }))} />
 
           {/* Drop zone */}
@@ -364,14 +494,28 @@ function EnrolModal({ open, onClose, onDone, courses = [] }) {
           </div>
 
           <div style={{ background: LIGHT, borderRadius: 10, padding: '10px 14px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: INK, marginBottom: 4, fontFamily: FONT }}>
-              CSV format — one student per row:
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: INK, fontFamily: FONT }}>
+                CSV format — one student per row:
+              </div>
+              <button type="button" onClick={downloadTemplate} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px',
+                borderRadius: 8, border: `1px solid ${BORDER}`, background: WHITE,
+                color: AMBER, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                flexShrink: 0,
+              }}>
+                <Download size={12} /> Starter file
+              </button>
             </div>
             <code style={{ fontSize: 11, color: MUTED, fontFamily: 'monospace' }}>
               name,email,phone<br />
               Jane Doe,jane@example.com,+2348012345678<br />
               John Smith,john@example.com,
             </code>
+            <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 6, lineHeight: 1.45 }}>
+              Download the starter file, replace the two example rows with your students,
+              and upload it back. Phone is optional; extra columns are ignored.
+            </div>
           </div>
 
           {csvResult && (

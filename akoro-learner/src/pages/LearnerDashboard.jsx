@@ -10,6 +10,7 @@ import { useCart } from '../contexts/CartContext.jsx';
 import TeacherNudge   from '../components/TeacherNudge.jsx';
 import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
+import SelfStudyList  from '../components/sessions/SelfStudyList.jsx';
 import SessionSheet   from '../components/sessions/SessionSheet.jsx';
 import BlockRenderer  from '../components/sessions/BlockRenderer.jsx';
 import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
@@ -58,6 +59,7 @@ export default function LearnerDashboard() {
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
   const [agentSubTab,       setAgentSubTab]       = useState("sessions");
+  const [selfStudyCount,    setSelfStudyCount]    = useState(0);   // badge on the Self study tab
   const [liveSubjectFilter, setLiveSubjectFilter] = useState("all");
   const [agentSubjectFilter,setAgentSubjectFilter]= useState("all");
   const [subjectFilter,     setSubjectFilter]     = useState("all");
@@ -134,14 +136,15 @@ export default function LearnerDashboard() {
       .then(d=>{ if(d.sessions?.length) setSessions(d.sessions); })
       .catch(()=>{});
 
-    // Challenges
-    apiGet("/api/battle/my-challenges")
-      .then(d=>{ if(d.challenges?.length) setChallenges(d.challenges); })
-      .catch(()=>{});
+    // Challenges + battles. Both answer { success, data } with the card shape
+    // the tabs render, so we set them straight through — including the empty
+    // case, which is a real answer ("nothing pending"), not a reason to keep
+    // whatever was on screen before.
+    loadBattles();
 
-    // Battles
-    apiGet("/api/battle/my-battles")
-      .then(d=>{ if(d.battles?.length) setBattles(d.battles); })
+    // Self study — only the outstanding ones drive the tab badge.
+    apiGet("/api/self-study/mine")
+      .then(d=>setSelfStudyCount((d?.data??[]).filter(a=>a.status!=="complete").length))
       .catch(()=>{});
 
     // Decay alerts
@@ -327,7 +330,7 @@ export default function LearnerDashboard() {
     title:          a.topic,
     topic:          a.topic,
     subject:        a.subject,
-    avatar:         `https://i.pravatar.cc/150?u=${a.id}`,
+    avatar:         null,
     tutor:          "AI Agent",
     level:          "Adaptive",
     nextSession:    `${a.daysSince}d ago`,
@@ -342,6 +345,12 @@ export default function LearnerDashboard() {
     hasDecay:       true,
     decayAlertId:   a.id,
   }));
+
+  // Outstanding work that lives under Agent but isn't an adaptive session:
+  // assigned self study, and topics due for revision. Declared after
+  // decayAsSessions because it reads it — a const referenced above its
+  // definition throws rather than being undefined.
+  const agentExtras = selfStudyCount + decayAsSessions.length;
 
   const totalUnread       = sessions.reduce((sum,s)=>sum+s.unread,0);
   const pendingChallenges = challenges.filter(c=>!acceptedIds.has(c.id)).length;
@@ -361,12 +370,18 @@ export default function LearnerDashboard() {
       if (status === 'live') {
         setLiveBattleModal(battle);
         setToast(`⚡ Challenge accepted — the battle is starting!`);
+      } else if (r.invited > 1) {
+        // A class battle set by a teacher: accepting takes your seat, it does
+        // not start the battle. Saying "starting!" here would send the learner
+        // looking for a battle that is still waiting on their classmates.
+        setToast(`✅ You're in — ${r.accepted} of ${r.invited} accepted so far.`);
       } else {
         setToast(`🗓 Battle scheduled — find it in Battles › Scheduled.`);
       }
     } catch (e) {
       setAcceptedIds(prev => { const n = new Set(prev); n.delete(c.id); return n; });
-      setToast('Could not accept the challenge. Please retry.');
+      // The server says WHY — expired, already resolved, not your challenge.
+      setToast(e?.message || 'Could not accept the challenge. Please retry.');
     }
   };
 
@@ -397,8 +412,19 @@ export default function LearnerDashboard() {
     }
   };
 
+  const loadBattles = useCallback(() => {
+    apiGet("/api/battle/my-challenges").then(d=>setChallenges(d?.data ?? [])).catch(()=>{});
+    apiGet("/api/battle/my-battles").then(d=>setBattles(d?.data ?? [])).catch(()=>{});
+  }, []);
+
   const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
-  const activeBattleCount=battles.filter(b=>b.status==="live"||b.status==="scheduled").length;
+  // 'lobby' counts too: a battle waiting on its invitations is outstanding work,
+  // and it can now sit there for the whole invite window rather than 5 seconds.
+  // Only battles I am actually in. An unanswered invitation is counted by the
+  // Challenges badge; counting it here too made one battle show as two pieces
+  // of outstanding work, in two different places.
+  const activeBattleCount=battles.filter(b=>["live","scheduled","lobby"].includes(b.status)
+    && (b.myState == null || b.myState === "accepted")).length;
 
   return (
     <>
@@ -486,9 +512,14 @@ export default function LearnerDashboard() {
               {/* ── Top session type tabs ── */}
               <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                 {[
-                  {key:"all",    label:t('sessions.all'),          icon:"📚", count:bySubject.length},
+                  // The Agent tab holds three things — sessions, self study and
+                  // revisions — so its badge has to count all three. Counting
+                  // only sessions read "Agent 0" above a "Self study 1", which
+                  // is the tab telling the learner there is nothing there while
+                  // pointing at the thing that is.
+                  {key:"all",    label:t('sessions.all'),          icon:"📚", count:bySubject.length + agentExtras},
                   {key:"live",   label:t('sessions.live_classes'),  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
-                  {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length},
+                  {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length + agentExtras},
                 ].map(({key,label,icon,count})=>(
                   <button key={key} onClick={()=>setSessionTab(key)} style={{ flex:1,padding:"10px 4px 11px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:sessionTab===key?800:600,color:sessionTab===key?BRAND:"#9CA3AF",borderBottom:`2.5px solid ${sessionTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
                     <span style={{ fontSize:13 }}>{icon}</span>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"#F3F4F6",color:sessionTab===key?"#fff":"#9CA3AF",borderRadius:8,padding:"1px 6px" }}>{count}</span>
@@ -564,6 +595,7 @@ export default function LearnerDashboard() {
                   <div style={{ display:"flex",borderBottom:"1px solid #F3F4F6",background:"#fff",flexShrink:0 }}>
                     {[
                       {key:"sessions",  label:t('sessions.sessions'),  icon:"📚", count:agentSessionsFiltered.length},
+                      {key:"selfstudy", label:"Self study",            icon:"📖", count:selfStudyCount},
                       {key:"revisions", label:t('sessions.revisions'), icon:"🔄", count:agentRevisions.length},
                     ].map(({key,label,icon,count})=>{
                       const active=agentSubTab===key;
@@ -621,6 +653,18 @@ export default function LearnerDashboard() {
                           agentProfile={agentProfile}/>
                       ))
                   )}
+                  {/* Self study sub-tab — teacher-assigned topics */}
+                  {agentSubTab==="selfstudy"&&(
+                    <SelfStudyList
+                      subjectFilter={agentSubjectFilter}
+                      onStart={brief=>{
+                        setTeachSession({
+                          ...brief,
+                          agentName:  agentProfile.name,
+                          agentEmoji: agentProfile.emoji,
+                        });
+                      }}/>
+                  )}
                   {/* Revisions sub-tab */}
                   {agentSubTab==="revisions"&&(
                     decayAsSessions.length===0
@@ -661,7 +705,7 @@ export default function LearnerDashboard() {
           )}
           {tab==="discovery" && <DiscoveryTab/>}
           {tab==="rankings" && <RankingsTab/>}
-          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")}/>}
+          {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}
         </div>
 
@@ -713,6 +757,16 @@ export default function LearnerDashboard() {
           <TeachAgentModal
             session={teachSession?.topic ? null : teachSession}
             config={teachSession?.topic ? teachSession : null}
+            // A self-study attempt has to know which session it became, or the
+            // teacher's progress view points at nothing.
+            onSessionStarted={sid=>{
+              if (teachSession?.selfStudyId && sid) {
+                // Best-effort, but not silent: if this never lands the teacher's
+                // progress view points at no session, so leave a trail.
+                apiPost(`/api/self-study/${teachSession.selfStudyId}/link`, { sessionId: sid })
+                  .catch(e => console.warn('[self-study] could not link session', sid, e?.detail || e?.message));
+              }
+            }}
             onClose={()=>{ setTeachSession(null); loadAgentSessions(); }}
           />
         )}

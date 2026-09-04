@@ -1,12 +1,34 @@
-import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from '../services/api.js';
+import { apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 
 export function useBattlesAPI() {
-  const getBattles   = (params = {}) => {
-    const q = new URLSearchParams(params).toString();
-    return apiGet(`/api/instructor/battles${q ? '?' + q : ''}`);
-  };
-  const createBattle = (data) => apiPost('/api/instructor/battles', data);
-  const updateBattle = (id, data) => apiPatch(`/api/instructor/battles/${id}`, data);
+  // "Everything I run or take part in" — course-independent, so the page can
+  // load before the teacher has picked a course.
+  const getBattles = () => apiGet('/api/battle/my-battles');
+
+  // Roster for the "who do you want to challenge?" picker.
+  const getRoster  = (courseId) => apiGet(`/api/battle/courses/${courseId}/roster`);
+
+  // One creation path for a duel, a handful of learners, or the whole class:
+  // the backend picks 1v1 vs classroom from how many targets resolve.
+  // One creator for both kinds; the scope travels in the path. A course battle
+  // takes its questions from that course's bank, a class battle from the
+  // past-questions bank for the subject — the API decides, not the caller.
+  // 'review' is class-scoped like 'class' — it draws its questions from a
+  // class subject. The server tells them apart by `mode` in the body.
+  const createBattle = ({ kind, courseId, classId, ...data }) =>
+    kind === 'course'
+      ? apiPost(`/api/battle/courses/${courseId}/battles/invite`, data)
+      : apiPost(`/api/battle/classes/${classId}/battles/invite`, data);
+
+  const getClasses = () => apiGet('/api/battle/my-classes');
+  const getClassRoster = (classId) => apiGet(`/api/battle/classes/${classId}/roster`);
+
+  const updateBattle = (id, data) => apiPut(`/api/battle/battles/${id}`, data);
+  // Starting is its own endpoint — it queues the worker, it isn't a status write.
+  const startBattle  = (id) => apiPost(`/api/battle/battles/${id}/start`, {});
+  // Real delete (participants/questions cascade). ?cancel=1 keeps the record.
+  const deleteBattle = (id) => apiDelete(`/api/battle/battles/${id}`);
+  const cancelBattle = (id) => apiDelete(`/api/battle/battles/${id}?cancel=1`);
 
   // ── Question bank (per course) ──────────────────────────────────────────
   const getQuestionBank    = (courseId) => apiGet(`/api/battle/courses/${courseId}/questions-bank`);
@@ -16,7 +38,7 @@ export function useBattlesAPI() {
   const generateBank       = (courseId, data) => apiPost(`/api/battle/courses/${courseId}/questions-bank/generate`, data);
 
   return {
-    getBattles, createBattle, updateBattle,
+    getBattles, getRoster, getClasses, getClassRoster, createBattle, updateBattle, startBattle, deleteBattle, cancelBattle,
     getQuestionBank, addBankQuestion, updateBankQuestion, deleteBankQuestion, generateBank,
   };
 }

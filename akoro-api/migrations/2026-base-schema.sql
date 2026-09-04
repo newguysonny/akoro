@@ -898,10 +898,25 @@ CREATE TABLE IF NOT EXISTS school_teachers (
 CREATE INDEX IF NOT EXISTS idx_school_teachers_school  ON school_teachers(school_id);
 CREATE INDEX IF NOT EXISTS idx_school_teachers_teacher ON school_teachers(teacher_id);
 
--- Add school_admin role to users check
-ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check
-    CHECK (role IN ('student', 'instructor', 'school_admin', 'admin'));
+-- Add school_admin role to users check. Union-built for the same reason as the
+-- xp_leaderboard scope check below: this file re-runs on every deploy and must
+-- never reject a role a later migration or feature introduced.
+DO $$
+DECLARE v_roles text[];
+BEGIN
+  SELECT array_agg(DISTINCT r ORDER BY r) INTO v_roles
+  FROM (
+    SELECT unnest(ARRAY['student', 'instructor', 'school_admin', 'admin']) AS r
+    UNION
+    SELECT DISTINCT role FROM users WHERE role IS NOT NULL
+  ) t;
+
+  EXECUTE 'ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check';
+  EXECUTE format(
+    'ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN (%s))',
+    (SELECT string_agg(quote_literal(r), ', ') FROM unnest(v_roles) r)
+  );
+END $$;
 
 -- Add must_change_password flag for auto-created accounts
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false;
@@ -2028,13 +2043,28 @@ ALTER TABLE xp_leaderboard
   ADD COLUMN IF NOT EXISTS win_rate       INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS scope_ref_id   UUID;        -- replaces leaderboard_cache.scope_id
 
--- Step 3b: Widen the scope CHECK to cover battle scopes
-ALTER TABLE xp_leaderboard
-  DROP CONSTRAINT IF EXISTS xp_leaderboard_scope_check;
+-- Step 3b: Widen the scope CHECK to cover battle scopes.
+--
+-- Built as the UNION of the scopes known here and the scopes already in the
+-- table. This file re-runs on every deploy, so a fixed list would reject rows
+-- written by any LATER migration or feature (it did exactly that once, for
+-- 'subject') and halt the whole deploy at the very first file.
+DO $$
+DECLARE v_scopes text[];
+BEGIN
+  SELECT array_agg(DISTINCT s ORDER BY s) INTO v_scopes
+  FROM (
+    SELECT unnest(ARRAY['course', 'classroom', 'global', 'battle_course', 'subject']) AS s
+    UNION
+    SELECT DISTINCT scope FROM xp_leaderboard WHERE scope IS NOT NULL
+  ) t;
 
-ALTER TABLE xp_leaderboard
-  ADD CONSTRAINT xp_leaderboard_scope_check
-  CHECK (scope IN ('course', 'classroom', 'global', 'battle_course'));
+  EXECUTE 'ALTER TABLE xp_leaderboard DROP CONSTRAINT IF EXISTS xp_leaderboard_scope_check';
+  EXECUTE format(
+    'ALTER TABLE xp_leaderboard ADD CONSTRAINT xp_leaderboard_scope_check CHECK (scope IN (%s))',
+    (SELECT string_agg(quote_literal(s), ', ') FROM unnest(v_scopes) s)
+  );
+END $$;
 
 -- Step 3c: Migrate data from leaderboard_cache
 INSERT INTO xp_leaderboard (

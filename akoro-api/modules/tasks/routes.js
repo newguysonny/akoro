@@ -192,7 +192,7 @@ router.post("/", async (req, res) => {
     if (isRecurring && !cronExpr) return res.status(400).json({ error: "cronExpr required for recurring tasks" });
 
     const teacherId             = req.user.id;
-    const { taskType, payload } = await extractIntent(title, description);
+    const { taskType, payload } = await extractIntent(title, description, req.user.role);
 
     const task = await TaskDB.create({
       creator_id: teacherId, agent_id: agentId,
@@ -243,37 +243,77 @@ router.get("/:taskId", async (req, res) => {
 });
 
 // ─── PATCH /api/tasks/:taskId ─────────────────────────────────────────────────
+// Edits a task that has not started yet — including WHEN it runs. Because the
+// run time lives in BullMQ (a delayed job), not just in the row, changing
+// due_at/recurrence has to cancel the old job and queue a new one; otherwise
+// the task would still fire at the original time.
 router.patch("/:taskId", async (req, res) => {
   try {
     const task = await TaskDB.findById(req.params.taskId);
     if (!task || task.creator_id !== req.user.id) return res.status(404).json({ error: "Task not found" });
-    if (!["pending", "queued"].includes(task.status)) return res.status(400).json({ error: "Cannot edit a running or completed task" });
+    if (!["pending", "queued", "cancelled"].includes(task.status))
+      return res.status(400).json({ error: "Cannot edit a running or completed task" });
 
-    const { title, description, priority, dueAt } = req.body;
+    const { title, description, priority, dueAt, isRecurring, cronExpr, timezone, courseId } = req.body;
     const updates = {};
-    if (title)       updates.title       = title;
-    if (description) updates.description = description;
-    if (priority)    updates.priority    = priority;
-    if (dueAt)       updates.due_at      = dueAt;
+    if (title !== undefined)       updates.title       = title;
+    if (description !== undefined) updates.description = description || null;
+    if (priority !== undefined)    updates.priority    = priority;
+    if (courseId !== undefined)    updates.course_id   = courseId || null;
+    if (timezone !== undefined)    updates.timezone    = timezone;
+    // `dueAt: null` is a real instruction ("run it now / unschedule"), so the
+    // presence of the key matters, not its truthiness.
+    const timingChanged = dueAt !== undefined || isRecurring !== undefined || cronExpr !== undefined;
+    if (dueAt !== undefined)       updates.due_at      = dueAt || null;
+    if (isRecurring !== undefined) updates.is_recurring = !!isRecurring;
 
-    const updated = await TaskDB.update(req.params.taskId, updates);
+    if (isRecurring && !cronExpr && !(await TaskScheduleDB.findByTask(task.id)))
+      return res.status(400).json({ error: "cronExpr required for recurring tasks" });
+
+    let updated = Object.keys(updates).length ? await TaskDB.update(req.params.taskId, updates) : task;
+
+    if (timingChanged) {
+      // Re-point the schedule row first so scheduleTask() reads the new cron.
+      if (!updated.is_recurring) {
+        await TaskScheduleDB.removeByTask(task.id);
+      } else if (cronExpr) {
+        const existing = await TaskScheduleDB.findByTask(task.id);
+        if (existing) await TaskScheduleDB.update(existing.id, { cron_expr: cronExpr, timezone: updated.timezone ?? "Africa/Lagos" });
+        else          await TaskScheduleDB.create({ taskId: task.id, cronExpr, timezone: updated.timezone ?? "Africa/Lagos" });
+      }
+      await cancelTask(updated.bull_job_id, updated.id);
+      const jobId = await scheduleTask(updated);
+      updated = { ...updated, bull_job_id: jobId, status: "queued" };
+    }
+
     res.json({ task: updated });
   } catch (err) {
+    console.error("[tasks] Update error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── DELETE /api/tasks/:taskId (cancel) ───────────────────────────────────────
+// ─── DELETE /api/tasks/:taskId ────────────────────────────────────────────────
+// Removes the task for good: the queued job, the recurring schedule, and the
+// row (runs/outputs/files cascade). Pass ?cancel=1 to keep the record and just
+// mark it cancelled instead.
 router.delete("/:taskId", async (req, res) => {
   try {
     const task = await TaskDB.findById(req.params.taskId);
     if (!task || task.creator_id !== req.user.id) return res.status(404).json({ error: "Task not found" });
-    if (task.status === "running") return res.status(400).json({ error: "Cannot cancel a running task" });
+    if (task.status === "running") return res.status(400).json({ error: "Cannot delete a running task" });
 
-    await cancelTask(task.bull_job_id);
-    await TaskDB.cancel(req.params.taskId);
-    res.json({ success: true });
+    await cancelTask(task.bull_job_id, task.id);
+
+    if (req.query.cancel === "1") {
+      await TaskDB.cancel(req.params.taskId);
+      return res.json({ success: true, cancelled: true });
+    }
+
+    await TaskDB.remove(req.params.taskId);
+    res.json({ success: true, deleted: true });
   } catch (err) {
+    console.error("[tasks] Delete error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

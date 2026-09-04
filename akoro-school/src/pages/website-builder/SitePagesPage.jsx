@@ -13,6 +13,7 @@ import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, RED, FONT } from '../../constants.js';
 import { BASE, slugify, pill, th, td, iconBtn, Tabs, addBtn, backBtn, toastEl, miniBtn } from './shared.jsx';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 /* ── Pages — WordPress-style list ────────────────────────────────────────── */
 const TABS = [
@@ -47,7 +48,7 @@ export function SitePagesPage() {
   };
   const trash = (r) => act(r.id, () => apiPost(`${BASE}/site-pages/${r.id}/trash`, {}), 'Moved to Trash');
   const restore = (r) => act(r.id, () => apiPost(`${BASE}/site-pages/${r.id}/restore`, {}), 'Restored');
-  const destroy = (r) => { if (window.confirm(`Permanently delete “${r.title}”? This cannot be undone.`)) act(r.id, () => apiDelete(`${BASE}/site-pages/${r.id}`), 'Deleted permanently'); };
+  const destroy = async (r) => { if (await confirmDialog(`Permanently delete “${r.title}”? This cannot be undone.`)) act(r.id, () => apiDelete(`${BASE}/site-pages/${r.id}`), 'Deleted permanently'); };
 
   const isTrash = tab === 'trash';
   const th = { textAlign: 'left', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, color: MUTED2, letterSpacing: .4 };

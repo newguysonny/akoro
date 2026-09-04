@@ -10,6 +10,7 @@ import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx
 import StatCards from '../../components/mgmt/StatCards.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, API } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../../constants.js';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 const BASE = '/api/school/mgmt';
 const TEACHER_OPTS = { url: '/api/school/instructors', labelFn: (r) => r.full_name || r.email };
@@ -467,7 +468,7 @@ export function ClassTimetablePage() {
     } catch (e) {
       // Class already has a timetable → confirm replace.
       if ((e.message || '').toLowerCase().includes('already has')) {
-        if (window.confirm('This class already has a timetable. Replace it with the starter template?')) return loadTemplate(true);
+        if (await confirmDialog({ title: 'Replace this timetable?', message: 'This class already has a timetable. Loading the starter template will replace every lesson currently on it.', confirmLabel: 'Replace' })) return loadTemplate(true);
       } else showToast(e.message || 'Could not load template');
     } finally { setBusy(false); }
   };
@@ -1086,7 +1087,7 @@ export function TeachingMaterialsPage() {
     } catch (e) { showToast(e.message || 'Could not save'); } finally { setBusy(false); }
   };
   const removeMaterial = async (r) => {
-    if (!window.confirm(`Delete “${r.title}”?`)) return;
+    if (!await confirmDialog(`Delete “${r.title}”?`)) return;
     try { await apiDelete(`${BASE}/learning-resources/${r.id}`); showToast('Deleted'); loadMaterials(); }
     catch (e) { showToast(e.message || 'Could not delete'); }
   };

@@ -27,10 +27,11 @@ export function useStudentsAPI() {
       send_to_emails: emails,
     });
 
-  const importCSV = async (file, courseId) => {
+  const importCSV = async (file, courseId, classroomId) => {
     const form = new FormData();
     form.append('csv', file);           // backend expects field name "csv"
-    if (courseId) form.append('course_id', courseId);
+    if (courseId)    form.append('course_id', courseId);
+    if (classroomId) form.append('classroom_id', classroomId);
     const res = await fetch(`${API}/api/profiles/teacher/students/import`, {
       method: 'POST',
       credentials: 'include',

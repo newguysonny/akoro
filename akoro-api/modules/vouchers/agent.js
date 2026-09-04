@@ -6,6 +6,7 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { authenticateToken } from "../auth/routes.js";
 import { vdb } from "./db.js";
+import { serverError } from "./lib/httpError.js";
 import { getBalance, debit, credit, transactions } from "./lib/wallet.js";
 import { priceForQuantity } from "./lib/pricing.js";
 import { generateCodes } from "./lib/codes.js";
@@ -50,7 +51,7 @@ router.get("/marketplace", async (req, res) => {
         boughtBefore: boughtFrom.has(s.id),
       })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/wallet — my balance + recent transactions.
@@ -58,7 +59,7 @@ router.get("/wallet", async (req, res) => {
   try {
     const [balance, recent] = await Promise.all([getBalance(req.user.id), transactions(req.user.id, { limit: 25 })]);
     res.json({ success: true, balance, recent });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/wallet/transactions
@@ -68,7 +69,7 @@ router.get("/wallet/transactions", async (req, res) => {
     const offset = parseInt(req.query.offset ?? "0", 10);
     const rows = await transactions(req.user.id, { limit, offset });
     res.json({ success: true, transactions: rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/wallet/topup/init — Paystack top-up (fiat only, v1).
@@ -89,7 +90,7 @@ router.post("/wallet/topup/init", async (req, res) => {
       callback_url: `${frontend}/wallet?ref=${reference}`,
     });
     res.json({ success: true, authorization_url: init.authorization_url, reference, amountUsd, amountNaira: kobo / 100 });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // POST /api/vouchers/purchase — buy N codes of a startup, paid from the wallet.
@@ -99,15 +100,21 @@ router.post("/purchase", async (req, res) => {
     const { startupId, quantity, unitCredits } = req.body || {};
     const qty = Math.floor(Number(quantity));
     const credits = Math.floor(Number(unitCredits));
-    if (!startupId || !qty || qty < 1 || !credits || credits < 1)
+    // Number.isFinite rejects Infinity/NaN, which the bare `!x` idiom lets through.
+    if (!startupId || !Number.isFinite(qty) || qty < 1 || !Number.isFinite(credits) || credits < 1)
       return res.status(400).json({ error: "startupId, a positive quantity and unitCredits are required" });
     if (qty > 10000) return res.status(400).json({ error: "Max 10,000 codes per purchase" });
+    if (credits > 1000000) return res.status(400).json({ error: "Max 1,000,000 credits per code" });
 
     const { data: startup } = await vdb().from("startups").select("*").eq("id", startupId).eq("status", "active").maybeSingle();
     if (!startup) return res.status(404).json({ error: "Startup not found or inactive" });
 
     const totalCreditsRequested = qty * credits;   // bulk tiers key off TOTAL credits bought
-    const { unitPriceUsd, discountPct } = await priceForQuantity(startup, totalCreditsRequested);
+    // priceForQuantity returns a PER-CREDIT rate. The cost of one code is that
+    // rate × the credits that code carries — multiplying by qty alone would
+    // charge the same for a 1-credit code as a 1,000,000-credit one.
+    const { unitPriceUsd: perCreditUsd, discountPct } = await priceForQuantity(startup, totalCreditsRequested);
+    const unitPriceUsd = +(perCreditUsd * credits).toFixed(6);   // price per CODE
     const totalCostUsd = +(unitPriceUsd * qty).toFixed(2);
 
     // 1) Claim the batch as "pending" first so a failed code-generation step
@@ -128,6 +135,7 @@ router.post("/purchase", async (req, res) => {
     }
 
     // 3) Generate + insert the codes. On failure, refund the debit and fail the batch.
+    let issued;
     try {
       const codes = generateCodes(qty);
       const rows = codes.map((code) => ({
@@ -140,18 +148,27 @@ router.post("/purchase", async (req, res) => {
       const { error: cErr } = await vdb().from("codes").insert(rows);
       if (cErr) throw new Error(cErr.message);
       await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);
-      res.status(201).json({
-        success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
-        unitPriceUsd, discountPct, totalCostUsd, codes,
-      });
+      issued = codes;
     } catch (e) {
-      await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } }).catch(() => {});
+      try {
+        await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } });
+      } catch (refundErr) {
+        console.error(`[vouchers/purchase] ‼️ REFUND FAILED agent=${req.user.id} batch=${batch.id} $${totalCostUsd} — manual correction required:`, refundErr.message);
+      }
       await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
       throw e;
     }
+
+    // Responding OUTSIDE the try above: a throw here (or from res.json) must
+    // never trigger the refund path for a purchase that actually succeeded,
+    // nor double-send after serverError.
+    res.status(201).json({
+      success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
+      unitPriceUsd, discountPct, totalCostUsd, codes: issued,
+    });
   } catch (e) {
     console.error("[vouchers/purchase]", e.message);
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -195,6 +212,7 @@ router.post("/purchase-product", async (req, res) => {
       throw e;
     }
 
+    let issued;
     try {
       const codes = generateCodes(qty);
       const rows = codes.map((code) => ({
@@ -203,18 +221,24 @@ router.post("/purchase-product", async (req, res) => {
       const { error: cErr } = await vdb().from("codes").insert(rows);
       if (cErr) throw new Error(cErr.message);
       await vdb().from("batches").update({ status: "paid" }).eq("id", batch.id);
-      res.status(201).json({
-        success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
-        unitPriceUsd, totalCostUsd, codes, productName: product.name,
-      });
+      issued = codes;
     } catch (e) {
-      await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } }).catch(() => {});
+      try {
+        await credit(req.user.id, totalCostUsd, { type: "refund", ref: `refund_${batch.id}`, meta: { reason: "code_generation_failed" } });
+      } catch (refundErr) {
+        console.error(`[vouchers/purchase-product] ‼️ REFUND FAILED agent=${req.user.id} batch=${batch.id} $${totalCostUsd} — manual correction required:`, refundErr.message);
+      }
       await vdb().from("batches").update({ status: "failed" }).eq("id", batch.id);
       throw e;
     }
+
+    res.status(201).json({
+      success: true, batchId: batch.id, quantity: qty, unitCredits: credits,
+      unitPriceUsd, totalCostUsd, codes: issued, productName: product.name,
+    });
   } catch (e) {
     console.error("[vouchers/purchase-product]", e.message);
-    res.status(500).json({ error: e.message });
+    serverError(res, e, req);
   }
 });
 
@@ -228,7 +252,7 @@ router.get("/my-codes", async (req, res) => {
     if (req.query.batchId) q = q.eq("batch_id", req.query.batchId);
     const { data } = await q;
     res.json({ success: true, codes: data || [] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 // GET /api/vouchers/batches — my purchase history, one row per bulk order.
@@ -252,7 +276,7 @@ router.get("/batches", async (req, res) => {
       success: true,
       batches: (batches || []).map((b) => ({ ...b, codeCounts: counts[b.id] || { active: 0, used: 0, expired: 0, refunded: 0 } })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { serverError(res, e, req); }
 });
 
 export default router;

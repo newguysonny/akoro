@@ -10,12 +10,19 @@
 import OpenAI from "openai";
 import { coinsAvailable, chargeForAI, InsufficientCoins } from "./coins.js";
 import { aiContext } from "./aiContext.js";
-import { AI_DEFAULT_MAX_TOKENS } from "./aiPricing.js";
+import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf } from "./aiPricing.js";
+import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
 
 export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export { InsufficientCoins };
 
-const rawClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// baseURL is overridable so the golden-path tests can point the whole platform
+// at a local stand-in and exercise every tool path end to end without a live
+// key. Unset in every real environment, where the SDK's default applies.
+const rawClient = new OpenAI({
+  apiKey:  process.env.OPENAI_API_KEY,
+  ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+});
 
 /**
  * Metered chat completion. The acting user comes from (in order): explicit
@@ -47,19 +54,49 @@ async function meteredCreate(params = {}) {
   const charge = (usage) => chargeForAI({ userId, feature, model, usage, ref, billTo })
     .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] charge failed:", e.message); });
 
+  // Every call is TIMED, whether or not it is billed. Cost and tokens used to
+  // be recorded only by the wallet debit, so a system or cron call — no payer,
+  // no debit — left no trace at all, and latency was recorded nowhere.
+  const started = Date.now();
+  const report = (usage, { ttfbMs = null, streamed = false, ok = true, errorKind = null } = {}) => {
+    const tokensIn  = usage?.prompt_tokens ?? 0;
+    const tokensOut = usage?.completion_tokens ?? 0;
+    const cachedIn  = usage ? cachedTokensOf(usage) : 0;
+    recordAiCall({
+      feature, model, ms: Date.now() - started, ttfbMs,
+      tokensIn, tokensOut, cachedIn,
+      costUsd: usage ? usdCost(model, tokensIn, tokensOut, cachedIn) : null,
+      userId, ref, streamed, ok, errorKind,
+    });
+  };
+
   // Streamed calls: ask OpenAI for exact usage in a final chunk, then tee it
   // out of the stream and charge when iteration completes. Falls back to an
   // estimate if no usage chunk arrives (e.g. early abort).
-  if (bills && clean.stream) {
-    const source = await rawClient.chat.completions.create({
-      ...clean,
-      stream_options: { include_usage: true, ...(clean.stream_options || {}) },
-    });
+  if (clean.stream) {
+    let source;
+    try {
+      source = await rawClient.chat.completions.create({
+        ...clean,
+        ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
+      });
+    } catch (e) { report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) }); throw e; }
+
     const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
-    return meterStreamUsage(source, (usage) => charge(usage || fallback));
+    return meterStreamUsage(source, (usage, ttfbMs) => {
+      // Time to FIRST chunk is the number a user feels; total is what the bill
+      // is made of. Kept apart, because averaging them hides the difference.
+      report(usage || (bills ? fallback : null), { ttfbMs, streamed: true });
+      if (bills) charge(usage || fallback);
+    });
   }
 
-  const res = await rawClient.chat.completions.create(clean);
+  let res;
+  try {
+    res = await rawClient.chat.completions.create(clean);
+  } catch (e) { report(null, { ok: false, errorKind: errorKindOf(e) }); throw e; }
+
+  report(res?.usage ?? null);
   if (bills && res?.usage) charge(res.usage);
   return res;
 }
@@ -68,14 +105,19 @@ async function meteredCreate(params = {}) {
 // charges once iteration ends. Forwards `.controller` for barge-in/abort.
 function meterStreamUsage(source, onDone) {
   let usage = null;
+  let ttfbMs = null;
+  const t0 = Date.now();
   const gen = (async function* () {
     try {
       for await (const chunk of source) {
+        // First chunk with actual content — a leading role-only delta is not
+        // the moment anything appears on screen.
+        if (ttfbMs == null && chunk?.choices?.[0]?.delta?.content) ttfbMs = Date.now() - t0;
         if (chunk?.usage) usage = chunk.usage;   // final include_usage chunk
         yield chunk;
       }
     } finally {
-      try { onDone(usage); } catch { /* billing must not break the stream */ }
+      try { onDone(usage, ttfbMs); } catch { /* billing must not break the stream */ }
     }
   })();
   if (source && source.controller) gen.controller = source.controller;
@@ -117,8 +159,16 @@ export const openai = new Proxy(rawClient, {
   },
 });
 
-/** Convenience wrapper for background jobs that must name the payer explicitly. */
-export async function meteredChat({ userId, feature = "ai", ref = null, ...params }) {
+/**
+ * Convenience wrapper for background jobs that must name the payer explicitly.
+ *
+ * `feature` defaults to UNDEFINED, not "ai". meteredCreate resolves it as
+ * `__feature ?? store.feature`, so a hardcoded default here does not fall back
+ * to the ambient context — it OVERWRITES it. Every request-path call routed
+ * through this helper was therefore relabelled from its real feature to the
+ * catch-all, which is how "ai" became the joint-largest line on the dashboard.
+ */
+export async function meteredChat({ userId, feature, ref = null, ...params }) {
   return meteredCreate({ ...params, __userId: userId, __feature: feature, __ref: ref });
 }
 
@@ -126,7 +176,8 @@ export async function meteredChat({ userId, feature = "ai", ref = null, ...param
  * llmComplete — one-shot chat completion returning plain text.
  * Mirrors the old Anthropic single-prompt helpers so call sites stay small.
  */
-export async function llmComplete(prompt, { system, maxTokens = 2048, temperature, userId, feature = "ai" } = {}) {
+// feature is deliberately undefined by default — see meteredChat.
+export async function llmComplete(prompt, { system, maxTokens = 2048, temperature, userId, feature } = {}) {
   const messages = [];
   if (system) messages.push({ role: "system", content: system });
   messages.push({ role: "user", content: prompt });

@@ -13,6 +13,7 @@ import ResourcePage, { inputStyle } from '../../components/mgmt/ResourcePage.jsx
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, AMBER, BLUE, PURPLE, RED, FONT } from '../../constants.js';
 import { BASE, slugify, pill, th, td, iconBtn, Tabs, addBtn, backBtn, toastEl, miniBtn } from './shared.jsx';
+import { confirmDialog } from '../../components/ConfirmHost.jsx';
 
 /* ── Menus — WordPress-style menu builder ────────────────────────────────── */
 const TARGETS = [{ value: '_self', label: 'Same tab' }, { value: '_blank', label: 'New tab' }];
@@ -70,7 +71,7 @@ export function MenusPage() {
     finally { setBusy(false); }
   };
   const deleteMenu = async () => {
-    if (!window.confirm(`Delete the menu “${selMenu.name}” and its items?`)) return;
+    if (!await confirmDialog(`Delete the menu “${selMenu.name}” and its items?`)) return;
     try { await apiDelete(`${BASE}/menus/${sel}`); setSel(null); setItems([]); loadMenus(); } catch (e) { showToast(e.message); }
   };
 

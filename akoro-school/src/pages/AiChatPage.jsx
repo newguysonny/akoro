@@ -5,17 +5,38 @@
  * the same educational tutor backend as the in-app Agent Chat.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck } from 'lucide-react';
+import { Send, Bot, LogOut, Loader2, Plus, Camera, Upload, FileText, Loader, Mic, ClipboardCheck, Trophy, Sparkles } from 'lucide-react';
 import AssessmentPicker from './ai-chat/AssessmentPicker.jsx';
+import RankingSheet from './ai-chat/RankingSheet.jsx';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
 import TeacherToolSheet from './ai-chat/TeacherToolSheet.jsx';
-import { API, apiGet, apiPost, getPortal } from '../services/api.js';
+import { API, apiGet, apiPost, getPortal, withAuth } from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { Modal, FileUploadZone, Btn, Txa } from '../components/Primitives.jsx';
 import VoiceChatPanel from '../components/voice/VoiceChatPanel.jsx';
-import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, FONT } from '../constants.js';
+import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, GOLD, FONT } from '../constants.js';
 
-const GREETING = "Hi! I'm your school's AI study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or plan a lesson. What would you like to explore?";
+// The chat is named after the school's own agent (set during onboarding), and
+// it opens differently for each kind of visitor. A parent asking about fees and
+// a student asking for homework help share nothing, so a single "ask me
+// anything about studying" greeting was wrong for everyone but the student.
+// Roles come from /ai/context: admin | teacher | parent | student | null (guest).
+function greetingFor(name, role, { school, firstName } = {}) {
+  const who = firstName ? ` ${firstName}` : '';
+  const at = school ? ` at ${school}` : '';
+  switch (role) {
+    case 'parent':
+      return `Hello${who}, I'm ${name}${at}. I can help you follow your child's progress, check fees and payments, see what's coming up on the school calendar, and find the learning materials for their subjects. What would you like to know?`;
+    case 'teacher':
+    case 'admin':
+      return `Hi${who}, I'm ${name}. I can help you plan and teach — lesson plans, hooks, worksheets, misconceptions to watch for, vocabulary sets, podcasts, marking against your rubric, and content for the school website. Tap ＋ for the teaching tools, or just tell me what you're teaching.`;
+    case 'student':
+      return `Hi${who}! I'm ${name}, your study assistant. Ask me anything — explain a topic, help with homework, prep for exams, or test yourself with an assessment. What would you like to explore?`;
+    default:
+      // No role resolved: a visitor who isn't a member of this school.
+      return `Hello, I'm ${name}${at}. I'm here to help you get to know the school — our programmes, admissions, fees and what makes us different. I can also book you a campus tour. What would you like to know?`;
+  }
+}
 
 const SITE_KEY = 'akoro_ai_return';
 
@@ -37,6 +58,11 @@ export default function AiChatPage() {
   // resolved server-side so a parent (whose account role is 'student') doesn't
   // get the student's Assessment option, etc.
   const [schoolRole, setSchoolRole] = useState(null);
+  const [aiName, setAiName] = useState('');
+  const [schoolName, setSchoolName] = useState('');
+  // Role may legitimately resolve to null (a guest), so "loaded" is tracked
+  // separately — the greeting can't wait for a truthy role.
+  const [ctxLoaded, setCtxLoaded] = useState(false);
   const isStudent = schoolRole === 'student';
   const isTeacher = schoolRole === 'teacher' || schoolRole === 'admin';
 
@@ -57,14 +83,14 @@ export default function AiChatPage() {
   // no cross-origin referrer to remember, so we default to this origin's
   // homepage ("/") rather than "/signin" (which doesn't exist on the site).
   const logout = useCallback(async () => {
-    try { await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: { 'X-Akoro-Portal': getPortal() } }); } catch { /* ignore */ }
+    try { await fetch(`${API}/api/auth/logout`, withAuth({ method: 'POST', headers: { 'X-Akoro-Portal': getPortal() } })); } catch { /* ignore */ }
     try { localStorage.removeItem('akoro_user'); } catch { /* ignore */ }
     let dest = '/';
     try { dest = sessionStorage.getItem(SITE_KEY) || dest; } catch { /* ignore */ }
     window.location.href = dest;
   }, []);
   const firstName = (user?.fullName || '').split(' ')[0] || '';
-  const [messages, setMessages] = useState([{ from: 'agent', text: GREETING }]);
+  const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
@@ -80,22 +106,39 @@ export default function AiChatPage() {
   const [voiceMode, setVoiceMode]     = useState(false);
   const [assessOpen, setAssessOpen]   = useState(false);
   const [assessment, setAssessment]   = useState(null);  // active proctored exam
-  const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | null
+  const [rankOpen, setRankOpen]       = useState(false);
+  const [teacherTool, setTeacherTool] = useState(null);  // 'lesson' | 'website' | 'teaching' | null
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, busy]);
 
   // Resolve the caller's role within the school they came from.
   useEffect(() => {
     apiGet(`/api/school/ai/context?host=${encodeURIComponent(resolveHost())}`)
-      .then((r) => setSchoolRole((r?.data ?? r)?.role || null))
-      .catch(() => setSchoolRole(null));
+      .then((r) => {
+        const d = r?.data ?? r;
+        setSchoolRole(d?.role || null);
+        setAiName(d?.aiName || 'Akoro');
+        setSchoolName(d?.schoolName || '');
+      })
+      .catch(() => { setSchoolRole(null); setAiName('Akoro'); })
+      .finally(() => setCtxLoaded(true));
   }, []);
+
+  // Greet only once the name AND the role are known, so nobody sees the
+  // greeting rewrite itself mid-read. Guarded on an empty thread so it can't
+  // reappear after the conversation has started.
+  useEffect(() => {
+    if (!aiName || !ctxLoaded) return;
+    const text = greetingFor(aiName, schoolRole, { school: schoolName, firstName });
+    setMessages((p) => (p.length === 0 ? [{ from: 'agent', text }] : p));
+  }, [aiName, ctxLoaded, schoolRole, schoolName, firstName]);
 
   const openAttach = (type) => {
     setAttachMenu(false);
     if (type === 'voice') { setVoiceMode(true); return; }
     if (type === 'assessment') { setAssessOpen(true); return; }
-    if (type === 'lesson' || type === 'website') { setTeacherTool(type); return; }
+    if (type === 'ranking') { setRankOpen(true); return; }
+    if (type === 'lesson' || type === 'website' || type === 'teaching') { setTeacherTool(type); return; }
     setAttachType(type); setAttachModal(true); setOcrText(''); setOcrError(''); setAttachFile(null);
   };
 
@@ -131,8 +174,12 @@ export default function AiChatPage() {
       { type: 'doc', icon: <FileText size={15} color={BLUE} />,  label: 'Upload document',    desc: 'Lesson notes, worksheets' },
     ] : []),
     { type: 'voice', icon: <Mic size={15} color={AMBER} />,    label: 'Voice Chat',         desc: 'Talk to the assistant live' },
-    ...(isStudent ? [{ type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Proctored — today’s subjects & topics' }] : []),
+    ...(isStudent ? [
+      { type: 'assessment', icon: <ClipboardCheck size={15} color={PURPLE} />, label: 'Assessment', desc: 'Live — today’s subjects & topics' },
+      { type: 'ranking',    icon: <Trophy size={15} color={GOLD} />,           label: 'Ranking',    desc: 'Class · courses · schools leaderboards' },
+    ] : []),
     ...(isTeacher ? [
+      { type: 'teaching', icon: <Sparkles size={15} color={AMBER} />,  label: 'Teaching tools',  desc: 'Podcast · misconceptions · hooks · vocabulary · grading' },
       { type: 'lesson',  icon: <FileText size={15} color={PURPLE} />, label: 'Lesson tools',    desc: 'Lesson plan · worksheet · quiz' },
       { type: 'website', icon: <FileText size={15} color={GREEN} />,  label: 'Website content', desc: 'Newsletter · recap · social · event' },
     ] : []),
@@ -170,13 +217,13 @@ export default function AiChatPage() {
         } catch { lane.current = 'tutor'; }
       }
       const data = await apiPost('/api/adaptive/chat/tutor', {
-        message: body, history, agentName: 'Akoro', role: isStudent ? 'student' : 'instructor',
+        message: body, history, agentName: aiName || 'Akoro', role: isStudent ? 'student' : 'instructor',
       });
       setMessages((p) => [...p, { from: 'agent', text: data.reply || data.response || "I'm here to help — could you rephrase that?" }]);
     } catch {
       setMessages((p) => [...p, { from: 'agent', text: 'Sorry — I had trouble responding just now. Please try again.' }]);
     } finally { setBusy(false); }
-  }, [busy, messages, isStudent]);
+  }, [busy, messages, isStudent, aiName]);
 
   const send = useCallback(() => {
     const body = text.trim();
@@ -209,7 +256,7 @@ export default function AiChatPage() {
           <Bot size={22} color={WHITE} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>AI Study Assistant</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: INK }}>{aiName || 'AI Study Assistant'}</div>
           <div style={{ fontSize: 11.5, color: GREEN, display: 'flex', alignItems: 'center', gap: 5 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: GREEN }} /> Online{firstName ? ` · ${firstName}` : ''}
           </div>
@@ -220,6 +267,7 @@ export default function AiChatPage() {
       </header>
 
       {assessOpen && <AssessmentPicker onClose={() => setAssessOpen(false)} onStart={startAssessment} />}
+      {rankOpen && <RankingSheet onClose={() => setRankOpen(false)} />}
       {teacherTool && (
         <TeacherToolSheet kind={teacherTool} host={siteHost.current} onClose={() => setTeacherTool(null)}
           onInsert={(text) => setMessages((p) => [...p, { from: 'agent', text }])} />

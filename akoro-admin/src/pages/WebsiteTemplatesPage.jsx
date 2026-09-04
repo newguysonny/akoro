@@ -4,6 +4,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast, Skeleton } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPut, apiDelete, API } from '../services/api.js';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 export default function WebsiteTemplatesPage() {
   const [list, setList] = useState(null);
@@ -64,7 +65,7 @@ export default function WebsiteTemplatesPage() {
     catch (e) { show(e.message || 'Failed', 'error'); }
   };
   const remove = async (t) => {
-    if (!window.confirm(`Delete the “${t.name}” template? Schools already using a copy keep theirs.`)) return;
+    if (!await confirmDialog(`Delete the “${t.name}” template? Schools already using a copy keep theirs.`)) return;
     try { await apiDelete(`/api/admin/website-templates/${t.id}`); setList((l) => l.filter((x) => x.id !== t.id)); show('Deleted'); }
     catch (e) { show(e.message || 'Delete failed', 'error'); }
   };

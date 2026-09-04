@@ -12,6 +12,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { requireApiKey, hashKey } from "./apiKeyAuth.js";
 import { vdb } from "./db.js";
 import { creditRedemption, PLATFORM_FEE_PCT } from "./lib/startupWallet.js";
+import { enqueueWebhook } from "./lib/webhooks.js";
 
 const router = Router();
 
@@ -114,6 +115,16 @@ router.post("/validate", requireApiKey, async (req, res) => {
       })
       .catch((e) => console.error("[vouchers] settlement credit failed for code", won.id, e.message));
 
+    // Notify the startup's own backend. Queued, not sent inline — a slow or
+    // dead endpoint must never make a legitimate redemption hang or fail.
+    enqueueWebhook(req.startup.id, "voucher.redeemed", {
+      transaction_id: audit?.id || won.id,
+      voucher_code: code,
+      credits: won.credits,
+      customer_id: customerId,
+      redeemed_at: new Date().toISOString(),
+    }).catch((e) => console.error("[vouchers] webhook enqueue failed for code", won.id, e.message));
+
     res.json({
       valid: true, credits: won.credits, currency: "USD",
       transaction_id: audit?.id || won.id,
@@ -134,7 +145,8 @@ router.get("/redemptions", requireApiKey, async (req, res) => {
       .eq("startup_id", req.startup.id).order("redeemed_at", { ascending: false }).limit(limit);
     res.json({ success: true, redemptions: data || [] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error("[vouchers] 500 GET /v1/redemptions —", e?.stack || e?.message);
+    res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 });
 

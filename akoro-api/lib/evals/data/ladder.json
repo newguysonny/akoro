@@ -1,0 +1,102 @@
+{
+  "_comment": [
+    "Goldens for the lesson-ladder suite.",
+    "",
+    "gp-ladder proves the STRUCTURE holds: dependencies point backwards, kinds are",
+    "valid, a garbage response yields an empty ladder. None of that says the ladder",
+    "is teachable. A perfectly-ordered path through the wrong six ideas passes every",
+    "structural check ever written.",
+    "",
+    "What this measures is the failure that was actually reported: the ladder for",
+    "'The water cycle' opened on 'States of Water: Solid, Liquid, and Gas'. A",
+    "learner who does not yet know what water IS cannot be taught that it has three",
+    "states — the path started on its second rung with the first one missing, and",
+    "looked completely reasonable while doing it.",
+    "",
+    "So each case names a topic and asks: does step 1 assume anything? Is the",
+    "sequence one a teacher would actually follow? The checks are deliberately",
+    "loose about WORDING and strict about ORDER — there are many good ways to name",
+    "the first step of the water cycle and only one place it can sit.",
+    "",
+    "startsBefore = a concept that must NOT already be assumed by step 1",
+    "ordered      = pairs [earlier, later] that must appear in that order",
+    "firstKind    = what step 1 has to be classified as"
+  ],
+  "threshold": 0.8,
+  "thresholdNote": "A ladder is a judgement call and reasonable curricula differ, so this is not held to 100%. But a foundation that is not first is not a matter of taste — it is a learner stuck on step one — and below 80% the generator is producing tables of contents again.",
+  "cases": [
+    {
+      "key": "water-cycle-starts-at-water",
+      "name": "The water cycle starts with water, not its states",
+      "topic": "The water cycle",
+      "subject": "Basic Science",
+      "firstKind": "foundation",
+      "startsBefore": ["evaporation", "condensation", "precipitation", "cycle"],
+      "ordered": [["evaporat", "condensat"], ["condensat", "precipitat"]],
+      "note": "The reported failure, exactly. Step 1 must not already be about a stage of the cycle — those are what the topic is FOR, not where it begins."
+    },
+    {
+      "key": "fractions-starts-at-parts",
+      "name": "Fractions start with what a part of a whole is",
+      "topic": "Fractions",
+      "subject": "Mathematics",
+      "firstKind": "foundation",
+      "startsBefore": ["adding", "add fractions", "denominator", "equivalent", "improper"],
+      "ordered": [["equivalent", "add"]],
+      "note": "Equivalence before addition is not stylistic: you cannot add fractions without common denominators, and common denominators ARE equivalence."
+    },
+    {
+      "key": "photosynthesis-starts-at-plants",
+      "name": "Photosynthesis starts with the plant, not the chemistry",
+      "topic": "Photosynthesis",
+      "subject": "Basic Science",
+      "firstKind": "foundation",
+      "startsBefore": ["chlorophyll", "glucose", "chemical equation", "chloroplast"],
+      "note": "A JSS1 learner needs to know a leaf makes food before any of those words mean anything."
+    },
+    {
+      "key": "simple-interest-starts-at-money-owed",
+      "name": "Simple interest starts before the formula",
+      "topic": "Simple interest",
+      "subject": "Mathematics",
+      "firstKind": "foundation",
+      "startsBefore": ["formula", "p x r x t", "calculate the interest"],
+      "note": "Opening on the formula is the single most common way this topic is taught badly — the symbols mean nothing without principal and rate first."
+    },
+    {
+      "key": "family-starts-at-what-a-family-is",
+      "name": "Family types start with what a family is",
+      "topic": "Family",
+      "subject": "Social Studies",
+      "firstKind": "foundation",
+      "startsBefore": ["nuclear", "extended", "blended", "roles", "responsibilities"],
+      "ordered": [["what", "type"]],
+      "note": "The battle that prompted all of this ran on Family and its six questions were six unrelated sub-labels. A ladder here should read as one idea opening out."
+    },
+    {
+      "key": "ends-in-synthesis",
+      "name": "A ladder ends by tying the topic together",
+      "topic": "The water cycle",
+      "subject": "Basic Science",
+      "endsWithKind": "synthesis",
+      "note": "The last rung is where the parts become a whole. A ladder that ends on another mechanism has taught the pieces and never the topic."
+    },
+    {
+      "key": "no-filler-titles",
+      "name": "Every step names something specific",
+      "topic": "Algebra",
+      "subject": "Mathematics",
+      "banned": ["introduction", "basics", "advanced concepts", "overview", "conclusion", "summary", "more about"],
+      "note": "\"Introduction to Algebra\" is a chapter heading, not a lesson. Filler titles are the tell that the model produced a table of contents rather than a path."
+    },
+    {
+      "key": "steps-are-teachable-sized",
+      "name": "Steps are lessons, not units",
+      "topic": "The water cycle",
+      "subject": "Basic Science",
+      "minSteps": 5,
+      "maxSteps": 9,
+      "note": "Three steps is a summary and fifteen is a syllabus. Each rung has to be teachable in five to ten minutes, which is what makes the < > navigation usable at all."
+    }
+  ]
+}

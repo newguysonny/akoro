@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon } from 'lucide-react';
+import { Coins, Plus, Loader2, ArrowUpRight, ArrowDownRight, Wallet as WalletIcon, Ticket } from 'lucide-react';
 import { apiGet, apiPost } from '../services/api.js';
 import { PageLayout } from '../components/Layout.jsx';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, FONT } from '../constants.js';
@@ -18,6 +18,10 @@ export default function WalletPage() {
   const [pricing, setPricing] = useState(null);
   const [coins, setCoins] = useState(2000);
   const [busy, setBusy] = useState(false);
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherErr, setVoucherErr] = useState('');
+  const [voucherMsg, setVoucherMsg] = useState('');
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
@@ -42,6 +46,24 @@ export default function WalletPage() {
   };
 
   const recent = data?.recent || [];
+  // Redeem a voucher code bought from an Akoro agent. Same endpoint the
+  // learner app uses — 1 voucher credit = 1 coin, credited server-side.
+  const redeemVoucher = async (e) => {
+    e.preventDefault();
+    const code = voucherCode.trim();
+    if (!code) return setVoucherErr('Enter a voucher code');
+    setBusy(true); setVoucherErr(''); setVoucherMsg('');
+    try {
+      const r = await apiPost('/api/wallet/redeem-voucher', { code });
+      const d = r?.data ?? r;
+      setVoucherMsg(`Redeemed — +${fmt(d.coins)} coins added.`);
+      setVoucherCode(''); setVoucherOpen(false);
+      load();
+    } catch (e2) {
+      setVoucherErr(e2?.message || 'Could not redeem that code');
+    } finally { setBusy(false); }
+  };
+
   return (
     <PageLayout title="Wallet & AI Credits" subtitle="Top up coins — every AI feature draws from this balance">
     <div style={{ maxWidth: 720, fontFamily: FONT }}>
@@ -65,6 +87,31 @@ export default function WalletPage() {
           <button onClick={topUp} style={primaryBtn}><Plus size={14} /> Continue to checkout</button>
         </div>
         {pricing && <div style={{ marginTop: 12, fontSize: 12, color: MUTED2 }}>Example: {pricing.examples?.map((e) => `${e.label} ≈ ${e.coins}`).join(' · ')} coins</div>}
+
+        {/* Voucher redemption — a code bought from an Akoro agent, offline */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+          {voucherMsg && <div style={{ fontSize: 12.5, fontWeight: 800, color: GREEN, marginBottom: 10 }}>{voucherMsg}</div>}
+          {!voucherOpen ? (
+            <button onClick={() => { setVoucherOpen(true); setVoucherErr(''); setVoucherMsg(''); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1px dashed ${BORDER}`, background: 'transparent', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 800, color: INK }}>
+              <Ticket size={15} /> Top up with a voucher code
+            </button>
+          ) : (
+            <form onSubmit={redeemVoucher}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: INK, marginBottom: 8 }}>Redeem a voucher code</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} autoFocus
+                  placeholder="XXXX-XXXX-XXXX"
+                  style={{ ...inp, width: 190, fontFamily: 'monospace', letterSpacing: 0.5 }} />
+                <button type="submit" disabled={busy} style={primaryBtn}>{busy ? 'Redeeming…' : 'Redeem'}</button>
+                <button type="button" onClick={() => { setVoucherOpen(false); setVoucherErr(''); }}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              </div>
+              {voucherErr && <div style={{ color: RED, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{voucherErr}</div>}
+              <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 8 }}>Bought a code from an Akoro agent? Enter it here to add coins instantly.</div>
+            </form>
+          )}
+        </div>
       </div>
 
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>

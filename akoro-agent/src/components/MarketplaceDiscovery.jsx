@@ -263,7 +263,13 @@ function CustomPurchase({ startup, onBought, onToast, onClose }) {
     return applicable.sort((a, b) => b.min_credits - a.min_credits)[0];
   };
   const tier = tierFor(qty);
-  const unitPrice = startup.credit_rate_usd * (1 - (tier?.discount_pct || 0) / 100);
+  const perCredit = startup.credit_rate_usd * (1 - (tier?.discount_pct || 0) / 100);
+  // Price of ONE code = per-credit rate x credits that code carries. Must match
+  // the server's math in modules/vouchers/agent.js or the quoted total lies.
+  const unitPrice = perCredit * unitCredits;
+  // Clearing a number input yields NaN — without this an NaN-quantity item
+  // lands in the cart, renders $NaN, and fails at checkout forever.
+  const validCustom = Number.isFinite(qty) && qty >= 1 && Number.isFinite(unitCredits) && unitCredits >= 1;
 
   const buy = async () => {
     setBusy(true);
@@ -295,11 +301,11 @@ function CustomPurchase({ startup, onBought, onToast, onClose }) {
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => { addItem({ type: 'custom', startupId: startup.id, startupName: startup.name, coverImageUrl: startup.cover_image_url, category: startup.category, unitCredits, unitPriceUsd: unitPrice, discountPct: tier?.discount_pct || 0, quantity: qty }); onToast('Added to cart'); }}
+        <button disabled={!validCustom} onClick={() => { addItem({ type: 'custom', startupId: startup.id, startupName: startup.name, coverImageUrl: startup.cover_image_url, category: startup.category, unitCredits, unitPriceUsd: unitPrice, discountPct: tier?.discount_pct || 0, quantity: qty }); onToast('Added to cart'); }}
           style={{ flex: 1, padding: 14, borderRadius: 13, border: `1.5px solid ${BRAND}`, background: WHITE, color: BRAND, fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
           Add to cart
         </button>
-        <button onClick={buy} disabled={busy} style={{ flex: 1, padding: 14, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
+        <button onClick={buy} disabled={busy || !validCustom} style={{ flex: 1, padding: 14, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff', fontSize: 13.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT }}>
           {busy ? 'Buying…' : 'Buy now'}
         </button>
       </div>

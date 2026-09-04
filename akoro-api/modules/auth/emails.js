@@ -282,3 +282,30 @@ export async function sendNotificationEmail({ to, name, subject, heading, body, 
   `, heading);
   await sendEmail({ to, subject, text: `${greeting}\n\n${body}${ctaUrl ? `\n\n${ctaLabel || "Open"}: ${ctaUrl}` : ""}`, html });
 }
+
+/**
+ * Ops alert — sent to whoever is on ALERT_EMAIL_TO when a rule fires or clears.
+ *
+ * Deliberately plain, and deliberately different from a learner-facing email:
+ * this is read at speed, possibly on a phone, by someone deciding whether to
+ * stop what they are doing. The subject carries the verdict, the body carries
+ * the number, and there is no call to action pretending it is marketing.
+ */
+export async function sendOpsAlertEmail({ to, subject, title, detail, kind, severity }) {
+  const resolved = kind === "resolved";
+  const tint   = resolved ? "#F1F8F4" : severity === "critical" ? "#FDF2F2" : "#FBF6F1";
+  const accent = resolved ? "#2E9E6B" : severity === "critical" ? "#D64545" : AMBER;
+  const label  = resolved ? "Resolved" : kind === "reminder" ? "Still firing" : "Alert";
+
+  const html = layout(`
+    ${eyebrow(label)}
+    <h1 style="margin:0 0 12px;font-size:21px;font-weight:700;color:${INK};letter-spacing:-.02em;">${title}</h1>
+    ${alertBox(detail, tint, accent, BODY)}
+    <p style="font-size:13px;color:${MUTED};margin:0;line-height:1.6;">
+      Checked automatically every few minutes. You will get one more message when it clears —
+      not one per check.
+    </p>
+  `, title);
+
+  await sendEmail({ to, subject, text: `${label}: ${title}\n\n${detail}`, html });
+}

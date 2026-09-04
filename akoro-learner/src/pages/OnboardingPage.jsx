@@ -19,8 +19,20 @@ const CLASSES_BY_LEVEL = {
   'University':        ['100 Level', '200 Level', '300 Level', '400 Level', '500 Level', 'Postgraduate'],
   'Adult learner':     [],
 };
-const SUBJECT_OPTIONS = ['Mathematics', 'Further Mathematics', 'Physics', 'Chemistry', 'Biology',
-  'Computer Science', 'English Language', 'English Literature', 'Economics', 'Geography', 'History'];
+/* The list was Further Mathematics, English Literature, Computer Science — a
+   UK sixth-form shape, on a platform built around the Nigerian curriculum
+   (NERDC schemes, NCEE papers, JSS/SSS classes). A JSS1 learner could not pick
+   Basic Science or Social Studies at all, which are two of the four their class
+   actually teaches. Junior-secondary cores added, seniors kept. */
+const SUBJECT_OPTIONS = [
+  'Mathematics', 'English Language', 'Basic Science', 'Basic Technology',
+  'Social Studies', 'Civic Education', 'Agricultural Science', 'Computer Studies',
+  'Business Studies', 'Home Economics', 'Cultural and Creative Arts',
+  'Physics', 'Chemistry', 'Biology', 'Further Mathematics', 'Economics',
+  'Geography', 'History', 'Government', 'Literature in English',
+  'Christian Religious Studies', 'Islamic Religious Studies',
+  'French', 'Yoruba', 'Igbo', 'Hausa',
+];
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -41,6 +53,10 @@ export default function OnboardingPage() {
   const [teachers, setTeachers]     = useState([]);
   const [teacherId, setTeacherId]   = useState('');   // '' = self-study, no teacher
   // Step 2 — student agent
+  // What the teacher already told us. Pre-filled, never assumed: the learner
+  // still walks every step and can change any of it.
+  const [prefill, setPrefill] = useState(null);
+
   const [agentName,  setAgentName]  = useState('');
   const [agentEmoji, setAgentEmoji] = useState('🤖');
 
@@ -50,6 +66,30 @@ export default function OnboardingPage() {
   useEffect(() => {
     fetch(`${API}/api/profiles/directory/teachers`, { credentials: 'include' })
       .then(r => r.json()).then(j => setTeachers(j.data || [])).catch(() => {});
+  }, []);
+
+  /* A learner their teacher added has already been told apart: their school,
+     their year, their subjects and who teaches them are all on file. Making
+     them retype it invites a near-miss ("JSS1" for "JSS 1") that then matches
+     nothing. Fill it in, say where it came from, and let them edit. */
+  useEffect(() => {
+    fetch(`${API}/api/profiles/onboarding-prefill`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(j => {
+        const p = j?.data;
+        if (!p || !p.className) return;
+        setPrefill(p);
+        // Only fill what the learner hasn't already touched.
+        setStudyLevel(v => v || p.studyLevel || '');
+        setYearGroup(v  => v || p.yearGroup  || '');
+        setSchoolName(v => v || p.schoolName || '');
+        if (p.teacherId) setTeacherId(v => v || p.teacherId);
+        // Selected as-is, not filtered against the canonical list: a school that
+        // teaches something we didn't think of must not have it silently
+        // dropped from its own learners' profiles.
+        if (p.subjects?.length) setSubjects(v => (v.length ? v : p.subjects));
+      })
+      .catch(() => {});
   }, []);
 
   const STEPS = [t('onboarding.step_profile'), t('onboarding.step_agent'), t('onboarding.step_prefs')];
@@ -179,6 +219,21 @@ export default function OnboardingPage() {
             <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.welcome')}</h1>
             <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.setup_profile')}</p>
 
+            {prefill && (
+              <div style={{
+                display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 18,
+                padding: '11px 13px', borderRadius: 12,
+                background: `${BRAND}0d`, border: `1px solid ${BRAND}33`,
+              }}>
+                <span style={{ fontSize: 15 }}>🏫</span>
+                <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', lineHeight: 1.5 }}>
+                  We filled some of this in from <strong>{prefill.source}</strong>
+                  {prefill.className ? <> — you're in <strong>{prefill.className}</strong></> : null}.
+                  Change anything that isn't right.
+                </div>
+              </div>
+            )}
+
             <div style={{ marginBottom: 14 }}>
               <label style={lbl}>{t('onboarding.full_name')}</label>
               <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder={t('onboarding.name_ph')} style={inp}/>
@@ -221,12 +276,23 @@ export default function OnboardingPage() {
                 <option value="">{teachers.length ? 'Select your teacher…' : 'No teachers available yet'}</option>
                 {teachers.map(tt => <option key={tt.id} value={tt.id}>{tt.full_name}{tt.school_name ? ` · ${tt.school_name}` : ''}</option>)}
               </select>
-              {teacherId && <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '6px 2px 0' }}>Your teacher will approve your request to join their class.</p>}
+              {teacherId && (
+                <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '6px 2px 0' }}>
+                  {prefill?.teacherId === teacherId
+                    ? `${prefill.teacherName} already has you in ${prefill.className}.`
+                    : 'Your teacher will approve your request to join their class.'}
+                </p>
+              )}
             </div>
             <div>
               <label style={lbl}>{t('onboarding.subjects_studying')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {SUBJECT_OPTIONS.map(s => <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>)}
+                {/* The school's own subjects first, then the rest — so a learner
+                    sees what their class actually teaches at the top, and any
+                    subject we don't carry still appears and can be removed. */}
+                {[...new Set([...(prefill?.subjects ?? []), ...SUBJECT_OPTIONS])].map(s => (
+                  <span key={s} onClick={() => toggleSubject(s)} style={chip(subjects.includes(s))}>{s}</span>
+                ))}
               </div>
             </div>
           </>

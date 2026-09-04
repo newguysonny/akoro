@@ -12,6 +12,7 @@ import { PageLayout } from '../components/Layout.jsx';
 import { uploadAndOcr } from '../services/uploadApi.js';
 import { API, apiGet, apiPost, apiPut, apiDelete } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, BLUE, PURPLE, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const BASE = '/api/instructor';
 const inputStyle = { width: '100%', padding: '10px 13px', borderRadius: 10, border: `1.5px solid ${BORDER}`, outline: 'none', fontSize: 13.5, fontFamily: FONT, color: INK, background: WHITE, boxSizing: 'border-box' };
@@ -125,7 +126,7 @@ export default function DocumentsPage() {
 
   const all = useMemo(() => (docs || []).filter((t) => !cat || t.category === cat), [docs, cat]);
   const view = (t) => window.open(`${API}${BASE}/documents/templates/${encodeURIComponent(t.id)}/html?sample=1`, '_blank', 'noopener');
-  const remove = async (t) => { if (!window.confirm(`Delete "${t.name}"?`)) return; try { await apiDelete(`${BASE}/documents/templates/${t.id}`); showToast('Deleted'); load(); } catch (e) { showToast(e.message); } };
+  const remove = async (t) => { if (!await confirmDialog(`Delete "${t.name}"?`)) return; try { await apiDelete(`${BASE}/documents/templates/${t.id}`); showToast('Deleted'); load(); } catch (e) { showToast(e.message); } };
 
   const card = { background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
   const actBtn = (color) => ({ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: `1px solid ${color}44`, background: `${color}0C`, color, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT });

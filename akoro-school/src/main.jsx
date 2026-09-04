@@ -1,6 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
+import ConfirmHost from './components/ConfirmHost.jsx';
+import ConnectionBanner from './components/ConnectionBanner.jsx';
 
 /**
  * School ADMIN portal — this deployment ALWAYS renders the portal app.
@@ -13,6 +16,12 @@ import App from './App.jsx';
  */
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+      {/* One host for every confirmDialog() call in the app. */}
+      <ConfirmHost />
+      {/* Explains an outage that pages would otherwise render as "nothing here". */}
+      <ConnectionBanner />
+    </ErrorBoundary>
   </React.StrictMode>
 );

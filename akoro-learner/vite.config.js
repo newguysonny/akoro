@@ -81,13 +81,20 @@ export default defineConfig({
             // HTML documents (SPA navigations) → NetworkFirst so a returning
             // visitor always gets the freshly-deployed shell that references the
             // current chunk hashes. Falls back to the last cached copy only when
-            // offline / the network stalls (3s). This is what prevents the
-            // white-screen-after-deploy: the shell is never served stale.
+            // offline / the network genuinely stalls.
+            //
+            // TIMEOUT: 3s was far too aggressive for our actual users. On a
+            // 3-5 KB/s mobile connection (normal in Nigeria) the document fetch
+            // ALWAYS exceeded 3s, so the SW served the stale cached shell on
+            // every navigation — pinning people to an old build permanently, no
+            // matter how many times we redeployed. 12s only costs a slow user
+            // extra wait in the rare case the network is truly dead, and that
+            // path still falls back to cache.
             urlPattern: ({ request }) => request.mode === 'navigate',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'akoro-html',
-              networkTimeoutSeconds: 3,
+              networkTimeoutSeconds: 12,
               expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 2 },
               cacheableResponse: { statuses: [0, 200] },
             },

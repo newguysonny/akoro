@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PageLayout } from '../components/Layout.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { INK, MUTED, MUTED2, BORDER, WHITE, GREEN, RED, ACCENT, FONT } from '../constants.js';
+import { confirmDialog } from '../components/ConfirmHost.jsx';
 
 const usd = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -12,18 +13,36 @@ export default function WalletPage() {
   const [withdrawals, setWithdrawals] = useState(null);
   const [form, setForm] = useState({ amountUsd: '', bankCode: '', accountNumber: '', accountName: '' });
   const [busy, setBusy] = useState(false);
+  const [loadErr, setLoadErr] = useState('');
+  const submitting = useRef(false);
   const [toast, setToast] = useState('');
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 3500); };
 
   const load = useCallback(() => {
     if (!current) return;
-    apiGet(`/api/vouchers/startups/${current.id}/wallet`).then(setWallet).catch(() => setWallet({ balance: 0, recent: [] }));
+    setLoadErr('');
+    apiGet(`/api/vouchers/startups/${current.id}/wallet`).then(setWallet)
+      // Never fall back to a fake 0 balance — showing "$0.00" for a failed
+      // fetch is a confidently wrong number a business may act on.
+      .catch((e) => setLoadErr(e.message || 'Could not load your balance'));
     apiGet(`/api/vouchers/startups/${current.id}/withdrawals`).then((r) => setWithdrawals(r.withdrawals || [])).catch(() => setWithdrawals([]));
   }, [current]);
   useEffect(() => { load(); }, [load]);
 
   const withdraw = async (e) => {
     e.preventDefault();
+    // setBusy is async — a fast double-click or Enter+click can fire twice
+    // before the button disables. A ref flips synchronously, so it can't.
+    if (submitting.current) return;
+
+    const amount = Number(form.amountUsd);
+    if (!Number.isFinite(amount) || amount <= 0) return showToast('Enter a valid amount');
+    if (amount > Number(wallet.balance || 0)) return showToast(`You only have ${usd(wallet.balance)} available`);
+    if (!/^\d{10}$/.test(form.accountNumber.trim())) return showToast('Account number must be 10 digits');
+    if (!form.bankCode.trim()) return showToast('Select your bank');
+    if (!await confirmDialog({ title: 'Confirm this withdrawal', message: `${usd(amount)} will be sent to account ${form.accountNumber}.`, detail: 'Payouts cannot be reversed once submitted. Check the account number.', confirmLabel: 'Withdraw', danger: false })) return;
+
+    submitting.current = true;
     setBusy(true);
     try {
       const r = await apiPost(`/api/vouchers/startups/${current.id}/withdraw`, {
@@ -34,10 +53,12 @@ export default function WalletPage() {
       load();
     } catch (e2) {
       showToast(e2.status === 402 ? 'Insufficient balance' : (e2.message || 'Withdrawal failed'));
-    } finally { setBusy(false); }
+    } finally { setBusy(false); submitting.current = false; }
   };
 
-  if (!current || !wallet) return <PageLayout title="Balance & Withdraw">Loading…</PageLayout>;
+  if (!current) return null;
+  if (loadErr) return <PageLayout title="Balance & Withdraw"><div style={{ color: RED, fontSize: 13, fontWeight: 700 }}>Couldn't load your wallet — {loadErr}</div></PageLayout>;
+  if (!wallet) return <PageLayout title="Balance & Withdraw">Loading…</PageLayout>;
 
   return (
     <PageLayout title="Balance & Withdraw" subtitle={`You earn on REDEEMED credits, net of a ${wallet.platformFeePct}% platform fee`}>

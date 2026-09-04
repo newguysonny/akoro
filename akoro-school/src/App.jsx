@@ -14,6 +14,7 @@ import InstructorsPage from './pages/InstructorsPage.jsx';
 import ClassroomsPage from './pages/ClassroomsPage.jsx';
 import StudentsPage from './pages/StudentsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
+import SelfStudyPage from './pages/SelfStudyPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AiChatPage   from './pages/AiChatPage.jsx';
@@ -120,6 +121,7 @@ import {
   ReportsAnalyticsPage,
 } from './pages/mgmt/helpAssetsPages.jsx';
 import SchoolWebsitePage   from './pages/SchoolWebsitePage.jsx';
+import WebsiteAiSyncPage   from './pages/WebsiteAiSyncPage.jsx';
 import AppearancePage      from './pages/AppearancePage.jsx';
 import WebsiteTemplatesPage, { AddTemplatePage, UploadTemplatePage } from './pages/WebsiteTemplatesPage.jsx';
 import { MediaPage, MediaEditorPage, SitePagesPage, SitePageEditorPage, MenusPage } from './pages/WebsiteBuilderPages.jsx';
@@ -135,7 +137,7 @@ const INSTRUCTOR_ROLES = ['school', 'school_admin', 'instructor', 'admin'];
 // Shown when an AI-chat sign-in reached the app but no session was established
 // (usually the browser blocked the cross-site session cookie). Gives a clear
 // message + a way back to the school website to retry, instead of a silent loop.
-function AiSigninError() {
+function AiSigninError({ reason }) {
   const back = () => {
     let dest = '/signin';
     try { dest = sessionStorage.getItem('akoro_ai_return') || dest; } catch { /* ignore */ }
@@ -146,8 +148,11 @@ function AiSigninError() {
       <div style={{ maxWidth: 420, textAlign: 'center', background: '#fff', border: '1px solid #EDE8E1', borderRadius: 18, padding: '28px 24px', boxShadow: '0 2px 10px rgba(0,0,0,.05)' }}>
         <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
         <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1A1A2E', margin: '0 0 8px' }}>We couldn’t complete your sign-in</h2>
-        <p style={{ fontSize: 14, color: '#6B6B80', lineHeight: 1.6, margin: '0 0 18px' }}>
-          Your session didn’t start — your browser may be blocking cross-site cookies. Try again, or open the chat in your browser’s normal (non-private) window.
+        <p style={{ fontSize: 14, color: '#6B6B80', lineHeight: 1.6, margin: '0 0 10px' }}>
+          {reason || 'Your session didn’t start — your browser may be blocking cross-site cookies.'}
+        </p>
+        <p style={{ fontSize: 12.5, color: '#9A96A8', lineHeight: 1.55, margin: '0 0 18px' }}>
+          Try again, or open the chat in your browser’s normal (non-private) window.
         </p>
         <button onClick={back} style={{ padding: '11px 22px', borderRadius: 12, border: 'none', background: '#6C3BFF', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
           Back to sign in
@@ -158,7 +163,7 @@ function AiSigninError() {
 }
 
 function ProtectedRoute({ children, anyRole = false }) {
-  const { isAuthenticated, user, booting, handoffError } = useAuth();
+  const { isAuthenticated, user, booting, handoffError, handoffReason } = useAuth();
   const location = useLocation();
   // Exchanging an AI-chat hand-off token — wait rather than bounce to /signin.
   if (booting) {
@@ -167,7 +172,7 @@ function ProtectedRoute({ children, anyRole = false }) {
   if (!isAuthenticated) {
     // AI-chat hand-off completed but no session stuck (e.g. cross-site cookie
     // blocked) — show a clear retry screen instead of a silent /signin bounce.
-    if (anyRole && handoffError) return <AiSigninError />;
+    if (anyRole && handoffError) return <AiSigninError reason={handoffReason} />;
     localStorage.setItem('akoro_redirect', location.pathname + location.search);
     return <Navigate to="/signin" replace />;
   }
@@ -251,6 +256,7 @@ function AppRoutes() {
       <Route path="/classes" element={<Navigate to="/mgmt/classes" replace />} />
       <Route path="/students" element={<Navigate to="/mgmt/students" replace />} />
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
+      <Route path="/self-study" element={<ProtectedRoute><SelfStudyPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/assessments" element={<ProtectedRoute><AssessmentReviewPage /></ProtectedRoute>} />
       <Route path="/chat" element={<ProtectedRoute anyRole><ChatPage /></ProtectedRoute>} />
@@ -483,6 +489,7 @@ function AppRoutes() {
       <Route path="/mgmt/asset-reports"      element={<ProtectedRoute><AssetReportsPage /></ProtectedRoute>} />
       <Route path="/mgmt/reports-analytics"  element={<ProtectedRoute><ReportsAnalyticsPage /></ProtectedRoute>} />
       <Route path="/settings-website" element={<ProtectedRoute><SchoolWebsitePage /></ProtectedRoute>} />
+      <Route path="/settings-website/ai-sync" element={<ProtectedRoute><WebsiteAiSyncPage /></ProtectedRoute>} />
       <Route path="/website-builder/appearance" element={<ProtectedRoute><AppearancePage /></ProtectedRoute>} />
       <Route path="/website-builder/media" element={<ProtectedRoute><MediaPage /></ProtectedRoute>} />
       <Route path="/website-builder/media/new" element={<ProtectedRoute><MediaEditorPage /></ProtectedRoute>} />

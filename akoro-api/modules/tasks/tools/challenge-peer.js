@@ -4,7 +4,7 @@
 import { z }                    from "zod";
 import { TaskDB, TaskOutputDB } from "../lib/db.js";
 import db                       from "../../../db.js";
-import { resolveMcq }           from "./create-battle.js";
+import { resolveMcq }           from "./mcq.js";
 import { openai, OPENAI_MODEL } from "../../../lib/aiModel.js";
 
 

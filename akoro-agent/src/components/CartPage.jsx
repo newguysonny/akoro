@@ -5,9 +5,9 @@
  * time and reports exactly which succeeded, which failed, and why, instead
  * of an all-or-nothing black box.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCart } from '../contexts/CartContext.jsx';
-import { apiPost } from '../services/api.js';
+import { apiGet, apiPost } from '../services/api.js';
 import { BRAND, GREEN, RED, GOLD, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT, CATEGORIES } from '../constants.js';
 
 const usd = (n) => `$${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,10 +15,47 @@ const fmt = (n) => Number(n || 0).toLocaleString();
 const catInfo = (key) => CATEGORIES[key] || CATEGORIES.other;
 const BILLING_LABELS = { one_time: 'One-time', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 
+// Mirrors modules/vouchers/lib/pricing.js + agent.js: best applicable tier,
+// per-credit rate, then price per CODE = rate x credits.
+function livePriceFor(item, startup) {
+  if (item.type === 'product') {
+    const p = (startup.products || []).find((x) => x.id === item.productId);
+    return p ? Number(p.price_usd) : null;      // null = no longer sold
+  }
+  const totalCredits = item.quantity * item.unitCredits;
+  const tier = (startup.discountTiers || []).filter((t) => totalCredits >= t.min_credits)
+    .sort((a, b) => b.min_credits - a.min_credits)[0];
+  const perCredit = Number(startup.credit_rate_usd) * (1 - (tier?.discount_pct || 0) / 100);
+  return perCredit * item.unitCredits;
+}
+
 export default function CartPage({ onClose, onBought, onToast }) {
-  const { items, removeItem, updateQty, clear } = useCart();
+  const { items, removeItem, updateQty, updatePrice, clear } = useCart();
   const [checkingOut, setCheckingOut] = useState(false);
   const [results, setResults] = useState(null);   // { succeeded: [], failed: [{item, reason}] } after checkout
+  // Prices in the cart are snapshots from when the item was added; the server
+  // charges its CURRENT price. Re-check on open so the total shown is the
+  // total charged, and surface anything that changed or disappeared.
+  const [priceCheck, setPriceCheck] = useState({ changed: [], gone: [] });
+
+  useEffect(() => {
+    if (!items.length) return;
+    apiGet('/api/vouchers/marketplace').then((r) => {
+      const byId = Object.fromEntries((r.startups || []).map((s) => [s.id, s]));
+      const changed = [], gone = [];
+      items.forEach((i) => {
+        const s = byId[i.startupId];
+        if (!s) { gone.push(i); return; }
+        const live = livePriceFor(i, s);
+        if (live == null) { gone.push(i); return; }
+        if (Math.abs(live - i.unitPriceUsd) > 0.005) {
+          changed.push({ cartId: i.cartId, name: i.productName || i.startupName, from: i.unitPriceUsd, to: live });
+          updatePrice(i.cartId, live);
+        }
+      });
+      setPriceCheck({ changed, gone });
+    }).catch(() => { /* offline — checkout still validates server-side */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const subtotal = items.reduce((s, i) => s + i.unitPriceUsd * i.quantity, 0);
   const minQtyFor = (i) => i.type === 'product' ? i.minOrderQty : 1;
@@ -76,6 +113,27 @@ export default function CartPage({ onClose, onBought, onToast }) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {priceCheck.changed.length > 0 && (
+          <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: 13, marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: '#92400E' }}>Prices changed since you added these</div>
+            {priceCheck.changed.map((c) => (
+              <div key={c.cartId} style={{ fontSize: 11.5, color: MUTED, marginTop: 3 }}>{c.name}: {usd(c.from)} → {usd(c.to)} each</div>
+            ))}
+            <div style={{ fontSize: 11.5, color: MUTED, marginTop: 5 }}>The total below is up to date.</div>
+          </div>
+        )}
+        {priceCheck.gone.length > 0 && (
+          <div style={{ background: '#FEF2F2', border: `1px solid ${RED}44`, borderRadius: 12, padding: 13, marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>No longer available</div>
+            {priceCheck.gone.map((g) => (
+              <div key={g.cartId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 }}>
+                <span style={{ fontSize: 11.5, color: MUTED }}>{g.productName || g.startupName}</span>
+                <button onClick={() => removeItem(g.cartId)} style={{ background: 'none', border: 'none', color: RED, fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}>Remove</button>
+              </div>
+            ))}
           </div>
         )}
 

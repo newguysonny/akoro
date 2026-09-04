@@ -611,6 +611,9 @@ export class DecayEngine {
   async _getMustKnowForTopic(subject, topic) {
     try {
       const res = await openai.chat.completions.create({
+        // Runs on a nightly cron, outside any request, so nothing sets the
+        // feature for it — without this its cost is unattributable.
+        __feature: "decay_engine",
         model: "gpt-4.1-mini",
         temperature: 0.2,
         response_format: { type: "json_object" },
@@ -754,15 +757,30 @@ const _origGenerateDecaySession = DecayEngine.prototype.generateDecaySession;
 DecayEngine.prototype.generateDecaySession = async function(agentId, studentId, subject, topic) {
   const base = await _origGenerateDecaySession.call(this, agentId, studentId, subject, topic);
 
-  // Enrich with per-subtopic confidence data
-  const { data: subtopicConf } = await supabase
-    .schema("edu")
-    .from("knowledge_confidence")
-    .select("subtopic, confidence, prev_confidence, misconceptions, assess_count")
-    .eq("student_id", studentId)
-    .eq("topic", topic)
-    .order("confidence", { ascending: true })
-    .catch(() => ({ data: null }));
+  // Enrich with per-subtopic confidence data.
+  //
+  // try/catch, NOT .catch(). A Supabase query builder is a thenable — it has
+  // .then() and awaits like a promise, but it is not a Promise and has no
+  // .catch method. Calling .catch() on it throws synchronously, before the
+  // query is even sent, and the message names the whole chain:
+  //
+  //   supabase.schema(...).from(...).select(...).eq(...).eq(...).order(...)
+  //     .catch is not a function
+  //
+  // which is what a learner saw instead of a decay re-teach session.
+  let subtopicConf = null;
+  try {
+    const { data } = await supabase
+      .schema("edu")
+      .from("knowledge_confidence")
+      .select("subtopic, confidence, prev_confidence, misconceptions, assess_count")
+      .eq("student_id", String(studentId))
+      .eq("topic", topic)
+      .order("confidence", { ascending: true });
+    subtopicConf = data;
+  } catch (e) {
+    console.warn("[decay] subtopic confidence lookup failed:", e.message);
+  }
 
   const subtopics      = subtopicConf || [];
   const weakestSubtopic = subtopics[0] || null;

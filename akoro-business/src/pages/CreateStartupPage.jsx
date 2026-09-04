@@ -1,17 +1,31 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { Upload } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
-import { apiPost } from '../services/api.js';
+import { apiPost, apiUpload } from '../services/api.js';
 import { BRAND, ACCENT, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT, CATEGORIES } from '../constants.js';
 
 export default function CreateStartupPage() {
   const { logout } = useAuth();
-  const { refresh } = useStartup();
+  const { refresh, startups } = useStartup();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', credit_rate_usd: 0.1, category: 'other', description: '', cover_image_url: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [imgBusy, setImgBusy] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImgBusy(true); setErr('');
+    try {
+      const r = await apiUpload('/api/vouchers/startups/upload-cover', file);
+      setForm((f) => ({ ...f, cover_image_url: r.url }));
+    } catch (e2) { setErr(e2.message || 'Could not upload image'); }
+    finally { setImgBusy(false); }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -50,8 +64,17 @@ export default function CreateStartupPage() {
           {Object.entries(CATEGORIES).map(([key, c]) => <option key={key} value={key}>{c.icon} {c.label}</option>)}
         </select>
 
-        <label style={lbl}>Cover photo URL (optional)</label>
-        <input value={form.cover_image_url} onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })} style={inp} placeholder="https://..." />
+        <label style={lbl}>Cover photo (optional)</label>
+        <input value={form.cover_image_url} onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })} style={inp} placeholder="https://... or upload below" />
+        <label style={{ ...uploadBtn, marginTop: 8, opacity: imgBusy ? 0.6 : 1, pointerEvents: imgBusy ? 'none' : 'auto' }}>
+          <Upload size={13} /> {imgBusy ? 'Uploading…' : 'Upload from device'}
+          <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={pickImage} style={{ display: 'none' }} />
+        </label>
+        {form.cover_image_url && (
+          <div style={{ marginTop: 8, width: '100%', aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
+            <img src={form.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          </div>
+        )}
         <div style={{ fontSize: 11.5, color: MUTED2, marginTop: 6 }}>Shown on your card in the agent marketplace — a 16:10 image works best.</div>
 
         <label style={lbl}>Short pitch (optional)</label>
@@ -62,7 +85,9 @@ export default function CreateStartupPage() {
         <button type="submit" disabled={busy} style={btn}>{busy ? 'Creating…' : 'Create voucher program'}</button>
 
         <div style={{ textAlign: 'center', marginTop: 14 }}>
-          <Link to="/manage-businesses" style={{ fontSize: 12, color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>Already have a business? Manage businesses</Link>
+          {startups?.length > 0
+            ? <Link to="/" style={{ fontSize: 12.5, color: ACCENT, fontWeight: 800, textDecoration: 'none' }}>← Back to dashboard</Link>
+            : <Link to="/manage-businesses" style={{ fontSize: 12, color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>Already have a business? Manage businesses</Link>}
         </div>
 
         <button type="button" onClick={logout} style={{ width: '100%', marginTop: 10, padding: 10, borderRadius: 11, border: `1px solid ${BORDER}`, background: 'transparent', color: MUTED, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Sign out</button>
@@ -74,3 +99,4 @@ export default function CreateStartupPage() {
 const lbl = { display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', margin: '14px 0 6px' };
 const inp = { width: '100%', padding: '11px 13px', borderRadius: 11, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none', fontFamily: FONT };
 const btn = { width: '100%', marginTop: 18, padding: 13, borderRadius: 13, border: 'none', background: `linear-gradient(135deg,${ACCENT},#4C1DCC)`, color: '#fff', fontSize: 14.5, fontWeight: 900, cursor: 'pointer', fontFamily: FONT };
+const uploadBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1px dashed ${BORDER}`, background: '#F9FAFB', color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT };

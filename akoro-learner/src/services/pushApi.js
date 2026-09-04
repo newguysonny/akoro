@@ -64,6 +64,9 @@ export async function disablePush() {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
+      // Deliberately silent: the browser subscription is already gone by this
+      // point, so the user IS unsubscribed. This only tidies the server record,
+      // and failing it must not make a successful action look broken.
       await apiPost('/api/notifications/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
       await sub.unsubscribe().catch(() => {});
     }
