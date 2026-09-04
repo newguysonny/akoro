@@ -280,7 +280,7 @@ export function initOfflineSync() {
  * Returns the accumulated reply text. Throws on network/stream errors so the
  * caller can fall back to a non-streaming request.
  */
-export async function streamPost(path, body, { onDelta, onDone } = {}) {
+export async function streamPost(path, body, { onDelta, onDone, onThinking, onStatus } = {}) {
   const r = await authedFetch(`${API}${path}`, {
     ...BASE_OPTS,
     method:  'POST',
@@ -300,6 +300,7 @@ export async function streamPost(path, body, { onDelta, onDone } = {}) {
   const decoder = new TextDecoder();
   let buffer = '';
   let full   = '';
+  let think  = '';
 
   const handleEvent = (raw) => {
     let event = 'message', data = '';
@@ -310,7 +311,9 @@ export async function streamPost(path, body, { onDelta, onDone } = {}) {
     if (!data) return;
     let parsed; try { parsed = JSON.parse(data); } catch { return; }
     if (event === 'delta' && parsed.text != null) { full += parsed.text; onDelta?.(parsed.text); }
-    else if (event === 'done')  { if (parsed.reply != null) full = parsed.reply; onDone?.(parsed); }
+    else if (event === 'thinking' && parsed.text) { think += parsed.text; onThinking?.(parsed.text, think); }
+    else if (event === 'status')  { onStatus?.(parsed); }
+    else if (event === 'done')  { if (parsed.reply != null) full = parsed.reply; onDone?.({ ...parsed, thinking: parsed.thinking ?? think }); }
     else if (event === 'error') { throw new Error(parsed.error || 'stream error'); }
   };
 

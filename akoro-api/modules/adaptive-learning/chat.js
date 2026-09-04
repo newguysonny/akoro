@@ -738,18 +738,185 @@ router.delete("/sessions/:id", async (req, res) => {
   }
 });
 
-// ─── /chat/tutor — plain educational AI chat (OpenAI, no tools/tasks) ─────────
-// Used by the "Agent Chat" tab in both the learner and instructor apps for
-// normal conversation. Locked to educational topics; does NOT create tasks or
-// touch the knowledge base.
-export function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}) {
-  const audience = role === "instructor"
-    ? "You assist teachers with academic subjects, lesson planning, pedagogy, assessment design, and explaining concepts so they can teach more effectively."
-    : "You assist students with academic subjects, studying, homework, exam preparation (e.g. WAEC, JAMB), and learning strategies.";
-  return `You are ${agentName}, an AI study tutor on the Akoro Learning Platform.
-${audience}
-Stay strictly on EDUCATIONAL topics. If asked about anything non-educational — relationships, politics, gossip, entertainment for its own sake, adult content, violence, illegal activity, financial/medical/legal advice, or idle chit-chat — politely decline in one short sentence and invite an academic question instead.
-Be clear, encouraging, and age-appropriate. Explain step by step with examples. Keep replies concise. Never fabricate facts; if you are unsure, say so.`;
+// ─── /chat/tutor — educational AI chat with modes + attachments ──────────────
+// Used by the "Agent Chat" tab in both the learner and instructor apps.
+//
+// body: { message, history[], agentName, role,
+//         mode: "default" | "think" | "research",
+//         attachments: [{ name, type, dataUrl }] }
+//
+// Modes:
+//   default   — the classic tutor: fast, grounded in syllabus + past questions.
+//   think     — a reasoning model reasons first. Its summary streams to the UI
+//               as `thinking` events (rendered as a collapsible "Thought
+//               process" above the answer), then the answer streams as usual.
+//               Falls back gpt-4o → gpt-4o-mini when the reasoning model or the
+//               Responses API surface isn't available on the key.
+//   research  — a deeper pass: more syllabus refs, more past questions, a
+//               structured study-guide answer and both ref sets on the reply.
+//               Progress streams as `status` steps the UI can show.
+//
+// Attachments (any mode): images go straight to vision; text files are
+// inlined into the prompt; PDFs are text-extracted — and a scanned PDF with
+// no text layer is rasterised to page images for vision OCR (renderPdfToImages).
+// A bad file never fails the request; it becomes a note appended to the message.
+
+const THINK_MODEL    = process.env.OPENAI_THINK_MODEL    || "o4-mini";
+const RESEARCH_MODEL = process.env.OPENAI_RESEARCH_MODEL || "gpt-4o";
+
+const MAX_FILES       = 4;
+const MAX_FILE_BYTES  = 5 * 1024 * 1024;    // 5 MB per file
+const MAX_TOTAL_BYTES = 12 * 1024 * 1024;   // 12 MB per message
+const DOC_TEXT_CAP    = 12_000;             // chars of extracted doc text in the prompt
+const SCAN_PDF_PAGES  = 4;                  // pages rasterised when a PDF has no text layer
+
+import { renderPdfToImages } from "./pdfRender.js";
+
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const TEXT_TYPES  = new Set(["text/plain", "text/markdown", "text/csv"]);
+
+function dataUrlToBuffer(dataUrl) {
+  const m = String(dataUrl || "").match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/);
+  if (!m) return null;
+  try { return m[2] ? Buffer.from(m[3], "base64") : Buffer.from(decodeURIComponent(m[3]), "utf8"); }
+  catch { return null; }
+}
+
+// pdf-parse's index.js runs a self-test file read when nothing requires it,
+// which crashes under ESM import — import the internals directly.
+async function extractPdfText(buffer) {
+  const mod = await import("pdf-parse/lib/pdf-parse.js");
+  const pdfParse = mod.default || mod;
+  const out = await pdfParse(buffer);
+  return String(out?.text || "");
+}
+
+/* Turn the client's attachment list into { visionParts, docContext, notes }.
+   visionParts are chat.completions image parts; docContext is prompt text;
+   notes are human-facing "what happened to your file" lines (also appended to
+   the message so the model knows what it is looking at). */
+async function processAttachments(attachments = []) {
+  const visionParts = [];
+  const docChunks   = [];
+  const notes       = [];
+  let total = 0;
+
+  for (const [i, a] of attachments.entries()) {
+    const name = String(a?.name || `file-${i + 1}`);
+    try {
+      if (i >= MAX_FILES) { notes.push(`Only the first ${MAX_FILES} attachments were read.`); break; }
+      const type = String(a?.type || "").toLowerCase();
+      const buf  = dataUrlToBuffer(a?.dataUrl);
+      if (!buf) { notes.push(`Couldn't read ${name}.`); continue; }
+      total += buf.length;
+      if (buf.length > MAX_FILE_BYTES || total > MAX_TOTAL_BYTES) { notes.push(`${name} was too large and was skipped.`); continue; }
+
+      if (IMAGE_TYPES.has(type)) {
+        visionParts.push({ type: "image_url", image_url: { url: a.dataUrl } });
+        notes.push(`🖼 ${name} attached.`);
+        continue;
+      }
+      if (type === "application/pdf" || /\.pdf$/i.test(name)) {
+        const text = await extractPdfText(buf).catch(() => "");
+        if (text && text.replace(/\s+/g, "").length >= 200) {
+          docChunks.push(`### Attached file: ${name}\n${text.slice(0, DOC_TEXT_CAP)}`);
+          notes.push(`📄 ${name} read.`);
+        } else {
+          // No usable text layer → scanned pages. Render for vision OCR.
+          const pages = await renderPdfToImages(buf, { maxPages: SCAN_PDF_PAGES, scale: 1.6 }).catch(() => []);
+          pages.forEach((url) => visionParts.push({ type: "image_url", image_url: { url, detail: "auto" } }));
+          notes.push(pages.length
+            ? `🔍 ${name} has no text layer — ${pages.length} page(s) read as images.`
+            : `Couldn't read ${name}.`);
+        }
+        continue;
+      }
+      if (TEXT_TYPES.has(type) || /\.(txt|md|csv)$/i.test(name)) {
+        docChunks.push(`### Attached file: ${name}\n${buf.toString("utf8").slice(0, DOC_TEXT_CAP)}`);
+        notes.push(`📄 ${name} read.`);
+        continue;
+      }
+      notes.push(`${name} isn't a supported file type and was skipped.`);
+    } catch {
+      notes.push(`Couldn't read ${name}.`);
+    }
+  }
+  return { visionParts, docContext: docChunks.join("\n\n"), notes };
+}
+
+const THINK_ADDENDUM = `
+
+The learner turned on "Think" mode because this question is hard. Reason through it carefully before answering — work the steps, sanity-check the result, and fix your working if the check fails. The visible answer stays clear, step-by-step and age-appropriate.`;
+
+const RESEARCH_ADDENDUM = `
+
+The learner turned on "Research" mode: they want a deeper, well-organised study answer. Use ALL the provided syllabus and past-question context and structure the reply exactly as:
+**The big picture** — 2–3 sentences orienting the topic.
+**Step by step** — a thorough worked explanation with examples.
+**How it's examined** — what the past questions show, with exam-focus tips.
+**Quick recap** — 3–5 bullet takeaways.
+Ground every section in the provided context; name the topics/sources you used.`;
+
+/* chat.completions streaming → `delta` events. Returns the full text. */
+async function streamChat({ send, messages, model, max_tokens = 700, temperature = 0.6 }) {
+  const stream = await openai.chat.completions.create({ model, temperature, max_tokens, stream: true, messages });
+  let full = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta?.content;
+    if (delta) { full += delta; send("delta", { text: delta }); }
+  }
+  return full;
+}
+
+/* Convert chat.completions-style messages to Responses-API input. */
+function toResponsesInput(messages) {
+  return messages.map((m) => ({
+    role: m.role,
+    content: typeof m.content === "string"
+      ? [{ type: m.role === "assistant" ? "output_text" : "input_text", text: m.content }]
+      : m.content.map((p) => p.type === "image_url"
+          ? { type: "input_image", image_url: p.image_url?.url, detail: p.image_url?.detail || "auto" }
+          : { type: "input_text", text: p.text }),
+  }));
+}
+
+/* Reasoning model via the Responses API. Reasoning summaries stream as
+   `thinking` events, the answer as `delta`. Throws when the model or API
+   surface is unavailable so the caller can fall back. */
+async function streamThinkWithResponses({ send, messages, model }) {
+  const useReasoning = model !== "gpt-4o";   // gpt-4o has no reasoning surface
+  const stream = await openai.responses.create({
+    model,
+    input: toResponsesInput(messages),
+    ...(useReasoning ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
+    max_output_tokens: 4000,
+    stream: true,
+  });
+  let full = "";
+  for await (const ev of stream) {
+    if (ev.type === "response.reasoning_summary_text.delta" && ev.delta) send("thinking", { text: ev.delta });
+    else if (ev.type === "response.output_text.delta" && ev.delta) { full += ev.delta; send("delta", { text: ev.delta }); }
+    else if (ev.type === "response.failed") throw new Error(ev.response?.error?.message || "reasoning model failed");
+    else if (ev.type === "error") throw new Error(ev.message || "reasoning model error");
+  }
+  return full;
+}
+
+/* Non-streaming reasoning call → { reply, thinking }. */
+async function thinkOnce({ messages, model }) {
+  const useReasoning = model !== "gpt-4o";
+  const resp = await openai.responses.create({
+    model,
+    input: toResponsesInput(messages),
+    ...(useReasoning ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
+    max_output_tokens: 4000,
+  });
+  const thinking = (Array.isArray(resp?.output) ? resp.output : [])
+    .filter((o) => o?.type === "reasoning")
+    .flatMap((o) => (o.summary || []).map((s) => s?.text || ""))
+    .join("\n\n")
+    .trim();
+  return { reply: String(resp?.output_text || "").trim(), thinking };
 }
 
 router.post("/tutor", async (req, res) => {
@@ -760,82 +927,145 @@ router.post("/tutor", async (req, res) => {
   const wantsStream = req.query.stream === "1" || req.query.stream === "true"
     || (req.headers.accept || "").includes("text/event-stream");
   try {
-    const { message, history = [], agentName, role } = req.body;
+    const { message, history = [], agentName, role, mode: rawMode, attachments: rawAttachments } = req.body;
+    const mode = ["think", "research"].includes(rawMode) ? rawMode : "default";
+    const isThink = mode === "think", isResearch = mode === "research";
     if (!message || !message.trim()) return res.status(400).json({ error: "message is required" });
+    if (Array.isArray(rawAttachments) && rawAttachments.length > MAX_FILES) {
+      return res.status(400).json({ error: `Too many attachments (max ${MAX_FILES}).` });
+    }
 
     const safeHistory = (Array.isArray(history) ? history : [])
       .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
       .slice(-10);
+
+    let headersSent = false;
+    const beginStream = () => {
+      if (headersSent) return;
+      res.writeHead(200, {
+        "Content-Type":      "text/event-stream",
+        "Cache-Control":     "no-cache, no-transform",
+        "Connection":        "keep-alive",
+        "X-Accel-Buffering": "no",   // disable proxy buffering (nginx)
+      });
+      res.flushHeaders?.();
+      headersSent = true;
+    };
+    const send   = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    const status = (step, label) => send("status", { step, label });
+    if (wantsStream) beginStream();
 
     // Ground the tutor in the uploaded exam syllabus when the question relates
     // to it (semantic match; empty for off-syllabus questions). `refs` are the
     // human-facing source chips shown under the reply.
     // Ground in BOTH the syllabus (what should be taught) and the past-question
     // bank (how it is actually examined) — they answer different halves of
-    // "will this be in the exam?". Fetched together; either may come back empty.
-    // Teachers additionally get the CURRICULUM — what a class is meant to be
-    // taught and how — which is the question they ask and students don't.
+    // "will this be in the exam?". Teachers additionally get the CURRICULUM —
+    // what a class is meant to be taught and how. Research mode digs deeper
+    // into both banks, since its whole point is a thorough, sourced answer.
     const wantsCurriculum = role === "instructor";
+    const sylLimit  = isResearch ? 8 : 5;
+    const pastLimit = isResearch ? 5 : 3;
+    if (isResearch && wantsStream) status("grounding", "Searching the syllabus and past questions…");
+
     const [
       { context: syllabusCtx, refs: syllabusRefs },
       { context: pastCtx, refs: pastRefs },
       { context: curriculumCtx, refs: curriculumRefs },
     ] = await Promise.all([
-      getSyllabusGrounding(message.trim(), { limit: 5 }).catch(() => ({ context: "", refs: [] })),
-      getPastQuestionGrounding(message.trim(), { limit: 3 }).catch(() => ({ context: "", refs: [] })),
+      getSyllabusGrounding(message.trim(), { limit: sylLimit }).catch(() => ({ context: "", refs: [] })),
+      getPastQuestionGrounding(message.trim(), { limit: pastLimit }).catch(() => ({ context: "", refs: [] })),
       wantsCurriculum
         ? getCurriculumGrounding(message.trim(), { limit: 3 }).catch(() => ({ context: "", refs: [] }))
         : Promise.resolve({ context: "", refs: [] }),
     ]);
-    const systemContent = tutorSystemPrompt({ agentName, role }) +
-      (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
-      (pastCtx ? `\n\n${pastCtx}` : "") +
-      (curriculumCtx ? `\n\n${curriculumCtx}` : "");
 
+    // Attachments: images/doc-text/scanned pages, with per-file notes.
+    let att = { visionParts: [], docContext: "", notes: [] };
+    if (Array.isArray(rawAttachments) && rawAttachments.length) {
+      if (wantsStream) status("attachments", "Reading your files…");
+      att = await processAttachments(rawAttachments);
+    }
+
+    const systemContent = tutorSystemPrompt({ agentName, role }) +
+      (isThink      ? THINK_ADDENDUM : "") +
+      (isResearch   ? RESEARCH_ADDENDUM : "") +
+      (syllabusCtx  ? `\n\n${syllabusCtx}` : "") +
+      (pastCtx      ? `\n\n${pastCtx}` : "") +
+      (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
+      (att.docContext ? `\n\n${att.docContext}` : "");
+
+    // The attachment notes ride along with the question so the model knows
+    // what each image/document is supposed to be.
+    const userText = message.trim() + (att.notes.length ? `\n\n(Attachments: ${att.notes.join(" ")})` : "");
+    const userContent = att.visionParts.length
+      ? [{ type: "text", text: userText }, ...att.visionParts]
+      : userText;
     const messages = [
       { role: "system", content: systemContent },
       ...safeHistory,
-      { role: "user", content: message.trim() },
+      { role: "user", content: userContent },
     ];
 
     if (!wantsStream) {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.6,
-        max_tokens: 700,
-        messages,
-      });
-      const reply = completion.choices?.[0]?.message?.content?.trim()
-        || "I'm here to help with your studies — ask me anything about your subjects!";
-      return res.json({ success: true, reply, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+      let reply = "", thinking = "", usedModel = "gpt-4o-mini";
+      if (isThink) {
+        try { ({ reply, thinking } = await thinkOnce({ messages, model: THINK_MODEL })); usedModel = THINK_MODEL; } catch {}
+        if (!reply) {
+          try {
+            const c = await openai.chat.completions.create({ model: "gpt-4o", temperature: 0.6, max_tokens: 1400, messages });
+            reply = c.choices?.[0]?.message?.content?.trim() || ""; usedModel = "gpt-4o";
+          } catch {}
+        }
+      } else {
+        usedModel = isResearch ? RESEARCH_MODEL : "gpt-4o-mini";
+        try {
+          const c = await openai.chat.completions.create({
+            model: usedModel, temperature: 0.6, max_tokens: isResearch ? 2200 : 700, messages,
+          });
+          reply = c.choices?.[0]?.message?.content?.trim() || "";
+        } catch {
+          if (isResearch) {
+            try {
+              const c = await openai.chat.completions.create({ model: "gpt-4o-mini", temperature: 0.6, max_tokens: 900, messages });
+              reply = c.choices?.[0]?.message?.content?.trim() || ""; usedModel = "gpt-4o-mini";
+            } catch {}
+          }
+        }
+      }
+      if (!reply) reply = "I'm here to help with your studies — ask me anything about your subjects!";
+      return res.json({ success: true, reply, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, curriculum: curriculumRefs, mode, metadata: { model: usedModel, responseTimeMs: Date.now() - t0 } });
     }
 
     // ── Streaming path (SSE) ──────────────────────────────────────────────
-    res.writeHead(200, {
-      "Content-Type":      "text/event-stream",
-      "Cache-Control":     "no-cache, no-transform",
-      "Connection":        "keep-alive",
-      "X-Accel-Buffering": "no",   // disable proxy buffering (nginx)
-    });
-    res.flushHeaders?.();
-
-    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-
-    let full = "";
+    // Events: status → thinking → delta* → done | error
+    let full = "", thinking = "", usedModel = "gpt-4o-mini";
     try {
-      const stream = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.6,
-        max_tokens: 700,
-        stream: true,
-        messages,
-      });
-      for await (const chunk of stream) {
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (delta) { full += delta; send("delta", { text: delta }); }
+      if (isThink) {
+        status("thinking", "Thinking…");
+        try { full = await streamThinkWithResponses({ send, messages, model: THINK_MODEL }); usedModel = THINK_MODEL; }
+        catch (thinkErr) {
+          console.error("[/chat/tutor think]", thinkErr?.message);
+          try { full = await streamThinkWithResponses({ send, messages, model: "gpt-4o" }); usedModel = "gpt-4o"; }
+          catch (gptErr) {
+            console.error("[/chat/tutor think→gpt-4o]", gptErr?.message);
+            full = await streamChat({ send, messages, model: "gpt-4o-mini", max_tokens: 900 });
+          }
+        }
+      } else if (isResearch) {
+        status("synthesis", "Writing it up…");
+        usedModel = RESEARCH_MODEL;
+        try { full = await streamChat({ send, messages, model: RESEARCH_MODEL, max_tokens: 2200 }); }
+        catch (err) {
+          console.error("[/chat/tutor research]", err?.message);
+          usedModel = "gpt-4o-mini";
+          full = await streamChat({ send, messages, model: "gpt-4o-mini", max_tokens: 900 });
+        }
+      } else {
+        full = await streamChat({ send, messages, model: "gpt-4o-mini", max_tokens: 700 });
       }
       if (!full.trim()) full = "I'm here to help with your studies — ask me anything about your subjects!";
-      send("done", { reply: full, syllabus: syllabusRefs, metadata: { model: "gpt-4o-mini", responseTimeMs: Date.now() - t0 } });
+      send("done", { reply: full, thinking, syllabus: syllabusRefs, pastQuestions: pastRefs, mode, metadata: { model: usedModel, responseTimeMs: Date.now() - t0 } });
     } catch (streamErr) {
       console.error("[/chat/tutor stream]", streamErr);
       send("error", { error: streamErr.message });
