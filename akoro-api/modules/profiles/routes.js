@@ -1615,17 +1615,68 @@ router.get("/onboarding-prefill", authenticateToken, asyncHandler(async (req, re
   });
 }));
 
+/* GET /api/profiles/directory/teachers — instructors a learner can join.
+ *
+ * Onboarding renders these as browsable profile cards (search + grid), so the
+ * payload now carries what a card shows: avatar, guide emoji, subjects,
+ * approved school, and how many students/classes the teacher actually has —
+ * a learner can compare before committing a request. Optional ?search= does a
+ * server-side pre-filter on name/username; the client still narrows locally
+ * across school and subjects too.
+ */
 router.get("/directory/teachers", authenticateToken, asyncHandler(async (req, res) => {
-  const { data: teachers } = await db.from("users")
-    .select("id, full_name, username, avatar_url").eq("role", "instructor").eq("is_active", true).order("full_name", { ascending: true }).limit(500);
+  let query = db.from("users")
+    .select("id, full_name, username, avatar_url, guide_emoji, subjects")
+    .eq("role", "instructor").eq("is_active", true)
+    .order("full_name", { ascending: true }).limit(500);
+  // .or() takes a comma-separated filter string, so strip characters that
+  // would let a search term inject extra filters or wildcards of its own.
+  const q = String(req.query.search || "").replace(/[%_,()]/g, " ").trim();
+  if (q) query = query.or(`full_name.ilike.%${q}%,username.ilike.%${q}%`);
+
+  const { data: teachers } = await query;
   const ids = (teachers || []).map((t) => t.id);
+
   let schoolByTeacher = {};
   if (ids.length) {
     const { data: links } = await db.from("school_teachers")
       .select("teacher_id, school_profiles ( name )").in("teacher_id", ids).eq("status", "approved");
     schoolByTeacher = Object.fromEntries((links || []).map((l) => [l.teacher_id, l.school_profiles?.name || null]));
   }
-  res200(res, (teachers || []).map((t) => ({ id: t.id, full_name: t.full_name, username: t.username, avatar_url: t.avatar_url, school_name: schoolByTeacher[t.id] || null })));
+
+  // Student + class counts in two flat queries (no per-teacher round trips):
+  // the teacher's classrooms, then the active roll of those classrooms. A
+  // learner sitting in two rooms of the same teacher is counted once.
+  const statsByTeacher = {};
+  if (ids.length) {
+    const { data: rooms } = await db.from("classrooms")
+      .select("id, teacher_id").in("teacher_id", ids);
+    const roomIds = (rooms || []).map((r) => r.id);
+    (rooms || []).forEach((r) => {
+      (statsByTeacher[r.teacher_id] ??= { students: new Set(), classes: 0 }).classes += 1;
+    });
+    if (roomIds.length) {
+      const { data: rolls } = await db.from("classroom_students")
+        .select("classroom_id, user_id").in("classroom_id", roomIds).eq("status", "active");
+      const teacherOfRoom = Object.fromEntries((rooms || []).map((r) => [r.id, r.teacher_id]));
+      (rolls || []).forEach(({ classroom_id, user_id }) => {
+        const tid = teacherOfRoom[classroom_id];
+        if (tid) statsByTeacher[tid].students.add(user_id);
+      });
+    }
+  }
+
+  res200(res, (teachers || []).map((t) => ({
+    id:             t.id,
+    full_name:      t.full_name,
+    username:       t.username,
+    avatar_url:     t.avatar_url || null,
+    guide_emoji:    t.guide_emoji || null,
+    subjects:       Array.isArray(t.subjects) ? t.subjects : [],
+    school_name:    schoolByTeacher[t.id] || null,
+    student_count:  statsByTeacher[t.id]?.students.size || 0,
+    classroom_count: statsByTeacher[t.id]?.classes || 0,
+  })));
 }));
 
 /* ── Teacher → school request + link status ───────────────────────────── */

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
@@ -52,6 +52,11 @@ export default function OnboardingPage() {
   const [subjects, setSubjects]     = useState([]);
   const [teachers, setTeachers]     = useState([]);
   const [teacherId, setTeacherId]   = useState('');   // '' = self-study, no teacher
+  // Step 3 — teacher picker: free-text search over the loaded directory.
+  // The whole directory (≤500) is already in memory, so filtering is instant
+  // and also covers school + subjects, not just the name.
+  const [teacherQuery, setTeacherQuery] = useState('');
+  const [brokenAvatars, setBrokenAvatars] = useState(() => new Set());
   // Step 2 — student agent
   // What the teacher already told us. Pre-filled, never assumed: the learner
   // still walks every step and can change any of it.
@@ -62,6 +67,17 @@ export default function OnboardingPage() {
 
   const toggleSubject = (s) =>
     setSubjects(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+
+  const filteredTeachers = useMemo(() => {
+    const q = teacherQuery.trim().toLowerCase();
+    if (!q) return teachers;
+    const tokens = q.split(/\s+/);
+    return teachers.filter(tt => {
+      const hay = [tt.full_name, tt.username, tt.school_name, ...(tt.subjects || [])]
+        .filter(Boolean).join(' ').toLowerCase();
+      return tokens.every(tok => hay.includes(tok));
+    });
+  }, [teachers, teacherQuery]);
 
   useEffect(() => {
     fetch(`${API}/api/profiles/directory/teachers`, { credentials: 'include' })
@@ -92,18 +108,20 @@ export default function OnboardingPage() {
       .catch(() => {});
   }, []);
 
-  const STEPS = [t('onboarding.step_profile'), t('onboarding.step_agent'), t('onboarding.step_prefs')];
+  const STEPS = [t('onboarding.step_profile'), t('onboarding.step_agent'), t('onboarding.step_teacher'), t('onboarding.step_prefs')];
 
   const validateStep = () => {
     setErr('');
     if (step === 0) {
       if (!fullName.trim())   { setErr(t('onboarding.err_name')); return false; }
       if (!studyLevel)        { setErr(t('onboarding.err_level')); return false; }
-      // A teacher is required (unless none exist yet to choose from).
-      if (teachers.length > 0 && !teacherId) { setErr('Please choose your teacher'); return false; }
     }
     if (step === 1) {
       if (!agentName.trim())  { setErr(t('onboarding.err_agent')); return false; }
+    }
+    // A teacher is required (unless none exist yet to choose from).
+    if (step === 2 && teachers.length > 0 && !teacherId) {
+      setErr(t('onboarding.err_teacher')); return false;
     }
     return true;
   };
@@ -201,7 +219,9 @@ export default function OnboardingPage() {
         <span style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)' }}>Akoro</span>
       </div>
 
-      <div style={{ width: '100%', maxWidth: 460, marginBottom: 16, display: 'flex', gap: 8 }}>
+      {/* Wider than the old 3-step card: the teacher grid reads better with two
+          roomy columns, and the form steps stretch without harm. */}
+      <div style={{ width: '100%', maxWidth: 560, marginBottom: 16, display: 'flex', gap: 8 }}>
         {STEPS.map((s, i) => (
           <div key={s} style={{ flex: 1 }}>
             <div style={{ height: 5, borderRadius: 99, background: i <= step ? accentColor : 'var(--ak-border2)', transition: 'background .2s' }}/>
@@ -211,7 +231,7 @@ export default function OnboardingPage() {
       </div>
 
       {/* Card */}
-      <div style={{ width: '100%', maxWidth: 460, background: 'var(--ak-surface)', borderRadius: 24,
+      <div style={{ width: '100%', maxWidth: 560, background: 'var(--ak-surface)', borderRadius: 24,
         padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.10)', border: '1px solid var(--ak-border)' }}>
 
         {step === 0 && (
@@ -270,20 +290,6 @@ export default function OnboardingPage() {
                 <input value={schoolName} onChange={e => setSchoolName(e.target.value)} placeholder={t('onboarding.school_ph')} style={inp}/>
               </div>
             </div>
-            <div style={{ marginTop: 14 }}>
-              <label style={lbl}>Your teacher <span style={{ fontWeight: 500, color: RED }}>*</span></label>
-              <select value={teacherId} onChange={e => setTeacherId(e.target.value)} style={{ ...inp, cursor: 'pointer' }}>
-                <option value="">{teachers.length ? 'Select your teacher…' : 'No teachers available yet'}</option>
-                {teachers.map(tt => <option key={tt.id} value={tt.id}>{tt.full_name}{tt.school_name ? ` · ${tt.school_name}` : ''}</option>)}
-              </select>
-              {teacherId && (
-                <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '6px 2px 0' }}>
-                  {prefill?.teacherId === teacherId
-                    ? `${prefill.teacherName} already has you in ${prefill.className}.`
-                    : 'Your teacher will approve your request to join their class.'}
-                </p>
-              )}
-            </div>
             <div>
               <label style={lbl}>{t('onboarding.subjects_studying')} <span style={{ fontWeight: 500, color: 'var(--ak-text-muted)' }}>({t('common.optional')})</span></label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -330,6 +336,133 @@ export default function OnboardingPage() {
 
         {step === 2 && (
           <>
+            <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.teacher_title')}</h1>
+            <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 18px' }}>{t('onboarding.teacher_desc')}</p>
+
+            {teachers.length > 0 ? (
+              <>
+                {/* Search — instant, client-side over the loaded directory, so it
+                    also matches school names and subjects, not just names. */}
+                <div style={{ position: 'relative', marginBottom: 12 }}>
+                  <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.55, pointerEvents: 'none' }}>🔍</span>
+                  <input
+                    value={teacherQuery}
+                    onChange={e => setTeacherQuery(e.target.value)}
+                    placeholder={t('onboarding.teacher_search')}
+                    style={{ ...inp, paddingLeft: 38, paddingRight: teacherQuery ? 36 : 14 }}
+                  />
+                  {teacherQuery && (
+                    <button onClick={() => setTeacherQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg)', color: 'var(--ak-text-sec)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+                  )}
+                </div>
+
+                {filteredTeachers.length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(228px, 1fr))', gap: 10,
+                    maxHeight: 312, overflowY: 'auto', padding: 2 }}>
+                    {filteredTeachers.map(tt => {
+                      const selected = teacherId === tt.id;
+                      return (
+                        <div key={tt.id} onClick={() => setTeacherId(selected ? '' : tt.id)} role="radio" aria-checked={selected}
+                          style={{ position: 'relative', cursor: 'pointer', borderRadius: 16, padding: '12px 13px',
+                            border: `2px solid ${selected ? accentColor : 'var(--ak-border2)'}`,
+                            background: selected ? `${accentColor}0d` : 'var(--ak-surface)',
+                            transition: 'border-color .15s, background .15s' }}>
+                          {selected && (
+                            <span style={{ position: 'absolute', top: 9, right: 9, width: 20, height: 20, borderRadius: '50%',
+                              background: accentColor, color: '#fff', fontSize: 11, fontWeight: 900,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {(() => {
+                              const initials = (tt.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
+                              const box = { width: 44, height: 44, borderRadius: 14, flex: '0 0 auto', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', fontSize: 20, overflow: 'hidden' };
+                              if (tt.avatar_url && !brokenAvatars.has(tt.id)) {
+                                return (
+                                  <img src={tt.avatar_url} alt=""
+                                    onError={() => setBrokenAvatars(prev => new Set(prev).add(tt.id))}
+                                    style={{ ...box, objectFit: 'cover', background: 'var(--ak-tag-bg)' }} />
+                                );
+                              }
+                              if (tt.guide_emoji) {
+                                return <div style={{ ...box, background: `${accentColor}14` }}>{tt.guide_emoji}</div>;
+                              }
+                              return (
+                                <div style={{ ...box, background: `linear-gradient(135deg,${accentColor}33,#4C1DCC33)`,
+                                  color: accentColor, fontSize: 14, fontWeight: 900 }}>{initials}</div>
+                              );
+                            })()}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: selected ? 18 : 0 }}>
+                                {tt.full_name}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--ak-text-muted)',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {tt.school_name || `@${tt.username}`}
+                              </div>
+                            </div>
+                          </div>
+                          {tt.subjects?.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 9 }}>
+                              {tt.subjects.slice(0, 2).map(s => (
+                                <span key={s} style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-sec)',
+                                  background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '3px 8px', whiteSpace: 'nowrap' }}>{s}</span>
+                              ))}
+                              {tt.subjects.length > 2 && (
+                                <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)',
+                                  background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '3px 8px' }}>+{tt.subjects.length - 2}</span>
+                              )}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 9, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sec)' }}>
+                            {tt.student_count > 0
+                              ? <span>👥 {tt.student_count} {t('onboarding.students')}</span>
+                              : <span style={{ color: BRAND }}>🌱 {t('onboarding.teacher_new')}</span>}
+                            {tt.classroom_count > 0 && (
+                              <span style={{ color: 'var(--ak-text-muted)' }}>· {tt.classroom_count} {t('onboarding.classes')}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px 16px', borderRadius: 14, background: 'var(--ak-tag-bg)',
+                    border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>🔍</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)' }}>{t('onboarding.teacher_no_match')}</div>
+                    <button onClick={() => setTeacherQuery('')} style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99,
+                      border: 'none', background: accentColor, color: '#fff', fontSize: 12, fontWeight: 800,
+                      cursor: 'pointer', fontFamily: 'inherit' }}>{t('onboarding.teacher_clear')}</button>
+                  </div>
+                )}
+
+                {teacherId && (
+                  <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '10px 2px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>✅</span>
+                    <span>
+                      {prefill?.teacherId === teacherId
+                        ? <>{prefill.teacherName} already has you in <strong>{prefill.className}</strong>.</>
+                        : t('onboarding.teacher_pending_note')}
+                    </span>
+                  </p>
+                )}
+              </>
+            ) : (
+              <div style={{ padding: '22px 18px', borderRadius: 14, background: 'var(--ak-tag-bg)',
+                border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
+                <div style={{ fontSize: 26, marginBottom: 8 }}>🧑🏽‍🏫</div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)', lineHeight: 1.5 }}>
+                  {t('onboarding.teacher_none')}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {step === 3 && (
+          <>
             <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.make_yours')}</h1>
             <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 22px' }}>{t('onboarding.appearance')}</p>
 
@@ -374,12 +507,12 @@ export default function OnboardingPage() {
               border: '1.5px solid var(--ak-border2)', background: 'var(--ak-surface)', color: 'var(--ak-text-sec)',
               fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>{t('onboarding.back')}</button>
           )}
-          <button onClick={step === 2 ? finish : next} disabled={saving} style={{ flex: 1, padding: '13px',
+          <button onClick={step === STEPS.length - 1 ? finish : next} disabled={saving} style={{ flex: 1, padding: '13px',
             borderRadius: 14, border: 'none', background: saving ? 'var(--ak-tag-bg)' : `linear-gradient(135deg,${accentColor},#4C1DCC)`,
             color: saving ? 'var(--ak-text-muted)' : '#fff', fontSize: 14, fontWeight: 800,
             cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'Nunito',sans-serif",
             boxShadow: saving ? 'none' : `0 4px 14px ${accentColor}44` }}>
-            {step === 2 ? (saving ? t('onboarding.setting_up') : t('onboarding.finish')) : t('onboarding.continue')}
+            {step === STEPS.length - 1 ? (saving ? t('onboarding.setting_up') : t('onboarding.finish')) : t('onboarding.continue')}
           </button>
         </div>
       </div>
