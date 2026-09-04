@@ -22,13 +22,13 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss }) {
   const stage = progressStage(item.progress);
 
   return (
-    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', zIndex: 850,
+    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', zIndex: 'var(--z-bar)',
       background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
       boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
-      animation: 'sheet-up .28s cubic-bezier(.32,1.2,.64,1)' }}>
+      animation: `sheet-up .28s var(--ease-spring)` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px 11px 14px' }}>
         {/* Art — subject emoji on a tinted tile (session) or file glyph (record) */}
-        <div style={{ width: 42, height: 42, borderRadius: 11, flexShrink: 0, background: `${BRAND}14`, border: `1px solid ${BRAND}2e`,
+        <div style={{ width: 42, height: 42, borderRadius: 'var(--r-md)', flexShrink: 0, background: `${BRAND}14`, border: `1px solid ${BRAND}2e`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{item.emoji || '📚'}</div>
 
         {/* Title + source */}

@@ -31,6 +31,11 @@ const LIGHT_VARS = {
   '--ak-select-bg':     '#F9FAFB',
   '--ak-input-bg':      '#ffffff',
   '--ak-overlay':       'rgba(0,0,0,0.45)',
+  // Status TEXT — dark enough for light surfaces (bars use --ak-success etc.
+  // from index.css for fills; these are for writing on them).
+  '--ak-success-text':  '#047857',
+  '--ak-warn-text':     '#B45309',
+  '--ak-danger-text':   '#B91C1C',
 };
 
 const DARK_VARS = {
@@ -50,6 +55,10 @@ const DARK_VARS = {
   '--ak-select-bg':     '#0D1117',
   '--ak-input-bg':      '#0D1117',
   '--ak-overlay':       'rgba(0,0,0,0.65)',
+  // Status TEXT — light enough for dark surfaces.
+  '--ak-success-text':  '#34D399',
+  '--ak-warn-text':     '#FBBF24',
+  '--ak-danger-text':   '#F87171',
 };
 
 export function resolveIsDark(mode) {
