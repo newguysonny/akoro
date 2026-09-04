@@ -376,7 +376,7 @@ function PurchaseHistorySheet({ onClose }) {
 }
 
 /* ── Main tab ──────────────────────────────────────────────── */
-export default function DiscoveryTab() {
+export default function DiscoveryTab({ initialQuery = '' }) {
   const { t } = useLang();
   const navigate = useNavigate();
   const [agents,  setAgents]  = useState([]);
@@ -386,7 +386,9 @@ export default function DiscoveryTab() {
   const [lLive,   setLLive]   = useState(true);
   const [lVideo,  setLVideo]  = useState(true);
   const [cat,     setCat]     = useState('all');
-  const [query,   setQuery]   = useState('');
+  // Seedable so the higher-ed Discover hub can hand a search over when the
+  // learner taps Courses with text already in the hub's search box.
+  const [query,   setQuery]   = useState(initialQuery);
   const [ownedIds, setOwnedIds] = useState(new Set());
   const [expanded, setExpanded] = useState({});   // { live, video, guides }
   const [toast,    setToast]    = useState(null);

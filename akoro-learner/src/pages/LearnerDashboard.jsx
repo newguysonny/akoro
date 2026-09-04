@@ -23,6 +23,7 @@ import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
 import AgentChatTab  from '../components/tabs/AgentChatTab.jsx';
 import RankingsTab   from '../components/tabs/RankingsTab.jsx';
 import DiscoveryTab  from '../components/tabs/DiscoveryTab.jsx';
+import DiscoverHub   from '../components/tabs/DiscoverHub.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon } from '../components/common/Icons.jsx';
@@ -54,8 +55,19 @@ export default function LearnerDashboard() {
     return VALID_TABS.includes(p) ? p : "sessions";
   };
   const [tab,               setTab]              = useState(tabFromUrl);
+  // Higher-ed Discover has an inner view: the hub, or the courses feed the
+  // hub's Courses card opens. Mirrored in the URL (?view=&q=) so Back/Forward
+  // move between hub and courses like they do between tabs.
+  const discoverViewFromUrl = () => new URLSearchParams(location.search).get("view") === "courses" ? "courses" : "hub";
+  const discoverQFromUrl    = () => new URLSearchParams(location.search).get("q") || "";
+  const [discoverView,  setDiscoverView]  = useState(discoverViewFromUrl);
+  const [discoverQuery, setDiscoverQuery] = useState(discoverQFromUrl);
   // Keep tab in sync when the URL changes (Back/Forward, deep link).
-  useEffect(() => { setTab(tabFromUrl()); }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setTab(tabFromUrl());
+    setDiscoverView(discoverViewFromUrl());
+    setDiscoverQuery(discoverQFromUrl());
+  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   // A user tab switch pushes a history entry; the effect above then sets state.
   const goTab = (key) => navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
   const [sessionTab,        setSessionTab]        = useState("all");
@@ -721,7 +733,24 @@ export default function LearnerDashboard() {
               ):challenges.filter(c=>!acceptedIds.has(c.id)).map(c=><ChallengeRow key={c.id} challenge={c} onTap={setSelectedChallenge}/>)}
             </div>
           )}
-          {tab==="discovery" && <DiscoveryTab/>}
+          {tab==="discovery" && (higherEd
+            ? (discoverView==="courses"
+              ? <>
+                  {/* Back to the hub — the courses feed is one of the discovery
+                      types, not the whole tab, for higher-ed learners. */}
+                  <div style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 14px 0",background:"var(--ak-surface)" }}>
+                    <button onClick={()=>navigate("/app?tab=discovery")} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:20,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-sub)",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>{t('dhub.title')}
+                    </button>
+                    {discoverQuery&&<span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>🔍 {discoverQuery}</span>}
+                  </div>
+                  <DiscoveryTab initialQuery={discoverQuery}/>
+                </>
+              : <DiscoverHub
+                  onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
+                  onOpenLive={()=>{ goTab("sessions"); setSessionTab("live"); }}/>
+              )
+            : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}
           {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji}/>}

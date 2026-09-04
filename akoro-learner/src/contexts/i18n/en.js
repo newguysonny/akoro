@@ -646,6 +646,28 @@ export const EN = {
   'agent.status_thinking':       'Thinking…',
   'agent.status_synthesis':      'Writing it up…',
 
+  /* ── Discover hub (higher-ed) ── */
+  'dhub.title':              'Discover',
+  'dhub.sub':                'Everything you can explore, in one place.',
+  'dhub.search_ph':          "Search topics or jump to a section…",
+  'dhub.clear':              'Clear search',
+  'dhub.soon':               'Soon',
+  'dhub.coming_soon':        'coming soon',
+  'dhub.cta_browse':         'Browse',
+  'dhub.cta_open':           'Open',
+  'dhub.cta_soon':           'Preview',
+  'dhub.no_match':           'Nothing matches that search.',
+  'dhub.card_notes':         'Notes/Materials',
+  'dhub.card_notes_desc':    'Your saved texts, links and pasted material',
+  'dhub.card_courses':       'Courses',
+  'dhub.card_courses_desc':  'Video & live courses, curated for you',
+  'dhub.card_pharmd':        'Pharm D',
+  'dhub.card_pharmd_desc':   'Doctor of Pharmacy program materials',
+  'dhub.card_guide':         'Teaching guide',
+  'dhub.card_guide_desc':    'Learn with trained teacher agents',
+  'dhub.card_live':          'Live classes',
+  'dhub.card_live_desc':     'Join scheduled live sessions',
+
   /* ── Add-a-record sheet (higher-ed dashboard) ── */
   'records.title':           'Add a record',
   'records.subtitle':        "Upload a file, add a link, or paste your notes — they'll be ready for your study sessions.",
