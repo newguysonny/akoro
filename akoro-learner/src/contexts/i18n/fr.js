@@ -590,3 +590,8 @@ export const FR = {
 'dhub.search_back':         'Back to results',
 'dhub.search_remove':       'Remove from recent',
 'dhub.search_all':          'All',
+
+/* Now Studying */
+'now_studying':       'Now Studying',
+'battles.minimize':       'Minimize',
+'battles.show_minimized': 'Show Minimized',

@@ -17,6 +17,7 @@ import DecaySessionModal from '../components/teaching/DecaySessionModal.jsx';
 import ConfigModal       from '../components/teaching/ConfigModal.jsx';
 import AssessmentRoom     from '../components/assessment/AssessmentRoom.jsx';
 import BattleModal       from '../components/battles/BattleModal.jsx';
+import NowStudying from '../components/now_studying/NowStudying';
 import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
 import AgentChatTab  from '../components/tabs/AgentChatTab.jsx';
@@ -694,6 +695,12 @@ export default function LearnerDashboard() {
             <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>{t('dash.start_session')}</span>
           </div>
         )}
+        {tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
+          <div onClick={()=>setShowNowStudying(true)} style={{ position:"fixed",bottom:24,right:18,zIndex:900,background:`linear-gradient(135deg,#10B981,#059669)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px #10B98150`,cursor:"pointer" }}>
+            <span style={{ fontSize:14,color:#10B981 }}>🟢</span>
+            <span style={{ fontSize:12,fontWeight:800,color:#10B981 }}>{t('now_studying')}</span>
+          </div>
+        )}
 
         {/* ── Overlays ── */}
 
@@ -765,7 +772,7 @@ export default function LearnerDashboard() {
         />}
         {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onClose={()=>setLiveBattleModal(null)}/>}
         {toast && <Toast msg={toast} color={toast.startsWith("🗓")?BRAND:RED} onDone={()=>setToast(null)}/>}
+      {showNowStudying && <NowStudying onClose={() => setShowNowStudying(false) />}}
       </div>
     </>
-  );
-}
+  );}
