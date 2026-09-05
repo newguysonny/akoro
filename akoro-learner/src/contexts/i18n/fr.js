@@ -589,6 +589,7 @@ export const FR = {
   'dhub.scope_search':       'Recherche',
   'dhub.course_results':     'Résultats de cours',
   'now.resume':              'Reprendre l’étude',
+  'now.resume_battle':   'Reprendre la bataille',
   'now.dismiss':             'Masquer',
   'now.minimize':            'Réduire et continuer plus tard',
   'now.minimized_toast':     'Suite en arrière-plan — reprenez depuis la barre au-dessus des onglets.',

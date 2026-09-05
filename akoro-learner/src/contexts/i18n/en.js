@@ -685,6 +685,7 @@ export const EN = {
   'dhub.scope_search':       'Search',
   'dhub.course_results':     'Course results',
   'now.resume':              'Resume studying',
+  'now.resume_battle':   'Resume battle',
   'now.dismiss':             'Dismiss',
   'now.minimize':            'Minimize & continue later',
   'now.minimized_toast':     'Continuing in the background — resume from the bar above your tabs.',

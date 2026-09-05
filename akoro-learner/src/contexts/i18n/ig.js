@@ -661,6 +661,7 @@ export const IG = {
   'dhub.scope_search':       'Ọchụchọ',
   'dhub.course_results':     'Nsonaazụ kọsị',
   'now.resume':              'Gaa n’ihu ọmụmụ',
+  'now.resume_battle':   'Malite agha ọzọ',
   'now.dismiss':             'ZoO',
   'now.minimize':            'Obelata ma emechaa meso',
   'now.minimized_toast':     'Na-aga n’ihu na azụ — malite ọzọ site na ogwe dị n’elu taabụ gị.',

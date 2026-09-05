@@ -661,6 +661,7 @@ export const PCM = {
   'dhub.scope_search':       'Search',
   'dhub.course_results':     'Course results',
   'now.resume':              'Continue studying',
+  'now.resume_battle':   'Resume the battle',
   'now.dismiss':             'Hide am',
   'now.minimize':            'Minimize make you continue later',
   'now.minimized_toast':     'E dey continue for background — resume am from the bar wey dey ontop your tabs.',

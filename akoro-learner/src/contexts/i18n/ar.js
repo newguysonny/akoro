@@ -642,6 +642,7 @@ export const AR = {
   'dhub.scope_search':       'بحث',
   'dhub.course_results':     'نتائج الدورات',
   'now.resume':              'متابعة الدراسة',
+  'now.resume_battle':   'استئناف المعركة',
   'now.dismiss':             'إخفاء',
   'now.minimize':            'تصغير ومتابعة لاحقًا',
   'now.minimized_toast':     'متابعة في الخلفية — استأنف من الشريط أعلى تبويباتك.',

@@ -649,6 +649,7 @@ export const PT = {
   'dhub.scope_search':       'Pesquisa',
   'dhub.course_results':     'Resultados de cursos',
   'now.resume':              'Retomar o estudo',
+  'now.resume_battle':   'Retomar a batalha',
   'now.dismiss':             'Dispensar',
   'now.minimize':            'Minimizar e continuar depois',
   'now.minimized_toast':     'Continuando em segundo plano — retome pela barra acima das abas.',

@@ -662,6 +662,7 @@ export const YO = {
   'dhub.scope_search':       'Àwárí',
   'dhub.course_results':     'Àwọn èsì kẹ́kọ̀ọ́',
   'now.resume':              'Tún bẹ̀rẹ̀ ẹ̀kọ́',
+  'now.resume_battle':   'Tún ìjà bẹ̀rẹ̀',
   'now.dismiss':             'Fi pamọ́',
   'now.minimize':            'Kéré méjì kí o tó tẹ̀síwájú',
   'now.minimized_toast':     'Ó ń tẹ̀síwájú ní abẹ́lẹ̀ — tún bẹ̀rẹ̀ láti ojú-ìpè ní òkè ìwọ̀n àbáa rẹ.',
