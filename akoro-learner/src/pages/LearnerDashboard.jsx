@@ -198,7 +198,7 @@ export default function LearnerDashboard() {
   // full-screen sheet that has its own layout.
   const showNowBar = higherEd && !!now.item && !now.dismissed
     && !(tab === "agent" && chatActive) && !selectedSession && !selectedChallenge
-    && !teachSession && !configOpen && !recordsOpen;
+    && !teachSession && !liveBattleModal && !configOpen && !recordsOpen;
 
   // ── Minimize — park a live session on the Now-Studying bar ──────────────
   const minimizeSessionSheet = () => {
@@ -238,12 +238,38 @@ export default function LearnerDashboard() {
     loadAgentSessions();
     setToast(t('now.minimized_toast'));
   };
+  // Battles keep running on the engine while parked — the modal is just a
+  // window onto the socket feed, so closing it loses nothing. ▶ re-opens
+  // with the freshest card from the battles list (snapshot as fallback).
+  const minimizeBattle = () => {
+    if (liveBattleModal) {
+      const b = battles.find(x => x.id === liveBattleModal.id) || liveBattleModal;
+      nowActs.setCurrent({
+        type: 'battle',
+        refId: b.id,
+        id: `battle-${b.id}`,
+        title: b.title || b.topic || 'Battle',
+        sub: b.status === 'live' ? t('now.battle_live') : t('now.battle_lobby'),
+        emoji: '⚔️',
+        progress: 0,
+        snapshot: b,
+      });
+    }
+    setLiveBattleModal(null);
+    setToast(t('now.minimized_toast'));
+  };
 
   // Bar ▶ — resume. Sessions reopen (live copy preferred, snapshot fallback);
   // records re-run the record open flow.
   const openNowItem = () => {
     if (!now.item) return;
-    if (now.item.type === 'session') {
+    if (now.item.type === 'battle') {
+      // Prefer the freshest card (status may have flipped while parked);
+      // fall back to the snapshot taken at minimize time.
+      const fresh = battles.find(x => x.id === now.item.refId) || now.item.snapshot;
+      if (fresh) setLiveBattleModal(fresh);
+      else setToast(t('now.battle_ended'));
+    } else if (now.item.type === 'session') {
       const live = [...agentSessions, ...sessions].find(x => x.id === now.item.id);
       openSessionTracked(live || now.item.snapshot || { id: now.item.id, title: now.item.title, progress: now.item.progress || 0 });
     } else {
@@ -1023,7 +1049,7 @@ export default function LearnerDashboard() {
             }
           }}
         />}
-        {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onClose={()=>setLiveBattleModal(null)}/>}
+        {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onMinimize={minimizeBattle} onClose={()=>setLiveBattleModal(null)}/>}
         {toast && <Toast msg={toast} color={toast.startsWith("🗓")?BRAND:RED} onDone={()=>setToast(null)}/>}
       </div>
     </>
