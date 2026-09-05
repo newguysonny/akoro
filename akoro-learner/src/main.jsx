@@ -4,6 +4,10 @@ import { io } from 'socket.io-client';
 import App from './App.jsx';
 import { API, initOfflineSync } from './services/api.js';
 import { isChunkError, recoverFromStaleChunk } from './utils/chunkRetry.js';
+// Tabler icons webfont — the app's `<i class="ti ti-*">` glyphs were written
+// against this set but the font was never loaded, so every icon rendered
+// invisible. Bundled locally (woff2), no runtime CDN.
+import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 import './index.css';
 
 // Global net for stale-chunk failures after a deploy — covers dynamic imports
@@ -75,6 +79,29 @@ if (isTenantHost) {
 
   // Replay any writes queued while offline (on boot + whenever we reconnect).
   initOfflineSync();
+
+  // Boot splash: index.html showed it for staged reloads (level/language/
+  // theme switch) and app-route cold starts (PWA launch). Fade it out once
+  // the app has painted and had a beat to restore the session, then clear
+  // any staged flag. Hard cap so a slow boot can never stick on the splash.
+  const stagedReload = (() => { try { return !!localStorage.getItem('akoro_boot_splash'); } catch { return false; } })();
+  const dismissLevelSplash = () => {
+    const s = document.getElementById('akoro-splash');
+    if (!s || s.dataset.closing === '1') return;
+    s.dataset.closing = '1';
+    s.style.transition = 'opacity .3s ease';
+    s.style.opacity = '0';
+    setTimeout(() => {
+      s.remove();
+      try { localStorage.removeItem('akoro_boot_splash'); } catch { /* noop */ }
+    }, 320);
+  };
+  if (typeof document !== 'undefined' && document.getElementById('akoro-splash')) {
+    // Staged reloads get a longer hold (the whole point is a deliberate
+    // re-entry); ordinary cold starts dismiss as soon as the app is up.
+    setTimeout(dismissLevelSplash, stagedReload ? 800 : 450);
+    setTimeout(dismissLevelSplash, 4000);   // safety net
+  }
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>

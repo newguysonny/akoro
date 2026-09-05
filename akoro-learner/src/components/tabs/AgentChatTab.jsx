@@ -43,7 +43,33 @@ const relTime = (iso) => {
 const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
 const AGENT_CONFIG = { name: '', avatars: AGENT_AVATARS };
 
-function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
+/* Collapsible "Thought process" — the reasoning model's streamed summary.
+   While the thoughts are still streaming it sits open (with a live shimmer);
+   once the answer starts (or the learner toggles it) it collapses. */
+function ThoughtBlock({ thinking, streaming }) {
+  const { t } = useLang();
+  const [open, setOpen] = useState(null);            // null = follow the stream
+  const expanded = open ?? streaming;
+  if (!thinking && !streaming) return null;
+  return (
+    <div style={{ marginBottom: 6, borderRadius: 12, border: "1px solid var(--ak-border)", background: "var(--ak-surface-hover)", overflow: "hidden" }}>
+      <button onClick={() => setOpen(!expanded)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Nunito',sans-serif" }}>
+        <span style={{ fontSize: 12 }}>🧠</span>
+        <span style={{ flex: 1, textAlign: "left", fontSize: 11, fontWeight: 800, color: "var(--ak-text-muted)", letterSpacing: .2 }}>{t('agent.thought_process')}</span>
+        {streaming && expanded
+          ? <span style={{ fontSize: 10, fontWeight: 800, color: BRAND, animation: "pulse-dot 1.2s ease-in-out infinite" }}>●</span>
+          : <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }}><polyline points="6 9 12 15 18 9"/></svg>}
+      </button>
+      {expanded && (
+        <div style={{ maxHeight: 150, overflowY: "auto", padding: "2px 12px 9px", fontSize: 11.5, lineHeight: 1.55, color: "var(--ak-text-muted)", whiteSpace: "pre-wrap", fontStyle: "italic" }}>
+          {thinking || "…"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActive }) {
   const { t } = useLang();
   const initName  = agentNameProp  || '';
   const initEmoji = agentEmojiProp || '🤖';
@@ -76,6 +102,59 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
   const [listError,  setListError]  = useState("");   // on the task list itself
   const [needsAgent, setNeedsAgent] = useState(false);
   const feedRef = useRef(null);
+
+  // ── Chat modes (Think / Research) + attachments ────────────────────────────
+  // Modes are exclusive: Think for careful reasoning, Research for a deeper,
+  // sourced study-guide answer. The choice persists across messages until the
+  // learner taps the pill again.
+  const [thinkMode,    setThinkMode]    = useState(false);
+  const [researchMode, setResearchMode] = useState(false);
+  const [attachments,  setAttachments]  = useState([]);   // {id, file, name, size, previewUrl}
+  const [attachError,  setAttachError]  = useState("");
+  const [statusLabel,  setStatusLabel]  = useState("");   // streaming phase ("Searching the syllabus…")
+  const fileInputRef   = useRef(null);
+  const MAX_FILES      = 4;
+  const MAX_FILE_MB    = 5;
+  const isSupportedFile = (f) =>
+    /^image\//.test(f.type) || f.type === "application/pdf" ||
+    /\.(txt|md|csv)$/i.test(f.name);
+
+  const addAttachments = (fileList) => {
+    const files = [...fileList];
+    if (!files.length) return;
+    setAttachError("");
+    const room = MAX_FILES - attachments.length;
+    if (room <= 0) { setAttachError(t('agent.attach_too_many').replace('{max}', MAX_FILES)); return; }
+    const accepted = [], rejected = [];
+    files.forEach((f) => {
+      if (!isSupportedFile(f) || f.size > MAX_FILE_MB * 1024 * 1024) rejected.push(f);
+      else if (accepted.length < room) accepted.push(f);
+    });
+    if (rejected.length) setAttachError(t('agent.attach_rejected').replace('{max}', MAX_FILE_MB));
+    if (accepted.length) {
+      setAttachments(prev => [...prev, ...accepted.map((f, i) => ({
+        id: Date.now() + "-" + i, file: f, name: f.name, size: f.size,
+        previewUrl: /^image\//.test(f.type) ? URL.createObjectURL(f) : null,
+      }))]);
+    }
+  };
+
+  const removeAttachment = (id) => {
+    setAttachments(prev => {
+      const hit = prev.find(a => a.id === id);
+      if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      return prev.filter(a => a.id !== id);
+    });
+  };
+
+  // File → data URL for the API (images go to vision; PDFs get decoded
+  // server-side for text extraction / scan OCR).
+  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
 
   // ── Persistent chat sessions ───────────────────────────────────────────────
   const [sessions,      setSessions]      = useState([]);
@@ -242,13 +321,26 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
 
   useEffect(()=>{ if(feedRef.current) feedRef.current.scrollTop=feedRef.current.scrollHeight; },[messages,loading]);
 
+  // Tell the dashboard whether the CHAT surface is showing (vs tasks/stats/
+  // self-study sub-tabs): the Now-Studying bar hides on chat only, per spec.
+  // Unmount also reports false so the bar returns when we leave this tab.
+  useEffect(() => {
+    onChatActive?.(innerTab === "chat");
+    return () => onChatActive?.(false);
+  }, [innerTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const sendMessage=async(overrideText)=>{
-    const text=(overrideText??input).trim();
+    // Attachments can be sent with an empty message — a friendly default text
+    // stands in so the model (and the transcript) knows what's being asked.
+    const raw=(overrideText??input).trim();
+    const text=raw || (attachments.length ? t('agent.attach_default_msg') : "");
     if(!text||loading) return;
     if(!overrideText) setInput("");
     const ts=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    const userMsg={id:Date.now(),from:"me",text,time:ts};
+    const userMsg={id:Date.now(),from:"me",text,time:ts,attachments:attachments.map(a=>({name:a.name,previewUrl:a.previewUrl}))};
+    const sentAttachments=attachments;
     setMessages(prev=>[...prev,userMsg]); setLoading(true);
+    setAttachError(""); setStatusLabel("");
 
     // Persist the user message (creating the session on first send). Errors are
     // swallowed inside the helpers so the chat still works offline.
@@ -259,7 +351,8 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
 
     // Agentic task intents ("quiz me", "explain…", "study plan", "remind me",
     // "challenge…") run a real task and stream the result back into the chat.
-    if(isTaskIntent(text)){
+    // With attachments in play the message is about THOSE files — always tutor.
+    if(!sentAttachments.length && isTaskIntent(text)){
       pushAgent(t('agent.error_working'));   // transient status — not persisted
       try {
         const task = await createTask({ title: text, priority: "medium" });
@@ -281,11 +374,17 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       return;
     }
 
-    // Normal AI chat — OpenAI educational tutor (no tasks/tools).
-    // Stream tokens so the reply starts appearing immediately; fall back to a
-    // plain request if the stream can't be established.
+    // Normal AI chat — OpenAI educational tutor. mode: "think" runs a
+    // reasoning model (its thought summary streams separately), "research" a
+    // deeper grounded pass. Attachments: images → vision, PDFs/text → context.
+    const mode = thinkMode ? "think" : researchMode ? "research" : "default";
+    const statusKey = { grounding:'agent.status_grounding', attachments:'agent.status_attachments', thinking:'agent.status_thinking', synthesis:'agent.status_synthesis' };
+    const attachmentsPayload = await Promise.all(sentAttachments.map(async (a) => ({
+      name: a.name, type: a.file.type || "", dataUrl: await fileToDataUrl(a.file),
+    })));
     const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
-    const payload={ message: text, history: history.slice(-8), agentName, role: "student" };
+    const payload={ message: text, history: history.slice(-8), agentName, role: "student", mode,
+      ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const replyId=Date.now()+Math.random();
     let started=false;
@@ -293,17 +392,27 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       if(started) return;
       started=true;
       setLoading(false);   // hide typing dots — the bubble now carries the text
-      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2}]);
+      setMessages(prev=>[...prev,{id:replyId,from:"agent",text:"",time:t2,thinking:"",phase:"thinking"}]);
+    };
+    const appendThinking=(chunk)=>{
+      ensureBubble();
+      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,thinking:m.thinking+chunk}:m));
     };
     const appendDelta=(chunk)=>{
       ensureBubble();
-      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:m.text+chunk}:m));
+      setStatusLabel("");
+      setMessages(prev=>prev.map(m=>m.id===replyId?{...m,text:m.text+chunk,phase:"answering"}:m));
     };
     let finalReply="";
     try {
       finalReply = await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
         onDelta: appendDelta,
-        onDone: ({ reply, syllabus })=>{ ensureBubble(); setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),syllabus:syllabus||[]}:m)); },
+        onThinking: appendThinking,
+        onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
+        onDone: ({ reply, syllabus, pastQuestions, thinking })=>{
+          ensureBubble(); setStatusLabel("");
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done"}:m));
+        },
       });
       if(!started){ // stream produced nothing — show fallback text
         finalReply=t('agent.fallback');
@@ -311,11 +420,13 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       }
     } catch {
       // Streaming failed before any token — try a normal request, then error.
+      setStatusLabel("");
       if(!started){
         try {
           const data = await apiPost("/api/adaptive/chat/tutor", payload);
           finalReply = data.reply || data.response || t('agent.fallback');
-          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,syllabus:data.syllabus||[]}]);
+          setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
+            thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[]}]);
         } catch {
           finalReply="";
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
@@ -323,6 +434,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
       }
     }
     if(finalReply && finalReply.trim()) persistToSession(sid, "agent", finalReply);
+    // Attachments are consumed by this message; free the preview URLs.
+    sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
+    setAttachments([]);
     setLoading(false);
   };
 
@@ -439,11 +553,22 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
           <div ref={feedRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12 }}>
             {messages.map(msg=>{
               const isMe=msg.from==="me";
+              const thinkingStream=!isMe&&msg.phase==="thinking";
               return (
                 <div key={msg.id} style={{ display:"flex",justifyContent:isMe?"flex-end":"flex-start",alignItems:"flex-end",gap:8 }}>
                   {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div>}
                   <div style={{ maxWidth:"78%" }}>
-                    <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
+                    {!isMe&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
+                    {(!msg.phase||msg.text)&&(
+                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
+                    )}
+                    {isMe&&msg.attachments?.length>0&&(
+                      <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
+                        {msg.attachments.map((a,i)=>a.previewUrl
+                          ? <img key={i} src={a.previewUrl} alt={a.name} style={{ width:52,height:52,objectFit:"cover",borderRadius:10,border:"1px solid rgba(255,255,255,.4)" }}/>
+                          : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"rgba(255,255,255,.18)",color:"#fff" }}>📄 {a.name}</span>)}
+                      </div>
+                    )}
                     {!isMe&&msg.syllabus?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                         {msg.syllabus.map((s,i)=>(
@@ -453,21 +578,67 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp }) {
                         ))}
                       </div>
                     )}
+                    {!isMe&&msg.pastQuestions?.length>0&&(
+                      <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
+                        {msg.pastQuestions.map((s,i)=>(
+                          <span key={i} title={`${s.exam} ${s.year||""}${s.subject?` · ${s.subject}`:""}${s.topic?` — ${s.topic}`:""}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.35)",color:"#B45309",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
+                            📝 {s.exam}{s.year?` ${s.year}`:""}{s.topic?` · ${s.topic}`:""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,textAlign:isMe?"right":"left" }}>{msg.time}</div>
                   </div>
                 </div>
               );
             })}
-            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:4,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
+            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
+            {loading&&statusLabel&&<div style={{ display:"flex",alignItems:"center",gap:6,margin:"-6px 0 0 38px" }}><span style={{ fontSize:10.5,fontWeight:800,color:BRAND,animation:"pulse-dot 1.4s ease-in-out infinite" }}>●</span><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{statusLabel}</span></div>}
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
-            <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 16px" }}>
+            {attachError&&(
+              <div style={{ display:"flex",alignItems:"center",gap:8,margin:"0 0 8px",padding:"7px 11px",borderRadius:10,background:"rgba(239,68,68,.10)",border:`1px solid ${RED}35` }}>
+                <span style={{ flex:1,fontSize:11,fontWeight:700,color:RED }}>{attachError}</span>
+                <button onClick={()=>setAttachError("")} style={{ border:"none",background:"transparent",color:RED,cursor:"pointer",fontSize:13,fontWeight:900,padding:0 }}>×</button>
+              </div>
+            )}
+            {attachments.length>0&&(
+              <div style={{ display:"flex",flexWrap:"wrap",gap:7,margin:"0 0 9px" }}>
+                {attachments.map(a=>(
+                  <div key={a.id} style={{ position:"relative" }}>
+                    {a.previewUrl
+                      ? <img src={a.previewUrl} alt={a.name} style={{ width:54,height:54,objectFit:"cover",borderRadius:12,border:"1.5px solid var(--ak-border2)",display:"block" }}/>
+                      : <div style={{ maxWidth:170,display:"flex",alignItems:"center",gap:5,padding:"10px 30px 10px 11px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)" }}>
+                          <span style={{ fontSize:15 }}>📄</span>
+                          <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{a.name}</span>
+                        </div>}
+                    <button onClick={()=>removeAttachment(a.id)} title={t('agent.attach_remove')} aria-label={t('agent.attach_remove')} style={{ position:"absolute",top:-6,right:-6,width:19,height:19,borderRadius:"50%",border:"none",background:"var(--ak-text)",color:"var(--ak-surface)",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,.25)" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 8px" }}>
+              <button onClick={()=>fileInputRef.current?.click()} disabled={loading} title={t('agent.attach_add')} aria-label={t('agent.attach_add')} style={{ width:34,height:34,borderRadius:"50%",border:"1.5px dashed var(--ak-border3)",background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:loading?"not-allowed":"pointer",flexShrink:0,opacity:loading?.45:1,transition:"border-color .15s" }}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
               <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={t('agent.ask_anything').replace('{name}', shownName)} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
-              <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+              <button onClick={()=>sendMessage()} disabled={loading||!input.trim()&&!attachments.length} style={{ width:36,height:36,borderRadius:"50%",background:(input.trim()||attachments.length)?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:(input.trim()||attachments.length)?"pointer":"default",flexShrink:0,transition:"background .2s" }}><SendIcon size={15} color={(input.trim()||attachments.length)?"#fff":"var(--ak-text-muted)"}/></button>
+            </div>
+            {/* Mode pills — Think & Research switch the tutor's engine; Task
+                keeps its gold accent and opens the task sheet. */}
+            <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:9 }}>
+              <button onClick={()=>{setThinkMode(v=>!v);setResearchMode(false);}} disabled={loading} title={t('agent.mode_think_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${thinkMode?`${BRAND}55`:"var(--ak-border2)"}`,background:thinkMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:thinkMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
+                🧠 {t('agent.mode_think')}
+              </button>
+              <button onClick={()=>{setResearchMode(v=>!v);setThinkMode(false);}} disabled={loading} title={t('agent.mode_research_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${researchMode?`${BRAND}55`:"var(--ak-border2)"}`,background:researchMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:researchMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
+                🔬 {t('agent.mode_research')}
+              </button>
+              <div style={{ flex:1 }}/>
+              <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
                 <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>{t('agent.task')}
               </button>
-              <button onClick={()=>sendMessage()} style={{ width:36,height:36,borderRadius:"50%",background:input.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:input.trim()?"pointer":"default",flexShrink:0,transition:"background .2s" }}><SendIcon size={15} color={input.trim()?"#fff":"var(--ak-text-muted)"}/></button>
             </div>
+            <input ref={fileInputRef} type="file" multiple accept="image/*,application/pdf,.txt,.md,.csv" style={{ display:"none" }} onChange={e=>{addAttachments(e.target.files); e.target.value="";}}/>
           </div>
         </>
       )}

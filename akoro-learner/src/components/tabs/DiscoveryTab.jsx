@@ -153,7 +153,7 @@ function AgentCard({ listing, owned, onOpen, wide, inCart }) {
         {owned
           ? <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>{t('discovery.owned')}</span>
           : inCart && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>🛒 In cart</span>}
-        <span style={{ position: 'absolute', bottom: 7, right: 7, fontSize: 9, fontWeight: 900, color: sc, background: '#fff', padding: '3px 7px', borderRadius: 6, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
+        <span style={{ position: 'absolute', bottom: 7, right: 7, fontSize: 9, fontWeight: 900, color: sc, background: 'var(--ak-surface)', padding: '3px 7px', borderRadius: 6, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
       </div>
 
       <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.25,
@@ -376,7 +376,7 @@ function PurchaseHistorySheet({ onClose }) {
 }
 
 /* ── Main tab ──────────────────────────────────────────────── */
-export default function DiscoveryTab() {
+export default function DiscoveryTab({ initialQuery = '' }) {
   const { t } = useLang();
   const navigate = useNavigate();
   const [agents,  setAgents]  = useState([]);
@@ -386,7 +386,9 @@ export default function DiscoveryTab() {
   const [lLive,   setLLive]   = useState(true);
   const [lVideo,  setLVideo]  = useState(true);
   const [cat,     setCat]     = useState('all');
-  const [query,   setQuery]   = useState('');
+  // Seedable so the higher-ed Discover hub can hand a search over when the
+  // learner taps Courses with text already in the hub's search box.
+  const [query,   setQuery]   = useState(initialQuery);
   const [ownedIds, setOwnedIds] = useState(new Set());
   const [expanded, setExpanded] = useState({});   // { live, video, guides }
   const [toast,    setToast]    = useState(null);

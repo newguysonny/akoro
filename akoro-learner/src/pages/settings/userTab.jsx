@@ -10,7 +10,7 @@ import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
 import {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, rowBase,
-  COUNTRIES, GUIDES, SCHOOL_TYPES, YEARS, LANGUAGES,
+  COUNTRIES, GUIDES, SCHOOL_TYPES, STUDY_LEVELS, YEARS, LANGUAGES,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
@@ -193,26 +193,46 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     } catch {
       showToast('Saved locally ✓');
     }
+
+    /* Level, language and theme switches all re-derive the whole app (the
+       school ↔ higher-ed tier reads studyLevel/schoolType; language and
+       theme come from storage at boot), so a plain state update isn't
+       enough — stage the branded boot splash and hard-reload so every
+       screen re-renders from the new setting. Runs on the saved-locally
+       path too: the queued write replays after the reload. */
+    if (['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
+        && val && val !== profile[field]) {
+      try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+      setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+    }
   }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);
 
   return (
     <div style={{ padding:'20px 0 0' }}>
-      {/* Order history card */}
-      <button onClick={()=>navigate('/orders')}
-        style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
-          margin:'0 16px 14px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
-          background:'var(--ak-surface)',border:'1px solid var(--ak-border)',
-          boxShadow:'0 1px 6px rgba(0,0,0,.06)',fontFamily:"'Nunito',sans-serif",textAlign:'left' }}>
-        <span style={{ width:38,height:38,borderRadius:11,flexShrink:0,background:`${color}18`,
-          display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <Icon name="ti-receipt" size={19} color={color}/>
-        </span>
-        <span style={{ flex:1,minWidth:0 }}>
-          <span style={{ display:'block',fontSize:14,fontWeight:800,color:'var(--ak-text)' }}>Order history</span>
-          <span style={{ display:'block',fontSize:12,color:'var(--ak-text-muted)' }}>Your payments &amp; receipts</span>
-        </span>
-        <Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>
-      </button>
+      {/* Quick-link cards — one design (same as the original Order history
+          card): tinted icon chip, title + sub, chevron. Order history is
+          live; Activities & Library are coming-soon for now. */}
+      {[
+        { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
+        { icon:'ti-activity', title:'settings.activities',    sub:'settings.activities_sub',    go:()=>showToast(t('settings.soon_toast')) },
+        { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>showToast(t('settings.soon_toast')) },
+      ].map(card => (
+        <button key={card.title} onClick={card.go}
+          style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
+            margin:'0 16px 14px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
+            background:'var(--ak-surface)',border:'1px solid var(--ak-border)',
+            boxShadow:'0 1px 6px rgba(0,0,0,.06)',fontFamily:"'Nunito',sans-serif",textAlign:'left' }}>
+          <span style={{ width:38,height:38,borderRadius:11,flexShrink:0,background:`${color}18`,
+            display:'flex',alignItems:'center',justifyContent:'center' }}>
+            <Icon name={card.icon} size={19} color={color}/>
+          </span>
+          <span style={{ flex:1,minWidth:0 }}>
+            <span style={{ display:'block',fontSize:14,fontWeight:800,color:'var(--ak-text)' }}>{t(card.title)}</span>
+            <span style={{ display:'block',fontSize:12,color:'var(--ak-text-muted)' }}>{t(card.sub)}</span>
+          </span>
+          <Icon name="ti-chevron-right" size={18} color="var(--ak-text-muted)"/>
+        </button>
+      ))}
 
       {/* Profile hero */}
       <div style={{ display:'flex',alignItems:'center',gap:14,background:'var(--ak-surface)',
@@ -249,6 +269,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
 
       <Section title={t('settings.learn_study')}>
+        <Row icon="ti-school" label={t('settings.study_level')} value={profile.studyLevel||t('settings.not_set')}
+          onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
         <Row icon="ti-chalkboard" label={t('settings.teaching_guide')}
           value={`${profile.guideEmoji||'🧠'} ${profile.teachingGuide||'NaNa Esumai'}`}
           onClick={()=>openSheet('teachingGuide',t('settings.teaching_guide'),'select',guides.length ? guides : GUIDES)}/>

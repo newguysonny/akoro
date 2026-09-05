@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useLang } from '../../contexts/LanguageContext.jsx';
 import { XIcon, UsersIcon, TrophyIcon, FlameIcon, BookIcon, PlayIcon, ZapIcon } from '../common/Icons.jsx';
 import { LiveBadge } from '../common/ProgressBar.jsx';
 
@@ -28,8 +29,9 @@ const mapStateP = (p) => ({
   score: p.score ?? 0, hp: p.hp ?? 100, streak: p.current_streak ?? p.streak ?? 0,
 });
 
-export default function BattleModal({ battle: initialBattle, onClose }) {
+export default function BattleModal({ battle: initialBattle, onClose, onMinimize }) {
   const { user } = useAuth();
+  const { t } = useLang();
   const myId = user?.id;
   const battleId = initialBattle?.id;
 
@@ -283,6 +285,15 @@ export default function BattleModal({ battle: initialBattle, onClose }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', display: 'flex', alignItems: 'center', gap: 4 }}><UsersIcon size={11} color="rgba(255,255,255,.45)" />{viewerCount || participants.length}</span>
+            {/* Minimize — park the battle on the Now-Studying bar. The engine
+                keeps running while it's parked, so this is non-destructive;
+                hidden once completed (nothing left to continue). */}
+            {onMinimize && !isCompleted && (
+              <button onClick={onMinimize} aria-label={t('now.minimize')} title={t('now.minimize')}
+                style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,.10)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            )}
             <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,.10)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><XIcon size={14} color="rgba(255,255,255,.6)" /></button>
           </div>
         </div>

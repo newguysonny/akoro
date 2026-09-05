@@ -9,7 +9,7 @@ import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function TeachAgentModal({ session, config, onClose, onSessionStarted }) {
+function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
@@ -687,6 +687,7 @@ function TeachAgentModal({ session, config, onClose, onSessionStarted }) {
         userTurns={userTurns}
         showSummarize={userTurns >= 2 && !summary}
         onSummarize={generateSummary}
+        onMinimize={onMinimize}
         recording={recording}
         onToggleRecording={toggleRecording}
         seconds={seconds}

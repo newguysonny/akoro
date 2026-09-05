@@ -4,7 +4,7 @@ import { PlayIcon, PhoneIcon, MessageIcon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, agentProfile }) {
+function SessionSheet({ session, onClose, onMinimize, onStartTeach, onAssess, decayAlert, agentProfile }) {
   const { t } = useLang();
   const sc           = SUBJECT_COLORS[session.subject] || BRAND;
   const pri          = PRIORITY_CONFIG[session.priority] || { dot:BRAND, bg:`${BRAND}10`, color:BRAND, label:"Upcoming", pulse:false };
@@ -180,6 +180,12 @@ function SessionSheet({ session, onClose, onStartTeach, onAssess, decayAlert, ag
 
       {/* CTA buttons */}
       <div style={{ display:"flex",gap:10 }}>
+        {onMinimize && (
+          <button onClick={onMinimize} title={t('now.minimize')} aria-label={t('now.minimize')}
+            style={{ flex:'0 0 auto',width:48,padding:"13px 0",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        )}
         <button onClick={onClose} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.close')}</button>
         <button onClick={()=>{onClose();onStartTeach(session);}}
           style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:ctaBg,

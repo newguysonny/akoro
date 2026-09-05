@@ -7,7 +7,7 @@ const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function DecaySessionModal({ alert, onClose, agentProfile }) {
+function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
   // Hold the activity lock so an auto-reload can't interrupt a decay session.
   useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
@@ -198,6 +198,7 @@ function DecaySessionModal({ alert, onClose, agentProfile }) {
       mode="decay"
       userTurns={userTurns}
       showSummarize={false}
+      onMinimize={onMinimize}
       recording={recording}
       onToggleRecording={toggleRecording}
       seconds={seconds}

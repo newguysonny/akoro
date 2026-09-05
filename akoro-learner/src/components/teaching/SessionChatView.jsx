@@ -40,6 +40,7 @@ function SessionChatView({
   guideLabel, onSwitchAgent, switching,
   connState = "connected",
   onClose,
+  onMinimize,
 }) {
   const { t } = useLang();
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
@@ -112,6 +113,15 @@ function SessionChatView({
                 border:`1px solid ${sc}44`,borderRadius:12,padding:"7px 12px",cursor:"pointer" }}>
               <SparkleIcon size={13} color={sc}/>
               <span style={{ fontSize:11,fontWeight:800,color:sc }}>{t('teaching.summarize')}</span>
+            </div>
+          )}
+          {/* Minimize — keep the session running, park it on the Now-Studying
+              bar. Non-destructive, so no confirm like close. */}
+          {onMinimize && (
+            <div onClick={onMinimize} role="button" aria-label={t('now.minimize')} title={t('now.minimize')}
+              style={{ width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.07)",
+                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </div>
           )}
           <div onClick={handleCloseRequest}
