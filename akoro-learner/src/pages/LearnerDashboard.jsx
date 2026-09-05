@@ -628,8 +628,11 @@ export default function LearnerDashboard() {
 
       <div style={{ width:"100vw",height:"100vh",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 
-        {/* HEADER */}
-        <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
+        {(tab==="sessions"||tab==="challenges")&&(
+          /* HEADER — Learn tab only ("sessions"). Challenges is Learn's
+             second pill, so it shares the header that holds the pills;
+             every other tab renders headerless. */
+          <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
               <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
@@ -684,6 +687,7 @@ export default function LearnerDashboard() {
           </div>
           )}
         </div>
+        )}
 
         {/* SCROLLABLE CONTENT */}
         <div style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
