@@ -4,9 +4,11 @@
  * ─────────────────────────────────────────────────────────────
  * Renders DiscoverSearchPage on the server (no browser) and asserts
  * the structure that matters: dialog shell, back button, autofocused
- * input, recent searches (seeded + empty-hint variants), live
- * filtered results with tile gradients, the no-match empty state,
- * and the pushRecent history logic. Run from akoro-learner:
+ * input, SCOPE-TAGGED recent searches (section chip/label vs 🔍
+ * Search, incl. legacy string-array migration), the friendly
+ * no-recents state with Try chips, LIVE course results (seeded via
+ * initialCourses), type filtering, the no-match empty state, and the
+ * pushRecent/matchCourse logic. Run from akoro-learner:
  *
  *   node scripts/check-dhub-search.mjs
  */
@@ -53,7 +55,7 @@ const vite = await createServer({
 try {
   const mod = await vite.ssrLoadModule('/src/components/tabs/DiscoverSearchPage.jsx');
   const DiscoverSearchPage = mod.default;
-  const { pushRecent } = mod;
+  const { pushRecent, matchCourse, RECENTS_KEY } = mod;
   const { LanguageProvider } = await vite.ssrLoadModule('/src/contexts/LanguageContext.jsx');
 
   const clean = (html) => html.replaceAll('<!-- -->', '');
@@ -62,47 +64,75 @@ try {
       React.createElement(DiscoverSearchPage, { onClose: () => {}, onPick: () => {}, ...props }))));
 
   let ok = true;
-  const report = (name, pass) => { console.log(`  ${name.padEnd(26)} ${pass}`); ok &&= pass; };
+  const report = (name, pass) => { console.log(`  ${name.padEnd(28)} ${pass}`); ok &&= pass; };
 
-  /* Seed two recent searches, then render the blank-query state. */
-  globalThis.localStorage.setItem('akoro.dhubRecents', JSON.stringify(['pharmacy materials', 'clinical rotations']));
+  /* Seed two SCOPE-TAGGED recents, then render the blank-query state. */
+  globalThis.localStorage.setItem(RECENTS_KEY, JSON.stringify([
+    { q: 'pharmacy materials', scope: 'courses' },
+    { q: 'clinical rotations', scope: 'search' },
+  ]));
   const html = render();
   const has = (s) => html.includes(s);
 
   const checks = [
-    ['dialog shell',        has('role="dialog"') && has('aria-modal="true"')],
-    ['back button',         has('aria-label="Close search"')],
-    ['search input',        has('Search topics or jump to a section') && has('aria-label="Search Discover"')],
-    ['full-screen fixed',   has('position:fixed') && has('inset:0')],
-    ['recent header',       has('Recent searches')],
-    ['recent items ×2',     has('pharmacy materials') && has('clinical rotations')],
-    ['clear-all button',    has('Clear all')],
-    ['remove buttons ×2',   (html.match(/aria-label="Remove /g) || []).length === 2],
+    ['dialog shell',          has('role="dialog"') && has('aria-modal="true"')],
+    ['back button',           has('aria-label="Close search"')],
+    ['search input',          has('Search topics or jump to a section') && has('aria-label="Search Discover"')],
+    ['full-screen fixed',     has('position:fixed') && has('inset:0')],
+    ['recent header',         has('Recent searches')],
+    ['recent items ×2',       has('pharmacy materials') && has('clinical rotations')],
+    ['scope tags + chips',    has('>Courses<') && has('>Search<') && has('linear-gradient(140deg,#F28C52,#DE5F26)')],
+    ['clear-all button',      has('Clear all')],
+    ['remove buttons ×2',     (html.match(/aria-label="Remove /g) || []).length === 2],
   ];
   for (const [name, pass] of checks) report(name, pass);
 
-  /* No recents at all → start-typing hint, section header hidden. */
-  globalThis.localStorage.removeItem('akoro.dhubRecents');
+  /* Legacy recents (bare strings) still load, tagged 🔍 Search. */
+  globalThis.localStorage.setItem(RECENTS_KEY, JSON.stringify(['old school strings']));
+  const legacy = render();
+  report('legacy recents migrate', legacy.includes('old school strings') && legacy.includes('>Search<'));
+
+  /* No recents at all → friendly state + Try chips, section hidden. */
+  globalThis.localStorage.removeItem(RECENTS_KEY);
   const fresh = render();
-  const hintOk = fresh.includes('Start typing to search topics and sections') && !fresh.includes('Recent searches');
-  report('no-recents hint', hintOk);
+  report('no-recents friendly state',
+    fresh.includes('No recent searches yet.') && fresh.includes('Try:')
+      && fresh.includes('>Courses<') && !fresh.includes('Recent searches'));
 
-  /* Typed query → results over the types, recents out of the way. */
-  const pharm = render({ initialQuery: 'pharm' });
-  const resultsOk = pharm.includes('Pharm D') && pharm.includes('Results')
-    && pharm.includes('linear-gradient(140deg,#14B8A6,#0C7E72)') && !pharm.includes('Recent searches');
-  report('filtered results (pharm)', resultsOk);
+  /* Typed query → live course rows first, matching types after. */
+  const seededCourses = [
+    { id: 1, slug: 'clinical-pharmacy-basics', title: 'Clinical Pharmacy Basics', subject: 'Pharmacy', _kind: 'video', price: 'Free' },
+    { id: 2, slug: 'roman-history', title: 'Roman History 101', subject: 'History', _kind: 'live' },
+  ];
+  const pharm = render({ initialQuery: 'pharm', initialCourses: seededCourses });
+  report('live course results',
+    pharm.includes('Course results') && pharm.includes('Clinical Pharmacy Basics') && !pharm.includes('Roman History 101'));
+  report('type results below', pharm.includes('Pharm D') && pharm.includes('Results') && !pharm.includes('Recent searches'));
 
-  /* Gibberish query → no-match empty state + clear action. */
-  const none = render({ initialQuery: 'zzzz-nope' });
-  const noneOk = none.includes('Nothing matches that search.') && none.includes('Clear search');
-  report('no-match empty state', noneOk);
+  /* Gibberish query (and no matching courses) → no-match empty state. */
+  const none = render({ initialQuery: 'zzzz-nope', initialCourses: seededCourses });
+  report('no-match empty state', none.includes('Nothing matches that search.') && none.includes('Clear search'));
 
-  /* Recent-history logic: dedupe + trim + most-recent-first + cap. */
-  const dedupeOk = JSON.stringify(pushRecent(['a', 'b'], ' b ')) === JSON.stringify(['b', 'a']);
-  const capOk = pushRecent(['1', '2', '3', '4', '5', '6', '7', '8'], '9').join(',') === '9,1,2,3,4,5,6,7';
-  const blankOk = JSON.stringify(pushRecent(['a'], '   ')) === JSON.stringify(['a']);
-  report('pushRecent logic', dedupeOk && capOk && blankOk);
+  /* Recent-history logic: scope tags, dedupe keeps newest scope, legacy
+     inputs, cap, blank rejection. */
+  const pushOk =
+    JSON.stringify(pushRecent([{ q: 'a', scope: 'search' }], 'b', 'pharmd'))
+      === JSON.stringify([{ q: 'b', scope: 'pharmd' }, { q: 'a', scope: 'search' }])
+    && JSON.stringify(pushRecent([{ q: 'x', scope: 'search' }], 'x', 'courses'))
+      === JSON.stringify([{ q: 'x', scope: 'courses' }])
+    && JSON.stringify(pushRecent(['a'], ' a ', 'search'))
+      === JSON.stringify([{ q: 'a', scope: 'search' }])
+    && pushRecent(['1', '2', '3', '4', '5', '6', '7', '8'], '9', 'live').map((r) => r.q).join(',') === '9,1,2,3,4,5,6,7'
+    && pushRecent(['a'], '   ').length === 1;
+  report('pushRecent logic', pushOk);
+
+  /* Live course matcher: title/subject, case-insensitive, blank-safe. */
+  const mcOk =
+    matchCourse({ title: 'Clinical Pharmacy Basics', subject: 'Pharmacy' }, 'PHARM')
+    && matchCourse({ title: 'X', subject: 'Pharmacology' }, 'pharm')
+    && !matchCourse({ title: 'Roman History 101' }, 'pharm')
+    && !matchCourse({ title: 'Anything' }, '   ');
+  report('matchCourse logic', mcOk);
 
   console.log(ok ? 'SEARCH RENDER OK' : 'SEARCH RENDER FAILED');
   process.exitCode = ok ? 0 : 1;

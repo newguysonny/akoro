@@ -26,7 +26,7 @@ import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-export default function DiscoverHub({ onOpenCourses, initialQuery = '' }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -149,6 +149,7 @@ export default function DiscoverHub({ onOpenCourses, initialQuery = '' }) {
           initialQuery={query}
           onClose={() => setSearchOpen(false)}
           onPick={onSearchPick}
+          onOpenCourse={onOpenCourse}
         />
       )}
 
