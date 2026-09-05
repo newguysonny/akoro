@@ -173,5 +173,11 @@ export default defineConfig({
       },
     }),
   ],
-  server: { port: 3000, host: true },
+  server: {
+    port: 3000,
+    host: true,
+    // Arena's live-preview proxies the dev server under *.e2b.app — without
+    // this, Vite 5 rejects that Host header with 403. Dev-only; harmless.
+    allowedHosts: true,
+  },
 });
