@@ -9,59 +9,44 @@
  * Live classes is its own product, deliberately NOT the Learn tab's
  * live sessions view, which is a different thing.)
  *
+ * Card design: bold 2-col colour-block tiles (music-app browse energy)
+ * but distinctly ours — per-type gradient washes rather than flat
+ * fills, and a tilted glass "study flashcard" holding the category
+ * emoji tucked into the corner (not a rotated album sleeve). The
+ * colour blocks are theme-independent by design; all surrounding
+ * chrome (header, search, empty state) stays on --ak tokens.
+ *
  * Gated by isHigherEdUI() in LearnerDashboard — school learners keep
  * the current DiscoveryTab feed directly.
  */
 import { useState } from 'react';
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { BRAND, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
+import DiscoverSearchPage from './DiscoverSearchPage.jsx';
+import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-const FONT = "'Nunito', sans-serif";
-
-/* Accent + art per type card. Order matches the product spec:
-   Notes/Materials, Courses, Pharm D, Teaching guide, Live classes. */
-const TYPES = (t) => ([
-  {
-    key: 'notes', icon: '📝', accent: GOLD, soon: true,
-    label: t('dhub.card_notes'), desc: t('dhub.card_notes_desc'),
-    kw: 'notes materials library records pdf document upload link paste',
-  },
-  {
-    key: 'courses', icon: '📚', accent: BRAND, soon: false, primary: true,
-    label: t('dhub.card_courses'), desc: t('dhub.card_courses_desc'),
-    kw: 'courses video lessons catalogue study curriculum marketplace',
-  },
-  {
-    key: 'pharmd', icon: '💊', accent: GREEN, soon: true,
-    label: t('dhub.card_pharmd'), desc: t('dhub.card_pharmd_desc'),
-    kw: 'pharm d pharmacy doctor program clinical pharmacology',
-  },
-  {
-    key: 'guide', icon: '🧑🏽‍🏫', accent: '#8B5CF6', soon: true,
-    label: t('dhub.card_guide'), desc: t('dhub.card_guide_desc'),
-    kw: 'teaching guide teacher agents tutors trained',
-  },
-  {
-    key: 'live', icon: '📡', accent: RED, soon: true,
-    label: t('dhub.card_live'), desc: t('dhub.card_live_desc'),
-    kw: 'live classes real time tutors stream broadcast',
-  },
-]);
-
-export default function DiscoverHub({ onOpenCourses }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery = '' }) {
   const { t } = useLang();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const all = TYPES(t);
-  const q = query.trim().toLowerCase();
-  const visible = !q ? all : all.filter((ty) =>
-    `${ty.label} ${ty.desc} ${ty.kw}`.toLowerCase().includes(q));
+  const visible = matchTypes(t, query);
 
-  const activate = (ty) => {
-    if (ty.key === 'courses') onOpenCourses?.(query.trim());
+  const activate = (ty, qOverride) => {
+    const q = qOverride ?? query.trim();
+    if (ty.key === 'courses') onOpenCourses?.(q);
     else setToast({ msg: `${ty.label} — ${t('dhub.coming_soon')}`, color: GOLD });
+  };
+
+  /* Picked from the full-screen search page: close it, reflect the
+     query on the hub behind, then activate the chosen card. */
+  const onSearchPick = (ty, q) => {
+    setSearchOpen(false);
+    setQuery(q);
+    activate(ty, q);
   };
 
   // Enter = the first thing the grid is showing (Courses leads when the
@@ -81,16 +66,22 @@ export default function DiscoverHub({ onOpenCourses }) {
         </p>
       </div>
 
-      {/* Search */}
+      {/* Search — opening the box raises the full-screen search page
+          (typing, recent searches and live results live there); the hub
+          box stays read-only so returning with a query still filters. */}
       <div style={{ padding: '10px 16px 4px' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}>🔍</span>
           <input
+            readOnly
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') onEnter(); }}
+            onFocus={() => setSearchOpen(true)}
+            onClick={() => setSearchOpen(true)}
             placeholder={t('dhub.search_ph')}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 38px 12px 36px', borderRadius: 14, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
+            aria-label={t('dhub.search_aria')}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 38px 12px 36px', borderRadius: 14, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none', cursor: 'pointer' }}
           />
           {query && (
             <button onClick={() => setQuery('')} aria-label={t('dhub.clear')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
@@ -98,33 +89,46 @@ export default function DiscoverHub({ onOpenCourses }) {
         </div>
       </div>
 
-      {/* Type cards grid */}
+      {/* Type cards grid — colour-block tiles */}
       {visible.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '10px 16px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, padding: '12px 16px 0' }}>
+          <style>{`.dhub-card{transition:transform .15s ease,box-shadow .15s ease}.dhub-card:hover{transform:translateY(-2px)}.dhub-card:active{transform:scale(.97)}`}</style>
           {visible.map((ty) => (
-            <div key={ty.key} onClick={() => activate(ty)} role="button" aria-label={ty.label}
-              style={{ position: 'relative', cursor: 'pointer', borderRadius: 18, padding: '14px 13px',
-                background: 'var(--ak-surface)', border: ty.primary ? `1.5px solid ${BRAND}55` : '1px solid var(--ak-border)',
-                boxShadow: ty.primary ? `0 4px 16px ${BRAND}18` : '0 1px 6px rgba(0,0,0,.05)',
-                display: 'flex', flexDirection: 'column', gap: 8, minHeight: 128, transition: 'transform .12s' }}>
+            <div key={ty.key} onClick={() => activate(ty)} role="button" aria-label={ty.label} className="dhub-card"
+              style={{ position: 'relative', cursor: 'pointer', borderRadius: 20, padding: '13px 14px',
+                background: ty.grad, color: '#fff', overflow: 'hidden', minHeight: 122,
+                boxShadow: ty.primary ? '0 6px 18px rgba(222,95,38,.32)' : '0 4px 14px rgba(15,23,42,.16)',
+                display: 'flex', flexDirection: 'column' }}>
+              {/* Depth arc */}
+              <span aria-hidden="true" style={{ position: 'absolute', right: -26, bottom: -32, width: 112, height: 112,
+                borderRadius: '50%', border: '1.5px solid rgba(255,255,255,.16)', pointerEvents: 'none' }} />
+              {/* Tilted glass study-tile — our take on the corner art */}
+              <span aria-hidden="true" style={{ position: 'absolute', right: -9, bottom: -11, width: 60, height: 60,
+                borderRadius: 16, transform: 'rotate(-14deg)',
+                background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.35)',
+                boxShadow: '0 6px 14px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, pointerEvents: 'none' }}>
+                {ty.icon}
+              </span>
               {ty.soon && (
                 <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 8.5, fontWeight: 900, letterSpacing: .4,
-                  padding: '2px 7px', borderRadius: 8, background: `${GOLD}1c`, color: '#B45309', textTransform: 'uppercase' }}>
+                  padding: '3px 8px', borderRadius: 99, background: 'rgba(0,0,0,.28)', color: 'rgba(255,255,255,.92)',
+                  textTransform: 'uppercase' }}>
                   {t('dhub.soon')}
                 </span>
               )}
-              <div style={{ width: 40, height: 40, borderRadius: 13, background: `${ty.accent}16`, border: `1px solid ${ty.accent}33`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
-                {ty.icon}
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 900, color: 'var(--ak-text)', margin: 0, lineHeight: 1.25 }}>{ty.label}</p>
-                <p style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', margin: '3px 0 0', lineHeight: 1.4 }}>{ty.desc}</p>
-              </div>
-              <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 900, color: ty.primary ? BRAND : 'var(--ak-text-muted)' }}>
-                {ty.primary ? t('dhub.cta_browse') : t('dhub.cta_soon')}
-                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-              </div>
+              <p style={{ fontSize: 14.5, fontWeight: 900, margin: 0, lineHeight: 1.2, maxWidth: '76%',
+                textShadow: '0 1px 2px rgba(0,0,0,.12)' }}>{ty.label}</p>
+              <p style={{ fontSize: 10.5, fontWeight: 700, margin: '4px 0 0', lineHeight: 1.35,
+                color: 'rgba(255,255,255,.78)', maxWidth: '82%' }}>{ty.desc}</p>
+              {ty.primary && (
+                <span style={{ marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10,
+                  fontWeight: 900, padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,.22)',
+                  color: '#fff', alignSelf: 'flex-start' }}>
+                  {t('dhub.cta_browse')}
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -138,6 +142,15 @@ export default function DiscoverHub({ onOpenCourses }) {
             {t('dhub.clear')}
           </button>
         </div>
+      )}
+
+      {searchOpen && (
+        <DiscoverSearchPage
+          initialQuery={query}
+          onClose={() => setSearchOpen(false)}
+          onPick={onSearchPick}
+          onOpenCourse={onOpenCourse}
+        />
       )}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
