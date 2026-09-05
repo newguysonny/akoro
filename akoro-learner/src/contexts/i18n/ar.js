@@ -564,3 +564,28 @@ export const AR = {
   'agent.updated':        'لقد تم تحديثي! أنا الآن {name} {emoji}. نفس المعرفة، هوية جديدة!',
   'agent.task_assigned':  "✅ تم تعيين المهمة!\n\n📋 \"{title}\"\nالأولوية: {priority}\n\nسأتابع هذا من أجلك!",
 };
+
+
+/* ── Discover Search ── */
+'dhub.search_recent':       'Recent searches',
+'dhub.search_jump':         'Jump to',
+'dhub.search_all_scope':    'Search in courses',
+'dhub.search_in_courses':   'in courses',
+'dhub.search_course_type':  'Course type',
+'dhub.search_none':         'No match',
+'dhub.search_clear_all':    'Clear all',
+'dhub.coming_soon':         'Coming soon',
+'dhub.card_notes':          'Notes',
+'dhub.card_notes_desc':     'Your records, PDFs and documents',
+'dhub.card_courses':        'Courses',
+'dhub.card_courses_desc':   'Video lessons and catalogue',
+'dhub.card_pharmd':         'PharmD',
+'dhub.card_pharmd_desc':    'Pharmacy and clinical program',
+'dhub.card_guide':          'Guide',
+'dhub.card_guide_desc':     'Teaching guides and tutors',
+'dhub.card_live':           'Live classes',
+'dhub.card_live_desc':      'Real-time tutors and broadcasts',
+'dhub.search_ph':           'Search or type course name…',
+'dhub.search_back':         'Back to results',
+'dhub.search_remove':       'Remove from recent',
+'dhub.search_all':          'All',

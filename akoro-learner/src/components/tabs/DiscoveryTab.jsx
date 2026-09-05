@@ -16,6 +16,9 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import DiscoverSearch from './search/DiscoverSearch';
+import { DHUB_ART } from './search/dhubArt';
+import { loadRecents, saveRecent, removeRecent, clearRecents } from './search/dhubRecents';
 import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet } from '../../services/api.js';
@@ -72,7 +75,17 @@ function RatingLine({ score, count }) {
       <span style={{ fontSize: 12.5, fontWeight: 900, color: '#B4690E' }}>{s.toFixed(1)}</span>
       <Stars rating={s} size={12} />
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)' }}>({fmtCount(count)})</span>
-    </div>
+      {/* Discover Search Modal */}
+      {discoverSearchOpen && (
+        <DiscoverSearch
+          onClose={() => setDiscoverSearchOpen(false)}
+          onOpenCourses={(q) => {
+            setDiscoverSearchOpen(false);
+            setDiscoverQuery(q);
+            // Could navigate or handle the query
+          }}
+        />
+      )}    </div>
   );
 }
 
@@ -234,7 +247,17 @@ function Categories({ value, onChange }) {
           );
         })}
       </div>
-    </div>
+      {/* Discover Search Modal */}
+      {discoverSearchOpen && (
+        <DiscoverSearch
+          onClose={() => setDiscoverSearchOpen(false)}
+          onOpenCourses={(q) => {
+            setDiscoverSearchOpen(false);
+            setDiscoverQuery(q);
+            // Could navigate or handle the query
+          }}
+        />
+      )}    </div>
   );
 }
 
@@ -371,7 +394,17 @@ function PurchaseHistorySheet({ onClose }) {
           )}
         </div>
       </div>
-    </div>
+      {/* Discover Search Modal */}
+      {discoverSearchOpen && (
+        <DiscoverSearch
+          onClose={() => setDiscoverSearchOpen(false)}
+          onOpenCourses={(q) => {
+            setDiscoverSearchOpen(false);
+            setDiscoverQuery(q);
+            // Could navigate or handle the query
+          }}
+        />
+      )}    </div>
   );
 }
 
@@ -386,7 +419,9 @@ export default function DiscoveryTab() {
   const [lLive,   setLLive]   = useState(true);
   const [lVideo,  setLVideo]  = useState(true);
   const [cat,     setCat]     = useState('all');
-  const [query,   setQuery]   = useState('');
+const [query, setQuery] = useState('');
+  const [discoverSearchOpen, setDiscoverSearchOpen] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState('');
   const [ownedIds, setOwnedIds] = useState(new Set());
   const [expanded, setExpanded] = useState({});   // { live, video, guides }
   const [toast,    setToast]    = useState(null);
@@ -486,13 +521,15 @@ export default function DiscoveryTab() {
 
       {/* Search + purchases */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 14px 0' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
-          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+        <button onClick={() => setDiscoverSearchOpen(true)} style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 18, cursor: 'pointer' }}>
+          🔍
+        </button>
+        <div style={{ flex: 1 }}>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('discovery.search')}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px 11px 36px', borderRadius: 13, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
+            style={{ display: 'none' }}
           />
         </div>
         <button onClick={() => setHistoryOpen(true)} title="My purchases"
@@ -531,6 +568,16 @@ export default function DiscoveryTab() {
 
       {historyOpen && <PurchaseHistorySheet onClose={() => setHistoryOpen(false)} />}
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
-    </div>
+      {/* Discover Search Modal */}
+      {discoverSearchOpen && (
+        <DiscoverSearch
+          onClose={() => setDiscoverSearchOpen(false)}
+          onOpenCourses={(q) => {
+            setDiscoverSearchOpen(false);
+            setDiscoverQuery(q);
+            // Could navigate or handle the query
+          }}
+        />
+      )}    </div>
   );
 }
