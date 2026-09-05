@@ -20,60 +20,33 @@
  * the current DiscoveryTab feed directly.
  */
 import { useState } from 'react';
-import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { BRAND, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import Toast from '../common/Toast.jsx';
-
-const FONT = "'Nunito', sans-serif";
-
-/* Gradient + art per type card. Order matches the product spec:
-   Notes/Materials, Courses, Pharm D, Teaching guide, Live classes. */
-const TYPES = (t) => ([
-  {
-    key: 'notes', icon: '📝', accent: GOLD, soon: true,
-    grad: 'linear-gradient(140deg,#7C5CE6,#5B3FD1)',
-    label: t('dhub.card_notes'), desc: t('dhub.card_notes_desc'),
-    kw: 'notes materials library records pdf document upload link paste',
-  },
-  {
-    key: 'courses', icon: '📚', accent: BRAND, soon: false, primary: true,
-    grad: 'linear-gradient(140deg,#F28C52,#DE5F26)',
-    label: t('dhub.card_courses'), desc: t('dhub.card_courses_desc'),
-    kw: 'courses video lessons catalogue study curriculum marketplace',
-  },
-  {
-    key: 'pharmd', icon: '💊', accent: GREEN, soon: true,
-    grad: 'linear-gradient(140deg,#14B8A6,#0C7E72)',
-    label: t('dhub.card_pharmd'), desc: t('dhub.card_pharmd_desc'),
-    kw: 'pharm d pharmacy doctor program clinical pharmacology',
-  },
-  {
-    key: 'guide', icon: '🧑🏽‍🏫', accent: '#8B5CF6', soon: true,
-    grad: 'linear-gradient(140deg,#4C8DF0,#2E62D9)',
-    label: t('dhub.card_guide'), desc: t('dhub.card_guide_desc'),
-    kw: 'teaching guide teacher agents tutors trained',
-  },
-  {
-    key: 'live', icon: '📡', accent: RED, soon: true,
-    grad: 'linear-gradient(140deg,#EF4E78,#C92A54)',
-    label: t('dhub.card_live'), desc: t('dhub.card_live_desc'),
-    kw: 'live classes real time tutors stream broadcast',
-  },
-]);
+import DiscoverSearchPage from './DiscoverSearchPage.jsx';
+import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
 export default function DiscoverHub({ onOpenCourses, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const all = TYPES(t);
-  const q = query.trim().toLowerCase();
-  const visible = !q ? all : all.filter((ty) =>
-    `${ty.label} ${ty.desc} ${ty.kw}`.toLowerCase().includes(q));
+  const visible = matchTypes(t, query);
 
-  const activate = (ty) => {
-    if (ty.key === 'courses') onOpenCourses?.(query.trim());
+  const activate = (ty, qOverride) => {
+    const q = qOverride ?? query.trim();
+    if (ty.key === 'courses') onOpenCourses?.(q);
     else setToast({ msg: `${ty.label} — ${t('dhub.coming_soon')}`, color: GOLD });
+  };
+
+  /* Picked from the full-screen search page: close it, reflect the
+     query on the hub behind, then activate the chosen card. */
+  const onSearchPick = (ty, q) => {
+    setSearchOpen(false);
+    setQuery(q);
+    activate(ty, q);
   };
 
   // Enter = the first thing the grid is showing (Courses leads when the
@@ -93,16 +66,22 @@ export default function DiscoverHub({ onOpenCourses, initialQuery = '' }) {
         </p>
       </div>
 
-      {/* Search */}
+      {/* Search — opening the box raises the full-screen search page
+          (typing, recent searches and live results live there); the hub
+          box stays read-only so returning with a query still filters. */}
       <div style={{ padding: '10px 16px 4px' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}>🔍</span>
           <input
+            readOnly
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') onEnter(); }}
+            onFocus={() => setSearchOpen(true)}
+            onClick={() => setSearchOpen(true)}
             placeholder={t('dhub.search_ph')}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 38px 12px 36px', borderRadius: 14, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
+            aria-label={t('dhub.search_aria')}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 38px 12px 36px', borderRadius: 14, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none', cursor: 'pointer' }}
           />
           {query && (
             <button onClick={() => setQuery('')} aria-label={t('dhub.clear')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
@@ -163,6 +142,14 @@ export default function DiscoverHub({ onOpenCourses, initialQuery = '' }) {
             {t('dhub.clear')}
           </button>
         </div>
+      )}
+
+      {searchOpen && (
+        <DiscoverSearchPage
+          initialQuery={query}
+          onClose={() => setSearchOpen(false)}
+          onPick={onSearchPick}
+        />
       )}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
