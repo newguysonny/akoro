@@ -1,14 +1,16 @@
 # Akoro agent from scratch
 
-A compact, runnable Python agent foundation. It separates the pieces that tend
-to become entangled in an agent implementation: LLM I/O, a deliberately
-non-secret plan, tool execution, memory, state, environment boundaries, and
-permission policy.
+A compact, runnable Python agent foundation with a complete **adaptive teaching
+service**. It separates the pieces that tend to become entangled in an agent
+implementation: LLM I/O, a deliberately non-secret plan, tool execution,
+memory, state, environment boundaries, permission policy, and the Student
+Agent / NaNa-style teaching roles.
 
-It is a **standalone Python package**. It does not replace the production
+It is a **standalone Python service**. It does not replace the production
 JavaScript tutoring agents under `akoro-api/modules/adaptive-learning/agents`.
-That lets the new architecture evolve and be evaluated independently before any
-production integration is considered.
+The Python implementation mirrors that adaptive session lifecycle so it can be
+evaluated independently, then connected through an authenticated service URL
+without exposing the browser directly to it.
 
 ## Layout
 
@@ -22,7 +24,9 @@ src/agent/
 ├── environment/  # workspace-only filesystem boundary
 ├── permissions/  # default-deny tool policy and input limits
 ├── loop/         # bounded tool-calling loop
-└── harness/      # one composition root and CLI entry point
+├── harness/      # one composition root and CLI entry point
+├── adaptive/     # Student Agent, NaNa guide, lesson ladder, orchestration
+└── service/      # internal FastAPI lifecycle API and live-session store
 ```
 
 `workspace/` is intentionally ignored except for `.gitkeep`; any persisted
@@ -44,6 +48,22 @@ The default client uses the official `openai` SDK. Set `OPENAI_BASE_URL` for an
 OpenAI-compatible provider. The SDK is imported only when the real client is
 constructed, so all unit tests can run without credentials or network access.
 
+## Run the adaptive-agent service
+
+```bash
+cd agent-from-scratch
+# Configure OPENAI_API_KEY; set a long shared secret before any production deployment.
+python -m agent.service
+# GET http://localhost:8000/health
+```
+
+The service implements the same lifecycle as the JavaScript adaptive-learning
+path: create a session, process teaching turns, read a summary, and end the
+session. It returns camel-case response fields aligned with the existing
+Socket.IO payloads. See [`DEPLOY.md`](DEPLOY.md) for the server-to-server
+contract, authentication boundary, deployment settings, and the staged Akoro
+API integration plan.
+
 ## Examples
 
 ```bash
@@ -58,8 +78,8 @@ explain, rather than crashing the process.
 
 ## Tests
 
-The test suite uses Python's standard library and fake LLM clients; no API key,
-network access, or third-party test runner is required.
+The suite uses Python's standard-library `unittest` runner and fake LLM clients.
+After installing the package dependencies, it needs no API key or network access.
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v

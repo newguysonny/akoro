@@ -35,17 +35,25 @@ class OpenAIChatClient:
             kwargs["base_url"] = config.base_url
         self._client = OpenAI(**kwargs)
 
-    def complete(self, messages: Sequence[Message], tools: Sequence[dict[str, Any]]) -> LLMResponse:
-        response = self._client.chat.completions.create(
-            model=self._config.model,
-            messages=[message.to_openai() for message in messages],
-            tools=list(tools) or None,
-            tool_choice="auto" if tools else None,
-            temperature=self._config.temperature,
-        )
+    def _create(self, messages: Sequence[Message], *, temperature: float | None = None,
+                tools: Sequence[dict[str, Any]] = (), json_mode: bool = False):
+        kwargs: dict[str, Any] = {
+            "model": self._config.model,
+            "messages": [message.to_openai() for message in messages],
+            "temperature": self._config.temperature if temperature is None else temperature,
+        }
+        if tools:
+            kwargs["tools"] = list(tools)
+            kwargs["tool_choice"] = "auto"
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = self._client.chat.completions.create(**kwargs)
         if not response.choices:
             raise RuntimeError("The LLM returned no choices")
-        message = response.choices[0].message
+        return response.choices[0].message
+
+    def complete(self, messages: Sequence[Message], tools: Sequence[dict[str, Any]]) -> LLMResponse:
+        message = self._create(messages, tools=tools)
         calls: list[ToolCall] = []
         for call in message.tool_calls or []:
             try:
@@ -56,3 +64,18 @@ class OpenAIChatClient:
                 arguments = {}
             calls.append(ToolCall(id=call.id, name=call.function.name, arguments=arguments))
         return LLMResponse(content=message.content or "", tool_calls=tuple(calls))
+
+    def complete_text(self, messages: Sequence[Message], temperature: float | None = None) -> str:
+        """Text completion used by the teaching-role adapters."""
+        return self._create(messages, temperature=temperature).content or ""
+
+    def complete_json(self, messages: Sequence[Message], temperature: float = 0) -> dict[str, Any]:
+        """JSON-object completion with a strict, provider-neutral return value."""
+        content = self._create(messages, temperature=temperature, json_mode=True).content or "{}"
+        try:
+            value = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("The LLM returned invalid JSON") from exc
+        if not isinstance(value, dict):
+            raise RuntimeError("The LLM JSON response must be an object")
+        return value

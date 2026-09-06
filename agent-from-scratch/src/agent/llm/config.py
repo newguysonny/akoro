@@ -65,6 +65,16 @@ def _as_float(value: str | None, default: float, minimum: float, maximum: float)
     return parsed
 
 
+def load_environment(
+    env: Mapping[str, str] | None = None,
+    dotenv_path: Path | None = None,
+) -> dict[str, str]:
+    """Return .env values with explicitly supplied/process values taking precedence."""
+    root = Path(__file__).resolve().parents[3]
+    dotenv_values = _read_dotenv(dotenv_path or root / ".env")
+    return {**dotenv_values, **dict(os.environ if env is None else env)}
+
+
 @dataclass(frozen=True, slots=True)
 class LLMConfig:
     """Validated configuration consumed by the provider client and loop."""
@@ -83,10 +93,7 @@ class LLMConfig:
         env: Mapping[str, str] | None = None,
         dotenv_path: Path | None = None,
     ) -> "LLMConfig":
-        root = Path(__file__).resolve().parents[3]
-        dotenv_values = _read_dotenv(dotenv_path or root / ".env")
-        # Explicit process (or supplied test) values override .env values.
-        source = {**dotenv_values, **dict(os.environ if env is None else env)}
+        source = load_environment(env, dotenv_path)
         api_key = source.get("OPENAI_API_KEY", "").strip()
         if not api_key:
             raise ConfigurationError("OPENAI_API_KEY is required; add it to .env or the environment")
