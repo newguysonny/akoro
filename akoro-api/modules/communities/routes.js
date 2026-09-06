@@ -48,6 +48,24 @@ const bad     = (res, m) => res.status(400).json({ success: false, error: m });
 const denied  = (res, m) => res.status(403).json({ success: false, error: m });
 const missing = (res) => res.status(404).json({ success: false, error: "Not found" });
 
+// Supabase's REST client returns structured errors. Retain that information
+// instead of throwing only its message, so a missing newly-deployed table can
+// be distinguished from an unexpected application failure below.
+const communityDbError = (error, operation) => {
+  const err = new Error(error?.message || `Could not ${operation}.`);
+  err.code = error?.code;
+  err.details = error?.details;
+  err.hint = error?.hint;
+  err.operation = operation;
+  return err;
+};
+
+const isCommunitySchemaUnavailable = (err) => {
+  const text = [err?.message, err?.details, err?.hint].filter(Boolean).join(" ");
+  return err?.code === "42P01" || err?.code === "PGRST106" || err?.code === "PGRST205" ||
+    /(?:schema cache|schema .* not (?:exposed|allowed)|relation .* does not exist|could not find (?:the )?table)/i.test(text);
+};
+
 router.use(authenticateToken);
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -139,7 +157,7 @@ router.post("/activities/:activityId/submit", asyncHandler(async (req, res) => {
       { activity_id: a.id, user_id: req.user.id, submitted_at: now(), updated_at: now() },
       { onConflict: "activity_id,user_id" }
     );
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   const { data: subs } = await edu().from("community_activity_submissions")
     .select("id").eq("activity_id", a.id);
@@ -153,7 +171,7 @@ router.delete("/activities/:activityId", asyncHandler(async (req, res) => {
   if (a.creator_id !== req.user.id) return denied(res, "Only the activity creator can delete it.");
 
   const { error } = await edu().from("community_activities").delete().eq("id", a.id);
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, { deleted: true });
 }));
@@ -165,7 +183,7 @@ router.get("/mine", asyncHandler(async (req, res) => {
     .select("role, joined_at, communities(*)")
     .eq("user_id", req.user.id)
     .order("joined_at", { ascending: false });
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   const mine = (data || [])
     .filter(r => r.communities)
@@ -183,7 +201,7 @@ router.get("/", asyncHandler(async (req, res) => {
   let query = edu().from("communities").select("*").eq("is_public", true);
   if (q) query = query.ilike("name", `%${q}%`);
   const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, await withExtras(data || []), { total: data?.length || 0 });
 }));
@@ -203,14 +221,32 @@ router.post("/", asyncHandler(async (req, res) => {
     .insert({ name, description, emoji, owner_id: req.user.id })
     .select("*")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "create this community");
 
-  // The creator is the owner of record on both sides.
-  const { error: memErr } = await edu().from("community_members")
-    .insert({ community_id: created.id, user_id: req.user.id, role: "owner" });
-  if (memErr) throw new Error(memErr.message);
+  // The creator is the owner of record on both sides. If the membership write
+  // fails, best-effort delete the just-created row so retrying cannot create an
+  // orphaned community the learner cannot open or manage.
+  const { data: membership, error: memErr } = await edu().from("community_members")
+    .insert({ community_id: created.id, user_id: req.user.id, role: "owner" })
+    .select("role, joined_at")
+    .single();
+  if (memErr) {
+    const { error: rollbackErr } = await edu().from("communities").delete().eq("id", created.id);
+    if (rollbackErr) {
+      console.error("[communities] could not roll back incomplete creation", {
+        communityId: created.id,
+        code: rollbackErr.code,
+        message: rollbackErr.message,
+      });
+    }
+    throw communityDbError(memErr, "add you as the community owner");
+  }
 
-  ok(res, { role: "owner", joined_at: now(), ...(await withExtras([created]))[0] });
+  ok(res, {
+    role: membership.role,
+    joined_at: membership.joined_at,
+    ...(await withExtras([created]))[0],
+  });
 }));
 
 // ─── GET /:id — one community + my membership ───────────────────────────────
@@ -235,7 +271,7 @@ router.get("/:id/activities", asyncHandler(async (req, res) => {
   const { data, error } = await edu().from("community_activities")
     .select("*").eq("community_id", c.id)
     .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   const rows = await withActivityExtras(data || []);
 
@@ -281,7 +317,7 @@ router.post("/:id/activities", asyncHandler(async (req, res) => {
     })
     .select("*")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, (await withActivityExtras([data]))[0]);
 }));
@@ -297,7 +333,7 @@ router.get("/:id/members", asyncHandler(async (req, res) => {
     .select("user_id, role, joined_at")
     .eq("community_id", c.id)
     .order("joined_at", { ascending: true });
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   const { data: users } = await db.from("users")
     .select("id, full_name, avatar_url")
@@ -384,7 +420,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
     .eq("id", c.id)
     .select("*")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, (await withExtras([data]))[0]);
 }));
@@ -401,7 +437,7 @@ router.post("/:id/join", asyncHandler(async (req, res) => {
       { community_id: c.id, user_id: req.user.id, role: "member" },
       { onConflict: "community_id,user_id" }
     );
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, { joined: true, community: (await withExtras([c]))[0] });
 }));
@@ -419,7 +455,7 @@ router.post("/:id/leave", asyncHandler(async (req, res) => {
 
   const { error } = await edu().from("community_members")
     .delete().eq("community_id", c.id).eq("user_id", req.user.id);
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "complete this community request");
 
   ok(res, { left: true });
 }));
@@ -432,9 +468,28 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   if (c.owner_id !== req.user.id) return denied(res, "Only the community creator can delete it.");
 
   const { error } = await edu().from("communities").delete().eq("id", c.id);
-  if (error) throw new Error(error.message);
+  if (error) throw communityDbError(error, "delete this community");
 
   ok(res, { deleted: true });
 }));
+
+// The communities feature is backed by its own late-added migration. Surface a
+// deploy/readiness problem truthfully instead of the global, unhelpful 500; the
+// client can tell the learner to retry while the release's schema step finishes.
+router.use((err, _req, res, next) => {
+  if (!isCommunitySchemaUnavailable(err)) return next(err);
+
+  console.error("[communities] schema is not ready", {
+    operation: err.operation,
+    code: err.code,
+    message: err.message,
+    details: err.details,
+  });
+  return res.status(503).json({
+    success: false,
+    error: "Communities are still being set up. Please try again in a minute.",
+    code: "COMMUNITIES_SCHEMA_PENDING",
+  });
+});
 
 export default router;
