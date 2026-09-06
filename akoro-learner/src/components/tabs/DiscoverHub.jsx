@@ -22,6 +22,7 @@
 import { useState } from 'react';
 import { BRAND, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
@@ -71,7 +72,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery 
           box stays read-only so returning with a query still filters. */}
       <div style={{ padding: '10px 16px 4px' }}>
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}>🔍</span>
+          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
           <input
             readOnly
             value={query}
@@ -84,7 +85,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery 
             style={{ width: '100%', boxSizing: 'border-box', padding: '12px 38px 12px 36px', borderRadius: 14, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13.5, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none', cursor: 'pointer' }}
           />
           {query && (
-            <button onClick={() => setQuery('')} aria-label={t('dhub.clear')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+            <button onClick={() => setQuery('')} aria-label={t('dhub.clear')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={11}/></button>
           )}
         </div>
       </div>
@@ -108,7 +109,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery 
                 background: 'rgba(255,255,255,.18)', border: '1.5px solid rgba(255,255,255,.35)',
                 boxShadow: '0 6px 14px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.35)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, pointerEvents: 'none' }}>
-                {ty.icon}
+                {ty.icon?.startsWith('ti-') ? <Icon name={ty.icon} size={28}/> : ty.icon}
               </span>
               {ty.soon && (
                 <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 8.5, fontWeight: 900, letterSpacing: .4,
@@ -135,7 +136,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, initialQuery 
       ) : (
         <div style={{ margin: '10px 16px 0', padding: '26px 18px', borderRadius: 16, border: '1px dashed var(--ak-border2)',
           textAlign: 'center', background: 'var(--ak-surface)' }}>
-          <div style={{ fontSize: 26, marginBottom: 6 }}>🔍</div>
+          <div style={{ marginBottom: 6 }}><Icon name="ti-search" size={26} color="var(--ak-text-sec, #6B7280)"/></div>
           <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sec, #6B7280)', margin: 0 }}>{t('dhub.no_match')}</p>
           <button onClick={() => setQuery('')} style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99, border: 'none',
             background: BRAND, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>

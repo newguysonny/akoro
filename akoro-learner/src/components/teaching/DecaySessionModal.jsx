@@ -150,7 +150,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
     if (recording) {
       clearInterval(timerRef.current);
       setRecording(false);
-      handleSend(`[🎙 ${t('teaching.voice_note')} – ${fmt(seconds)}] ${t('teaching.explained_verbally')}`);
+      handleSend(`[${t('teaching.voice_note')} – ${fmt(seconds)}] ${t('teaching.explained_verbally')}`);
       setSeconds(0);
     } else {
       setRecording(true);

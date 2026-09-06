@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, difficultyStyle, subjectStyle, AVATAR_FALLBACK } from '../../constants.js';
-import { ZapIcon, StarIcon } from '../common/Icons.jsx';
+import { ZapIcon, StarIcon, Icon } from '../common/Icons.jsx';
 import BattleModal from './BattleModal.jsx';
 import { formatLeft } from './ChallengeModal.jsx';
 import CreateBattleSheet from './CreateBattleSheet.jsx';
@@ -14,7 +14,7 @@ function ChallengeRow({ challenge, onTap }) {
   // expiresIn unconditionally, so an invitation that never expires still
   // advertised an hour and then disappeared when it ran out.
   const deadline=challenge.expiresAt?formatLeft(Math.max(0,new Date(challenge.expiresAt)-Date.now())):null;
-  const typePill=isClassroom?{label:`🏫 ${t('battles.classroom')}`,bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:`⚡ ${t('battles.immediate')}`,bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:`🗓 ${t('battles.scheduled')}`,bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
+  const typePill=isClassroom?{label:t('battles.classroom'),bg:"rgba(16,185,129,.10)",color:"#10B981",border:"rgba(16,185,129,.25)"}:isImmediate?{label:t('battles.immediate'),bg:"rgba(239,68,68,.10)",color:RED,border:"rgba(239,68,68,.25)"}:{label:t('battles.scheduled'),bg:"rgba(108,59,255,.10)",color:BRAND,border:"rgba(108,59,255,.25)"};
   return (
     <div onClick={()=>onTap(challenge)} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 18px",borderBottom:"1px solid var(--ak-border)",cursor:"pointer",background:"var(--ak-surface)",transition:"background .15s" }}>
       <div style={{ position:"relative",flexShrink:0 }}>
@@ -27,12 +27,12 @@ function ChallengeRow({ challenge, onTap }) {
           <span style={{ fontSize:11,fontWeight:800,color:GOLD,flexShrink:0,marginLeft:8 }}>{challenge.xpPrize}</span>
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:5,marginBottom:5,flexWrap:"wrap" }}>
-          <span style={{ fontSize:10,fontWeight:700,color:sc,background:`${sc}14`,borderRadius:5,padding:"1px 7px",flexShrink:0 }}>{subj.icon} {challenge.title}</span>
+          <span style={{ fontSize:10,fontWeight:700,color:sc,background:`${sc}14`,borderRadius:5,padding:"1px 7px",flexShrink:0,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name={subj.icon} size={11} color={sc}/>{challenge.title}</span>
           <div style={{ background:diff.bg,borderRadius:5,padding:"1px 7px",flexShrink:0 }}><span style={{ fontSize:9.5,fontWeight:800,color:diff.color }}>{diff.label}</span></div>
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
           <div style={{ display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:20,background:typePill.bg,border:`1px solid ${typePill.border}` }}><span style={{ fontSize:9.5,fontWeight:900,color:typePill.color }}>{typePill.label}</span></div>
-          {isClassroom?<span style={{ fontSize:10.5,fontWeight:600,color:"#10B981" }}>👥 {(challenge.participants?.length ?? challenge.participantCount ?? 0)} {t('battles.agents')} · ⏱ {challenge.timeLimit}{deadline?` · ⏰ ${deadline}`:''}</span>:isImmediate?<span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{deadline?`⏰ ${t('battles.expires_in')} ${deadline} · `:''}⏱ {challenge.timeLimit}</span>:<span style={{ fontSize:10.5,fontWeight:600,color:BRAND }}>🗓 {challenge.scheduledFor?new Date(challenge.scheduledFor).toLocaleString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'—'} · ⏱ {challenge.timeLimit}</span>}
+          {isClassroom?<span style={{ fontSize:10.5,fontWeight:600,color:"#10B981",display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-users" size={11} color="#10B981"/>{(challenge.participants?.length ?? challenge.participantCount ?? 0)} {t('battles.agents')} · <Icon name="ti-stopwatch" size={10} color="#10B981"/>{challenge.timeLimit}{deadline&&<> · <Icon name="ti-alarm" size={10} color="#10B981"/>{deadline}</>}</span>:isImmediate?<span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)",display:"inline-flex",alignItems:"center",gap:4 }}>{deadline&&<><Icon name="ti-alarm" size={10} color="var(--ak-text-muted)"/>{t('battles.expires_in')} {deadline} ·</>} <Icon name="ti-stopwatch" size={10} color="var(--ak-text-muted)"/>{challenge.timeLimit}</span>:<span style={{ fontSize:10.5,fontWeight:600,color:BRAND,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-calendar" size={11} color={BRAND}/>{challenge.scheduledFor?new Date(challenge.scheduledFor).toLocaleString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'—'} · <Icon name="ti-stopwatch" size={10} color={BRAND}/>{challenge.timeLimit}</span>}
         </div>
       </div>
       <div style={{ width:28,height:28,borderRadius:"50%",background:isImmediate?`${RED}12`:`${BRAND}12`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",border:`1.5px solid ${isImmediate?RED:BRAND}40` }}><ZapIcon size={12} color={isImmediate?RED:BRAND}/></div>
@@ -101,7 +101,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
     completed:{label:"COMPLETED",bg:"rgba(16,185,129,.10)", color:GREEN, border:"rgba(16,185,129,.25)" },
     lobby:    {label:"WAITING",  bg:"rgba(245,158,11,.12)", color:GOLD,  border:"rgba(245,158,11,.28)" },
   };
-  const TABS=[{key:"active",label:t('battles.active'),icon:"⚡",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"🗓",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"🏆",count:completedBattles.length}];
+  const TABS=[{key:"active",label:t('battles.active'),icon:"ti-bolt",count:liveBattles.length+waitingBattles.length},{key:"scheduled",label:t('battles.scheduled'),icon:"ti-calendar",count:scheduledBattles.length},{key:"completed",label:t('battles.completed'),icon:"ti-trophy",count:completedBattles.length}];
   return (
     <div style={{ flex:1,overflowY:"auto",background:"var(--ak-surface)",display:"flex",flexDirection:"column" }}>
       <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,padding:"12px 16px 10px",borderBottom:"1px solid var(--ak-border)" }}>
@@ -115,18 +115,18 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
       <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
         {TABS.map(({key,label,icon,count})=>(
           <button key={key} onClick={()=>setViewFilter(key)} style={{ flex:1,padding:"9px 4px 10px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:viewFilter===key?800:600,color:viewFilter===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${viewFilter===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-            <span style={{ fontSize:13 }}>{icon}</span>{label}
+            <Icon name={icon} size={13} color={viewFilter===key?BRAND:"var(--ak-text-muted)"}/>{label}
             {count>0&&<span style={{ fontSize:9.5,fontWeight:900,background:viewFilter===key?BRAND:"var(--ak-border)",color:viewFilter===key?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 6px" }}>{count}</span>}
           </button>
         ))}
       </div>
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 16px 6px",borderBottom:"1px solid var(--ak-border)" }}>
-        <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>⚔️ Start a battle</button>
+        <button onClick={()=>setCreating(true)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:11.5,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>@@<Icon name="ti-swords" size={13} color="#fff"/>Start a battle</button>
         <button onClick={onViewChallenge} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${RED}40`,background:`${RED}08`,fontSize:11.5,fontWeight:800,color:RED,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}><ZapIcon size={11} color={RED}/>{t('battles.find_challenges')}</button>
       </div>
       {mine.length===0&&(
         <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12,padding:"40px 24px" }}>
-          <span style={{ fontSize:52,opacity:.2 }}>⚔️</span>
+          <Icon name="ti-swords" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
           <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty')}</p>
           <p style={{ fontSize:12,fontWeight:600,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('battles.empty_hint')}</p>
           <button onClick={onViewChallenge} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:7 }}><ZapIcon size={13} color="#fff"/>{t('battles.view_challenges')}</button>
@@ -134,7 +134,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
       )}
       {mine.length>0&&displayed.length===0&&(
         <div style={{ textAlign:"center",padding:"36px 24px",color:"var(--ak-text-muted)" }}>
-          <span style={{ fontSize:36,opacity:.3 }}>{viewFilter==="active"?"⚡":viewFilter==="scheduled"?"🗓":"🏆"}</span>
+          <Icon name={viewFilter==="active"?"ti-bolt":viewFilter==="scheduled"?"ti-calendar":"ti-trophy"} size={36} color="var(--ak-text-muted)" style={{opacity:.3}}/>
           <p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{viewFilter==="active"?t('battles.none_live'):viewFilter==="scheduled"?t('battles.none_scheduled'):t('battles.none_completed')}</p>
         </div>
       )}
@@ -158,7 +158,7 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                 </div>
                 {b.battleType==="classroom"&&b.participants?.length>0?(
                   <div style={{ display:"flex",alignItems:"center",gap:6,background:"rgba(16,185,129,.06)",borderRadius:12,padding:"8px 10px",marginBottom:10,border:"1px solid rgba(16,185,129,.18)" }}>
-                    <span style={{ fontSize:10,fontWeight:800,color:"#10B981",flexShrink:0 }}>🏫 CLASS</span>
+                    <span style={{ fontSize:10,fontWeight:800,color:"#10B981",flexShrink:0,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-school" size={11} color="#10B981"/>CLASS</span>
                     <div style={{ display:"flex",gap:5,flexWrap:"wrap",flex:1 }}>{b.participants.map(p=><div key={p.id} title={`${p.name} · ${p.owner}`} style={{ width:26,height:26,borderRadius:"50%",background:p.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,border:p.isYou?"2px solid #E8884A":"1px solid rgba(255,255,255,.3)",flexShrink:0 }}>{p.emoji}</div>)}</div>
                     <span style={{ fontSize:10,fontWeight:700,color:"rgba(255,255,255,.40)",flexShrink:0 }}>{b.participants.length} {t('battles.agents')}</span>
                   </div>
@@ -176,19 +176,19 @@ function BattlesTab({ battles, onViewChallenge, onBattleCreated }) {
                   </div>
                 )}
                 <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap" }}>
-                  <span style={{ fontSize:10,fontWeight:700,color:sc,background:`${sc}14`,borderRadius:5,padding:"1px 7px" }}>{bs.icon} {bs.label}</span>
+                  <span style={{ fontSize:10,fontWeight:700,color:sc,background:`${sc}14`,borderRadius:5,padding:"1px 7px",display:"inline-flex",alignItems:"center",gap:4 }}><Icon name={bs.icon} size={11} color={sc}/>{bs.label}</span>
                   <div style={{ background:diff.bg,borderRadius:5,padding:"1px 7px" }}><span style={{ fontSize:9.5,fontWeight:800,color:diff.color }}>{diff.label}</span></div>
                   <span style={{ fontSize:10.5,fontWeight:800,color:GOLD,display:"flex",alignItems:"center",gap:3 }}><ZapIcon size={10} color={GOLD}/>{b.xpPrize}</span>
-                  <span style={{ fontSize:10.5,color:"var(--ak-text-muted)",fontWeight:600 }}>⏱ {b.timeLimit}</span>
+                  <span style={{ fontSize:10.5,color:"var(--ak-text-muted)",fontWeight:600,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-stopwatch" size={10} color="var(--ak-text-muted)"/>{b.timeLimit}</span>
                   {b.status==="live"&&b.startedAgo!=null&&<span style={{ fontSize:10,color:RED,fontWeight:700 }}>{t('battles.started_ago').replace('{min}',b.startedAgo)}</span>}
-                  {b.status==="scheduled"&&b.startsIn&&<span style={{ fontSize:10,color:BRAND,fontWeight:700 }}>🗓 {b.startsIn}</span>}
-                  {b.status==="lobby"&&<span style={{ fontSize:10,color:GOLD,fontWeight:700 }}>⏳ Waiting for players to accept</span>}
+                  {b.status==="scheduled"&&b.startsIn&&<span style={{ fontSize:10,color:BRAND,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-calendar" size={11} color={BRAND}/>{b.startsIn}</span>}
+                  {b.status==="lobby"&&<span style={{ fontSize:10,color:GOLD,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4 }}><Icon name="ti-hourglass" size={11} color={GOLD}/>Waiting for players to accept</span>}
                 </div>
-                {b.status==="completed"&&resultLine(b,t)&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><span style={{ fontSize:14 }}>{b.review?"📋":"🏆"}</span><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{resultLine(b,t)}</span></div>)}
+                {b.status==="completed"&&resultLine(b,t)&&(<div style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:10,background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.20)",marginBottom:10 }}><Icon name={b.review?"ti-clipboard":"ti-trophy"} size={15} color={GREEN}/><span style={{ fontSize:12,fontWeight:700,color:GREEN }}>{resultLine(b,t)}</span></div>)}
                 <div style={{ display:"flex",gap:7 }}>
-                  {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📺</span>{t('battles.watch_live')}</button>}
-                  {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>👁</span>{t('battles.preview')}</button>}
-                  {b.status==="completed"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:`1.5px solid var(--ak-border2)`,background:"var(--ak-surface-hover)",color:"var(--ak-text-sec)",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><span style={{ fontSize:14 }}>📊</span>{t('battles.view_result')}</button>}
+                  {b.status==="live"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${RED},#DC2626)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><Icon name="ti-player-play" size={14} color="#fff"/>{t('battles.watch_live')}</button>}
+                  {b.status==="scheduled"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><Icon name="ti-eye" size={14} color="#fff"/>{t('battles.preview')}</button>}
+                  {b.status==="completed"&&<button onClick={()=>setWatching(b)} style={{ flex:1,padding:"10px",borderRadius:12,border:`1.5px solid var(--ak-border2)`,background:"var(--ak-surface-hover)",color:"var(--ak-text-sec)",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}><Icon name="ti-chart-bar" size={14} color="var(--ak-text-sub)"/>{t('battles.view_result')}</button>}
                   <button onClick={()=>setRosterOf(b)} style={{ padding:"10px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('battles.details')}</button>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { Icon } from '../components/common/Icons.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { useLang, SUPPORTED_LANGUAGES } from '../contexts/LanguageContext.jsx';
 import { API } from '../services/api.js';
@@ -34,6 +35,90 @@ const SUBJECT_OPTIONS = [
   'French', 'Yoruba', 'Igbo', 'Hausa',
 ];
 
+/* Shown in a teacher card in place of their profile photo when they don't
+   have one (or it fails to load). */
+const TEACHER_PLACEHOLDER = '/placeholder-teacher.jpg';
+
+/**
+ * TeacherCard — discover-hub style card for the teacher step:
+ * profile photo on top (or the branded placeholder), class badge over the
+ * photo, teacher name + school beneath, subject chips and class size.
+ * Click to select; click again to clear.
+ */
+function TeacherCard({ teacher, selected, accent, onPick }) {
+  const { t } = useLang();
+  const [imgFailed, setImgFailed] = useState(false);
+  const hasPhoto = !imgFailed && !!teacher.avatar_url;
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      aria-pressed={selected}
+      style={{
+        textAlign: 'left', background: 'var(--ak-surface)', cursor: 'pointer',
+        borderRadius: 14, padding: 6, display: 'flex', flexDirection: 'column',
+        border: selected ? `2px solid ${accent}` : '1.5px solid var(--ak-border)',
+        boxShadow: selected ? `0 4px 14px ${accent}33` : 'none',
+        transition: 'border .15s, box-shadow .15s', fontFamily: "'Nunito',sans-serif",
+      }}
+    >
+      {/* Photo — teacher profile picture or placeholder image */}
+      <div style={{ width: '100%', aspectRatio: '16/10', borderRadius: 10, overflow: 'hidden',
+        position: 'relative', background: 'linear-gradient(135deg,#EDE9FE,#DDD3FF)', flexShrink: 0 }}>
+        <img
+          src={hasPhoto ? teacher.avatar_url : TEACHER_PLACEHOLDER}
+          alt={teacher.full_name || 'Teacher'}
+          loading="lazy"
+          onError={() => setImgFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+        {teacher.class_name && (
+          <span style={{ position: 'absolute', bottom: 6, right: 6, maxWidth: '72%', fontSize: 9,
+            fontWeight: 900, color: accent, background: '#fff', padding: '3px 7px', borderRadius: 6,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            boxShadow: '0 1px 3px rgba(17,12,40,.12)' }}>{teacher.class_name}</span>
+        )}
+        {selected && (
+          <span style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: '50%',
+            background: accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontWeight: 900, boxShadow: '0 1px 4px rgba(17,12,40,.25)' }}><Icon name="ti-check" size={12} color="#fff"/></span>
+        )}
+      </div>
+      <div style={{ padding: '7px 5px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.2,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {teacher.full_name || 'Teacher'}
+        </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {teacher.school_name || `@${teacher.username || 'teacher'}`}
+        </div>
+        {teacher.subjects?.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {teacher.subjects.slice(0, 2).map(s => (
+              <span key={s} style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-sec)',
+                background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '2px 7px', whiteSpace: 'nowrap',
+                overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{s}</span>
+            ))}
+            {teacher.subjects.length > 2 && (
+              <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)',
+                background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '2px 7px' }}>+{teacher.subjects.length - 2}</span>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sec)' }}>
+          {teacher.student_count > 0
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-users" size={11}/> {teacher.student_count} {t('onboarding.students')}</span>
+            : <span style={{ color: BRAND, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-plant" size={11}/> {t('onboarding.teacher_new')}</span>}
+          {teacher.classroom_count > 0 && (
+            <span style={{ color: 'var(--ak-text-muted)' }}>· {teacher.classroom_count} {t('onboarding.classes')}</span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { user, markOnboarded, logout } = useAuth();
@@ -51,12 +136,12 @@ export default function OnboardingPage() {
   const [schoolName, setSchoolName] = useState('');
   const [subjects, setSubjects]     = useState([]);
   const [teachers, setTeachers]     = useState([]);
+  const [teachersLoading, setTeachersLoading] = useState(true);
   const [teacherId, setTeacherId]   = useState('');   // '' = self-study, no teacher
   // Step 3 — teacher picker: free-text search over the loaded directory.
   // The whole directory (≤500) is already in memory, so filtering is instant
   // and also covers school + subjects, not just the name.
   const [teacherQuery, setTeacherQuery] = useState('');
-  const [brokenAvatars, setBrokenAvatars] = useState(() => new Set());
   // Step 2 — student agent
   // What the teacher already told us. Pre-filled, never assumed: the learner
   // still walks every step and can change any of it.
@@ -73,7 +158,7 @@ export default function OnboardingPage() {
     if (!q) return teachers;
     const tokens = q.split(/\s+/);
     return teachers.filter(tt => {
-      const hay = [tt.full_name, tt.username, tt.school_name, ...(tt.subjects || [])]
+      const hay = [tt.full_name, tt.username, tt.school_name, tt.class_name, ...(tt.subjects || [])]
         .filter(Boolean).join(' ').toLowerCase();
       return tokens.every(tok => hay.includes(tok));
     });
@@ -81,7 +166,9 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     fetch(`${API}/api/profiles/directory/teachers`, { credentials: 'include' })
-      .then(r => r.json()).then(j => setTeachers(j.data || [])).catch(() => {});
+      .then(r => r.json()).then(j => setTeachers(j.data || []))
+      .catch(() => {})
+      .finally(() => setTeachersLoading(false));
   }, []);
 
   /* A learner their teacher added has already been told apart: their school,
@@ -210,6 +297,16 @@ export default function OnboardingPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', background: 'var(--ak-bg)', padding: '24px 20px', fontFamily: "'Nunito',sans-serif" }}>
+      {/* Responsive rules: teacher grid is 2 cols on mobile, 3 on tablet+
+          (the card widens on tablet so the 3-up grid has room). */}
+      <style>{`
+        .ob-card-wrap { width: 100%; max-width: 460px; }
+        .ob-teachers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        @media (min-width: 640px) {
+          .ob-card-wrap { max-width: 700px; }
+          .ob-teachers-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        }
+      `}</style>
       {/* Escape hatch: never get stuck on onboarding */}
       <button onClick={logout} style={{ position: 'fixed', top: 16, right: 18, zIndex: 50, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 9, border: '1px solid rgba(0,0,0,0.12)', background: 'rgba(255,255,255,0.92)', color: '#6B6B80', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Log out</button>
 
@@ -219,9 +316,7 @@ export default function OnboardingPage() {
         <span style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)' }}>Akoro</span>
       </div>
 
-      {/* Wider than the old 3-step card: the teacher grid reads better with two
-          roomy columns, and the form steps stretch without harm. */}
-      <div style={{ width: '100%', maxWidth: 560, marginBottom: 16, display: 'flex', gap: 8 }}>
+      <div className="ob-card-wrap" style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
         {STEPS.map((s, i) => (
           <div key={s} style={{ flex: 1 }}>
             <div style={{ height: 5, borderRadius: 99, background: i <= step ? accentColor : 'var(--ak-border2)', transition: 'background .2s' }}/>
@@ -231,7 +326,7 @@ export default function OnboardingPage() {
       </div>
 
       {/* Card */}
-      <div style={{ width: '100%', maxWidth: 560, background: 'var(--ak-surface)', borderRadius: 24,
+      <div className="ob-card-wrap" style={{ background: 'var(--ak-surface)', borderRadius: 24,
         padding: '28px 26px', boxShadow: '0 4px 32px rgba(0,0,0,.10)', border: '1px solid var(--ak-border)' }}>
 
         {step === 0 && (
@@ -245,7 +340,7 @@ export default function OnboardingPage() {
                 padding: '11px 13px', borderRadius: 12,
                 background: `${BRAND}0d`, border: `1px solid ${BRAND}33`,
               }}>
-                <span style={{ fontSize: 15 }}>🏫</span>
+                <Icon name="ti-school" size={15} color={BRAND}/>
                 <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', lineHeight: 1.5 }}>
                   We filled some of this in from <strong>{prefill.source}</strong>
                   {prefill.className ? <> — you're in <strong>{prefill.className}</strong></> : null}.
@@ -339,12 +434,23 @@ export default function OnboardingPage() {
             <h1 style={{ fontSize: 21, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>{t('onboarding.teacher_title')}</h1>
             <p style={{ fontSize: 13, color: 'var(--ak-text-sub)', margin: '0 0 18px' }}>{t('onboarding.teacher_desc')}</p>
 
-            {teachers.length > 0 ? (
+            {teachersLoading ? (
+              <div className="ob-teachers-grid" style={{ maxHeight: 340, overflowY: 'auto', padding: 2 }}>
+                {[0, 1, 2, 3].map(i => (
+                  <div key={i} style={{ borderRadius: 14, border: '1.5px solid var(--ak-border)',
+                    background: 'var(--ak-surface)', overflow: 'hidden', opacity: .6 }}>
+                    <div style={{ width: '100%', aspectRatio: '16/10', background: 'var(--ak-border)' }} />
+                    <div style={{ height: 11, margin: 10, borderRadius: 4, background: 'var(--ak-border)' }} />
+                    <div style={{ height: 8, width: '60%', margin: '0 10px 11px', borderRadius: 4, background: 'var(--ak-border)' }} />
+                  </div>
+                ))}
+              </div>
+            ) : teachers.length > 0 ? (
               <>
                 {/* Search — instant, client-side over the loaded directory, so it
-                    also matches school names and subjects, not just names. */}
+                    also matches school, class and subjects, not just names. */}
                 <div style={{ position: 'relative', marginBottom: 12 }}>
-                  <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.55, pointerEvents: 'none' }}>🔍</span>
+                  <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.55, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
                   <input
                     value={teacherQuery}
                     onChange={e => setTeacherQuery(e.target.value)}
@@ -352,85 +458,21 @@ export default function OnboardingPage() {
                     style={{ ...inp, paddingLeft: 38, paddingRight: teacherQuery ? 36 : 14 }}
                   />
                   {teacherQuery && (
-                    <button onClick={() => setTeacherQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg)', color: 'var(--ak-text-sec)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+                    <button onClick={() => setTeacherQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg)', color: 'var(--ak-text-sec)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={11}/></button>
                   )}
                 </div>
 
                 {filteredTeachers.length > 0 ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(228px, 1fr))', gap: 10,
-                    maxHeight: 312, overflowY: 'auto', padding: 2 }}>
-                    {filteredTeachers.map(tt => {
-                      const selected = teacherId === tt.id;
-                      return (
-                        <div key={tt.id} onClick={() => setTeacherId(selected ? '' : tt.id)} role="radio" aria-checked={selected}
-                          style={{ position: 'relative', cursor: 'pointer', borderRadius: 16, padding: '12px 13px',
-                            border: `2px solid ${selected ? accentColor : 'var(--ak-border2)'}`,
-                            background: selected ? `${accentColor}0d` : 'var(--ak-surface)',
-                            transition: 'border-color .15s, background .15s' }}>
-                          {selected && (
-                            <span style={{ position: 'absolute', top: 9, right: 9, width: 20, height: 20, borderRadius: '50%',
-                              background: accentColor, color: '#fff', fontSize: 11, fontWeight: 900,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
-                          )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            {(() => {
-                              const initials = (tt.full_name || '?').split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
-                              const box = { width: 44, height: 44, borderRadius: 14, flex: '0 0 auto', display: 'flex',
-                                alignItems: 'center', justifyContent: 'center', fontSize: 20, overflow: 'hidden' };
-                              if (tt.avatar_url && !brokenAvatars.has(tt.id)) {
-                                return (
-                                  <img src={tt.avatar_url} alt=""
-                                    onError={() => setBrokenAvatars(prev => new Set(prev).add(tt.id))}
-                                    style={{ ...box, objectFit: 'cover', background: 'var(--ak-tag-bg)' }} />
-                                );
-                              }
-                              if (tt.guide_emoji) {
-                                return <div style={{ ...box, background: `${accentColor}14` }}>{tt.guide_emoji}</div>;
-                              }
-                              return (
-                                <div style={{ ...box, background: `linear-gradient(135deg,${accentColor}33,#4C1DCC33)`,
-                                  color: accentColor, fontSize: 14, fontWeight: 900 }}>{initials}</div>
-                              );
-                            })()}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)',
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: selected ? 18 : 0 }}>
-                                {tt.full_name}
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--ak-text-muted)',
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {tt.school_name || `@${tt.username}`}
-                              </div>
-                            </div>
-                          </div>
-                          {tt.subjects?.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 9 }}>
-                              {tt.subjects.slice(0, 2).map(s => (
-                                <span key={s} style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-sec)',
-                                  background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '3px 8px', whiteSpace: 'nowrap' }}>{s}</span>
-                              ))}
-                              {tt.subjects.length > 2 && (
-                                <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)',
-                                  background: 'var(--ak-tag-bg)', borderRadius: 99, padding: '3px 8px' }}>+{tt.subjects.length - 2}</span>
-                              )}
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 9, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sec)' }}>
-                            {tt.student_count > 0
-                              ? <span>👥 {tt.student_count} {t('onboarding.students')}</span>
-                              : <span style={{ color: BRAND }}>🌱 {t('onboarding.teacher_new')}</span>}
-                            {tt.classroom_count > 0 && (
-                              <span style={{ color: 'var(--ak-text-muted)' }}>· {tt.classroom_count} {t('onboarding.classes')}</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="ob-teachers-grid" style={{ maxHeight: 340, overflowY: 'auto', padding: 2 }} aria-label="Choose your teacher">
+                    {filteredTeachers.map(tt => (
+                      <TeacherCard key={tt.id} teacher={tt} selected={teacherId === tt.id} accent={accentColor}
+                        onPick={() => { setTeacherId(teacherId === tt.id ? '' : tt.id); setErr(''); }} />
+                    ))}
                   </div>
                 ) : (
                   <div style={{ padding: '20px 16px', borderRadius: 14, background: 'var(--ak-tag-bg)',
                     border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
-                    <div style={{ fontSize: 22, marginBottom: 6 }}>🔍</div>
+                    <div style={{ marginBottom: 6 }}><Icon name="ti-search" size={22} color="var(--ak-text-sec)"/></div>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)' }}>{t('onboarding.teacher_no_match')}</div>
                     <button onClick={() => setTeacherQuery('')} style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99,
                       border: 'none', background: accentColor, color: '#fff', fontSize: 12, fontWeight: 800,
@@ -440,7 +482,7 @@ export default function OnboardingPage() {
 
                 {teacherId && (
                   <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '10px 2px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>✅</span>
+                    <Icon name="ti-circle-check" size={14} color="#10B981"/>
                     <span>
                       {prefill?.teacherId === teacherId
                         ? <>{prefill.teacherName} already has you in <strong>{prefill.className}</strong>.</>
@@ -452,7 +494,7 @@ export default function OnboardingPage() {
             ) : (
               <div style={{ padding: '22px 18px', borderRadius: 14, background: 'var(--ak-tag-bg)',
                 border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
-                <div style={{ fontSize: 26, marginBottom: 8 }}>🧑🏽‍🏫</div>
+                <div style={{ marginBottom: 8 }}><Icon name="ti-school" size={26} color="var(--ak-text-sec)"/></div>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)', lineHeight: 1.5 }}>
                   {t('onboarding.teacher_none')}
                 </div>

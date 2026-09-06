@@ -1619,10 +1619,10 @@ router.get("/onboarding-prefill", authenticateToken, asyncHandler(async (req, re
  *
  * Onboarding renders these as browsable profile cards (search + grid), so the
  * payload now carries what a card shows: avatar, guide emoji, subjects,
- * approved school, and how many students/classes the teacher actually has —
- * a learner can compare before committing a request. Optional ?search= does a
- * server-side pre-filter on name/username; the client still narrows locally
- * across school and subjects too.
+ * approved school, the default class a learner would join, and how many
+ * students/classes the teacher actually has — a learner can compare before
+ * committing a request. Optional ?search= does a server-side pre-filter on
+ * name/username; the client still narrows locally across school and subjects.
  */
 router.get("/directory/teachers", authenticateToken, asyncHandler(async (req, res) => {
   let query = db.from("users")
@@ -1647,13 +1647,18 @@ router.get("/directory/teachers", authenticateToken, asyncHandler(async (req, re
   // Student + class counts in two flat queries (no per-teacher round trips):
   // the teacher's classrooms, then the active roll of those classrooms. A
   // learner sitting in two rooms of the same teacher is counted once.
+  // Oldest-first so the first name per teacher is the DEFAULT class — the one
+  // /me/teacher-request joins (mirrors ensureDefaultClassroom).
   const statsByTeacher = {};
+  const classByTeacher = {};
   if (ids.length) {
     const { data: rooms } = await db.from("classrooms")
-      .select("id, teacher_id").in("teacher_id", ids);
+      .select("id, teacher_id, name, created_at").in("teacher_id", ids)
+      .order("created_at", { ascending: true });
     const roomIds = (rooms || []).map((r) => r.id);
     (rooms || []).forEach((r) => {
       (statsByTeacher[r.teacher_id] ??= { students: new Set(), classes: 0 }).classes += 1;
+      if (!classByTeacher[r.teacher_id]) classByTeacher[r.teacher_id] = r.name;
     });
     if (roomIds.length) {
       const { data: rolls } = await db.from("classroom_students")
@@ -1674,6 +1679,7 @@ router.get("/directory/teachers", authenticateToken, asyncHandler(async (req, re
     guide_emoji:    t.guide_emoji || null,
     subjects:       Array.isArray(t.subjects) ? t.subjects : [],
     school_name:    schoolByTeacher[t.id] || null,
+    class_name:     classByTeacher[t.id] || null,
     student_count:  statsByTeacher[t.id]?.students.size || 0,
     classroom_count: statsByTeacher[t.id]?.classes || 0,
   })));

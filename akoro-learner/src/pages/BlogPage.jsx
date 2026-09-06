@@ -199,7 +199,7 @@ export default function BlogPage() {
               New research, product updates, and education insights delivered to your inbox every two weeks. No spam — unsubscribe anytime.
             </p>
             {subState === 'done' ? (
-              <p style={{ color: '#22C55E', fontWeight: 700, fontSize: 16 }}>✓ You're subscribed — see you in your inbox!</p>
+              <p style={{ color: '#22C55E', fontWeight: 700, fontSize: 16 }}>You're subscribed — see you in your inbox!</p>
             ) : (
               <form onSubmit={handleSubscribe} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <input type="email" placeholder="you@example.com" required value={email} onChange={e => setEmail(e.target.value)}

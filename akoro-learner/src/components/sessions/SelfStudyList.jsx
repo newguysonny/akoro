@@ -10,6 +10,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS } from '../../constants.js';
+import { Icon } from '../common/Icons.jsx';
 import { apiGet, apiPost } from '../../services/api.js';
 
 const STATUS = {
@@ -78,7 +79,7 @@ export default function SelfStudyList({ onStart, subjectFilter = 'all' }) {
   if (shown.length === 0) {
     return (
       <div style={{ padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 52, opacity: .2 }}>📖</span>
+        <Icon name="ti-book-2" size={52} color="var(--ak-text-muted)" style={{ opacity: .2 }}/>
         <p style={{ fontSize: 15, fontWeight: 800, color: '#9CA3AF' }}>Nothing assigned yet</p>
         <p style={{ fontSize: 12, color: '#D1D5DB', textAlign: 'center', lineHeight: 1.5, maxWidth: 260 }}>
           When your teacher sets a self-study topic it appears here, and you work through it with your agent.
@@ -108,7 +109,7 @@ export default function SelfStudyList({ onStart, subjectFilter = 'all' }) {
               width: 46, height: 46, borderRadius: 14, flexShrink: 0, fontSize: 22,
               background: `${sc}14`, border: `1.5px solid ${sc}35`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>📖</div>
+            }}><Icon name="ti-book-2" size={18} color={BRAND}/></div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
@@ -136,10 +137,10 @@ export default function SelfStudyList({ onStart, subjectFilter = 'all' }) {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                 {a.assignedBy && (
-                  <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)' }}>👩‍🏫 {a.assignedBy}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 3 }}><Icon name="ti-chalkboard" size={11} color="var(--ak-text-muted)"/>{a.assignedBy}</span>
                 )}
                 {due && (
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: due.overdue ? RED : GOLD }}>🗓 {due.text}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: due.overdue ? RED : GOLD, display: 'inline-flex', alignItems: 'center', gap: 3 }}><Icon name="ti-calendar" size={11} color={due.overdue ? RED : GOLD}/>{due.text}</span>
                 )}
               </div>
 
@@ -151,7 +152,7 @@ export default function SelfStudyList({ onStart, subjectFilter = 'all' }) {
                   fontSize: 11.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer',
                   fontFamily: "'Nunito',sans-serif",
                 }}>
-                  {busy ? 'Opening…' : a.status === 'started' ? '▶ Continue' : '▶ Start studying'}
+                  {busy ? 'Opening…' : a.status === 'started' ? <><Icon name="ti-player-play" size={11}/> Continue</> : <><Icon name="ti-player-play" size={11}/> Start studying</>}
                 </button>
               )}
             </div>

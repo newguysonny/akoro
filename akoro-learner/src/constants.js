@@ -4,11 +4,13 @@ export const RED   = "#EF4444";
 export const GREEN = "#10B981";
 export const GOLD  = "#F59E0B";
 
+/* Subject icons are @tabler/icons-webfont names — render them with
+   <Icon name={...}/>; they are not text glyphs. */
 export const SUBJECTS = {
-  all:     { label:"All Topics", color:BRAND,     icon:"📚" },
-  maths:   { label:"Maths",      color:"#6C3BFF", icon:"🔢" },
-  english: { label:"English",    color:"#0EA5E9", icon:"📖" },
-  science: { label:"Science",    color:"#10B981", icon:"🔬" },
+  all:     { label:"All Topics", color:BRAND,     icon:"ti-book" },
+  maths:   { label:"Maths",      color:"#6C3BFF", icon:"ti-math-function" },
+  english: { label:"English",    color:"#0EA5E9", icon:"ti-book-2" },
+  science: { label:"Science",    color:"#10B981", icon:"ti-microscope" },
 };
 
 export const SUBJECT_COLORS = { maths:"#6C3BFF", english:"#0EA5E9", science:"#10B981" };
@@ -24,28 +26,28 @@ export const SUBJECT_COLORS = { maths:"#6C3BFF", english:"#0EA5E9", science:"#10
  * for is still a subject the learner can read.
  */
 const SUBJECT_MATCHERS = [
-  [/math/i,                       { icon:"🔢", color:"#6C3BFF" }],
-  [/english|literat|language art/i,{ icon:"📖", color:"#0EA5E9" }],
-  [/physics/i,                    { icon:"⚛️", color:"#6366F1" }],
-  [/chem/i,                       { icon:"🧪", color:"#14B8A6" }],
-  [/bio/i,                        { icon:"🧬", color:"#22C55E" }],
-  [/science/i,                    { icon:"🔬", color:"#10B981" }],
-  [/social|civic|government/i,    { icon:"🌍", color:"#F59E0B" }],
-  [/history/i,                    { icon:"🏛", color:"#B45309" }],
-  [/geograph/i,                   { icon:"🗺", color:"#0891B2" }],
-  [/econom|commerce|account/i,    { icon:"📊", color:"#EA580C" }],
-  [/comput|ict|technolog/i,       { icon:"💻", color:"#4F46E5" }],
-  [/agric/i,                      { icon:"🌾", color:"#65A30D" }],
-  [/health|physical/i,            { icon:"🏃", color:"#DB2777" }],
-  [/relig|christian|islamic/i,    { icon:"🕊", color:"#7C3AED" }],
-  [/art|music|creative/i,         { icon:"🎨", color:"#DB2777" }],
+  [/math/i,                       { icon:"ti-math-function", color:"#6C3BFF" }],
+  [/english|literat|language art/i,{ icon:"ti-book-2", color:"#0EA5E9" }],
+  [/physics/i,                    { icon:"ti-atom", color:"#6366F1" }],
+  [/chem/i,                       { icon:"ti-flask", color:"#14B8A6" }],
+  [/bio/i,                        { icon:"ti-dna", color:"#22C55E" }],
+  [/science/i,                    { icon:"ti-microscope", color:"#10B981" }],
+  [/social|civic|government/i,    { icon:"ti-world", color:"#F59E0B" }],
+  [/history/i,                    { icon:"ti-clock-history", color:"#B45309" }],
+  [/geograph/i,                   { icon:"ti-map", color:"#0891B2" }],
+  [/econom|commerce|account/i,    { icon:"ti-chart-bar", color:"#EA580C" }],
+  [/comput|ict|technolog/i,       { icon:"ti-device-laptop", color:"#4F46E5" }],
+  [/agric/i,                      { icon:"ti-plant", color:"#65A30D" }],
+  [/health|physical/i,            { icon:"ti-run", color:"#DB2777" }],
+  [/relig|christian|islamic/i,    { icon:"ti-star", color:"#7C3AED" }],
+  [/art|music|creative/i,         { icon:"ti-palette", color:"#DB2777" }],
 ];
 
 const FALLBACK_COLORS = ["#6C3BFF","#0EA5E9","#10B981","#F59E0B","#EC4899","#14B8A6"];
 
 export function subjectStyle(subject) {
   const name = (subject ?? "").toString().trim();
-  if (!name) return { label:"General", icon:"📘", color:"#6B7280" };
+  if (!name) return { label:"General", icon:"ti-book", color:"#6B7280" };
 
   const slug = SUBJECTS[name.toLowerCase()];
   if (slug) return { label:slug.label, icon:slug.icon, color:slug.color };
@@ -56,7 +58,7 @@ export function subjectStyle(subject) {
   // Stable per name, so the same subject is always the same colour.
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return { label:name, icon:"📘", color:FALLBACK_COLORS[h % FALLBACK_COLORS.length] };
+  return { label:name, icon:"ti-book", color:FALLBACK_COLORS[h % FALLBACK_COLORS.length] };
 }
 
 export const PRIORITY_CONFIG = {

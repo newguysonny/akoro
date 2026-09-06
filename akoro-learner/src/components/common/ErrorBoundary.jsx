@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import { isChunkError, recoverFromStaleChunk } from '../../utils/chunkRetry.js';
+import { Icon } from './Icons.jsx';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -55,7 +56,7 @@ class ErrorBoundary extends Component {
               borderRadius:20, border:'1.5px solid #E5E7EB', fontSize:13, fontWeight:700,
               color:'#374151', background:'#fff', cursor:'pointer',
               fontFamily:"'Nunito',sans-serif" }}>
-            🔄 Refresh
+            <Icon name="ti-refresh" size={13}/> Refresh
           </button>
         </header>
 
@@ -67,9 +68,7 @@ class ErrorBoundary extends Component {
               <div style={{ width:80, height:80, borderRadius:'50%',
                 background:`${RED}12`, border:`1.5px solid ${RED}30`,
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:36 }}>
-                ⚠️
-              </div>
+                fontSize:36 }}><Icon name="ti-alert-triangle" size={36} color={RED}/></div>
             </div>
 
             <h1 style={{ fontSize:'clamp(24px,5vw,40px)', fontWeight:900,
@@ -91,14 +90,14 @@ class ErrorBoundary extends Component {
                   borderRadius:14, background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,
                   color:'#fff', fontSize:14, fontWeight:800, border:'none', cursor:'pointer',
                   fontFamily:"'Nunito',sans-serif", boxShadow:`0 4px 14px ${BRAND}44` }}>
-                🔄 Refresh page
+                <Icon name="ti-refresh" size={14}/> Refresh page
               </button>
               <button onClick={() => { window.location.href = '/'; }}
                 style={{ display:'flex', alignItems:'center', gap:7, padding:'12px 22px',
                   borderRadius:14, background:'#fff', border:'1.5px solid #E5E7EB',
                   color:'#374151', fontSize:14, fontWeight:700, cursor:'pointer',
                   fontFamily:"'Nunito',sans-serif" }}>
-                🏠 Go home
+                <Icon name="ti-home" size={14}/> Go home
               </button>
               <button onClick={() => window.history.back()}
                 style={{ display:'flex', alignItems:'center', gap:7, padding:'12px 22px',

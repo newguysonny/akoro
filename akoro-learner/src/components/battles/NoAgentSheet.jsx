@@ -8,11 +8,12 @@
  */
 import React, { useState } from 'react';
 import { BRAND, RED } from '../../constants.js';
+import { Icon } from '../common/Icons.jsx';
 
 // settingsApi's putAgent resolves the body even on a 4xx/5xx, so it cannot tell
 // us whether the agent was actually created — and here that difference decides
 // whether we replay the battle. So do the call directly and check.
-const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
 async function createAgent(body) {
   const r = await fetch(`${API}/api/user/agent`, {
     method: 'PUT', credentials: 'include',
@@ -74,7 +75,7 @@ export default function NoAgentSheet({ open, onClose, onCreated, defaultName = '
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2200, background: 'rgba(6,6,18,.6)', backdropFilter: 'blur(5px)' }} />
       <div style={SHEET}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--ak-border3)', margin: '14px auto 20px' }} />
-        <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 6px' }}>🤖 First, meet your agent</p>
+        <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 6px' }}><Icon name="ti-robot" size={16}/> First, meet your agent</p>
         <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', margin: '0 0 20px', lineHeight: 1.55 }}>
           Battles are agent vs agent — yours studies what you study and competes for you.
           You don't have one yet, so let's make it now. It takes a second, and you can
@@ -119,7 +120,7 @@ export default function NoAgentSheet({ open, onClose, onCreated, defaultName = '
             color: (busy || !name.trim()) ? 'var(--ak-text-muted)' : '#fff',
             cursor: (busy || !name.trim()) ? 'default' : 'pointer',
             fontFamily: "'Nunito',sans-serif",
-          }}>{busy ? 'Creating…' : '✨ Create my agent'}</button>
+          }}>{busy ? 'Creating…' : <><Icon name="ti-sparkles" size={12}/> Create my agent</>}</button>
         </div>
       </div>
     </>

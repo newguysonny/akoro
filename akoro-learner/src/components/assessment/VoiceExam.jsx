@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 import { BRAND, RED, GREEN } from '../../constants.js';
-import { XIcon } from '../common/Icons.jsx';
+import { XIcon, Icon } from '../common/Icons.jsx';
 
 const AMBER = '#F59E0B';
 
@@ -110,7 +110,7 @@ export default function VoiceExam({
           )}
         </button>
         <div style={{ fontSize: 12, color: '#64748B', fontWeight: 700 }}>{listening ? 'Tap to send your answer' : 'Hold a quiet space · stay in frame'}</div>
-        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}>🎙 {voiceError} — you can type your answer below instead.</div>}
+        {voiceError && <div style={{ fontSize: 12, color: '#FCA5A5', fontWeight: 700, maxWidth: 420, textAlign: 'center' }}><Icon name="ti-microphone" size={12}/> {voiceError} — you can type your answer below instead.</div>}
 
         <button onClick={() => setShowType(s => !s)} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>
           {showType ? 'Hide typing' : 'Type instead'}

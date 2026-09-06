@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
-import { ZapIcon, ChevDownIcon } from '../common/Icons.jsx';
+import { ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
 
 /* Where a step sits in the arc of the topic. Four kinds, because that is the
    shape of learning something: name it, see how it works, use it, tie it
@@ -188,7 +188,7 @@ function AudioPlayer({ url, tint = BRAND, dark = false }) {
         background: dark ? `${tint}33` : "rgba(255,255,255,.55)", display:"flex",
         alignItems:"center", justifyContent:"center", cursor:"pointer",
         border:`1px solid ${dark ? `${tint}66` : "rgba(255,255,255,.7)"}` }}>
-        <span style={{ fontSize:12, color: dark ? tint : "#fff", lineHeight:1 }}>{playing ? "❚❚" : "▶"}</span>
+        <Icon name={playing ? "ti-player-pause" : "ti-player-play"} size={12} color={dark ? tint : "#fff"}/>
       </div>
       <div style={{ flex:1, height:4, borderRadius:3, background:trackBg, overflow:"hidden", minWidth:60 }}>
         <div style={{ height:"100%", width:`${progress}%`, background: dark ? tint : "#fff",
@@ -292,7 +292,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
       overflow:"hidden", flexShrink:0, margin:"6px 0 8px", opacity }}>
       <div style={{ background:"linear-gradient(135deg,#7F1D1D,#991B1B)", padding:"7px 13px",
         display:"flex", alignItems:"center", gap:8 }}>
-        <span style={{ fontSize:14 }}>⚡</span>
+        <Icon name="ti-bolt" size={14} color="#FDE047"/>
         <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>
           Sargeant{block.phase ? ` — ${block.phase}` : ""}
         </span>
@@ -314,7 +314,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
         <div style={{ background:color, padding:"7px 13px", display:"flex",
           alignItems:"center", justifyContent:"space-between" }}>
           <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>
-            {block.passed ? "✓ Assessment passed" : "⚠ Needs more practice"}
+            {block.passed ? <><Icon name="ti-check" size={12}/> Assessment passed</> : <><Icon name="ti-alert-triangle" size={12}/> Needs more practice</>}
             {block.subtopic ? ` — ${block.subtopic}` : ""}
           </span>
           <span style={{ fontSize:12, fontWeight:900, color:"#fff" }}>{pct}%</span>
@@ -325,7 +325,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
           </div>
           <div style={{ fontSize:11.5, color:"rgba(255,255,255,.65)", lineHeight:1.55 }}>
             {block.passed
-              ? `${block.agentName||"Agent"} confidence: ${pct}% ✓ — ready for ${block.nextSubtopic || "next subtopic"}.`
+              ? `${block.agentName||"Agent"} confidence: ${pct}% — ready for ${block.nextSubtopic || "next subtopic"}.`
               : `${block.agentName||"Agent"} confidence: ${pct}% — below 70%. Please re-teach before advancing.`
             }
           </div>
@@ -357,7 +357,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
           <div style={{ marginBottom:10 }}>
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"rgba(255,255,255,.45)", marginBottom:4 }}>
               <span>Previous: {block.prevConfidence}%</span>
-              <span style={{ color:"#FCA5A5" }}>▼ Dropped {drop}% over {block.daysSince} days</span>
+              <span style={{ color:"#FCA5A5", display:"inline-flex", alignItems:"center", gap:3 }}><Icon name="ti-trending-down" size={10}/> Dropped {drop}% over {block.daysSince} days</span>
               <span style={{ color:"#FCA5A5" }}>Now: {block.confidence}%</span>
             </div>
             <div style={{ height:6, background:"rgba(255,255,255,.12)", borderRadius:3, overflow:"hidden" }}>
@@ -372,7 +372,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
             My confidence on <strong>{block.topic}</strong> has dropped significantly. I've been making mistakes with:
           </p>
           {(block.misconceptions || []).map((m,i)=>(
-            <div key={i} style={{ fontSize:12, color:"#FCA5A5", marginBottom:3 }}>⚠ {m}</div>
+            <div key={i} style={{ fontSize:12, color:"#FCA5A5", marginBottom:3, display:"flex", alignItems:"center", gap:4 }}><Icon name="ti-alert-triangle" size={11}/> {m}</div>
           ))}
           <p style={{ fontSize:12.5, color:"rgba(255,255,255,.55)", lineHeight:1.5, margin:"8px 0 0", fontStyle:"italic" }}>
             Can you re-teach me this? I need to refresh my understanding.
@@ -387,7 +387,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
     <div style={{ textAlign:"center", padding:"20px 16px",
       background:"linear-gradient(135deg,rgba(108,59,255,.18),rgba(16,185,129,.10))",
       borderRadius:16, border:"1.5px solid rgba(108,59,255,.35)", margin:"8px 0", opacity }}>
-      <div style={{ fontSize:36, marginBottom:8 }}>🎉</div>
+      <div style={{ marginBottom:8 }}><Icon name="ti-confetti" size={36} color="#FBBF24"/></div>
       <div style={{ fontSize:15, fontWeight:800, color:"#F1F5F9", marginBottom:4 }}>
         {block.isDecay ? "Revision Complete!" : "Session Complete!"}
       </div>
@@ -403,7 +403,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
         color:"#fff", fontSize:13.5, lineHeight:1.55, whiteSpace:"pre-wrap", fontWeight:500 }}>
         {(block.modality === "audio" || block.modality === "live") && (
           <span style={{ fontSize:10, fontWeight:700, opacity:.75, display:"block", marginBottom:2 }}>
-            {block.modality === "live" ? "🎙 Voice" : "🎤 Audio"}
+            {block.modality === "live" ? <><Icon name="ti-microphone" size={10}/> Voice</> : <><Icon name="ti-headphones" size={10}/> Audio</>}
           </span>
         )}
         {block.text}

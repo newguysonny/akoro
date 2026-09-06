@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
+import { Icon } from '../../components/common/Icons.jsx';
 
 // ─── palette / tokens ────────────────────────────────────────────────────────
 
@@ -248,7 +249,7 @@ function SchemaBuilder({ schema, onChange }) {
               {v.description && <span style={{ color: "var(--ak-text-muted)" }}> — {v.description}</span>}
               {required.includes(k) && <span style={{ color: BRAND, marginLeft: 4 }}>*</span>}
             </span>
-            <Btn variant="ghost" onClick={() => remove(k)} style={{ padding: "2px 8px", fontSize: 12 }}>✕</Btn>
+            <Btn variant="ghost" onClick={() => remove(k)} style={{ padding: "2px 8px", fontSize: 12 }}><Icon name="ti-x" size={12}/></Btn>
           </div>
         ))}
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>

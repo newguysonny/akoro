@@ -1,6 +1,6 @@
 import React from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, AVATAR_FALLBACK } from '../../constants.js';
-import { PlayIcon, PhoneIcon, MessageIcon } from '../common/Icons.jsx';
+import { PlayIcon, PhoneIcon, MessageIcon, Icon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -62,7 +62,7 @@ function SessionSheet({ session, onClose, onMinimize, onStartTeach, onAssess, de
         background:isDecay?`${RED}10`:isAgent?`${GREEN}10`:`${sc}12`,
         border:`1px solid ${isDecay?`${RED}30`:isAgent?`${GREEN}30`:`${sc}25`}`,
         borderRadius:8,padding:"5px 12px",marginBottom:12 }}>
-        <span style={{ fontSize:13 }}>{SUBJECTS[session.subject]?.icon}</span>
+        <Icon name={SUBJECTS[session.subject]?.icon || "ti-book"} size={14} color={isDecay?RED:isAgent?GREEN:sc}/>
         <span style={{ fontSize:12,fontWeight:700,color:isDecay?RED:isAgent?GREEN:sc }}>{session.topic}</span>
       </div>
 
@@ -79,25 +79,25 @@ function SessionSheet({ session, onClose, onMinimize, onStartTeach, onAssess, de
             <div style={{ height:"100%",width:`${decayAlert.confidence}%`,background:`linear-gradient(90deg,${RED}88,${RED})`,borderRadius:99 }}/>
           </div>
           <div style={{ display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"var(--ak-text-muted)" }}>
-            <span style={{ color:RED }}>▼ {t('sheet.dropped')} {drop}%</span>
+            <span style={{ color:RED,display:"inline-flex",alignItems:"center",gap:3 }}><Icon name="ti-trending-down" size={11} color={RED}/> {t('sheet.dropped')} {drop}%</span>
             <span>{decayAlert.daysSince} {t('sheet.days_since_last_session')}</span>
           </div>
         </div>
         {decayAlert.misconceptions?.length>0&&(
           <div style={{ background:"#FFF7ED",border:"1px solid rgba(245,158,11,.25)",borderRadius:14,padding:"12px 14px",marginBottom:12 }}>
-            <p style={{ fontSize:11,fontWeight:800,color:"#92400E",margin:"0 0 8px",letterSpacing:.3 }}>⚠ {t('sheet.flagged_gaps')}</p>
+            <p style={{ fontSize:11,fontWeight:800,color:"#92400E",margin:"0 0 8px",letterSpacing:.3,display:"flex",alignItems:"center",gap:5 }}><Icon name="ti-alert-triangle" size={13} color="#92400E"/>{t('sheet.flagged_gaps')}</p>
             {decayAlert.misconceptions.map((m,i)=><p key={i} style={{ fontSize:12.5,color:"#7C2D12",margin:"0 0 4px",fontWeight:600 }}>· {m}</p>)}
           </div>
         )}
         <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
           <p style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",margin:"0 0 8px" }}>{t('sheet.session_stats')}</p>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
-            {[{icon:"📌",val:`${session.topics||0} topics`,label:t('sheet.to_review')},
-              {icon:"🔁",val:`${session.revisions||0} revisions`,label:t('sheet.completed_so_far')},
-              {icon:"⭐",val:`${session.reviews||0} assessments`,label:t('sheet.passed_sargeant')}
+            {[{icon:"ti-pin",val:`${session.topics||0} topics`,label:t('sheet.to_review')},
+              {icon:"ti-refresh",val:`${session.revisions||0} revisions`,label:t('sheet.completed_so_far')},
+              {icon:"ti-star",val:`${session.reviews||0} assessments`,label:t('sheet.passed_sargeant')}
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
-                <span style={{ fontSize:13 }}>{icon}</span>
+                <Icon name={icon} size={14} color="var(--ak-text-sub)"/>
                 <span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)" }}>{val}</span>
                 <span style={{ fontSize:11,color:"var(--ak-text-muted)" }}>{label}</span>
               </div>
@@ -134,12 +134,12 @@ function SessionSheet({ session, onClose, onMinimize, onStartTeach, onAssess, de
         )}
         <div style={{ background:"var(--ak-bg)",borderRadius:14,border:"1px solid var(--ak-border)",padding:"11px 14px",marginBottom:14 }}>
           <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
-            {[{icon:"📌",val:`${session.topics||0} subtopics`,label:t('sheet.in_session')},
-              {icon:"🔁",val:`${session.revisions||0} assessments`,label:t('sheet.with_sargeant')},
-              {icon:"⭐",val:`${session.reviews||0} passed`,label:t('sheet.above_70')}
+            {[{icon:"ti-pin",val:`${session.topics||0} subtopics`,label:t('sheet.in_session')},
+              {icon:"ti-refresh",val:`${session.revisions||0} assessments`,label:t('sheet.with_sargeant')},
+              {icon:"ti-star",val:`${session.reviews||0} passed`,label:t('sheet.above_70')}
             ].map(({icon,val,label})=>(
               <div key={icon} style={{ display:"flex",alignItems:"center",gap:8 }}>
-                <span style={{ fontSize:13 }}>{icon}</span>
+                <Icon name={icon} size={14} color="var(--ak-text-sub)"/>
                 <span style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)" }}>{val}</span>
                 <span style={{ fontSize:11,color:"var(--ak-text-muted)" }}>{label}</span>
               </div>
@@ -174,7 +174,7 @@ function SessionSheet({ session, onClose, onMinimize, onStartTeach, onAssess, de
           style={{ width:"100%",padding:"12px",borderRadius:14,border:"1.5px solid rgba(245,158,11,.4)",
             background:"rgba(245,158,11,.1)",fontSize:13,fontWeight:800,color:"#F59E0B",cursor:"pointer",
             fontFamily:"'Nunito',sans-serif",marginBottom:10 }}>
-          ⚡ Take live assessment
+          <Icon name="ti-bolt" size={14} color="#F59E0B"/> Take live assessment
         </button>
       )}
 

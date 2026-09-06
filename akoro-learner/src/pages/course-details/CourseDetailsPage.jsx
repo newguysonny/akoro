@@ -99,7 +99,7 @@ export default function CourseDetailsPage() {
       const d = await r.json().catch(() => ({}));
       const body = d.data || d;
       if (!r.ok) { setToast({ msg: d.message || body.message || 'Could not enrol', color: RED }); return; }
-      if (body.free) { setIsEnrolled(true); setToast({ msg: 'Enrolled! 🎉', color: GREEN }); }
+      if (body.free) { setIsEnrolled(true); setToast({ msg: 'Enrolled!', color: GREEN }); }
       else if (body.checkout_url) { window.location.href = body.checkout_url; }
       else { setToast({ msg: 'Enrolment started', color: GREEN }); }
     } catch { setToast({ msg: 'Network error — please retry', color: RED }); }
@@ -143,7 +143,7 @@ export default function CourseDetailsPage() {
     if (p.get('payment') === 'success') {
       checkEnrolled(view.course.id).then((ok) => {
         setIsEnrolled(ok);
-        setToast({ msg: ok ? 'Payment confirmed — you’re enrolled! 🎉' : 'Payment received — enrolment finalising…', color: GREEN });
+        setToast({ msg: ok ? 'Payment confirmed — you’re enrolled!' : 'Payment received — enrolment finalising…', color: GREEN });
       });
     }
     window.history.replaceState({}, '', window.location.pathname);
@@ -162,7 +162,7 @@ export default function CourseDetailsPage() {
             <span className="fs" style={{ fontSize: 17, fontWeight: 800, color: INK }}>Akoro</span>
           </div>
           <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 800, padding: '4px 11px', borderRadius: 100, background: courseType === 'video' ? `${BRAND}14` : '#FEE2E2', color: courseType === 'video' ? BRAND : '#DC2626' }}>
-            {courseType === 'video' ? '🎬 Video course' : '🔴 Live class'}
+            {courseType === 'video' ? <><Video size={11}/> Video course</> : <><Radio size={11}/> Live class</>}
           </span>
           <button onClick={() => navigate('/cart')} style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: INK, display: 'flex', padding: 4 }} aria-label="Cart">
             <ShoppingCart size={19} />

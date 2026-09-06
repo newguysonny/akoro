@@ -6,10 +6,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video,
+  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Crown, PartyPopper,
 } from 'lucide-react';
 import { API, apiPost } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
+import { Icon } from '../../components/common/Icons.jsx';
 import BattleModal from '../../components/battles/BattleModal.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
@@ -85,9 +86,9 @@ function ActionChips({ course }) {
     } catch { /* cancelled */ }
   };
   const chips = [
-    { key: 'cal', label: calAdded ? 'Added ✓' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v) },
-    { key: 'agent', label: agentLinked ? 'Agent linked ✓' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
-    { key: 'share', label: copied ? 'Link copied ✓' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: share },
+    { key: 'cal', label: calAdded ? 'Added' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v) },
+    { key: 'agent', label: agentLinked ? 'Agent linked' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
+    { key: 'share', label: copied ? 'Link copied' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: share },
     { key: 'host', label: 'Host revision session', icon: <Plus size={13} />, onClick: () => {} },
     { key: 'report', label: 'Report', icon: <Flag size={13} />, onClick: () => {} },
   ];
@@ -127,11 +128,11 @@ const DEFAULT_MODULES = [
 const DEFAULT_COURSE = {
   title: 'Course', subject: 'General', level: 'All levels', rating: null, ratingCount: '',
   students: 0, hours: 0, instructor: 'Instructor', updated: '', priceLabel: 'Free',
-  priceOld: null, emoji: '📘', description: '', schedule: null, reviews: null, teachers: null,
+  priceOld: null, emoji: 'ti-book', description: '', schedule: null, reviews: null, teachers: null,
 };
 
 /* ── HLS video player ─────────────────────────────────────── */
-function VideoPlayer({ lesson, courseEmoji = '📘' }) {
+function VideoPlayer({ lesson, courseEmoji = 'ti-book' }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const saveRef = useRef(0);
@@ -204,7 +205,7 @@ function VideoPlayer({ lesson, courseEmoji = '📘' }) {
         <video ref={videoRef} controls playsInline onTimeUpdate={onTime} style={{ width: '100%', height: '100%', background: '#000' }} />
       ) : (
         <div style={{ width: '100%', height: '100%', minHeight: 240, background: 'linear-gradient(135deg,#0d1a2e,#1a1f3a,#0d2137)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-          <div style={{ fontSize: 64, opacity: 0.5 }}>{courseEmoji}</div>
+          <div style={{ fontSize: 64, opacity: 0.5 }}>{courseEmoji?.startsWith('ti-') ? <Icon name={courseEmoji} size={64}/> : (courseEmoji || <Icon name="ti-book" size={64}/>)}</div>
           <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 16, fontWeight: 800, textAlign: 'center', padding: '0 20px' }}>{lesson?.title || 'Lesson'}</div>
           <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12 }}>{status === 'loading' ? 'Loading stream…' : status === 'error' ? "Couldn't load this lesson" : 'Video coming soon'}</div>
         </div>
@@ -230,7 +231,7 @@ function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
           <div key={mi} style={{ ...card, overflow: 'hidden' }}>
             <button onClick={() => setOpen(open === mi ? -1 : mi)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: 16, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, background: isEnrolled && pct === 100 ? '#E8F8EE' : isEnrolled && pct > 0 ? `${BRAND}18` : '#F0ECE6', color: isEnrolled && pct === 100 ? '#2AA76E' : isEnrolled && pct > 0 ? BRAND : MUTED2 }}>{isEnrolled && pct === 100 ? '✓' : mi + 1}</div>
+                <div style={{ width: 28, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, background: isEnrolled && pct === 100 ? '#E8F8EE' : isEnrolled && pct > 0 ? `${BRAND}18` : '#F0ECE6', color: isEnrolled && pct === 100 ? '#2AA76E' : isEnrolled && pct > 0 ? BRAND : MUTED2 }}>{isEnrolled && pct === 100 ? <Check size={11} /> : mi + 1}</div>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: INK, display: 'flex', alignItems: 'center', gap: 8 }}>
                     {m.title}{!unlocked && <Lock size={12} color="#C9C5BE" />}
@@ -249,7 +250,7 @@ function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
                   return (
                     <div key={li} onClick={() => clickable && onPick({ ...l, module: m.title })}
                       style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px', borderBottom: li < m.lessons.length - 1 ? `1px solid ${BORDER}` : 'none', cursor: clickable ? 'pointer' : unlocked ? 'default' : 'not-allowed', opacity: unlocked ? 1 : 0.5, background: active ? `${BRAND}10` : 'transparent' }}>
-                      <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0, background: isEnrolled && l.done ? BRAND : unlocked ? '#EDE8E1' : '#F0ECE6', color: isEnrolled && l.done ? '#fff' : MUTED2 }}>{isEnrolled && l.done ? '✓' : !unlocked ? <Lock size={9} /> : li + 1}</div>
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0, background: isEnrolled && l.done ? BRAND : unlocked ? '#EDE8E1' : '#F0ECE6', color: isEnrolled && l.done ? '#fff' : MUTED2 }}>{isEnrolled && l.done ? <Check size={10} /> : !unlocked ? <Lock size={9} /> : li + 1}</div>
                       {l.type === 'video' ? <Play size={12} color={unlocked ? BRAND : '#C9C5BE'} /> : <BookOpen size={12} color={unlocked ? BRAND : '#C9C5BE'} />}
                       <span style={{ flex: 1, fontSize: 13.5, color: unlocked ? INK : '#C9C5BE' }}>{l.title}</span>
                       <span style={{ fontSize: 11, color: MUTED2 }}>{l.duration}</span>
@@ -299,7 +300,7 @@ function ReviewForm({ courseId }) {
   };
 
   if (posted) return (
-    <div style={{ ...card, padding: 16, marginBottom: 14, fontSize: 13.5, fontWeight: 700, color: '#2AA76E' }}>✓ Thanks for your review!</div>
+    <div style={{ ...card, padding: 16, marginBottom: 14, fontSize: 13.5, fontWeight: 700, color: '#2AA76E' }}><Check size={13} style={{ display: "inline-block", verticalAlign: "-2px" }} /> Thanks for your review!</div>
   );
   return (
     <div style={{ ...card, padding: 18, marginBottom: 14 }}>
@@ -377,7 +378,7 @@ function BattleCard({ b, onOpen }) {
     <div style={{ flex: 1, textAlign: 'center' }}>
       <div style={{ position: 'relative', display: 'inline-block' }}>
         <Avatar emoji={ag.emoji} bg={ag.bg || `${ag.color || BRAND}1A`} size={42} ring={ag.isYou ? true : undefined} />
-        {win && <div style={{ position: 'absolute', top: -8, right: -8, fontSize: 15 }}>👑</div>}
+        {win && <div style={{ position: 'absolute', top: -8, right: -8, fontSize: 15 }}><Crown size={15} fill={GOLD} color={GOLD}/></div>}
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 800, color: INK, marginTop: 4 }}>{ag.name}</div>
       {ag.owner && <div style={{ fontSize: 10.5, color: MUTED2 }}>{ag.owner}</div>}
@@ -473,7 +474,7 @@ function BattlesSection({ battles: real, leaderboard: realLb, lobbies }) {
 
       {/* Filter */}
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 12, width: 'fit-content' }}>
-        {[['all', 'All battles'], ['live', '🔴 Live now']].map(([k, l]) => (
+        {[['all', 'All battles'], ['live', 'Live now']].map(([k, l]) => (
           <button key={k} onClick={() => setFilter(k)} style={{ padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 800, background: filter === k ? INK : 'transparent', color: filter === k ? '#fff' : MUTED }}>{l}</button>
         ))}
       </div>
@@ -491,7 +492,7 @@ function BattlesSection({ battles: real, leaderboard: realLb, lobbies }) {
         <div style={{ fontSize: 13.5, fontWeight: 900, color: INK, marginBottom: 10 }}>Course Leaderboard</div>
         {leaderboard.map((ag, i) => (
           <div key={ag.id || ag.name || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: i < leaderboard.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
-            <div style={{ width: 22, textAlign: 'center', fontSize: 15, fontWeight: 900, color: i === 0 ? GOLD : MUTED2 }}>{i === 0 ? '👑' : i + 1}</div>
+            <div style={{ width: 22, textAlign: 'center', fontSize: 15, fontWeight: 900, color: i === 0 ? GOLD : MUTED2 }}>{i === 0 ? <Crown size={14} fill={GOLD} color={GOLD}/> : i + 1}</div>
             <Avatar emoji={ag.emoji} bg={ag.bg || `${ag.color || BRAND}1A`} size={32} ring={ag.isYou ? true : undefined} />
             <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: INK }}>{ag.name}{ag.isYou && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 800, color: '#fff', background: INK, padding: '1px 7px', borderRadius: 100 }}>You</span>}</div>{ag.owner && <div style={{ fontSize: 11, color: MUTED2 }}>{ag.owner}</div>}</div>
             <div style={{ fontWeight: 900, color: ag.isYou ? BRAND : INK }}>{ag.pts} <span style={{ fontSize: 10, color: MUTED2, fontWeight: 700 }}>pts</span></div>
@@ -598,7 +599,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
           <div style={{ fontSize: 64 }}>{course.emoji}</div>
           <div style={{ flex: 1, minWidth: 240 }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-              {isVideo ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 900, padding: '2px 9px', borderRadius: 100, background: BRAND, color: '#fff' }}>🎬 VIDEO COURSE</span> : <LiveBadge />}
+              {isVideo ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 900, padding: '2px 9px', borderRadius: 100, background: BRAND, color: '#fff' }}><Video size={10}/> VIDEO COURSE</span> : <LiveBadge />}
               {!isVideo && course.platform && <PlatformBadge platform={course.platform} />}
               <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,.7)', background: 'rgba(255,255,255,.1)', padding: '3px 10px', borderRadius: 100 }}>{course.subject}</span>
             </div>
@@ -675,7 +676,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
               </div>
             )}
             <div style={{ ...card, padding: 20 }}>
-              {[[`${course.students}`, 'Students enrolled'], [`${course.rating || '—'} ★`, 'Average rating'], [`${total}`, 'Lessons']].map(([v, l]) => (
+              {[[`${course.students}`, 'Students enrolled'], [`${course.rating || '—'}`, 'Average rating'], [`${total}`, 'Lessons']].map(([v, l]) => (
                 <div key={l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${BORDER}`, fontSize: 13.5 }}><span style={{ color: MUTED }}>{l}</span><span style={{ fontWeight: 800, color: INK }}>{v}</span></div>
               ))}
             </div>
@@ -759,7 +760,7 @@ function EnrolledVideoView({ course, modules }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {complete && (
         <div style={{ ...card, padding: 18, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', background: 'linear-gradient(135deg,#F0FFF6,#EAF6FF)', border: '1px solid #CDEBD8' }}>
-          <div style={{ fontSize: 34 }}>🎉</div>
+          <PartyPopper size={34} color="#F59E0B" style={{ flexShrink: 0 }}/>
           <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: INK }}>Course complete!</div>
             <div style={{ fontSize: 12.5, color: MUTED }}>You’ve finished every lesson. Download your certificate.</div>
@@ -780,7 +781,7 @@ function EnrolledVideoView({ course, modules }) {
       <ActionChips course={course} />
 
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
-        {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews'], ['battles', '⚔️ Battles'], ['revisions', 'Live revisions']].map(([id, label]) => (
+        {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews'], ['battles', 'Battles'], ['revisions', 'Live revisions']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, fontWeight: 800, background: tab === id ? INK : 'transparent', color: tab === id ? '#fff' : MUTED }}>{label}</button>
         ))}
       </div>

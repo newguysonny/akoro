@@ -31,7 +31,7 @@ export default defineConfig({
         // generated service worker. Lives in public/ so it ships as /push-sw.js.
         importScripts: ['/push-sw.js'],
         // Precache the built app shell so the app opens with no connection.
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff2}'],
         // Keep the shell lean for low-bandwidth users: the heavy TensorFlow
         // (face-detection) + hls video chunks are lazy-loaded, online-only
         // features (proctored assessment / video). They're cached on demand by

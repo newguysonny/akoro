@@ -3,7 +3,7 @@ import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { API,  apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
-import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon } from '../common/Icons.jsx';
+import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
@@ -54,10 +54,10 @@ function ThoughtBlock({ thinking, streaming }) {
   return (
     <div style={{ marginBottom: 6, borderRadius: 12, border: "1px solid var(--ak-border)", background: "var(--ak-surface-hover)", overflow: "hidden" }}>
       <button onClick={() => setOpen(!expanded)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", background: "none", border: "none", cursor: "pointer", fontFamily: "'Nunito',sans-serif" }}>
-        <span style={{ fontSize: 12 }}>🧠</span>
+        <Icon name="ti-brain" size={12}/>
         <span style={{ flex: 1, textAlign: "left", fontSize: 11, fontWeight: 800, color: "var(--ak-text-muted)", letterSpacing: .2 }}>{t('agent.thought_process')}</span>
         {streaming && expanded
-          ? <span style={{ fontSize: 10, fontWeight: 800, color: BRAND, animation: "pulse-dot 1.2s ease-in-out infinite" }}>●</span>
+          ? <span style={{ width: 7, height: 7, borderRadius: '50%', background: BRAND, display: 'inline-block', animation: 'pulse-dot 1.2s ease-in-out infinite' }}/>
           : <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }}><polyline points="6 9 12 15 18 9"/></svg>}
       </button>
       {expanded && (
@@ -534,9 +534,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
         </button>
       </div>
       <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
-        {[{key:"chat",label:t('agent.chat'),icon:"💬",badge:null},{key:"tasks",label:t('agent.tasks'),icon:"📋",badge:pendingCount},{key:"stats",label:t('agent.stats'),icon:"📊",badge:null}].map(({key,label,icon,badge})=>(
+        {[{key:"chat",label:t('agent.chat'),icon:"ti-message-circle",badge:null},{key:"tasks",label:t('agent.tasks'),icon:"ti-clipboard",badge:pendingCount},{key:"stats",label:t('agent.stats'),icon:"ti-chart-bar",badge:null}].map(({key,label,icon,badge})=>(
           <button key={key} onClick={()=>setInnerTab(key)} style={{ flex:1,padding:"9px 4px 10px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:innerTab===key?800:600,color:innerTab===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${innerTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}>
-            <span style={{ fontSize:13 }}>{icon}</span>{label}
+            <Icon name={icon} size={13}/>{label}
             {badge>0&&<span style={{ fontSize:9,fontWeight:900,background:innerTab===key?BRAND:"var(--ak-border)",color:innerTab===key?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{badge}</span>}
           </button>
         ))}
@@ -566,14 +566,14 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
                         {msg.attachments.map((a,i)=>a.previewUrl
                           ? <img key={i} src={a.previewUrl} alt={a.name} style={{ width:52,height:52,objectFit:"cover",borderRadius:10,border:"1px solid rgba(255,255,255,.4)" }}/>
-                          : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"rgba(255,255,255,.18)",color:"#fff" }}>📄 {a.name}</span>)}
+                          : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"rgba(255,255,255,.18)",color:"#fff" }}><Icon name="ti-file-text" size={10}/> {a.name}</span>)}
                       </div>
                     )}
                     {!isMe&&msg.syllabus?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                         {msg.syllabus.map((s,i)=>(
                           <span key={i} title={`${s.exam?s.exam+" ":""}${s.subject} — ${s.topic}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                            📘 {s.exam?`${s.exam} · `:""}{s.topic}
+                            <Icon name="ti-book" size={10}/> {s.exam?`${s.exam} · `:""}{s.topic}
                           </span>
                         ))}
                       </div>
@@ -582,7 +582,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                         {msg.pastQuestions.map((s,i)=>(
                           <span key={i} title={`${s.exam} ${s.year||""}${s.subject?` · ${s.subject}`:""}${s.topic?` — ${s.topic}`:""}`} style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:800,padding:"3px 9px",borderRadius:20,background:"rgba(232,136,74,.12)",border:"1px solid rgba(232,136,74,.35)",color:"#B45309",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
-                            📝 {s.exam}{s.year?` ${s.year}`:""}{s.topic?` · ${s.topic}`:""}
+                            <Icon name="ti-edit" size={10}/> {s.exam}{s.year?` ${s.year}`:""}{s.topic?` · ${s.topic}`:""}
                           </span>
                         ))}
                       </div>
@@ -593,7 +593,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
               );
             })}
             {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
-            {loading&&statusLabel&&<div style={{ display:"flex",alignItems:"center",gap:6,margin:"-6px 0 0 38px" }}><span style={{ fontSize:10.5,fontWeight:800,color:BRAND,animation:"pulse-dot 1.4s ease-in-out infinite" }}>●</span><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{statusLabel}</span></div>}
+            {loading&&statusLabel&&<div style={{ display:"flex",alignItems:"center",gap:6,margin:"-6px 0 0 38px" }}><span style={{ width:7,height:7,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite" }}/><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{statusLabel}</span></div>}
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
             {attachError&&(
@@ -609,10 +609,10 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                     {a.previewUrl
                       ? <img src={a.previewUrl} alt={a.name} style={{ width:54,height:54,objectFit:"cover",borderRadius:12,border:"1.5px solid var(--ak-border2)",display:"block" }}/>
                       : <div style={{ maxWidth:170,display:"flex",alignItems:"center",gap:5,padding:"10px 30px 10px 11px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)" }}>
-                          <span style={{ fontSize:15 }}>📄</span>
+                          <Icon name="ti-file-text" size={15}/>
                           <span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{a.name}</span>
                         </div>}
-                    <button onClick={()=>removeAttachment(a.id)} title={t('agent.attach_remove')} aria-label={t('agent.attach_remove')} style={{ position:"absolute",top:-6,right:-6,width:19,height:19,borderRadius:"50%",border:"none",background:"var(--ak-text)",color:"var(--ak-surface)",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,.25)" }}>✕</button>
+                    <button onClick={()=>removeAttachment(a.id)} title={t('agent.attach_remove')} aria-label={t('agent.attach_remove')} style={{ position:"absolute",top:-6,right:-6,width:19,height:19,borderRadius:"50%",border:"none",background:"var(--ak-text)",color:"var(--ak-surface)",fontSize:10,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 4px rgba(0,0,0,.25)" }}><Icon name="ti-x" size={10}/></button>
                   </div>
                 ))}
               </div>
@@ -628,10 +628,10 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                 keeps its gold accent and opens the task sheet. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:9 }}>
               <button onClick={()=>{setThinkMode(v=>!v);setResearchMode(false);}} disabled={loading} title={t('agent.mode_think_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${thinkMode?`${BRAND}55`:"var(--ak-border2)"}`,background:thinkMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:thinkMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
-                🧠 {t('agent.mode_think')}
+                <Icon name="ti-brain" size={12}/> {t('agent.mode_think')}
               </button>
               <button onClick={()=>{setResearchMode(v=>!v);setThinkMode(false);}} disabled={loading} title={t('agent.mode_research_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${researchMode?`${BRAND}55`:"var(--ak-border2)"}`,background:researchMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:researchMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
-                🔬 {t('agent.mode_research')}
+                <Icon name="ti-microscope" size={12}/> {t('agent.mode_research')}
               </button>
               <div style={{ flex:1 }}/>
               <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
@@ -665,7 +665,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             </div>
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:40,opacity:.3 }}>📋</span><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
+            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
               <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
                 <button onClick={()=>toggleTask(tk.id).catch(e=>setListError(e?.message||"Couldn't update that task."))} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                   {tk.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -676,16 +676,16 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
                   <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
                     <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[tk.priority],color:PRI_COLOR[tk.priority] }}>{PRI_LABEL[tk.priority]}</span>
                     {tk.due_at&&<span style={{ fontSize:10,fontWeight:700,color:new Date(tk.due_at)<new Date()&&tk.status!=="done"?RED:"var(--ak-text-muted)" }}>
-                      🗓 {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                      <Icon name="ti-calendar" size={10}/> {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
                     </span>}
-                    {tk.is_recurring&&<span style={{ fontSize:10,fontWeight:700,color:BRAND }}>🔁 repeats</span>}
+                    {tk.is_recurring&&<span style={{ fontSize:10,fontWeight:700,color:BRAND }}><Icon name="ti-refresh" size={10}/> repeats</span>}
                   </div>
                 </div>
                 <div style={{ display:"flex",gap:5,flexShrink:0 }}>
                   <button onClick={()=>openEditTask(tk)} disabled={tk.status==="running"} title="Edit"
-                    style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}>✏️</button>
+                    style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}><Icon name="ti-edit" size={11}/></button>
                   <button onClick={()=>removeTask(tk)} disabled={tk.status==="running"} title="Delete"
-                    style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}>🗑</button>
+                    style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}><Icon name="ti-trash" size={11}/></button>
                 </div>
               </div>
             ))}
@@ -699,14 +699,14 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
         <><div onClick={closeTaskSheet} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
           <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>{tEditing?`✏️ Edit task`:`📋 ${t('agent.assign_to')} ${agentName}`}</p>
+          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 6px" }}>{tEditing?<><Icon name="ti-edit" size={13}/> Edit task</>:<><Icon name="ti-clipboard" size={13}/> {t('agent.assign_to')} {agentName}</>}</p>
           <p style={{ fontSize:12,color:"var(--ak-text-muted)",margin:"0 0 20px",lineHeight:1.5 }}>{t('agent.assign_sub')}</p>
           <div style={{ marginBottom:14 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.task_title')}</label><input className="ak-chat-input" value={tTitle} onChange={e=>setTTitle(e.target.value)} placeholder={t('agent.task_title_ph')} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
           <div style={{ marginBottom:18 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.description')} <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span></label><textarea className="ak-chat-input" value={tDesc} onChange={e=>setTDesc(e.target.value)} placeholder={t('agent.desc_ph')} rows={3} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",resize:"none",lineHeight:1.5,boxSizing:"border-box" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
           <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('agent.priority')}</label><div style={{ display:"flex",gap:8 }}>{[["high",t('agent.pri_high')],["medium",t('agent.pri_medium')],["low",t('agent.pri_low')]].map(([k,l])=><button key={k} onClick={()=>setTPriority(k)} style={{ flex:1,padding:"9px 6px",borderRadius:12,border:`1.5px solid ${tPriority===k?PRI_COLOR[k]:"var(--ak-border2)"}`,background:tPriority===k?`${PRI_COLOR[k]}10`:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:tPriority===k?PRI_COLOR[k]:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div></div>
           <div style={{ marginBottom:22 }}>
             <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>
-              🗓 Run at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
+              <Icon name="ti-calendar" size={12}/> Run at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
             </label>
             <input type="datetime-local" value={tDueAt} onChange={e=>setTDueAt(e.target.value)}
               style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }}/>
@@ -761,7 +761,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
             {sessionsLoading&&sessions.length===0?(
               <p style={{ textAlign:"center",fontSize:12,color:"var(--ak-text-muted)",padding:"20px 0" }}>{t('common.loading')}</p>
             ):sessions.length===0?(
-              <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><span style={{ fontSize:34,opacity:.3 }}>💬</span><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
+              <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
             ):sessions.map(s=>{
               const active=s.id===sessionId;
               return (

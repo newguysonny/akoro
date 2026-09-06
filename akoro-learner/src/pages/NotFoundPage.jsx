@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Icon } from '../components/common/Icons.jsx';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
 
 const BRAND = '#6C3BFF';
 
 const suggestions = [
-  { emoji:'📚', title:'My Sessions',      desc:'Live classes and agent sessions',  to:'/' },
-  { emoji:'⚔️', title:'Battles',           desc:'Challenge other students, earn XP', to:'/' },
-  { emoji:'🏆', title:'Rankings',          desc:'See where you stand on the board',  to:'/' },
-  { emoji:'🤖', title:'My Agent',          desc:'Chat with your AI learning agent',  to:'/' },
+  { emoji:'ti-book', title:'My Sessions',      desc:'Live classes and agent sessions',  to:'/' },
+  { emoji:'ti-swords', title:'Battles',           desc:'Challenge other students, earn XP', to:'/' },
+  { emoji:'ti-trophy', title:'Rankings',          desc:'See where you stand on the board',  to:'/' },
+  { emoji:'ti-robot', title:'My Agent',          desc:'Chat with your AI learning agent',  to:'/' },
 ];
 
 export default function NotFoundPage() {
@@ -64,7 +65,7 @@ export default function NotFoundPage() {
             <div style={{ display:'inline-flex', alignItems:'center', gap:10,
               background:'var(--ak-surface)', border:'1.5px solid var(--ak-border2)', borderRadius:20,
               padding:'12px 24px', boxShadow:'0 4px 20px rgba(0,0,0,.06)' }}>
-              <span style={{ fontSize:28 }}>🔍</span>
+              <Icon name="ti-search" size={28} color="var(--ak-text-sec)"/>
               <span style={{ fontFamily:'monospace', fontSize:52, fontWeight:900,
                 color:'var(--ak-text)', letterSpacing:-2 }}>404</span>
             </div>
@@ -86,19 +87,19 @@ export default function NotFoundPage() {
               borderRadius:14, background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,
               color:'#fff', fontSize:14, fontWeight:800, textDecoration:'none',
               boxShadow:`0 4px 14px ${BRAND}44` }}>
-              🏠 Go to Dashboard
+              <Icon name="ti-home" size={14}/> Go to Dashboard
             </Link>
             <Link to="/signin" style={{ display:'flex', alignItems:'center', gap:7, padding:'12px 22px',
               borderRadius:14, background:'var(--ak-surface)', border:'1.5px solid var(--ak-border2)',
               color:'var(--ak-text-sec)', fontSize:14, fontWeight:700, textDecoration:'none' }}>
-              🔑 Sign in
+              <Icon name="ti-key" size={14}/> Sign in
             </Link>
           </div>
 
           {/* Search */}
           <div style={{ width:'100%', maxWidth:380, position:'relative' }}>
             <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)',
-              fontSize:16, pointerEvents:'none' }}>🔍</span>
+              fontSize:16, pointerEvents:'none' }}><Icon name="ti-search" size={16}/></span>
             <input value={query} onChange={e=>setQuery(e.target.value)}
               placeholder="Search sessions, battles, rankings…"
               style={{ width:'100%', padding:'11px 14px 11px 42px', borderRadius:20,
@@ -123,7 +124,7 @@ export default function NotFoundPage() {
                     textDecoration:'none' }}>
                   <div style={{ width:42, height:42, borderRadius:12, fontSize:20,
                     background:`${BRAND}10`, display:'flex', alignItems:'center',
-                    justifyContent:'center', flexShrink:0 }}>{s.emoji}</div>
+                    justifyContent:'center', flexShrink:0 }}>{s.emoji?.startsWith('ti-') ? <Icon name={s.emoji} size={20}/> : s.emoji}</div>
                   <div>
                     <p style={{ fontSize:14, fontWeight:800, color:'var(--ak-text)', margin:'0 0 2px' }}>{s.title}</p>
                     <p style={{ fontSize:12, color:'var(--ak-text-sub)', margin:0 }}>{s.desc}</p>

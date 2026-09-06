@@ -1,32 +1,33 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, apiDelete } from '../services/api.js';
+import { Icon } from '../components/common/Icons.jsx';
 import { pushSupported, getPushStatus, enablePush, disablePush } from '../services/pushApi.js';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
 /* Emoji + accent per notification type (matches the learner app's emoji style) */
 const TYPE_META = {
-  enrolled_in_course:  { emoji: '🎓', color: GREEN },
-  enrollment_new:      { emoji: '🎓', color: GREEN },
-  purchase_success:    { emoji: '🧾', color: GREEN },
-  order_processing:    { emoji: '⏳', color: BRAND },
-  purchase_refunded:   { emoji: '↩️', color: GOLD  },
-  agent_unlocked:      { emoji: '🤖', color: BRAND },
-  session_scheduled:   { emoji: '📅', color: BRAND },
-  session_reminder:    { emoji: '⏰', color: BRAND },
-  session_started:     { emoji: '🔴', color: RED   },
-  session_cancelled:   { emoji: '🚫', color: RED   },
-  session_rescheduled: { emoji: '🔄', color: GOLD  },
-  battle_invite:       { emoji: '⚔️', color: '#A855F7' },
-  battle_started:      { emoji: '⚔️', color: '#A855F7' },
-  teacher_message:     { emoji: '💬', color: BRAND },
-  task_complete:       { emoji: '✅', color: GREEN },
-  decay_alert:         { emoji: '🧠', color: GOLD  },
-  review_new:          { emoji: '⭐', color: GOLD  },
-  system:              { emoji: '🔔', color: '#9CA3AF' },
+  enrolled_in_course:  { emoji: 'ti-award', color: GREEN },
+  enrollment_new:      { emoji: 'ti-award', color: GREEN },
+  purchase_success:    { emoji: 'ti-receipt', color: GREEN },
+  order_processing:    { emoji: 'ti-hourglass', color: BRAND },
+  purchase_refunded:   { emoji: 'ti-corner-up-left', color: GOLD  },
+  agent_unlocked:      { emoji: 'ti-robot', color: BRAND },
+  session_scheduled:   { emoji: 'ti-calendar', color: BRAND },
+  session_reminder:    { emoji: 'ti-alarm', color: BRAND },
+  session_started:     { emoji: 'ti-circle-dot', color: RED   },
+  session_cancelled:   { emoji: 'ti-ban', color: RED   },
+  session_rescheduled: { emoji: 'ti-refresh', color: GOLD  },
+  battle_invite:       { emoji: 'ti-swords', color: '#A855F7' },
+  battle_started:      { emoji: 'ti-swords', color: '#A855F7' },
+  teacher_message:     { emoji: 'ti-message', color: BRAND },
+  task_complete:       { emoji: 'ti-circle-check', color: GREEN },
+  decay_alert:         { emoji: 'ti-brain', color: GOLD  },
+  review_new:          { emoji: 'ti-star', color: GOLD  },
+  system:              { emoji: 'ti-bell', color: '#9CA3AF' },
 };
 
-const getMeta = (type) => TYPE_META[type] || { emoji: '🔔', color: '#9CA3AF' };
+const getMeta = (type) => TYPE_META[type] || { emoji: 'ti-bell', color: '#9CA3AF' };
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -52,7 +53,7 @@ function NotifRow({ n, onMarkRead, onDelete, onOpen }) {
         background: `${color}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 18,
       }}>
-        {emoji}
+        {emoji?.startsWith('ti-') ? <Icon name={emoji} size={18}/> : emoji}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -198,7 +199,7 @@ export default function NotificationsPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, padding: '10px 12px', background: push.subscribed ? '#ECFDF5' : '#F0EBFF', border: `1px solid ${push.subscribed ? '#A7F3D0' : '#DDD3FF'}`, borderRadius: 12 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>
-                {push.subscribed ? '🔔 Push notifications on' : '🔕 Enable push notifications'}
+                {push.subscribed ? <><Icon name="ti-bell" size={12}/> Push notifications on</> : <><Icon name="ti-bell-off" size={12}/> Enable push notifications</>}
               </div>
               <div style={{ fontSize: 11, color: 'var(--ak-text-muted)' }}>
                 {push.subscribed ? 'Get alerts even when the app is closed.' : 'Be notified of purchases, classes and replies.'}
@@ -230,7 +231,7 @@ export default function NotificationsPage() {
           </div>
         ) : displayed.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🔔</div>
+            <div style={{ marginBottom: 10 }}><Icon name="ti-bell" size={40} color="var(--ak-text-muted)"/></div>
             <p style={{ fontSize: 14, color: 'var(--ak-text-muted)', fontWeight: 700 }}>
               {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
             </p>

@@ -17,7 +17,7 @@
 import { useState, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { apiGet } from '../../services/api.js';
-import { XIcon } from '../common/Icons.jsx';
+import { XIcon, Icon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -95,7 +95,7 @@ export default function ParticipantsSheet({ battle, onClose }) {
                     <span style={{ fontSize:18 }}>{p.emoji || '🧑‍🎓'}</span>
                     <div style={{ flex:1,minWidth:0 }}>
                       <div style={{ fontSize:12.5,fontWeight:800,color:'var(--ak-text)' }}>
-                        {p.fullName}{p.isWinner && ' 🏆'}
+                        {p.fullName} {p.isWinner && <Icon name="ti-trophy" size={11} color="#F59E0B"/>}
                       </div>
                       <div style={{ fontSize:10.5,color:'var(--ak-text-muted)' }}>@{p.username}</div>
                     </div>
@@ -103,7 +103,7 @@ export default function ParticipantsSheet({ battle, onClose }) {
                         state is all there is. */}
                     {ran && p.state === 'accepted' ? (
                       <span style={{ fontSize:11,fontWeight:800,color:BRAND }}>
-                        {p.score} · {p.correct}✓
+                        {p.score} · {p.correct} <Icon name="ti-check" size={10}/>
                       </span>
                     ) : (
                       <Chip color={st.color} bg={st.bg}>{st.label}</Chip>

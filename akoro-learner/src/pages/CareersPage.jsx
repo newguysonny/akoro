@@ -267,7 +267,7 @@ export default function CareersPage() {
                               <div style={{ padding: '0 22px 24px', borderTop: `1px solid ${BORDER}` }}>
                                 <p style={{ fontSize: 14, color: TEXT, lineHeight: 1.7, marginTop: 16, marginBottom: 20 }}>{summary}</p>
                                 {as === 'done' ? (
-                                  <p style={{ color: '#22C55E', fontWeight: 700, fontSize: 14 }}>✓ Application received! We'll be in touch.</p>
+                                  <p style={{ color: '#22C55E', fontWeight: 700, fontSize: 14 }}>Application received! We'll be in touch.</p>
                                 ) : (
                                   <form onSubmit={e => handleApply(e, key)} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
                                     <input required placeholder="Full name" value={af.name || ''} onChange={setField(key, 'name')}

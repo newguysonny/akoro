@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from '../../components/common/Icons.jsx';
 import { API } from '../../services/api.js';
 
 const BRAND = '#6C3BFF';
@@ -51,7 +52,7 @@ export default function ForgotPasswordPage() {
         <div style={{ width: 52, height: 52, borderRadius: 16,
           background: `linear-gradient(135deg,${BRAND},#4C1DCC)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 24, marginBottom: 20 }}>🔑</div>
+          fontSize: 24, marginBottom: 20 }}><Icon name="ti-key" size={24} color="#6C3BFF"/></div>
 
         {sent ? (
           <>

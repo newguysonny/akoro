@@ -8,6 +8,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { Icon } from '../components/common/Icons.jsx';
 import { ArrowLeft, Tag, CreditCard, Landmark, Smartphone, Check, ShieldCheck, CheckCircle2, XCircle, Clock, Ticket } from 'lucide-react';
 import { useCart } from '../contexts/CartContext.jsx';
 import { applyCoupon as applyCouponApi, checkoutCart, verifyCheckout } from '../services/cartApi.js';
@@ -91,7 +92,7 @@ export default function CheckoutPage() {
       <Shell onBack={goBack} count={headerCount} title="Order confirmed">
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 18px', background: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={38} color={GREEN} /></div>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment successful 🎉</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 8px' }}>Payment successful <Icon name="ti-confetti" size={20} color="#22C55E"/></h1>
           <p style={{ fontSize: 14.5, color: 'var(--ak-text-muted)', lineHeight: 1.6, margin: 0 }}>
             {verifyState === 'checking' ? 'Confirming your payment…'
               : verifyState === 'pending' ? 'We’ve received your payment — your access unlocks automatically once it finishes confirming (this can take a moment for bank/USSD).'
@@ -168,7 +169,7 @@ export default function CheckoutPage() {
         const d = await r.json().catch(() => ({}));
         const body = d.data || d;
         if (!r.ok) { setToast({ msg: d.message || body.message || 'Could not start payment', color: RED }); return; }
-        if (body.free) { setToast({ msg: 'Enrolled! 🎉', color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
+        if (body.free) { setToast({ msg: 'Enrolled!', color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
         if (body.checkout_url) { window.location.href = body.checkout_url; return; }
         setToast({ msg: 'Payment started', color: GREEN });
       } else if (mode === 'topup') {
@@ -180,7 +181,7 @@ export default function CheckoutPage() {
         const res = await apiPost('/api/adaptive/marketplace/checkout', { listingId: st.listing.id });
         const d = res?.data ?? res;
         if (d?.authorization_url) { window.location.href = d.authorization_url; return; }
-        if (d?.free || d?.success) { setToast({ msg: `${st.listing.title} unlocked! 🎉`, color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
+        if (d?.free || d?.success) { setToast({ msg: `${st.listing.title} unlocked!`, color: GREEN }); setTimeout(() => navigate(st.returnTo || '/app'), 900); return; }
         setToast({ msg: 'Could not start payment', color: RED });
       } else {
         if (!isFree && method === 'voucher' && !voucherCode.trim()) {
@@ -194,7 +195,7 @@ export default function CheckoutPage() {
         });
         const d = res?.data ?? res;
         if (d?.checkout_url) { window.location.href = d.checkout_url; return; }
-        if (d?.free) { setToast({ msg: d.message || 'Access granted! 🎉', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
+        if (d?.free) { setToast({ msg: d.message || 'Access granted!', color: GREEN }); await refresh(); setTimeout(() => navigate('/app'), 1200); return; }
         setToast({ msg: 'Checkout started', color: GREEN }); await refresh();
       }
     } catch (e) {

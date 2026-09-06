@@ -26,6 +26,14 @@ const ForgotPasswordPage = lazyWithRetry(() => import('./pages/auth/ForgotPasswo
 const ResetPasswordPage  = lazyWithRetry(() => import('./pages/auth/ResetPasswordPage.jsx'));
 const FDEAdminPage       = lazyWithRetry(() => import('./pages/FDEAdminPage.jsx'));
 const NotificationsPage  = lazyWithRetry(() => import('./pages/NotificationsPage.jsx'));
+const ActivityPage       = lazyWithRetry(() => import('./pages/ActivityPage.jsx'));
+const CommunityPage      = lazyWithRetry(() => import('./pages/CommunityPage.jsx'));
+const CommunityActivityPage  = lazyWithRetry(() => import('./pages/CommunityActivityPage.jsx'));
+const CommunitySettingsPage  = lazyWithRetry(() => import('./pages/CommunitySettingsPage.jsx'));
+const CommunityPeoplePage    = lazyWithRetry(() => import('./pages/CommunityPeoplePage.jsx'));
+const CommunityAnalyticsPage = lazyWithRetry(() => import('./pages/CommunityAnalyticsPage.jsx'));
+const CommunityProfilePage   = lazyWithRetry(() => import('./pages/CommunityProfilePage.jsx'));
+const LibraryPage        = lazyWithRetry(() => import('./pages/LibraryPage.jsx'));
 const DrawPage           = lazyWithRetry(() => import('./pages/DrawPage.jsx'));
 const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx'));
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
@@ -104,6 +112,14 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
+      <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>
+      <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>}/>
+      <Route path="/communities" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>}/>
+      <Route path="/communities/:communityId" element={<ProtectedRoute><CommunityActivityPage /></ProtectedRoute>}/>
+      <Route path="/communities/:communityId/profile" element={<ProtectedRoute><CommunityProfilePage /></ProtectedRoute>}/>
+      <Route path="/communities/:communityId/settings" element={<ProtectedRoute><CommunitySettingsPage /></ProtectedRoute>}/>
+      <Route path="/communities/:communityId/people" element={<ProtectedRoute><CommunityPeoplePage /></ProtectedRoute>}/>
+      <Route path="/communities/:communityId/analytics" element={<ProtectedRoute><CommunityAnalyticsPage /></ProtectedRoute>}/>
       <Route path="/draw"       element={<ProtectedRoute><DrawPage /></ProtectedRoute>}/>
       <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
       <Route path="/course/:slug"  element={<CourseDetailsPage />}/>

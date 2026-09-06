@@ -29,6 +29,7 @@
 import { useEffect, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { Icon } from '../common/Icons.jsx';
 import { apiGet } from '../../services/api.js';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
@@ -159,7 +160,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
     const ty = all.find((x) => x.key === scope);
     return ty
       ? { icon: ty.icon, chipBg: ty.grad, label: ty.label }
-      : { icon: '🔍', chipBg: 'var(--ak-tag-bg, #F3F4F6)', label: t('dhub.scope_search') };
+      : { icon: 'ti-search', chipBg: 'var(--ak-tag-bg, #F3F4F6)', label: t('dhub.scope_search') };
   };
 
   const sectionHeader = { fontSize: 12, fontWeight: 900, color: 'var(--ak-text-sub)',
@@ -180,7 +181,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
           ←
         </button>
         <div style={{ position: 'relative', flex: 1 }}>
-          <span aria-hidden="true" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}>🔍</span>
+          <span aria-hidden="true" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
           <input
             autoFocus
             value={query}
@@ -196,7 +197,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
             <button onClick={() => setQuery('')} aria-label={t('dhub.clear')}
               style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22,
                 borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg, #F3F4F6)',
-                color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+                color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={11}/></button>
           )}
         </div>
       </div>
@@ -227,7 +228,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
                           transition: 'transform .12s ease' }}>
                         <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0,
                           background: meta.chipBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 14, boxShadow: '0 3px 8px rgba(15,23,42,.16)' }}>{meta.icon}</span>
+                          fontSize: 14, boxShadow: '0 3px 8px rgba(15,23,42,.16)' }}>{meta.icon?.startsWith('ti-') ? <Icon name={meta.icon} size={14}/> : meta.icon}</span>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', margin: 0,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.q}</p>
@@ -238,7 +239,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
                           aria-label={`${t('dhub.remove')} "${r.q}"`}
                           style={{ width: 24, height: 24, borderRadius: '50%', border: 'none', flexShrink: 0,
                             background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)',
-                            fontSize: 10.5, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+                            fontSize: 10.5, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={10}/></button>
                       </div>
                     );
                   })}
@@ -248,7 +249,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
               /* …or, with nothing searched yet, the friendly empty state
                  (distinct from the no-match message) with example chips */
               <div style={{ padding: '44px 18px', textAlign: 'center' }}>
-                <div style={{ fontSize: 30, marginBottom: 8 }}>🔍</div>
+                <div style={{ marginBottom: 8 }}><Icon name="ti-search" size={30} color="var(--ak-text-sec, #6B7280)"/></div>
                 <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', margin: 0 }}>
                   {t('dhub.recent_none')}
                 </p>
@@ -291,14 +292,14 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
                         boxShadow: '0 3px 9px rgba(15,23,42,.18)' }}>
                         {c.cover_image_url
                           ? <img src={c.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : (c._kind === 'live' ? '📡' : '📚')}
+                          : <Icon name={c._kind === 'live' ? 'ti-broadcast' : 'ti-book'} size={18} color="#fff"/>}
                       </span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', margin: 0, lineHeight: 1.2,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</p>
                         <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '2px 0 0',
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {c._kind === 'live' ? '🔴 ' : ''}{c.subject || ''}{c.price ? ` · ${c.price}` : ''}
+                          {c.subject || ''}{c.price ? ` · ${c.price}` : ''}
                         </p>
                       </span>
                       <span aria-hidden="true" style={{ color: 'var(--ak-text-sec, #6B7280)', flexShrink: 0 }}><ChevronRight /></span>
@@ -321,7 +322,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
                         transition: 'transform .12s ease' }}>
                       <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0,
                         background: ty.grad, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 16, boxShadow: '0 3px 9px rgba(15,23,42,.18)' }}>{ty.icon}</span>
+                        fontSize: 16, boxShadow: '0 3px 9px rgba(15,23,42,.18)' }}>{ty.icon?.startsWith('ti-') ? <Icon name={ty.icon} size={16}/> : ty.icon}</span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', margin: 0, lineHeight: 1.2 }}>{ty.label}</p>
                         <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '2px 0 0',
@@ -343,7 +344,7 @@ export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick,
           /* Genuinely nothing — no courses, no sections */
           <div style={{ margin: '10px 0 0', padding: '26px 18px', borderRadius: 16,
             border: '1px dashed var(--ak-border2)', textAlign: 'center', background: 'var(--ak-surface)' }}>
-            <div style={{ fontSize: 26, marginBottom: 6 }}>🔍</div>
+            <div style={{ marginBottom: 6 }}><Icon name="ti-search" size={26} color="var(--ak-text-sec, #6B7280)"/></div>
             <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sec, #6B7280)', margin: 0 }}>{t('dhub.no_match')}</p>
             <button onClick={() => setQuery('')}
               style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99, border: 'none', background: BRAND,

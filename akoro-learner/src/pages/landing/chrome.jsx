@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from '../../components/common/Icons.jsx';
 import {
   Brain, Zap, Swords, BarChart3, Mic, School, WifiOff, Trophy,
   Link2, Menu, X, ChevronDown, ChevronLeft, ChevronRight, Star, Check, ArrowRight, Play,
@@ -163,7 +164,7 @@ function FinalCTA({ onSignup }) {
           </h2>
           <p style={{ fontSize: 17, color: 'rgba(255,255,255,.8)', marginBottom: 36, lineHeight: 1.65 }}>{t('landing.free_to_start')}</p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-            <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}>🎓 {t('landing.learner_login')} <ArrowRight size={16}/></Btn>
+            <Btn v="primary" sz="lg" onClick={onSignup} style={{ background: '#fff', color: B2, border: '1.5px solid #fff' }}><Icon name="ti-award" size={14}/> {t('landing.learner_login')} <ArrowRight size={16}/></Btn>
             <Btn v="outline" sz="lg" onClick={() => { window.location.href = `${INSTRUCTOR_URL}/signin`; }} style={{ background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}><School size={16}/> {t('landing.instructor_login')}</Btn>
           </div>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
