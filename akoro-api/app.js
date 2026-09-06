@@ -43,6 +43,7 @@ import rankingModule              from "./modules/ranking/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
+import { startChatFollowUpWorker } from "./modules/adaptive-learning/chat-follow-ups.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
@@ -403,6 +404,15 @@ if (process.env.REDIS_URL) {
   import("./lib/evalWorker.js")
     .then((m) => m.startEvalWorker())
     .catch((e) => console.error("[evals] worker failed to start:", e.message));
+
+  // Learner-requested agent check-ins are durable delayed jobs. Their worker
+  // creates the persistent chat and notification at the requested time.
+  try {
+    startChatFollowUpWorker();
+    console.log("[chat-follow-ups] worker started at boot");
+  } catch (e) {
+    console.error("[chat-follow-ups] worker failed to start:", e.message);
+  }
 }
 
 // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,

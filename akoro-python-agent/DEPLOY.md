@@ -85,10 +85,14 @@ Content-Type: application/json
 {"success":true,"result":{"completion":61}}
 ```
 
-A student-scoped capability currently receives the six existing adaptive-chat
-functions: `check_progress`, `create_task`, `list_tasks`, `find_battles`,
-`get_ranking`, and `get_weak_topics`. `create_task` is marked side-effecting.
-A teacher-task capability receives the existing task-agent tool catalogue,
+A student-scoped capability currently receives seven adaptive-chat functions:
+`check_progress`, `create_task`, `schedule_chat_follow_up`, `list_tasks`,
+`find_battles`, `get_ranking`, and `get_weak_topics`. `create_task` and
+`schedule_chat_follow_up` are marked side-effecting. The follow-up tool stores
+a delayed delivery, then opens a new persistent Agent Chat and notifies the
+learner at its offset-aware scheduled time. Delivery requires `REDIS_URL` on
+Akoro API so its BullMQ follow-up worker can run. A teacher-task capability
+receives the existing task-agent tool catalogue,
 including quiz, lesson-plan, worksheet, report, exam-prep, attendance,
 interactive-material, grading, scheduling, battle, self-study, and teaching
 library tools, after Akoro entitlement gates have been applied. Task tools run
@@ -101,7 +105,8 @@ state, filter the catalogue by entitlement, validate arguments, apply rate
 limits, and enforce idempotency. It must not use a caller-supplied `studentId`
 as authority. It returns tool output as data only—never trusted prompt
 instructions. Its implementation is `akoro-api/modules/agent-tools/` and its
-durable replay record is created by `2026-agent-tools-gateway.sql`. The trusted
+durable replay record is created by `2026-agent-tools-gateway.sql`; scheduled
+chat delivery is created by `2026-scheduled-chat-follow-ups.sql`. The trusted
 Node bridge can mint a context with `issueAgentToolsCapability` exported by
 `akoro-api/modules/agent-tools/index.js`.
 

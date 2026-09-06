@@ -85,6 +85,28 @@ class AkoroToolsTests(unittest.TestCase):
         self.assertIn("disabled", result["error"])
         self.assertEqual(len(transport.calls), 1, "The invocation must never reach Akoro API")
 
+    def test_scheduled_chat_follow_up_is_relayed_only_when_writes_are_enabled(self) -> None:
+        transport = RecordingTransport([
+            {
+                "name": "schedule_chat_follow_up",
+                "description": "Schedule a new agent chat.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"message": {"type": "string"}, "scheduledAt": {"type": "string"}},
+                    "required": ["message", "scheduledAt"],
+                },
+                "sideEffecting": True,
+            },
+        ], result={"success": True, "result": {"scheduled": True, "followUpId": "follow-up-1"}})
+        tools = AkoroToolsClient("https://api.akoro.test/tools", "secret", transport=transport).open_session(
+            "session-1", "opaque-capability", max_calls=3, allow_side_effects=True,
+        )
+        result = tools.invoke(ToolCall("schedule-1", "schedule_chat_follow_up", {
+            "message": "Ready for your revision?", "scheduledAt": "2026-09-08T14:00:00+01:00",
+        }))
+        self.assertEqual(result["result"]["followUpId"], "follow-up-1")
+        self.assertEqual(transport.calls[1][1]["tool"], "schedule_chat_follow_up")
+
     def test_tool_loop_feeds_bounded_result_back_to_the_model(self) -> None:
         transport = RecordingTransport([
             {

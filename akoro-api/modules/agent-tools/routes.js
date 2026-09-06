@@ -19,7 +19,7 @@ import {
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
 const MAX_CATALOGUE = 24;
-const STUDENT_WRITE_TOOLS = new Set(["create_task"]);
+const STUDENT_WRITE_TOOLS = new Set(["create_task", "schedule_chat_follow_up"]);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);
@@ -156,9 +156,9 @@ function validateStudentArguments(name, arguments_) {
   const only = (allowed) => {
     if (keys.some((key) => !allowed.has(key))) throw new GatewayError(422, "Unexpected student tool argument");
   };
-  const shortText = (value, label, required = false) => {
+  const shortText = (value, label, required = false, max = 500) => {
     if (value === undefined && !required) return;
-    if (typeof value !== "string" || !value.trim() || value.length > 500) {
+    if (typeof value !== "string" || !value.trim() || value.length > max) {
       throw new GatewayError(422, `${label} is invalid`);
     }
   };
@@ -182,6 +182,13 @@ function validateStudentArguments(name, arguments_) {
       }
       shortText(arguments_.due, "due");
       shortText(arguments_.course, "course");
+      return;
+    case "schedule_chat_follow_up":
+      only(new Set(["message", "scheduledAt", "timezone", "title"]));
+      shortText(arguments_.message, "message", true, 800);
+      shortText(arguments_.scheduledAt, "scheduledAt", true, 64);
+      shortText(arguments_.timezone, "timezone", false, 80);
+      shortText(arguments_.title, "title", false, 80);
       return;
     default:
       throw new GatewayError(404, "Student tool is not available");

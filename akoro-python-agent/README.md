@@ -175,12 +175,17 @@ derives authority from the signed capability plus current user/task state,
 validates tool arguments, applies entitlement gates, and honours the durable
 idempotency key. It never trusts `studentId` in a Python request as authority.
 
-Student sessions receive six account tools: `check_progress`, `create_task`,
-`list_tasks`, `find_battles`, `get_ranking`, and `get_weak_topics`. A signed
-teacher-task context receives the existing task-agent catalogue—quiz, lesson,
-worksheet, report, exam-prep, attendance, interactive, grading, scheduling,
-battle, self-study, and teaching-library tools—only while that task run remains
-active and its instructor gates allow them.
+Student sessions receive seven account tools: `check_progress`, `create_task`,
+`schedule_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`, and
+`get_weak_topics`. `schedule_chat_follow_up` creates a durable delayed job;
+at delivery Akoro creates a new persistent Agent Chat, seeds its message, and
+sends the learner an in-app/socket/push notification. It requires a future ISO
+8601 `scheduledAt` value with an offset and an explicit learner request; Akoro's
+Redis-backed worker delivers it. A signed teacher-task
+context receives the existing task-agent catalogue—quiz, lesson, worksheet,
+report, exam-prep, attendance, interactive, grading, scheduling, battle,
+self-study, and teaching-library tools—only while that task run remains active
+and its instructor gates allow them.
 
 Catalogues support Akoro's existing `input_schema` spelling as well as
 `inputSchema`. The service caps catalogues at 24 functions, invocation

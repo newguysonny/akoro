@@ -35,6 +35,7 @@ import {
 } from "./agents/student/knowledge.js";
 import { decayEngine } from "./agents/student/decayEngine.js";
 import { activeSessions } from "./websocket.js";
+import { scheduleChatFollowUp } from "./chat-follow-ups.js";
 
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -164,6 +165,20 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "schedule_chat_follow_up",
+    description: "Schedule the agent to open a new chat and send the student a message at a specific future time. Only use after the student explicitly asks for the schedule. scheduledAt must be an ISO 8601 timestamp with a timezone offset, for example 2026-09-08T14:00:00+01:00.",
+    input_schema: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "The exact helpful opening message the agent will send in the new chat." },
+        scheduledAt: { type: "string", description: "Future ISO 8601 timestamp including timezone offset." },
+        timezone: { type: "string", description: "IANA timezone for display, for example Africa/Lagos. Defaults to Africa/Lagos." },
+        title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
+      },
+      required: ["message", "scheduledAt"],
+    },
+  },
+  {
     name: "list_tasks",
     description: "Get the student's pending tasks sorted by priority.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -217,6 +232,14 @@ export async function executeChatTool(name, input, studentId) {
       if (error) return { error: error.message };
       global.io?.to(`user:${studentId}`).emit("task:created", task);
       return { created: true, title: task.title, priority: task.priority };
+    }
+    case "schedule_chat_follow_up": {
+      try {
+        const schedule = await scheduleChatFollowUp({ userId: studentId, input });
+        return { scheduled: true, ...schedule };
+      } catch (error) {
+        return { error: error.message || "Could not schedule the chat follow-up" };
+      }
     }
     case "list_tasks": {
       const { data } = await db.from("tasks")
@@ -1130,13 +1153,15 @@ async function handleStudentChatWithTools(req, res, studentId, message, history,
       ).join("\n")
     : "";
 
+  const currentUtc = new Date().toISOString();
   const systemPrompt =
     `You are ${agent.name}, an AI learning agent at level ${agent.level} on Akoro Learning Platform.` +
     `\nYou have been taught across ${agent.total_sessions} sessions.` +
     knowledgeCtx +
     (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
-    `\n\nYou can also use tools to check the student's real progress, tasks, battles, and rankings.` +
+    `\n\nYou can also use tools to check the student's real progress, tasks, battles, rankings, and to schedule a new future Agent Chat message.` +
     `\nAnswer from your knowledge when you can. Use tools when the student asks about their actual data.` +
+    `\nOnly schedule a future chat after the student explicitly asks for it. scheduledAt must be a future ISO 8601 timestamp with a timezone offset. Current UTC time: ${currentUtc}. Use the student's stated timezone, or Africa/Lagos only if none is stated.` +
     `\nIf you don't know something: "I haven't been taught about that yet — teach me!"`;
 
   const messages = [

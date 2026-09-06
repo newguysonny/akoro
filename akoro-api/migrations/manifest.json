@@ -117,7 +117,8 @@
     "2026-fix-adaptive-session-agent-fk.sql",
     "2026-communities.sql",
     "2026-community-activities.sql",
-    "2026-agent-tools-gateway.sql"
+    "2026-agent-tools-gateway.sql",
+    "2026-scheduled-chat-follow-ups.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
