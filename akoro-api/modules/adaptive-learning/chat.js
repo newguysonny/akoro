@@ -40,6 +40,11 @@ import {
   listChatFollowUps,
   scheduleChatFollowUp,
 } from "./chat-follow-ups.js";
+import {
+  getLearnerAutonomy,
+  scheduleAutonomyReviewForTask,
+  setLearnerAutonomy,
+} from "./learner-autonomy.js";
 
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -162,7 +167,8 @@ export const CHAT_TOOLS = [
       properties: {
         title:    { type: "string", description: "Short task title" },
         priority: { type: "string", enum: ["high", "medium", "low"] },
-        due:      { type: "string", description: "e.g. 'Today', 'Tomorrow', 'This week'" },
+        due:      { type: "string", description: "Human-friendly display label, e.g. 'Tomorrow' (optional)." },
+        dueAt:    { type: "string", description: "Optional exact due instant in ISO 8601 format with Z or a numeric timezone offset. Supply this only when the student specified a precise time; it makes an Online agent eligible to offer a proactive chat at that time." },
         course:   { type: "string", description: "Related course or subject (optional)" },
       },
       required: ["title", "priority"],
@@ -226,6 +232,16 @@ export const CHAT_TOOLS = [
   },
 ];
 
+function parsePreciseTaskDueAt(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())) {
+    throw new Error("dueAt must be an ISO 8601 timestamp with a timezone offset");
+  }
+  const due = new Date(value);
+  if (!Number.isFinite(due.getTime())) throw new Error("dueAt is not a valid time");
+  return due.toISOString();
+}
+
 export async function executeChatTool(name, input, studentId) {
   switch (name) {
     case "check_progress": {
@@ -247,11 +263,16 @@ export async function executeChatTool(name, input, studentId) {
         title: input.title, priority: input.priority ?? "medium",
         status: "pending", task_type: "general",
         payload: { due: input.due ?? "This week" },
+        due_at: parsePreciseTaskDueAt(input.dueAt),
         timezone: "Africa/Lagos",
       }).select().single();
       if (error) return { error: error.message };
+      // This is intentionally best-effort: creating a learner-requested task
+      // never depends on Redis, and the worker re-checks the persisted opt-in.
+      try { await scheduleAutonomyReviewForTask(task); }
+      catch (autonomyError) { console.warn("[chat/create-task] autonomy schedule skipped:", autonomyError.message); }
       global.io?.to(`user:${studentId}`).emit("task:created", task);
-      return { created: true, title: task.title, priority: task.priority };
+      return { created: true, title: task.title, priority: task.priority, dueAt: task.due_at ?? null };
     }
     case "schedule_chat_follow_up": {
       try {
@@ -277,7 +298,7 @@ export async function executeChatTool(name, input, studentId) {
     }
     case "list_tasks": {
       const { data } = await db.from("tasks")
-        .select("id, title, priority, status, payload")
+        .select("id, title, priority, status, payload, due_at")
         .eq("creator_id", studentId).eq("status", "pending")
         .order("created_at", { ascending: false }).limit(10);
       return { tasks: data ?? [], count: data?.length ?? 0 };
@@ -419,6 +440,30 @@ function buildTurnBlocks(result, agentPairId) {
   }
   return blocks;
 }
+
+// =============================================================
+// LEARNER AGENT AUTONOMY — persistent opt-in, never UI-authorized
+// =============================================================
+
+router.get("/autonomy", async (req, res) => {
+  try {
+    res.json({ success: true, ...(await getLearnerAutonomy(req.user.id)) });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not load agent autonomy" });
+  }
+});
+
+router.patch("/autonomy", async (req, res) => {
+  if (typeof req.body?.enabled !== "boolean") {
+    return res.status(422).json({ error: "enabled must be a boolean" });
+  }
+  try {
+    const result = await setLearnerAutonomy({ userId: req.user.id, enabled: req.body.enabled });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message || "Could not save agent autonomy" });
+  }
+});
 
 // =============================================================
 // AGENT PAIR ROUTES

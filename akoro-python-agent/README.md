@@ -183,7 +183,26 @@ at delivery Akoro creates a new persistent Agent Chat, seeds its message, and
 sends the learner an in-app/socket/push notification. The list tool shows
 pending deliveries and the cancellation tool can cancel one by its `followUpId`.
 Scheduling requires a future ISO 8601 `scheduledAt` value with an offset and an
-explicit learner request; Akoro's Redis-backed worker delivers it. A signed teacher-task
+explicit learner request; Akoro's Redis-backed worker delivers it. `create_task`
+may also include an exact offset-aware `dueAt` when the learner supplied a precise
+due time; plain-language `due` remains display-only and never infers a schedule.
+
+## Learner-controlled task autonomy
+
+The learner dashboard's **Agent online / Agent offline** header control is a
+server-backed, default-off opt-in. While Online, Akoro queues a review only for
+a pending, non-recurring learner task with a precise `due_at`. At its due time,
+the worker re-checks that opt-in and that task state, then opens **one** new
+persistent Agent Chat suggesting a first next step and sends the normal
+notification. It does not run a task executor, change the task, spend funds,
+complete work, message anyone else, or poll the learner's task list on an
+interval. Switching Offline pauses outstanding reviews; turning Online back on
+can queue still-pending precisely due tasks, with a durable revision/idempotency
+record preventing duplicate chats.
+
+This autonomous path belongs to `akoro-api`, where the authenticated learner
+preference and worker authorization remain durable. Python is not trusted to
+supply user identity or authorization for it. A signed teacher-task
 context receives the existing task-agent catalogue—quiz, lesson, worksheet,
 report, exam-prep, attendance, interactive, grading, scheduling, battle,
 self-study, and teaching-library tools—only while that task run remains active

@@ -468,7 +468,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     setListError("");
     const okToDelete = await confirmDialog({
       title: 'Delete this task?',
-      message: `“${tk.title}” and anything your agent produced for it will be removed.`,
+      message: `“${tk.title}” will be removed.`,
     });
     if(!okToDelete) return;
     try { await deleteTask(tk.id); }
@@ -706,12 +706,12 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
           <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:8,letterSpacing:.3 }}>{t('agent.priority')}</label><div style={{ display:"flex",gap:8 }}>{[["high",t('agent.pri_high')],["medium",t('agent.pri_medium')],["low",t('agent.pri_low')]].map(([k,l])=><button key={k} onClick={()=>setTPriority(k)} style={{ flex:1,padding:"9px 6px",borderRadius:12,border:`1.5px solid ${tPriority===k?PRI_COLOR[k]:"var(--ak-border2)"}`,background:tPriority===k?`${PRI_COLOR[k]}10`:"var(--ak-surface-hover)",fontSize:12,fontWeight:800,color:tPriority===k?PRI_COLOR[k]:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div></div>
           <div style={{ marginBottom:22 }}>
             <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>
-              <Icon name="ti-calendar" size={12}/> Run at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
+              <Icon name="ti-calendar" size={12}/> Due at <span style={{ fontSize:10,fontWeight:500,color:"var(--ak-text-muted)" }}>{t('common.optional')}</span>
             </label>
             <input type="datetime-local" value={tDueAt} onChange={e=>setTDueAt(e.target.value)}
               style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13.5,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none",boxSizing:"border-box" }}/>
             <p style={{ fontSize:10.5,color:"var(--ak-text-muted)",margin:"5px 0 0",lineHeight:1.45 }}>
-              Leave empty and your agent starts right away. Pick a date and time to schedule it.
+              Leave empty to keep this as a manual task. With a precise due time, your Agent online setting may open one helpful chat when it becomes due; it never runs or completes the task.
             </p>
           </div>
           {tError&&<p style={{ fontSize:12,fontWeight:800,color:RED,margin:"0 0 12px" }}>{tError}</p>}

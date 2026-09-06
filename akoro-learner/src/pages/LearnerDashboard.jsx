@@ -88,9 +88,13 @@ export default function LearnerDashboard() {
   const [assessSession,     setAssessSession]     = useState(null); // proctored assessment target
   const [acceptedIds,       setAcceptedIds]       = useState(new Set());
   const [battles,           setBattles]           = useState([]);
-  const [toast,             setToast]             = useState(null);
-  const [isOnline,          setIsOnline]          = useState(true);
-  const [liveBattleModal,   setLiveBattleModal]   = useState(null);
+  const [toast,               setToast]               = useState(null);
+  // This is the server-backed autonomy consent, not browser connectivity.
+  // Defaulting false keeps the agent offline until the API confirms an opt-in.
+  const [agentOnline,         setAgentOnline]         = useState(false);
+  const [agentAutonomyLoaded, setAgentAutonomyLoaded] = useState(false);
+  const [agentAutonomySaving, setAgentAutonomySaving] = useState(false);
+  const [liveBattleModal,     setLiveBattleModal]     = useState(null);
 
   // ── API-driven state ─────────────────────────────────────────────────────
   const [sessions,     setSessions]     = useState([]);
@@ -288,11 +292,40 @@ export default function LearnerDashboard() {
     return ()=>{ alive=false; clearInterval(t); };
   },[]);
 
+  const toggleAgentAutonomy = useCallback(async () => {
+    if (!agentAutonomyLoaded || agentAutonomySaving) return;
+    const previous = agentOnline;
+    const next = !previous;
+    setAgentOnline(next); // responsive UI; API remains the source of authority.
+    setAgentAutonomySaving(true);
+    try {
+      const response = await apiPatch("/api/adaptive/chat/autonomy", { enabled: next });
+      const saved = typeof response?.enabled === "boolean" ? response.enabled : next;
+      setAgentOnline(saved);
+      setToast(saved
+        ? "Agent online — it may only start a chat when one of your precisely due tasks is due."
+        : "Agent offline — future autonomous task chats are paused.");
+    } catch (error) {
+      setAgentOnline(previous);
+      setToast(error?.message || "Could not update your agent setting. Please retry.");
+    } finally {
+      setAgentAutonomySaving(false);
+    }
+  }, [agentAutonomyLoaded, agentAutonomySaving, agentOnline]);
+
   useEffect(()=>{
     // User profile — name, avatar, year group, XP for the header
     apiGet("/api/profiles/me")
       .then(d=>{ if(d?.id||d?.data?.id) setUserProfile(d.data||d); })
       .catch(()=>{});
+
+    // Read the durable preference every fresh dashboard load. A failed read
+    // leaves the agent safely Offline rather than treating local UI state as
+    // permission for a background worker.
+    apiGet("/api/adaptive/chat/autonomy")
+      .then(d=>{ setAgentOnline(Boolean(d?.enabled)); })
+      .catch(()=>{ setAgentOnline(false); })
+      .finally(()=>setAgentAutonomyLoaded(true));
 
     // Agent profile — student agent + guide agent
     apiGet("/api/user/agent")
@@ -641,7 +674,7 @@ export default function LearnerDashboard() {
                   : <div style={{ width:38,height:38,borderRadius:"50%",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:15,fontWeight:900,border:"2px solid #EDE9FE" }}>
                       {(userProfile?.fullName||userProfile?.username||"?").trim().charAt(0).toUpperCase()}
                     </div>}
-                <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:isOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:isOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
+                <div style={{ position:"absolute",bottom:1,right:1,width:10,height:10,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
               </div>
               <div>
                 <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,lineHeight:1.2 }}>{userProfile?.fullName||userProfile?.username||"…"}</p>
@@ -672,9 +705,19 @@ export default function LearnerDashboard() {
                   </span>
                 )}
               </button>
-              <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:"pointer",border:`1px solid ${BRAND}3D` }}>
-                <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease",display:"flex",alignItems:"center",gap:5 }}>{isOnline?<><span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block"}}/>Online</>:"Online"}</div>
-              </div>
+              <button type="button" onClick={toggleAgentAutonomy}
+                aria-pressed={agentOnline}
+                aria-label={agentOnline ? "Turn autonomous Agent offline" : "Turn autonomous Agent online"}
+                disabled={!agentAutonomyLoaded || agentAutonomySaving}
+                title={agentOnline
+                  ? "Agent online: it may only open a chat when one of your precisely due tasks is due."
+                  : "Agent offline: it cannot start autonomous task chats."}
+                style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:agentAutonomyLoaded&&!agentAutonomySaving?"pointer":"wait",border:`1px solid ${BRAND}3D`,opacity:agentAutonomyLoaded?1:.7 }}>
+                <span style={{ padding:"4px 12px",borderRadius:100,background:agentOnline?BRAND:"transparent",color:agentOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease",display:"flex",alignItems:"center",gap:5 }}>
+                  {agentOnline&&<span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block"}}/>}
+                  {agentAutonomySaving ? "Saving…" : agentOnline ? "Agent online" : "Agent offline"}
+                </span>
+              </button>
             </div>
           </div>
           {(tab==="sessions"||tab==="challenges")&&(

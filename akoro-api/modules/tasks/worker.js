@@ -7,6 +7,8 @@
 import { Worker }   from "bullmq";
 import Redis        from "ioredis";
 import { TaskDB, TaskRunDB, AgentDB } from "./lib/db.js";
+import db from "../../db.js";
+import { scheduleAutonomyReviewForTask } from "../adaptive-learning/learner-autonomy.js";
 import { buildContext }               from "./lib/context.js";
 import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
@@ -30,6 +32,28 @@ export const taskWorker = new Worker("task-runner", async (job) => {
 
   const task = await TaskDB.findById(taskId);
   if (!task || task.status === "cancelled") return;
+
+  // A learner task is a personal study plan. Even if an old queued job exists
+  // from before learner autonomy was introduced, it must not fall through to
+  // this arbitrary-execution worker. Its only automatic path is the separate
+  // due-time Agent Chat worker, which never changes task state.
+  const { data: owner, error: ownerError } = await db.from("users")
+    .select("role")
+    .eq("id", task.creator_id)
+    .maybeSingle();
+  if (ownerError) throw new Error("Could not verify task owner before execution");
+  if (["student", "learner"].includes(String(owner?.role || "").toLowerCase())) {
+    const pendingTask = task.status === "queued"
+      ? await TaskDB.updateStatus(taskId, "pending", { bullJobId: null })
+      : task;
+    // A legacy generic task job can reach this worker after the new policy is
+    // deployed. Hand it to the narrow chat-only scheduler instead of dropping
+    // the learner's due-task nudge along with the unsafe execution.
+    try { await scheduleAutonomyReviewForTask(pendingTask); }
+    catch (autonomyError) { console.warn("[tasks/worker] learner autonomy schedule skipped:", autonomyError.message); }
+    console.log(`[tasks/worker] skipped learner task ${taskId}; autonomous execution is disabled`);
+    return;
+  }
 
   const runNumber = await TaskRunDB.nextRunNumber(taskId);
   const run       = await TaskRunDB.create({ taskId, runNumber, status: "running", agentSteps: [] });

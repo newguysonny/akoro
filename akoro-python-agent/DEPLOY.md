@@ -94,6 +94,19 @@ side-effecting. The follow-up tool stores a delayed delivery, then opens a new
 persistent Agent Chat and notifies the learner at its offset-aware scheduled
 time. The list and cancellation tools provide learner-owned schedule management.
 Delivery requires `REDIS_URL` on Akoro API so its BullMQ follow-up worker can run.
+
+### Learner due-task autonomy
+
+The learner dashboard's **Agent online / Agent offline** control persists a
+default-off consent in Akoro API. When Online, only a pending, non-recurring
+learner task with a precise `dueAt`/`due_at` is queued for its one exact due
+time. The Akoro worker re-checks both consent and task state before creating a
+single persistent proactive Agent Chat plus normal notification. It does not
+execute, modify, complete, or spend for the task, and it performs no periodic
+task polling. The worker must be running anywhere `REDIS_URL` is configured;
+Offline pauses outstanding reviews. `create_task` accepts optional exact,
+offset-aware `dueAt`; a human-friendly `due` label does not create a schedule.
+
 A teacher-task capability
 receives the existing task-agent tool catalogue,
 including quiz, lesson-plan, worksheet, report, exam-prep, attendance,

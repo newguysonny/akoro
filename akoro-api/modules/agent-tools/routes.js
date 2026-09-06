@@ -179,12 +179,17 @@ function validateStudentArguments(name, arguments_) {
       shortText(arguments_.subject, "subject");
       return;
     case "create_task":
-      only(new Set(["title", "priority", "due", "course"]));
+      only(new Set(["title", "priority", "due", "dueAt", "course"]));
       shortText(arguments_.title, "title", true);
       if (!["high", "medium", "low"].includes(arguments_.priority)) {
         throw new GatewayError(422, "priority is invalid");
       }
       shortText(arguments_.due, "due");
+      if (arguments_.dueAt !== undefined) {
+        if (typeof arguments_.dueAt !== "string" || arguments_.dueAt.length > 64 || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:?\d{2})$/i.test(arguments_.dueAt.trim()) || !Number.isFinite(new Date(arguments_.dueAt).getTime())) {
+          throw new GatewayError(422, "dueAt must be an ISO 8601 timestamp with a timezone offset");
+        }
+      }
       shortText(arguments_.course, "course");
       return;
     case "schedule_chat_follow_up":

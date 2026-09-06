@@ -44,6 +44,7 @@ import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
 import { startChatFollowUpWorker } from "./modules/adaptive-learning/chat-follow-ups.js";
+import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/learner-autonomy.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
@@ -412,6 +413,19 @@ if (process.env.REDIS_URL) {
     console.log("[chat-follow-ups] worker started at boot");
   } catch (e) {
     console.error("[chat-follow-ups] worker failed to start:", e.message);
+  }
+
+  // The learner's persisted opt-in, not a browser state, authorizes every
+  // autonomous due-task nudge. Recovery only restores delayed due-time jobs;
+  // it never enables autonomy for a learner.
+  try {
+    startLearnerAutonomyWorker();
+    recoverLearnerAutonomySchedules()
+      .then(({ scheduled }) => console.log(`[learner-autonomy] recovered ${scheduled} due-task review(s)`))
+      .catch((e) => console.error("[learner-autonomy] schedule recovery failed:", e.message));
+    console.log("[learner-autonomy] worker started at boot");
+  } catch (e) {
+    console.error("[learner-autonomy] worker failed to start:", e.message);
   }
 }
 

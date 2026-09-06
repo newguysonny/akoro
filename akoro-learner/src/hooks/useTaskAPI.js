@@ -32,8 +32,8 @@ export function useTaskAPI() {
     return d.task;
   }, [agentId]);
 
-  // Edit a task that hasn't started. Sending dueAt/isRecurring re-queues it on
-  // the backend, so the new time is the one that actually fires.
+  // Edit a learner-owned study task. A precise dueAt updates the server-side,
+  // opt-in Agent Chat review only; it never queues task execution.
   const updateTask = useCallback(async ({ id, title, description, priority, dueAt, isRecurring, cronExpr }) => {
     const d = await apiPatch(`/api/tasks/${id}`, { title, description, priority, dueAt, isRecurring, cronExpr });
     if (d?.task) setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...d.task } : t)));
