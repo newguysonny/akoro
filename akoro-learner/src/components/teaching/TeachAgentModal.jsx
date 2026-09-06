@@ -151,6 +151,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         mode,
         sessionId:      prevSessId,
         teacherAgentId: config?.teacherAgentId || session?.teacherAgentId || AGENT_CONFIG.teacherAgentId,
+        // Higher-ed reference text is capped by the upload endpoint; only this
+        // short-lived session receives it, never a local record or later session.
+        reference:      config?.reference || null,
         userId:         STUDENT_ID,
       });
 
@@ -681,6 +684,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         onSend={handleSend}
         topic={topic}
         subject={subject}
+        reference={config?.reference || null}
         agentName={agentNm}
         agentEmoji={agentEm}
         mode={mode}

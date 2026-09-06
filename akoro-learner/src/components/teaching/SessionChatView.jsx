@@ -32,7 +32,7 @@ function MicMeter({ level = 0 }) {
 
 function SessionChatView({
   blocks, loading, loadingNote = '', input, onInputChange, onSend,
-  topic, subject, agentName, agentEmoji, mode,
+  topic, subject, agentName, agentEmoji, mode, reference = null,
   userTurns, onSummarize, showSummarize,
   recording, onToggleRecording, seconds,
   voiceStreaming, interimText, voiceLevel = 0, onToggleVoice,
@@ -96,6 +96,12 @@ function SessionChatView({
           <p style={{ fontSize:11,fontWeight:600,color:"#475569",margin:0 }}>
             {subject} · {agentEmoji} {agentName} · {guideLabel || "NaNa Esumai 🧠 · Sargeant ⚡"}
           </p>
+          {reference && (
+            <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"#6EE7B7" }}>
+              <Icon name="ti-paperclip" size={10}/>
+              <span style={{ fontSize:9.5,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{reference.name}</span>
+            </div>
+          )}
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
           {onSwitchAgent && (

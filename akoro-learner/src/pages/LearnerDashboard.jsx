@@ -962,6 +962,7 @@ export default function LearnerDashboard() {
         {configOpen && (
           <ConfigModal
             initial={configInitial}
+            higherEd={higherEd}
             onStart={cfg => {
               setConfigOpen(false);
               setConfigInitial(null);

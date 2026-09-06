@@ -23,6 +23,7 @@ import {
 import { decayEngine } from "./agents/student/decayEngine.js";
 import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
+import { normalizeSessionReference } from "./sessionReference.js";
 import db from "../../db.js";
 
 export const activeSessions = new Map();
@@ -582,6 +583,7 @@ export function setupWebSocket(io) {
       mode = "fresh",
       sessionId: prevSessionId,   // for continuation
       notificationId,             // for decay
+      reference,                  // compact text returned by /teaching/reference
       userId,
     }) => {
       if (!studentId || !topic)
@@ -595,6 +597,9 @@ export function setupWebSocket(io) {
 
       try {
         const caller     = userId || studentId;
+        // Socket payloads are client-controlled. Only retain the capped,
+        // text-only reference produced by the authenticated upload endpoint.
+        const sessionReference = normalizeSessionReference(reference);
         let historyBlocks = [];
         let decayPayload  = null;
         let sessionType   = "free_teaching";
@@ -652,13 +657,9 @@ export function setupWebSocket(io) {
           subject,
           continuationSessionId: mode === "continuation" ? prevSessionId : null,
           decayPayload,
-          // Prompt context injected here — orchestrator uses this to
-          // set agent's opening knowledge state
-          agentContext: {
-            mode,
-            historyLoaded:    historyBlocks.length > 0,
-            previousSessionId: prevSessionId ?? null,
-          },
+          // Capped source material from the higher-ed start-session modal.
+          // It is session-memory only; no file or raw text is persisted.
+          referenceMaterial: sessionReference,
         });
 
         // Read by initialize() once the ladder is resolved, so the session
@@ -717,6 +718,11 @@ export function setupWebSocket(io) {
           initialState:      init.initialState,
           decayPayload,
           historyBlocks,
+          reference: sessionReference ? {
+            name: sessionReference.name,
+            chars: sessionReference.chars,
+            truncated: sessionReference.truncated,
+          } : null,
           // Provenance of the lesson plan, so the learner can see where it came
           // from (school scheme of work / exam syllabus / AI-generated).
           source: ladder ? {
@@ -912,11 +918,13 @@ export function setupWebSocket(io) {
         socket.emit("agent_pair_switching", { newAgentPairId });
 
         // Rebuild the orchestrator with the new teacher; reuse student + topic
+        const priorOrchestrator = activeSessions.get(sessionId);
         const orchestrator = await getOrchestrator({
           mode:     "student",
           studentId,
           userId:   caller,
           teacherAgentId,
+          referenceMaterial: priorOrchestrator?.referenceMaterial || null,
         });
         const init = await orchestrator.initialize(studentId, topic);
 

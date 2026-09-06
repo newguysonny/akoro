@@ -26,9 +26,10 @@ export async function getOrchestrator({
   userId         = null,
   teacherAgentId = null,
   mode           = "auto",
-  sessionType    = "free_teaching",
-  subject        = null,
-  decayPayload   = null,
+  sessionType       = "free_teaching",
+  subject           = null,
+  decayPayload      = null,
+  referenceMaterial = null,
 } = {}) {
 
   if (agentPairId && BUILTIN_REGISTRY[agentPairId])
@@ -51,7 +52,9 @@ return null;
 
   if (mode === "student" || studentId) {
     const guideOrchestrator = await _resolveGuideForStudent(teacherAgentId, studentId || userId);
-    return new StudentSessionOrchestrator({ studentId, teacherAgentId, guideOrchestrator, sessionType, subject, decayPayload });
+    return new StudentSessionOrchestrator({
+      studentId, teacherAgentId, guideOrchestrator, sessionType, subject, decayPayload, referenceMaterial,
+    });
   }
 
   if (agentId) {

@@ -49,7 +49,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
   constructor({ studentId, teacherAgentId = null, guideOrchestrator,
                 sessionType = "free_teaching",   // "free_teaching" | "decay_review"
                 subject = null,                  // free-teaching subject (decay carries its own)
-                decayPayload = null }) {          // pre-loaded subject+topic for decay sessions
+                decayPayload = null,
+                referenceMaterial = null }) {     // short-lived learner-supplied session source
     super();
     this.studentId          = studentId;
     this.teacherAgentId     = teacherAgentId;
@@ -57,6 +58,9 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     this.sessionType        = sessionType;
     this.decayPayload       = decayPayload;       // { subject, topic, confidence, priority, ... }
     this.subject            = subject || decayPayload?.subject || null;
+    // The REST upload route already caps this value; keep only this object in
+    // live memory and never write its raw source text to adaptive_sessions.
+    this.referenceMaterial  = referenceMaterial?.text ? referenceMaterial : null;
     this.studentAgentRecord = null;
     this.studentAgent       = null;
     this.sessionDeltaId     = null;
@@ -102,6 +106,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       teacherId,
       agentRecord,
       subject:     this.subject,   // scope expressed intelligence to this subject
+      referenceMaterial: this.referenceMaterial,
     });
 
     // Load initial state
