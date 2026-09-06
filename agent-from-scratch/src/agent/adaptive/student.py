@@ -1,6 +1,7 @@
 """The learner-owned Student Agent role from the adaptive-learning flow."""
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from agent.llm.messages import Message
@@ -34,7 +35,70 @@ class StudentAgent:
         self.last_tool_executions: list[dict[str, Any]] = []
 
     def reply(self, human_message: str, topic: str, state: dict[str, int], history: list[dict[str, str]], phase_label: str) -> str:
-        context = self._repository.retrieve_context(self.profile.id, self.profile.student_id, topic, self._subject, human_message)
+        messages = self._reply_messages(human_message, topic, state, history, phase_label)
+        return self._complete_reply(messages)
+
+    def stream_reply(
+        self,
+        human_message: str,
+        topic: str,
+        state: dict[str, int],
+        history: list[dict[str, str]],
+        phase_label: str,
+        should_stop: Callable[[], bool] | None = None,
+    ) -> Iterator[str]:
+        """Yield Student Agent text when the model supports streaming.
+
+        Tool-enabled turns intentionally take the regular bounded function-call
+        loop and are emitted as one SSE chunk. Streaming function-call deltas
+        need a separate, provider-specific parser; buffering avoids making a
+        partial tool name or arguments executable.
+        """
+        messages = self._reply_messages(human_message, topic, state, history, phase_label)
+        self.last_tool_executions = []
+        if should_stop and should_stop():
+            return
+        complete = getattr(self._model, "complete", None)
+        if self._tools and self._tools.enabled and callable(complete):
+            answer = self._complete_reply(messages)
+            if not should_stop or not should_stop():
+                yield answer
+            return
+
+        stream = getattr(self._model, "stream_text", None)
+        if not callable(stream):
+            answer = self._model.complete_text(messages, temperature=0.65).strip()
+            if not should_stop or not should_stop():
+                yield answer or "I’m not sure I understood that yet. Could you explain the key idea another way?"
+            return
+
+        yielded = False
+        for token in stream(messages, temperature=0.65):
+            if should_stop and should_stop():
+                return
+            token = str(token)
+            if token:
+                yielded = True
+                yield token
+        if not yielded and (not should_stop or not should_stop()):
+            yield "I’m not sure I understood that yet. Could you explain the key idea another way?"
+
+    def _complete_reply(self, messages: list[Message]) -> str:
+        self.last_tool_executions = []
+        complete = getattr(self._model, "complete", None)
+        if self._tools and self._tools.enabled and callable(complete):
+            response = self._tool_loop.respond(self._model, messages, self._tools)
+            self.last_tool_executions = list(response.executions)
+            answer = response.content.strip()
+        else:
+            answer = self._model.complete_text(messages, temperature=0.65).strip()
+        return answer or "I’m not sure I understood that yet. Could you explain the key idea another way?"
+
+    def _reply_messages(self, human_message: str, topic: str, state: dict[str, int],
+                        history: list[dict[str, str]], phase_label: str) -> list[Message]:
+        context = self._repository.retrieve_context(
+            self.profile.id, self.profile.student_id, topic, self._subject, human_message,
+        )
         context_text = "\n".join(f"- {chunk.content}" for chunk in context) or "No prior knowledge on this topic yet."
         recent = "\n".join(
             f"{'Teacher' if item['role'] == 'human_teacher' else 'Student Agent'}: {item['content']}"
@@ -73,16 +137,7 @@ Rules:
 
 Recent conversation:
 {recent}"""
-        messages = [Message.system(system), Message.user(human_message)]
-        self.last_tool_executions = []
-        complete = getattr(self._model, "complete", None)
-        if self._tools and self._tools.enabled and callable(complete):
-            response = self._tool_loop.respond(self._model, messages, self._tools)
-            self.last_tool_executions = list(response.executions)
-            answer = response.content.strip()
-        else:
-            answer = self._model.complete_text(messages, temperature=0.65).strip()
-        return answer or "I’m not sure I understood that yet. Could you explain the key idea another way?"
+        return [Message.system(system), Message.user(human_message)]
 
     def analyse_understanding(self, student_reply: str, topic: str, history: list[dict[str, str]]) -> LearningAnalysis:
         system = f"""Assess the Student Agent's understanding of \"{topic}\" from its reply. Return JSON only:

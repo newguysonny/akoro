@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Iterator
 from typing import Any, Protocol, Sequence
 import json
 
@@ -68,6 +69,23 @@ class OpenAIChatClient:
     def complete_text(self, messages: Sequence[Message], temperature: float | None = None) -> str:
         """Text completion used by the teaching-role adapters."""
         return self._create(messages, temperature=temperature).content or ""
+
+    def stream_text(self, messages: Sequence[Message], temperature: float | None = None) -> Iterator[str]:
+        """Yield provider text deltas without storing a response transcript."""
+        kwargs: dict[str, Any] = {
+            "model": self._config.model,
+            "messages": [message.to_openai() for message in messages],
+            "temperature": self._config.temperature if temperature is None else temperature,
+            "stream": True,
+        }
+        stream = self._client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            content = getattr(getattr(choices[0], "delta", None), "content", None)
+            if isinstance(content, str) and content:
+                yield content
 
     def complete_json(self, messages: Sequence[Message], temperature: float = 0) -> dict[str, Any]:
         """JSON-object completion with a strict, provider-neutral return value."""

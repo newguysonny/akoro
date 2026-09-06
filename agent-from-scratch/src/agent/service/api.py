@@ -7,9 +7,12 @@ credential. Domain construction lives in `harness`, agent coordination in
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
+import logging
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
@@ -18,7 +21,10 @@ from agent.harness.adaptive_service import AdaptiveServiceRuntime, build_adaptiv
 
 from .contracts import StartSessionRequest, TeachingTurnRequest
 from .settings import ServiceSettings
-from .store import SessionNotFoundError
+from .store import SessionBusyError, SessionNotFoundError, StreamAlreadyActiveError, StreamNotActiveError
+from .streaming import sse_event
+
+log = logging.getLogger(__name__)
 
 
 def create_app(
@@ -29,7 +35,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or ServiceSettings.from_env()
     runtime = runtime or build_adaptive_service_runtime(settings, model=model, repository=repository)
-    app = FastAPI(title="Akoro Adaptive Agent Service", version="0.4.0")
+    app = FastAPI(title="Akoro Adaptive Agent Service", version="0.5.0")
     app.state.settings = settings
     app.state.runtime = runtime
 
@@ -45,7 +51,7 @@ def create_app(
         return {
             "ok": True,
             "service": "adaptive-agent",
-            "version": "0.4.0",
+            "version": "0.5.0",
             "activeSessions": runtime.sessions.active_count(),
             "persistence": type(runtime.repository).__name__,
             "akoroApiConfigured": bool(settings.akoro_api_url),
@@ -89,12 +95,64 @@ def create_app(
     @app.post("/v1/sessions/{session_id}/turns", dependencies=[Depends(require_internal_caller)])
     def teaching_turn(session_id: str, payload: TeachingTurnRequest) -> dict:
         try:
+            runtime.sessions.assert_not_streaming(session_id)
             with runtime.sessions.session(session_id) as loop:
                 return loop.process_teaching_message(payload.message)
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A teaching stream is active for this session") from exc
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    @app.post("/v1/sessions/{session_id}/turns/stream", dependencies=[Depends(require_internal_caller)])
+    def streaming_teaching_turn(session_id: str, payload: TeachingTurnRequest) -> StreamingResponse:
+        """SSE form of a teaching turn: tokens followed by one final payload."""
+        try:
+            stop_signal = runtime.sessions.begin_stream(session_id)
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
+        except StreamAlreadyActiveError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A teaching stream is already active for this session") from exc
+
+        def events() -> Iterator[str]:
+            try:
+                yield sse_event("stream_started", {"sessionId": session_id})
+                with runtime.sessions.session(session_id) as loop:
+                    for item in loop.stream_teaching_message(payload.message, should_stop=stop_signal.is_set):
+                        yield sse_event(item["event"], item["data"])
+            except GeneratorExit:
+                # The client disconnected. The loop has not finalised a partial
+                # response, so the learner can retry the turn safely.
+                raise
+            except ValueError as exc:
+                yield sse_event("error", {"code": "invalid_turn", "message": str(exc)})
+            except Exception:
+                log.exception("Adaptive teaching stream failed", extra={"session_id": session_id})
+                yield sse_event("error", {"code": "stream_failed", "message": "Teaching stream could not be completed"})
+            finally:
+                runtime.sessions.finish_stream(session_id)
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
+                "Connection": "keep-alive",
+            },
+        )
+
+    @app.post("/v1/sessions/{session_id}/turns/stream/stop", dependencies=[Depends(require_internal_caller)])
+    def stop_streaming_teaching_turn(session_id: str) -> dict:
+        try:
+            runtime.sessions.stop_stream(session_id)
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
+        except StreamNotActiveError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No teaching stream is active for this session") from exc
+        return {"sessionId": session_id, "stopping": True}
 
     @app.get("/v1/sessions/{session_id}/summary", dependencies=[Depends(require_internal_caller)])
     def summary(session_id: str) -> dict:
@@ -110,6 +168,8 @@ def create_app(
             return {"summary": runtime.sessions.end(session_id)}
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stop the active teaching stream before ending this session") from exc
 
     return app
 

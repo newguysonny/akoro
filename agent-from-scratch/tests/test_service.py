@@ -39,6 +39,13 @@ class FakeServiceModel:
         return self.json_responses.pop(0)
 
 
+class StreamingServiceModel(FakeServiceModel):
+    def stream_text(self, _messages, temperature=0.4):
+        self.asserted_temperature = temperature
+        yield "I understand "
+        yield "the foundation, but I would like an example."
+
+
 class ToolEnabledServiceModel(FakeServiceModel):
     def __init__(self) -> None:
         super().__init__()
@@ -111,6 +118,47 @@ class ServiceContractTests(unittest.TestCase):
         self.assertEqual(end.status_code, 200)
         self.assertEqual(end.json()["summary"]["agentGrowth"]["totalSessions"], 1)
         self.assertEqual(self.client.get("/v1/sessions/python-session-1/summary", headers=self.headers).status_code, 404)
+
+    def test_streaming_turn_emits_tokens_then_the_normal_terminal_turn_payload(self) -> None:
+        model = StreamingServiceModel()
+        runtime = build_adaptive_service_runtime(
+            self.client.app.state.settings, model=model, repository=InMemoryLearningRepository(),
+        )
+        client = TestClient(create_app(self.client.app.state.settings, runtime=runtime))
+        start = client.post("/v1/sessions", headers=self.headers, json={
+            "studentId": "learner-1", "topic": "Plants", "sessionId": "stream-session-1",
+        })
+        self.assertEqual(start.status_code, 200)
+
+        stream = client.post("/v1/sessions/stream-session-1/turns/stream", headers=self.headers, json={"message": "Plants use light."})
+        self.assertEqual(stream.status_code, 200)
+        self.assertTrue(stream.headers["content-type"].startswith("text/event-stream"))
+        self.assertIn("event: stream_started", stream.text)
+        self.assertIn('event: student_token\ndata: {"text":"I understand "}', stream.text)
+        self.assertIn("event: turn_complete", stream.text)
+        self.assertIn('"studentAgentResponse":"I understand the foundation, but I would like an example."', stream.text)
+        self.assertEqual(runtime.sessions.active_count(), 1)
+
+    def test_stop_endpoint_signals_an_active_stream_and_rejects_a_second_turn(self) -> None:
+        start = self.client.post("/v1/sessions", headers=self.headers, json={
+            "studentId": "learner-1", "topic": "Plants", "sessionId": "stoppable-stream-session",
+        })
+        self.assertEqual(start.status_code, 200)
+        runtime = self.client.app.state.runtime
+        signal = runtime.sessions.begin_stream("stoppable-stream-session")
+        self.assertEqual(
+            self.client.post("/v1/sessions/stoppable-stream-session/turns", headers=self.headers, json={"message": "Plants use light."}).status_code,
+            409,
+        )
+        stop = self.client.post("/v1/sessions/stoppable-stream-session/turns/stream/stop", headers=self.headers)
+        self.assertEqual(stop.status_code, 200)
+        self.assertEqual(stop.json(), {"sessionId": "stoppable-stream-session", "stopping": True})
+        self.assertTrue(signal.is_set())
+        runtime.sessions.finish_stream("stoppable-stream-session")
+        self.assertEqual(
+            self.client.post("/v1/sessions/stoppable-stream-session/turns/stream/stop", headers=self.headers).status_code,
+            409,
+        )
 
     def test_session_uses_only_akoro_catalogue_tools_and_returns_result_free_audit_metadata(self) -> None:
         transport = ToolTransport()

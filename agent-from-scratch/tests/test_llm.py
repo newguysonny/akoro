@@ -4,6 +4,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from types import SimpleNamespace
+
+from agent.llm.client import OpenAIChatClient
 from agent.llm.config import ConfigurationError, LLMConfig
 from agent.llm.messages import Message, ToolCall
 
@@ -21,6 +24,29 @@ class MessageTests(unittest.TestCase):
         self.assertEqual(wire["role"], "tool")
         self.assertEqual(wire["tool_call_id"], "call-1")
         self.assertEqual(wire["content"], '{"result": 4}')
+
+
+class StreamingClientTests(unittest.TestCase):
+    def test_stream_text_yields_only_non_empty_provider_content_deltas(self) -> None:
+        calls = []
+
+        def create(**kwargs):
+            calls.append(kwargs)
+            return iter([
+                SimpleNamespace(choices=[]),
+                SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Hello"))]),
+                SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]),
+                SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=" world"))]),
+            ])
+
+        client = object.__new__(OpenAIChatClient)
+        client._config = LLMConfig(api_key="test", model="stream-model", temperature=0.3)
+        client._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+        self.assertEqual(list(client.stream_text([Message.user("Hi")], temperature=0.7)), ["Hello", " world"])
+        self.assertTrue(calls[0]["stream"])
+        self.assertEqual(calls[0]["temperature"], 0.7)
+        self.assertEqual(calls[0]["model"], "stream-model")
 
 
 class ConfigTests(unittest.TestCase):

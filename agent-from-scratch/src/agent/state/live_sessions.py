@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from threading import RLock
+from threading import Event, RLock
 from time import monotonic
 from typing import Iterator
 
@@ -14,11 +14,25 @@ class SessionNotFoundError(KeyError):
     """The session expired, ended, or was never created on this instance."""
 
 
+class StreamAlreadyActiveError(RuntimeError):
+    """Only one ordered teaching stream may own a session at a time."""
+
+
+class StreamNotActiveError(RuntimeError):
+    """A stop was requested when the session has no running stream."""
+
+
+class SessionBusyError(RuntimeError):
+    """The requested operation would race an active teaching stream."""
+
+
 @dataclass(slots=True)
 class _Entry:
     loop: AdaptiveTeachingLoop
     last_touched: float
     lock: RLock = field(default_factory=RLock)
+    stream_stop: Event = field(default_factory=Event)
+    streaming: bool = False
 
 
 class LiveSessionStore:
@@ -51,7 +65,48 @@ class LiveSessionStore:
             entry.last_touched = monotonic()
             yield entry.loop
 
+    def begin_stream(self, session_id: str) -> Event:
+        """Reserve ordered session ownership before a StreamingResponse starts."""
+        with self._lock:
+            self._reap_locked()
+            entry = self._entries.get(session_id)
+            if not entry:
+                raise SessionNotFoundError(session_id)
+            if entry.streaming:
+                raise StreamAlreadyActiveError(session_id)
+            entry.streaming = True
+            entry.stream_stop.clear()
+            entry.last_touched = monotonic()
+            return entry.stream_stop
+
+    def finish_stream(self, session_id: str) -> None:
+        with self._lock:
+            entry = self._entries.get(session_id)
+            if entry:
+                entry.streaming = False
+                entry.last_touched = monotonic()
+
+    def stop_stream(self, session_id: str) -> None:
+        with self._lock:
+            self._reap_locked()
+            entry = self._entries.get(session_id)
+            if not entry:
+                raise SessionNotFoundError(session_id)
+            if not entry.streaming:
+                raise StreamNotActiveError(session_id)
+            entry.stream_stop.set()
+
+    def assert_not_streaming(self, session_id: str) -> None:
+        with self._lock:
+            self._reap_locked()
+            entry = self._entries.get(session_id)
+            if not entry:
+                raise SessionNotFoundError(session_id)
+            if entry.streaming:
+                raise SessionBusyError(session_id)
+
     def end(self, session_id: str) -> dict:
+        self.assert_not_streaming(session_id)
         with self.session(session_id) as loop:
             result = loop.end_session()
         with self._lock:
@@ -65,5 +120,10 @@ class LiveSessionStore:
 
     def _reap_locked(self) -> None:
         cutoff = monotonic() - self._ttl
-        for session_id in [key for key, entry in self._entries.items() if entry.last_touched < cutoff]:
+        # Never evict a live response merely because an upstream LLM or tool
+        # call was slower than expected. Cancellation/end will release it.
+        for session_id in [
+            key for key, entry in self._entries.items()
+            if not entry.streaming and entry.last_touched < cutoff
+        ]:
             self._entries.pop(session_id, None)

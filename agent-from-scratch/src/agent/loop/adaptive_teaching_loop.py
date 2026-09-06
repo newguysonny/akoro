@@ -6,6 +6,7 @@ rules, and service composition live in their dedicated top-level modules.
 """
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from agent.adaptive.guide import NaNaGuide
@@ -110,6 +111,43 @@ class AdaptiveTeachingLoop:
         }
 
     def process_teaching_message(self, human_message: str) -> dict[str, Any]:
+        human_message, prior = self._prepare_teaching_turn(human_message)
+        student_reply = self._student.reply(  # type: ignore[union-attr]
+            human_message, self.session.topic, prior.as_percentages(), self.session.history,
+            self.session.progress.label(),
+        )
+        return self._complete_teaching_turn(human_message, student_reply)
+
+    def stream_teaching_message(
+        self, human_message: str, should_stop: Callable[[], bool] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Yield ordered token and terminal events for one teaching turn.
+
+        A cancelled or disconnected stream does not alter cognitive state,
+        transcript, XP, or knowledge persistence. Those mutations occur only
+        once a complete Student Agent reply has been received.
+        """
+        human_message, prior = self._prepare_teaching_turn(human_message)
+        fragments: list[str] = []
+        for token in self._student.stream_reply(  # type: ignore[union-attr]
+            human_message, self.session.topic, prior.as_percentages(), self.session.history,
+            self.session.progress.label(), should_stop,
+        ):
+            if should_stop and should_stop():
+                yield {"event": "stopped", "data": {"sessionId": self.session.session_id}}
+                return
+            fragments.append(token)
+            yield {"event": "student_token", "data": {"text": token}}
+        if should_stop and should_stop():
+            yield {"event": "stopped", "data": {"sessionId": self.session.session_id}}
+            return
+        student_reply = "".join(fragments).strip()
+        if not student_reply:
+            yield {"event": "stopped", "data": {"sessionId": self.session.session_id}}
+            return
+        yield {"event": "turn_complete", "data": self._complete_teaching_turn(human_message, student_reply)}
+
+    def _prepare_teaching_turn(self, human_message: str):
         if self._ended:
             raise RuntimeError("This session has already ended")
         if not self._student or not self._profile:
@@ -119,12 +157,11 @@ class AdaptiveTeachingLoop:
             raise ValueError("message is required")
         if len(human_message) > 12_000:
             raise ValueError("message is limited to 12,000 characters")
+        return human_message, self._repository.get_cognitive_state(self._profile.id, self.session.topic)
 
-        prior = self._repository.get_cognitive_state(self._profile.id, self.session.topic)
-        student_reply = self._student.reply(
-            human_message, self.session.topic, prior.as_percentages(), self.session.history,
-            self.session.progress.label(),
-        )
+    def _complete_teaching_turn(self, human_message: str, student_reply: str) -> dict[str, Any]:
+        if not self._student or not self._profile:
+            raise RuntimeError("Initialize the session before processing messages")
         analysis = self._student.analyse_understanding(student_reply, self.session.topic, self.session.history)
         cognitive = self._repository.update_cognitive_state(self._profile.id, self.session.topic, analysis)
         state = cognitive.as_percentages()
@@ -139,11 +176,10 @@ class AdaptiveTeachingLoop:
                 self._profile.id, self.session.student_id, self.session.topic, self.session.subject, analysis.strengths,
             )
 
-        active_part = self._current_subtopic()
         guide = self._guide.coaching_tip(
             topic=self.session.topic,
             phase=self.session.progress.label(),
-            current_subtopic=active_part,
+            current_subtopic=self._current_subtopic(),
             human_message=human_message,
             student_response=student_reply,
             state=state,

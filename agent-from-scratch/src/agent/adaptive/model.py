@@ -1,6 +1,7 @@
 """Teaching-model protocol and OpenAI implementation adapter."""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol, Sequence
 
 from agent.llm.client import LLMResponse, OpenAIChatClient
@@ -24,6 +25,9 @@ class OpenAIAdaptiveModel:
 
     def complete_text(self, messages: Sequence[Message], temperature: float = 0.4) -> str:
         return self._client.complete_text(messages, temperature)
+
+    def stream_text(self, messages: Sequence[Message], temperature: float = 0.4) -> Iterator[str]:
+        return self._client.stream_text(messages, temperature)
 
     def complete_json(self, messages: Sequence[Message], temperature: float = 0.0) -> dict:
         return self._client.complete_json(messages, temperature)

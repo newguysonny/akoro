@@ -53,6 +53,18 @@ This separation makes each layer unit-testable and lets the current evaluation
 repository be swapped for a protected Akoro API repository without changing
 LLM roles, browser code, or HTTP contracts.
 
+### Agent-system coverage
+
+| Capability | Current implementation |
+|---|---|
+| Tools | Akoro API-provided, per-session function catalogue; Python has no direct database tools. |
+| Loop | Generic permissioned `AgentLoop`, adaptive `AdaptiveTeachingLoop`, and bounded `TeachingToolLoop`. |
+| State | Explicit agent run state, validated teaching progression, TTL live sessions, per-session locks, and stream-stop signals. |
+| Permissions | Default-deny local tools; separate inbound service and outbound Akoro-tools credentials; backend remains the authority for account actions. |
+| Error handling | Validated settings/contracts, bounded remote calls, safe tool failures, typed session/stream conflicts, and generic SSE error events after a stream starts. |
+| Stopping conditions | Provider timeout, maximum model/tool rounds, per-session tool caps, single-stream ownership, explicit stop, client disconnect, end-session guard, and TTL cleanup for idle sessions. |
+| Environment access | A workspace-confined `Environment` supports the generic agent harness. The adaptive HTTP service intentionally has no arbitrary filesystem tool; references arrive already-normalised and remain memory-only. |
+
 ## Quick start
 
 ```bash
@@ -84,6 +96,47 @@ session. It returns camel-case response fields aligned with the existing
 Socket.IO payloads. See [`DEPLOY.md`](DEPLOY.md) for the server-to-server
 contract, authentication boundary, deployment settings, and the staged Akoro
 API integration plan.
+
+## Streaming teaching turns
+
+Use the authenticated Server-Sent Events endpoint when the Akoro API bridge
+needs token-by-token Student Agent output:
+
+```http
+POST /v1/sessions/{sessionId}/turns/stream
+X-Akoro-Agent-Secret: <internal service secret>
+Content-Type: application/json
+
+{"message":"Plants use light energy to make glucose."}
+```
+
+The response is `text/event-stream` and has this ordered lifecycle:
+
+| SSE event | Meaning |
+|---|---|
+| `stream_started` | the service reserved this session for one ordered stream |
+| `student_token` | a Student Agent text delta; concatenate `data.text` in order |
+| `turn_complete` | the normal complete teaching-turn payload, after analysis, coaching, XP, and state updates finish |
+| `stopped` | cancellation or disconnect stopped a partial reply; no turn state was committed |
+| `error` | a stream-time error after the HTTP response started; inspect `data.code` |
+
+A stream can be cancelled by the trusted bridge:
+
+```http
+POST /v1/sessions/{sessionId}/turns/stream/stop
+X-Akoro-Agent-Secret: <internal service secret>
+```
+
+Only one stream may run for a session (`409` otherwise). A normal turn and
+session end are also rejected while a stream owns the session. The browser must
+still talk only to `akoro-api`: the Node bridge should consume these SSE events
+and relay the appropriate Socket.IO events to the learner.
+
+For a provider that supports text streaming, `student_token` is emitted as each
+model text delta arrives. A turn with backend function tools is safely buffered
+through the function-call loop and then emitted as one text event; partial tool
+arguments are never executed. This keeps tool execution provider-neutral until
+a dedicated streaming tool-call parser is introduced.
 
 ## Account-aware Akoro API tools
 

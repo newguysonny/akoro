@@ -8,7 +8,7 @@ from agent.adaptive.ladder import normalise_ladder
 from agent.adaptive.orchestrator import AdaptiveTeachingOrchestrator
 from agent.adaptive.repository import InMemoryLearningRepository
 from agent.adaptive.types import AdaptiveSession, SessionReference
-from agent.service.store import SessionNotFoundError, SessionStore
+from agent.service.store import SessionNotFoundError, SessionStore, StreamAlreadyActiveError, StreamNotActiveError
 
 
 class FakeTeachingModel:
@@ -111,3 +111,25 @@ class AdaptiveOrchestratorTests(unittest.TestCase):
         with self.assertRaises(SessionNotFoundError):
             with store.session("missing"):
                 pass
+
+    def test_stream_stop_prevents_partial_turn_state_and_releases_session_ownership(self) -> None:
+        orchestrator = AdaptiveTeachingOrchestrator(
+            InMemoryLearningRepository(), FakeTeachingModel(), AdaptiveSession(student_id="learner-1", topic="Photosynthesis"),
+        )
+        orchestrator.initialize()
+        store = SessionStore(ttl_seconds=60)
+        store.create(orchestrator)
+        signal = store.begin_stream(orchestrator.session.session_id)
+        with self.assertRaises(StreamAlreadyActiveError):
+            store.begin_stream(orchestrator.session.session_id)
+        store.stop_stream(orchestrator.session.session_id)
+        self.assertTrue(signal.is_set())
+        self.assertEqual(
+            list(orchestrator.stream_teaching_message("Plants use sunlight.", should_stop=signal.is_set)),
+            [{"event": "stopped", "data": {"sessionId": orchestrator.session.session_id}}],
+        )
+        self.assertEqual(orchestrator.session.turns_completed, 0)
+        self.assertEqual(len(orchestrator.session.history), 0)
+        store.finish_stream(orchestrator.session.session_id)
+        with self.assertRaises(StreamNotActiveError):
+            store.stop_stream(orchestrator.session.session_id)

@@ -132,7 +132,9 @@ shape that the current Socket.IO layer emits:
 | Purpose | Method and path | Response purpose |
 |---|---|---|
 | Create live session | `POST /v1/sessions` | `session_ready` payload |
-| Process a teacher turn | `POST /v1/sessions/{id}/turns` | adaptive teaching response |
+| Process a buffered teacher turn | `POST /v1/sessions/{id}/turns` | adaptive teaching response |
+| Stream a teacher turn | `POST /v1/sessions/{id}/turns/stream` | internal SSE: `stream_started`, `student_token`, then `turn_complete` |
+| Stop a stream | `POST /v1/sessions/{id}/turns/stream/stop` | requests a safe, non-committing stop |
 | Read a summary | `GET /v1/sessions/{id}/summary` | `session_summary` payload |
 | Finalise a session | `POST /v1/sessions/{id}/end` | `session_ended` summary |
 
