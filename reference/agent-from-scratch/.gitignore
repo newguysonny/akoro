@@ -1,0 +1,17 @@
+# Secrets and local virtual environments
+.env
+.venv/
+
+# Python build/test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# The agent may persist long-term memory and other runtime artefacts here.
+workspace/*
+!workspace/.gitkeep

@@ -3,9 +3,9 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "akoro-agent-from-scratch"
+name = "akoro-python-agent"
 version = "0.1.0"
-description = "A small, permissioned, tool-using agent with an OpenAI-compatible LLM client."
+description = "Akoro’s structured Python adaptive-teaching agent service with Akoro API tools and streaming."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

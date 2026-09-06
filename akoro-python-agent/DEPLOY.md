@@ -7,7 +7,7 @@ internal credential.
 
 ## Deploy as its own service
 
-1. Create a Railway (or container-host) service with `agent-from-scratch` as
+1. Create a Railway (or container-host) service with `akoro-python-agent` as
    the root directory. `Dockerfile` binds Uvicorn to `0.0.0.0:$PORT`.
 2. Set these service variables:
 

@@ -1,4 +1,4 @@
-# Akoro agent from scratch
+# Akoro Python Agent
 
 A compact, runnable Python agent foundation with a complete **adaptive teaching
 service**. It separates the pieces that tend to become entangled in an agent
@@ -8,6 +8,8 @@ Agent / NaNa-style teaching roles.
 
 It is a **standalone Python service**. It does not replace the production
 JavaScript tutoring agents under `akoro-api/modules/adaptive-learning/agents`.
+The original generic foundation is retained as a read-only snapshot in
+[`../reference/agent-from-scratch`](../reference/agent-from-scratch).
 The Python implementation mirrors that adaptive session lifecycle so it can be
 evaluated independently, then connected through an authenticated service URL
 without exposing the browser directly to it.
@@ -68,7 +70,7 @@ LLM roles, browser code, or HTTP contracts.
 ## Quick start
 
 ```bash
-cd agent-from-scratch
+cd akoro-python-agent
 cp .env.example .env
 # Set OPENAI_API_KEY in .env
 python -m venv .venv
@@ -84,7 +86,7 @@ constructed, so all unit tests can run without credentials or network access.
 ## Run the adaptive-agent service
 
 ```bash
-cd agent-from-scratch
+cd akoro-python-agent
 # Configure OPENAI_API_KEY; set a long shared secret before any production deployment.
 python -m agent.service
 # GET http://localhost:8000/health
