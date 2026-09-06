@@ -231,6 +231,8 @@ export const AR = {
   'settings.order_history_sub':'مدفوعاتك وإيصالاتك',
   'settings.activities':       'الأنشطة',
   'settings.activities_sub':   'نشاطك التعليمي',
+  'settings.communities':      'المجتمعات',
+  'settings.communities_sub':  'المجموعات التي انضممت إليها',
   'settings.library':          'المكتبة',
   'settings.library_sub':      'الدروس والمواد المحفوظة',
   'settings.soon_toast':       'هذا القسم قادم قريبًا!',

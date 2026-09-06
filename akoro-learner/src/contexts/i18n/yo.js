@@ -251,6 +251,8 @@ export const YO = {
   'settings.order_history_sub':'Òwó tí o san & àwọn ìwé-ẹ̀rì rẹ',
   'settings.activities':       'Àwọn iṣẹ́',
   'settings.activities_sub':   'Ìṣẹ́ ìkẹ́kọ̀ọ́ rẹ',
+  'settings.communities':      'Àwọn àgbègbè',
+  'settings.communities_sub':  'Àwọn ẹgbẹ́ tí o kópa sí',
   'settings.library':          'Ilé ìkàwé',
   'settings.library_sub':      'Àwọn ẹ̀kọ́ & ohun èlò tí o fipamọ́',
   'settings.soon_toast':       'Apá yìí ń bọ̀ láìpẹ́!',

@@ -232,6 +232,8 @@ export const HA = {
   'settings.order_history_sub':'Biyan kuɗi & rasituna',
   'settings.activities':       'Ayyuka',
   'settings.activities_sub':   'Aikin karatunka',
+  'settings.communities':      'Al’umomi',
+  'settings.communities_sub':  'Rungunoni ka shiga',
   'settings.library':          'Laburare',
   'settings.library_sub':      'Darussa & kayan da aka ajiye',
   'settings.soon_toast':       'Wannan sashe nan ba da jimīla!',

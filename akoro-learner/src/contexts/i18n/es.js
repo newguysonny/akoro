@@ -250,6 +250,8 @@ export const ES = {
   'settings.order_history_sub':'Tus pagos y recibos',
   'settings.activities':       'Actividades',
   'settings.activities_sub':   'Tu actividad de aprendizaje',
+  'settings.communities':      'Comunidades',
+  'settings.communities_sub':  'Grupos a los que has entrado',
   'settings.library':          'Biblioteca',
   'settings.library_sub':      'Lecciones y materiales guardados',
   'settings.soon_toast':       '¡Esta sección llegará pronto!',

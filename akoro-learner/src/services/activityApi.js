@@ -39,6 +39,26 @@ const fetchAssignments = () => Promise.resolve([]); // TODO: /api/activities?kin
 const fetchProjects    = () => Promise.resolve([]); // TODO: /api/activities?kind=project
 const fetchMultiStage  = () => Promise.resolve([]); // TODO: /api/activities?kind=multistage
 
+/* Community activity feed — the seam behind /communities/:id.
+   The endpoint exists and returns [] until the first community-scoped
+   activity kind lands; the Activity page renders either way. */
+export async function fetchCommunityActivities(communityId) {
+  try {
+    const d = await apiGet(`/api/communities/${communityId}/activities`, { cache: false });
+    return (d?.data ?? []).map(a => ({
+      id:         a.id,
+      kind:       a.kind || 'assignment',
+      title:      a.title || 'Activity',
+      subtitle:   a.subtitle || null,
+      details:    a.details || null,
+      status:     a.status || 'assigned',
+      dueAt:      a.dueAt || null,
+      assignedBy: a.assignedBy || null,
+      source:     'community',
+    }));
+  } catch { return []; }
+}
+
 /**
  * All of the learner's activities, merged and ordered: open work first,
  * soonest due on top, no-due-date last.

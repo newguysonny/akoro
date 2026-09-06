@@ -232,6 +232,8 @@ export const FR = {
   'settings.order_history_sub':'Vos paiements et reçus',
   'settings.activities':       'Activités',
   'settings.activities_sub':   'Votre activité d’apprentissage',
+  'settings.communities':      'Communautés',
+  'settings.communities_sub':  'Groupes auxquels vous avez adhéré',
   'settings.library':          'Bibliothèque',
   'settings.library_sub':      'Leçons et supports enregistrés',
   'settings.soon_toast':       'Cette section arrive bientôt !',

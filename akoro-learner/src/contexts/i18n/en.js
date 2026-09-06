@@ -354,6 +354,8 @@ export const EN = {
   'settings.order_history_sub':'Your payments & receipts',
   'settings.activities':       'Activities',
   'settings.activities_sub':   'Your learning activity',
+  'settings.communities':      'Communities',
+  'settings.communities_sub':  'Groups you’ve joined',
   'settings.library':          'Library',
   'settings.library_sub':      'Saved lessons & materials',
   'settings.soon_toast':       'This section is coming soon!',

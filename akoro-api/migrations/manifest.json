@@ -114,7 +114,8 @@
     "2026-hybrid-retrieval.sql",
     "2026-knowledge-hierarchy.sql",
     "2026-knowledge-map.sql",
-    "2026-fix-adaptive-session-agent-fk.sql"
+    "2026-fix-adaptive-session-agent-fk.sql",
+    "2026-communities.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

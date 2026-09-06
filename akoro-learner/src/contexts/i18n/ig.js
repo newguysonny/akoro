@@ -250,6 +250,8 @@ export const IG = {
   'settings.order_history_sub':'Ịkwụ ụgwọ & ihe nnata gị',
   'settings.activities':       'Omume',
   'settings.activities_sub':   'Omume ọmụmụ gị',
+  'settings.communities':      'Otu',
+  'settings.communities_sub':  'Otu ị sonyere',
   'settings.library':          'Ọbá akwụkwọ',
   'settings.library_sub':      'Ozeko & ihe ndị echekwara',
   'settings.soon_toast':       'Ngalaba a na-abịa n’oge adịghị anya!',

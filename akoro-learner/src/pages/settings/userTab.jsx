@@ -14,6 +14,7 @@ import {
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
+import { isHigherEdUI } from '../../utils/studyLevel.js';
 
 /* ─── Notification section ────────────────────────────────────── */
 /* ─── Notification section ────────────────────────────────────── */
@@ -211,10 +212,14 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     <div style={{ padding:'20px 0 0' }}>
       {/* Quick-link cards — one design (same as the original Order history
           card): tinted icon chip, title + sub, chevron. Order history,
-          Activities and Library are live. */}
+          Library and the activity card are live. Higher-ed learners get
+          Communities (study groups, each with its own Activity page)
+          instead of the flat Activities feed. */}
       {[
         { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
-        { icon:'ti-activity', title:'settings.activities',    sub:'settings.activities_sub',    go:()=>navigate('/activities') },
+        isHigherEdUI(profile)
+          ? { icon:'ti-users', title:'settings.communities',  sub:'settings.communities_sub',  go:()=>navigate('/communities') }
+          : { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
         { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
       ].map(card => (
         <button key={card.title} onClick={card.go}

@@ -250,6 +250,8 @@ export const PCM = {
   'settings.order_history_sub':'Your payments & receipts',
   'settings.activities':       'Activities',
   'settings.activities_sub':   'Your learning activity',
+  'settings.communities':      'Communities',
+  'settings.communities_sub':  'Groug wey you join',
   'settings.library':          'Library',
   'settings.library_sub':      'Lessons & materials wey you save',
   'settings.soon_toast':       'This section dey come soon!',
