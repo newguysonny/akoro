@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { fetchMyActivities, fetchCommunityActivities } from '../services/activityApi.js';
-import { fetchCommunity } from '../services/communityApi.js';
+import { useNavigate } from 'react-router-dom';
+import { fetchMyActivities } from '../services/activityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
@@ -107,43 +106,20 @@ function ActivityCard({ a }) {
 }
 
 export default function ActivityPage() {
-  const navigate  = useNavigate();
-  const { communityId } = useParams();   // set → this is a community's activity page
+  const navigate = useNavigate();
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const [community, setCommunity]   = useState(null);
-  const [communityLoading, setCommunityLoading] = useState(!!communityId);
-
-  /* Community mode: resolve the community header (name, members) once. */
-  useEffect(() => {
-    if (!communityId) { setCommunity(null); setCommunityLoading(false); return; }
-    let alive = true;
-    setCommunityLoading(true);
-    fetchCommunity(communityId).then(c => {
-      if (alive) { setCommunity(c); setCommunityLoading(false); }
-    });
-    return () => { alive = false; };
-  }, [communityId]);
 
   const load = useCallback(async () => {
     try {
-      setItems(communityId
-        ? await fetchCommunityActivities(communityId)
-        : await fetchMyActivities());
+      setItems(await fetchMyActivities());
     } finally { setLoading(false); }
-  }, [communityId]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const openCount = items.filter(a => a.status !== 'complete').length;
-  const isCommunity = !!communityId;
-  const headerTitle = isCommunity
-    ? (communityLoading ? 'Community' : community?.name || 'Community')
-    : 'Activity';
-  const headerSub = isCommunity
-    ? `${community?.member_count || 0} members`
-    : (openCount > 0 ? `${openCount} open` : 'All caught up');
 
   const displayed = filter === 'all' ? items : items.filter(a => a.kind === filter);
   const activeLabel = KINDS.find(k => k.key === filter)?.label || 'Activity';
@@ -161,16 +137,14 @@ export default function ActivityPage() {
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => navigate(isCommunity ? '/communities' : '/app')}
+            <button onClick={() => navigate('/app')}
               style={{ background: '#F0EBFF', border: '1px solid #DDD3FF', borderRadius: 100, width: 34, height: 34, cursor: 'pointer', color: BRAND, fontSize: 16, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               ‹
             </button>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {headerTitle}
-              </p>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>Activity</p>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0 }}>
-                {headerSub}
+                {openCount > 0 ? `${openCount} open` : 'All caught up'}
               </p>
             </div>
           </div>

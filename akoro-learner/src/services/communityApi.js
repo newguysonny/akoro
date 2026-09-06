@@ -56,3 +56,51 @@ export async function deleteCommunity(id) {
   const d = await apiDelete(`/api/communities/${id}`);
   return d?.data ?? null;
 }
+
+/* ── Community activities ─────────────────────────────────────────────────── */
+
+/* The community's activity feed, newest first (creator name, submission
+   counts, my_submitted flag on each row). */
+export async function fetchCommunityActivities(communityId) {
+  try {
+    const d = await apiGet(`/api/communities/${communityId}/activities`, { cache: false });
+    return d?.data ?? [];
+  } catch { return []; }
+}
+
+/* Creator posts an activity: { name, subject, class, dueAt, instructions }.
+   Throws with a user-facing message. */
+export async function createCommunityActivity(communityId, payload) {
+  const d = await apiPost(`/api/communities/${communityId}/activities`, payload);
+  return d?.data ?? null;
+}
+
+/* Delete an activity (its creator only). */
+export async function deleteCommunityActivity(activityId) {
+  const d = await apiDelete(`/api/communities/activities/${activityId}`);
+  return d?.data ?? null;
+}
+
+/* A member submits work (idempotent). Throws with a user-facing message. */
+export async function submitCommunityActivity(activityId) {
+  const d = await apiPost(`/api/communities/activities/${activityId}/submit`);
+  return d?.data ?? null;
+}
+
+/* ── Creator tools ────────────────────────────────────────────────────────── */
+
+/* Member list (owner first): { user_id, role, joined_at, name, avatar_url }. */
+export async function fetchCommunityMembers(communityId) {
+  try {
+    const d = await apiGet(`/api/communities/${communityId}/members`, { cache: false });
+    return d?.data ?? [];
+  } catch { return []; }
+}
+
+/* { members, activities, submissions, avg_per_activity, recent[] }. */
+export async function fetchCommunityAnalytics(communityId) {
+  try {
+    const d = await apiGet(`/api/communities/${communityId}/analytics`, { cache: false });
+    return d?.data ?? null;
+  } catch { return null; }
+}

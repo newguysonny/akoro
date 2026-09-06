@@ -3,20 +3,35 @@
  *
  * Communities are study groups for higher-ed learners. The learner app's
  * Community page lists the caller's joined communities (GET /mine); the
- * plus icon creates one (POST /); every community has its own Activity
- * page in the learner app, fed by GET /:id/activities.
+ * plus icon creates one (POST /); every community has an Activity page
+ * (community activities posted by its creator), plus settings / people /
+ * analytics pages for the creator and a profile view for members.
  *
  * Mounted at /api/communities. All routes require an authenticated user.
  *
+ * Community:
  *   GET    /mine               → my joined communities (role + member counts)
  *   GET    /                   → public communities (discovery, ?q= to search)
  *   POST   /                   → create (body: name, description?, emoji?)
  *   GET    /:id                → one community + my membership
- *   PATCH  /:id                → edit (owner only)
+ *   PATCH  /:id                → edit (creator only)
  *   POST   /:id/join           → join (idempotent)
- *   POST   /:id/leave          → leave (members only — owners delete instead)
- *   DELETE /:id                → delete (owner only)
- *   GET    /:id/activities     → the community's activity feed
+ *   POST   /:id/leave          → leave (members only — creators delete instead)
+ *   DELETE /:id                → delete (creator only)
+ *
+ * Community activities (creator posts, members submit):
+ *   GET    /:id/activities     → the community's activity feed (with
+ *                                creator name, submission counts, my_submitted)
+ *   POST   /:id/activities     → create (creator only)
+ *   POST   /activities/:activityId/submit → member submits (idempotent)
+ *   DELETE /activities/:activityId        → delete (activity creator only)
+ *
+ * Creator tools:
+ *   GET    /:id/members        → member list (names, avatars, roles)
+ *   GET    /:id/analytics      → community stats + recent submissions
+ *
+ * NOTE on ordering: the /activities/:activityId routes are registered
+ * before the /:id routes — "activities" must not be captured as :id.
  */
 
 import { Router }                         from "express";
@@ -35,7 +50,7 @@ const missing = (res) => res.status(404).json({ success: false, error: "Not foun
 
 router.use(authenticateToken);
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────────
 
 /** Member counts for the given community ids, in one query. */
 async function memberCounts(ids) {
@@ -47,11 +62,11 @@ async function memberCounts(ids) {
   return counts;
 }
 
-/** Owner display names for the given user ids, in one query. */
-async function ownerNames(ownerIds) {
-  if (!ownerIds.length) return new Map();
+/** Display names for the given user ids, in one query. */
+async function userNames(userIds) {
+  if (!userIds.length) return new Map();
   const { data } = await db.from("users")
-    .select("id, full_name").in("id", [...new Set(ownerIds)]);
+    .select("id, full_name").in("id", [...new Set(userIds)]);
   const names = new Map();
   for (const u of data || []) names.set(u.id, u.full_name || "");
   return names;
@@ -62,7 +77,7 @@ async function withExtras(communityRows) {
   if (!communityRows.length) return communityRows;
   const [counts, names] = await Promise.all([
     memberCounts(communityRows.map(c => c.id)),
-    ownerNames(communityRows.map(c => c.owner_id)),
+    userNames(communityRows.map(c => c.owner_id)),
   ]);
   return communityRows.map(c => ({
     ...c,
@@ -84,6 +99,65 @@ async function communityOr404(res, id) {
   return withExtras([c])[0];
 }
 
+/** Add creator_name + submissions_count to raw activity rows. */
+async function withActivityExtras(rows) {
+  if (!rows.length) return rows;
+  const [subs, names] = await Promise.all([
+    edu().from("community_activity_submissions")
+      .select("activity_id").in("activity_id", rows.map(r => r.id)),
+    userNames(rows.map(r => r.creator_id)),
+  ]);
+  const counts = new Map();
+  for (const s of subs || []) counts.set(s.activity_id, (counts.get(s.activity_id) || 0) + 1);
+  return rows.map(r => ({
+    ...r,
+    creator_name:    names.get(r.creator_id) || "",
+    submissions_count: counts.get(r.id) || 0,
+  }));
+}
+
+/** Fetch one activity row or null. */
+async function findActivity(id) {
+  const { data } = await edu().from("community_activities").select("*").eq("id", id).maybeSingle();
+  return data ?? null;
+}
+
+// ─── community activity routes (registered before /:id routes) ──────────────
+
+/* POST /activities/:activityId/submit — a member submits (idempotent). */
+router.post("/activities/:activityId/submit", asyncHandler(async (req, res) => {
+  const a = await findActivity(req.params.activityId);
+  if (!a) return missing(res);
+
+  const { data: mem } = await edu().from("community_members")
+    .select("user_id")
+    .eq("community_id", a.community_id).eq("user_id", req.user.id).maybeSingle();
+  if (!mem) return denied(res, "Join this community first.");
+
+  const { error } = await edu().from("community_activity_submissions")
+    .upsert(
+      { activity_id: a.id, user_id: req.user.id, submitted_at: now(), updated_at: now() },
+      { onConflict: "activity_id,user_id" }
+    );
+  if (error) throw new Error(error.message);
+
+  const { data: subs } = await edu().from("community_activity_submissions")
+    .select("id").eq("activity_id", a.id);
+  ok(res, { submitted: true, submissions_count: subs?.length || 0 });
+}));
+
+/* DELETE /activities/:activityId — the activity's creator only. */
+router.delete("/activities/:activityId", asyncHandler(async (req, res) => {
+  const a = await findActivity(req.params.activityId);
+  if (!a) return missing(res);
+  if (a.creator_id !== req.user.id) return denied(res, "Only the activity creator can delete it.");
+
+  const { error } = await edu().from("community_activities").delete().eq("id", a.id);
+  if (error) throw new Error(error.message);
+
+  ok(res, { deleted: true });
+}));
+
 // ─── GET /mine — my joined communities ──────────────────────────────────────
 
 router.get("/mine", asyncHandler(async (req, res) => {
@@ -95,11 +169,7 @@ router.get("/mine", asyncHandler(async (req, res) => {
 
   const mine = (data || [])
     .filter(r => r.communities)
-    .map(r => ({
-      role:      r.role,
-      joined_at: r.joined_at,
-      ...r.communities,
-    }));
+    .map(r => ({ role: r.role, joined_at: r.joined_at, ...r.communities }));
 
   ok(res, await withExtras(mine), { total: mine.length });
 }));
@@ -130,12 +200,7 @@ router.post("/", asyncHandler(async (req, res) => {
   if (description && description.length > 500) return bad(res, "Description is too long (max 500).");
 
   const { data: created, error } = await edu().from("communities")
-    .insert({
-      name,
-      description,
-      emoji,
-      owner_id: req.user.id,
-    })
+    .insert({ name, description, emoji, owner_id: req.user.id })
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -160,12 +225,142 @@ router.get("/:id", asyncHandler(async (req, res) => {
   ok(res, { ...c, my_role: mem?.role || null, joined_at: mem?.joined_at || null });
 }));
 
-// ─── PATCH /:id — edit (owner only) ─────────────────────────────────────────
+// ─── community activity feed ────────────────────────────────────────────────
+
+/* GET /:id/activities — the community's activities, newest first. */
+router.get("/:id/activities", asyncHandler(async (req, res) => {
+  const c = await communityOr404(res, req.params.id);
+  if (!c) return;
+
+  const { data, error } = await edu().from("community_activities")
+    .select("*").eq("community_id", c.id)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const rows = await withActivityExtras(data || []);
+
+  // Which of these has the caller already submitted?
+  const mine = new Set();
+  if (rows.length) {
+    const { data: mySubs } = await edu().from("community_activity_submissions")
+      .select("activity_id").eq("user_id", req.user.id)
+      .in("activity_id", rows.map(r => r.id));
+    for (const s of mySubs || []) mine.add(s.activity_id);
+  }
+
+  ok(res, rows.map(r => ({ ...r, my_submitted: mine.has(r.id) })), { total: rows.length });
+}));
+
+/* POST /:id/activities — the community creator posts an activity. */
+router.post("/:id/activities", asyncHandler(async (req, res) => {
+  const c = await communityOr404(res, req.params.id);
+  if (!c) return;
+  if (c.owner_id !== req.user.id) return denied(res, "Only the community creator can post activities.");
+
+  const name         = String(req.body?.name || "").trim();
+  const subject      = String(req.body?.subject || "").trim() || null;
+  const className    = String(req.body?.["class"] || req.body?.class_name || "").trim() || null;
+  const instructions = String(req.body?.instructions || "").trim() || null;
+
+  if (!name) return bad(res, "Give the activity a name.");
+  if (name.length > 120) return bad(res, "Activity name is too long (max 120).");
+  if (subject && subject.length > 80) return bad(res, "Subject is too long (max 80).");
+  if (className && className.length > 80) return bad(res, "Class is too long (max 80).");
+  if (instructions && instructions.length > 2000) return bad(res, "Instructions are too long (max 2000).");
+
+  let dueAt = null;
+  if (req.body?.dueAt) {
+    const d = new Date(req.body.dueAt);
+    if (!Number.isNaN(d.getTime())) dueAt = d.toISOString();
+  }
+
+  const { data, error } = await edu().from("community_activities")
+    .insert({
+      community_id: c.id, creator_id: req.user.id,
+      name, subject, class_name: className, instructions, due_at: dueAt,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+
+  ok(res, (await withActivityExtras([data]))[0]);
+}));
+
+// ─── creator tools: members + analytics ─────────────────────────────────────
+
+/* GET /:id/members — who's in the community (owner first). */
+router.get("/:id/members", asyncHandler(async (req, res) => {
+  const c = await communityOr404(res, req.params.id);
+  if (!c) return;
+
+  const { data: mem, error } = await edu().from("community_members")
+    .select("user_id, role, joined_at")
+    .eq("community_id", c.id)
+    .order("joined_at", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  const { data: users } = await db.from("users")
+    .select("id, full_name, avatar_url")
+    .in("id", (mem || []).map(m => m.user_id));
+  const uMap = new Map((users || []).map(u => [u.id, u]));
+
+  const list = (mem || []).map(m => ({
+    user_id:   m.user_id,
+    role:      m.role,
+    joined_at: m.joined_at,
+    name:      uMap.get(m.user_id)?.full_name || "Learner",
+    avatar_url: uMap.get(m.user_id)?.avatar_url || null,
+  }));
+  list.sort((a, b) => (b.role === "owner") - (a.role === "owner"));
+
+  ok(res, list, { total: list.length });
+}));
+
+/* GET /:id/analytics — community stats + recent submissions. */
+router.get("/:id/analytics", asyncHandler(async (req, res) => {
+  const c = await communityOr404(res, req.params.id);
+  if (!c) return;
+
+  const { data: acts } = await edu().from("community_activities")
+    .select("id, name").eq("community_id", c.id);
+  const actIds = (acts || []).map(a => a.id);
+  const actNames = new Map((acts || []).map(a => [a.id, a.name]));
+
+  let subCount = 0;
+  let recent = [];
+  if (actIds.length) {
+    const { count } = await edu().from("community_activity_submissions")
+      .select("*", { count: "exact", head: true }).in("activity_id", actIds);
+    subCount = count || 0;
+
+    const { data: subs } = await edu().from("community_activity_submissions")
+      .select("activity_id, user_id, submitted_at")
+      .in("activity_id", actIds)
+      .order("submitted_at", { ascending: false })
+      .limit(10);
+    const uNames = await userNames((subs || []).map(s => s.user_id));
+    recent = (subs || []).map(s => ({
+      user_name:     uNames.get(s.user_id) || "Learner",
+      activity_name: actNames.get(s.activity_id) || "Activity",
+      submitted_at:  s.submitted_at,
+    }));
+  }
+
+  ok(res, {
+    members:          c.member_count,
+    activities:       actIds.length,
+    submissions:      subCount,
+    avg_per_activity: actIds.length ? Math.round((subCount / actIds.length) * 10) / 10 : 0,
+    recent,
+  });
+}));
+
+// ─── PATCH /:id — edit (creator only) ───────────────────────────────────────
 
 router.patch("/:id", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
-  if (c.owner_id !== req.user.id) return denied(res, "Only the community owner can edit it.");
+  if (c.owner_id !== req.user.id) return denied(res, "Only the community creator can edit it.");
 
   const patch = {};
   if (req.body?.name !== undefined) {
@@ -220,7 +415,7 @@ router.post("/:id/leave", asyncHandler(async (req, res) => {
   const { data: mem } = await edu().from("community_members")
     .select("role").eq("community_id", c.id).eq("user_id", req.user.id).maybeSingle();
   if (!mem) return bad(res, "You're not in this community.");
-  if (mem.role === "owner") return bad(res, "Owners can't leave — delete the community or make someone else the owner.");
+  if (mem.role === "owner") return bad(res, "Owners can't leave — delete the community instead.");
 
   const { error } = await edu().from("community_members")
     .delete().eq("community_id", c.id).eq("user_id", req.user.id);
@@ -229,30 +424,17 @@ router.post("/:id/leave", asyncHandler(async (req, res) => {
   ok(res, { left: true });
 }));
 
-// ─── DELETE /:id — delete (owner only) ──────────────────────────────────────
+// ─── DELETE /:id — delete (creator only) ────────────────────────────────────
 
 router.delete("/:id", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
-  if (c.owner_id !== req.user.id) return denied(res, "Only the community owner can delete it.");
+  if (c.owner_id !== req.user.id) return denied(res, "Only the community creator can delete it.");
 
   const { error } = await edu().from("communities").delete().eq("id", c.id);
   if (error) throw new Error(error.message);
 
   ok(res, { deleted: true });
-}));
-
-// ─── GET /:id/activities — the community's activity feed ────────────────────
-//
-// SEAM: no community-scoped activity source exists yet. The learner app
-// renders this route with the standard Activity shell (kind pills + cards),
-// so when the first community activity kind lands (assignments posted to a
-// community, shared resources, …), only this handler changes.
-router.get("/:id/activities", asyncHandler(async (req, res) => {
-  const c = await communityOr404(res, req.params.id);
-  if (!c) return;
-  // TODO: join community-scoped activity sources once they exist.
-  ok(res, [], { total: 0 });
 }));
 
 export default router;
