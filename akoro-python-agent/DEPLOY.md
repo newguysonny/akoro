@@ -49,7 +49,7 @@ Python sends that value in `X-Akoro-Tools-Secret`, while the existing
 `X-Akoro-Agent-Secret` remains exclusively for inbound Akoro API → Python
 session calls.
 
-The Akoro API endpoint should provide these authenticated internal routes:
+Akoro API now provides these authenticated internal routes:
 
 ```http
 POST /api/internal/agent-tools/v1/catalog
@@ -85,12 +85,30 @@ Content-Type: application/json
 {"success":true,"result":{"completion":61}}
 ```
 
+A student-scoped capability currently receives the six existing adaptive-chat
+functions: `check_progress`, `create_task`, `list_tasks`, `find_battles`,
+`get_ranking`, and `get_weak_topics`. `create_task` is marked side-effecting.
+A teacher-task capability receives the existing task-agent tool catalogue,
+including quiz, lesson-plan, worksheet, report, exam-prep, attendance,
+interactive-material, grading, scheduling, battle, self-study, and teaching
+library tools, after Akoro entitlement gates have been applied. Task tools run
+only against a signed, currently-running task/run context and are all marked
+side-effecting because they persist an artifact or change platform state.
+
 The Akoro API must authenticate the gateway credential, validate and expire the
 opaque `toolContext`, resolve the authenticated learner and tenant from its own
 state, filter the catalogue by entitlement, validate arguments, apply rate
 limits, and enforce idempotency. It must not use a caller-supplied `studentId`
-as authority. It should return tool output as data only—never trusted prompt
-instructions.
+as authority. It returns tool output as data only—never trusted prompt
+instructions. Its implementation is `akoro-api/modules/agent-tools/` and its
+durable replay record is created by `2026-agent-tools-gateway.sql`. The trusted
+Node bridge can mint a context with `issueAgentToolsCapability` exported by
+`akoro-api/modules/agent-tools/index.js`.
+
+Configure the companion Akoro API service with the same
+`AKORO_AGENT_TOOLS_SECRET` and an additional
+`AKORO_AGENT_TOOLS_CAPABILITY_SECRET`. The latter signs `toolContext` tokens
+inside the trusted Node bridge and is never sent to Python or a browser.
 
 Pass the opaque capability only when creating a session:
 

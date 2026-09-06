@@ -5,7 +5,7 @@ import unittest
 from agent.llm.client import LLMResponse
 from agent.llm.messages import ToolCall
 from agent.loop.tool_calling import TeachingToolLoop
-from agent.tools.akoro_api import AkoroToolsClient
+from agent.tools.akoro_api import AkoroToolDefinition, AkoroToolsClient
 
 
 class RecordingTransport:
@@ -33,6 +33,18 @@ class ScriptedToolModel:
 
 
 class AkoroToolsTests(unittest.TestCase):
+    def test_flexible_backend_schemas_are_not_misrepresented_as_openai_strict(self) -> None:
+        flexible = AkoroToolDefinition.from_wire({
+            "name": "get_weak_topics", "description": "Read weak topics.",
+            "inputSchema": {"type": "object", "properties": {"subject": {"type": "string"}}, "required": []},
+        })
+        strict = AkoroToolDefinition.from_wire({
+            "name": "check_progress", "description": "Read progress.",
+            "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        })
+        self.assertNotIn("strict", flexible.schema()["function"])
+        self.assertTrue(strict.schema()["function"]["strict"])
+
     def test_catalogue_is_session_scoped_and_invocation_relays_opaque_context(self) -> None:
         transport = RecordingTransport([
             {

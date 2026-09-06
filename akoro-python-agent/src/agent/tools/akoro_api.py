@@ -25,6 +25,26 @@ _MAX_ARGUMENT_BYTES = 12_000
 _MAX_RESULT_CHARS = 12_000
 
 
+def _is_openai_strict_schema(schema: Any) -> bool:
+    """Return whether every object level meets OpenAI strict-schema rules."""
+    if not isinstance(schema, dict):
+        return False
+    kind = schema.get("type")
+    if kind == "object":
+        properties = schema.get("properties")
+        required = schema.get("required")
+        return (
+            schema.get("additionalProperties") is False
+            and isinstance(properties, dict)
+            and isinstance(required, list)
+            and set(properties) == set(required)
+            and all(_is_openai_strict_schema(value) for value in properties.values())
+        )
+    if kind == "array":
+        return _is_openai_strict_schema(schema.get("items"))
+    return isinstance(kind, str)
+
+
 class AkoroToolsError(RuntimeError):
     """The remote tools gateway rejected or could not fulfil a request."""
 
@@ -69,15 +89,17 @@ class AkoroToolDefinition:
         )
 
     def schema(self) -> dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.input_schema,
-                "strict": True,
-            },
+        function: dict[str, Any] = {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.input_schema,
         }
+        # Akoro's existing catalogue permits optional fields. OpenAI strict mode
+        # requires every schema property to be required, so advertising strict
+        # for a flexible backend schema would make a valid tool unusable.
+        if _is_openai_strict_schema(self.input_schema):
+            function["strict"] = True
+        return {"type": "function", "function": function}
 
     def public(self) -> dict[str, Any]:
         """Safe catalogue metadata suitable for the session-ready response."""

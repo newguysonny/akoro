@@ -152,13 +152,17 @@ AKORO_AGENT_TOOLS_URL=https://api.akoro.app/api/internal/agent-tools/v1
 AKORO_AGENT_TOOLS_SECRET=<different-long-random-secret>
 ```
 
+The Akoro API uses the same `AKORO_AGENT_TOOLS_SECRET` for gateway verification
+and a separate `AKORO_AGENT_TOOLS_CAPABILITY_SECRET` to sign short-lived
+capabilities. Its signing secret stays in Akoro API only.
+
 When starting a Python session, the authenticated Akoro API bridge may include
 an opaque, short-lived `toolContext`. Python never reads this value as an
 identity claim; it relays it to the tools gateway on catalogue and invoke
 requests. Without both environment settings **and** `toolContext`, no remote
 functions are shown to the model.
 
-The expected Akoro API contract is intentionally small:
+The implemented Akoro API contract is intentionally small:
 
 | Request | Body | Required response |
 |---|---|---|
@@ -166,10 +170,17 @@ The expected Akoro API contract is intentionally small:
 | `POST {AKORO_AGENT_TOOLS_URL}/invoke` | `sessionId`, `toolContext`, `tool`, `arguments`, `idempotencyKey` | `{"success":true,"result":{...}}` or `{"success":false,"error":"..."}` |
 
 Python sends `X-Akoro-Tools-Secret` only on those private outbound requests.
-The Akoro API must validate that secret, validate and expire `toolContext`,
-derive user/tenant authority from that capability or its own session record,
-validate tool arguments, enforce entitlements, and honour the idempotency key.
-It must not trust `studentId` in a Python request as authorization.
+The Akoro API validates that secret, validates and expires `toolContext`,
+derives authority from the signed capability plus current user/task state,
+validates tool arguments, applies entitlement gates, and honours the durable
+idempotency key. It never trusts `studentId` in a Python request as authority.
+
+Student sessions receive six account tools: `check_progress`, `create_task`,
+`list_tasks`, `find_battles`, `get_ranking`, and `get_weak_topics`. A signed
+teacher-task context receives the existing task-agent catalogue—quiz, lesson,
+worksheet, report, exam-prep, attendance, interactive, grading, scheduling,
+battle, self-study, and teaching-library tools—only while that task run remains
+active and its instructor gates allow them.
 
 Catalogues support Akoro's existing `input_schema` spelling as well as
 `inputSchema`. The service caps catalogues at 24 functions, invocation

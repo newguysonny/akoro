@@ -61,6 +61,7 @@ import contentModule             from "./modules/content/routes.js";
 import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
+import { agentToolsRouter as agentToolsModule } from "./modules/agent-tools/index.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -376,6 +377,9 @@ app.use("/api", internalLimit);
 // stays in sync with what's configured in the Paystack dashboard; it defaults
 // to /api/webhooks/paystack when the env var is unset.
 app.use(PAYSTACK_WEBHOOK_PATH, paystackWebhookRouter);
+// Private Python-agent tool gateway. It has its own shared credential and
+// session-bound capability; standardLimit still protects the service caller.
+app.use("/api/internal/agent-tools/v1", standardLimit, agentToolsModule);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);

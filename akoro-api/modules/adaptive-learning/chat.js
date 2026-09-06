@@ -143,7 +143,7 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 // ─── Global chat tools (added to /chat for mini-ChatGPT functionality) ────────
 // These execute against the student's real data when the agent needs them.
 
-const CHAT_TOOLS = [
+export const CHAT_TOOLS = [
   {
     name: "check_progress",
     description: "Check the student's progress across all enrolled courses. Returns completion % and overall XP.",
@@ -191,7 +191,7 @@ const CHAT_TOOLS = [
   },
 ];
 
-async function executeChatTool(name, input, studentId) {
+export async function executeChatTool(name, input, studentId) {
   switch (name) {
     case "check_progress": {
       const { data: enrollments } = await db.from("enrollments")
