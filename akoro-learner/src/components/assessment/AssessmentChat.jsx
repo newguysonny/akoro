@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
+import { Icon } from '../common/Icons.jsx';
 
 /**
  * AssessmentChat — renders the Sergeant proctored-exam transcript.
@@ -52,7 +53,7 @@ function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disable
             style={{ width:40, height:40, flexShrink:0, borderRadius:12, cursor: disabled?"default":"pointer",
               border:`1px solid ${voiceMode ? BRAND : "rgba(255,255,255,.12)"}`,
               background: voiceMode ? `${BRAND}22` : "rgba(255,255,255,.05)",
-              color: voiceMode ? BRAND : "#94A3B8", fontSize:17 }}>🔊</button>
+              color: voiceMode ? BRAND : "#94A3B8", fontSize:17 }}><Icon name="ti-volume" size={17}/></button>
         )}
 
         {voiceMode ? (
@@ -63,7 +64,7 @@ function AssessmentChat({ blocks, input, onInputChange, onSend, loading, disable
               display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
             {listening
               ? <><span style={{ width:9, height:9, borderRadius:"50%", background:"#fff", animation:"pulse-dot 1s ease-in-out infinite" }} /> Stop & submit</>
-              : <>🎙 Hold to answer</>}
+              : <><Icon name="ti-microphone" size={13}/> Hold to answer</>}
           </button>
         ) : (
           <>
@@ -90,14 +91,14 @@ function Block({ b }) {
   switch (b.type) {
     case "proctor-banner":
       return <div style={{ background:"rgba(108,59,255,.1)", border:"1px solid rgba(108,59,255,.25)", borderRadius:12,
-        padding:"10px 12px", fontSize:11.5, fontWeight:700, color:"#C4B5FD", textAlign:"center" }}>🛡 {b.text}</div>;
+        padding:"10px 12px", fontSize:11.5, fontWeight:700, color:"#C4B5FD", textAlign:"center" }}><Icon name="ti-shield" size={12}/> {b.text}</div>;
 
     case "sergeant":
       return (
         <div style={{ alignSelf:"flex-start", maxWidth:"88%", background:"rgba(255,255,255,.05)",
           border:"1px solid rgba(255,255,255,.08)", borderRadius:"14px 14px 14px 4px", padding:"10px 13px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-            <span style={{ fontSize:14 }}>{b.emoji || "⚡"}</span>
+            <span style={{ fontSize:14 }}>{b.emoji?.startsWith("ti-") ? <Icon name={b.emoji} size={14}/> : (b.emoji || <Icon name="ti-bolt" size={14}/>)}</span>
             <span style={{ fontSize:11, fontWeight:800, color:GOLD }}>{b.agent || "Sergeant"}</span>
             {b.score != null && (
               <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:900,
@@ -130,11 +131,11 @@ function Block({ b }) {
 
     case "hint":
       return <div style={{ alignSelf:"flex-start", maxWidth:"88%", background:"rgba(245,158,11,.08)",
-        border:"1px solid rgba(245,158,11,.22)", borderRadius:12, padding:"9px 12px", fontSize:12.5, fontWeight:600, color:"#FDE68A" }}>💡 {b.text}</div>;
+        border:"1px solid rgba(245,158,11,.22)", borderRadius:12, padding:"9px 12px", fontSize:12.5, fontWeight:600, color:"#FDE68A" }}><Icon name="ti-bulb" size={12}/> {b.text}</div>;
 
     case "proctor-flag":
       return <div style={{ alignSelf:"center", background:"rgba(248,113,113,.1)", border:"1px solid rgba(248,113,113,.25)",
-        borderRadius:10, padding:"7px 12px", fontSize:11, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}>⚠ {b.text}</div>;
+        borderRadius:10, padding:"7px 12px", fontSize:11, fontWeight:700, color:"#FCA5A5", textAlign:"center" }}><Icon name="ti-alert-triangle" size={12}/> {b.text}</div>;
 
     case "system-divider":
       return <div style={{ alignSelf:"center", fontSize:11, fontWeight:700, color:"#64748B", padding:"4px 0" }}>{b.label}</div>;

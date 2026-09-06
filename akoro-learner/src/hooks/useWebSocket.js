@@ -22,7 +22,7 @@ export function useWebSocket({
         });
 
         socket.on('live_class_starting', alert => {
-          setToast(`📡 ${alert.title} starts in ${alert.minutesUntil} min!`);
+          setToast(`${alert.title} starts in ${alert.minutesUntil} min!`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:'starting-soon', scheduleBucket:'starting-soon',
@@ -34,7 +34,7 @@ export function useWebSocket({
         });
 
         socket.on('live_class_live', alert => {
-          setToast(`🔴 ${alert.title} is now LIVE! Join now.`);
+          setToast(`${alert.title} is now LIVE! Join now.`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:'live', scheduleBucket:'live', nextSession:'LIVE', joinUrl: alert.joinUrl }
@@ -45,7 +45,7 @@ export function useWebSocket({
         });
 
         socket.on('new_challenge', challenge => {
-          setToast(`⚡ ${challenge.challenger} challenged you!`);
+          setToast(`${challenge.challenger} challenged you!`);
           setChallenges(prev => [challenge, ...prev]);
           setTab('challenges');
         });
@@ -55,7 +55,7 @@ export function useWebSocket({
         });
 
         socket.on('battle_accepted', data => {
-          setToast(`✅ ${data.opponent} accepted your challenge!`);
+          setToast(`${data.opponent} accepted your challenge!`);
           setBattles(prev => prev.map(b => b.id === data.battleId ? { ...b, status: data.status } : b));
           socket.emit('join-battle', data.battleId);
         });

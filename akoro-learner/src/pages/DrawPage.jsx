@@ -10,6 +10,7 @@
  */
 import { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from '../components/common/Icons.jsx';
 import { apiPost } from '../services/api.js';
 import { BRAND } from '../constants.js';
 import { SAMPLES } from './draw/samples.js';
@@ -18,10 +19,10 @@ const DrawCanvas = lazy(() => import('./draw/DrawCanvas.jsx'));
 
 const FONT = "'Nunito', sans-serif";
 const MODES = [
-  { key: 'svg',        label: '🎨 Illustration' },
-  { key: 'excalidraw', label: '✏️ Editable' },
-  { key: 'mermaid',    label: '📊 Flowchart' },
-  { key: 'sketch',     label: '✍️ Your sketch' },
+  { key: 'svg',        icon: 'ti-palette', label: 'Illustration' },
+  { key: 'excalidraw', icon: 'ti-edit', label: 'Editable' },
+  { key: 'mermaid',    icon: 'ti-chart-bar', label: 'Flowchart' },
+  { key: 'sketch',     icon: 'ti-pencil', label: 'Your sketch' },
 ];
 const CHIPS = ['How electromagnetic induction works', 'How photosynthesis works', 'The structure of an atom', 'The water cycle', 'How a neuron fires'];
 
@@ -99,12 +100,12 @@ export default function DrawPage() {
           {isSketch ? (
             <button onClick={askAI} disabled={busy}
               style={{ flexShrink: 0, background: busy ? '#C9BEFF' : BRAND, color: '#fff', border: 'none', borderRadius: 12, padding: '11px 18px', cursor: busy ? 'default' : 'pointer', fontSize: 14, fontWeight: 800, fontFamily: FONT }}>
-              {busy ? 'Reading…' : '🤖 Ask AI'}
+              {busy ? 'Reading…' : <><Icon name="ti-robot" size={12}/> Ask AI</>}
             </button>
           ) : (
             <button onClick={() => generate()} disabled={busy || !prompt.trim()}
               style={{ flexShrink: 0, background: busy || !prompt.trim() ? '#C9BEFF' : BRAND, color: '#fff', border: 'none', borderRadius: 12, padding: '11px 18px', cursor: busy ? 'default' : 'pointer', fontSize: 14, fontWeight: 800, fontFamily: FONT }}>
-              {busy ? 'Drawing…' : '✨ Draw'}
+              {busy ? 'Drawing…' : <><Icon name="ti-sparkles" size={12}/> Draw</>}
             </button>
           )}
         </div>
@@ -112,8 +113,8 @@ export default function DrawPage() {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {MODES.map((m) => (
             <button key={m.key} onClick={() => { setMode(m.key); setReading(null); }}
-              style={{ background: mode === m.key ? BRAND : 'var(--ak-bg)', color: mode === m.key ? '#fff' : 'var(--ak-text-sub)', border: `1px solid ${mode === m.key ? BRAND : 'var(--ak-border2)'}`, borderRadius: 100, padding: '6px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 800, fontFamily: FONT }}>
-              {m.label}
+              style={{ background: mode === m.key ? BRAND : 'var(--ak-bg)', color: mode === m.key ? '#fff' : 'var(--ak-text-sub)', border: `1px solid ${mode === m.key ? BRAND : 'var(--ak-border2)'}`, borderRadius: 100, padding: '6px 13px', cursor: 'pointer', fontSize: 12, fontWeight: 800, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+              {m.icon && <Icon name={m.icon} size={12}/>} {m.label}
             </button>
           ))}
           {showSvg && <button onClick={() => setDrawKey((k) => k + 1)} title="Replay the drawing"
@@ -151,7 +152,7 @@ export default function DrawPage() {
         {isSketch && reading && (
           <div style={{ position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 20, background: 'var(--ak-surface)', border: `1px solid ${BRAND}55`, borderRadius: 14, boxShadow: '0 6px 24px rgba(0,0,0,.18)', padding: '12px 14px', maxHeight: '45%', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 900, color: BRAND }}>🤖 AI reads your drawing</span>
+              <span style={{ fontSize: 12.5, fontWeight: 900, color: BRAND }}><Icon name="ti-robot" size={12}/> AI reads your drawing</span>
               <button onClick={() => setReading(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ak-text-muted)', fontSize: 16, fontWeight: 900 }}>×</button>
             </div>
             <div style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--ak-text)', whiteSpace: 'pre-wrap' }}>{reading}</div>

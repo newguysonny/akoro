@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { API, apiGet } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
@@ -57,7 +58,7 @@ function Stars({ rating = 0, size = 12 }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1, lineHeight: 1 }}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} style={{ fontSize: size, color: i <= Math.round(r) ? GOLD : 'var(--ak-border2)' }}>★</span>
+        <Icon key={i} name="ti-star" size={size} color={i <= Math.round(r) ? GOLD : 'var(--ak-border2)'} style={{ lineHeight: 1 }}/>
       ))}
     </span>
   );
@@ -102,12 +103,12 @@ function CourseCard({ course, onOpen, wide, inCart }) {
           ? <img src={course.img} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
           : null}
-        <span style={{ fontSize: 46, opacity: course.img ? 0 : 1 }}>{course.emoji || '📘'}</span>
+        <span style={{ fontSize: 46, opacity: course.img ? 0 : 1 }}>{course.emoji?.startsWith('ti-') ? <Icon name={course.emoji} size={46}/> : (course.emoji || <Icon name="ti-book" size={46}/>)}</span>
         <span style={{
           position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, letterSpacing: .3,
           color: '#fff', background: isLive ? RED : 'rgba(17,12,40,.72)', padding: '3px 7px', borderRadius: 6,
-        }}>{isLive ? `● ${t('discovery.live')}` : t('discovery.video')}</span>
-        {inCart && <span style={{ position: 'absolute', top: 7, right: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}>🛒 In cart</span>}
+        }}>{isLive ? <><span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#fff', marginRight: 4 }}/> {t('discovery.live')}</> : t('discovery.video')}</span>
+        {inCart && <span style={{ position: 'absolute', top: 7, right: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}><Icon name="ti-shopping-cart" size={9}/> In cart</span>}
       </div>
 
       <div style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', lineHeight: 1.25,
@@ -152,7 +153,7 @@ function AgentCard({ listing, owned, onOpen, wide, inCart }) {
         <span style={{ fontSize: 46, opacity: listing.cover_image_url ? 0 : 1 }}>{(() => { const a = listing.teacher_avatar || listing.agent_avatar; return (typeof a === 'string' && /^(https?:)?\/\//.test(a.trim())) ? '🎓' : (a || '🎓'); })()}</span>
         {owned
           ? <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: GREEN, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>{t('discovery.owned')}</span>
-          : inCart && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}>🛒 In cart</span>}
+          : inCart && <span style={{ position: 'absolute', top: 7, left: 7, fontSize: 9, fontWeight: 900, color: '#fff', background: BRAND, padding: '3px 7px', borderRadius: 6, zIndex: 1 }}><Icon name="ti-shopping-cart" size={9}/> In cart</span>}
         <span style={{ position: 'absolute', bottom: 7, right: 7, fontSize: 9, fontWeight: 900, color: sc, background: 'var(--ak-surface)', padding: '3px 7px', borderRadius: 6, textTransform: 'capitalize' }}>{listing.subject || t('discovery.general')}</span>
       </div>
 
@@ -168,7 +169,7 @@ function AgentCard({ listing, owned, onOpen, wide, inCart }) {
         <span style={{ fontSize: 14, fontWeight: 900, color: listing.is_free ? GREEN : 'var(--ak-text)' }}>
           {fmtPrice(listing.price_kobo, listing.currency, t('discovery.free'))}
         </span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>👥 {fmtCount(listing.total_students)}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}><Icon name="ti-users" size={10}/> {fmtCount(listing.total_students)}</span>
       </div>
     </button>
   );
@@ -346,7 +347,7 @@ function PurchaseHistorySheet({ onClose }) {
                       <div style={{ width: 46, height: 46, borderRadius: 11, flexShrink: 0, overflow: 'hidden', background: `linear-gradient(135deg, ${BRAND}18, ${BRAND}08)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
                         {c.cover_image_url
                           ? <img src={c.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(ev) => { ev.currentTarget.style.display = 'none'; }} />
-                          : (live ? '🔴' : '🎬')}
+                          : (live ? <Icon name="ti-circle-dot" size={22} color={RED}/> : <Icon name="ti-player-play" size={22} color={BRAND}/>)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -489,7 +490,7 @@ export default function DiscoveryTab({ initialQuery = '' }) {
       {/* Search + purchases */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 14px 0' }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}>🔍</span>
+          <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5 }}><Icon name="ti-search" size={14}/></span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -499,7 +500,7 @@ export default function DiscoveryTab({ initialQuery = '' }) {
         </div>
         <button onClick={() => setHistoryOpen(true)} title="My purchases"
           style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 13, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 18, cursor: 'pointer' }}>
-          🧾
+          <Icon name="ti-receipt" size={18} color="var(--ak-text-sec)"/>
         </button>
       </div>
 

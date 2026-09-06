@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchMyActivities } from '../services/activityApi.js';
+import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
 /* Emoji + accent per activity kind (matches the learner app's emoji style) */
 const TYPE_META = {
-  assignment: { emoji: '📝', color: BRAND    },
-  project:    { emoji: '📂', color: GREEN    },
-  multistage: { emoji: '🧩', color: '#A855F7' },
-  self_study: { emoji: '📖', color: GOLD     },
+  assignment: { emoji: 'ti-edit', color: BRAND    },
+  project:    { emoji: 'ti-folder', color: GREEN    },
+  multistage: { emoji: 'ti-puzzle', color: '#A855F7' },
+  self_study: { emoji: 'ti-book-2', color: GOLD     },
 };
 
 const KINDS = [
@@ -27,7 +28,7 @@ const STATUS = {
   complete: { label: 'Done',        color: GREEN,     bg: 'rgba(16,185,129,.10)' },
 };
 
-const getMeta  = (kind)   => TYPE_META[kind]   || { emoji: '📋', color: '#9CA3AF' };
+const getMeta  = (kind)   => TYPE_META[kind]   || { emoji: 'ti-clipboard', color: '#9CA3AF' };
 const getStatus = (stat)  => STATUS[stat]      || STATUS.assigned;
 
 function timeAgo(iso) {
@@ -68,7 +69,7 @@ function ActivityCard({ a }) {
         background: `${color}1A`, display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 18,
       }}>
-        {emoji}
+        {emoji?.startsWith('ti-') ? <Icon name={emoji} size={18}/> : emoji}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>

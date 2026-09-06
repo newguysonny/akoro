@@ -15,6 +15,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BRAND, RED, GREEN } from '../../constants.js';
 import { apiGet, apiPost } from '../../services/api.js';
+import { Icon } from '../common/Icons.jsx';
 import NoAgentSheet, { isNoAgentError } from './NoAgentSheet.jsx';
 
 const SHEET = {
@@ -233,7 +234,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
           }}>×</button>
         </div>
 
-        <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: '8px 0 6px' }}>⚔️ Start a battle</p>
+        <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: "8px 0 6px", display: "flex", alignItems: "center", gap: 5 }}><Icon name="ti-swords" size={15} color={BRAND}/> Start a battle</p>
         <p style={{ fontSize: 12, color: 'var(--ak-text-muted)', margin: '0 0 20px', lineHeight: 1.5 }}>
           Challenge one classmate, a few of them, or everyone. Your agents do the fighting.
         </p>
@@ -247,7 +248,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
           </>
         ) : hasNothing ? (
           <div style={{ padding: '26px 8px 10px', textAlign: 'center' }}>
-            <div style={{ fontSize: 40, opacity: .25 }}>📚</div>
+            <Icon name="ti-books" size={40} color="var(--ak-text-muted)" style={{ opacity: .25 }}/>
             <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', margin: '10px 0 4px' }}>Nothing to battle in yet</p>
             <p style={{ fontSize: 12, color: 'var(--ak-text-muted)', lineHeight: 1.5 }}>
               Join a course, or ask your teacher to add you to a class. Battles need classmates.
@@ -265,8 +266,8 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
               <label style={LABEL}>Battle type</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {[
-                  ['course', '📘 Course battle', courses.length ? 'From a course you take' : 'No courses yet', !courses.length],
-                  ['class',  '🏫 Class battle',  classes.length ? 'From a class subject'  : 'Not in a class yet', !classes.length],
+                  ['course', 'Course battle', courses.length ? 'From a course you take' : 'No courses yet', !courses.length],
+                  ['class',  'Class battle',  classes.length ? 'From a class subject'  : 'Not in a class yet', !classes.length],
                 ].map(([k, label, hint, disabled]) => (
                   <button key={k} onClick={() => !disabled && setKind(k)} disabled={disabled} style={{
                     flex: 1, padding: '10px 8px', borderRadius: 12, textAlign: 'left',
@@ -365,7 +366,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
                             width: 19, height: 19, borderRadius: 6, flexShrink: 0, fontSize: 11, fontWeight: 900,
                             border: `2px solid ${on ? BRAND : 'var(--ak-border3)'}`, background: on ? BRAND : 'transparent',
                             color: '#fff', lineHeight: '16px', textAlign: 'center',
-                          }}>{on ? '✓' : ''}</span>
+                          }}>{on ? <Icon name="ti-check" size={12} color="#fff"/> : ''}</span>
                           <span style={{ fontSize: 16 }}>{r.emoji || '🧑‍🎓'}</span>
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--ak-text)' }}>{r.full_name}</span>
@@ -390,10 +391,10 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
                           </span>
                         ) : (
                           <>
-                            {checked?.found?.length > 0 && <span style={{ color: GREEN }}>✓ {checked.found.join(', ')}</span>}
+                            {checked?.found?.length > 0 && <span style={{ color: GREEN, display: "inline-flex", alignItems: "center", gap: 3 }}><Icon name="ti-check" size={11} color={GREEN}/> {checked.found.join(', ')}</span>}
                             {checked?.found?.length > 0 && checked?.missing?.length > 0 && <span style={{ color: 'var(--ak-text-muted)' }}> · </span>}
                             {checked?.missing?.length > 0 && (
-                              <span style={{ color: RED }}>✕ {checked.missing.join(', ')} — not in this {scopeWord}</span>
+                              <span style={{ color: RED, display: "inline-flex", alignItems: "center", gap: 3 }}><Icon name="ti-x" size={11} color={RED}/> {checked.missing.join(', ')} — not in this {scopeWord}</span>
                             )}
                           </>
                         )}
@@ -456,7 +457,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
             </div>
 
             <div style={{ marginBottom: 22 }}>
-              <label style={LABEL}>🗓 Schedule for <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--ak-text-muted)' }}>optional</span></label>
+              <label style={LABEL}><Icon name="ti-calendar" size={13} color={BRAND}/> Schedule for <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--ak-text-muted)' }}>optional</span></label>
               <input type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} style={FIELD} />
               <p style={{ fontSize: 10.5, color: 'var(--ak-text-muted)', margin: '5px 0 0', lineHeight: 1.45 }}>
                 Leave empty to send the challenge right now.
@@ -480,7 +481,7 @@ export default function CreateBattleSheet({ onClose, onCreated }) {
                 fontFamily: "'Nunito',sans-serif",
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               }}>
-                {busy ? <><Spinner color="#fff" /> Sending…</> : `⚔️ Challenge${count ? ` ${count}` : ''}`}
+                {busy ? <><Spinner color="#fff" /> Sending…</> : <><Icon name="ti-swords" size={14} color="#fff"/> Challenge{count ? ` ${count}` : ''}</>}
               </button>
             </div>
           </>

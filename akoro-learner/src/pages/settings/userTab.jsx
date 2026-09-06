@@ -162,8 +162,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       }
       try {
         await onSaveProfile({ teachingGuide: opt.name, guideEmoji: opt.emoji });
-        showToast('Saved ✓');
-      } catch { showToast('Saved locally ✓'); }
+        showToast('Saved');
+      } catch { showToast('Saved locally'); }
       return;
     }
 
@@ -189,9 +189,9 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
     setProfile(p => ({ ...p, [field]: val }));
     try {
       await onSaveProfile({ [apiKey]: val });
-      showToast('Saved ✓');
+      showToast('Saved');
     } catch {
-      showToast('Saved locally ✓');
+      showToast('Saved locally');
     }
 
     /* Level, language and theme switches all re-derive the whole app (the
@@ -210,11 +210,11 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
   return (
     <div style={{ padding:'20px 0 0' }}>
       {/* Quick-link cards — one design (same as the original Order history
-          card): tinted icon chip, title + sub, chevron. Order history is
-          live; Activities & Library are coming-soon for now. */}
+          card): tinted icon chip, title + sub, chevron. Order history and
+          Activities are live; Library is coming-soon. */}
       {[
         { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
-        { icon:'ti-activity', title:'settings.activities',    sub:'settings.activities_sub',    go:()=>showToast(t('settings.soon_toast')) },
+        { icon:'ti-activity', title:'settings.activities',    sub:'settings.activities_sub',    go:()=>navigate('/activities') },
         { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>showToast(t('settings.soon_toast')) },
       ].map(card => (
         <button key={card.title} onClick={card.go}
@@ -289,7 +289,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         <Row icon="ti-id" label={t('settings.account_id')} sub={t('settings.tap_to_copy')} value={profile.memberId} noArrow
           onClick={()=>{navigator.clipboard?.writeText(profile.memberId);showToast(t('settings.copied'));}}/>
         <Row icon="ti-link" label={t('settings.linked_accounts')}
-          value={profile.googleLinked?'Google ✓':t('settings.none')}
+          value={profile.googleLinked?'Google':t('settings.none')}
           sub={profile.googleLinked?t('settings.google_connected'):undefined}/>
       </Section>
 
@@ -392,13 +392,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
             try {
               const { data } = await uploadAvatar(dataUrl, 'user');
               if (data?.url) setProfile(p=>({...p,avatarUrl:data.url}));
-              showToast('Photo updated ✓');
+              showToast('Photo updated');
             } catch { showToast('Upload failed — saved locally'); }
           }}
           onSaveEmoji={em=>{
             setProfile(p=>({...p,avatarEmoji:em,avatarUrl:null}));
             try { onSaveProfile({ avatarEmoji: em }); } catch { /* best-effort */ }
-            showToast('Saved ✓');
+            showToast('Saved');
           }}/>
       )}
       {subjectSheet&&(
@@ -406,8 +406,8 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClose={()=>setSubjectSheet(false)}
           onSave={async s=>{
             setProfile(p=>({...p,subjects:s}));
-            try { await onSaveProfile({ subjects:s }); showToast('Subjects saved ✓'); }
-            catch { showToast('Saved locally ✓'); }
+            try { await onSaveProfile({ subjects:s }); showToast('Subjects saved'); }
+            catch { showToast('Saved locally'); }
           }}/>
       )}
       {sheet&&(
@@ -420,7 +420,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClose={()=>setTwoFaSheet(null)}
           onDone={(enabled)=>{
             setProfile(p=>({...p,twoFactor:enabled}));
-            showToast(enabled ? '2FA enabled ✓' : '2FA disabled');
+            showToast(enabled ? '2FA enabled' : '2FA disabled');
           }}/>
       )}
       {toast&&(

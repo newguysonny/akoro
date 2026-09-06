@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Icon } from '../../components/common/Icons.jsx';
 import { API } from '../../services/api.js';
 
 const BRAND = '#6C3BFF';
@@ -65,7 +66,7 @@ export default function ResetPasswordPage() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'var(--ak-bg)', fontFamily: "'Nunito',sans-serif", padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div style={{ fontSize: 48, marginBottom: 16 }}><Icon name="ti-alert-triangle" size={48} color="#F59E0B"/></div>
         <h2 style={{ color: 'var(--ak-text)', marginBottom: 8 }}>Invalid reset link</h2>
         <p style={{ color: 'var(--ak-text-sub)', marginBottom: 24 }}>
           This link is missing or malformed. Please request a new password reset.
@@ -90,7 +91,7 @@ export default function ResetPasswordPage() {
         <div style={{ width: 52, height: 52, borderRadius: 16,
           background: done ? `linear-gradient(135deg,${GREEN},#059669)` : `linear-gradient(135deg,${BRAND},#4C1DCC)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 24, marginBottom: 20 }}>{done ? '✅' : '🔒'}</div>
+          fontSize: 24, marginBottom: 20 }}><Icon name={done ? "ti-circle-check" : "ti-lock"} size={24} color={done ? GREEN : BRAND}/></div>
 
         {done ? (
           <>
@@ -128,7 +129,7 @@ export default function ResetPasswordPage() {
                   <button type="button" onClick={() => setShowPw(v => !v)}
                     style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
                       background: 'none', border: 'none', cursor: 'pointer', fontSize: 16,
-                      color: 'var(--ak-text-muted)' }}>{showPw ? '🙈' : '👁'}</button>
+                      color: 'var(--ak-text-muted)' }}><Icon name={showPw ? 'ti-eye-off' : 'ti-eye'} size={16} color="var(--ak-text-muted)"/></button>
                 </div>
                 {password && (
                   <div style={{ marginTop: 8 }}>

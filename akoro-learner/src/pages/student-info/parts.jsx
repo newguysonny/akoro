@@ -20,6 +20,7 @@ import {
   Brain,
 } from "lucide-react";
 import { SiteNav, SFSHeader, SiteFooter } from '../../components/SiteChrome.jsx';
+import { Icon } from '../../components/common/Icons.jsx';
 import ProTip from '../../components/ProTip.jsx';
 
 
@@ -42,7 +43,7 @@ function AnnouncementBar({ onDismiss }) {
       style={{ background: "#F1EBFF", color: "#3A2570" }}
     >
       <span className="max-w-md leading-snug">
-        🎓 12,400+ students trust Akoro. See how they{" "}
+        <Icon name="ti-award" size={14} style={{ display: "inline-block", verticalAlign: "-2px", marginRight: 5 }}/>12,400+ students trust Akoro. See how they{" "}
         <a href="/signup" className="font-bold underline underline-offset-2">
           learn smarter
         </a>

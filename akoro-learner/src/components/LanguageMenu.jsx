@@ -16,6 +16,7 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { useLang, SUPPORTED_LANGUAGES } from '../contexts/LanguageContext.jsx';
+import { Icon } from './common/Icons.jsx';
 
 /**
  * Flag and endonym per language.
@@ -80,7 +81,7 @@ export default function LanguageMenu({ dark = true }) {
         <span style={{ fontSize: 15 }}>{current.flag}</span>
         {/* The name, not just the flag — a flag alone makes the reader guess. */}
         <span style={{ fontSize: 12, fontWeight: 600 }}>{current.native}</span>
-        <span style={{ fontSize: 9, opacity: .7 }}>{open ? '▲' : '▼'}</span>
+        <Icon name={open ? "ti-chevron-up" : "ti-chevron-down"} size={10} style={{ opacity: .7 }}/>
       </button>
 
       {open && (
@@ -118,7 +119,7 @@ export default function LanguageMenu({ dark = true }) {
                   {meta.native !== name && (
                     <span style={{ fontSize: 10.5, opacity: .5 }}>{name}</span>
                   )}
-                  {isCurrent && <span style={{ color: '#6C3BFF', fontWeight: 800 }}>{'✓'}</span>}
+                  {isCurrent && <Icon name="ti-check" size={12} color='#6C3BFF' style={{ fontWeight: 800 }}/>}
                 </button>
               </li>
             );

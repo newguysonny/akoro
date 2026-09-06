@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from '../components/common/Icons.jsx';
 import { apiGet, apiPost } from '../services/api.js';
 import { useWallet } from '../hooks/useWallet.js';
 import { BRAND, GREEN, RED, GOLD } from '../constants.js';
@@ -32,7 +33,7 @@ export default function WalletPage() {
     try {
       const r = await apiPost('/api/wallet/redeem-voucher', { code });
       const d = r?.data ?? r;
-      showToast(`Voucher redeemed — +${fmt(d.coins)} coins 🎉`);
+      showToast(`Voucher redeemed — +${fmt(d.coins)} coins`);
       setVoucherCode(''); setVoucherOpen(false);
       refresh();
     } catch (e2) {
@@ -72,7 +73,7 @@ export default function WalletPage() {
         <div style={{ background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, borderRadius: 18, padding: '22px 20px', color: '#fff', marginBottom: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>Your balance</div>
           <div style={{ fontSize: 40, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>🪙</span>{fmt(balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.85 }}>coins</span>
+            <Icon name="ti-coins" size={26} color="#FDE68A"/>{fmt(balance)} <span style={{ fontSize: 16, fontWeight: 700, opacity: 0.85 }}>coins</span>
           </div>
           <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>Every AI feature — tutor chat, quizzes, assessments — spends from here.</div>
         </div>
@@ -103,11 +104,11 @@ export default function WalletPage() {
             {!voucherOpen ? (
               <button onClick={() => { setVoucherOpen(true); setVoucherErr(''); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px dashed var(--ak-border2)', background: 'transparent', cursor: 'pointer', fontFamily: "'Nunito',sans-serif", fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)' }}>
-                <span style={{ fontSize: 16 }}>🎟️</span> Top up with a voucher code
+                <Icon name="ti-ticket" size={16} color={BRAND}/> Top up with a voucher code
               </button>
             ) : (
               <form onSubmit={redeemVoucher}>
-                <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8 }}>🎟️ Redeem a voucher code</div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, marginBottom: 8 }}><Icon name="ti-ticket" size={13}/> Redeem a voucher code</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <input value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} autoFocus
                     placeholder="XXXX-XXXX-XXXX"

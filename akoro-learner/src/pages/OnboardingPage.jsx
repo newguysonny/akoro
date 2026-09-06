@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { Icon } from '../components/common/Icons.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { useLang, SUPPORTED_LANGUAGES } from '../contexts/LanguageContext.jsx';
 import { API } from '../services/api.js';
@@ -80,7 +81,7 @@ function TeacherCard({ teacher, selected, accent, onPick }) {
         {selected && (
           <span style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: '50%',
             background: accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 900, boxShadow: '0 1px 4px rgba(17,12,40,.25)' }}>✓</span>
+            fontSize: 11, fontWeight: 900, boxShadow: '0 1px 4px rgba(17,12,40,.25)' }}><Icon name="ti-check" size={12} color="#fff"/></span>
         )}
       </div>
       <div style={{ padding: '7px 5px 6px', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -107,8 +108,8 @@ function TeacherCard({ teacher, selected, accent, onPick }) {
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--ak-text-sec)' }}>
           {teacher.student_count > 0
-            ? <span>👥 {teacher.student_count} {t('onboarding.students')}</span>
-            : <span style={{ color: BRAND }}>🌱 {t('onboarding.teacher_new')}</span>}
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-users" size={11}/> {teacher.student_count} {t('onboarding.students')}</span>
+            : <span style={{ color: BRAND, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ti-plant" size={11}/> {t('onboarding.teacher_new')}</span>}
           {teacher.classroom_count > 0 && (
             <span style={{ color: 'var(--ak-text-muted)' }}>· {teacher.classroom_count} {t('onboarding.classes')}</span>
           )}
@@ -339,7 +340,7 @@ export default function OnboardingPage() {
                 padding: '11px 13px', borderRadius: 12,
                 background: `${BRAND}0d`, border: `1px solid ${BRAND}33`,
               }}>
-                <span style={{ fontSize: 15 }}>🏫</span>
+                <Icon name="ti-school" size={15} color={BRAND}/>
                 <div style={{ fontSize: 12, color: 'var(--ak-text-sub)', lineHeight: 1.5 }}>
                   We filled some of this in from <strong>{prefill.source}</strong>
                   {prefill.className ? <> — you're in <strong>{prefill.className}</strong></> : null}.
@@ -449,7 +450,7 @@ export default function OnboardingPage() {
                 {/* Search — instant, client-side over the loaded directory, so it
                     also matches school, class and subjects, not just names. */}
                 <div style={{ position: 'relative', marginBottom: 12 }}>
-                  <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.55, pointerEvents: 'none' }}>🔍</span>
+                  <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: 0.55, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
                   <input
                     value={teacherQuery}
                     onChange={e => setTeacherQuery(e.target.value)}
@@ -457,7 +458,7 @@ export default function OnboardingPage() {
                     style={{ ...inp, paddingLeft: 38, paddingRight: teacherQuery ? 36 : 14 }}
                   />
                   {teacherQuery && (
-                    <button onClick={() => setTeacherQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg)', color: 'var(--ak-text-sec)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>✕</button>
+                    <button onClick={() => setTeacherQuery('')} aria-label="Clear search" style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg)', color: 'var(--ak-text-sec)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={11}/></button>
                   )}
                 </div>
 
@@ -471,7 +472,7 @@ export default function OnboardingPage() {
                 ) : (
                   <div style={{ padding: '20px 16px', borderRadius: 14, background: 'var(--ak-tag-bg)',
                     border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
-                    <div style={{ fontSize: 22, marginBottom: 6 }}>🔍</div>
+                    <div style={{ marginBottom: 6 }}><Icon name="ti-search" size={22} color="var(--ak-text-sec)"/></div>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)' }}>{t('onboarding.teacher_no_match')}</div>
                     <button onClick={() => setTeacherQuery('')} style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99,
                       border: 'none', background: accentColor, color: '#fff', fontSize: 12, fontWeight: 800,
@@ -481,7 +482,7 @@ export default function OnboardingPage() {
 
                 {teacherId && (
                   <p style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', margin: '10px 2px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>✅</span>
+                    <Icon name="ti-circle-check" size={14} color="#10B981"/>
                     <span>
                       {prefill?.teacherId === teacherId
                         ? <>{prefill.teacherName} already has you in <strong>{prefill.className}</strong>.</>
@@ -493,7 +494,7 @@ export default function OnboardingPage() {
             ) : (
               <div style={{ padding: '22px 18px', borderRadius: 14, background: 'var(--ak-tag-bg)',
                 border: '1px dashed var(--ak-border2)', textAlign: 'center' }}>
-                <div style={{ fontSize: 26, marginBottom: 8 }}>🧑‍🏫</div>
+                <div style={{ marginBottom: 8 }}><Icon name="ti-school" size={26} color="var(--ak-text-sec)"/></div>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ak-text-sec)', lineHeight: 1.5 }}>
                   {t('onboarding.teacher_none')}
                 </div>

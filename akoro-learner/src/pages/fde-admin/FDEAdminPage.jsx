@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { confirmDialog } from '../../components/common/ConfirmHost.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../services/api.js';
+import { Icon } from '../../components/common/Icons.jsx';
 
 // ─── palette / tokens ────────────────────────────────────────────────────────
 import { BRAND, SURFACE, BORDER, EXECUTOR_COLORS, EXECUTOR_DESCRIPTIONS, SCOPE_COLORS, Badge, Chip, Section, Input, Textarea, Select, Btn, LlmPromptConfig, NotifyConfig, CreateBattleConfig, HttpWebhookConfig, CONFIG_EDITORS, SchemaBuilder, BLANK_FORM, ToolForm, ToolRow } from './parts.jsx';
@@ -109,7 +110,7 @@ export default function FDEAdminPage() {
               <div style={{ fontSize: 18, fontWeight: 800 }}>{modal === "create" ? "New dynamic tool" : `Edit: ${modal.editing.name}`}</div>
               <div style={{ fontSize: 12, color: "var(--ak-text-sub)" }}>Configure how this tool behaves at run time.</div>
             </div>
-            <Btn variant="ghost" onClick={() => setModal(null)}>✕</Btn>
+            <Btn variant="ghost" onClick={() => setModal(null)}><Icon name="ti-x" size={14}/></Btn>
           </div>
           <ToolForm
             initial={modal?.editing ?? null}

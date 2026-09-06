@@ -18,6 +18,7 @@
 import { BRAND, RED } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { progressStage } from '../../utils/nowStudying.js';
+import { Icon } from '../common/Icons.jsx';
 
 const FONT = "'Nunito', sans-serif";
 
@@ -43,7 +44,7 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss }) {
         <div style={{ width: 42, height: 42, borderRadius: 'var(--r-md)', flexShrink: 0,
           background: battleLive ? `${RED}14` : `${BRAND}14`,
           border: `1px solid ${battleLive ? `${RED}2e` : `${BRAND}2e`}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{item.emoji || '📚'}</div>
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{item.emoji?.startsWith('ti-') ? <Icon name={item.emoji} size={20}/> : item.emoji ? <span>{item.emoji}</span> : <Icon name="ti-book" size={20}/>}</div>
 
         {/* Title + source */}
         <div onClick={onOpen} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>

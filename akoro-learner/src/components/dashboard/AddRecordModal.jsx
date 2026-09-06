@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../../contexts/LanguageContext.jsx';
-import { XIcon } from '../common/Icons.jsx';
+import { XIcon, Icon } from '../common/Icons.jsx';
 
 const BRAND = '#6C3BFF';
 const RED   = '#EF4444';
@@ -34,7 +34,7 @@ const saveRecords = (uid, list) => {
   try { localStorage.setItem(storageKey(uid), JSON.stringify(list)); } catch { /* private mode */ }
 };
 
-const KIND_ICON = { upload: '📎', link: '🔗', paste: '📋' };
+const KIND_ICON = { upload: 'ti-paperclip', link: 'ti-link', paste: 'ti-clipboard' };
 
 export default function AddRecordModal({ open, onClose, user, onOpenRecord, onToggleDone }) {
   const { t } = useLang();
@@ -100,15 +100,15 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
 
         {/* Tabs — Upload / Link / Paste */}
         <div style={{ display:'flex', gap:6, background:'var(--ak-surface-hover)', borderRadius:14, padding:4, marginBottom:14 }}>
-          {[['upload', `📎 ${t('records.tab_upload')}`], ['link', `🔗 ${t('records.tab_link')}`], ['paste', `📋 ${t('records.tab_paste')}`]].map(([key, label]) => (
-            <button key={key} onClick={() => { setTab(key); setErr(''); }} style={{ flex:1, padding:'9px 4px', borderRadius:11, border:'none', cursor:'pointer', fontSize:12, fontWeight:800, fontFamily:"'Nunito',sans-serif", background:tab===key?'var(--ak-surface)':'transparent', color:tab===key?BRAND:'var(--ak-text-muted)', boxShadow:tab===key?'0 1px 4px rgba(0,0,0,.08)':'none', transition:'all .15s' }}>{label}</button>
+          {[['upload', 'ti-paperclip', t('records.tab_upload')], ['link', 'ti-link', t('records.tab_link')], ['paste', 'ti-clipboard', t('records.tab_paste')]].map(([key, icon, label]) => (
+            <button key={key} onClick={() => { setTab(key); setErr(''); }} style={{ flex:1, padding:'9px 4px', borderRadius:11, border:'none', cursor:'pointer', fontSize:12, fontWeight:800, fontFamily:"'Nunito',sans-serif", background:tab===key?'var(--ak-surface)':'transparent', color:tab===key?BRAND:'var(--ak-text-muted)', boxShadow:tab===key?'0 1px 4px rgba(0,0,0,.08)':'none', transition:'all .15s', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}><Icon name={icon} size={12}/> {label}</button>
           ))}
         </div>
 
         {tab==='upload' && (
           <div>
             <button onClick={() => fileInputRef.current?.click()} style={{ width:'100%', padding:'22px 16px', borderRadius:14, border:`1.5px dashed ${BRAND}55`, background:`${BRAND}08`, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:7, fontFamily:"'Nunito',sans-serif" }}>
-              <span style={{ fontSize:26 }}>📎</span>
+              <Icon name="ti-paperclip" size={26} color={BRAND}/>
               <span style={{ fontSize:13, fontWeight:800, color:BRAND }}>{file ? file.name : t('records.choose_file')}</span>
               <span style={{ fontSize:10.5, fontWeight:600, color:'var(--ak-text-muted)' }}>{file ? `${(file.size/1024/1024).toFixed(1)} MB` : t('records.upload_hint')}</span>
             </button>
@@ -138,7 +138,7 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
 
         {/* Saved on this device (frontend-only, says so) */}
         <p style={{ fontSize:10.5, fontWeight:700, color:'var(--ak-text-muted)', margin:'12px 2px 0', display:'flex', alignItems:'center', gap:5 }}>
-          <span>💾</span>{t('records.saved_local')}
+          <Icon name="ti-device-floppy" size={12} color="var(--ak-text-muted)"/>{t('records.saved_local')}
         </p>
 
         <div style={{ marginTop:12, borderTop:'1px solid var(--ak-border)', paddingTop:12 }}>
@@ -150,11 +150,11 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
             return (
             <div key={r.id} onClick={() => onOpenRecord?.(r)}
               style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 10px', borderRadius:11, background:'var(--ak-surface-hover)', border:'1px solid var(--ak-border)', marginBottom:6, cursor:onOpenRecord?'pointer':'default' }}>
-              <span style={{ fontSize:15, flexShrink:0 }}>{KIND_ICON[r.kind] || '📄'}</span>
+              <span style={{ flexShrink:0 }}><Icon name={KIND_ICON[r.kind] || 'ti-file-text'} size={15}/></span>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12.5, fontWeight:800, color:done?'var(--ak-text-muted)':'var(--ak-text)', margin:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', textDecoration:done?'line-through':'none' }}>{r.name}</p>
                 <p style={{ fontSize:10, color:'var(--ak-text-muted)', margin:'1px 0 0' }}>
-                  {done ? `✓ ${t('records.done_label')} · ` : ''}{r.size ? `${(r.size/1024).toFixed(0)} KB · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
+                  {done ? `${t('records.done_label')} · ` : ''}{r.size ? `${(r.size/1024).toFixed(0)} KB · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
                 </p>
               </div>
               <button onClick={(e) => { e.stopPropagation(); onToggleDone?.(r); }} title={t('records.mark_done')} aria-label={t('records.mark_done')}

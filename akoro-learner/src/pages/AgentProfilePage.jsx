@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, ShoppingCart, Check } from 'lucide-react';
+import { Icon } from '../components/common/Icons.jsx';
 import { useCart } from '../contexts/CartContext.jsx';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, STUDENT_ID } from '../constants.js';
 import { apiGet, apiPost } from '../services/api.js';
@@ -37,7 +38,7 @@ function AgentAvatar({ value, sc }) {
 
 function Stars({ rating = 0, size = 13 }) {
   const r = Number(rating) || 0;
-  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <span key={i} style={{ fontSize: size, color: i <= Math.round(r) ? GOLD : 'var(--ak-border2)' }}>★</span>)}</span>;
+  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <Icon key={i} name="ti-star" size={size} color={i <= Math.round(r) ? GOLD : 'var(--ak-border2)'} style={{ lineHeight: 1 }}/>)}</span>;
 }
 
 export default function AgentProfilePage() {
@@ -135,9 +136,9 @@ export default function AgentProfilePage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 18 }}>
-        {[{ l: t('discovery.learners'), v: fmtCount(full.total_students), i: '👥' }, { l: t('discovery.trained_on'), v: `${Math.round(full.total_hours_trained || 0)}h`, i: '🎓' }, { l: t('discovery.sessions'), v: fmtCount(full.training_sessions), i: '📈' }].map((s) => (
+        {[{ l: t('discovery.learners'), v: fmtCount(full.total_students), i: 'ti-users' }, { l: t('discovery.trained_on'), v: `${Math.round(full.total_hours_trained || 0)}h`, i: 'ti-award' }, { l: t('discovery.sessions'), v: fmtCount(full.training_sessions), i: 'ti-trending-up' }].map((s) => (
           <div key={s.l} style={{ background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 12, padding: '10px 6px', textAlign: 'center' }}>
-            <div style={{ fontSize: 16 }}>{s.i}</div><div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', marginTop: 2 }}>{s.v}</div>
+            <div style={{ fontSize: 16 }}>{s.i?.startsWith('ti-') ? <Icon name={s.i} size={16}/> : s.i}</div><div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', marginTop: 2 }}>{s.v}</div>
             <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--ak-text-muted)', textTransform: 'uppercase' }}>{s.l}</div>
           </div>
         ))}
@@ -167,7 +168,7 @@ export default function AgentProfilePage() {
       {owned && !posted && (
         <div style={{ marginTop: 20, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '13px 14px' }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--ak-text)', marginBottom: 9 }}>{t('discovery.rate_agent')}</div>
-          <div style={{ display: 'inline-flex', gap: 4 }}>{[1, 2, 3, 4, 5].map((i) => <button key={i} onClick={() => setMyRating(i)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}><span style={{ fontSize: 26, color: i <= myRating ? GOLD : 'var(--ak-border2)' }}>★</span></button>)}</div>
+          <div style={{ display: 'inline-flex', gap: 4 }}>{[1, 2, 3, 4, 5].map((i) => <button key={i} onClick={() => setMyRating(i)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}><Icon name="ti-star" size={26} color={i <= myRating ? GOLD : 'var(--ak-border2)'} style={{ lineHeight: 1 }}/></button>)}</div>
           <textarea value={myText} onChange={(e) => setMyText(e.target.value)} placeholder={t('discovery.review_ph')} rows={2} style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, padding: '10px 12px', borderRadius: 11, border: '1px solid var(--ak-border2)', background: 'var(--ak-bg)', fontSize: 13, fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none', resize: 'none' }} />
           <button onClick={submitReview} disabled={!myRating} style={{ marginTop: 9, padding: '9px 16px', borderRadius: 11, border: 'none', background: myRating ? `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)` : '#E5E1F2', color: myRating ? '#fff' : 'var(--ak-text-muted)', fontSize: 12.5, fontWeight: 800, cursor: myRating ? 'pointer' : 'default', fontFamily: FONT }}>{t('discovery.submit_review')}</button>
         </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
-import { XIcon, ChevDownIcon } from '../common/Icons.jsx';
+import { XIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
 import { apiPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -72,7 +72,7 @@ function ConfigModal({ initial, onStart, onCancel }) {
             <h2 style={{ fontSize:16,fontWeight:800,color:"var(--ak-text)",margin:0 }}>{t('config.title')}</h2>
             <p style={{ fontSize:11.5,color:"var(--ak-text-sub)",margin:"3px 0 0" }}>{t('config.subtitle')}</p>
           </div>
-          {onCancel && <button onClick={onCancel} style={{ width:30,height:30,borderRadius:"50%",border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",cursor:"pointer",fontSize:14,color:"var(--ak-text-sub)" }}>✕</button>}
+          {onCancel && <button onClick={onCancel} style={{ width:30,height:30,borderRadius:"50%",border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",cursor:"pointer",fontSize:14,color:"var(--ak-text-sub)" }}><Icon name="ti-x" size={14}/></button>}
         </div>
 
         {/* Topic */}
@@ -96,7 +96,7 @@ function ConfigModal({ initial, onStart, onCancel }) {
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7 }}>
             <label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sec)",letterSpacing:.3 }}>{t('config.subtopics')} ({subtopics.length})</label>
             <button onClick={generate} disabled={!topic.trim()||generating} style={{ padding:"4px 11px",borderRadius:6,border:`0.5px solid ${BRAND}`,background:generating?"var(--ak-bg)":`${BRAND}10`,color:!topic.trim()||generating?"var(--ak-text-muted)":BRAND,fontSize:11,fontWeight:700,cursor:topic.trim()&&!generating?"pointer":"default",fontFamily:"inherit" }}>
-              {generating?`⏳ ${t('config.generating')}`:`✨ ${t('config.autogen')}`}
+              {generating?<><Icon name="ti-hourglass" size={11}/> {t('config.generating')}</>:<><Icon name="ti-sparkles" size={11}/> {t('config.autogen')}</>}
             </button>
           </div>
           {genError&&(
@@ -107,7 +107,7 @@ function ConfigModal({ initial, onStart, onCancel }) {
               {subtopics.map((st,i)=>(
                 <div key={st} style={{ display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:20,background:`${BRAND}10`,border:`0.5px solid ${BRAND}30`,fontSize:12,fontWeight:700,color:BRAND }}>
                   <span style={{ fontSize:9.5,color:"var(--ak-text-muted)",fontWeight:500 }}>{i+1}</span>{st}
-                  <button onClick={()=>removeSubtopic(st)} style={{ background:"none",border:"none",cursor:"pointer",fontSize:11,color:"var(--ak-text-muted)",padding:0,lineHeight:1 }}>✕</button>
+                  <button onClick={()=>removeSubtopic(st)} style={{ background:"none",border:"none",cursor:"pointer",fontSize:11,color:"var(--ak-text-muted)",padding:0,lineHeight:1 }}><Icon name="ti-x" size={11}/></button>
                 </div>
               ))}
             </div>
@@ -142,7 +142,7 @@ function ConfigModal({ initial, onStart, onCancel }) {
           <button onClick={()=>{ if(!canStart) return; onStart({ topic, subject, subtopics, objectives:objs }); }}
             disabled={!canStart}
             style={{ flex:2,padding:"12px",borderRadius:10,border:"none",background:canStart?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:canStart?"#fff":"#9CA3AF",cursor:canStart?"pointer":"default",fontFamily:"inherit" }}>
-            ▶ {t('config.start')}
+            <Icon name="ti-player-play" size={12}/> {t('config.start')}
           </button>
         </div>
       </div>

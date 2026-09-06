@@ -1,5 +1,21 @@
 import { BRAND, GOLD } from '../../constants.js';
 
+/**
+ * Icon — real icon from the @tabler/icons-webfont set (loaded globally in
+ * main.jsx). Use this everywhere an emoji used to be a UI glyph:
+ *
+ *   <Icon name="ti-swords" size={14} color={BRAND} />
+ *
+ * `name` is the tabler class without the `ti-` prefix styling — pass the
+ * full `ti-*` name. Font-based, so it inherits font-smoothing and scales
+ * with `size`.
+ */
+export function Icon({ name, size = 16, color, style = {} }) {
+  if (!name) return null;
+  return <i className={`ti ${name}`} aria-hidden="true"
+    style={{ fontSize: size, color: color || 'inherit', lineHeight: 1, display: 'inline-flex', flexShrink: 0, ...style }}/>;
+}
+
 function PhoneIcon({ size=18,color="#fff"     }){return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.67A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>;}
 function MessageIcon({size=18,color="#fff"   }){return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>;}
 function PlayIcon({ size=14, color="#fff"    }){return <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none"><polygon points="5,3 19,12 5,21"/></svg>;}

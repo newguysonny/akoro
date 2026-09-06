@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BRAND, RED, SUBJECTS, getStudentId } from '../constants.js';
 import AssessmentRoom from '../components/assessment/AssessmentRoom.jsx';
+import { Icon } from '../components/common/Icons.jsx';
 
 const FONT = "'Nunito', sans-serif";
 
@@ -76,7 +77,7 @@ export default function AssessmentPage() {
       }}>
         {/* Header */}
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>⚡</div>
+          <div style={{ marginBottom: 8 }}><Icon name="ti-bolt" size={36} color="#FBBF24"/></div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#F1F5F9' }}>
             Live Assessment
           </h1>
@@ -163,7 +164,7 @@ export default function AssessmentPage() {
                 background: `linear-gradient(135deg, ${BRAND}, ${BRAND}CC)`,
                 color: '#fff',
               }}
-            >⚡ Start assessment</button>
+            ><Icon name="ti-bolt" size={13}/> Start assessment</button>
           </div>
         </form>
 

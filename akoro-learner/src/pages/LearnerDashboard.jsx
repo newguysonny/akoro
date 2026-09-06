@@ -26,7 +26,7 @@ import DiscoveryTab  from '../components/tabs/DiscoveryTab.jsx';
 import DiscoverHub   from '../components/tabs/DiscoverHub.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
-import { ZapIcon, MicIcon } from '../components/common/Icons.jsx';
+import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
@@ -161,7 +161,7 @@ export default function LearnerDashboard() {
       id: s.id,
       title: s.title || 'Study session',
       sub: (SUBJECTS[s.subject]?.label) || s.topic || 'Session',
-      emoji: (SUBJECTS[s.subject]?.icon) || '📚',
+      emoji: (SUBJECTS[s.subject]?.icon) || 'ti-book',
       progress: s.progress || 0,
       snapshot: s,
     });
@@ -178,7 +178,7 @@ export default function LearnerDashboard() {
       id: r.id,
       title: r.name,
       sub: kindLabel,
-      emoji: r.kind === 'link' ? '🔗' : r.kind === 'paste' ? '📋' : '📎',
+      emoji: r.kind === 'link' ? 'ti-link' : r.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
       progress: r.progress || 0,
     });
     if (!r.progress) { setRecordProgress(r.id, 10); nowActs.setProgress(r.id, 10); }
@@ -230,7 +230,7 @@ export default function LearnerDashboard() {
         id: `decay-${d.id || d.topic || 'session'}`,
         title: `${t('now.relearn')} ${d.topic || ''}`.trim(),
         sub: d.subject || '',
-        emoji: '🔁',
+        emoji: 'ti-refresh',
         progress: 0,
       });
     }
@@ -250,7 +250,7 @@ export default function LearnerDashboard() {
         id: `battle-${b.id}`,
         title: b.title || b.topic || 'Battle',
         sub: b.status === 'live' ? t('now.battle_live') : t('now.battle_lobby'),
-        emoji: '⚔️',
+        emoji: 'ti-swords',
         progress: 0,
         snapshot: b,
       });
@@ -364,7 +364,7 @@ export default function LearnerDashboard() {
 
         // Live class starting soon
         socket.on("live_class_starting", alert => {
-          setToast(`📡 ${alert.title} starts in ${alert.minutesUntil} min!`);
+          setToast(`${alert.title} starts in ${alert.minutesUntil} min!`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:"starting-soon", scheduleBucket:"starting-soon",
@@ -377,7 +377,7 @@ export default function LearnerDashboard() {
 
         // Live class now live
         socket.on("live_class_live", alert => {
-          setToast(`🔴 ${alert.title} is now LIVE! Join now.`);
+          setToast(`${alert.title} is now LIVE! Join now.`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:"live", scheduleBucket:"live",
@@ -395,7 +395,7 @@ export default function LearnerDashboard() {
 
         // New challenge from peer
         socket.on("new_challenge", challenge => {
-          setToast(`⚡ ${challenge.challenger} challenged you!`);
+          setToast(`${challenge.challenger} challenged you!`);
           setChallenges(prev => [challenge, ...prev]);
           goTab("challenges");
         });
@@ -409,7 +409,7 @@ export default function LearnerDashboard() {
 
         // Gap 3: challenger notified their battle was accepted
         socket.on("battle_accepted", data => {
-          setToast(`✅ ${data.opponent} accepted your challenge! Battle ${data.isImmediate ? "starting now" : "scheduled"}.`);
+          setToast(`${data.opponent} accepted your challenge! Battle ${data.isImmediate ? "starting now" : "scheduled"}.`);
           setBattles(prev => prev.map(b =>
             b.id === data.battleId ? { ...b, status: data.status } : b
           ));
@@ -448,7 +448,7 @@ export default function LearnerDashboard() {
         // bump the bell badge live so it doesn't need a refresh to appear.
         socket.on("notification", n => {
           setNotifUnread(u => (u || 0) + 1);
-          if (n?.title) setToast(`🔔 ${n.title}`);
+          if (n?.title) setToast(`${n.title}`);
         });
       }
     } catch { /* socket.io not loaded — REST polling fallback */ }
@@ -551,14 +551,14 @@ export default function LearnerDashboard() {
       setBattles(prev => [battle, ...prev.filter(b => b.id !== battle.id)]);
       if (status === 'live') {
         setLiveBattleModal(battle);
-        setToast(`⚡ Challenge accepted — the battle is starting!`);
+        setToast(`Challenge accepted — the battle is starting!`);
       } else if (r.invited > 1) {
         // A class battle set by a teacher: accepting takes your seat, it does
         // not start the battle. Saying "starting!" here would send the learner
         // looking for a battle that is still waiting on their classmates.
-        setToast(`✅ You're in — ${r.accepted} of ${r.invited} accepted so far.`);
+        setToast(`You're in — ${r.accepted} of ${r.invited} accepted so far.`);
       } else {
-        setToast(`🗓 Battle scheduled — find it in Battles › Scheduled.`);
+        setToast({msg:'Battle scheduled — find it in Battles › Scheduled.',color:BRAND});
       }
     } catch (e) {
       setAcceptedIds(prev => { const n = new Set(prev); n.delete(c.id); return n; });
@@ -651,7 +651,7 @@ export default function LearnerDashboard() {
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
               <button onClick={()=>navigate("/wallet")} title={coinLow?"Low balance — tap to top up":"Coin balance"}
                 style={{ display:"flex",alignItems:"center",gap:5,background:coinLow?`${RED}14`:`${GOLD}1F`,border:`1px solid ${coinLow?`${RED}55`:`${GOLD}55`}`,borderRadius:100,height:34,padding:"0 12px",cursor:"pointer" }}>
-                <span style={{ fontSize:14,lineHeight:1 }}>🪙</span>
+                <Icon name="ti-coins" size={15} color={GOLD}/>
                 <span style={{ fontSize:12.5,fontWeight:900,color:coinLow?"var(--ak-danger-text)":"var(--ak-warn-text)" }}>{(coinBalance||0).toLocaleString()}</span>
               </button>
               <button onClick={()=>navigate("/cart")} title="Cart"
@@ -673,7 +673,7 @@ export default function LearnerDashboard() {
                 )}
               </button>
               <div onClick={()=>setIsOnline(o=>!o)} style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:"pointer",border:`1px solid ${BRAND}3D` }}>
-                <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease" }}>{isOnline?"● Online":"Online"}</div>
+                <div style={{ padding:"4px 12px",borderRadius:100,background:isOnline?BRAND:"transparent",color:isOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease",display:"flex",alignItems:"center",gap:5 }}>{isOnline?<><span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block"}}/>Online</>:"Online"}</div>
               </div>
             </div>
           </div>
@@ -703,12 +703,12 @@ export default function LearnerDashboard() {
                   // only sessions read "Agent 0" above a "Self study 1", which
                   // is the tab telling the learner there is nothing there while
                   // pointing at the thing that is.
-                  {key:"all",    label:t('sessions.all'),          icon:"📚", count:bySubject.length + agentExtras},
-                  {key:"live",   label:t('sessions.live_classes'),  icon:"📡", count:bySubject.filter(s=>s.type==="live").length},
-                  {key:"agent",  label:t('sessions.agent'),         icon:"🤖", count:bySubject.filter(s=>s.type==="agent").length + agentExtras},
+                  {key:"all",    label:t('sessions.all'),          icon:"ti-book", count:bySubject.length + agentExtras},
+                  {key:"live",   label:t('sessions.live_classes'),  icon:"ti-broadcast", count:bySubject.filter(s=>s.type==="live").length},
+                  {key:"agent",  label:t('sessions.agent'),         icon:"ti-robot", count:bySubject.filter(s=>s.type==="agent").length + agentExtras},
                 ].map(({key,label,icon,count})=>(
                   <button key={key} onClick={()=>setSessionTab(key)} style={{ flex:1,padding:"10px 4px 11px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:sessionTab===key?800:600,color:sessionTab===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${sessionTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-                    <span style={{ fontSize:13 }}>{icon}</span>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"var(--ak-tag-bg)",color:sessionTab===key?"#fff":"var(--ak-text-sub)",borderRadius:8,padding:"1px 6px" }}>{count}</span>
+                    <Icon name={icon} size={13}/>{label}<span style={{ fontSize:9.5,fontWeight:800,background:sessionTab===key?BRAND:"var(--ak-tag-bg)",color:sessionTab===key?"#fff":"var(--ak-text-sub)",borderRadius:8,padding:"1px 6px" }}>{count}</span>
                   </button>
                 ))}
               </div>
@@ -718,11 +718,11 @@ export default function LearnerDashboard() {
                 <>
                   <div style={{ display:"flex",gap:7,padding:"10px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-bg)",flexShrink:0 }}>
                     {[
-                      {key:"live",          label:t('sessions.live_now'),      icon:"🔴"},
-                      {key:"starting-soon", label:t('sessions.starting_soon'), icon:"⏰"},
-                      {key:"today",         label:t('sessions.today'),         icon:"📅"},
-                      {key:"tomorrow",      label:t('sessions.tomorrow'),      icon:"🌅"},
-                      {key:"week",          label:t('sessions.this_week'),     icon:"📆"},
+                      {key:"live", label:t('sessions.live_now'), icon:"ti-circle-dot"},
+                      {key:"starting-soon", label:t('sessions.starting_soon'), icon:"ti-alarm"},
+                      {key:"today", label:t('sessions.today'), icon:"ti-calendar"},
+                      {key:"tomorrow", label:t('sessions.tomorrow'), icon:"ti-sunrise"},
+                      {key:"week", label:t('sessions.this_week'), icon:"ti-calendar-month"},
                     ].map(({key,label,icon})=>{
                       const cnt = bySubject.filter(s=>liveMatch(s,key)).length;
                       const active = liveSubTab===key;
@@ -736,7 +736,7 @@ export default function LearnerDashboard() {
                             background:active?(isAlert?`${RED}10`:`${BRAND}10`):"#fff",
                             color:active?(isAlert?RED:BRAND):"var(--ak-text-sub)",transition:"all .2s" }}>
                           {isAlert&&active&&<div style={{ width:6,height:6,borderRadius:"50%",background:RED,animation:"pulse-dot 1s ease-in-out infinite" }}/>}
-                          <span>{icon}</span>{label}
+                          <Icon name={icon} size={12}/>{label}
                           {cnt>0&&<span style={{ fontSize:9,fontWeight:900,background:active?(isAlert?RED:BRAND):"var(--ak-tag-bg)",color:active?"#fff":isAlert?RED:"var(--ak-text-sub)",borderRadius:8,padding:"1px 5px" }}>{cnt}</span>}
                         </button>
                       );
@@ -744,9 +744,9 @@ export default function LearnerDashboard() {
                   </div>
                   {/* Subject filter for live classes */}
                   <div style={{ display:"flex",gap:7,padding:"8px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",flexShrink:0 }}>
-                    {[{key:"all",label:"All",icon:"📚"},{key:"maths",label:"Maths",icon:SUBJECTS.maths.icon},{key:"english",label:"English",icon:SUBJECTS.english.icon},{key:"science",label:"Science",icon:SUBJECTS.science.icon}].map(({key,label,icon})=>{
+                    {[{key:"all",label:"All",icon:"ti-book"},{key:"maths",label:"Maths",icon:SUBJECTS.maths.icon},{key:"english",label:"English",icon:SUBJECTS.english.icon},{key:"science",label:"Science",icon:SUBJECTS.science.icon}].map(({key,label,icon})=>{
                       const color=SUBJECT_COLORS[key]||BRAND, active=liveSubjectFilter===key;
-                      return <button key={key} onClick={()=>setLiveSubjectFilter(key)} style={{ flexShrink:0,padding:"5px 13px",borderRadius:20,cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontWeight:active?800:600,fontSize:11.5,border:`1.5px solid ${active?color:"var(--ak-border2)"}`,background:active?`${color}10`:"var(--ak-surface)",color:active?color:"var(--ak-text-sub)",transition:"all .2s",display:"flex",alignItems:"center",gap:5 }}><span>{icon}</span>{label}</button>;
+                      return <button key={key} onClick={()=>setLiveSubjectFilter(key)} style={{ flexShrink:0,padding:"5px 13px",borderRadius:20,cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontWeight:active?800:600,fontSize:11.5,border:`1.5px solid ${active?color:"var(--ak-border2)"}`,background:active?`${color}10`:"var(--ak-surface)",color:active?color:"var(--ak-text-sub)",transition:"all .2s",display:"flex",alignItems:"center",gap:5 }}><Icon name={icon} size={12}/>{label}</button>;
                     })}
                   </div>
                 </>
@@ -757,9 +757,7 @@ export default function LearnerDashboard() {
               {sessionTab!=="agent"&&(
                 filtered.length===0
                   ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:10 }}>
-                    <span style={{ fontSize:52,opacity:.2 }}>
-                      {sessionTab==="live"?liveSubTab==="starting-soon"?"🔴":"📡":"📚"}
-                    </span>
+                    <Icon name={sessionTab==="live"?liveSubTab==="starting-soon"?"ti-circle-dot":"ti-broadcast":"ti-book"} size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
                     <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>
                       {sessionTab==="live"
                         ?(liveSubTab==="starting-soon"?t('sessions.none_starting'):liveSubTab==="today"?t('sessions.none_today'):liveSubTab==="tomorrow"?t('sessions.none_tomorrow'):t('sessions.none_week'))
@@ -780,9 +778,9 @@ export default function LearnerDashboard() {
                   {/* Sub-tab bar */}
                   <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
                     {[
-                      {key:"sessions",  label:t('sessions.sessions'),  icon:"📚", count:agentSessionsFiltered.length},
-                      {key:"selfstudy", label:"Self study",            icon:"📖", count:selfStudyCount},
-                      {key:"revisions", label:t('sessions.revisions'), icon:"🔄", count:agentRevisions.length},
+                      {key:"sessions", label:t('sessions.sessions'), icon:"ti-book", count:agentSessionsFiltered.length},
+                      {key:"selfstudy", label:"Self study", icon:"ti-book-2", count:selfStudyCount},
+                      {key:"revisions", label:t('sessions.revisions'), icon:"ti-refresh", count:agentRevisions.length},
                     ].map(({key,label,icon,count})=>{
                       const active=agentSubTab===key;
                       const isRevision=key==="revisions";
@@ -794,7 +792,7 @@ export default function LearnerDashboard() {
                             borderBottom:`2.5px solid ${active?(isRevision?RED:BRAND):"transparent"}`,
                             transition:"all .2s",fontFamily:"'Nunito',sans-serif",
                             display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>
-                          <span style={{ fontSize:13 }}>{icon}</span>{label}
+                          <Icon name={icon} size={13}/>{label}
                           {count>0&&<span style={{ fontSize:9.5,fontWeight:900,
                             background:active?(isRevision?RED:BRAND):"var(--ak-tag-bg)",
                             color:active?"#fff":isRevision?RED:"var(--ak-text-sub)",
@@ -805,8 +803,8 @@ export default function LearnerDashboard() {
                   </div>
                   {/* Subject filter chips */}
                   <div style={{ display:"flex",gap:7,padding:"10px 16px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid #F3F4F6",flexShrink:0 }}>
-                    {[{key:"all",label:"All",icon:"📚"},
-                      {key:"maths",label:"Maths",icon:SUBJECTS.maths.icon},
+                    {[{key:"all",label:"All",icon:"ti-book"},
+                       {key:"maths",label:"Maths",icon:SUBJECTS.maths.icon},
                       {key:"english",label:"English",icon:SUBJECTS.english.icon},
                       {key:"science",label:"Science",icon:SUBJECTS.science.icon},
                     ].map(({key,label,icon})=>{
@@ -819,7 +817,7 @@ export default function LearnerDashboard() {
                             background:active?`${color}10`:"#fff",
                             color:active?color:"var(--ak-text-sub)",transition:"all .2s",
                             display:"flex",alignItems:"center",gap:5 }}>
-                          <span>{icon}</span>{label}
+                          <Icon name={icon} size={12}/>{label}
                         </button>
                       );
                     })}
@@ -828,7 +826,7 @@ export default function LearnerDashboard() {
                   {agentSubTab==="sessions"&&(
                     agentSessionsFiltered.length===0
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
-                        <span style={{ fontSize:52,opacity:.2 }}>📚</span>
+                        <Icon name="ti-book" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
                         <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>{t('sessions.empty')}</p>
                         <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.empty_hint')}</p>
                       </div>
@@ -855,7 +853,7 @@ export default function LearnerDashboard() {
                   {agentSubTab==="revisions"&&(
                     decayAsSessions.length===0
                       ?<div style={{ padding:"40px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:10 }}>
-                        <span style={{ fontSize:52,opacity:.2 }}>✅</span>
+                        <Icon name="ti-check" size={52} color="var(--ak-text-muted)" style={{opacity:.2}}/>
                         <p style={{ fontSize:15,fontWeight:800,color:"var(--ak-text-muted)" }}>{t('sessions.no_revisions')}</p>
                         <p style={{ fontSize:12,color:"#D1D5DB",textAlign:"center" }}>{t('sessions.all_up_to_date')}</p>
                       </div>
@@ -881,7 +879,7 @@ export default function LearnerDashboard() {
               </div>
               {challenges.filter(c=>!acceptedIds.has(c.id)).length===0?(
                 <div style={{ padding:"48px 24px",display:"flex",flexDirection:"column",alignItems:"center",gap:12 }}>
-                  <span style={{ fontSize:48,opacity:.25 }}>✅</span>
+                  <Icon name="ti-check" size={48} color="var(--ak-text-muted)" style={{opacity:.25}}/>
                   <p style={{ fontSize:14,fontWeight:800,color:"var(--ak-text-muted)",textAlign:"center" }}>{t('challenges.all_accepted')}</p>
                   <p style={{ fontSize:12,fontWeight:600,color:"#D1D5DB",textAlign:"center" }}>{t('challenges.check_battles')}</p>
                   <button onClick={()=>goTab("battles")} style={{ padding:"10px 22px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('challenges.go_to_battles')}</button>
@@ -898,7 +896,7 @@ export default function LearnerDashboard() {
                     <button onClick={()=>navigate("/app?tab=discovery")} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:20,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-sub)",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
                       <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>{t('dhub.title')}
                     </button>
-                    {discoverQuery&&<span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>🔍 {discoverQuery}</span>}
+                    {discoverQuery&&<span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}><Icon name="ti-search" size={10} color="var(--ak-text-muted)"/> {discoverQuery}</span>}
                   </div>
                   <DiscoveryTab initialQuery={discoverQuery}/>
                 </>
@@ -1055,7 +1053,7 @@ export default function LearnerDashboard() {
           }}
         />}
         {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onMinimize={minimizeBattle} onClose={()=>setLiveBattleModal(null)}/>}
-        {toast && <Toast msg={toast} color={toast.startsWith("🗓")?BRAND:RED} onDone={()=>setToast(null)}/>}
+        {toast && <Toast msg={typeof toast==='string'?toast:toast.msg} color={typeof toast==='string'?RED:(toast.color||RED)} onDone={()=>setToast(null)}/>}
       </div>
     </>
   );

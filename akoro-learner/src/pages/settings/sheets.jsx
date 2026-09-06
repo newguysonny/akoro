@@ -295,7 +295,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
                 style={{ padding:'14px 8px',borderRadius:12,textAlign:'center',cursor:'pointer',
                   border:`1.5px solid ${val===m?BRAND:'var(--ak-border2)'}`,
                   background:val===m?`${BRAND}08`:'var(--ak-select-bg)' }}>
-                <div style={{ fontSize:22,marginBottom:5 }}>{m==='light'?'☀️':m==='dark'?'🌙':'⚙️'}</div>
+                <div style={{ marginBottom:5 }}><Icon name={m==='light'?'ti-sun':m==='dark'?'ti-moon':'ti-settings'} size={22} color="var(--ak-text-sec)"/></div>
                 <p style={{ margin:0,fontSize:11.5,fontWeight:800,
                   color:val===m?BRAND:'var(--ak-text-sec)',textTransform:'capitalize' }}>{m}</p>
               </div>
@@ -329,7 +329,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
           <div style={{ background:'#FFF7ED',border:'1px solid #FED7AA',
             borderRadius:14,padding:'14px 16px',marginBottom:12 }}>
             <p style={{ margin:'0 0 8px',fontSize:14,fontWeight:800,color:'#92400E' }}>
-              ⚠️ {t('settings.deactivate_q')}</p>
+              <Icon name="ti-alert-triangle" size={14}/> {t('settings.deactivate_q')}</p>
             <p style={{ margin:0,fontSize:13,color:'#78350F',lineHeight:1.6 }}>
               {t('settings.deactivate_warn')}</p>
           </div>
@@ -339,7 +339,7 @@ function GenericSheet({ field,label,type,options,value,onClose,onSave }) {
             <div style={{ background:'#FEF2F2',border:'1px solid #FECACA',
               borderRadius:14,padding:'14px 16px',marginBottom:14 }}>
               <p style={{ margin:'0 0 8px',fontSize:14,fontWeight:800,color:'#7F1D1D' }}>
-                🗑️ {t('settings.delete_q')}</p>
+                <Icon name="ti-trash" size={14}/> {t('settings.delete_q')}</p>
               <p style={{ margin:0,fontSize:13,color:'#991B1B',lineHeight:1.6 }}>
                 {t('settings.delete_warn')}</p>
             </div>

@@ -24,8 +24,8 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
   const saveField = useCallback(async (field, val) => {
     const updated = { ...agent, [field]: val };
     setAgent(updated);
-    try { await onSaveAgent({ [field]: val }); showToast('Saved ✓'); }
-    catch { showToast('Saved locally ✓'); }
+    try { await onSaveAgent({ [field]: val }); showToast('Saved'); }
+    catch { showToast('Saved locally'); }
   }, [agent, onSaveAgent, setAgent]);
 
   const stats = [
@@ -137,12 +137,12 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           onClose={()=>setAvatarSheet(false)}
           onSavePhoto={async url=>{
             setAgent(a=>({...a,photoUrl:url}));
-            try { await onSaveAgent({ photoUrl:url }); showToast('Photo updated ✓'); }
+            try { await onSaveAgent({ photoUrl:url }); showToast('Photo updated'); }
             catch { showToast('Failed to update photo'); }
           }}
           onSaveEmoji={async em=>{
             setAgent(a=>({...a,emoji:em,photoUrl:null}));
-            try { await onSaveAgent({ emoji:em }); showToast('Saved ✓'); }
+            try { await onSaveAgent({ emoji:em }); showToast('Saved'); }
             catch { showToast('Failed to save'); }
           }}/>
       )}
@@ -151,8 +151,8 @@ function AgentTab({ agent, setAgent, onSaveAgent }) {
           onClose={()=>setSubjectSheet(false)}
           onSave={async s=>{
             setAgent(a=>({...a,subjects:s}));
-            try { await onSaveAgent({ subjects:s }); showToast('Subjects saved ✓'); }
-            catch { showToast('Saved locally ✓'); }
+            try { await onSaveAgent({ subjects:s }); showToast('Subjects saved'); }
+            catch { showToast('Saved locally'); }
           }}/>
       )}
       {sheet&&(

@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { SiteNav, SFSHeader, SiteFooter } from '../../components/SiteChrome.jsx';
+import { Icon } from '../../components/common/Icons.jsx';
 
 
 /* ── Brand tokens (match Akoro landing page) ── */
@@ -38,7 +39,7 @@ function AnnouncementBar({ onDismiss }) {
       style={{ background: "#F1EBFF", color: "#3A2570" }}
     >
       <span className="max-w-md leading-snug">
-        🏫 280+ partner schools trust Akoro. See how they{" "}
+        <Icon name="ti-school" size={14} style={{ display: "inline-block", verticalAlign: "-2px", marginRight: 5 }}/>280+ partner schools trust Akoro. See how they{" "}
         <a href="/signup" className="font-bold underline underline-offset-2">
           transformed learning
         </a>

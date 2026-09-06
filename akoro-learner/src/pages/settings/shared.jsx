@@ -46,10 +46,7 @@ const AVATAR_LIST   = ['👨🏾‍🎓','👩🏾‍🎓','🧑🏾‍🎓','�
 const ACCENTS       = [BRAND,'#3B82F6','#10B981','#E8884A','#EC4899','#F59E0B','#EF4444','#8B5CF6'];
 
 /* ─── Micro-components ────────────────────────────────────────── */
-function Icon({ name, size=16, color, style={} }) {
-  return <i className={`ti ${name}`}
-    style={{ fontSize:size, color:color||'inherit', lineHeight:1, ...style }}/>;
-}
+import { Icon } from '../../components/common/Icons.jsx';
 function Toggle({ on, onChange, disabled }) {
   return (
     <div onClick={disabled ? undefined : onChange}
@@ -82,7 +79,7 @@ function SubjectChip({ label, onRemove, color=BRAND }) {
         style={{ width:14,height:14,borderRadius:'50%',
           background:`${color}25`,display:'inline-flex',
           alignItems:'center',justifyContent:'center',
-          cursor:'pointer',marginLeft:1,fontSize:9 }}>✕</span>}
+          cursor:'pointer',marginLeft:1,fontSize:9 }}><Icon name="ti-x" size={9}/></span>}
     </div>
   );
 }

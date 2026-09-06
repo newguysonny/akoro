@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { apiGet } from '../../services/api.js';
+import { Icon } from '../common/Icons.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 const FONT = "'Nunito', sans-serif";
@@ -216,13 +217,13 @@ export default function AgentStatsTab({ studentId = STUDENT_ID, agentName = 'Age
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                     {h.subject && <span style={{ fontSize: 10, fontWeight: 800, color: col, background: `${col}14`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{h.subject}</span>}
-                    {delta !== 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: delta > 0 ? GREEN : RED }}>{delta > 0 ? '▲' : '▼'} {Math.abs(delta)}% {t('stats.understanding')}</span>}
+                    {delta !== 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: delta > 0 ? GREEN : RED }}>{delta > 0 ? <Icon name="ti-trending-up" size={9}/> : <Icon name="ti-trending-down" size={9}/>} {Math.abs(delta)}% {t('stats.understanding')}</span>}
                     {h.agent_knowledge_added > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-sub)' }}>+{h.agent_knowledge_added} {t('stats.chunks')}</span>}
                     {h.xp_earned > 0 && <span style={{ fontSize: 10.5, fontWeight: 800, color: GOLD }}>+{h.xp_earned} XP</span>}
                   </div>
                   {h.concepts_learned?.length > 0 && (
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-sub)', marginTop: 6, lineHeight: 1.4 }}>
-                      💡 {h.concepts_learned.slice(0, 4).join(', ')}
+                      <Icon name="ti-bulb" size={11} color={GOLD}/> {h.concepts_learned.slice(0, 4).join(', ')}
                     </div>
                   )}
                 </div>

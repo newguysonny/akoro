@@ -7,6 +7,7 @@
  */
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { Icon } from '../components/common/Icons.jsx';
 import { SiteNav, SiteFooter, Btn } from '../components/SiteChrome.jsx';
 import {
   Check, X, Star, ArrowRight, Sparkles, Globe, MessageSquare, GraduationCap,
@@ -39,7 +40,7 @@ const TIERS = [
   {
     id: 'growth', name: 'Growth', tag: 'Parent & Student Engagement', icon: Users,
     monthly: 30000, blurb: 'Turn your website into a 24/7 engagement engine: after-school revision, a 24/7 WhatsApp agent, and teacher tools.',
-    cta: 'Start free pilot', highlight: true, badge: '⭐ Best value',
+    cta: 'Start free pilot', highlight: true, badge: 'Best value',
     features: [
       'Everything in Starter, plus:',
       'AI Assessment Agent: students revise & get graded',
@@ -176,7 +177,7 @@ export default function PricingPage() {
                 transform: hot ? 'translateY(-6px)' : 'none', display: 'flex', flexDirection: 'column',
               }}>
                 {t.badge && (
-                  <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${B},${B2})`, color: '#fff', fontSize: 11.5, fontWeight: 800, padding: '5px 14px', borderRadius: 99, whiteSpace: 'nowrap', boxShadow: `0 6px 18px ${B}44` }}>{t.badge}</div>
+                  <div style={{ position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${B},${B2})`, color: '#fff', fontSize: 11.5, fontWeight: 800, padding: '5px 14px', borderRadius: 99, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', boxShadow: `0 6px 18px ${B}44` }}><Icon name="ti-star" size={11}/> {t.badge}</div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4 }}>
                   <div style={{ width: 34, height: 34, borderRadius: 9, background: hot ? B : TINT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

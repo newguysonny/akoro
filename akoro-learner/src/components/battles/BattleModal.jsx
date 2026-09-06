@@ -14,7 +14,7 @@ import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { API, apiGet, apiPost } from '../../services/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
-import { XIcon, UsersIcon, TrophyIcon, FlameIcon, BookIcon, PlayIcon, ZapIcon } from '../common/Icons.jsx';
+import { XIcon, UsersIcon, TrophyIcon, FlameIcon, BookIcon, PlayIcon, ZapIcon, Icon } from '../common/Icons.jsx';
 import { LiveBadge } from '../common/ProgressBar.jsx';
 
 const B = '/api/battle';
@@ -128,7 +128,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
     s.on('battle:started', (d) => {
       setStatus('live');
       setParticipants((d.participants || []).map(mapStateP));
-      pushLog(`⚔️ Battle started — ${d.participants?.length || 0} agents`);
+      pushLog(`Battle started — ${d.participants?.length || 0} agents`);
     });
     s.on('battle:question', (q) => {
       setQuestion(q); setReveal(null); setSelected(null); setMyResult(null);
@@ -142,7 +142,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
       setQuestion((q) => { if (q && q.questionOrder === d.questionOrder) recordAnswered(q, d.correctIndex, selectedRef.current); return q; });
     });
     s.on('battle:log', (e) => pushLog(e.message, e.timestamp));
-    s.on('battle:over', (d) => { setOver(d); setStatus('completed'); pushLog('🏁 Battle complete!'); });
+    s.on('battle:over', (d) => { setOver(d); setStatus('completed'); pushLog('Battle complete!'); });
 
     // Deliberately silent: a heartbeat that misses is replaced by the next one
     // 20s later, and telling the learner mid-battle that one ping failed would
@@ -246,13 +246,13 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
 
   const StudentRow = ({ p, rank }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 12, background: p.userId === myId ? 'rgba(232,136,74,.15)' : 'rgba(255,255,255,.04)', border: p.userId === myId ? '1px solid rgba(232,136,74,.35)' : '1px solid rgba(255,255,255,.07)' }}>
-      <span style={{ fontSize: 12, width: 18, textAlign: 'center' }}>{rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : rank + 1}</span>
+      <span style={{ fontSize: 12, width: 18, textAlign: 'center' }}>{rank === 0 ? <Icon name="ti-medal" size={12} color={GOLD}/> : rank === 1 ? <Icon name="ti-medal" size={12} color="#C0C0C0"/> : rank === 2 ? <Icon name="ti-medal" size={12} color="#CD7F32"/> : rank + 1}</span>
       <div style={{ width: 28, height: 28, borderRadius: '50%', background: `${p.agentColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{p.agentEmoji}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.agentName}</span>
           {p.userId === myId && <span style={{ fontSize: 8, fontWeight: 900, padding: '1px 5px', borderRadius: 20, background: 'rgba(232,136,74,.30)', color: '#E8884A' }}>YOU</span>}
-          {p.streak >= 2 && <span style={{ fontSize: 9, color: '#FB923C' }}>🔥{p.streak}</span>}
+          {p.streak >= 2 && <span style={{ fontSize: 9, color: "#FB923C", display: "inline-flex", alignItems: "center", gap: 2 }}><Icon name="ti-flame" size={9} color="#FB923C"/>{p.streak}</span>}
         </div>
         <div style={{ height: 4, marginTop: 3, background: 'rgba(255,255,255,.12)', borderRadius: 2, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${p.hp}%`, background: p.hp > 50 ? GREEN : p.hp > 25 ? GOLD : RED, borderRadius: 2, transition: 'width .5s' }} />
@@ -271,7 +271,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
         {/* Notification ticker */}
         <div style={{ overflow: 'hidden', whiteSpace: 'nowrap', background: 'rgba(0,0,0,.30)', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <div style={{ display: 'inline-flex', gap: 48, animation: 'bm-ticker 28s linear infinite' }}>
-            {tickerItems.map((tk, i) => <span key={i} style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 600, padding: '0 24px' }}>⚔️ {tk}</span>)}
+            {tickerItems.map((tk, i) => <span key={i} style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 600, padding: "0 24px" }}><Icon name="ti-swords" size={10}/> {tk}</span>)}
           </div>
         </div>
 
@@ -393,7 +393,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: 'rgba(232,136,74,.20)', color: '#E8884A' }}>Q{question.questionOrder}{totalQ ? `/${totalQ}` : ''}{question.topic ? ` · ${question.topic}` : ''}</span>
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,.35)' }}>+{question.xpValue} XP</span>
-                    {me?.streak >= 2 && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: 'rgba(249,115,22,.20)', color: '#FB923C' }}>🔥 {me.streak}× streak</span>}
+                    {me?.streak >= 2 && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: 'rgba(249,115,22,.20)', color: "#FB923C", display: "inline-flex", alignItems: "center", gap: 2 }}><Icon name="ti-flame" size={10} color="#FB923C"/>{me.streak}× streak</span>}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0', lineHeight: 1.55, marginBottom: 12 }}>{question.questionText}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -420,10 +420,10 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   </div>
                   <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,.35)' }}>
                     {iAmParticipant
-                      ? (isReview ? '🤖 Your agent is working through your review' : '🤖 Your agent is answering — watch it play')
-                      : '👁 You’re watching this battle'}
+                      ? (isReview ? 'Your agent is working through your review' : 'Your agent is answering — watch it play')
+                      : 'You + APOS + re watching this battle'}
                   </div>
-                  {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? `✓ Your agent got it — +${myResult.xp_gained} XP` : '✗ Your agent got it wrong'}</div>}
+                  {myResult && <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12.5, fontWeight: 800, color: myResult.is_correct ? '#4ADE80' : '#F87171' }}>{myResult.is_correct ? <><Icon name="ti-check" size={12} color="#4ADE80"/> Your agent got it — +${myResult.xp_gained} XP</> : <><Icon name="ti-x" size={12} color="#F87171"/> Your agent got it wrong</>}</div>}
                 </div>
               )}
 
@@ -434,7 +434,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   score and no XP, just an empty arena. */}
               {isCompleted && isReview && results?.type === 'review' && (
                 <div style={{ ...panel, textAlign: 'center' }}>
-                  <div style={{ fontSize: 34 }}>📋</div>
+                  <Icon name="ti-clipboard" size={34} color="rgba(255,255,255,.35)"/>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', marginTop: 4 }}>
                     {results.score?.correct} of {results.score?.total} correct
                   </div>
@@ -494,7 +494,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
           {tab === 'stats' && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {[['Your XP this battle', myXp, '#E8884A'], ['Questions answered', myAnswered, GREEN], ['Your streak', `${me?.streak || 0}🔥`, GOLD], ['Viewers', viewerCount || participants.length, '#3B82F6']].map(([label, val, color]) => (
+                {[['Your XP this battle', myXp, '#E8884A'], ['Questions answered', myAnswered, GREEN], ['Your streak', `${me?.streak || 0}`, GOLD], ['Viewers', viewerCount || participants.length, '#3B82F6']].map(([label, val, color]) => (
                   <div key={label} style={panel}><div style={{ fontSize: 22, fontWeight: 900, color, marginBottom: 4 }}>{val}</div><div style={{ fontSize: 10.5, color: 'rgba(255,255,255,.40)' }}>{label}</div></div>
                 ))}
               </div>
@@ -542,7 +542,7 @@ export default function BattleModal({ battle: initialBattle, onClose, onMinimize
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
                     <span style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,.40)' }}>Q{entry.order}</span>
                     {entry.topic && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 20, background: 'rgba(232,136,74,.18)', color: '#E8884A' }}>{entry.topic}</span>}
-                    {entry.myPick != null && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '1px 8px', borderRadius: 20, background: entry.myCorrect ? 'rgba(16,185,129,.18)' : 'rgba(239,68,68,.18)', color: entry.myCorrect ? '#4ADE80' : '#F87171' }}>{entry.myCorrect ? '✓ Correct' : '✗ Wrong'}</span>}
+                    {entry.myPick != null && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '1px 8px', borderRadius: 20, background: entry.myCorrect ? 'rgba(16,185,129,.18)' : 'rgba(239,68,68,.18)', color: entry.myCorrect ? "#4ADE80" : "#F87171", display:"inline-flex",alignItems:"center",gap:3 }}><Icon name={entry.myCorrect ? "ti-check" : "ti-x"} size={10}/>{entry.myCorrect ? 'Correct' : 'Wrong'}</span>}
                   </div>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#E2E8F0', lineHeight: 1.55, margin: '0 0 10px' }}>{entry.text}</p>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>

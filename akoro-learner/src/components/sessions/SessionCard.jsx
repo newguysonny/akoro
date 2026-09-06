@@ -1,5 +1,6 @@
 import React from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, AVATAR_FALLBACK } from '../../constants.js';
+import { Icon } from '../common/Icons.jsx';
 import { ProgressBar } from '../common/ProgressBar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -43,8 +44,8 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
           <span style={{ fontSize:10,fontWeight:700,
             color:isDecay?RED:sc,
             background:isDecay?`${RED}12`:`${sc}14`,
-            borderRadius:5,padding:"1px 7px",flexShrink:0 }}>
-            {SUBJECTS[session.subject]?.icon} {isDecay ? decayAlert.topic : SUBJECTS[session.subject]?.label}
+            borderRadius:5,padding:"1px 7px",flexShrink:0,display:"inline-flex",alignItems:"center",gap:4 }}>
+            <Icon name={SUBJECTS[session.subject]?.icon || "ti-book"} size={11} color={isDecay?RED:sc}/>{isDecay ? decayAlert.topic : SUBJECTS[session.subject]?.label}
           </span>
           <span style={{ fontSize:10,fontWeight:600,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
             {isDecay
@@ -56,8 +57,8 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
         {/* Meta row */}
         {isDecay ? (
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
-            <span style={{ fontSize:9.5,fontWeight:700,color:RED,fontFamily:"monospace" }}>
-              ⚠ {t('card.confidence')} {decayAlert.confidence}% ({t('card.was')} {decayAlert.prevConfidence}%)
+            <span style={{ fontSize:9.5,fontWeight:700,color:RED,fontFamily:"monospace",display:"inline-flex",alignItems:"center",gap:3 }}>
+              <Icon name="ti-alert-triangle" size={10} color={RED}/> {t('card.confidence')} {decayAlert.confidence}% ({t('card.was')} {decayAlert.prevConfidence}%)
             </span>
             {decayAlert.misconceptions?.length > 0 && (
               <span style={{ fontSize:9.5,fontWeight:600,color:"var(--ak-text-muted)",fontFamily:"monospace" }}>
@@ -67,8 +68,8 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
           </div>
         ) : (
           <div style={{ display:"flex",alignItems:"center",gap:6,flexWrap:"wrap" }}>
-            {[{v:session.id,c:"var(--ak-text-muted)"},{v:`🕐 ${session.time}`,c:"var(--ak-text-muted)"},{v:`📌 ${session.topics} ${t('card.topics')}`,c:sc},{v:`🔁 ${session.revisions} ${t('card.revisions')}`,c:"var(--ak-text-muted)"},{v:`⭐ ${session.reviews} ${t('card.reviews')}`,c:GOLD}].map(({v,c},i)=>(
-              <span key={i} style={{ fontSize:9.5,fontWeight:700,color:c,fontFamily:"monospace" }}>{v}</span>
+            {[{v:session.id,c:"var(--ak-text-muted)"},{i:"ti-clock",v:session.time,c:"var(--ak-text-muted)"},{i:"ti-pin",v:`${session.topics} ${t('card.topics')}`,c:sc},{i:"ti-refresh",v:`${session.revisions} ${t('card.revisions')}`,c:"var(--ak-text-muted)"},{i:"ti-star",v:`${session.reviews} ${t('card.reviews')}`,c:GOLD}].map(({i,v,c},idx)=>(
+              <span key={idx} style={{ fontSize:9.5,fontWeight:700,color:c,fontFamily:"monospace",display:"inline-flex",alignItems:"center",gap:3 }}><Icon name={i} size={10} color={c}/>{v}</span>
             ))}
           </div>
         )}
@@ -91,7 +92,7 @@ function SessionCard({ session, onTap, decayAlert, agentProfile }) {
         <div style={{ width:20,height:20,borderRadius:"50%",background:`${RED}15`,flexShrink:0,
           display:"flex",alignItems:"center",justifyContent:"center",
           border:`1.5px solid ${RED}40`,animation:"pulse-dot 1.5s ease-in-out infinite" }}>
-          <span style={{ fontSize:10 }}>⚠</span>
+          <Icon name="ti-alert-triangle" size={11} color={RED}/>
         </div>
       ) : session.unread > 0 ? (
         <div style={{ width:20,height:20,borderRadius:"50%",background:sc,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}>

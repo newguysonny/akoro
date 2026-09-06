@@ -13,6 +13,7 @@
  */
 import { useState, useEffect } from 'react';
 import { BRAND, RED } from '../../constants.js';
+import { Icon } from './Icons.jsx';
 
 let listener = null;
 
@@ -57,7 +58,7 @@ export default function ConfirmHost() {
         fontFamily: "'Nunito',sans-serif", maxHeight: '80vh', overflowY: 'auto',
       }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--ak-border3)', margin: '14px auto 18px' }} />
-        <div style={{ fontSize: 34, textAlign: 'center', marginBottom: 8 }}>{danger ? '⚠️' : '❓'}</div>
+        <div style={{ fontSize: 34, textAlign: 'center', marginBottom: 8 }}><Icon name={danger ? 'ti-alert-triangle' : 'ti-help'} size={34} color={danger ? RED : 'var(--ak-text-muted)'} style={{ display: 'inline-flex' }}/></div>
         <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 6px', textAlign: 'center' }}>
           {req.title || (danger ? 'Are you sure?' : 'Please confirm')}
         </p>

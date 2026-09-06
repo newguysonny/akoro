@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
-import { MicIcon, SendIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon } from '../common/Icons.jsx';
+import { MicIcon, SendIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, Icon } from '../common/Icons.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -233,7 +233,7 @@ function SessionChatView({
                 justifyContent:"center",animation:"pulse-dot 1s ease-in-out infinite",flexShrink:0 }}>
                 <MicIcon size={12} color="#fff"/>
               </div>
-              <span style={{ fontSize:12,fontWeight:800,color:RED }}>● {fmt(seconds)} — {t('teaching.tap_to_stop')}</span>
+              <span style={{ fontSize:12,fontWeight:800,color:RED,display:'inline-flex',alignItems:'center',gap:5 }}><span style={{ width:7,height:7,borderRadius:'50%',background:'currentColor',display:'inline-block' }}/> {fmt(seconds)} — {t('teaching.tap_to_stop')}</span>
             </div>
           </div>
         )}
