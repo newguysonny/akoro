@@ -4,7 +4,7 @@
  * Akoro portal (including the agent app, even though both touch the voucher
  * module — a startup owner and an agent are different sessions).
  */
-export const API = import.meta.env.VITE_API_URL || 'https://akoro.app';
+export const API = import.meta.env.VITE_API_URL || 'https://akoro.onrender.com';
 
 /* ── Session recovery ────────────────────────────────────────────────────────
  * The access token lives ~15 minutes. Leave a tab idle past that and the next

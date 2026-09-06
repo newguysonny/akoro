@@ -11,5 +11,5 @@ export const PURPLE = "#7C3AED";
 export const BLUE   = "#3B82F6";
 export const FONT   = "'DM Sans', sans-serif";
 
-export const API    = import.meta.env.VITE_API_URL || "https://akoro.app";
-export const WS_URL = import.meta.env.VITE_WS_URL || "https://akoro.app";
+export const API    = import.meta.env.VITE_API_URL || "https://akoro.onrender.com";
+export const WS_URL = import.meta.env.VITE_WS_URL || "https://akoro.onrender.com";

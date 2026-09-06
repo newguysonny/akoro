@@ -44,7 +44,7 @@ export default function DashboardPage() {
           We're the source of truth — you never store or trust a code as valid on your own.
         </p>
         <pre style={{ background: '#0F1115', color: '#E5E7EB', borderRadius: 10, padding: 14, fontSize: 11.5, overflowX: 'auto', fontFamily: 'monospace' }}>
-{`curl -X POST ${import.meta.env.VITE_API_URL || 'https://akoro.app'}/api/vouchers/v1/validate \\
+{`curl -X POST ${import.meta.env.VITE_API_URL || 'https://akoro.onrender.com'}/api/vouchers/v1/validate \\
   -H "Authorization: Bearer sk_live_..." \\
   -H "Content-Type: application/json" \\
   -d '{"voucher_code":"X9K7-MQPL-3R9T","customer_id":"cust_123"}'`}
