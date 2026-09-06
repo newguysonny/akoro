@@ -26,6 +26,7 @@ const ForgotPasswordPage = lazyWithRetry(() => import('./pages/auth/ForgotPasswo
 const ResetPasswordPage  = lazyWithRetry(() => import('./pages/auth/ResetPasswordPage.jsx'));
 const FDEAdminPage       = lazyWithRetry(() => import('./pages/FDEAdminPage.jsx'));
 const NotificationsPage  = lazyWithRetry(() => import('./pages/NotificationsPage.jsx'));
+const ActivityPage       = lazyWithRetry(() => import('./pages/ActivityPage.jsx'));
 const DrawPage           = lazyWithRetry(() => import('./pages/DrawPage.jsx'));
 const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage.jsx'));
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
@@ -104,6 +105,7 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>}/>
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
+      <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>
       <Route path="/draw"       element={<ProtectedRoute><DrawPage /></ProtectedRoute>}/>
       <Route path="/assessment"  element={<ProtectedRoute><AssessmentPage /></ProtectedRoute>}/>
       <Route path="/course/:slug"  element={<CourseDetailsPage />}/>
