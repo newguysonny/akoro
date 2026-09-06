@@ -19,18 +19,35 @@ src/agent/
 ├── llm/          # environment config, provider client, typed chat messages
 ├── reasoning/    # compact task planning and permission-aware decisions
 ├── tools/        # registry, safe calculator, bounded web search
-├── memory/       # in-process recent context and JSON-backed long-term memory
-├── state/        # explicit run state and auditable tool events
+├── memory/       # recent context, durable JSON memory, live teaching transcript
+├── state/        # agent-run state, validated phases, concurrency-safe live sessions
 ├── environment/  # workspace-only filesystem boundary
-├── permissions/  # default-deny tool policy and input limits
-├── loop/         # bounded tool-calling loop
-├── harness/      # one composition root and CLI entry point
-├── adaptive/     # Student Agent, NaNa guide, lesson ladder, orchestration
-└── service/      # internal FastAPI lifecycle API and live-session store
+├── permissions/  # default-deny tools and internal-service access policy
+├── loop/         # generic agent loop and adaptive teaching coordination loop
+├── harness/      # explicit composition roots for CLI and adaptive service
+├── adaptive/     # domain roles: Student Agent, NaNa guide, ladder, repository seam
+└── service/      # thin internal FastAPI delivery adapter and HTTP contracts
 ```
 
 `workspace/` is intentionally ignored except for `.gitkeep`; any persisted
 memory belongs to the local runtime, not source control.
+
+### Responsibility boundaries
+
+- **`service`** parses and returns HTTP only; it does not make learning or
+  authentication decisions.
+- **`harness`** composes the configured model, repository, live-session store,
+  and internal access policy in one place.
+- **`loop`** coordinates turns; **`reasoning`** validates lesson progression;
+  **`state`** owns phase and concurrency state; and **`memory`** owns the
+  bounded live transcript.
+- **`adaptive`** contains the Student Agent and NaNa-style domain roles plus a
+  persistence protocol. It has no FastAPI dependency.
+- **`permissions`** default-denies tools and protects the internal service.
+
+This separation makes each layer unit-testable and lets the current evaluation
+repository be swapped for a protected Akoro API repository without changing
+LLM roles, browser code, or HTTP contracts.
 
 ## Quick start
 

@@ -5,15 +5,10 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from uuid import uuid4
 
+from agent.memory.session_memory import SessionTranscript
+from agent.state.teaching_state import PHASES, PHASE_LABELS, TeachingState
+
 MAX_REFERENCE_CHARS = 12_000
-PHASES = ("PHASE_1", "PHASE_2", "PHASE_3", "PHASE_4", "MASTERY")
-PHASE_LABELS = {
-    "PHASE_1": "Phase 1 — What does Student Agent already know?",
-    "PHASE_2": "Phase 2 — Must-know parts",
-    "PHASE_3": "Phase 3 — Student Agent teaches it back",
-    "PHASE_4": "Phase 4 — Push a little further!",
-    "MASTERY": "Mastery",
-}
 
 
 def clamp(value: Any, low: float = 0.0, high: float = 1.0, default: float = 0.0) -> float:
@@ -134,11 +129,10 @@ class AdaptiveSession:
     subject: str | None = None
     session_type: Literal["free_teaching", "continuation", "decay_review"] = "free_teaching"
     teacher_agent_id: str | None = None
-    phase: str = "PHASE_1"
+    progress: TeachingState = field(default_factory=TeachingState)
     must_know_parts: list[str] = field(default_factory=list)
     knowledge_map: list[LessonStep] = field(default_factory=list)
-    must_know_index: int = 0
-    history: list[dict[str, str]] = field(default_factory=list)
+    history: SessionTranscript = field(default_factory=SessionTranscript)
     reference: SessionReference | None = None
     knowledge_buffer: list[KnowledgeChunk] = field(default_factory=list)
     turns_completed: int = 0
