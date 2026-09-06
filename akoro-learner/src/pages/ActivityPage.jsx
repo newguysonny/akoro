@@ -164,7 +164,9 @@ export default function ActivityPage() {
           </div>
         ) : displayed.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>{getMeta(filter).emoji}</div>
+            <div style={{ fontSize: 40, marginBottom: 10, color: getMeta(filter).color }}>
+              <Icon name={getMeta(filter).emoji} size={40}/>
+            </div>
             <p style={{ fontSize: 14, color: 'var(--ak-text-muted)', fontWeight: 700 }}>
               {filter === 'all' ? 'No activities yet' : `No ${activeLabel.toLowerCase()} yet`}
             </p>

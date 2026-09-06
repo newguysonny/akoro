@@ -210,12 +210,12 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
   return (
     <div style={{ padding:'20px 0 0' }}>
       {/* Quick-link cards — one design (same as the original Order history
-          card): tinted icon chip, title + sub, chevron. Order history and
-          Activities are live; Library is coming-soon. */}
+          card): tinted icon chip, title + sub, chevron. Order history,
+          Activities and Library are live. */}
       {[
         { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
         { icon:'ti-activity', title:'settings.activities',    sub:'settings.activities_sub',    go:()=>navigate('/activities') },
-        { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>showToast(t('settings.soon_toast')) },
+        { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
       ].map(card => (
         <button key={card.title} onClick={card.go}
           style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
