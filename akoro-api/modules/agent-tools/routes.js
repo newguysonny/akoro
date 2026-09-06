@@ -19,7 +19,11 @@ import {
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
 const MAX_CATALOGUE = 24;
-const STUDENT_WRITE_TOOLS = new Set(["create_task", "schedule_chat_follow_up"]);
+const STUDENT_WRITE_TOOLS = new Set([
+  "create_task",
+  "schedule_chat_follow_up",
+  "cancel_scheduled_chat_follow_up",
+]);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);
@@ -189,6 +193,15 @@ function validateStudentArguments(name, arguments_) {
       shortText(arguments_.scheduledAt, "scheduledAt", true, 64);
       shortText(arguments_.timezone, "timezone", false, 80);
       shortText(arguments_.title, "title", false, 80);
+      return;
+    case "list_scheduled_chat_follow_ups":
+      only(new Set());
+      return;
+    case "cancel_scheduled_chat_follow_up":
+      only(new Set(["followUpId"]));
+      if (typeof arguments_.followUpId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(arguments_.followUpId)) {
+        throw new GatewayError(422, "followUpId is invalid");
+      }
       return;
     default:
       throw new GatewayError(404, "Student tool is not available");

@@ -175,13 +175,15 @@ derives authority from the signed capability plus current user/task state,
 validates tool arguments, applies entitlement gates, and honours the durable
 idempotency key. It never trusts `studentId` in a Python request as authority.
 
-Student sessions receive seven account tools: `check_progress`, `create_task`,
-`schedule_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`, and
-`get_weak_topics`. `schedule_chat_follow_up` creates a durable delayed job;
+Student sessions receive nine account tools: `check_progress`, `create_task`,
+`schedule_chat_follow_up`, `list_scheduled_chat_follow_ups`,
+`cancel_scheduled_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`,
+and `get_weak_topics`. `schedule_chat_follow_up` creates a durable delayed job;
 at delivery Akoro creates a new persistent Agent Chat, seeds its message, and
-sends the learner an in-app/socket/push notification. It requires a future ISO
-8601 `scheduledAt` value with an offset and an explicit learner request; Akoro's
-Redis-backed worker delivers it. A signed teacher-task
+sends the learner an in-app/socket/push notification. The list tool shows
+pending deliveries and the cancellation tool can cancel one by its `followUpId`.
+Scheduling requires a future ISO 8601 `scheduledAt` value with an offset and an
+explicit learner request; Akoro's Redis-backed worker delivers it. A signed teacher-task
 context receives the existing task-agent catalogue—quiz, lesson, worksheet,
 report, exam-prep, attendance, interactive, grading, scheduling, battle,
 self-study, and teaching-library tools—only while that task run remains active

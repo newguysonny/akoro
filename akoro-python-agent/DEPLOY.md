@@ -85,13 +85,16 @@ Content-Type: application/json
 {"success":true,"result":{"completion":61}}
 ```
 
-A student-scoped capability currently receives seven adaptive-chat functions:
-`check_progress`, `create_task`, `schedule_chat_follow_up`, `list_tasks`,
-`find_battles`, `get_ranking`, and `get_weak_topics`. `create_task` and
-`schedule_chat_follow_up` are marked side-effecting. The follow-up tool stores
-a delayed delivery, then opens a new persistent Agent Chat and notifies the
-learner at its offset-aware scheduled time. Delivery requires `REDIS_URL` on
-Akoro API so its BullMQ follow-up worker can run. A teacher-task capability
+A student-scoped capability currently receives nine adaptive-chat functions:
+`check_progress`, `create_task`, `schedule_chat_follow_up`,
+`list_scheduled_chat_follow_ups`, `cancel_scheduled_chat_follow_up`,
+`list_tasks`, `find_battles`, `get_ranking`, and `get_weak_topics`. `create_task`,
+`schedule_chat_follow_up`, and `cancel_scheduled_chat_follow_up` are marked
+side-effecting. The follow-up tool stores a delayed delivery, then opens a new
+persistent Agent Chat and notifies the learner at its offset-aware scheduled
+time. The list and cancellation tools provide learner-owned schedule management.
+Delivery requires `REDIS_URL` on Akoro API so its BullMQ follow-up worker can run.
+A teacher-task capability
 receives the existing task-agent tool catalogue,
 including quiz, lesson-plan, worksheet, report, exam-prep, attendance,
 interactive-material, grading, scheduling, battle, self-study, and teaching

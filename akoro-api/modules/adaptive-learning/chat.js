@@ -35,7 +35,11 @@ import {
 } from "./agents/student/knowledge.js";
 import { decayEngine } from "./agents/student/decayEngine.js";
 import { activeSessions } from "./websocket.js";
-import { scheduleChatFollowUp } from "./chat-follow-ups.js";
+import {
+  cancelChatFollowUp,
+  listChatFollowUps,
+  scheduleChatFollowUp,
+} from "./chat-follow-ups.js";
 
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -179,6 +183,22 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "list_scheduled_chat_follow_ups",
+    description: "List the student's still-pending scheduled Agent Chat messages. Use when they ask what check-ins are scheduled.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "cancel_scheduled_chat_follow_up",
+    description: "Cancel one pending scheduled Agent Chat message. Use only after the student explicitly asks to cancel it and has identified the scheduled follow-up.",
+    input_schema: {
+      type: "object",
+      properties: {
+        followUpId: { type: "string", description: "The followUpId returned by list_scheduled_chat_follow_ups or schedule_chat_follow_up." },
+      },
+      required: ["followUpId"],
+    },
+  },
+  {
     name: "list_tasks",
     description: "Get the student's pending tasks sorted by priority.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -239,6 +259,20 @@ export async function executeChatTool(name, input, studentId) {
         return { scheduled: true, ...schedule };
       } catch (error) {
         return { error: error.message || "Could not schedule the chat follow-up" };
+      }
+    }
+    case "list_scheduled_chat_follow_ups": {
+      try {
+        return await listChatFollowUps({ userId: studentId });
+      } catch (error) {
+        return { error: error.message || "Could not load scheduled chat follow-ups" };
+      }
+    }
+    case "cancel_scheduled_chat_follow_up": {
+      try {
+        return await cancelChatFollowUp({ userId: studentId, followUpId: input.followUpId });
+      } catch (error) {
+        return { error: error.message || "Could not cancel the chat follow-up" };
       }
     }
     case "list_tasks": {
@@ -1159,9 +1193,9 @@ async function handleStudentChatWithTools(req, res, studentId, message, history,
     `\nYou have been taught across ${agent.total_sessions} sessions.` +
     knowledgeCtx +
     (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
-    `\n\nYou can also use tools to check the student's real progress, tasks, battles, rankings, and to schedule a new future Agent Chat message.` +
+    `\n\nYou can also use tools to check the student's real progress, tasks, battles, rankings, and manage future Agent Chat messages.` +
     `\nAnswer from your knowledge when you can. Use tools when the student asks about their actual data.` +
-    `\nOnly schedule a future chat after the student explicitly asks for it. scheduledAt must be a future ISO 8601 timestamp with a timezone offset. Current UTC time: ${currentUtc}. Use the student's stated timezone, or Africa/Lagos only if none is stated.` +
+    `\nOnly schedule or cancel a future chat after the student explicitly asks for it. scheduledAt must be a future ISO 8601 timestamp with a timezone offset. Current UTC time: ${currentUtc}. Use the student's stated timezone, or Africa/Lagos only if none is stated. List pending follow-ups before cancelling unless the request includes a valid followUpId.` +
     `\nIf you don't know something: "I haven't been taught about that yet — teach me!"`;
 
   const messages = [

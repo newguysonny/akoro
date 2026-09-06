@@ -4,6 +4,7 @@ const MIN_DELAY_MS = 60_000;
 const MAX_DELAY_MS = 180 * 24 * 60 * 60 * 1000;
 const ISO_WITH_OFFSET = /(?:Z|[+-]\d{2}:\d{2})$/i;
 const TIME_ZONE_FALLBACK = "Africa/Lagos";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function limitedText(value, label, { required = false, max = 800 } = {}) {
   if (value === undefined || value === null || value === "") {
@@ -36,4 +37,11 @@ export function validateFollowUpInput(input = {}) {
   if (delayMs < MIN_DELAY_MS) throw new Error("scheduledAt must be at least one minute in the future");
   if (delayMs > MAX_DELAY_MS) throw new Error("scheduledAt must be within 180 days");
   return { message, title, timezone, scheduledAt: time.toISOString(), delayMs };
+}
+
+export function validateFollowUpId(value) {
+  if (typeof value !== "string" || !UUID.test(value)) {
+    throw new Error("followUpId is invalid");
+  }
+  return value;
 }

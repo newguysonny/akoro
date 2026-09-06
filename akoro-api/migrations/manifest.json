@@ -118,7 +118,8 @@
     "2026-communities.sql",
     "2026-community-activities.sql",
     "2026-agent-tools-gateway.sql",
-    "2026-scheduled-chat-follow-ups.sql"
+    "2026-scheduled-chat-follow-ups.sql",
+    "2026-scheduled-chat-follow-ups-delivery-state.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
