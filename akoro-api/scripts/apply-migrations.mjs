@@ -3,11 +3,13 @@
  * apply-migrations.mjs
  * ─────────────────────────────────────────────────────────────
  * Runs the ordered SQL migrations in migrations/manifest.json against
- * DATABASE_URL. Every schema file is idempotent (IF NOT EXISTS / DO $$ /
- * ON CONFLICT), so this is safe to run on every deploy.
+ * MIGRATION_DATABASE_URL when it is set, otherwise DATABASE_URL (then legacy
+ * DB_URL). Every schema file is idempotent (IF NOT EXISTS / DO $$ / ON
+ * CONFLICT), so this is safe to run on every deploy.
  *
  * Usage (from akoro-api/):
  *   DATABASE_URL=postgres://…:6543/postgres node scripts/apply-migrations.mjs
+ *   MIGRATION_DATABASE_URL=postgres://…:5432/postgres node scripts/apply-migrations.mjs
  *   node scripts/apply-migrations.mjs --group=schema     (default; every deploy)
  *   node scripts/apply-migrations.mjs --group=demo       (sample data — never prod)
  *   node scripts/apply-migrations.mjs --group=all
