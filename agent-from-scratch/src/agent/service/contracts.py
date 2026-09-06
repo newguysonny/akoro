@@ -23,6 +23,10 @@ class StartSessionRequest(Contract):
     teacher_agent_id: str | None = Field(default=None, alias="teacherAgentId", max_length=180)
     session_id: str | None = Field(default=None, alias="sessionId", max_length=180)
     mode: Literal["fresh", "continuation", "decay"] = "fresh"
+    # Opaque, short-lived capability created by Akoro API after it authenticates
+    # and authorises the browser request. Python only relays it to the private
+    # tools API and never parses it as identity or permission data.
+    tool_context: str | None = Field(default=None, alias="toolContext", min_length=1, max_length=4096)
     reference: ReferenceRequest | None = None
 
 

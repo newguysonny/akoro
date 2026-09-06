@@ -15,6 +15,7 @@ from agent.adaptive.student import StudentAgent
 from agent.adaptive.types import AdaptiveSession
 from agent.reasoning.teaching import TeachingPlan
 from agent.state.teaching_state import PHASE_LABELS, ProgressionPolicy
+from agent.tools.akoro_api import AkoroToolSession
 
 _ACTION_LABELS = {
     "DIG_DEEPER": "Dig deeper",
@@ -33,10 +34,12 @@ _ACTION_LABELS = {
 class AdaptiveTeachingLoop:
     """Coordinates agent roles while preserving hard state and privacy limits."""
 
-    def __init__(self, repository: LearningRepository, model: TeachingModel, session: AdaptiveSession) -> None:
+    def __init__(self, repository: LearningRepository, model: TeachingModel, session: AdaptiveSession,
+                 tools: AkoroToolSession | None = None) -> None:
         self._repository = repository
         self._model = model
         self.session = session
+        self._tools = tools
         self._guide = NaNaGuide(model)
         self._progression = ProgressionPolicy()
         self._profile = None
@@ -55,7 +58,9 @@ class AdaptiveTeachingLoop:
         )
         self.session.knowledge_map = list(plan.steps)
         self.session.must_know_parts = plan.titles
-        self._student = StudentAgent(self._profile, self._repository, self._model, self.session.subject, self.session.reference)
+        self._student = StudentAgent(
+            self._profile, self._repository, self._model, self.session.subject, self.session.reference, self._tools,
+        )
         cognitive = self._repository.get_cognitive_state(self._profile.id, self.session.topic)
         current = self._current_subtopic()
         opening_blocks = [
@@ -96,6 +101,10 @@ class AdaptiveTeachingLoop:
             "initialState": cognitive.as_percentages(),
             # Metadata only: source text never crosses the service boundary.
             "reference": self.session.reference.metadata() if self.session.reference else None,
+            "tools": {
+                "enabled": bool(self._tools and self._tools.enabled),
+                "available": self._tools.public_catalogue() if self._tools else [],
+            },
             "guideProfile": {"name": self._guide.name, "emoji": self._guide.emoji},
             "agentPairId": "student-session",
         }
@@ -168,6 +177,10 @@ class AdaptiveTeachingLoop:
         return {
             "type": "teaching_response",
             "studentAgentResponse": student_reply,
+            # This structured audit field is intentionally result-free. The
+            # model may use bounded data to answer the teacher's question, but
+            # callers do not receive a second raw tool-result payload here.
+            "toolExecutions": self._student.last_tool_executions,
             "guideMessage": guide["tip"],
             "guideIsUrgent": guide["isUrgent"],
             "guideName": self._guide.name,

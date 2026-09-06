@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Protocol, Sequence
 
-from agent.llm.client import OpenAIChatClient
+from agent.llm.client import LLMResponse, OpenAIChatClient
 from agent.llm.messages import Message
 
 
@@ -17,6 +17,10 @@ class OpenAIAdaptiveModel:
 
     def __init__(self, client: OpenAIChatClient) -> None:
         self._client = client
+
+    def complete(self, messages: Sequence[Message], tools: Sequence[dict]) -> LLMResponse:
+        """Function-calling surface used only when a session has Akoro tools."""
+        return self._client.complete(messages, tools)
 
     def complete_text(self, messages: Sequence[Message], temperature: float = 0.4) -> str:
         return self._client.complete_text(messages, temperature)

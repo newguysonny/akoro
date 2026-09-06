@@ -18,7 +18,7 @@ without exposing the browser directly to it.
 src/agent/
 ├── llm/          # environment config, provider client, typed chat messages
 ├── reasoning/    # compact task planning and permission-aware decisions
-├── tools/        # registry, safe calculator, bounded web search
+├── tools/        # registry, local utilities, and the Akoro API tools gateway
 ├── memory/       # recent context, durable JSON memory, live teaching transcript
 ├── state/        # agent-run state, validated phases, concurrency-safe live sessions
 ├── environment/  # workspace-only filesystem boundary
@@ -44,6 +44,10 @@ memory belongs to the local runtime, not source control.
 - **`adaptive`** contains the Student Agent and NaNa-style domain roles plus a
   persistence protocol. It has no FastAPI dependency.
 - **`permissions`** default-denies tools and protects the internal service.
+- **`tools/akoro_api.py`** is the only outbound path to account-aware tools. It
+  loads an Akoro API-provided, per-session catalogue and relays model calls
+  using an opaque Akoro-issued capability; it does not contain database logic
+  or browser tokens.
 
 This separation makes each layer unit-testable and lets the current evaluation
 repository be swapped for a protected Akoro API repository without changing
@@ -80,6 +84,50 @@ session. It returns camel-case response fields aligned with the existing
 Socket.IO payloads. See [`DEPLOY.md`](DEPLOY.md) for the server-to-server
 contract, authentication boundary, deployment settings, and the staged Akoro
 API integration plan.
+
+## Account-aware Akoro API tools
+
+The adaptive service can enrich a **Student Agent** reply with live Akoro data
+only when the Akoro API grants a session-scoped catalogue. It does not access
+Supabase or reuse a browser JWT. Configure the full private gateway root and a
+separate, outbound-only secret:
+
+```bash
+AKORO_AGENT_TOOLS_URL=https://api.akoro.app/api/internal/agent-tools/v1
+AKORO_AGENT_TOOLS_SECRET=<different-long-random-secret>
+```
+
+When starting a Python session, the authenticated Akoro API bridge may include
+an opaque, short-lived `toolContext`. Python never reads this value as an
+identity claim; it relays it to the tools gateway on catalogue and invoke
+requests. Without both environment settings **and** `toolContext`, no remote
+functions are shown to the model.
+
+The expected Akoro API contract is intentionally small:
+
+| Request | Body | Required response |
+|---|---|---|
+| `POST {AKORO_AGENT_TOOLS_URL}/catalog` | `sessionId`, `toolContext` | `{"tools":[{"name","description","inputSchema","sideEffecting","maxCalls"}]}` |
+| `POST {AKORO_AGENT_TOOLS_URL}/invoke` | `sessionId`, `toolContext`, `tool`, `arguments`, `idempotencyKey` | `{"success":true,"result":{...}}` or `{"success":false,"error":"..."}` |
+
+Python sends `X-Akoro-Tools-Secret` only on those private outbound requests.
+The Akoro API must validate that secret, validate and expire `toolContext`,
+derive user/tenant authority from that capability or its own session record,
+validate tool arguments, enforce entitlements, and honour the idempotency key.
+It must not trust `studentId` in a Python request as authorization.
+
+Catalogues support Akoro's existing `input_schema` spelling as well as
+`inputSchema`. The service caps catalogues at 24 functions, invocation
+arguments at 12 KB, tool data added to model context at 12 KB, and calls at the
+configured per-session limit. Only result-free execution metadata is returned
+in `toolExecutions`; the raw structured result is not echoed as an API field
+(the model may use bounded facts from it in its natural-language reply).
+
+Read tools are available by default once Akoro grants them. Tools marked
+`sideEffecting: true` are blocked locally unless
+`AGENT_ALLOW_SIDE_EFFECTING_TOOLS=true`; leave that default in place until the
+Akoro API has a confirmed-action workflow. Akoro API authorization remains the
+final and mandatory enforcement point in either case.
 
 ## Examples
 

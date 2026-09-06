@@ -18,6 +18,13 @@ internal credential.
    AKORO_AGENT_SERVICE_SECRET=<long random value>
    AGENT_SESSION_TTL_SECONDS=1800
    AKORO_API_URL=https://api.akoro.app       # reserved for persistence bridge
+
+   # Optional: Akoro API's private account-aware tools gateway.
+   AKORO_AGENT_TOOLS_URL=https://api.akoro.app/api/internal/agent-tools/v1
+   AKORO_AGENT_TOOLS_SECRET=<different long random value>
+   AGENT_TOOL_TIMEOUT_SECONDS=12
+   AGENT_TOOL_MAX_CALLS_PER_SESSION=4
+   AGENT_ALLOW_SIDE_EFFECTING_TOOLS=false
    ```
 
 3. Verify the unauthenticated health endpoint:
@@ -31,6 +38,77 @@ internal credential.
 introduced. In that mode, active sessions and memory are process-local and are
 lost at restart. This is intentional for isolated testing; it is not a durable
 production data path.
+
+## Akoro API tools gateway contract
+
+The Python service can call **only** an Akoro API tool gateway configured by
+`AKORO_AGENT_TOOLS_URL`; it has no direct database credentials. This setting is
+a full private base URL, not a browser-facing URL. Pair it with
+`AKORO_AGENT_TOOLS_SECRET`, an independently rotatable outbound credential.
+Python sends that value in `X-Akoro-Tools-Secret`, while the existing
+`X-Akoro-Agent-Secret` remains exclusively for inbound Akoro API → Python
+session calls.
+
+The Akoro API endpoint should provide these authenticated internal routes:
+
+```http
+POST /api/internal/agent-tools/v1/catalog
+X-Akoro-Tools-Secret: <outbound secret>
+Content-Type: application/json
+
+{"sessionId":"...","toolContext":"<opaque Akoro-issued capability>"}
+```
+
+```json
+{
+  "tools": [
+    {
+      "name": "check_progress",
+      "description": "Read the current learner progress.",
+      "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false},
+      "sideEffecting": false,
+      "maxCalls": 2
+    }
+  ]
+}
+```
+
+```http
+POST /api/internal/agent-tools/v1/invoke
+X-Akoro-Tools-Secret: <outbound secret>
+Content-Type: application/json
+
+{"sessionId":"...","toolContext":"<opaque capability>","tool":"check_progress","arguments":{},"idempotencyKey":"<model-tool-call-id>"}
+```
+
+```json
+{"success":true,"result":{"completion":61}}
+```
+
+The Akoro API must authenticate the gateway credential, validate and expire the
+opaque `toolContext`, resolve the authenticated learner and tenant from its own
+state, filter the catalogue by entitlement, validate arguments, apply rate
+limits, and enforce idempotency. It must not use a caller-supplied `studentId`
+as authority. It should return tool output as data only—never trusted prompt
+instructions.
+
+Pass the opaque capability only when creating a session:
+
+```json
+{"studentId":"derived-by-akoro-api","topic":"Photosynthesis","toolContext":"<short-lived capability>"}
+```
+
+The service opens the catalogue once for that live session. It returns safe
+catalogue metadata in `session_ready` and result-free `toolExecutions` metadata
+on a teaching turn. Raw structured tool data is bounded and not echoed as an
+API field; the model may use relevant bounded facts in its natural-language
+reply. Calls are capped per session, and malformed/unavailable tools fail
+closed without ending a valid teaching session.
+
+Tools with `sideEffecting: true` are denied by default by the Python service.
+Keep `AGENT_ALLOW_SIDE_EFFECTING_TOOLS=false` until an explicit Akoro API
+confirmed-action flow is deployed; backend authorization remains mandatory even
+if it is enabled later.
 
 ## Future akoro-api bridge contract
 

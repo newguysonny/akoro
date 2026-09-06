@@ -129,6 +129,9 @@ class AdaptiveSession:
     subject: str | None = None
     session_type: Literal["free_teaching", "continuation", "decay_review"] = "free_teaching"
     teacher_agent_id: str | None = None
+    # Opaque, signed-by-Akoro context. Python stores and relays this only; it
+    # never treats browser-provided identity fields as tool authority.
+    tool_context: str | None = None
     progress: TeachingState = field(default_factory=TeachingState)
     must_know_parts: list[str] = field(default_factory=list)
     knowledge_map: list[LessonStep] = field(default_factory=list)

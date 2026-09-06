@@ -29,7 +29,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or ServiceSettings.from_env()
     runtime = runtime or build_adaptive_service_runtime(settings, model=model, repository=repository)
-    app = FastAPI(title="Akoro Adaptive Agent Service", version="0.3.0")
+    app = FastAPI(title="Akoro Adaptive Agent Service", version="0.4.0")
     app.state.settings = settings
     app.state.runtime = runtime
 
@@ -45,11 +45,16 @@ def create_app(
         return {
             "ok": True,
             "service": "adaptive-agent",
-            "version": "0.3.0",
+            "version": "0.4.0",
             "activeSessions": runtime.sessions.active_count(),
             "persistence": type(runtime.repository).__name__,
             "akoroApiConfigured": bool(settings.akoro_api_url),
             "authConfigured": bool(settings.internal_secret),
+            "tools": {
+                "configured": runtime.tools_configured,
+                "provider": "akoro-api" if runtime.tools_configured else None,
+                "sideEffectingToolsEnabled": runtime.allow_side_effecting_tools,
+            },
         }
 
     @app.get("/ready")
@@ -60,6 +65,7 @@ def create_app(
             "ready": True,
             "mode": "evaluation" if isinstance(runtime.repository, InMemoryLearningRepository) else "integrated",
             "akoroApiConfigured": bool(settings.akoro_api_url),
+            "toolsConfigured": runtime.tools_configured,
         }
 
     @app.post("/v1/sessions", dependencies=[Depends(require_internal_caller)])
@@ -71,6 +77,7 @@ def create_app(
             topic=payload.topic.strip(),
             subject=payload.subject.strip() if payload.subject else None,
             teacher_agent_id=payload.teacher_agent_id,
+            tool_context=payload.tool_context,
             session_type=session_type,
             reference=SessionReference.from_payload(payload.reference.model_dump() if payload.reference else None),
         )

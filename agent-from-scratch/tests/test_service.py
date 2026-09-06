@@ -12,9 +12,13 @@ os.environ.setdefault("AGENT_SERVICE_ENVIRONMENT", "development")
 from fastapi.testclient import TestClient
 
 from agent.adaptive.repository import InMemoryLearningRepository
+from agent.harness.adaptive_service import build_adaptive_service_runtime
+from agent.llm.client import LLMResponse
 from agent.llm.config import LLMConfig
+from agent.llm.messages import ToolCall
 from agent.service.api import create_app
 from agent.service.settings import ServiceSettings
+from agent.tools.akoro_api import AkoroToolsClient
 
 
 class FakeServiceModel:
@@ -33,6 +37,44 @@ class FakeServiceModel:
 
     def complete_json(self, messages, temperature=0.0):
         return self.json_responses.pop(0)
+
+
+class ToolEnabledServiceModel(FakeServiceModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tool_rounds = 0
+
+    def complete(self, messages, tools):
+        self.tool_rounds += 1
+        if self.tool_rounds == 1:
+            self.asserted_tool_name = tools[0]["function"]["name"]
+            return LLMResponse("", (ToolCall("tool-call-1", "check_progress", {}),))
+        return LLMResponse("I checked the current progress: it is 61 percent.")
+
+
+class ToolTransport:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def __call__(self, url, payload, headers, _timeout):
+        self.calls.append((url, payload, headers))
+        if url.endswith("/catalog"):
+            return {"tools": [{
+                "name": "check_progress", "description": "Read current progress.",
+                "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+            }]}
+        return {"success": True, "result": {"completion": 61, "privateIdentifier": "never-return-directly"}}
+
+
+class ServiceSettingsTests(unittest.TestCase):
+    def test_tools_gateway_variables_are_an_all_or_nothing_secure_pair(self) -> None:
+        base = {"OPENAI_API_KEY": "test", "AGENT_SERVICE_ENVIRONMENT": "production", "AKORO_AGENT_SERVICE_SECRET": "inbound"}
+        with self.assertRaisesRegex(ValueError, "configured together"):
+            ServiceSettings.from_env({**base, "AKORO_AGENT_TOOLS_URL": "https://api.example.test/internal/tools"})
+        with self.assertRaisesRegex(ValueError, "HTTPS"):
+            ServiceSettings.from_env({**base, "AKORO_AGENT_TOOLS_URL": "http://api.example.test/internal/tools", "AKORO_AGENT_TOOLS_SECRET": "outbound"})
+        settings = ServiceSettings.from_env({**base, "AKORO_AGENT_TOOLS_URL": "https://api.example.test/internal/tools", "AKORO_AGENT_TOOLS_SECRET": "outbound"})
+        self.assertTrue(settings.tools_configured)
 
 
 class ServiceContractTests(unittest.TestCase):
@@ -69,3 +111,29 @@ class ServiceContractTests(unittest.TestCase):
         self.assertEqual(end.status_code, 200)
         self.assertEqual(end.json()["summary"]["agentGrowth"]["totalSessions"], 1)
         self.assertEqual(self.client.get("/v1/sessions/python-session-1/summary", headers=self.headers).status_code, 404)
+
+    def test_session_uses_only_akoro_catalogue_tools_and_returns_result_free_audit_metadata(self) -> None:
+        transport = ToolTransport()
+        runtime = build_adaptive_service_runtime(
+            self.client.app.state.settings,
+            model=ToolEnabledServiceModel(),
+            repository=InMemoryLearningRepository(),
+            tools_client=AkoroToolsClient("https://api.example.test/internal/tools", "outbound-secret", transport=transport),
+        )
+        client = TestClient(create_app(self.client.app.state.settings, runtime=runtime))
+        start = client.post("/v1/sessions", headers=self.headers, json={
+            "studentId": "learner-1", "topic": "Plants", "sessionId": "tool-session-1",
+            "toolContext": "opaque-signed-context",
+        })
+        self.assertEqual(start.status_code, 200)
+        self.assertEqual(start.json()["tools"], {
+            "enabled": True,
+            "available": [{"name": "check_progress", "description": "Read current progress.", "sideEffecting": False}],
+        })
+
+        turn = client.post("/v1/sessions/tool-session-1/turns", headers=self.headers, json={"message": "What is my current progress?"})
+        self.assertEqual(turn.status_code, 200)
+        self.assertEqual(turn.json()["studentAgentResponse"], "I checked the current progress: it is 61 percent.")
+        self.assertEqual(turn.json()["toolExecutions"], [{"tool": "check_progress", "success": True, "sideEffecting": False}])
+        self.assertNotIn("privateIdentifier", turn.text)
+        self.assertEqual(transport.calls[1][1]["toolContext"], "opaque-signed-context")
