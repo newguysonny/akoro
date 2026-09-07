@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent.adaptive.akoro_concept_state import AkoroConceptStateClient, AkoroConceptStateError
+from agent.adaptive.akoro_learning_insights import AkoroLearningInsightsClient, AkoroLearningInsightsError
 from agent.adaptive.concept_repository import AkoroConceptLearningRepository
 from agent.adaptive.model import OpenAIAdaptiveModel, TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
@@ -26,10 +27,12 @@ class AdaptiveServiceRuntime:
     tools_client: AkoroToolsClient | None = None
     conversation_client: AkoroConversationClient | None = None
     concept_state_client: AkoroConceptStateClient | None = None
+    learning_insights_client: AkoroLearningInsightsClient | None = None
     tool_max_calls_per_session: int = 4
     write_confirmation_proposals: bool = False
     allow_side_effecting_tools: bool = False
     enable_concept_state: bool = False
+    enable_learning_insights: bool = False
 
     @property
     def tools_configured(self) -> bool:
@@ -39,9 +42,10 @@ class AdaptiveServiceRuntime:
         tools = self._open_tools(session)
         conversation_store = self._open_conversation(session)
         repository = self._repository_for_session(session)
+        insights_store = self._open_learning_insights(session)
         loop = AdaptiveTeachingLoop(
             repository, self.model, session, tools=tools,
-            conversation_store=conversation_store,
+            conversation_store=conversation_store, learning_insights_store=insights_store,
         )
         ready = loop.initialize()
         self.sessions.create(loop)
@@ -60,6 +64,15 @@ class AdaptiveServiceRuntime:
             topic_key=session.topic_key,
         )
         return AkoroConceptLearningRepository(self.repository, concept_session)
+
+    def _open_learning_insights(self, session: AdaptiveSession):
+        if not self.enable_learning_insights:
+            return None
+        if not self.learning_insights_client or not session.tool_context:
+            raise AkoroLearningInsightsError("Akoro learning insights are not configured for this session")
+        return self.learning_insights_client.open_session(
+            session_id=session.session_id, tool_context=session.tool_context,
+        )
 
     def _open_conversation(self, session: AdaptiveSession) -> AkoroConversationSession | None:
         if not session.conversation_id:
@@ -100,6 +113,7 @@ def build_adaptive_service_runtime(
     tools_client: AkoroToolsClient | None = None,
     conversation_client: AkoroConversationClient | None = None,
     concept_state_client: AkoroConceptStateClient | None = None,
+    learning_insights_client: AkoroLearningInsightsClient | None = None,
 ) -> AdaptiveServiceRuntime:
     repository = repository or InMemoryLearningRepository()
     model = model or OpenAIAdaptiveModel(OpenAIChatClient(settings.llm))
@@ -123,6 +137,12 @@ def build_adaptive_service_runtime(
             settings.akoro_tools_api_secret or "",
             settings.tool_timeout_seconds,
         )
+    if learning_insights_client is None and settings.enable_learning_insights:
+        learning_insights_client = AkoroLearningInsightsClient(
+            settings.akoro_tools_api_url or "",
+            settings.akoro_tools_api_secret or "",
+            settings.tool_timeout_seconds,
+        )
     return AdaptiveServiceRuntime(
         repository=repository,
         model=model,
@@ -131,8 +151,10 @@ def build_adaptive_service_runtime(
         tools_client=tools_client,
         conversation_client=conversation_client,
         concept_state_client=concept_state_client,
+        learning_insights_client=learning_insights_client,
         tool_max_calls_per_session=settings.tool_max_calls_per_session,
         write_confirmation_proposals=settings.write_confirmation_proposals,
         allow_side_effecting_tools=settings.allow_side_effecting_tools,
         enable_concept_state=settings.enable_concept_state,
+        enable_learning_insights=settings.enable_learning_insights,
     )

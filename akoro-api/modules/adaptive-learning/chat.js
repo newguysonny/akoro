@@ -52,6 +52,10 @@ import { localiseInstant } from "./learner-time-context.js";
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
 const query      = (text, params) => pool.query(text, params);
+// The measured learner-profile slice is a separate additive deployment. Keep
+// the legacy JavaScript teaching/session engine unchanged while its migration
+// and learner controls are being rolled out.
+const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED || "").toLowerCase() === "true";
 
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
@@ -485,6 +489,68 @@ router.patch("/autonomy", async (req, res) => {
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not save agent autonomy" });
+  }
+});
+
+// =============================================================
+// LEARNER-OWNED MEASURED STUDY INSIGHTS — profile + compact episodes
+// =============================================================
+
+router.get("/learning-insights", async (req, res) => {
+  if (!learnerInsightsEnabled) return res.json({ success: true, enabled: false, profile: null, episodes: [] });
+  try {
+    const [profileResult, episodesResult] = await Promise.all([
+      db.schema("edu").from("learner_teaching_profiles")
+        .select("evidence_count, profile_confidence, mean_attention, mean_fatigue, mean_reasoning_quality, reasoning_style, pacing_recommendation, policy_version, expires_at")
+        .eq("learner_id", req.user.id).maybeSingle(),
+      db.schema("edu").from("learner_learning_episodes")
+        .select("concept_id, kind, summary, occurred_at")
+        .eq("learner_id", req.user.id).order("occurred_at", { ascending: false }).limit(12),
+    ]);
+    if (profileResult.error || episodesResult.error) throw profileResult.error || episodesResult.error;
+    const profile = profileResult.data ? {
+      evidenceCount: Number(profileResult.data.evidence_count || 0),
+      profileConfidence: Number(profileResult.data.profile_confidence || 0),
+      meanAttention: Number(profileResult.data.mean_attention || 0),
+      meanFatigue: Number(profileResult.data.mean_fatigue || 0),
+      meanReasoningQuality: Number(profileResult.data.mean_reasoning_quality || 0),
+      reasoningStyle: profileResult.data.reasoning_style,
+      pacingRecommendation: profileResult.data.pacing_recommendation,
+      policyVersion: profileResult.data.policy_version,
+      expiresAt: profileResult.data.expires_at,
+    } : null;
+    const episodes = (episodesResult.data || []).map((episode) => ({
+      conceptId: episode.concept_id, kind: episode.kind,
+      summary: String(episode.summary || "").slice(0, 420), occurredAt: episode.occurred_at,
+    }));
+    return res.json({ success: true, enabled: true, profile, episodes });
+  } catch (error) {
+    return res.status(503).json({ success: false, error: "Learning insights are unavailable" });
+  }
+});
+
+router.delete("/learning-insights", async (req, res) => {
+  if (!learnerInsightsEnabled) return res.status(409).json({ success: false, error: "Learning insights are not enabled" });
+  const scope = String(req.body?.scope || "all").toLowerCase();
+  if (!["all", "profile", "episodes"].includes(scope)) {
+    return res.status(422).json({ success: false, error: "scope must be all, profile, or episodes" });
+  }
+  try {
+    const removals = [];
+    // Profile reset includes source measurements; otherwise a later turn would
+    // immediately recreate the same profile from retained measurements.
+    if (scope === "all" || scope === "profile") {
+      removals.push(db.schema("edu").from("learner_turn_measurements").delete().eq("learner_id", req.user.id));
+      removals.push(db.schema("edu").from("learner_teaching_profiles").delete().eq("learner_id", req.user.id));
+    }
+    if (scope === "all" || scope === "episodes") {
+      removals.push(db.schema("edu").from("learner_learning_episodes").delete().eq("learner_id", req.user.id));
+    }
+    const outcomes = await Promise.all(removals);
+    if (outcomes.some(({ error }) => error)) throw new Error("clear failed");
+    return res.json({ success: true, cleared: scope });
+  } catch (error) {
+    return res.status(503).json({ success: false, error: "Learning insights could not be cleared" });
   }
 });
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from agent.adaptive.concepts import LearnerConceptState
+from agent.adaptive.learner_signals import LearningMeasurement
 from agent.memory.session_memory import SessionTranscript
 from agent.permissions.internal import InternalServicePolicy
 from agent.state.teaching_state import CognitiveProgressState, CognitiveProgressionEngine
@@ -99,6 +100,29 @@ class CognitiveProgressionEngineTests(unittest.TestCase):
         self.assertFalse(transition.objective_advanced)
         self.assertEqual(transition.learning_mode, "retrieve")
         self.assertEqual(transition.reason, "low_retention")
+
+    def test_a_current_validated_fatigue_signal_holds_progress_for_a_shorter_chunk(self) -> None:
+        state = CognitiveProgressState()
+        transition = CognitiveProgressionEngine().apply(
+            state, total_objectives=3, understanding=.95, confusion=.05, engagement=.95,
+            turn_understanding=.95, agent_level=1, knowledge_score=0,
+            learner_signal=LearningMeasurement(.90, .80, .85, "causal", "observed"),
+        )
+        self.assertFalse(transition.objective_advanced)
+        self.assertEqual(transition.learning_mode, "clarify")
+        self.assertEqual(transition.reason, "fatigue_or_attention_requires_shorter_chunk")
+        self.assertTrue(transition.learner_signal_used)
+        self.assertEqual(transition.public()["learnerSignalPolicyVersion"], "learner-signals-v1")
+
+    def test_stale_or_not_checked_signal_cannot_change_progress(self) -> None:
+        state = CognitiveProgressState()
+        transition = CognitiveProgressionEngine().apply(
+            state, total_objectives=3, understanding=.95, confusion=.05, engagement=.95,
+            turn_understanding=.95, agent_level=1, knowledge_score=0,
+            learner_signal=LearningMeasurement(),
+        )
+        self.assertTrue(transition.objective_advanced)
+        self.assertFalse(transition.learner_signal_used)
 
     def test_mastery_is_recognised_only_at_final_objective_with_high_evidence(self) -> None:
         state = CognitiveProgressState(objective_index=2)

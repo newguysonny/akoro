@@ -18,6 +18,15 @@ from statistics import fmean
 from typing import Iterable, Protocol
 
 
+class LearnerSignalEvidence(Protocol):
+    """Policy-versioned, bounded turn signal supplied by the insights contract."""
+    attention: float
+    fatigue: float
+    reasoning_quality: float
+    measurement_status: str
+    policy_version: str
+
+
 class ConceptEvidence(Protocol):
     mastery: float
     retention: float
@@ -37,6 +46,11 @@ class CognitivePolicy:
     low_retention: float = 0.45
     minimum_canonical_evidence: int = 1
     maximum_profile_adjustment: float = 0.08
+    # Only a contemporaneous schema-validated turn signal can hold objective
+    # movement for pacing. A slow-moving profile is presentation-only.
+    learner_signal_contract: str = "learner-signals-v1"
+    high_fatigue: float = 0.75
+    low_attention: float = 0.25
 
 
 @dataclass(slots=True)
@@ -79,6 +93,11 @@ class CognitiveTransition:
     cognitive_signal: float
     canonical_signal: float | None
     profile_adjustment: float
+    learner_signal_used: bool
+    learner_signal_policy_version: str | None
+    learner_attention: float | None
+    learner_fatigue: float | None
+    learner_reasoning_quality: float | None
 
     def public(self) -> dict[str, object]:
         return {
@@ -93,6 +112,11 @@ class CognitiveTransition:
             "cognitiveSignal": round(self.cognitive_signal, 4),
             "canonicalSignal": round(self.canonical_signal, 4) if self.canonical_signal is not None else None,
             "profileAdjustment": round(self.profile_adjustment, 4),
+            "learnerSignalUsed": self.learner_signal_used,
+            "learnerSignalPolicyVersion": self.learner_signal_policy_version,
+            "learnerAttention": round(self.learner_attention, 4) if self.learner_attention is not None else None,
+            "learnerFatigue": round(self.learner_fatigue, 4) if self.learner_fatigue is not None else None,
+            "learnerReasoningQuality": round(self.learner_reasoning_quality, 4) if self.learner_reasoning_quality is not None else None,
         }
 
 
@@ -122,6 +146,7 @@ class CognitiveProgressionEngine:
         agent_level: int,
         knowledge_score: float,
         concept_states: Iterable[ConceptEvidence] = (),
+        learner_signal: LearnerSignalEvidence | None = None,
     ) -> CognitiveTransition:
         previous_mode = state.learning_mode
         old_index = state.objective_index
@@ -134,6 +159,14 @@ class CognitiveProgressionEngine:
         turn_understanding = _fraction(turn_understanding)
         evidence = list(concept_states)
         canonical_evidence_used = bool(evidence)
+        learner_signal_used = bool(
+            learner_signal
+            and learner_signal.measurement_status == "observed"
+            and learner_signal.policy_version == self.policy.learner_signal_contract
+        )
+        learner_attention = _fraction(learner_signal.attention) if learner_signal_used and learner_signal else None
+        learner_fatigue = _fraction(learner_signal.fatigue) if learner_signal_used and learner_signal else None
+        learner_reasoning_quality = _fraction(learner_signal.reasoning_quality) if learner_signal_used and learner_signal else None
 
         cognitive_score = (
             understanding * 0.52
@@ -172,13 +205,21 @@ class CognitiveProgressionEngine:
             count < self.policy.minimum_canonical_evidence for count in evidence_count
         )
         low_retention = bool(evidence) and min(_fraction(item.retention) for item in evidence) < self.policy.low_retention
-        blocked = active_misconception or confusion >= self.policy.high_confusion or needs_more_canonical_evidence or low_retention
+        # This is a conservative pacing guard, not a claim about attention or
+        # ability. It applies only to a valid, current contract version—not to
+        # a persistent profile or a missing/ambiguous judge response.
+        signal_requires_shorter_chunk = bool(
+            learner_signal_used and (learner_fatigue >= self.policy.high_fatigue or learner_attention < self.policy.low_attention)
+        )
+        blocked = active_misconception or confusion >= self.policy.high_confusion or needs_more_canonical_evidence or low_retention or signal_requires_shorter_chunk
         ready = readiness >= threshold and not blocked
         objective_advanced = ready and old_index < final_index
         mastery_recognised = ready and old_index >= final_index and readiness >= mastery_threshold
 
         if active_misconception:
             learning_mode, reason = "repair", "active_misconception"
+        elif signal_requires_shorter_chunk:
+            learning_mode, reason = "clarify", "fatigue_or_attention_requires_shorter_chunk"
         elif confusion >= self.policy.high_confusion:
             learning_mode, reason = "clarify", "high_confusion"
         elif needs_more_canonical_evidence:
@@ -214,6 +255,11 @@ class CognitiveProgressionEngine:
             cognitive_signal=round(_fraction(cognitive_score), 4),
             canonical_signal=round(_fraction(canonical_score), 4) if canonical_score is not None else None,
             profile_adjustment=profile_adjustment,
+            learner_signal_used=learner_signal_used,
+            learner_signal_policy_version=learner_signal.policy_version if learner_signal_used and learner_signal else None,
+            learner_attention=learner_attention,
+            learner_fatigue=learner_fatigue,
+            learner_reasoning_quality=learner_reasoning_quality,
         )
 
 

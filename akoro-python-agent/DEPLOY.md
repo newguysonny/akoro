@@ -31,6 +31,9 @@ internal credential.
    # Keep false until reviewed concept-catalogue rows AND the bridge's signed
    # curriculum scope are deployed.
    AGENT_ENABLE_CONCEPT_STATE=false
+   # Keep false until 2026-learner-signal-profile-v1.sql is applied and the
+   # authenticated learner visibility/clear controls are enabled in Akoro API.
+   AGENT_ENABLE_LEARNING_INSIGHTS=false
    ```
 
 3. Verify the unauthenticated health endpoint:
@@ -108,6 +111,45 @@ the Student Agent decides whether to hold, repair, retrieve, challenge, move
 one objective, or recognise mastery. Its thresholds are versioned and returned
 in `cognitiveDecision` for monitoring; the UI must not turn a model suggestion
 into an advancement.
+
+## Measured learner-signals profile and episodes
+
+`AGENT_ENABLE_LEARNING_INSIGHTS=true` opens a distinct optional private
+resource at `/learning-insights`. It requires the same session-bound learner
+capability and Akoro gateway credential as other Python integrations, but not a
+curriculum scope unless an episode is recorded. The service writes one
+idempotent `(learner, session, turn)` score tuple only after a completed reply;
+a disconnected or stopped stream writes nothing. A separate schema-validated
+judge may report `observed` attention/fatigue/reasoning quality or the safe
+`not_checked` zero-value fallback. It does not save raw replies, judge rationale,
+hidden reasoning, tool output, health data, or an inferred learner identity.
+
+Akoro computes a rolling 12-observed-turn aggregate and expires it after 45
+days. The profile remains a soft pacing cue only after at least three
+observations. A current valid `learner-signals-v1` high-fatigue/very-low-
+attention measurement may hold an otherwise-ready objective for a shorter
+clarifying chunk; neither profile nor measurement can advance an objective,
+modify concept mastery/retention, send a proactive message, or create a task. A compact episode is permitted only from
+a Guardian-supported concept observation, is capped at 60 per learner, and uses
+a server-generated approved-concept summary.
+
+Deploy `2026-learner-signal-profile-v1.sql` through the normal migration
+manifest first. Then set both service and Akoro API controls deliberately:
+
+```bash
+# Python service
+AGENT_ENABLE_LEARNING_INSIGHTS=true
+
+# Akoro API authenticated learner projection and destructive clear endpoint
+AKORO_LEARNER_INSIGHTS_ENABLED=true
+```
+
+Before enabling, verify `GET /health` reports `learningInsights.enabled: true`.
+A signed-in learner can inspect only their own compact projection at
+`GET /api/adaptive/chat/learning-insights`, and can explicitly delete `all`,
+`profile` (which also removes measurements), or `episodes` with
+`DELETE /api/adaptive/chat/learning-insights`. Do not enable either flag until
+the migration, private gateway, and learner control surface have been deployed.
 
 ## Durable learner conversation context
 

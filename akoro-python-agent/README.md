@@ -122,6 +122,42 @@ local cognitive state. A non-empty snapshot refreshes only its bounded concept
 scope's retention using the same documented decay coefficients as the existing JS decay
 engine; it never creates a task, notification, or other learner action.
 
+### Measured learner-signals substrate
+
+The next additive slice is also **off by default**
+(`AGENT_ENABLE_LEARNING_INSIGHTS=false`). With the same private gateway and a
+learner capability, it can store exactly one idempotent measurement for a
+completed teaching turn: bounded attention, fatigue, reasoning-quality scores,
+and a categorical reasoning style. A separate narrow judge returns
+`not_checked` (all zeroes) when a reply is too ambiguous; the scores are not a
+health, ability, or identity assessment and factual correctness remains solely
+with `CurriculumGuardian`.
+
+Akoro's `2026-learner-signal-profile-v1.sql` owns the raw-free measurement
+ledger, a twelve-turn slow-moving aggregate profile, and a maximum of sixty
+compact learning episodes. An episode is created only from a Guardian-supported
+concept outcome, and Akoro constructs its summary from the approved concept
+title—no transcript quote, hidden model reasoning, or tool result is stored.
+The profile stays a soft response-presentation cue until it has at least three
+observed turns. A current, schema-valid `learner-signals-v1` fatigue/very-low-
+attention measurement may only hold an otherwise-ready objective for a shorter
+clarifying chunk; it cannot advance an objective, change canonical concept
+state, create a task, or trigger a notification.
+
+Apply that migration before enabling:
+
+```bash
+AGENT_ENABLE_LEARNING_INSIGHTS=true
+AKORO_LEARNER_INSIGHTS_ENABLED=true  # enables authenticated Akoro API visibility/clear controls
+```
+
+The learner can view the bounded projection at
+`GET /api/adaptive/chat/learning-insights`, and explicitly clear `all`,
+`profile` (including source measurements), or `episodes` with
+`DELETE /api/adaptive/chat/learning-insights`. These controls are authenticated
+and always derive the learner from the token; the private Python endpoint never
+accepts a learner ID.
+
 | Capability | Current implementation |
 |---|---|
 | Tools | Akoro API-provided, per-session function catalogue; Python has no direct database tools. |

@@ -67,6 +67,11 @@ def create_app(
                 "enabled": runtime.enable_concept_state,
                 "durableOwner": "akoro-api" if runtime.enable_concept_state else None,
             },
+            "learningInsights": {
+                "enabled": runtime.enable_learning_insights,
+                "durableOwner": "akoro-api" if runtime.enable_learning_insights else None,
+                "rawReplyStored": False,
+            },
             "tools": {
                 "configured": runtime.tools_configured,
                 "provider": "akoro-api" if runtime.tools_configured else None,
@@ -119,8 +124,8 @@ def create_app(
         try:
             runtime.sessions.assert_not_streaming(session_id)
             with runtime.sessions.session(session_id) as loop:
-                if (loop.session.conversation or loop.concept_state_active) and not payload.turn_id:
-                    raise ValueError("turnId is required when durable conversation context or concept state is attached")
+                if (loop.session.conversation or loop.concept_state_active or loop.learning_insights_active) and not payload.turn_id:
+                    raise ValueError("turnId is required when durable conversation context, concept state, or learning insights are attached")
                 return loop.process_teaching_message(payload.message, turn_id=payload.turn_id)
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
@@ -157,8 +162,8 @@ def create_app(
             try:
                 yield sse_event("stream_started", {"sessionId": session_id})
                 with runtime.sessions.session(session_id) as loop:
-                    if (loop.session.conversation or loop.concept_state_active) and not payload.turn_id:
-                        raise ValueError("turnId is required when durable conversation context or concept state is attached")
+                    if (loop.session.conversation or loop.concept_state_active or loop.learning_insights_active) and not payload.turn_id:
+                        raise ValueError("turnId is required when durable conversation context, concept state, or learning insights are attached")
                     for item in loop.stream_teaching_message(
                         payload.message, should_stop=stop_signal.is_set, turn_id=payload.turn_id,
                     ):

@@ -128,7 +128,8 @@
     "2026-python-agent-conversation-scratchpad-plan.sql",
     "2026-python-agent-memory-retrieval.sql",
     "2026-concept-state-v1.sql",
-    "2026-concept-state-retention-v1.sql"
+    "2026-concept-state-retention-v1.sql",
+    "2026-learner-signal-profile-v1.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

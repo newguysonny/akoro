@@ -40,6 +40,10 @@ class ServiceSettings:
     # slice. It is intentionally off until reviewed curriculum rows and the
     # trusted Node bridge are deployed.
     enable_concept_state: bool = False
+    # Opt-in durable, bounded turn measurements and learner-clearable study
+    # profile/episodes. This remains off until the corresponding Akoro migration
+    # and authenticated learner controls are deployed.
+    enable_learning_insights: bool = False
 
     @property
     def tools_configured(self) -> bool:
@@ -65,8 +69,11 @@ class ServiceSettings:
         if bool(tools_url) != bool(tools_secret):
             raise ValueError("AKORO_AGENT_TOOLS_URL and AKORO_AGENT_TOOLS_SECRET must be configured together")
         enable_concept_state = _as_bool(source.get("AGENT_ENABLE_CONCEPT_STATE"), name="AGENT_ENABLE_CONCEPT_STATE")
+        enable_learning_insights = _as_bool(source.get("AGENT_ENABLE_LEARNING_INSIGHTS"), name="AGENT_ENABLE_LEARNING_INSIGHTS")
         if enable_concept_state and not (tools_url and tools_secret):
             raise ValueError("AGENT_ENABLE_CONCEPT_STATE requires the configured Akoro private gateway")
+        if enable_learning_insights and not (tools_url and tools_secret):
+            raise ValueError("AGENT_ENABLE_LEARNING_INSIGHTS requires the configured Akoro private gateway")
         if tools_url:
             parsed = urlparse(tools_url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -102,4 +109,5 @@ class ServiceSettings:
             ),
             allow_side_effecting_tools=_as_bool(source.get("AGENT_ALLOW_SIDE_EFFECTING_TOOLS"), name="AGENT_ALLOW_SIDE_EFFECTING_TOOLS"),
             enable_concept_state=enable_concept_state,
+            enable_learning_insights=enable_learning_insights,
         )

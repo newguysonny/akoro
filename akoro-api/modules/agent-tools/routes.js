@@ -24,6 +24,7 @@ import {
 } from "./write-confirmations.js";
 import conversationContextRouter from "./conversation-context-routes.js";
 import conceptStateRouter from "./concept-state-routes.js";
+import learningInsightsRouter from "./learning-insights-routes.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
@@ -39,6 +40,9 @@ router.use("/conversations", conversationContextRouter);
 // Canonical curriculum concept state is a separate bounded resource. It never
 // appears in the model tool catalogue and cannot be used by teacher contexts.
 router.use("/concept-state", conceptStateRouter);
+// Slow-moving learner signals and compact episodes use the same private
+// credential/capability boundary but are never advertised as model functions.
+router.use("/learning-insights", learningInsightsRouter);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);

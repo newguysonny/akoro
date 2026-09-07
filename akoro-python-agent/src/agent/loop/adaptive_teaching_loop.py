@@ -13,11 +13,13 @@ from typing import Any
 
 from agent.adaptive.concepts import CurriculumConcept, LearnerConceptState, encode_concept_condition
 from agent.adaptive.guide import NaNaGuide
+from agent.adaptive.learner_signals import LearningMeasurement, LearningSignalJudge, LearnerTeachingProfile, episode_from_observations
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import LearningRepository
 from agent.adaptive.student import StudentAgent
 from agent.adaptive.types import AdaptiveSession
 from agent.memory.akoro_conversation import AkoroConversationError, AkoroConversationSession
+from agent.adaptive.akoro_learning_insights import AkoroLearningInsightsError, AkoroLearningInsightsSession
 from agent.memory.conversation import ConversationMemoryUpdate, LearnerMemory, MAX_MEMORY_ITEMS
 from agent.memory.scratchpad import WorkingScratchpad
 from agent.reasoning.teaching import TeachingPlan
@@ -51,7 +53,8 @@ class AdaptiveTeachingLoop:
 
     def __init__(self, repository: LearningRepository, model: TeachingModel, session: AdaptiveSession,
                  tools: AkoroToolSession | None = None,
-                 conversation_store: AkoroConversationSession | None = None) -> None:
+                 conversation_store: AkoroConversationSession | None = None,
+                 learning_insights_store: AkoroLearningInsightsSession | None = None) -> None:
         self._repository = repository
         self._model = model
         self.session = session
@@ -59,6 +62,14 @@ class AdaptiveTeachingLoop:
         # The store is an Akoro API capability-bound handle. It is optional for
         # standalone/evaluation sessions and never owns database credentials.
         self._conversation_store = conversation_store
+        # Signal storage is a separate optional, learner-owned capability. It
+        # cannot access tools, concept-state transitions, or transcript writes.
+        self._learning_insights_store = learning_insights_store
+        self._signal_judge = LearningSignalJudge(model)
+        self._learning_profile: LearnerTeachingProfile | None = None
+        self._learning_episodes: tuple[dict[str, object], ...] = ()
+        self._last_learning_measurement = LearningMeasurement()
+        self._learning_insights_status: dict[str, object] = {"enabled": bool(learning_insights_store), "saved": False}
         self._guide = NaNaGuide(model)
         self._cognitive_engine = CognitiveProgressionEngine()
         self._profile = None
@@ -80,6 +91,7 @@ class AdaptiveTeachingLoop:
         if not self.session.student_id or not self.session.topic.strip():
             raise ValueError("student_id and topic are required")
         self._profile = self._repository.get_or_create_agent(self.session.student_id)
+        self._load_learning_insights()
         self._active_concepts = self._repository.resolve_active_concepts(
             self.session.student_id, self.session.subject, self.session.topic,
         )
@@ -144,6 +156,7 @@ class AdaptiveTeachingLoop:
             "knowledgeScore": round(self._profile.knowledge_score),
             "initialState": cognitive.as_percentages(),
             "conceptTracking": self._concept_tracking_public(),
+            "learningInsights": self._learning_insights_public(),
             # Metadata only: source text never crosses the service boundary.
             "reference": self.session.reference.metadata() if self.session.reference else None,
             # No raw conversation or memory is echoed to the caller. The bridge
@@ -226,8 +239,53 @@ class AdaptiveTeachingLoop:
         """Whether this session resolved reviewed canonical concepts."""
         return bool(self._active_concepts)
 
+    @property
+    def learning_insights_active(self) -> bool:
+        """Whether completed turns write to the learner-owned insights store."""
+        return self._learning_insights_store is not None
+
     def _concept_condition(self) -> str:
-        return encode_concept_condition(self._active_concepts, self._concept_states)
+        concepts = encode_concept_condition(self._active_concepts, self._concept_states)
+        profile = self._learning_profile.prompt_line() if self._learning_profile else (
+            "Learner teaching profile: no durable profile is available; do not assume a preferred pace."
+        )
+        return f"{concepts}\n\n{profile}"
+
+    def _load_learning_insights(self) -> None:
+        if not self._learning_insights_store:
+            return
+        try:
+            self._learning_profile, self._learning_episodes = self._learning_insights_store.snapshot()
+            self._learning_insights_status = {"enabled": True, "saved": False, "loaded": True}
+        except AkoroLearningInsightsError:
+            # Measurements are enrichment only. A retrieval outage must not
+            # discard a learner's teaching session or invent a profile locally.
+            self._learning_profile = None
+            self._learning_episodes = ()
+            self._learning_insights_status = {"enabled": True, "saved": False, "loaded": False, "reason": "unavailable"}
+
+    def _learning_insights_public(self) -> dict[str, object]:
+        return {
+            **self._learning_insights_status,
+            "profile": self._learning_profile.public() if self._learning_profile else None,
+            "episodes": list(self._learning_episodes),
+            "lastMeasurement": self._last_learning_measurement.public(),
+        }
+
+    def _record_learning_measurement(self, learner_message: str, observations, turn_id: str) -> None:
+        if not self._learning_insights_store:
+            return
+        measurement = self._signal_judge.assess(learner_message)
+        self._last_learning_measurement = measurement
+        try:
+            profile = self._learning_insights_store.record(
+                turn_id, measurement, episode_from_observations(tuple(observations)),
+            )
+            if profile:
+                self._learning_profile = profile
+            self._learning_insights_status = {"enabled": True, "saved": True}
+        except AkoroLearningInsightsError:
+            self._learning_insights_status = {"enabled": True, "saved": False, "reason": "unavailable"}
 
     def _concept_tracking_public(self) -> dict[str, Any]:
         states_by_id = {state.concept_id: state for state in self._concept_states}
@@ -273,8 +331,8 @@ class AdaptiveTeachingLoop:
         # Persist this durable slice before altering the compatibility-only
         # evaluation state, so a failed Akoro call leaves no local half-turn.
         observations = self._student.observe_concepts(student_reply)
+        stable_turn_id = turn_id or f"turn-{self.session.turns_completed + 1}"
         if observations:
-            stable_turn_id = turn_id or f"turn-{self.session.turns_completed + 1}"
             updated_states = self._repository.record_concept_observations(
                 self.session.student_id, self.session.session_id, stable_turn_id, observations,
             )
@@ -284,6 +342,11 @@ class AdaptiveTeachingLoop:
                 by_id.get(concept.id, LearnerConceptState(concept.id))
                 for concept in self._active_concepts
             ]
+        # The separate behavioural judge sees only the learner's completed
+        # teaching message, after concept observations have been
+        # Guardian-validated. It records no raw message and cannot influence
+        # canonical mastery transitions.
+        self._record_learning_measurement(human_message, observations, stable_turn_id)
         cognitive = self._repository.update_cognitive_state(self._profile.id, self.session.topic, analysis)
         state = cognitive.as_percentages()
         self._last_concept_observations = {
@@ -312,6 +375,7 @@ class AdaptiveTeachingLoop:
             agent_level=self._profile.level,
             knowledge_score=self._profile.knowledge_score,
             concept_states=self._concept_states,
+            learner_signal=self._last_learning_measurement if self._learning_insights_store else None,
         )
         cognitive_decision = transition.public()
         guide = self._guide.coaching_tip(
@@ -351,6 +415,7 @@ class AdaptiveTeachingLoop:
             # No retrieved text is exposed here. This only reports whether the
             # bounded learner-memory lookup informed this turn's prompt.
             "memoryRetrieval": dict(self._last_memory_retrieval),
+            "learningInsights": self._learning_insights_public(),
             # This structured audit field is intentionally result-free. The
             # model may use bounded data to answer the teacher's question, but
             # callers do not receive a second raw tool-result payload here.
