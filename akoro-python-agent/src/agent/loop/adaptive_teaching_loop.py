@@ -66,6 +66,9 @@ class AdaptiveTeachingLoop:
         # Retains only recent completed turns during the live session so a
         # bridge retry never regenerates a different answer for one turn id.
         self._durable_turn_cache: dict[str, _CachedConversationTurn] = {}
+        # Public metadata only; semantic hits themselves stay inside the model
+        # prompt and never become an extra raw context payload to the browser.
+        self._last_memory_retrieval: dict[str, Any] = {"attempted": False, "mode": "not_available", "matches": 0}
 
     def initialize(self) -> dict[str, Any]:
         if not self.session.student_id or not self.session.topic.strip():
@@ -147,6 +150,7 @@ class AdaptiveTeachingLoop:
         if turn_id and turn_id in self._durable_turn_cache:
             return self._replay_durable_turn(turn_id, normalised)
         human_message, prior = self._prepare_teaching_turn(normalised)
+        self._refresh_relevant_memory(human_message)
         self.session.scratchpad = self._student.plan_scratchpad(human_message, self.session.topic)  # type: ignore[union-attr]
         student_reply = self._student.reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,
@@ -171,6 +175,7 @@ class AdaptiveTeachingLoop:
             yield {"event": "turn_complete", "data": replayed}
             return
         human_message, prior = self._prepare_teaching_turn(normalised)
+        self._refresh_relevant_memory(human_message)
         self.session.scratchpad = self._student.plan_scratchpad(human_message, self.session.topic)  # type: ignore[union-attr]
         fragments: list[str] = []
         for token in self._student.stream_reply(  # type: ignore[union-attr]
@@ -202,6 +207,27 @@ class AdaptiveTeachingLoop:
         if len(human_message) > 12_000:
             raise ValueError("message is limited to 12,000 characters")
         return human_message, self._repository.get_cognitive_state(self._profile.id, self.session.topic)
+
+    def _refresh_relevant_memory(self, human_message: str) -> None:
+        """Hydrate bounded semantic context before planning or replying.
+
+        The gateway owns embeddings and user scoping. A request failure is not
+        fatal to teaching: the pre-hydrated recent notes and role-correct chat
+        transcript remain available as a deterministic local fallback.
+        """
+        if not self._conversation_store or not self.session.conversation:
+            self._last_memory_retrieval = {"attempted": False, "mode": "not_available", "matches": 0}
+            return
+        try:
+            mode, memories = self._conversation_store.retrieve_relevant(
+                query=human_message,
+                subject=self.session.subject,
+            )
+            self.session.conversation.set_relevant_memories(memories)
+            self._last_memory_retrieval = {"attempted": True, "mode": mode, "matches": len(memories)}
+        except AkoroConversationError:
+            self.session.conversation.set_relevant_memories([])
+            self._last_memory_retrieval = {"attempted": True, "mode": "unavailable", "matches": 0}
 
     def _complete_teaching_turn(
         self, human_message: str, student_reply: str, *, turn_id: str | None = None,
@@ -262,6 +288,9 @@ class AdaptiveTeachingLoop:
             "type": "teaching_response",
             "studentAgentResponse": student_reply,
             "scratchpad": scratchpad.wire(),
+            # No retrieved text is exposed here. This only reports whether the
+            # bounded learner-memory lookup informed this turn's prompt.
+            "memoryRetrieval": dict(self._last_memory_retrieval),
             # This structured audit field is intentionally result-free. The
             # model may use bounded data to answer the teacher's question, but
             # callers do not receive a second raw tool-result payload here.

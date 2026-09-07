@@ -13,7 +13,11 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .conversation import ConversationMemoryUpdate, LearnerConversationContext
+from .conversation import (
+    ConversationMemoryUpdate,
+    LearnerConversationContext,
+    RetrievedLearnerMemory,
+)
 from agent.tools.akoro_api import Transport
 
 _MAX_CONTEXT_RESPONSE_BYTES = 192 * 1024
@@ -53,6 +57,16 @@ class AkoroConversationSession:
     session_id: str
     tool_context: str
     context: LearnerConversationContext
+
+    def retrieve_relevant(self, *, query: str, subject: str | None = None) -> tuple[str, list[RetrievedLearnerMemory]]:
+        """Fetch bounded query-relevant long-term context before prompt construction."""
+        return self.client.retrieve_relevant(
+            session_id=self.session_id,
+            tool_context=self.tool_context,
+            conversation_id=self.context.conversation_id,
+            query=query,
+            subject=subject,
+        )
 
     def persist_turn(
         self,
@@ -99,6 +113,40 @@ class AkoroConversationClient:
         except ValueError as exc:
             raise AkoroConversationError(str(exc)) from exc
         return AkoroConversationSession(self, session_id, tool_context, context)
+
+    def retrieve_relevant(
+        self,
+        *,
+        session_id: str,
+        tool_context: str,
+        conversation_id: str,
+        query: str,
+        subject: str | None = None,
+    ) -> tuple[str, list[RetrievedLearnerMemory]]:
+        clean_query = str(query or "").strip()[:4_000]
+        if len(clean_query) < 3:
+            return "skipped", []
+        response = self._post("/conversations/relevant-memory", {
+            "sessionId": session_id,
+            "toolContext": tool_context,
+            "conversationId": conversation_id,
+            "query": clean_query,
+            "subject": str(subject or "").strip()[:180] or None,
+        })
+        if not bool(response.get("success", False)):
+            raise AkoroConversationError(self._error(response, "Akoro learner memory retrieval is unavailable"))
+        raw = response.get("memories")
+        memories: list[RetrievedLearnerMemory] = []
+        if isinstance(raw, list):
+            for item in raw[:6]:
+                if isinstance(item, Mapping):
+                    parsed = RetrievedLearnerMemory.from_wire(item)
+                    if parsed:
+                        memories.append(parsed)
+        mode = str(response.get("retrieval") or "unknown").strip().lower()
+        if mode not in {"hybrid", "lexical", "recency"}:
+            mode = "unknown"
+        return mode, memories
 
     def persist_turn(
         self,

@@ -78,6 +78,33 @@ summary, memory, and scratchpad are clearly labelled as untrusted reference
 data. Neither past conversation text nor memory can override the service system
 instructions.
 
+### Semantic learner-memory retrieval
+
+Before every attached Python-agent turn, Python sends the **bounded current
+learner message** (and optional subject) to
+`POST /api/internal/agent-tools/v1/conversations/relevant-memory`. Akoro
+creates the query embedding with its metered provider credentials and performs
+user-scoped hybrid reciprocal-rank search across only:
+
+- active, learner-clearable `edu.learner_agent_memories`; and
+- compact `edu.learner_agent_conversation_summaries` from that learner's chats.
+
+It returns at most six 1,200-character reference items. The exact chat
+transcript, current scratchpad, and raw tool results are **not** vectorized or
+returned by this route. Python keeps native recent `user`/`assistant` history
+and the active scratchpad in their existing prompt positions, adds only the
+retrieved older context as clearly-labelled untrusted reference data, then
+plans and replies. Results never appear as raw text in the browser response;
+`memoryRetrieval` reports only attempted/mode/match-count metadata.
+
+Summary/note writes clear their `embedded_at` value, attempt a safe inline
+embedding after durable persistence, and leave any provider failure for the
+central embedding sweeper. The vector function has a lexical-only branch if a
+query embedding is unavailable; if semantic retrieval itself is unavailable,
+the gateway falls back to a deterministic bounded newest-note/summary list.
+All retrieval predicates include the authenticated learner ID and active-memory
+status, so forgotten notes and other learners' context cannot surface.
+
 ### Structured working scratchpad
 
 Every iteration also receives an **Active working scratchpad** before the
@@ -126,12 +153,14 @@ rather than generate a second answer. This route is independent of the model
 function-tool catalogue and never becomes an LLM-callable tool.
 
 Apply `2026-python-agent-conversation-memory.sql`,
-`2026-python-agent-conversation-scratchpad.sql`, and
-`2026-python-agent-conversation-scratchpad-plan.sql` before enabling this path.
+`2026-python-agent-conversation-scratchpad.sql`,
+`2026-python-agent-conversation-scratchpad-plan.sql`, and
+`2026-python-agent-memory-retrieval.sql` before enabling this path.
 They extend the existing chat-message schema with nullable Python turn IDs, add
 durable summaries and bounded `edu.learner_agent_memories`, persist the
-conversation scratchpad/plan, and record idempotent cross-service turns. All
-three are in `migrations/manifest.json` for the API deployment's normal
+conversation scratchpad/plan, record idempotent cross-service turns, and add
+1536-dimensional summary/note vectors plus user-scoped hybrid retrieval. All
+four are in `migrations/manifest.json` for the API deployment's normal
 `npm run db:deploy` pre-deploy process.
 
 The current JavaScript Agent Chat remains unchanged until its authenticated Node

@@ -9,6 +9,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
+import { embedText } from "../../lib/embeddingSweeper.js";
 import {
   requireAgentToolsCredential,
   verifyAgentToolsCapability,
@@ -16,13 +17,18 @@ import {
 import {
   boundedText,
   conversationRequest,
+  memoryRetrievalRequest,
   persistenceRequest,
   publicConversationMessage,
   publicMemory,
+  publicRelevantMemory,
   publicScratchpad,
 } from "./conversation-context-validation.js";
 
 const router = Router();
+// A nearest vector neighbour is not automatically useful study context. Lexical
+// hits remain valid on their own; vector-only hits must clear this modest floor.
+const MIN_MEMORY_SIMILARITY = 0.30;
 
 class ConversationGatewayError extends Error {
   constructor(status, message) {
@@ -134,6 +140,122 @@ async function loadConversationSnapshot(conversationId, userId) {
     scratchpad: scratchpadResult.data ? publicScratchpad(scratchpadResult.data) : null,
     memories: (memoriesResult.data || []).map(publicMemory).filter(Boolean),
   };
+}
+
+async function recentMemoryFallback(userId) {
+  // This is deliberately deterministic and bounded. Retrieval outages must not
+  // erase all durable context or make a learner's agent depend on a vector API.
+  const [memoriesResult, summaryResult] = await Promise.all([
+    db.schema("edu").from("learner_agent_memories")
+      .select("id, kind, content, subject, topic, updated_at")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .limit(6),
+    db.schema("edu").from("learner_agent_conversation_summaries")
+      .select("chat_session_id, summary, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(2),
+  ]);
+  if (memoriesResult.error || summaryResult.error) {
+    throw new ConversationGatewayError(503, "Learner memory retrieval is unavailable");
+  }
+  const rows = [
+    ...(memoriesResult.data || []).map((row) => ({ ...row, memory_type: "memory" })),
+    ...(summaryResult.data || []).map((row) => ({
+      id: row.chat_session_id,
+      memory_type: "conversation_summary",
+      kind: "conversation_summary",
+      content: row.summary,
+      updated_at: row.updated_at,
+    })),
+  ].sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)));
+  return rows.slice(0, 6).map(publicRelevantMemory).filter(Boolean);
+}
+
+async function relevantMemory({ query, subject, userId }) {
+  let embedding = null;
+  try {
+    // The private Akoro gateway, rather than the Python service, owns provider
+    // metering and embedding credentials. A failed embedding still permits the
+    // SQL function's lexical branch below.
+    embedding = await embedText(query, "learner_agent_memory_query", userId);
+  } catch (error) {
+    console.warn("[agent-tools/conversations] query embedding unavailable:", error?.message || error);
+  }
+
+  try {
+    const { data, error } = await db.rpc("match_learner_agent_memory", {
+      p_user_id: userId,
+      p_query_embedding: embedding,
+      p_match_count: 6,
+      p_query_text: query,
+      p_subject: subject,
+    });
+    if (error) throw error;
+    const memories = (data || [])
+      // A vector-only nearest neighbour can still be unrelated. Lexical hits
+      // carry their own exact-term evidence and do not have a cosine floor.
+      .filter((row) => row.vector_rank == null || Number(row.similarity ?? 0) >= MIN_MEMORY_SIMILARITY)
+      .map(publicRelevantMemory).filter(Boolean).slice(0, 6);
+    // Empty is a valid hybrid result. It is better than injecting irrelevant
+    // newest notes, so only use recency when the retrieval implementation is
+    // actually unavailable.
+    return { mode: embedding ? "hybrid" : "lexical", memories };
+  } catch (error) {
+    console.warn("[agent-tools/conversations] semantic retrieval unavailable:", error?.message || error);
+    return { mode: "recency", memories: await recentMemoryFallback(userId) };
+  }
+}
+
+function memoryEmbeddingText({ content, topic, subject }) {
+  return [content, topic, subject].filter(Boolean).join(" ").trim();
+}
+
+async function writeEmbedding({ table, filters, userId, updatedAt, text }) {
+  if (!text || text.length < 3) return;
+  try {
+    const embedding = await embedText(text, "learner_agent_memory_write", userId);
+    if (!embedding) return;
+    let update = db.schema("edu").from(table)
+      .update({ embedding, embedded_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      // Do not stamp a newer summary/note with a vector made for an older one.
+      .eq("updated_at", updatedAt);
+    for (const [column, value] of Object.entries(filters)) update = update.eq(column, value);
+    const { error } = await update;
+    if (error) throw error;
+  } catch (error) {
+    // Persistence has already succeeded. The missing-vector sweeper will retry
+    // without making a learner's completed lesson fail when OpenAI is down.
+    console.warn(`[agent-tools/conversations] ${table} embedding deferred:`, error?.message || error);
+  }
+}
+
+async function embedPersistedContext({ request, userId, updatedAt }) {
+  const writes = [writeEmbedding({
+    table: "learner_agent_conversation_summaries",
+    filters: { chat_session_id: request.conversationId },
+    userId,
+    updatedAt,
+    text: request.summary,
+  })];
+  for (const memory of request.memories) {
+    writes.push(writeEmbedding({
+      table: "learner_agent_memories",
+      filters: {
+        chat_session_id: request.conversationId,
+        agent_session_id: request.sessionId,
+        agent_turn_id: request.turnId,
+        kind: memory.kind,
+      },
+      userId,
+      updatedAt,
+      text: memoryEmbeddingText(memory),
+    }));
+  }
+  await Promise.all(writes);
 }
 
 async function messageForTurn({ conversationId, userId, sessionId, turnId, role, text, createdAt }) {
@@ -249,6 +371,7 @@ async function persistTurn({ request, userId }) {
 
   try {
     const now = new Date();
+    const contextUpdatedAt = now.toISOString();
     const userMessage = await messageForTurn({
       conversationId: request.conversationId, userId, sessionId: request.sessionId, turnId: request.turnId,
       role: "user", text: request.userMessage, createdAt: now.toISOString(),
@@ -270,7 +393,11 @@ async function persistTurn({ request, userId }) {
         user_id: userId,
         summary: request.summary,
         source_message_count: Number(countResult.count || 0),
-        updated_at: new Date().toISOString(),
+        // A summary is rewritten on every completed turn. Queue a fresh vector
+        // rather than leaving a semantically stale representation behind.
+        embedding: null,
+        embedded_at: null,
+        updated_at: contextUpdatedAt,
       }, { onConflict: "chat_session_id" }),
       db.schema("edu").from("learner_agent_conversation_scratchpads").upsert({
         chat_session_id: request.conversationId,
@@ -292,7 +419,11 @@ async function persistTurn({ request, userId }) {
           agent_turn_id: request.turnId,
           ...memory,
           status: "active",
-          updated_at: new Date().toISOString(),
+          // Retried writes are idempotent; marking this null makes both new
+          // and amended notes eligible for the central embedding repairer.
+          embedding: null,
+          embedded_at: null,
+          updated_at: contextUpdatedAt,
         })), { onConflict: "chat_session_id,agent_session_id,agent_turn_id,kind" })
         : Promise.resolve({ error: null }),
       db.from("chat_sessions").update({
@@ -303,6 +434,9 @@ async function persistTurn({ request, userId }) {
     if (summaryResult.error || scratchpadResult.error || memoryResult.error || sessionResult.error) {
       throw new ConversationGatewayError(503, "Conversation context could not be completed");
     }
+    // Embeddings are best-effort and never change durable-turn success. Failed
+    // writes retain embedded_at=null for the central sweeper to repair.
+    await embedPersistedContext({ request, userId, updatedAt: contextUpdatedAt });
     await markTurn({
       conversationId: request.conversationId, userId, sessionId: request.sessionId, turnId: request.turnId,
       patch: {
@@ -341,6 +475,29 @@ router.post("/context", requireAgentToolsCredential, async (req, res) => {
         ...snapshot,
       },
     });
+  } catch (error) {
+    return gatewayError(res, error);
+  }
+});
+
+router.post("/relevant-memory", requireAgentToolsCredential, async (req, res) => {
+  try {
+    let request;
+    try {
+      request = memoryRetrievalRequest(req.body || {});
+    } catch (error) {
+      throw new ConversationGatewayError(422, error.message);
+    }
+    const claims = verifyAgentToolsCapability(request.toolContext, request.sessionId);
+    if (!claims || claims.scope !== "student") {
+      throw new ConversationGatewayError(403, "A valid learner conversation context is required");
+    }
+    const principal = await activePrincipal(claims);
+    // The supplied conversation ID is still ownership-checked even though
+    // retrieval can return relevant notes from the learner's other sessions.
+    await ownedConversation(request.conversationId, principal.id);
+    const result = await relevantMemory({ ...request, userId: principal.id });
+    return res.json({ success: true, retrieval: result.mode, memories: result.memories });
   } catch (error) {
     return gatewayError(res, error);
   }

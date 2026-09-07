@@ -65,6 +65,17 @@ export function normaliseScratchpad(value) {
   return scratchpad;
 }
 
+export function memoryRetrievalRequest(body = {}) {
+  const { sessionId, toolContext, conversationId } = conversationRequest(body);
+  // A retrieval query is the current learner message, not an arbitrary history
+  // payload. Bound it independently so the gateway never embeds a giant raw
+  // transcript or provider prompt injection corpus.
+  const query = boundedText(body.query, 4_000);
+  const subject = boundedText(body.subject, 180) || null;
+  if (query.length < 3) throw new Error("A retrieval query of at least three characters is required");
+  return { sessionId, toolContext, conversationId, query, subject };
+}
+
 export function persistenceRequest(body = {}) {
   const { sessionId, toolContext, conversationId } = conversationRequest(body);
   const turnId = typeof body.turnId === "string" ? body.turnId : "";
@@ -127,5 +138,25 @@ export function publicMemory(row = {}) {
     content,
     topic: boundedText(row.topic, 180) || null,
     subject: boundedText(row.subject, 180) || null,
+  };
+}
+
+/** A retrieval result may additionally be a compact conversation summary.
+ * This is intentionally a separate wire shape from writable learner memories:
+ * callers cannot use a virtual summary result to create a memory note. */
+export function publicRelevantMemory(row = {}) {
+  const source = row.memory_type === "conversation_summary" ? "conversation_summary"
+    : row.memory_type === "memory" ? "memory" : "";
+  const kind = source === "conversation_summary" ? "conversation_summary" : row.kind;
+  if (!source || (source === "memory" && !MEMORY_KINDS.has(kind))) return null;
+  const content = boundedText(row.content, 1_200);
+  if (!content) return null;
+  return {
+    id: boundedText(row.id, 80),
+    source,
+    kind,
+    content,
+    topic: source === "memory" ? (boundedText(row.topic, 180) || null) : null,
+    subject: source === "memory" ? (boundedText(row.subject, 180) || null) : null,
   };
 }

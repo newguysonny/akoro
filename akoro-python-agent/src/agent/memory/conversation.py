@@ -15,6 +15,7 @@ from agent.memory.scratchpad import WorkingScratchpad
 
 ConversationRole = Literal["user", "assistant"]
 MemoryKind = Literal["learning_summary", "study_preference", "learner_goal"]
+RelevantMemoryKind = Literal["learning_summary", "study_preference", "learner_goal", "conversation_summary"]
 
 MAX_CONVERSATION_MESSAGES = 40
 MAX_CONVERSATION_MESSAGE_CHARS = 12_000
@@ -23,6 +24,8 @@ MAX_LLM_HISTORY_CHARS = 24_000
 MAX_CONVERSATION_SUMMARY_CHARS = 4_000
 MAX_MEMORY_ITEMS = 8
 MAX_MEMORY_CHARS = 1_500
+MAX_RETRIEVED_MEMORY_ITEMS = 6
+MAX_RETRIEVED_MEMORY_CHARS = 1_200
 
 
 def _text(value: Any, maximum: int) -> str:
@@ -91,6 +94,58 @@ class LearnerMemory:
         return f"- {labels[self.kind]}{f' ({scope})' if scope else ''}: {self.content}"
 
 
+@dataclass(frozen=True, slots=True)
+class RetrievedLearnerMemory:
+    """A bounded read-only semantic hit from Akoro's learner-owned memory.
+
+    This never becomes a writable memory note in Python. In particular,
+    `conversation_summary` is a virtual retrieval source, not a new user
+    preference or a replacement for the role-correct transcript.
+    """
+
+    id: str
+    source: Literal["memory", "conversation_summary"]
+    kind: RelevantMemoryKind
+    content: str
+    topic: str | None = None
+    subject: str | None = None
+
+    @classmethod
+    def from_wire(cls, value: Mapping[str, Any]) -> "RetrievedLearnerMemory | None":
+        source = str(value.get("source") or "").strip()
+        kind = str(value.get("kind") or "").strip()
+        if source not in {"memory", "conversation_summary"}:
+            return None
+        allowed = {"learning_summary", "study_preference", "learner_goal"}
+        if source == "conversation_summary":
+            if kind != "conversation_summary":
+                return None
+        elif kind not in allowed:
+            return None
+        content = _text(value.get("content"), MAX_RETRIEVED_MEMORY_CHARS)
+        if not content:
+            return None
+        return cls(
+            id=_text(value.get("id"), 80),
+            source=source,  # type: ignore[arg-type]
+            kind=kind,  # type: ignore[arg-type]
+            content=content,
+            topic=_text(value.get("topic"), 180) or None,
+            subject=_text(value.get("subject"), 180) or None,
+        )
+
+    def prompt_line(self) -> str:
+        if self.source == "conversation_summary":
+            return f"- Relevant earlier conversation summary: {self.content}"
+        labels = {
+            "learning_summary": "Relevant study note",
+            "study_preference": "Relevant learner preference",
+            "learner_goal": "Relevant learner goal",
+        }
+        scope = ", ".join(part for part in [self.subject, self.topic] if part)
+        return f"- {labels[self.kind]}{f' ({scope})' if scope else ''}: {self.content}"
+
+
 @dataclass(slots=True)
 class LearnerConversationContext:
     """A bounded durable-context snapshot attached to an active Python session."""
@@ -100,6 +155,9 @@ class LearnerConversationContext:
     summary: str | None = None
     messages: list[ConversationMessage] = field(default_factory=list)
     memories: list[LearnerMemory] = field(default_factory=list)
+    # Refreshed for each current learner message; it is never persisted in this
+    # in-process context or echoed to callers as raw private content.
+    relevant_memories: list[RetrievedLearnerMemory] = field(default_factory=list)
     scratchpad: WorkingScratchpad | None = None
     restored_message_count: int = 0
 
@@ -161,10 +219,33 @@ class LearnerConversationContext:
                 remaining -= len(content)
         return [item.as_llm_message() for item in reversed(chosen)]
 
+    def set_relevant_memories(self, values: list[RetrievedLearnerMemory]) -> None:
+        # The API may return a stale duplicate of the snapshot's latest note or
+        # of this conversation's summary. Keep exact history/snapshot context
+        # once and reserve the small semantic budget for distinct older context.
+        seen_content = {memory.content for memory in self.memories}
+        if self.summary:
+            seen_content.add(self.summary)
+        relevant: list[RetrievedLearnerMemory] = []
+        for memory in values:
+            if not memory.content or memory.content in seen_content:
+                continue
+            relevant.append(memory)
+            seen_content.add(memory.content)
+            if len(relevant) >= MAX_RETRIEVED_MEMORY_ITEMS:
+                break
+        self.relevant_memories = relevant
+
     def memory_for_prompt(self) -> str:
-        if not self.memories:
-            return "No saved learner study notes are available."
-        return "\n".join(memory.prompt_line() for memory in self.memories)
+        sections: list[str] = []
+        if self.memories:
+            sections.append("Recent saved learner study notes:\n" + "\n".join(memory.prompt_line() for memory in self.memories))
+        if self.relevant_memories:
+            sections.append(
+                "Semantically retrieved older learner context for the current message:\n"
+                + "\n".join(memory.prompt_line() for memory in self.relevant_memories),
+            )
+        return "\n\n".join(sections) if sections else "No saved learner study notes are available."
 
     def public_metadata(self, *, persistence: str = "active") -> dict[str, Any]:
         return {

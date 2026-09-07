@@ -12,7 +12,7 @@ from agent.adaptive.types import AgentProfile
 from agent.harness.adaptive_service import build_adaptive_service_runtime
 from agent.llm.config import LLMConfig
 from agent.memory.akoro_conversation import AkoroConversationClient
-from agent.memory.conversation import LearnerConversationContext
+from agent.memory.conversation import LearnerConversationContext, RetrievedLearnerMemory
 from agent.memory.scratchpad import WorkingScratchpad
 from agent.service.api import create_app
 from agent.service.settings import ServiceSettings
@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 class CaptureModel:
     def __init__(self) -> None:
         self.calls = []
+        self.json_calls = []
         self.json_responses = [
             {"steps": [{"title": "Foundation", "kind": "foundation", "buildsOn": None, "whyNow": "Start here."}]},
             {"goal": "Understand how plants use light.", "progressSummary": "", "completed": [], "plan": [{"step": "Connect light to glucose production.", "status": "in_progress"}], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
@@ -35,7 +36,8 @@ class CaptureModel:
         self.calls.append(messages)
         return "I remember we were discussing how plants use light energy."
 
-    def complete_json(self, _messages, temperature=0.0):
+    def complete_json(self, messages, temperature=0.0):
+        self.json_calls.append(messages)
         return self.json_responses.pop(0)
 
 
@@ -71,6 +73,16 @@ class ContextTransport:
                         "topic": "Photosynthesis", "subject": "Biology",
                     }],
                 },
+            }
+        if url.endswith("/conversations/relevant-memory"):
+            return {
+                "success": True,
+                "retrieval": "hybrid",
+                "memories": [{
+                    "id": "memory-older", "source": "memory", "kind": "learning_summary",
+                    "content": "Chlorophyll is the pigment that captures light energy.",
+                    "topic": "Photosynthesis", "subject": "Biology",
+                }],
             }
         if url.endswith("/conversations/turns"):
             return {"success": True, "persistence": {"saved": True, "replayed": False, "assistantMessageId": "message-2"}}
@@ -150,6 +162,10 @@ class ConversationContextTests(unittest.TestCase):
             ],
             "memories": [{"id": "memory-1", "kind": "learning_summary", "content": "Water and carbon dioxide are inputs."}],
         }, "conversation-2")
+        context.set_relevant_memories([RetrievedLearnerMemory(
+            id="older-memory", source="memory", kind="learning_summary",
+            content="Chlorophyll captures light energy for photosynthesis.", topic="Photosynthesis", subject="Biology",
+        )])
         student = StudentAgent(
             AgentProfile(id="agent-1", student_id="learner-1"), InMemoryLearningRepository(), model,
             conversation=context,
@@ -158,6 +174,8 @@ class ConversationContextTests(unittest.TestCase):
         messages = model.calls[0]
         self.assertIn("Earlier study focused", messages[0].content)
         self.assertIn("Water and carbon dioxide", messages[0].content)
+        self.assertIn("Chlorophyll captures light", messages[0].content)
+        self.assertIn("Semantically retrieved older learner context", messages[0].content)
         self.assertIn("## Active working scratchpad", messages[0].content)
         self.assertIn("Answer the learner's light question.", messages[0].content)
         self.assertEqual([(message.role, message.content) for message in messages[1:]], [
@@ -200,9 +218,13 @@ class ConversationContextTests(unittest.TestCase):
         })
         self.assertEqual(completed.status_code, 200)
         self.assertTrue(completed.json()["conversationPersistence"]["saved"])
+        self.assertEqual(completed.json()["memoryRetrieval"], {"attempted": True, "mode": "hybrid", "matches": 1})
         self.assertEqual(completed.json()["scratchpad"]["goal"], "Understand how plants use light.")
-        self.assertTrue(transport.calls[1][0].endswith("/conversations/turns"))
-        saved = transport.calls[1][1]
+        self.assertTrue(transport.calls[1][0].endswith("/conversations/relevant-memory"))
+        self.assertEqual(transport.calls[1][1]["query"], "Light helps plants make food.")
+        self.assertIn("Chlorophyll is the pigment", model.json_calls[1][1].content)
+        self.assertTrue(transport.calls[2][0].endswith("/conversations/turns"))
+        saved = transport.calls[2][1]
         self.assertEqual(saved["conversationId"], "8ca0532e-20be-49c2-b4df-566d87f0e0e4")
         self.assertEqual(saved["turnId"], "turn_context_0001")
         self.assertEqual(saved["userMessage"], "Light helps plants make food.")
