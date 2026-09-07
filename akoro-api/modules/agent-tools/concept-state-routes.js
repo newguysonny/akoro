@@ -22,6 +22,7 @@ import {
 } from "./concept-state-validation.js";
 
 const router = Router();
+const trackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
 
 class ConceptStateGatewayError extends Error {
   constructor(status, message) {
@@ -126,10 +127,25 @@ router.post("/snapshot", requireAgentToolsCredential, async (req, res) => {
       .eq("learner_id", principal.id)
       .in("concept_id", request.conceptIds);
     if (error) throw new ConceptStateGatewayError(503, "Learner concept state is unavailable");
+    let trackerByConcept = new Map();
+    if (trackerEnabled) {
+      const { data: tracker, error: trackerError } = await db.schema("edu").from("learner_concept_tracker")
+        .select("concept_id, learning_status, resume_point")
+        .eq("learner_id", principal.id).in("concept_id", request.conceptIds);
+      if (trackerError) throw new ConceptStateGatewayError(503, "Learner concept tracker is unavailable");
+      trackerByConcept = new Map((tracker || []).map((row) => [row.concept_id, row]));
+    }
     const byConcept = new Map((data || []).map((row) => [row.concept_id, row]));
     return res.json({
       success: true,
-      states: request.conceptIds.map((conceptId) => publicState(byConcept.get(conceptId), conceptId)),
+      trackerEnabled,
+      states: request.conceptIds.map((conceptId) => ({
+        ...publicState(byConcept.get(conceptId), conceptId),
+        ...(trackerEnabled ? { tracker: trackerByConcept.get(conceptId) ? {
+          learningStatus: trackerByConcept.get(conceptId).learning_status,
+          resumePoint: trackerByConcept.get(conceptId).resume_point,
+        } : null } : {}),
+      })),
     });
   } catch (error) {
     return sendError(res, error);
@@ -165,6 +181,14 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
         },
       });
       if (error) throw new ConceptStateGatewayError(503, "Learner concept evidence could not be recorded");
+      if (trackerEnabled) {
+        const { error: trackerError } = await db.schema("edu").rpc("record_learner_concept_tracker", {
+          p_learner_id: principal.id, p_concept_id: observation.conceptId,
+          p_source_session_id: request.sessionId, p_source_turn_id: request.turnId,
+          p_observation_kind: observation.kind, p_claim_status: observation.claimStatus,
+        });
+        if (trackerError) throw new ConceptStateGatewayError(503, "Learner concept tracker could not be recorded");
+      }
       const state = Array.isArray(data) ? data[0] : data;
       if (!state) throw new ConceptStateGatewayError(503, "Learner concept state was not returned");
       states.push(publicState(state, observation.conceptId));

@@ -131,6 +131,13 @@ class ConceptRepositoryTests(unittest.TestCase):
         self.assertEqual(snapshot[0].evidence_count, 0)
         self.assertNotIn(("learner-1", PHOTOSYNTHESIS_INPUTS.id), repository._concept_states)
 
+    def test_tracker_status_and_server_generated_resume_point_are_bounded_in_condition(self) -> None:
+        condition = encode_concept_condition([PHOTOSYNTHESIS_INPUTS], [LearnerConceptState(
+            PHOTOSYNTHESIS_INPUTS.id, learning_status="confused", resume_point="Review the approved objective with a new example.",
+        )])
+        self.assertIn("tracker_status=confused", condition)
+        self.assertIn("resume=Review the approved objective", condition)
+
     def test_condition_is_bounded_canonical_state_not_raw_transcript(self) -> None:
         condition = encode_concept_condition(
             [PHOTOSYNTHESIS_INPUTS],

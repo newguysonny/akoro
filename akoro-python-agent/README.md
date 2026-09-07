@@ -122,6 +122,15 @@ local cognitive state. A non-empty snapshot refreshes only its bounded concept
 scope's retention using the same documented decay coefficients as the existing JS decay
 engine; it never creates a task, notification, or other learner action.
 
+The optional qualitative tracker (`AKORO_CONCEPT_TRACKER_ENABLED=true`) adds a
+separate, deterministic status/resume projection after canonical evidence is
+recorded. It is only enabled after `2026-concept-tracker-qualitative-v1.sql` is
+applied. Its status, topic resume point, and bounded confusion notes derive from
+approved catalogue objectives plus evidence outcomes—not raw chat text or judge
+rationale. Learners can view their own projection at
+`GET /api/adaptive/chat/concept-tracker` and clear only compact confusion notes
+at `DELETE /api/adaptive/chat/concept-tracker/confusion-notes`.
+
 ### Measured learner-signals substrate
 
 The next additive slice is also **off by default**

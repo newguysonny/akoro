@@ -57,6 +57,7 @@ const query      = (text, params) => pool.query(text, params);
 // and learner controls are being rolled out.
 const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED || "").toLowerCase() === "true";
 const learnerSoulStateEnabled = String(process.env.AKORO_LEARNER_SOUL_STATE_ENABLED || "").toLowerCase() === "true";
+const conceptTrackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
 
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
@@ -490,6 +491,60 @@ router.patch("/autonomy", async (req, res) => {
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not save agent autonomy" });
+  }
+});
+
+// =============================================================
+// QUALITATIVE CONCEPT TRACKER — curriculum-derived learner projection
+// =============================================================
+
+router.get("/concept-tracker", async (req, res) => {
+  if (!conceptTrackerEnabled) return res.json({ success: true, enabled: false, concepts: [], resumePoints: [] });
+  try {
+    const [trackerResult, resumeResult, notesResult] = await Promise.all([
+      db.schema("edu").from("learner_concept_tracker")
+        .select("concept_id, learning_status, resume_point, last_observation_kind, updated_at, concept_catalog(title, code, subject, topic_key)")
+        .eq("learner_id", req.user.id).order("updated_at", { ascending: false }).limit(24),
+      db.schema("edu").from("learner_topic_resume_points")
+        .select("curriculum_key, subject, topic_key, resume_point, concept_id, updated_at")
+        .eq("learner_id", req.user.id).order("updated_at", { ascending: false }).limit(12),
+      db.schema("edu").from("learner_concept_confusion_notes")
+        .select("concept_id, note, created_at").eq("learner_id", req.user.id)
+        .order("created_at", { ascending: false }).limit(24),
+    ]);
+    if (trackerResult.error || resumeResult.error || notesResult.error) throw trackerResult.error || resumeResult.error || notesResult.error;
+    const notesByConcept = new Map();
+    for (const note of notesResult.data || []) {
+      const entries = notesByConcept.get(note.concept_id) || [];
+      if (entries.length < 3) entries.push({ note: String(note.note || "").slice(0, 420), createdAt: note.created_at });
+      notesByConcept.set(note.concept_id, entries);
+    }
+    return res.json({
+      success: true, enabled: true,
+      concepts: (trackerResult.data || []).map((item) => ({
+        conceptId: item.concept_id, status: item.learning_status, resumePoint: item.resume_point,
+        lastObservationKind: item.last_observation_kind, updatedAt: item.updated_at,
+        concept: item.concept_catalog ? { title: item.concept_catalog.title, code: item.concept_catalog.code, subject: item.concept_catalog.subject, topicKey: item.concept_catalog.topic_key } : null,
+        confusionNotes: notesByConcept.get(item.concept_id) || [],
+      })),
+      resumePoints: (resumeResult.data || []).map((item) => ({
+        curriculumKey: item.curriculum_key, subject: item.subject, topicKey: item.topic_key,
+        resumePoint: item.resume_point, conceptId: item.concept_id, updatedAt: item.updated_at,
+      })),
+    });
+  } catch {
+    return res.status(503).json({ success: false, error: "Concept tracker is unavailable" });
+  }
+});
+
+router.delete("/concept-tracker/confusion-notes", async (req, res) => {
+  if (!conceptTrackerEnabled) return res.status(409).json({ success: false, error: "Concept tracker is not enabled" });
+  try {
+    const { error } = await db.schema("edu").from("learner_concept_confusion_notes").delete().eq("learner_id", req.user.id);
+    if (error) throw error;
+    return res.json({ success: true, cleared: "confusion_notes" });
+  } catch {
+    return res.status(503).json({ success: false, error: "Concept tracker notes could not be cleared" });
   }
 });
 

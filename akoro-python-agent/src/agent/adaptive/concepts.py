@@ -97,6 +97,8 @@ class LearnerConceptState:
     next_review_due: str | None = None
     last_retention_decay_at: str | None = None
     state_version: int = 1
+    learning_status: str | None = None
+    resume_point: str | None = None
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any], concept_id: str | None = None) -> "LearnerConceptState | None":
@@ -108,9 +110,15 @@ class LearnerConceptState:
             version = max(1, int(value.get("stateVersion", value.get("state_version", 1))))
         except (TypeError, ValueError):
             return None
+        tracker = value.get("tracker") if isinstance(value.get("tracker"), Mapping) else {}
+        learning_status = _text(tracker.get("learningStatus"), 40).lower() if tracker else ""
+        if learning_status not in {"not_started", "introduced", "learning", "confused", "understood", "mastered"}:
+            learning_status = ""
         return cls(
             concept_id=identifier,
             mastery=clamp(value.get("mastery")),
+            learning_status=learning_status or None,
+            resume_point=_text(tracker.get("resumePoint"), 420) or None,
             retention=clamp(value.get("retention")),
             evidence_confidence=clamp(value.get("evidenceConfidence", value.get("evidence_confidence"))),
             misconception_active=bool(value.get("misconceptionActive", value.get("misconception_active"))),
@@ -132,6 +140,8 @@ class LearnerConceptState:
             "evidenceCount": self.evidence_count,
             "nextReviewDue": self.next_review_due,
             "lastRetentionDecayAt": self.last_retention_decay_at,
+            "learningStatus": self.learning_status,
+            "resumePoint": self.resume_point,
         }
 
 
@@ -289,6 +299,10 @@ def encode_concept_condition(
             f"evidence_confidence={state.evidence_confidence:.2f}; "
             f"misconception={'active' if state.misconception_active else 'none'}"
         )
+        if state.learning_status:
+            line += f"; tracker_status={state.learning_status}"
+        if state.resume_point:
+            line += f"; resume={state.resume_point[:240]}"
         if concept.objective:
             line += f"; objective={concept.objective[:320]}"
         if sum(len(item) + 1 for item in lines) + len(line) > max_chars:
