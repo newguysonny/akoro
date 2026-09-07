@@ -14,11 +14,11 @@ import {
   incrementAgentStats,
   createSessionDelta,
   finalizeSessionDelta,
-  retrieveAgentKnowledgeByTopic,
 } from "./knowledge.js";
 import { decayEngine } from "./decayEngine.js";
 import { getStudentState } from "../../student-state.js";
 import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
+import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { createClient } from "@supabase/supabase-js";
 
@@ -225,84 +225,30 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       ? await this.guideOrchestrator.control.getTopicBoundary(topic)
       : { allowed: [], offTopic: [], boundaryStatement: topic };
 
-    // Teaching plan
-    const plan = this.guideOrchestrator.guide?.buildTeachingPlan
-      ? this.guideOrchestrator.guide.buildTeachingPlan(topic, mustKnow)
-      : `📚 Teaching Plan:\n• Build the agent's knowledge on ${topic}`;
-
-    const guideName   = this.guideOrchestrator.guide?.name   || "Guide";
-    const controlName = this.guideOrchestrator.control?.name || "Control";
-
-    // Load prior topic knowledge for decay sessions
-    let priorKnowledgeSummary = "";
-    if (this.sessionType === "decay_review" && this.decayPayload) {
-      const { subject, topic: decayTopic, confidence, daysSinceReview } = this.decayPayload;
-      const priorChunks = await retrieveAgentKnowledgeByTopic(agentRecord.id, subject, decayTopic, 3);
-
-      priorKnowledgeSummary = [
-        ``,
-        `📊 Agent's Current Knowledge on ${subject} — ${decayTopic}:`,
-        `  Confidence: ${Math.round(confidence * 100)}% | Days since last taught: ${daysSinceReview || 0}`,
-        priorChunks.length > 0
-          ? `  Prior knowledge:\n${priorChunks.map(c => `    • ${c.content?.substring(0, 100)}...`).join("\n")}`
-          : `  No prior knowledge found — start from scratch.`,
-      ].join("\n");
-    }
-
-    const allowedList = boundary.allowed?.map(a  => `    ${a}`).join("\n") || "";
-    const offList     = boundary.offTopic?.map(o => `    ${o}`).join("\n") || "";
+    const guideName = this.guideOrchestrator.guide?.name || "Guide";
 
     // ── Build opening prompt ──────────────────────────────────
     const isDecaySession = this.sessionType === "decay_review";
 
-    const openingPrompt = [
-      `═══════════════════════════════════════════════════════════════`,
-      isDecaySession
-        ? `DECAY REVIEW SESSION: Teach "${topic}" to your Student Agent`
-        : `SESSION START: Teaching "${topic}" to Student Agent`,
-      `Engine: Real-Time Adaptive Learning System`,
-      `Agent Level: ${agentRecord.level} | Sessions: ${agentRecord.total_sessions} | Score: ${Math.round(agentRecord.knowledge_score)}`,
-      isDecaySession
-        ? `⚠️  Session Type: Knowledge Reinforcement — ${this.decayPayload?.subject?.toUpperCase()} / ${topic}`
-        : `📚 Session Type: Free Teaching`,
-      `═══════════════════════════════════════════════════════════════`,
-      ``,
-      `🧠 INITIAL STATE`,
-      `Understanding: ${u}% | Mode: PHASE 1`,
-      ``,
-      `${guideName}:`,
-      plan,
-      ``,
-      `${controlName} (Focus Monitor):`,
-      `🎯 Topic boundary: ${topic} ONLY`,
-      allowedList ? `  ✅ Allowed:\n${allowedList}` : "",
-      offList     ? `  ❌ Off-topic:\n${offList}`   : "",
-      priorKnowledgeSummary,
-      ``,
-      `🤖 About Your Student Agent:`,
-      agentRecord.total_sessions === 0
-        ? `  This is your agent's FIRST session — it knows nothing yet. Teach it well!`
-        : `  Your agent has had ${agentRecord.total_sessions} session(s) and knows ${Math.round(agentRecord.knowledge_score)} knowledge points.`,
-      isDecaySession
-        ? `  🔄 This is a REINFORCEMENT session. The agent's confidence on this topic has dropped.`
-        : "",
-      ``,
-      `═══════════════════════════════════════════════════════════════`,
-      STUDENT_PHASES.PHASE_1,
-      `═══════════════════════════════════════════════════════════════`,
-      ``,
-      isDecaySession
-        ? `Ready — teach ${topic} to reinforce your agent's knowledge! 🔄`
-        : `Ready — start teaching! 🚀`,
-    ].filter(l => l !== "").join("\n");
+    // This remains as a textual fallback for older clients. Keep it learner
+    // facing: the technical workflow phase, cognitive percentages, and private
+    // boundary/control instructions are represented only in server state.
+    const openingPrompt = isDecaySession
+      ? `Let's reinforce ${topic}. Re-teach the current idea to your agent and build on what you already know.`
+      : `Let's teach ${topic}. Start with the current idea and explain it in your own words.`;
 
     // ── Structured opening blocks (same typed shape the UI renders per turn) ──
     // The must-know parts are this engine's "objectives" checklist; the first
     // part is the opening subtopic. Built from real data — no fabricated content.
     const guideEmoji = this.guideOrchestrator.guide?.emoji || "🧠";
+    const activeObjectiveIndex = this.session.mustKnowIndex;
+    const initialLearningState = createPublicLearningState({
+      currentConcept: mustKnow[activeObjectiveIndex] || topic,
+      dialogue: this.getTeachingEvidenceSnapshot().dialogue,
+    });
     const openGuideText = isDecaySession
-      ? `Let's reinforce ${topic}. Re-teach it to your agent and I'll guide you through the phases.`
-      : `Let's teach ${topic} to your agent. I'll guide you through 4 phases — start by explaining the basics in your own words.`;
+      ? `Let's reinforce ${topic}. Re-teach the current idea to your agent and I'll guide you one step at a time.`
+      : `Let's teach ${topic} to your agent. Start by explaining the current idea in your own words.`;
 
     const openingBlocks = [
       {
@@ -313,27 +259,24 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         // it. Same array, same order, same length — the checklist was the bar
         // spelled out. The header can page through them instead.
         type:     "subtopic-hdr",
-        subtopic: mustKnow[0] || topic,
+        subtopic: mustKnow[activeObjectiveIndex] || topic,
         items:    mustKnow,
         // Parallel to items — same order, same length. Empty for a
         // teacher-authored scheme of work, where the ordering is theirs and
         // needs no explanation from us.
         map:      this.session?.knowledgeMap || [],
-        idx:      0,
+        idx:      activeObjectiveIndex,
         total:    mustKnow.length || 1,
         topic,
         subject:  this.subject || "",
       },
-      // No "plan" block. The four phases are how the teaching agent steers the
-      // session, not something a learner needs to read — they were a table of
-      // contents for machinery. The PHASE_1 badge stays on the guide's own
-      // messages, which is where knowing the phase actually helps.
       {
-        type:  "guide",
-        agent: guideName,
-        emoji: guideEmoji,
-        phase: STUDENT_PHASES.PHASE_1,
-        text:  openGuideText,
+        type:             "guide",
+        agent:            guideName,
+        emoji:            guideEmoji,
+        learningState:    initialLearningState.learningState,
+        nextLearningMove: initialLearningState.nextLearningMove,
+        text:             openGuideText,
       },
     ];
 
@@ -388,6 +331,14 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       ? analysis.newConceptLearned
       : null;
     const misconceptionCleared = evidenceUpdate.misconceptionRepaired;
+    // This context describes the response that was just generated. It uses the
+    // pre-advance concept held by the workflow, so a successful turn is never
+    // relabelled as if the response had already been about the next objective.
+    const publicLearningState = createPublicLearningState({
+      currentConcept: mustKnowParts[workflow.mustKnowIndex] || topic,
+      dialogue: evidenceUpdate.dialogue,
+      masteryStatus: evidenceUpdate.current.masteryStatus,
+    });
 
     // Conversation content remains in the existing bounded session history.
     // The workflow trace itself carries only named public steps, never raw
@@ -411,8 +362,12 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       guideMessage: guideResult.tip,
       guideIsUrgent: guideResult.isUrgent || false,
       guideName,
+      studentAgentName: this.studentAgentRecord?.name || "Agent",
       controlStatusLine: null,
       controlName,
+      // Narrow UI state derived on the server. It is intentionally distinct
+      // from the private evidence snapshot and cognitive values below.
+      publicLearningState,
       workflow: workflow.publicWorkflow,
       adaptiveEngine: {
         understanding: Math.round(updatedState.cognitive.understanding * 100),

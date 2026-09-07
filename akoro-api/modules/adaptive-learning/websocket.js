@@ -333,29 +333,26 @@ function resultToTypedBlocks(result, agentPairId) {
   const guideEmoji = result.guideEmoji || "🧠";
   const renderStyle = result.guideRenderStyle || NANA_RENDER_STYLE;
   const agentName  = result.studentAgentName || "Agent";
-  const confidence = result.adaptiveEngine?.understanding ?? 0;
+  // These labels are already shaped by the server-side evidence workflow.
+  // They are safe learner-facing direction, not raw evaluation values.
+  const learningState = result.publicLearningState || {};
 
   // No drift block. A wandering learner is steered inside NaNa's own tip now,
   // as part of a turn that still teaches — rather than by a red alarm from a
   // second agent that replaced the whole turn with a scolding. Sargeant still
   // appears below for the assessment gate, which is a different job.
 
-  // Subtopic advance — full header sequence
-  if (result.subtopicAdvanced && result.currentSubtopic) {
-    // Header only. The objectives ride on it rather than following as their own
-    // checklist, and the phase plan is not shown at all — it steers the
-    // teaching agent, and the phase badge on its messages already tells the
-    // learner where they are.
-    blocks.push({
-      type:    "subtopic-hdr",
-      subtopic: result.currentSubtopic,
-      idx:     result.subtopicIdx     ?? 0,
-      items:   result.subtopicObjectives ?? [],
-      total:   result.totalSubtopics  ?? 1,
-      topic:   result.topic    ?? "",
-      subject: result.subject  ?? "",
-    });
-  }
+  const advancedObjectiveHeader = result.subtopicAdvanced && result.currentSubtopic
+    ? {
+        type:    "subtopic-hdr",
+        subtopic: result.currentSubtopic,
+        idx:     result.subtopicIdx     ?? 0,
+        items:   result.subtopicObjectives ?? [],
+        total:   result.totalSubtopics  ?? 1,
+        topic:   result.topic    ?? "",
+        subject: result.subject  ?? "",
+      }
+    : null;
 
   // Sargeant assessment gate
   if (result.wardenHolding && result.wardenHoldMessage) {
@@ -367,34 +364,39 @@ function resultToTypedBlocks(result, agentPairId) {
     });
   }
 
-  // Student agent response
+  // Student Agent response. The current idea and short explanation of the
+  // prompt's purpose are deterministic server-owned UI copy—never an inferred
+  // browser state and never a claim that the agent has mastered the concept.
   if (result.studentAgentResponse) {
     blocks.push({
-      type:       "student-agent",
-      agent:      agentName,
-      emoji:      "🤖",
-      phase:      `${agentName} · Phase ${result.currentPhase ?? "?"} · ${confidence}%`,
-      confidence,
-      text:       result.studentAgentResponse,
+      type:            "student-agent",
+      agent:           agentName,
+      emoji:           "🤖",
+      currentIdea:     learningState.currentIdea || null,
+      whyThisResponse: learningState.whyThisResponse || null,
+      text:            result.studentAgentResponse,
     });
   }
 
-  // Guide message
+  // Teaching Guide response. A short evidence status and next learning move
+  // replace the internal phase label; private scores and evaluator rationale
+  // stay on the server.
   if (result.guideMessage) {
-    const phase = result.phaseChanged && result.phaseLabel
-      ? result.phaseLabel
-      : result.currentPhase
-      ? `Phase ${result.currentPhase}${result.guideIsUrgent ? " — Intervening" : ""}`
-      : "Guide";
     blocks.push({
-      type:        "guide",
-      agent:       guideName,
-      emoji:       guideEmoji,
-      phase,
-      text:        result.guideMessage,
+      type:             "guide",
+      agent:            guideName,
+      emoji:            guideEmoji,
+      learningState:    learningState.learningState || null,
+      nextLearningMove: learningState.nextLearningMove || null,
+      text:             result.guideMessage,
       renderStyle,
     });
   }
+
+  // When this turn unlocks a new objective, introduce it only after the
+  // responses about the just-completed idea. This keeps each response context
+  // truthful and leaves the familiar objective tracker ready for the next turn.
+  if (advancedObjectiveHeader) blocks.push(advancedObjectiveHeader);
 
   // Sargeant assessment result
   if (result.assessmentResult) {
@@ -566,7 +568,6 @@ export function setupWebSocket(io) {
           topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
           agentLevel: init.agentLevel, totalSessions: init.totalSessions,
           knowledgeScore: init.knowledgeScore, initialState: init.initialState,
-          teachingEvidence: init.teachingEvidence || null,
         });
       } catch (err) { console.error("[start_student_session]", err); socket.emit("error", { message: err.message }); }
     });
@@ -607,7 +608,7 @@ export function setupWebSocket(io) {
           message: init.openingPrompt, mustKnowParts: init.mustKnowParts,
           topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
           agentLevel: init.agentLevel, knowledgeScore: init.knowledgeScore,
-          initialState: init.initialState, teachingEvidence: init.teachingEvidence || null,
+          initialState: init.initialState,
           decayPayload: decaySessionPayload,
         });
       } catch (err) { console.error("[start_decay_session]", err); socket.emit("error", { message: err.message }); }
@@ -785,7 +786,6 @@ export function setupWebSocket(io) {
           agentLevel:        init.agentLevel,
           knowledgeScore:    init.knowledgeScore,
           initialState:      init.initialState,
-          teachingEvidence:  init.teachingEvidence || null,
           decayPayload,
           historyBlocks,
           reference: sessionReference ? {
@@ -931,7 +931,6 @@ export function setupWebSocket(io) {
         currentSubtopic: orchestrator.session?.mustKnowParts?.[orchestrator.session?.mustKnowIndex] || null,
         topic:        orchestrator.session?.topic   || null,
         subject:      orchestrator.subject          || null,
-        teachingEvidence: orchestrator.getTeachingEvidenceSnapshot?.() || null,
       });
     });
 
@@ -1027,8 +1026,10 @@ export function setupWebSocket(io) {
           agentLevel:       init.agentLevel,
           knowledgeScore:   init.knowledgeScore,
           initialState:     init.initialState,
-          teachingEvidence: init.teachingEvidence || null,
           studentAgentName: init.studentAgentName,
+          // The client appends this one server-shaped guide message after its
+          // switch divider; it must not manufacture a phase or learning state.
+          guideOpeningBlock: init.openingBlocks?.find((block) => block.type === "guide") || null,
           guideProfile: {
             name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
             emoji:       orchestrator.guideOrchestrator?.guide?.emoji || "🧠",

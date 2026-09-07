@@ -97,7 +97,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
         const opening = d.openingBlocks?.length
           ? d.openingBlocks
           : d.message
-          ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Revision · ready", text:d.message }]
+          ? [{ type:"guide", agent:gName, emoji:gEmoji, text:d.message }]
           : [];
         if (d.historyBlocks?.length) setBlocks(prev => [...prev.filter(b => !b.faded), ...d.historyBlocks, ...opening]);
         else if (opening.length) setBlocks(prev => prev.length ? [...prev, ...opening] : opening);

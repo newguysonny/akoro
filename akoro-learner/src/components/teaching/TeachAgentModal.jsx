@@ -206,13 +206,13 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: gEmoji });
         if (d.agentPairId) setCurrentPair(d.agentPairId);
 
-        // Prefer the structured opening (subtopic header + phase plan +
-        // objectives checklist + guide card) the backend now sends; fall back
-        // to a single guide block from the opening message if absent.
+        // Prefer the server-owned typed opening blocks. The objective tracker
+        // remains the session's visible progress UI; the guide block carries a
+        // safe learning state and next move instead of an internal phase.
         const opening = d.openingBlocks?.length
           ? d.openingBlocks
           : d.message
-          ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Teach · ready", text:d.message }]
+          ? [{ type:"guide", agent:gName, emoji:gEmoji, text:d.message }]
           : [];
 
         if (d.historyBlocks?.length) {
@@ -292,8 +292,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         setBlocks(prev => [
           ...prev,
           { type:"system-divider", label:`Switched to ${newGuideName}` },
-          ...(d.message ? [{ type:"guide", agent:newGuideName, emoji:d.guideProfile?.emoji || "🧠",
-              phase:"New teacher · ready", text:d.message }] : []),
+          ...(d.guideOpeningBlock ? [d.guideOpeningBlock] : d.message
+            ? [{ type:"guide", agent:newGuideName, emoji:d.guideProfile?.emoji || "🧠", text:d.message }]
+            : []),
         ]);
       });
       ws.on("student_done", ()=>{});

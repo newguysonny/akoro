@@ -114,7 +114,6 @@ export function createTeachingTurnTools() {
           understanding: Math.round(context.updatedState.cognitive.understanding * 100),
           confusion: Math.round(context.updatedState.cognitive.confusion * 100),
           engagement: Math.round(context.updatedState.cognitive.engagement * 100),
-          teachingEvidence: teachingContext(orchestrator),
         });
       },
     },
