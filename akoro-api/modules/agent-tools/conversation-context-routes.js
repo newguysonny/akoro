@@ -15,9 +15,14 @@ import {
   verifyAgentToolsCapability,
 } from "./capability.js";
 import {
+  AGENT_ID,
+  CONVERSATION_ID,
+  MEMORY_KINDS,
+  TURN_ID,
   boundedText,
   conversationRequest,
   memoryRetrievalRequest,
+  normaliseScratchpad,
   persistenceRequest,
   publicConversationMessage,
   publicMemory,
@@ -459,6 +464,72 @@ async function persistTurn({ request, userId }) {
     }
     throw error;
   }
+}
+
+// These exported operations are used by the authenticated first-party Agent
+// endpoint as well as the private Python gateway below. They deliberately take
+// a server-derived `userId`; browser input cannot select another learner or
+// bypass ownership checks.
+export async function loadLearnerAgentConversationContext({ conversationId, userId }) {
+  const conversation = await ownedConversation(conversationId, userId);
+  const snapshot = await loadConversationSnapshot(conversation.id, userId);
+  return {
+    conversationId: conversation.id,
+    title: boundedText(conversation.title, 180) || null,
+    ...snapshot,
+  };
+}
+
+export async function retrieveLearnerAgentMemory({ query, subject = null, userId }) {
+  return relevantMemory({ query: boundedText(query, 4_000), subject: boundedText(subject, 180) || null, userId });
+}
+
+export async function completedLearnerAgentConversationTurn({ conversationId, userId, sessionId, turnId }) {
+  if (!CONVERSATION_ID.test(conversationId) || !AGENT_ID.test(sessionId) || !TURN_ID.test(turnId)) return null;
+  const { data: turn, error } = await db.schema("edu").from("learner_agent_conversation_turns")
+    .select("agent_message_id")
+    .eq("chat_session_id", conversationId)
+    .eq("user_id", userId)
+    .eq("agent_session_id", sessionId)
+    .eq("agent_turn_id", turnId)
+    .eq("status", "completed")
+    .maybeSingle();
+  if (error) throw new ConversationGatewayError(503, "Conversation turn state is unavailable");
+  if (!turn?.agent_message_id) return null;
+  const { data: message, error: messageError } = await db.from("chat_messages")
+    .select("text")
+    .eq("id", turn.agent_message_id)
+    .eq("session_id", conversationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (messageError) throw new ConversationGatewayError(503, "Conversation reply is unavailable");
+  return boundedText(message?.text, 12_000) || null;
+}
+
+export async function persistLearnerAgentConversationTurn({
+  conversationId, userId, sessionId, turnId, userMessage, assistantMessage,
+  summary, scratchpad, memories = [],
+}) {
+  const request = {
+    conversationId,
+    sessionId: boundedText(sessionId, 180),
+    turnId: boundedText(turnId, 180),
+    userMessage: boundedText(userMessage, 12_000),
+    assistantMessage: boundedText(assistantMessage, 12_000),
+    summary: boundedText(summary, 4_000),
+    scratchpad: normaliseScratchpad(scratchpad),
+    memories: Array.isArray(memories) ? memories.slice(0, 4).map((memory) => ({
+      kind: memory?.kind,
+      content: boundedText(memory?.content, 1_500),
+      topic: boundedText(memory?.topic, 180) || null,
+      subject: boundedText(memory?.subject, 180) || null,
+    })).filter((memory) => MEMORY_KINDS.has(memory.kind) && memory.content) : [],
+  };
+  if (!CONVERSATION_ID.test(request.conversationId) || !AGENT_ID.test(request.sessionId)
+      || !TURN_ID.test(request.turnId) || !request.userMessage || !request.assistantMessage || !request.summary) {
+    throw new ConversationGatewayError(422, "Agent conversation turn is invalid");
+  }
+  return persistTurn({ request, userId });
 }
 
 router.post("/context", requireAgentToolsCredential, async (req, res) => {

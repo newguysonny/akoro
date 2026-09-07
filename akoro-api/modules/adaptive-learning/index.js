@@ -65,7 +65,7 @@ router.post("/training/stream/end",   authenticateToken, endLiveStream);
 router.use("/marketplace",  marketplaceRouter);
 
 // HTTP chat fallback (for non-WebSocket clients)
-// POST /api/adaptive/chat
+// POST /api/adaptive/chat/agent — unified streamed/non-streamed Agent Chat
 // GET  /api/adaptive/chat/history/:agentId
 // Teaching session — phase engine (configure + start + message + state + assess)
 // Mounted BEFORE chatRouter so /teaching/* is handled here, not by chat.js

@@ -78,7 +78,7 @@ check('all questions were generated', gen.json?.data?.generated > 0);
 
 console.log('\n═══ D. TUTOR CHAT ═══');
 console.log('   typed: "Explain photosynthesis simply"\n');
-const chat = await call(priya, 'POST', '/api/adaptive/chat/tutor',
+const chat = await call(priya, 'POST', '/api/adaptive/chat/agent',
   { message: 'Explain photosynthesis simply', studentId: null });
 check('tutor chat answers', chat.status === 200 && !!(chat.json?.reply || chat.json?.response),
   chat.status !== 200 ? JSON.stringify(chat.json).slice(0, 140) : String(chat.json.reply || chat.json.response).slice(0, 60));

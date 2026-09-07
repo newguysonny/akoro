@@ -8,7 +8,7 @@ import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
 import AgentStatsTab from './AgentStatsTab.jsx';
-import { routesToAccountTools } from '../../lib/agentAccountActionRouting.js';
+import { agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -189,12 +189,6 @@ function AgentChatTab({
     return creatingRef.current;
   };
 
-  const persistToSession = async (sid, role, text) => {
-    if (!sid || !text) return;
-    try { await apiPost(`${CHAT_BASE}/sessions/${sid}/messages`, { role, text }); }
-    catch { /* non-critical — chat still works in-memory */ }
-  };
-
   const openSession = async (id) => {
     setDrawerOpen(false);
     if (id === sessionIdRef.current) return;
@@ -286,51 +280,27 @@ function AgentChatTab({
     setMessages(prev=>[...prev,userMsg]); setLoading(true);
     setAttachError(""); setStatusLabel("");
 
-    // Persist the user message (creating the session on first send). Errors are
-    // swallowed inside the helpers so the chat still works offline.
+    // Every learner turn uses the one unified Agent endpoint. It creates an
+    // owned session before the request, then the API—not browser intent regexes
+    // or separate persistence writes—selects direct tutoring or an authorised
+    // tool and commits the completed turn.
     const sid = await ensureSession(text);
-    persistToSession(sid, "user", text);
-    // Show an agent bubble AND persist it, so a refresh reloads the same text.
-    const say = (txt) => { pushAgent(txt); persistToSession(sid, "agent", txt); };
-
-    // Explicit task/reminder/message requests—and their short detail
-    // follow-ups—go through the bounded tool loop, where the API derives
-    // identity and supplies safe profile/time context. This lets “Revise Maths
-    // tomorrow at 8 am” complete the preceding “schedule a task” request
-    // instead of falling back to the read-only tutor. Attachments always stay
-    // on the tutor path.
-    if(!sentAttachments.length && routesToAccountTools(text, messages)){
-      try {
-        const history = messages.slice(-10).map(m => ({
-          role: m.from === "me" ? "user" : "assistant", content: m.text,
-        }));
-        const data = await apiPost("/api/adaptive/chat/chat", {
-          message: text, history, studentId: true,
-        });
-        const reply = data?.response || "I couldn't complete that request. Please try again.";
-        say(reply);
-        // A task may have been created through the API tool rather than the
-        // task sheet, so refresh the local Tasks tab after the tool turn.
-        if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task")) {
-          refetchTasks();
-        }
-      } catch {
-        say(t('agent.error_task'));
-      }
+    if (!sid) {
+      pushAgent(t('agent.error_connection'));
       setLoading(false);
       return;
     }
-
-    // Normal AI chat — OpenAI educational tutor. mode: "think" runs a
-    // reasoning model (its thought summary streams separately), "research" a
-    // deeper grounded pass. Attachments: images → vision, PDFs/text → context.
     const mode = thinkMode ? "think" : researchMode ? "research" : "default";
     const statusKey = { grounding:'agent.status_grounding', attachments:'agent.status_attachments', thinking:'agent.status_thinking', synthesis:'agent.status_synthesis' };
     const attachmentsPayload = await Promise.all(sentAttachments.map(async (a) => ({
       name: a.name, type: a.file.type || "", dataUrl: await fileToDataUrl(a.file),
     })));
-    const history=[...messages,userMsg].map(m=>({role:m.from==="me"?"user":"assistant",content:m.text}));
-    const payload={ message: text, history: history.slice(-8), agentName, role: "student", mode,
+    const history = messages.map(m => ({ role: m.from === "me" ? "user" : "assistant", content: m.text }));
+    // A retry keeps the same opaque key for this send, allowing the server's
+    // durable turn contract to repair a partial write without duplicate rows.
+    const turnId = createAgentChatTurnId();
+    const payload = { message: text, history: history.slice(-24), agentName, mode,
+      conversationId: sid, turnId,
       ...(attachmentsPayload.length ? { attachments: attachmentsPayload } : {}) };
     const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     const replyId=Date.now()+Math.random();
@@ -352,13 +322,14 @@ function AgentChatTab({
     };
     let finalReply="";
     try {
-      finalReply = await streamPost("/api/adaptive/chat/tutor?stream=1", payload, {
+      finalReply = await streamPost(agentChatEndpoint({ stream: true }), payload, {
         onDelta: appendDelta,
         onThinking: appendThinking,
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
-        onDone: ({ reply, syllabus, pastQuestions, thinking })=>{
+        onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions })=>{
           ensureBubble(); setStatusLabel("");
           setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done"}:m));
+          if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
         },
       });
       if(!started){ // stream produced nothing — show fallback text
@@ -366,21 +337,22 @@ function AgentChatTab({
         setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2}]);
       }
     } catch {
-      // Streaming failed before any token — try a normal request, then error.
+      // Streaming failed before any token — retry the same idempotent turn in
+      // normal JSON form, then show a connection error only if that also fails.
       setStatusLabel("");
       if(!started){
         try {
-          const data = await apiPost("/api/adaptive/chat/tutor", payload);
+          const data = await apiPost(agentChatEndpoint(), payload);
           finalReply = data.reply || data.response || t('agent.fallback');
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[]}]);
+          if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
         } catch {
           finalReply="";
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
         }
       }
     }
-    if(finalReply && finalReply.trim()) persistToSession(sid, "agent", finalReply);
     // Attachments are consumed by this message; free the preview URLs.
     sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
     setAttachments([]);

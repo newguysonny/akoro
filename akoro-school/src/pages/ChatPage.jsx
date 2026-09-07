@@ -193,7 +193,7 @@ export default function ChatPage() {
         const history = [...messages, { from: 'me', text: bodyText }]
           .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
           .slice(-8);
-        const data = await apiPost('/api/adaptive/chat/tutor', {
+        const data = await apiPost('/api/adaptive/chat/agent', {
           message: bodyText, history, agentName, role: 'instructor',
         });
         pushAgent(data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?");
