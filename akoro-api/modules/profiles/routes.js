@@ -823,7 +823,7 @@ router.get("/admin/teachers",                                          authentic
 
 const PROFILE_SELECT = [
   "id","email","username","full_name","avatar_url","avatar_emoji","phone","role",
-  "country","school_name","school_type","year_group","study_level",
+  "country","city","school_name","school_type","year_group","study_level",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
   "subjects","two_factor_enabled","onboarding_completed","created_at",
 ].join(",");
@@ -864,6 +864,7 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
     phone:           user.phone,
     role:            user.role,
     country:         user.country,
+    city:            user.city ?? null,
     schoolName:      user.school_name,
     schoolType:      user.school_type,
     yearGroup:       user.year_group,
@@ -914,6 +915,40 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
   });
 }));
 
+/**
+ * GET /api/profiles/me/location — the caller's self-reported location only.
+ * This intentionally does not return contact details or infer a timezone.
+ */
+router.get("/me/location", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: location, error } = await db.from("users")
+    .select("city, country").eq("id", req.user.id).maybeSingle();
+  if (error) return res.status(500).json({ success: false, message: "Failed to load location" });
+  if (!location) return res.status(404).json({ success: false, message: "User not found" });
+  res200(res, { city: location.city ?? null, country: location.country ?? null });
+}));
+
+/**
+ * PATCH /api/profiles/me/location — update city and/or country for this user.
+ * An IANA timezone remains a separate explicit setting because a place name is
+ * not a reliable timezone authority.
+ */
+router.patch("/me/location", authenticateToken, [
+  body("city").optional().isString().trim().isLength({ max: 120 }),
+  body("country").optional().isString().trim().isLength({ max: 80 }),
+], runValidation, asyncHandler(async (req, res) => {
+  const { city, country } = req.body;
+  if (city === undefined && country === undefined) return res400(res, "city or country is required");
+
+  const patch = { updated_at: now() };
+  if (city !== undefined) patch.city = city.trim() || null;
+  if (country !== undefined) patch.country = country.trim() || null;
+  const { data: updated, error } = await db.from("users")
+    .update(patch).eq("id", req.user.id).select("city, country").maybeSingle();
+  if (error) return res.status(500).json({ success: false, message: "Failed to save location" });
+  if (!updated) return res.status(404).json({ success: false, message: "User not found" });
+  res200(res, { city: updated.city ?? null, country: updated.country ?? null });
+}));
+
 /** PATCH /api/profiles/me — update user profile fields */
 router.patch("/me", authenticateToken, [
   body("fullName").optional().trim().isLength({ min: 1, max: 120 }),
@@ -921,6 +956,7 @@ router.patch("/me", authenticateToken, [
   body("phone").optional().trim(),
   body("avatarEmoji").optional().trim(),
   body("country").optional().trim(),
+  body("city").optional().trim().isLength({ max: 120 }),
   body("schoolName").optional().trim(),
   body("schoolType").optional().trim(),
   body("yearGroup").optional().trim(),
@@ -937,7 +973,7 @@ router.patch("/me", authenticateToken, [
 ], runValidation, asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const {
-    fullName, username, phone, avatarEmoji, country, schoolName, schoolType,
+    fullName, username, phone, avatarEmoji, country, city, schoolName, schoolType,
     yearGroup, studyLevel, language, timeZone, displayMode, accentColor,
     teachingGuide, guideEmoji, subjects, twoFactorEnabled, onboardingCompleted,
   } = req.body;
@@ -955,6 +991,7 @@ router.patch("/me", authenticateToken, [
   if (phone          !== undefined) patch.phone            = phone;
   if (avatarEmoji    !== undefined) patch.avatar_emoji     = avatarEmoji;
   if (country        !== undefined) patch.country          = country;
+  if (city           !== undefined) patch.city             = city || null;
   if (schoolName     !== undefined) patch.school_name      = schoolName;
   if (schoolType     !== undefined) patch.school_type      = schoolType;
   if (yearGroup      !== undefined) patch.year_group       = yearGroup;
@@ -1001,6 +1038,8 @@ router.patch("/me", authenticateToken, [
   res200(res, {
     fullName: updated.full_name,
     username: updated.username,
+    city: updated.city ?? null,
+    country: updated.country ?? null,
     accentColor: updated.accent_color,
     timeZone: timeZone !== undefined ? timeZone.trim() : undefined,
     onboardingCompleted: updated.onboarding_completed ?? false,

@@ -8,7 +8,8 @@
 import db from "../../db.js";
 import { localiseInstant, resolveLearnerTimeZone } from "./learner-time-context.js";
 
-const PROFILE_FIELDS = "full_name, username, country, language, school_name, year_group, study_level, subjects, created_at";
+const PROFILE_FIELDS = "full_name, username, city, country, language, school_name, year_group, study_level, subjects, created_at";
+const PROFILE_FIELDS_BASE = "full_name, username, country, language, school_name, year_group, study_level, subjects, created_at";
 
 function text(value, max = 120) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
@@ -23,6 +24,14 @@ function preferredName(user) {
 function cleanSubjects(subjects) {
   if (!Array.isArray(subjects)) return [];
   return subjects.map((subject) => text(subject, 80)).filter(Boolean).slice(0, 20);
+}
+
+// Keep the personalisation tool useful while a rolling deployment is waiting
+// for the additive city migration. It simply omits city until the schema lands.
+async function learnerProfile(userId) {
+  const result = await db.from("users").select(PROFILE_FIELDS).eq("id", userId).maybeSingle();
+  if (!result.error) return result;
+  return db.from("users").select(PROFILE_FIELDS_BASE).eq("id", userId).maybeSingle();
 }
 
 async function userTimeZonePreference(userId) {
@@ -44,7 +53,7 @@ async function userTimeZonePreference(userId) {
 export async function getLearnerProfileContext(userId, { now = new Date() } = {}) {
   if (!userId) throw new Error("An authenticated learner is required");
   const [{ data: user, error }, configuredTimeZone] = await Promise.all([
-    db.from("users").select(PROFILE_FIELDS).eq("id", userId).maybeSingle(),
+    learnerProfile(userId),
     userTimeZonePreference(userId),
   ]);
   if (error) throw new Error("Could not load learner profile context");
@@ -56,6 +65,7 @@ export async function getLearnerProfileContext(userId, { now = new Date() } = {}
   return {
     preferredName: preferredName(user),
     language: text(user.language, 80) || "English",
+    city: text(user.city, 120) || null,
     country: text(user.country, 80) || null,
     schoolName: text(user.school_name, 120) || null,
     studyLevel: text(user.study_level, 80) || null,

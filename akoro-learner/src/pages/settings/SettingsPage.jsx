@@ -122,6 +122,7 @@ export default function SettingsPage() {
           avatarEmoji:   data.avatarEmoji || '👨🏾‍🎓',
           phone:         data.phone,
           country:       data.country,
+          city:          data.city || '',
           school:        data.schoolName,
           schoolType:    data.schoolType,
           year:          data.yearGroup,

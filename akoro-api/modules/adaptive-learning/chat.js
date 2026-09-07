@@ -158,7 +158,7 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 export const CHAT_TOOLS = [
   {
     name: "get_learner_context",
-    description: "Read the signed-in learner's safe personalisation context: preferred name, language, study level, subjects, account timezone, and current local/UTC time. Use before interpreting relative dates or times such as 'tomorrow at 8am', and before personalising a response. Never ask for or expose contact, payment, authentication, or other sensitive account data.",
+    description: "Read the signed-in learner's safe personalisation context: preferred name, city/country, language, study level, subjects, account timezone, and current local/UTC time. Use before interpreting relative dates or times such as 'tomorrow at 8am', and before personalising a response. City/country are self-reported context only: never infer a timezone from them. Never ask for or expose contact, payment, authentication, or other sensitive account data.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {

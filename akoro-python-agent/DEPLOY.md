@@ -90,8 +90,9 @@ A student-scoped capability currently receives ten adaptive-chat functions:
 `schedule_chat_follow_up`, `list_scheduled_chat_follow_ups`,
 `cancel_scheduled_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`,
 and `get_weak_topics`. `get_learner_context` is a read-only, privacy-minimised
-profile/account-context lookup: preferred name, learning context, account timezone,
-and current local/UTC time only. It omits contact, payment, and authentication data.
+profile/account-context lookup: preferred name, self-reported city/country,
+learning context, account timezone, and current local/UTC time only. City/country
+never infer a timezone; it omits contact, payment, and authentication data.
 The agent calls it before it resolves relative dates/times or personalises a reply.
 `create_task`,
 `schedule_chat_follow_up`, and `cancel_scheduled_chat_follow_up` are marked

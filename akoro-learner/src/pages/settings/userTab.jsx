@@ -192,7 +192,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
 
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
-      country:'country', school:'schoolName', schoolType:'schoolType',
+      city:'city', country:'country', school:'schoolName', schoolType:'schoolType',
       year:'yearGroup', teachingGuide:'teachingGuide',
       language:'language', timeZone:'timeZone', displayMode:'displayMode',
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
@@ -280,6 +280,9 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           sub={profile.googleLinked?t('settings.linked_via_google'):undefined}/>
         <Row icon="ti-phone" label={t('settings.phone')} value={profile.phone||t('settings.not_set')}
           onClick={()=>openSheet('phone',t('settings.phone'),'text')}/>
+        <Row icon="ti-building-community" label="City" value={profile.city||t('settings.not_set')}
+          sub="Optional — self-reported location"
+          onClick={()=>openSheet('city','City','text')}/>
         <Row icon="ti-map-pin" label={t('settings.country')}    value={profile.country||t('settings.not_set')}
           onClick={()=>openSheet('country',t('settings.country'),'select',COUNTRIES)}/>
         <Row icon="ti-clock" label="Time zone" value={profile.timeZone||'Africa/Lagos (Akoro default)'}
