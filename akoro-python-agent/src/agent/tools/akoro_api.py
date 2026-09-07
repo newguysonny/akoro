@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+import hashlib
 import json
 import re
 from typing import Any
@@ -117,6 +118,9 @@ class ToolExecution:
     side_effecting: bool
     already_done: bool = False
     error: str | None = None
+    requires_confirmation: bool = False
+    confirmation_id: str | None = None
+    confirmation_preview: dict[str, Any] | None = None
 
     def public(self) -> dict[str, Any]:
         value: dict[str, Any] = {
@@ -126,6 +130,12 @@ class ToolExecution:
         }
         if self.already_done:
             value["alreadyDone"] = True
+        if self.requires_confirmation:
+            value["requiresConfirmation"] = True
+        if self.confirmation_id:
+            value["confirmationId"] = self.confirmation_id
+        if self.confirmation_preview is not None:
+            value["confirmationPreview"] = self.confirmation_preview
         if self.error:
             value["error"] = self.error
         return value
@@ -180,7 +190,8 @@ class AkoroToolsClient:
         self._transport = transport or _https_post
 
     def open_session(self, session_id: str, tool_context: str, *, max_calls: int,
-                     allow_side_effects: bool = False) -> "AkoroToolSession":
+                     allow_side_effects: bool = False,
+                     request_write_confirmations: bool = False) -> "AkoroToolSession":
         if not tool_context:
             return AkoroToolSession.disabled("No Akoro tool context was supplied")
         response = self._post("/catalog", {"sessionId": session_id, "toolContext": tool_context})
@@ -205,6 +216,7 @@ class AkoroToolsClient:
             definitions=definitions,
             max_calls=max_calls,
             allow_side_effects=allow_side_effects,
+            request_write_confirmations=request_write_confirmations,
         )
 
     def invoke(self, *, session_id: str, tool_context: str, name: str,
@@ -236,6 +248,52 @@ class AkoroToolsClient:
             bounded = {"truncated": True, "preview": rendered[:_MAX_RESULT_CHARS]}
         return success, bounded, error
 
+    def request_write_confirmation(self, *, session_id: str, tool_context: str, name: str,
+                                   arguments: dict[str, Any], proposal_key: str) -> tuple[bool, Any, str | None]:
+        """Ask Akoro API to stage a review card; it does not execute the tool."""
+        try:
+            encoded = json.dumps(arguments, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise AkoroToolsError("Tool arguments cannot be serialised") from exc
+        if len(encoded) > _MAX_ARGUMENT_BYTES:
+            raise AkoroToolsError("Tool arguments exceed the 12,000-byte limit")
+        response = self._post("/confirmations", {
+            "sessionId": session_id,
+            "toolContext": tool_context,
+            "tool": name,
+            "arguments": arguments,
+            "proposalKey": proposal_key[:180],
+        })
+        return self._tool_response(response)
+
+    def execute_confirmed_write(self, *, session_id: str, tool_context: str,
+                                confirmation_token: str, idempotency_key: str) -> tuple[bool, Any, str | None]:
+        """Redeem one learner-reviewed token through the private gateway."""
+        response = self._post("/execute-confirmed", {
+            "sessionId": session_id,
+            "toolContext": tool_context,
+            "confirmationToken": confirmation_token,
+            "idempotencyKey": idempotency_key[:180],
+        })
+        success, result, error = self._tool_response(response)
+        if isinstance(result, dict) and response.get("confirmedTool"):
+            result = {"tool": str(response["confirmedTool"])[:80], **result}
+        return success, result, error
+
+    @staticmethod
+    def _tool_response(response: dict[str, Any]) -> tuple[bool, Any, str | None]:
+        # Deliberately do not accept a generic `{data: ...}` wrapper here:
+        # concrete `{success, result}` keeps a tool result distinct from a
+        # transport envelope and makes the backend contract auditable.
+        success = bool(response.get("success", False))
+        error = str(response.get("error") or response.get("message") or "")[:500] or None
+        result = response.get("result", {})
+        bounded = _bound_value(result)
+        rendered = json.dumps(bounded, ensure_ascii=False)
+        if len(rendered) > _MAX_RESULT_CHARS:
+            bounded = {"truncated": True, "preview": rendered[:_MAX_RESULT_CHARS]}
+        return success, bounded, error
+
     def _post(self, suffix: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._transport(
             f"{self._base_url}{suffix}",
@@ -259,7 +317,10 @@ class AkoroToolSession:
     tool_context: str = ""
     definitions: dict[str, AkoroToolDefinition] = field(default_factory=dict)
     max_calls: int = 4
+    # This is a master deployment gate for redemption, not permission for a
+    # model to write directly. Every learner write still needs a reviewed token.
     allow_side_effects: bool = False
+    request_write_confirmations: bool = False
     disabled_reason: str | None = None
     _calls: int = 0
     _calls_by_name: dict[str, int] = field(default_factory=dict)
@@ -298,15 +359,34 @@ class AkoroToolSession:
             return self._record(call.name, False, definition.side_effecting, error="Tool-call limit reached for this teaching session")
         if self._calls_by_name.get(call.name, 0) >= definition.max_calls:
             return self._record(call.name, False, definition.side_effecting, error="This tool reached its per-session call limit")
-        # A tool catalogue may include write-capable tools, but a teaching
-        # session is read-only by default. This local defence is in addition
-        # to (never a replacement for) Akoro API authorization.
-        if definition.side_effecting and not self.allow_side_effects:
-            return self._record(call.name, False, True, error="Side-effecting tools are disabled for this teaching session")
-        if definition.side_effecting and call.name in self._completed_side_effects:
-            value = self._completed_side_effects[call.name]
-            self._executions.append(ToolExecution(call.name, True, True, already_done=True))
-            return {"success": True, "alreadyDone": True, "result": value}
+        if definition.side_effecting:
+            # A model tool call can only produce a reviewable proposal. It can
+            # never invoke a learner write directly, even when the deployment
+            # gate later allows redemption of an explicitly confirmed action.
+            if not self.request_write_confirmations:
+                return self._record(call.name, False, True, error="Write confirmation proposals are disabled for this teaching session")
+            self._calls += 1
+            self._calls_by_name[call.name] = self._calls_by_name.get(call.name, 0) + 1
+            try:
+                success, result, error = self.client.request_write_confirmation(
+                    session_id=self.session_id,
+                    tool_context=self.tool_context,
+                    name=call.name,
+                    arguments=call.arguments,
+                    proposal_key=call_id,
+                )
+            except AkoroToolsError as exc:
+                return self._record(call.name, False, True, error=str(exc))
+            if not success or not isinstance(result, Mapping) or not result.get("confirmationId"):
+                return self._record(call.name, False, True, error=error or "Action confirmation could not be prepared")
+            preview = result.get("preview")
+            safe_preview = _bound_value(preview) if isinstance(preview, dict) else None
+            self._executions.append(ToolExecution(
+                call.name, True, True, requires_confirmation=True,
+                confirmation_id=str(result["confirmationId"])[:80],
+                confirmation_preview=safe_preview,
+            ))
+            return {"success": True, "requiresConfirmation": True, "result": result}
 
         self._calls += 1
         self._calls_by_name[call.name] = self._calls_by_name.get(call.name, 0) + 1
@@ -321,8 +401,31 @@ class AkoroToolSession:
         except AkoroToolsError as exc:
             return self._record(call.name, False, definition.side_effecting, error=str(exc))
         self._executions.append(ToolExecution(call.name, success, definition.side_effecting, error=error))
-        if success and definition.side_effecting:
-            self._completed_side_effects[call.name] = result
+        return {"success": success, "result": result, **({"error": error} if error else {})}
+
+    def execute_confirmed_write(self, confirmation_token: str) -> dict[str, Any]:
+        """Redeem exactly one browser-reviewed action after the deployment gate."""
+        token = str(confirmation_token or "").strip()
+        if not token:
+            return self._record("confirmed_action", False, True, error="A confirmation token is required")
+        if not self.allow_side_effects:
+            return self._record("confirmed_action", False, True, error="Side-effecting tools are disabled for this service")
+        if not self.client:
+            return self._record("confirmed_action", False, True, error="This tool session is not available")
+        # Stable retry key for the same signed token. The API's durable
+        # idempotency row returns the original result after a network retry.
+        idempotency_key = "confirmed-" + hashlib.sha256(token.encode("utf-8")).hexdigest()
+        try:
+            success, result, error = self.client.execute_confirmed_write(
+                session_id=self.session_id,
+                tool_context=self.tool_context,
+                confirmation_token=token,
+                idempotency_key=idempotency_key,
+            )
+        except AkoroToolsError as exc:
+            return self._record("confirmed_action", False, True, error=str(exc))
+        name = result.get("tool", "confirmed_action") if isinstance(result, Mapping) else "confirmed_action"
+        self._executions.append(ToolExecution(str(name)[:80], success, True, error=error))
         return {"success": success, "result": result, **({"error": error} if error else {})}
 
     def _record(self, name: str, success: bool, side_effecting: bool, *, error: str) -> dict[str, Any]:

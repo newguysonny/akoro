@@ -9,15 +9,33 @@ from agent.tools.akoro_api import AkoroToolDefinition, AkoroToolsClient
 
 
 class RecordingTransport:
-    def __init__(self, catalogue: list[dict], result: dict | None = None) -> None:
+    def __init__(self, catalogue: list[dict], result: dict | None = None,
+                 confirmation: dict | None = None, confirmed_result: dict | None = None) -> None:
         self.catalogue = catalogue
         self.result = result or {"success": True, "result": {"completion": 42}}
+        self.confirmation = confirmation or {
+            "success": True,
+            "result": {
+                "requiresConfirmation": True,
+                "confirmationId": "3ea5f00a-13e5-4acf-aef0-bb0427e6acb4",
+                "preview": {"kind": "create_task", "title": "Revise biology"},
+            },
+        }
+        self.confirmed_result = confirmed_result or {
+            "success": True,
+            "confirmedTool": "create_task",
+            "result": {"created": True, "title": "Revise biology"},
+        }
         self.calls: list[tuple[str, dict, dict]] = []
 
     def __call__(self, url: str, payload: dict, headers: dict, _timeout: float) -> dict:
         self.calls.append((url, payload, headers))
         if url.endswith("/catalog"):
             return {"tools": self.catalogue}
+        if url.endswith("/confirmations"):
+            return self.confirmation
+        if url.endswith("/execute-confirmed"):
+            return self.confirmed_result
         return self.result
 
 
@@ -68,7 +86,7 @@ class AkoroToolsTests(unittest.TestCase):
         self.assertEqual(transport.calls[1][2]["X-Akoro-Tools-Secret"], "outbound-secret")
         self.assertEqual(tools.drain_executions(), [{"tool": "check_progress", "success": True, "sideEffecting": False}])
 
-    def test_side_effecting_catalogue_tools_are_denied_by_default(self) -> None:
+    def test_side_effecting_catalogue_tools_are_denied_without_proposals(self) -> None:
         transport = RecordingTransport([
             {
                 "name": "create_task",
@@ -83,29 +101,53 @@ class AkoroToolsTests(unittest.TestCase):
         result = tools.invoke(ToolCall("write-1", "create_task", {}))
         self.assertFalse(result["success"])
         self.assertIn("disabled", result["error"])
-        self.assertEqual(len(transport.calls), 1, "The invocation must never reach Akoro API")
+        self.assertEqual(len(transport.calls), 1, "The proposal must never reach Akoro API without its gate")
 
-    def test_scheduled_chat_follow_up_is_relayed_only_when_writes_are_enabled(self) -> None:
+    def test_side_effecting_tool_stages_a_review_card_and_never_invokes_directly(self) -> None:
         transport = RecordingTransport([
             {
                 "name": "schedule_chat_follow_up",
                 "description": "Schedule a new agent chat.",
                 "inputSchema": {
-                    "type": "object",
-                    "properties": {"message": {"type": "string"}, "scheduledAt": {"type": "string"}},
+                    "type": "object", "properties": {"message": {"type": "string"}, "scheduledAt": {"type": "string"}},
                     "required": ["message", "scheduledAt"],
                 },
                 "sideEffecting": True,
             },
-        ], result={"success": True, "result": {"scheduled": True, "followUpId": "follow-up-1"}})
+        ])
         tools = AkoroToolsClient("https://api.akoro.test/tools", "secret", transport=transport).open_session(
-            "session-1", "opaque-capability", max_calls=3, allow_side_effects=True,
+            "session-1", "opaque-capability", max_calls=3, request_write_confirmations=True,
         )
         result = tools.invoke(ToolCall("schedule-1", "schedule_chat_follow_up", {
             "message": "Ready for your revision?", "scheduledAt": "2026-09-08T14:00:00+01:00",
         }))
-        self.assertEqual(result["result"]["followUpId"], "follow-up-1")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["requiresConfirmation"])
+        self.assertEqual(transport.calls[1][0], "https://api.akoro.test/tools/confirmations")
         self.assertEqual(transport.calls[1][1]["tool"], "schedule_chat_follow_up")
+        self.assertEqual(tools.drain_executions(), [{
+            "tool": "schedule_chat_follow_up", "success": True, "sideEffecting": True,
+            "requiresConfirmation": True,
+            "confirmationId": "3ea5f00a-13e5-4acf-aef0-bb0427e6acb4",
+            "confirmationPreview": {"kind": "create_task", "title": "Revise biology"},
+        }])
+
+    def test_confirmed_write_needs_the_service_gate_and_uses_one_stable_redemption_key(self) -> None:
+        transport = RecordingTransport([])
+        blocked = AkoroToolsClient("https://api.akoro.test/tools", "secret", transport=transport).open_session(
+            "session-1", "opaque-capability", max_calls=3,
+        )
+        self.assertFalse(blocked.execute_confirmed_write("reviewed-token")["success"])
+        self.assertEqual(len(transport.calls), 1)
+
+        tools = AkoroToolsClient("https://api.akoro.test/tools", "secret", transport=transport).open_session(
+            "session-1", "opaque-capability", max_calls=3, allow_side_effects=True,
+        )
+        result = tools.execute_confirmed_write("reviewed-token")
+        self.assertTrue(result["success"])
+        self.assertEqual(result["result"]["tool"], "create_task")
+        self.assertEqual(transport.calls[-1][0], "https://api.akoro.test/tools/execute-confirmed")
+        self.assertTrue(transport.calls[-1][1]["idempotencyKey"].startswith("confirmed-"))
 
     def test_tool_loop_feeds_bounded_result_back_to_the_model(self) -> None:
         transport = RecordingTransport([

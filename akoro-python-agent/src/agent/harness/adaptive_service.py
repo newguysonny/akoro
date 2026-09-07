@@ -22,6 +22,7 @@ class AdaptiveServiceRuntime:
     internal_policy: InternalServicePolicy
     tools_client: AkoroToolsClient | None = None
     tool_max_calls_per_session: int = 4
+    write_confirmation_proposals: bool = False
     allow_side_effecting_tools: bool = False
 
     @property
@@ -44,6 +45,7 @@ class AdaptiveServiceRuntime:
                 session.tool_context,
                 max_calls=self.tool_max_calls_per_session,
                 allow_side_effects=self.allow_side_effecting_tools,
+                request_write_confirmations=self.write_confirmation_proposals,
             )
         except AkoroToolsError:
             # Tooling is an optional enhancement, never a reason to drop an
@@ -74,5 +76,6 @@ def build_adaptive_service_runtime(
         internal_policy=InternalServicePolicy(settings.internal_secret, settings.environment),
         tools_client=tools_client,
         tool_max_calls_per_session=settings.tool_max_calls_per_session,
+        write_confirmation_proposals=settings.write_confirmation_proposals,
         allow_side_effecting_tools=settings.allow_side_effecting_tools,
     )

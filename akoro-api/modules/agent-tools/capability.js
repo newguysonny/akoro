@@ -7,10 +7,11 @@
  * the gateway verifies it on every catalogue and invocation request.
  */
 import jwt from "jsonwebtoken";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const ISSUER = "akoro-api-agent-tools";
 const AUDIENCE = "akoro-python-agent-tools";
+const CONFIRMATION_AUDIENCE = "akoro-python-agent-write-confirmation";
 const SESSION_ID = /^[A-Za-z0-9_-]{1,180}$/;
 const TASK_ID = /^[A-Za-z0-9_-]{1,180}$/;
 const TEACHER_ROLES = new Set(["instructor", "teacher", "school", "school_admin", "admin"]);
@@ -81,6 +82,70 @@ export function verifyAgentToolsCapability(token, sessionId) {
     if (!claims.sub || !claims.jti || !["student", "teacher_task"].includes(claims.scope)) return null;
     if (claims.scope === "teacher_task" && (!TASK_ID.test(String(claims.taskId || "")) || !TASK_ID.test(String(claims.runId || "")))) return null;
     return claims;
+  } catch {
+    return null;
+  }
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") {
+    return Object.keys(value).sort().reduce((normalised, key) => {
+      // JSON request bodies cannot normally contain undefined, but dropping it
+      // matches JSON.stringify and prevents different representations hashing
+      // as different approved actions.
+      if (value[key] !== undefined) normalised[key] = canonicalJson(value[key]);
+      return normalised;
+    }, {});
+  }
+  return value;
+}
+
+/** Stable digest binding a confirmation to one exact validated tool payload. */
+export function agentToolArgumentsDigest(arguments_) {
+  return createHash("sha256").update(JSON.stringify(canonicalJson(arguments_))).digest("hex");
+}
+
+/**
+ * A short-lived, one-use candidate token delivered only after the authenticated
+ * learner reviews a pending operation. The database confirmation row remains
+ * authoritative and is consumed by the private gateway before it executes.
+ */
+export function issueAgentToolsWriteConfirmation({
+  userId, sessionId, capabilityJti, confirmationId, toolName, argumentsDigest, ttlSeconds = 300,
+}) {
+  const secret = capabilitySecret();
+  if (!secret) throw new Error("AKORO_AGENT_TOOLS_CAPABILITY_SECRET is required to issue a write confirmation");
+  if (!userId || !SESSION_ID.test(String(sessionId)) || !capabilityJti || !confirmationId
+      || !/^[a-z][a-z0-9_]{0,79}$/.test(String(toolName)) || !/^[a-f0-9]{64}$/i.test(String(argumentsDigest))) {
+    throw new Error("A valid confirmed action is required");
+  }
+  const boundedTtl = Math.max(60, Math.min(Number(ttlSeconds) || 300, 600));
+  return jwt.sign({
+    sub: String(userId),
+    sid: String(sessionId),
+    scope: "student_write_confirmation",
+    capabilityJti: String(capabilityJti),
+    confirmationId: String(confirmationId),
+    toolName: String(toolName),
+    argumentsDigest: String(argumentsDigest),
+    jti: randomUUID(),
+  }, secret, { algorithm: "HS256", issuer: ISSUER, audience: CONFIRMATION_AUDIENCE, expiresIn: boundedTtl });
+}
+
+export function verifyAgentToolsWriteConfirmation(token, { claims, sessionId } = {}) {
+  const secret = capabilitySecret();
+  if (!secret || !token || !claims || !SESSION_ID.test(String(sessionId))) return null;
+  try {
+    const confirmation = jwt.verify(token, secret, {
+      algorithms: ["HS256"], issuer: ISSUER, audience: CONFIRMATION_AUDIENCE,
+    });
+    if (!confirmation || confirmation.scope !== "student_write_confirmation"
+        || confirmation.sub !== claims.sub || confirmation.sid !== sessionId
+        || confirmation.capabilityJti !== claims.jti || !confirmation.confirmationId
+        || !/^[a-z][a-z0-9_]{0,79}$/.test(String(confirmation.toolName || ""))
+        || !/^[a-f0-9]{64}$/i.test(String(confirmation.argumentsDigest || ""))) return null;
+    return confirmation;
   } catch {
     return null;
   }

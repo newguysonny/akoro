@@ -248,6 +248,12 @@ class AdaptiveTeachingLoop:
             "turnXP": turn_xp,
         }
 
+    def execute_confirmed_action(self, confirmation_token: str) -> dict[str, Any]:
+        """Redeem a server-issued learner confirmation without re-prompting the model."""
+        if not self._tools:
+            return {"success": False, "error": "Akoro account tools are not available for this session"}
+        return self._tools.execute_confirmed_write(confirmation_token)
+
     def generate_summary(self) -> dict[str, Any]:
         if not self._profile:
             raise RuntimeError("Initialize the session before requesting a summary")

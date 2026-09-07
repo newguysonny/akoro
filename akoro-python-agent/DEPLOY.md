@@ -24,6 +24,8 @@ internal credential.
    AKORO_AGENT_TOOLS_SECRET=<different long random value>
    AGENT_TOOL_TIMEOUT_SECONDS=12
    AGENT_TOOL_MAX_CALLS_PER_SESSION=4
+   # Keep both false until the Node bridge and learner review UI are deployed.
+   AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS=false
    AGENT_ALLOW_SIDE_EFFECTING_TOOLS=false
    ```
 
@@ -153,10 +155,38 @@ API field; the model may use relevant bounded facts in its natural-language
 reply. Calls are capped per session, and malformed/unavailable tools fail
 closed without ending a valid teaching session.
 
-Tools with `sideEffecting: true` are denied by default by the Python service.
-Keep `AGENT_ALLOW_SIDE_EFFECTING_TOOLS=false` until an explicit Akoro API
-confirmed-action flow is deployed; backend authorization remains mandatory even
-if it is enabled later.
+Learner tools with `sideEffecting: true` cannot execute directly from a Python
+model call. With `AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS=true`, Python may
+only stage a 10-minute learner review preview through Akoro API. The browser
+must explicitly approve it at the authenticated `/api/agent-actions/v1`
+confirmation endpoint; Akoro then issues a short-lived, one-use token bound to
+the exact tool arguments. The trusted Node bridge sends that token to Python's
+`POST /v1/sessions/{sessionId}/confirmed-actions` endpoint. Only then—and only
+with `AGENT_ALLOW_SIDE_EFFECTING_TOOLS=true`—can Python redeem the action. The
+private gateway rechecks the signed user/session/capability/payload binding and
+atomically consumes the durable confirmation before executing it. Backend
+authorization remains mandatory at every step.
+
+The browser review contract is deliberately separate from the private gateway:
+
+| Purpose | Authenticated Akoro API route | Body |
+|---|---|---|
+| List bounded pending/reviewed previews | `GET /api/agent-actions/v1/confirmations` | — |
+| Approve an exact preview | `POST /api/agent-actions/v1/confirmations/{confirmationId}/confirm` | `{"confirmed":true}` |
+| Reject an exact preview | `POST /api/agent-actions/v1/confirmations/{confirmationId}/reject` | `{"rejected":true}` |
+
+These routes return title/message, ISO instant, local date/time, and IANA
+timezone where the action has a time. They do **not** return raw action
+arguments, the Akoro gateway secret, or the confirmation token. On approval,
+Akoro API performs the trusted relay to the Python endpoint below. If the
+bridge is not configured, approval remains durable but cannot execute anything.
+
+Python has two private gateway calls: `POST
+/api/internal/agent-tools/v1/confirmations` stages a proposal and `POST
+/api/internal/agent-tools/v1/execute-confirmed` redeems an opaque reviewed
+token. Raw `/invoke` rejects every learner write tool. The new confirmation
+ledger migration is `2026-agent-tool-write-confirmations.sql`; apply it before
+enabling the proposals flag.
 
 ## Future akoro-api bridge contract
 
@@ -181,6 +211,7 @@ shape that the current Socket.IO layer emits:
 |---|---|---|
 | Create live session | `POST /v1/sessions` | `session_ready` payload |
 | Process a buffered teacher turn | `POST /v1/sessions/{id}/turns` | adaptive teaching response |
+| Redeem an approved learner write | `POST /v1/sessions/{id}/confirmed-actions` | submits only the opaque reviewed token; does not call the model |
 | Stream a teacher turn | `POST /v1/sessions/{id}/turns/stream` | internal SSE: `stream_started`, `student_token`, then `turn_complete` |
 | Stop a stream | `POST /v1/sessions/{id}/turns/stream/stop` | requests a safe, non-committing stop |
 | Read a summary | `GET /v1/sessions/{id}/summary` | `session_summary` payload |

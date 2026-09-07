@@ -32,3 +32,10 @@ class StartSessionRequest(Contract):
 
 class TeachingTurnRequest(Contract):
     message: str = Field(min_length=1, max_length=12_000)
+
+
+class ConfirmedActionRequest(Contract):
+    # Opaque, short-lived token issued only after the learner approves the
+    # exact preview. The trusted Node bridge—not browser JavaScript—relays it.
+    # Python does not parse or authorise it.
+    confirmation_token: str = Field(alias="confirmationToken", min_length=1, max_length=4096)

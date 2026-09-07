@@ -9,13 +9,19 @@ import { Router } from "express";
 
 import db from "../../db.js";
 import { CHAT_TOOLS, executeChatTool } from "../adaptive-learning/chat.js";
-import { isIanaTimeZone } from "../adaptive-learning/learner-time-context.js";
+import { getLearnerProfileContext } from "../adaptive-learning/learner-profile-context.js";
+import { isIanaTimeZone, localiseInstant } from "../adaptive-learning/learner-time-context.js";
 import { getToolsForTask } from "../tasks/tools/index.js";
 import {
   isTeacherRole,
   requireAgentToolsCredential,
   verifyAgentToolsCapability,
+  verifyAgentToolsWriteConfirmation,
 } from "./capability.js";
+import {
+  consumeWriteConfirmation,
+  requestWriteConfirmation,
+} from "./write-confirmations.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
@@ -202,6 +208,9 @@ function validateStudentArguments(name, arguments_) {
       only(new Set(["message", "scheduledAt", "timezone", "title"]));
       shortText(arguments_.message, "message", true, 800);
       shortText(arguments_.scheduledAt, "scheduledAt", true, 64);
+      if (typeof arguments_.scheduledAt !== "string" || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/i.test(arguments_.scheduledAt.trim()) || !Number.isFinite(new Date(arguments_.scheduledAt).getTime())) {
+        throw new GatewayError(422, "scheduledAt must be an ISO 8601 timestamp with a timezone offset");
+      }
       shortText(arguments_.timezone, "timezone", false, 80);
       if (arguments_.timezone !== undefined && !isIanaTimeZone(arguments_.timezone)) {
         throw new GatewayError(422, "timezone must be a valid IANA timezone");
@@ -290,6 +299,95 @@ function normaliseToolOutcome(outcome) {
   return { success: true, result: outcome && typeof outcome === "object" ? outcome : { value: outcome ?? null } };
 }
 
+function invocationDetails(body, idempotencyField = "idempotencyKey") {
+  const name = typeof body.tool === "string" ? body.tool : "";
+  const idempotencyKey = typeof body[idempotencyField] === "string" ? body[idempotencyField] : "";
+  if (!/^[a-z][a-z0-9_]{0,79}$/.test(name) || !idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY) {
+    throw new GatewayError(422, `tool and ${idempotencyField} are invalid`);
+  }
+  if (!body.arguments || typeof body.arguments !== "object" || Array.isArray(body.arguments)) {
+    throw new GatewayError(422, "arguments must be an object");
+  }
+  return { name, idempotencyKey, arguments_: body.arguments };
+}
+
+async function freezeLearnerWriteTimezone(name, arguments_, userId) {
+  // The reviewed text and the eventual write must agree even if an account
+  // timezone is edited between review and redemption. Copy first so request
+  // parsing/model-owned input is never mutated after validation.
+  if (!["create_task", "schedule_chat_follow_up"].includes(name) || arguments_.timezone) return arguments_;
+  const context = await getLearnerProfileContext(userId);
+  return { ...arguments_, timezone: context.timeZone };
+}
+
+async function confirmationPreview(name, arguments_, principalId) {
+  switch (name) {
+    case "create_task": {
+      const dueAt = arguments_.dueAt || null;
+      const timezone = arguments_.timezone || null;
+      return {
+        kind: "create_task",
+        title: boundedText(arguments_.title, 180),
+        description: arguments_.description ? boundedText(arguments_.description, 800) : null,
+        due: arguments_.due ? boundedText(arguments_.due, 120) : null,
+        dueAt,
+        dueLocal: dueAt && timezone ? localiseInstant(dueAt, timezone) : null,
+        timezone,
+        course: arguments_.course ? boundedText(arguments_.course, 120) : null,
+      };
+    }
+    case "schedule_chat_follow_up": {
+      const scheduledAt = arguments_.scheduledAt;
+      const timezone = arguments_.timezone;
+      return {
+        kind: "schedule_chat_follow_up",
+        title: arguments_.title ? boundedText(arguments_.title, 80) : "Scheduled check-in",
+        message: boundedText(arguments_.message, 800),
+        scheduledAt,
+        scheduledLocal: localiseInstant(scheduledAt, timezone),
+        timezone,
+      };
+    }
+    case "cancel_scheduled_chat_follow_up": {
+      // An opaque id alone is not a meaningful confirmation. Re-read the
+      // learner-owned pending delivery so the card says exactly which future
+      // message, date/time, and timezone will be cancelled.
+      const { data, error } = await db.schema("edu").from("scheduled_chat_follow_ups")
+        .select("id, title, message, scheduled_at, timezone")
+        .eq("id", arguments_.followUpId)
+        .eq("user_id", principalId)
+        .eq("status", "scheduled")
+        .maybeSingle();
+      if (error) throw new GatewayError(503, "Could not prepare the scheduled-message cancellation");
+      if (!data) throw new GatewayError(404, "The scheduled message is no longer available to cancel");
+      return {
+        kind: "cancel_scheduled_chat_follow_up",
+        followUpId: data.id,
+        title: boundedText(data.title, 80),
+        message: boundedText(data.message, 800),
+        scheduledAt: data.scheduled_at,
+        scheduledLocal: localiseInstant(data.scheduled_at, data.timezone),
+        timezone: data.timezone,
+      };
+    }
+    default:
+      return { kind: name };
+  }
+}
+
+async function assertLearnerWriteProposal({ claims, principal, name, arguments_ }) {
+  if (claims.scope !== "student") {
+    throw new GatewayError(403, "Write confirmations are currently available only for learner account tools");
+  }
+  const catalogue = await catalogueFor(claims, principal);
+  const definition = catalogue.find((tool) => tool.name === name);
+  if (!definition) throw new GatewayError(404, "Tool is not available for this context");
+  if (!definition.sideEffecting || !STUDENT_WRITE_TOOLS.has(name)) {
+    throw new GatewayError(422, "Only learner write tools require confirmation");
+  }
+  validateStudentArguments(name, arguments_);
+}
+
 async function priorInvocation(capabilityJti, idempotencyKey) {
   const { data, error } = await db.schema("edu").from("agent_tool_invocations")
     .select("status, response, tool_name")
@@ -325,6 +423,65 @@ async function completeInvocation(claims, idempotencyKey, response) {
   if (error) throw new GatewayError(503, "Agent tools idempotency store is unavailable");
 }
 
+/** Execute a previously validated invocation and persist its replay result. */
+async function executeInvocation({ claims, principal, name, arguments_, idempotencyKey }) {
+  const claim = await claimInvocation({ claims, principal, name, idempotencyKey });
+  if (!claim.created) {
+    if (!claim.existing || claim.existing.status === "running") {
+      throw new GatewayError(409, "An invocation with this idempotency key is already running");
+    }
+    if (claim.existing.tool_name !== name) {
+      throw new GatewayError(409, "An idempotency key cannot be reused for another tool");
+    }
+    return claim.existing.response;
+  }
+
+  let response;
+  try {
+    let outcome;
+    if (claims.scope === "student") {
+      outcome = await executeChatTool(name, arguments_, principal.id);
+    } else {
+      const teacherTool = await registeredTeacherTool(claims, principal, name);
+      const courseId = await assertCourseScopedArguments(arguments_, teacherTool.context, principal);
+      await assertStudentScopedArguments(arguments_, courseId);
+      outcome = await teacherTool.registered.execute(arguments_, teacherTool.context);
+    }
+    response = normaliseToolOutcome(outcome);
+  } catch (error) {
+    console.error("[agent-tools/invoke]", { tool: name, message: error.message });
+    response = { success: false, error: "Tool operation could not be completed" };
+  }
+  await completeInvocation(claims, idempotencyKey, response);
+  return response;
+}
+
+/**
+ * Stage—not execute—a learner write proposed by the Python model. The returned
+ * preview is what the browser must show the learner before confirmation.
+ */
+router.post("/confirmations", requireAgentToolsCredential, async (req, res) => {
+  try {
+    const { body, claims, sessionId } = readRequest(req);
+    const { name, idempotencyKey: proposalKey, arguments_ } = invocationDetails(body, "proposalKey");
+    const principal = await currentPrincipal(claims);
+    await assertLearnerWriteProposal({ claims, principal, name, arguments_ });
+    const reviewedArguments = await freezeLearnerWriteTimezone(name, arguments_, principal.id);
+    const confirmation = await requestWriteConfirmation({
+      claims, principal, sessionId, toolName: name, arguments_: reviewedArguments,
+      preview: await confirmationPreview(name, reviewedArguments, principal.id), proposalKey,
+    });
+    return res.json({ success: true, result: { requiresConfirmation: true, ...confirmation } });
+  } catch (error) {
+    const status = error instanceof GatewayError ? error.status : 503;
+    if (!(error instanceof GatewayError)) console.error("[agent-tools/confirmations]", error.message);
+    return res.status(status).json({
+      success: false,
+      error: error instanceof GatewayError ? error.message : "Action confirmation could not be prepared",
+    });
+  }
+});
+
 router.post("/catalog", requireAgentToolsCredential, async (req, res) => {
   try {
     const { claims } = readRequest(req);
@@ -337,51 +494,73 @@ router.post("/catalog", requireAgentToolsCredential, async (req, res) => {
   }
 });
 
+/**
+ * Redeem a browser-reviewed action through the Python-only gateway. The tool
+ * arguments come from the durable proposal, so a model cannot alter them after
+ * the learner has read and approved the preview.
+ */
+router.post("/execute-confirmed", requireAgentToolsCredential, async (req, res) => {
+  try {
+    const { body, claims, sessionId } = readRequest(req);
+    const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
+    if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY) {
+      throw new GatewayError(422, "idempotencyKey is invalid");
+    }
+    const confirmation = verifyAgentToolsWriteConfirmation(body.confirmationToken, { claims, sessionId });
+    if (!confirmation) throw new GatewayError(403, "A valid learner write confirmation is required");
+    const principal = await currentPrincipal(claims);
+    if (claims.scope !== "student") throw new GatewayError(403, "This confirmation is not valid for the current tool scope");
+    const catalogue = await catalogueFor(claims, principal);
+    if (!catalogue.some((tool) => tool.name === confirmation.toolName && tool.sideEffecting)) {
+      throw new GatewayError(403, "The confirmed tool is no longer available for this account");
+    }
+
+    // A network retry after successful execution must return its original
+    // stored result even though the one-use confirmation has been consumed.
+    const existing = await priorInvocation(claims.jti, idempotencyKey);
+    if (existing) {
+      if (existing.status === "running") throw new GatewayError(409, "An invocation with this idempotency key is already running");
+      if (existing.tool_name !== confirmation.toolName) throw new GatewayError(409, "An idempotency key cannot be reused for another tool");
+      return res.json(existing.response);
+    }
+
+    const approved = await consumeWriteConfirmation({ confirmation, claims, principal, sessionId });
+    if (!STUDENT_WRITE_TOOLS.has(approved.toolName)) {
+      throw new GatewayError(403, "This confirmation is not valid for a learner write tool");
+    }
+    validateStudentArguments(approved.toolName, approved.arguments_);
+    const response = await executeInvocation({
+      claims, principal, name: approved.toolName, arguments_: approved.arguments_, idempotencyKey,
+    });
+    return res.json({ ...response, confirmedTool: approved.toolName });
+  } catch (error) {
+    const message = error?.message || "";
+    const status = error instanceof GatewayError ? error.status
+      : /expired/i.test(message) ? 410
+      : /invalid|already used|already being used/i.test(message) ? 409
+      : 503;
+    if (!(error instanceof GatewayError)) console.error("[agent-tools/execute-confirmed]", message);
+    return res.status(status).json({
+      success: false,
+      error: error instanceof GatewayError ? error.message : "Confirmed action could not be executed",
+    });
+  }
+});
+
 router.post("/invoke", requireAgentToolsCredential, async (req, res) => {
   try {
     const { body, claims } = readRequest(req);
-    const name = typeof body.tool === "string" ? body.tool : "";
-    const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
-    if (!/^[a-z][a-z0-9_]{0,79}$/.test(name) || !idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY) {
-      throw new GatewayError(422, "tool and idempotencyKey are invalid");
-    }
-    if (!body.arguments || typeof body.arguments !== "object" || Array.isArray(body.arguments)) {
-      throw new GatewayError(422, "arguments must be an object");
-    }
+    const { name, idempotencyKey, arguments_ } = invocationDetails(body);
     const principal = await currentPrincipal(claims);
     const catalogue = await catalogueFor(claims, principal);
     if (!catalogue.some((tool) => tool.name === name)) throw new GatewayError(404, "Tool is not available for this context");
-    if (claims.scope === "student") validateStudentArguments(name, body.arguments);
-
-    const claim = await claimInvocation({ claims, principal, name, idempotencyKey });
-    if (!claim.created) {
-      if (!claim.existing || claim.existing.status === "running") {
-        throw new GatewayError(409, "An invocation with this idempotency key is already running");
+    if (claims.scope === "student") {
+      validateStudentArguments(name, arguments_);
+      if (STUDENT_WRITE_TOOLS.has(name)) {
+        throw new GatewayError(403, "Learner write tools require a reviewed confirmation and /execute-confirmed");
       }
-      if (claim.existing.tool_name !== name) {
-        throw new GatewayError(409, "An idempotency key cannot be reused for another tool");
-      }
-      return res.json(claim.existing.response);
     }
-
-    let response;
-    try {
-      let outcome;
-      if (claims.scope === "student") {
-        outcome = await executeChatTool(name, body.arguments, principal.id);
-      } else {
-        const teacherTool = await registeredTeacherTool(claims, principal, name);
-        const courseId = await assertCourseScopedArguments(body.arguments, teacherTool.context, principal);
-        await assertStudentScopedArguments(body.arguments, courseId);
-        outcome = await teacherTool.registered.execute(body.arguments, teacherTool.context);
-      }
-      response = normaliseToolOutcome(outcome);
-    } catch (error) {
-      console.error("[agent-tools/invoke]", { tool: name, message: error.message });
-      response = { success: false, error: "Tool operation could not be completed" };
-    }
-    await completeInvocation(claims, idempotencyKey, response);
-    return res.json(response);
+    return res.json(await executeInvocation({ claims, principal, name, arguments_, idempotencyKey }));
   } catch (error) {
     const status = error instanceof GatewayError ? error.status : 500;
     if (!(error instanceof GatewayError)) console.error("[agent-tools/invoke]", error.message);

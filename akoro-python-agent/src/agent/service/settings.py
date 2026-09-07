@@ -31,6 +31,10 @@ class ServiceSettings:
     akoro_tools_api_secret: str | None = None
     tool_timeout_seconds: float = 12
     tool_max_calls_per_session: int = 4
+    # Enables staging review cards from model-proposed learner writes. Staging
+    # never executes the action; redemption needs a learner confirmation too.
+    write_confirmation_proposals: bool = False
+    # Master deployment gate for redeeming an already learner-confirmed write.
     allow_side_effecting_tools: bool = False
 
     @property
@@ -85,5 +89,9 @@ class ServiceSettings:
             akoro_tools_api_secret=tools_secret,
             tool_timeout_seconds=tool_timeout,
             tool_max_calls_per_session=tool_max_calls,
+            write_confirmation_proposals=_as_bool(
+                source.get("AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS"),
+                name="AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS",
+            ),
             allow_side_effecting_tools=_as_bool(source.get("AGENT_ALLOW_SIDE_EFFECTING_TOOLS"), name="AGENT_ALLOW_SIDE_EFFECTING_TOOLS"),
         )

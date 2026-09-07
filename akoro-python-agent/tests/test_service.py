@@ -73,6 +73,19 @@ class ToolTransport:
         return {"success": True, "result": {"completion": 61, "privateIdentifier": "never-return-directly"}}
 
 
+class ConfirmationTransport(ToolTransport):
+    def __call__(self, url, payload, headers, timeout):
+        self.calls.append((url, payload, headers))
+        if url.endswith("/catalog"):
+            return {"tools": [{
+                "name": "create_task", "description": "Create a reviewed task.", "sideEffecting": True,
+                "inputSchema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+            }]}
+        if url.endswith("/execute-confirmed"):
+            return {"success": True, "confirmedTool": "create_task", "result": {"created": True, "taskId": "task-1"}}
+        raise AssertionError(f"Unexpected transport call: {url}")
+
+
 class ServiceSettingsTests(unittest.TestCase):
     def test_tools_gateway_variables_are_an_all_or_nothing_secure_pair(self) -> None:
         base = {"OPENAI_API_KEY": "test", "AGENT_SERVICE_ENVIRONMENT": "production", "AKORO_AGENT_SERVICE_SECRET": "inbound"}
@@ -185,3 +198,36 @@ class ServiceContractTests(unittest.TestCase):
         self.assertEqual(turn.json()["toolExecutions"], [{"tool": "check_progress", "success": True, "sideEffecting": False}])
         self.assertNotIn("privateIdentifier", turn.text)
         self.assertEqual(transport.calls[1][1]["toolContext"], "opaque-signed-context")
+
+    def test_confirmed_action_endpoint_only_redeems_the_opaque_review_token(self) -> None:
+        transport = ConfirmationTransport()
+        settings = ServiceSettings(
+            llm=LLMConfig(api_key="test"), environment="development", internal_secret="shared-secret",
+            akoro_api_url="https://api.example.test", session_ttl_seconds=600,
+            allow_side_effecting_tools=True,
+        )
+        runtime = build_adaptive_service_runtime(
+            settings, model=FakeServiceModel(), repository=InMemoryLearningRepository(),
+            tools_client=AkoroToolsClient("https://api.example.test/internal/tools", "outbound-secret", transport=transport),
+        )
+        client = TestClient(create_app(settings, runtime=runtime))
+        start = client.post("/v1/sessions", headers=self.headers, json={
+            "studentId": "learner-1", "topic": "Plants", "sessionId": "confirmed-action-session",
+            "toolContext": "opaque-signed-context",
+        })
+        self.assertEqual(start.status_code, 200)
+
+        response = client.post(
+            "/v1/sessions/confirmed-action-session/confirmed-actions", headers=self.headers,
+            json={"confirmationToken": "opaque-learner-reviewed-token"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["execution"]["success"], True)
+        self.assertTrue(transport.calls[1][0].endswith("/execute-confirmed"))
+        gateway_payload = transport.calls[1][1]
+        self.assertEqual(set(gateway_payload), {"sessionId", "toolContext", "confirmationToken", "idempotencyKey"})
+        self.assertEqual(gateway_payload["sessionId"], "confirmed-action-session")
+        self.assertEqual(gateway_payload["toolContext"], "opaque-signed-context")
+        self.assertEqual(gateway_payload["confirmationToken"], "opaque-learner-reviewed-token")
+        self.assertTrue(gateway_payload["idempotencyKey"].startswith("confirmed-"))
+        self.assertEqual(len(transport.calls), 2)

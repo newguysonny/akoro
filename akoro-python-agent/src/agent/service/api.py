@@ -19,7 +19,7 @@ from agent.adaptive.repository import InMemoryLearningRepository, LearningReposi
 from agent.adaptive.types import AdaptiveSession, SessionReference
 from agent.harness.adaptive_service import AdaptiveServiceRuntime, build_adaptive_service_runtime
 
-from .contracts import StartSessionRequest, TeachingTurnRequest
+from .contracts import ConfirmedActionRequest, StartSessionRequest, TeachingTurnRequest
 from .settings import ServiceSettings
 from .store import SessionBusyError, SessionNotFoundError, StreamAlreadyActiveError, StreamNotActiveError
 from .streaming import sse_event
@@ -59,6 +59,7 @@ def create_app(
             "tools": {
                 "configured": runtime.tools_configured,
                 "provider": "akoro-api" if runtime.tools_configured else None,
+                "writeConfirmationProposalsEnabled": runtime.write_confirmation_proposals,
                 "sideEffectingToolsEnabled": runtime.allow_side_effecting_tools,
             },
         }
@@ -104,6 +105,18 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A teaching stream is active for this session") from exc
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    @app.post("/v1/sessions/{session_id}/confirmed-actions", dependencies=[Depends(require_internal_caller)])
+    def execute_confirmed_action(session_id: str, payload: ConfirmedActionRequest) -> dict:
+        """Redeem one learner-reviewed action; never ask the model to repeat it."""
+        try:
+            runtime.sessions.assert_not_streaming(session_id)
+            with runtime.sessions.session(session_id) as loop:
+                return {"execution": loop.execute_confirmed_action(payload.confirmation_token)}
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A teaching stream is active for this session") from exc
 
     @app.post("/v1/sessions/{session_id}/turns/stream", dependencies=[Depends(require_internal_caller)])
     def streaming_teaching_turn(session_id: str, payload: TeachingTurnRequest) -> StreamingResponse:

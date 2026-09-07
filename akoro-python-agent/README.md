@@ -167,7 +167,9 @@ The implemented Akoro API contract is intentionally small:
 | Request | Body | Required response |
 |---|---|---|
 | `POST {AKORO_AGENT_TOOLS_URL}/catalog` | `sessionId`, `toolContext` | `{"tools":[{"name","description","inputSchema","sideEffecting","maxCalls"}]}` |
-| `POST {AKORO_AGENT_TOOLS_URL}/invoke` | `sessionId`, `toolContext`, `tool`, `arguments`, `idempotencyKey` | `{"success":true,"result":{...}}` or `{"success":false,"error":"..."}` |
+| `POST {AKORO_AGENT_TOOLS_URL}/invoke` | `sessionId`, `toolContext`, `tool`, `arguments`, `idempotencyKey` | Read-tool result only: `{"success":true,"result":{...}}` |
+| `POST {AKORO_AGENT_TOOLS_URL}/confirmations` | `sessionId`, `toolContext`, `tool`, `arguments`, `proposalKey` | Non-executing review preview and `confirmationId` |
+| `POST {AKORO_AGENT_TOOLS_URL}/execute-confirmed` | `sessionId`, `toolContext`, `confirmationToken`, `idempotencyKey` | Executes the server-stored reviewed action once |
 
 Python sends `X-Akoro-Tools-Secret` only on those private outbound requests.
 The Akoro API validates that secret, validates and expires `toolContext`,
@@ -225,11 +227,26 @@ configured per-session limit. Only result-free execution metadata is returned
 in `toolExecutions`; the raw structured result is not echoed as an API field
 (the model may use bounded facts from it in its natural-language reply).
 
-Read tools are available by default once Akoro grants them. Tools marked
-`sideEffecting: true` are blocked locally unless
-`AGENT_ALLOW_SIDE_EFFECTING_TOOLS=true`; leave that default in place until the
-Akoro API has a confirmed-action workflow. Akoro API authorization remains the
-final and mandatory enforcement point in either case.
+### Learner write-confirmation flow
+
+Read tools are available by default once Akoro grants them. A learner write tool
+never runs directly from a model call. When
+`AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS=true`, Python can only stage a
+short-lived review card containing the exact bounded task/schedule/cancellation
+preview. The authenticated learner reviews it at the Akoro API browser endpoint,
+then Akoro issues a one-use, action-and-payload-bound confirmation token.
+
+The learner UI reads pending previews at `GET /api/agent-actions/v1/confirmations`
+and explicitly approves or rejects one at
+`POST /api/agent-actions/v1/confirmations/{confirmationId}/confirm` (with
+`{"confirmed":true}`) or `/reject` (with `{"rejected":true}`). The trusted Node bridge supplies the approval
+token to Python's `POST /v1/sessions/{sessionId}/confirmed-actions` endpoint.
+Python may redeem it only when `AGENT_ALLOW_SIDE_EFFECTING_TOOLS=true`; its private gateway validates
+the signed session/principal/capability/payload binding and atomically consumes
+the durable confirmation before execution. A retry with the same token receives
+the durable idempotent result; a second action cannot use it. Keep both flags
+`false` until the bridge and review UI are deployed. Akoro API authorization
+remains mandatory at every step.
 
 ## Examples
 
