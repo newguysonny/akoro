@@ -59,7 +59,7 @@ function ThoughtBlock({ thinking, streaming }) {
 }
 
 function AgentChatTab({
-  onStartTeach, agentNameProp, agentEmojiProp, onChatActive,
+  onStartTeach, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
   agentOnline = false, agentAutonomyLoaded = false, agentAutonomySaving = false,
   onToggleAgentAutonomy,
 }) {
@@ -591,6 +591,15 @@ function AgentChatTab({
               </button>
               <button onClick={()=>{setResearchMode(v=>!v);setThinkMode(false);}} disabled={loading} title={t('agent.mode_research_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${researchMode?`${BRAND}55`:"var(--ak-border2)"}`,background:researchMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:researchMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
                 <Icon name="ti-microscope" size={12}/> {t('agent.mode_research')}
+              </button>
+              <button type="button" onClick={()=>onStartExamPrep?.()} disabled={loading || !onStartExamPrep} title="Start generated exam-style practice" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${GREEN}45`,background:`${GREEN}10`,fontSize:10.5,fontWeight:800,color:GREEN,cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+                <Icon name="ti-clipboard-check" size={12}/> Practice
+              </button>
+              <button type="button" onClick={()=>onOpenConceptTracker?.()} disabled={!onOpenConceptTracker} title="View learning tracker" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${BRAND}35`,background:`${BRAND}0D`,fontSize:10.5,fontWeight:800,color:BRAND,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
+                <Icon name="ti-chart-bar" size={12}/> Progress
+              </button>
+              <button type="button" onClick={()=>onOpenAdaptiveControls?.()} disabled={!onOpenAdaptiveControls} title="Open adaptive learning controls" style={{ width:29,height:29,padding:0,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:"pointer",flexShrink:0 }}>
+                <Icon name="ti-adjustments" size={13}/>
               </button>
               <div style={{ flex:1 }}/>
               <button onClick={()=>setTaskOpen(true)} style={{ display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:20,border:`1px solid ${GOLD}40`,background:`${GOLD}12`,fontSize:10.5,fontWeight:800,color:"#B45309",cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>

@@ -14,9 +14,12 @@ import SelfStudyList  from '../components/sessions/SelfStudyList.jsx';
 import SessionSheet   from '../components/sessions/SessionSheet.jsx';
 import BlockRenderer  from '../components/sessions/BlockRenderer.jsx';
 import TeachAgentModal   from '../components/teaching/TeachAgentModal.jsx';
+import ConceptTrackerModal from '../components/teaching/ConceptTrackerModal.jsx';
+import AdaptiveControlsModal from '../components/teaching/AdaptiveControlsModal.jsx';
 import DecaySessionModal from '../components/teaching/DecaySessionModal.jsx';
 import ConfigModal       from '../components/teaching/ConfigModal.jsx';
 import AssessmentRoom     from '../components/assessment/AssessmentRoom.jsx';
+import ExamPrepConfidenceModal from '../components/assessment/ExamPrepConfidenceModal.jsx';
 import BattleModal       from '../components/battles/BattleModal.jsx';
 import ChallengeModal    from '../components/battles/ChallengeModal.jsx';
 import { BattlesTab, ChallengeRow } from '../components/battles/BattlesTab.jsx';
@@ -86,6 +89,9 @@ export default function LearnerDashboard() {
   const [configInitial,     setConfigInitial]     = useState(null);  // pre-fill from session sheet
   const [decaySession,      setDecaySession]      = useState(null); // decay alert object
   const [assessSession,     setAssessSession]     = useState(null); // proctored assessment target
+  const [examPrepOpen,      setExamPrepOpen]      = useState(false); // learner-owned generated-practice loop
+  const [conceptTrackerOpen,setConceptTrackerOpen] = useState(false); // canonical tracker projection
+  const [adaptiveControlsOpen,setAdaptiveControlsOpen] = useState(false); // learner-selected controls / clear
   const [acceptedIds,       setAcceptedIds]       = useState(new Set());
   const [battles,           setBattles]           = useState([]);
   const [toast,               setToast]               = useState(null);
@@ -953,7 +959,7 @@ export default function LearnerDashboard() {
             : <DiscoveryTab/>)}
           {tab==="rankings" && <RankingsTab/>}
           {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
-          {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}
+          {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} onStartExamPrep={()=>setExamPrepOpen(true)} onOpenConceptTracker={()=>setConceptTrackerOpen(true)} onOpenAdaptiveControls={()=>setAdaptiveControlsOpen(true)} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}
             agentOnline={agentOnline} agentAutonomyLoaded={agentAutonomyLoaded} agentAutonomySaving={agentAutonomySaving}
             onToggleAgentAutonomy={toggleAgentAutonomy}/>}
         </div>
@@ -1070,6 +1076,15 @@ export default function LearnerDashboard() {
             onClose={() => setAssessSession(null)}
           />
         )}
+        {examPrepOpen && <ExamPrepConfidenceModal
+          onClose={()=>setExamPrepOpen(false)}
+          onStartTeach={config=>{
+            setExamPrepOpen(false);
+            setTeachSession({ ...config, agentName:agentProfile.name, agentEmoji:agentProfile.emoji });
+          }}
+        />}
+        {conceptTrackerOpen && <ConceptTrackerModal onClose={()=>setConceptTrackerOpen(false)} />}
+        {adaptiveControlsOpen && <AdaptiveControlsModal onClose={()=>setAdaptiveControlsOpen(false)} />}
 
         {selectedSession && <SessionSheet
           onMinimize={minimizeSessionSheet}

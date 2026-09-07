@@ -14,6 +14,7 @@ from typing import Any
 from agent.adaptive.concepts import CurriculumConcept, LearnerConceptState, encode_concept_condition
 from agent.adaptive.guide import NaNaGuide
 from agent.adaptive.learner_signals import LearningMeasurement, LearningSignalJudge, LearnerTeachingProfile, episode_from_observations
+from agent.adaptive.planning_skills import TopicSignal, calibrate_difficulty, prioritise_topics, session_sizing, synthesise_progress
 from agent.adaptive.soul_state import SoulState
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import LearningRepository
@@ -166,6 +167,10 @@ class AdaptiveTeachingLoop:
             "knowledgeScore": round(self._profile.knowledge_score),
             "initialState": cognitive.as_percentages(),
             "conceptTracking": self._concept_tracking_public(),
+            # Deterministic, explainable planner output. The presentation layer
+            # may choose not to show it; it is also appended as a bounded cue to
+            # the teaching prompt below, never a durable learner label.
+            "adaptivePlan": self._adaptive_plan_public(),
             "learningInsights": self._learning_insights_public(),
             "soulState": self._soul_state_public(),
             # Metadata only: source text never crosses the service boundary.
@@ -255,13 +260,53 @@ class AdaptiveTeachingLoop:
         """Whether completed turns write to the learner-owned insights store."""
         return self._learning_insights_store is not None
 
+    def _topic_signals(self) -> list[TopicSignal]:
+        states = {state.concept_id: state for state in self._concept_states}
+        return [
+            TopicSignal(
+                topic=concept.title,
+                mastery=state.mastery,
+                retention=state.retention,
+                evidence_confidence=state.evidence_confidence,
+                misconception_active=state.misconception_active,
+                learning_status=state.learning_status or "not_started",
+            )
+            for concept in self._active_concepts
+            for state in [states.get(concept.id, LearnerConceptState(concept.id))]
+        ]
+
+    def _adaptive_plan_public(self) -> dict[str, object]:
+        signals = self._topic_signals()
+        pacing = self._learning_profile.pacing_recommendation if self._learning_profile else "unknown"
+        attention = self._learning_profile.mean_attention if self._learning_profile else None
+        fatigue = self._learning_profile.mean_fatigue if self._learning_profile else None
+        priorities = prioritise_topics(signals, limit=5)
+        first = priorities[0] if priorities else None
+        active = next((item for item in signals if first and item.topic[:180] == first["topic"]), None)
+        return {
+            "policyVersion": "adaptive-planning-v1",
+            "priorities": priorities,
+            "difficulty": calibrate_difficulty(active) if active else "medium",
+            "recommendedMinutes": session_sizing(pacing=pacing, attention=attention, fatigue=fatigue),
+            "progress": synthesise_progress(signals),
+        }
+
     def _concept_condition(self) -> str:
         concepts = encode_concept_condition(self._active_concepts, self._concept_states)
         profile = self._learning_profile.prompt_line() if self._learning_profile else (
             "Learner teaching profile: no durable profile is available; do not assume a preferred pace."
         )
+        plan = self._adaptive_plan_public()
+        first = plan["priorities"][0] if plan["priorities"] else None
+        planning = (
+            "Deterministic adaptive planning cue (not a learner label): "
+            f"prioritise={first['topic'] if first else self.session.topic}; "
+            f"reason={first['reason'] if first else 'current_topic'}; "
+            f"suggested difficulty={plan['difficulty']}; short session target={plan['recommendedMinutes']} minutes. "
+            "Use this only to choose the next explanation or retrieval step; do not describe scores, profiling, or a diagnosis to the learner."
+        )
         soul = self._soul_state.prompt_condition() if self._soul_state_store else ""
-        return f"{concepts}\n\n{profile}\n\n{soul}".strip()
+        return f"{concepts}\n\n{profile}\n\n{planning}\n\n{soul}".strip()
 
     def _load_soul_state(self) -> None:
         if not self._soul_state_store:
@@ -445,6 +490,7 @@ class AdaptiveTeachingLoop:
             # bounded learner-memory lookup informed this turn's prompt.
             "memoryRetrieval": dict(self._last_memory_retrieval),
             "learningInsights": self._learning_insights_public(),
+            "adaptivePlan": self._adaptive_plan_public(),
             "soulState": self._soul_state_public(),
             # This structured audit field is intentionally result-free. The
             # model may use bounded data to answer the teacher's question, but

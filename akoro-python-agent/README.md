@@ -124,12 +124,14 @@ engine; it never creates a task, notification, or other learner action.
 
 The optional qualitative tracker (`AKORO_CONCEPT_TRACKER_ENABLED=true`) adds a
 separate, deterministic status/resume projection after canonical evidence is
-recorded. It is only enabled after `2026-concept-tracker-qualitative-v1.sql` is
-applied. Its status, topic resume point, and bounded confusion notes derive from
-approved catalogue objectives plus evidence outcomes—not raw chat text or judge
-rationale. Learners can view their own projection at
-`GET /api/adaptive/chat/concept-tracker` and clear only compact confusion notes
-at `DELETE /api/adaptive/chat/concept-tracker/confusion-notes`.
+recorded. Apply both `2026-concept-tracker-qualitative-v1.sql` and
+`2026-concept-tracker-qualitative-v2.sql` before enabling it. The complete
+lifecycle is `not_started → introduced → learning → understood → mastered`, with
+`confused` as a repair branch; it is derived from approved catalogue objectives
+and canonical evidence outcomes—not raw chat text or judge rationale. Learners
+can view their own projection at `GET /api/adaptive/chat/concept-tracker` and
+clear only compact confusion notes at
+`DELETE /api/adaptive/chat/concept-tracker/confusion-notes`.
 
 ### Measured learner-signals substrate
 
@@ -179,11 +181,14 @@ the fallback is 70% and three attempts. Every run carries the explicit
 `generated_exam_style` provenance—it is not a historic past-paper corpus.
 
 The authenticated endpoints are under `/api/adaptive/exam-prep/confidence-runs`:
-create a run, read its current attempt, submit answers, and request a fresh
-retest only after an explicit `learnerConfirmedReady` value. A low score offers
-configuration for the existing teach-back experience but starts no session,
-task, notification, autonomy flow, or instructor escalation automatically.
-Apply `2026-exam-prep-confidence-loop-v1.sql` before enabling it.
+list the learner's twelve most recent runs, create a run, read its current
+attempt, submit answers, and request a fresh retest only after an explicit
+`learnerConfirmedReady` value. The learner app opens this from the Agent tab,
+labels it **Generated exam-style practice**, and hands a low-score learner
+straight into the existing `TeachAgentModal` only after the learner chooses it.
+A low score starts no session, task, notification, autonomy flow, or instructor
+escalation automatically. Apply `2026-exam-prep-confidence-loop-v1.sql` before
+enabling it.
 
 ### Learner-selected Soul interaction layer
 
@@ -194,6 +199,9 @@ learner can explicitly choose interaction style, response tone, challenge, and
 encouragement preferences, and can create a short-lived current-session
 check-in using bounded categorical values for feeling, study context, intent,
 and requested support. It has no free-text diary or relationship-memory field.
+The learner app exposes these explicit choices through the Agent-tab controls,
+along with an authenticated one-action erasure control for saved preferences,
+check-ins, profile measurements, and compact episodes.
 
 When enabled, the Python agent fetches this read-only Akoro projection once at
 session start and uses it only as a presentation prompt condition. The compact

@@ -229,6 +229,7 @@ async function apiSend(method, path, body, { queueOffline = false } = {}) {
 }
 
 export const apiPost   = (path, body, opts) => apiSend('POST', path, body, opts);
+export const apiPut    = (path, body, opts) => apiSend('PUT', path, body, opts);
 export const apiPatch  = (path, body, opts) => apiSend('PATCH', path, body, opts);
 export const apiDelete = (path, opts)       => apiSend('DELETE', path, undefined, opts);
 

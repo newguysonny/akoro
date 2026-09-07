@@ -20,6 +20,7 @@ const enabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toL
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const text = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
 const fail = (res, status, error) => res.status(status).json({ success: false, error });
+class ExamPrepRequestError extends Error {}
 
 function input(body) {
   const topic = text(body?.topic, 180);
@@ -27,7 +28,7 @@ function input(body) {
   const examBoard = text(body?.examBoard || "WAEC", 80).toUpperCase();
   const requestedCount = Number(body?.questionCount ?? 5);
   if (topic.length < 3 || !subject || !examBoard || !Number.isInteger(requestedCount) || requestedCount < 3 || requestedCount > 10) {
-    throw new Error("topic, subject, examBoard, and 3 to 10 questions are required");
+    throw new ExamPrepRequestError("topic, subject, examBoard, and 3 to 10 questions are required");
   }
   return { topic, subject, examBoard, questionCount: requestedCount };
 }
@@ -110,8 +111,24 @@ router.post("/confidence-runs", async (req, res) => {
     if (attemptError) throw attemptError;
     return res.status(201).json({ success: true, run: publicRun(run), attempt: publicAttempt(attempt) });
   } catch (error) {
+    if (error instanceof ExamPrepRequestError) return fail(res, 422, error.message);
     console.error("[exam-prep-confidence/start]", error?.message || error);
     return fail(res, 503, "Exam-prep practice could not be prepared");
+  }
+});
+
+// A bounded learner-owned index lets the client resume a previous generated
+// practice run without recreating questions or relying on browser storage.
+router.get("/confidence-runs", async (req, res) => {
+  if (!enabled) return res.json({ success: true, enabled: false, runs: [] });
+  try {
+    const { data, error } = await db.schema("edu").from("learner_exam_prep_runs").select("*")
+      .eq("learner_id", req.user.id).order("updated_at", { ascending: false }).limit(12);
+    if (error) throw error;
+    return res.json({ success: true, enabled: true, runs: (data || []).map(publicRun) });
+  } catch (error) {
+    console.error("[exam-prep-confidence/list]", error?.message || error);
+    return fail(res, 503, "Exam-prep runs are unavailable");
   }
 });
 

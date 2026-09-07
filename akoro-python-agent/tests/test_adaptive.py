@@ -88,6 +88,9 @@ class AdaptiveOrchestratorTests(unittest.TestCase):
         self.assertEqual(ready["mustKnowParts"][0], "What plants need")
         self.assertEqual(ready["reference"], {"name": "lecture.pdf", "chars": 22, "truncated": False})
         self.assertNotIn("SECRET SOURCE MATERIAL", str(ready))
+        self.assertEqual(ready["adaptivePlan"]["policyVersion"], "adaptive-planning-v1")
+        self.assertEqual(ready["adaptivePlan"]["recommendedMinutes"], 20)
+        self.assertEqual(ready["adaptivePlan"]["difficulty"], "medium")
 
         turn = orchestrator.process_teaching_message("Plants use sunlight, water, and carbon dioxide.")
         self.assertEqual(turn["type"], "teaching_response")

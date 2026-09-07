@@ -44,8 +44,9 @@ def calibrate_difficulty(signal: TopicSignal) -> str:
     return "medium"
 
 def session_sizing(*, pacing: str, attention: float | None = None, fatigue: float | None = None) -> int:
-    if _fraction(fatigue) >= .65 or _fraction(attention) < .40 or pacing == "shorter_chunks": return 10
-    if pacing == "stretch" and _fraction(attention) >= .72 and _fraction(fatigue) < .45: return 30
+    # Missing values mean no measurement was accepted, not zero attention.
+    if (fatigue is not None and _fraction(fatigue) >= .65) or (attention is not None and _fraction(attention) < .40) or pacing == "shorter_chunks": return 10
+    if pacing == "stretch" and attention is not None and _fraction(attention) >= .72 and (fatigue is None or _fraction(fatigue) < .45): return 30
     return 20
 
 def synthesise_progress(signals: Iterable[TopicSignal]) -> dict[str, object]:
