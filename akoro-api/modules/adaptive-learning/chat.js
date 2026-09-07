@@ -58,6 +58,24 @@ const query      = (text, params) => pool.query(text, params);
 const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED || "").toLowerCase() === "true";
 const learnerSoulStateEnabled = String(process.env.AKORO_LEARNER_SOUL_STATE_ENABLED || "").toLowerCase() === "true";
 const conceptTrackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
+const examPrepConfidenceEnabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toLowerCase() === "true";
+
+// A deterministic, feature-aware inventory for the learner UI. This avoids an
+// LLM advertising web access, past papers, or autonomous actions it cannot do.
+router.get("/capabilities", (req, res) => res.json({
+  success: true,
+  title: "What your Akoro learning agent can do",
+  sections: [
+    { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss your answers"] },
+    { title: "Organisation", items: ["Create learner-owned study tasks when you ask", "Schedule a future chat message when you explicitly request one", "Show due tasks and your recorded learning progress"] },
+    { title: "Learning tools", items: [
+      ...(examPrepConfidenceEnabled ? ["Run generated exam-style practice checks with a teach-back and retest path"] : []),
+      ...(conceptTrackerEnabled ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
+      ...(learnerInsightsEnabled || learnerSoulStateEnabled ? ["Use only your selected interaction controls and bounded learning insights"] : []),
+    ] },
+    { title: "Files and limits", items: ["Read attached PDFs, text files, CSV files, and supported images for the current chat", "I do not claim generated questions are historical past papers", "I do not browse the live web, access private account secrets, or take actions without your request"] },
+  ].filter(section => section.items.length),
+}));
 
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
