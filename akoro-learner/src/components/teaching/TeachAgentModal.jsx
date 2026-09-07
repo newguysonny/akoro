@@ -145,8 +145,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
       wsRef.current = ws;
 
+      // The server derives the learner from the authenticated socket. Do not
+      // send a browser-controlled user or student identifier with a lesson.
       const startSession = () => ws.emit("start_adaptive_session", {
-        studentId:      STUDENT_ID,
         topic,          subject,
         mode,
         sessionId:      prevSessId,
@@ -154,7 +155,6 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // Higher-ed reference text is capped by the upload endpoint; only this
         // short-lived session receives it, never a local record or later session.
         reference:      config?.reference || null,
-        userId:         STUDENT_ID,
       });
 
       ws.on("connect", () => {
@@ -163,11 +163,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // instead of starting a fresh one. The backend keeps the orchestrator
         // alive through a short grace window after a drop.
         if (sessionIdRef.current) {
-          ws.emit("resume_session", {
-            sessionId: sessionIdRef.current,
-            studentId: STUDENT_ID,
-            userId:    STUDENT_ID,
-          });
+          ws.emit("resume_session", { sessionId: sessionIdRef.current });
         } else {
           startSession();
         }
@@ -591,7 +587,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     if (pairId === currentPair || switching) { setSwitchOpen(false); return; }
     if (!wsRef.current?.connected) return;
     setSwitching(true);
-    wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic, userId: STUDENT_ID });
+    // Ownership is evaluated against the authenticated socket identity server-side.
+    wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic });
   };
 
   const generateSummary = () => {

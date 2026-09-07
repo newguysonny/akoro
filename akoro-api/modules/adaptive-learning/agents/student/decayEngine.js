@@ -505,16 +505,25 @@ export class DecayEngine {
   }
 
   // ── Mark notification as read ────────────────────────────────
-  async markNotificationRead(notificationId) {
-    await supabase
+  // Notification ids travel through a browser and are therefore never authority
+  // by themselves. Scope every mutation to the authenticated learner, too.
+  async markNotificationRead(notificationId, studentId) {
+    if (!notificationId || !studentId) return false;
+    const { data, error } = await supabase
       .schema("edu").from("decay_notifications")
       .update({ is_read: true, read_at: new Date() })
-      .eq("id", notificationId);
+      .eq("id", notificationId)
+      .eq("student_id", studentId)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
   }
 
   // ── Mark notification as actioned (session started) ──────────
-  async markNotificationActioned(notificationId, sessionId) {
-    await supabase
+  async markNotificationActioned(notificationId, sessionId, studentId) {
+    if (!notificationId || !studentId) return false;
+    const { data, error } = await supabase
       .schema("edu").from("decay_notifications")
       .update({
         is_actioned: true,
@@ -523,7 +532,12 @@ export class DecayEngine {
         is_read:     true,
         read_at:     new Date(),
       })
-      .eq("id", notificationId);
+      .eq("id", notificationId)
+      .eq("student_id", studentId)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    return !!data;
   }
 
   // ── Get full knowledge health dashboard for a student ────────

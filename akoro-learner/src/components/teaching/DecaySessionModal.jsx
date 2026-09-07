@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
@@ -45,12 +45,12 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
       wsRef.current = ws;
 
+      // The server derives the learner from the authenticated socket. Do not
+      // send a browser-controlled user or student identifier with a lesson.
       const startSession = () => ws.emit("start_adaptive_session", {
-        studentId:      STUDENT_ID,
         subject,        topic,
         mode:           "decay",
         notificationId: alert.id,
-        userId:         STUDENT_ID,
       });
 
       ws.on("connect", () => {
@@ -58,11 +58,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
         // Seamless resume on reconnect — re-bind to the surviving orchestrator
         // rather than restarting the re-teach.
         if (sessionIdRef.current) {
-          ws.emit("resume_session", {
-            sessionId: sessionIdRef.current,
-            studentId: STUDENT_ID,
-            userId:    STUDENT_ID,
-          });
+          ws.emit("resume_session", { sessionId: sessionIdRef.current });
         } else {
           startSession();
         }

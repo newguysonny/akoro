@@ -515,7 +515,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
       // Mark notification as actioned
       if (this.notificationId) {
-        await decayEngine.markNotificationActioned(this.notificationId, sessionId);
+        await decayEngine.markNotificationActioned(this.notificationId, sessionId, studentId);
       }
     }
 

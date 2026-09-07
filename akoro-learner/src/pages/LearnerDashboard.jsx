@@ -395,10 +395,9 @@ export default function LearnerDashboard() {
         socket = window.io(API, { transports: ["websocket","polling"], withCredentials: true });
 
         socket.on("connect", () => {
-          // Join user room (live alerts + challenges)
-          socket.emit("subscribe-student", STUDENT_ID);
-          // Gap 1 fix: also join student:{id} room for decay cron alerts
-          socket.emit("join-student-room", STUDENT_ID);
+          // The server joins only rooms for the authenticated socket identity.
+          socket.emit("subscribe-student");
+          socket.emit("join-student-room");
         });
 
         // Live class starting soon

@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { API } from '../services/api.js';
-import { STUDENT_ID } from '../constants.js';
 
 /**
  * Connects to the backend WebSocket and registers all
@@ -17,8 +16,9 @@ export function useWebSocket({
         socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
 
         socket.on('connect', () => {
-          socket.emit('subscribe-student', STUDENT_ID);
-          socket.emit('join-student-room',  STUDENT_ID);
+          // The server joins only rooms for the authenticated socket identity.
+          socket.emit('subscribe-student');
+          socket.emit('join-student-room');
         });
 
         socket.on('live_class_starting', alert => {

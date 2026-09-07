@@ -1000,8 +1000,11 @@ router.get("/decay/topics/:studentId/:subject", async (req, res) => {
 // POST /decay/acknowledge/:notifId — mark notification as read
 router.post("/decay/acknowledge/:notifId", async (req, res) => {
   try {
-    await decayEngine.markNotificationRead(req.params.notifId);
-    res.json({ success: true, notificationId: req.params.notifId });
+    // A notification UUID is not authorization. The decay engine scopes the
+    // update to the authenticated learner so one learner cannot acknowledge
+    // another learner's alert.
+    const acknowledged = await decayEngine.markNotificationRead(req.params.notifId, req.user.id);
+    res.json({ success: true, acknowledged, notificationId: req.params.notifId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

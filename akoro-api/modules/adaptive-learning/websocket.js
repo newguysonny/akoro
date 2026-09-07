@@ -467,7 +467,7 @@ export function setupWebSocket(io) {
 
     // ── start_session ─────────────────────────────────────────
     // v3.2: accepts userId for ownership check
-    socket.on("start_session", async ({ agentId, topic, agentPairId, sessionId, userId }) => {
+    socket.on("start_session", async ({ agentId, topic, agentPairId, userId }) => {
       if (!agentId || !topic) return socket.emit("error", { message: "agentId and topic required" });
       try {
         let pairId = agentPairId;
@@ -476,7 +476,9 @@ export function setupWebSocket(io) {
           pairId = prefs.guide_pair_id || "nana-sargeant";
         }
 
-        const id = sessionId || `session_${agentId}_${Date.now()}`;
+        // A fresh session id is server-generated. Accepting an arbitrary id here
+        // could overwrite another live entry in the in-memory session map.
+        const id = `session_${agentId}_${Date.now()}`;
         const orchestrator = await getOrchestrator({
           agentPairId: pairId,
           agentId,
@@ -538,8 +540,11 @@ export function setupWebSocket(io) {
         const caller = userId || studentId;
         const agent  = await getOrCreateStudentAgent(studentId);
         const decaySessionPayload = await decayEngine.generateDecaySession(agent.id, studentId, subject, topic);
-
-        if (notificationId) await decayEngine.markNotificationRead(notificationId);
+        // A client may send an arbitrary notification UUID. Retain it for the
+        // session only when it belongs to this authenticated learner.
+        const ownedNotificationId = notificationId && await decayEngine.markNotificationRead(notificationId, studentId)
+          ? notificationId
+          : null;
 
         const id = `decay_${studentId}_${Date.now()}`;
         const orchestrator = await getOrchestrator({
@@ -547,7 +552,7 @@ export function setupWebSocket(io) {
           teacherAgentId: teacherAgentId || null,
           userId: caller,
           sessionType: "decay_review",
-          decayPayload: { ...decaySessionPayload, notificationId },
+          decayPayload: { ...decaySessionPayload, notificationId: ownedNotificationId },
         });
         const init = await orchestrator.initialize(studentId, topic);
 
@@ -604,16 +609,20 @@ export function setupWebSocket(io) {
         let decayPayload  = null;
         let sessionType   = "free_teaching";
         let resumeFrom    = null;
+        let ownedNotificationId = null;
 
         // ── Continuation: load block history from DB ─────────
         if (mode === "continuation" && prevSessionId) {
           sessionType = "continuation";
           try {
+            // The continuation id comes from the browser, so ownership belongs
+            // in this query rather than in client-side navigation state.
             const { data: prevSession } = await db.schema("edu")
               .from("adaptive_sessions")
               .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
               .eq("id", prevSessionId)
-              .single();
+              .eq("student_id", studentId)
+              .maybeSingle();
 
             // The position, not just the transcript. Loading only the words
             // meant a continuation showed the previous lesson greyed out and
@@ -645,7 +654,12 @@ export function setupWebSocket(io) {
           sessionType = "decay_review";
           const agent = await getOrCreateStudentAgent(studentId);
           decayPayload = await decayEngine.generateDecaySession(agent.id, studentId, subject, topic);
-          if (notificationId) await decayEngine.markNotificationRead(notificationId);
+          // An alert id is an untrusted browser value. It may be carried into
+          // the session only after the token-derived learner owns that alert.
+          if (notificationId && await decayEngine.markNotificationRead(notificationId, studentId)) {
+            ownedNotificationId = notificationId;
+          }
+          decayPayload = { ...decayPayload, notificationId: ownedNotificationId };
         }
 
         // ── Create orchestrator with mode-aware context ───────
@@ -976,8 +990,8 @@ export function setupWebSocket(io) {
     // ── acknowledge_alert ─────────────────────────────────────
     socket.on("acknowledge_alert", async ({ notificationId }) => {
       try {
-        await decayEngine.markNotificationRead(notificationId);
-        socket.emit("alert_acknowledged", { notificationId });
+        const acknowledged = await decayEngine.markNotificationRead(notificationId, socket.data.user.id);
+        socket.emit("alert_acknowledged", { notificationId, acknowledged });
       } catch (err) { socket.emit("error", { message: err.message }); }
     });
 
