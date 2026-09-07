@@ -16,7 +16,8 @@ test("the unified route assembles study grounding and invokes the authorised too
   assert.match(route, /getPastQuestionGrounding\(userMessage/);
   assert.match(route, /processAttachments\(rawAttachments\)/);
   assert.match(route, /runAgentToolLoop\(/);
-  assert.match(route, /get_agent_capabilities/);
+  assert.match(route, /requiresAgentCapabilitiesTool\(userMessage\)/);
+  assert.match(route, /requiredTool:.*get_agent_capabilities/s);
   assert.match(route, /toolChoice: "none"/);
 });
 

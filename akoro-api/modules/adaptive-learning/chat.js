@@ -45,6 +45,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
+import { requiresAgentCapabilitiesTool } from "./agent-chat-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
 import { localiseInstant } from "./learner-time-context.js";
@@ -1406,9 +1407,12 @@ function openAiChatTools() {
   }));
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, status, tools = openAiChatTools() }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, status, tools = openAiChatTools(), requiredTool = null }) {
   const executions = [];
   const transcript = [...messages];
+  if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
+    throw new Error("The required Agent Chat tool is unavailable");
+  }
   // The unified endpoint serves instructor/school tutoring too, but learner
   // account tools are never authorised for those roles.
   if (!tools.length) return { messages: transcript, toolExecutions: executions };
@@ -1418,7 +1422,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, status, to
       max_tokens: 900,
       messages: [{ role: "system", content: systemContent }, ...transcript],
       tools,
-      tool_choice: "auto",
+      // This force is limited to capability questions: it guarantees the
+      // response is based on the live Akoro inventory, but does not choose an
+      // endpoint, shape learner-facing prose, or invent a feature.
+      tool_choice: iteration === 0 && requiredTool
+        ? { type: "function", function: { name: requiredTool } }
+        : "auto",
     });
     const assistant = result.choices?.[0]?.message ?? { role: "assistant", content: "" };
     const calls = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
@@ -1583,6 +1592,8 @@ router.post("/agent", async (req, res) => {
       studentId: req.user.id,
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools() : [],
+      requiredTool: role === "student" && requiresAgentCapabilitiesTool(userMessage)
+        ? "get_agent_capabilities" : null,
     });
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
     const tools = role === "student" ? openAiChatTools() : null;
