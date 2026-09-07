@@ -30,3 +30,14 @@ test("durable Agent Chat context stays server-owned and uses an idempotent turn"
   assert.match(route, /sessionId: agentSessionId\(conversationId\)/);
   assert.match(route, /turnId,/);
 });
+
+test("learner study projections remain bounded tools and product feedback needs explicit consent", () => {
+  for (const tool of [
+    "get_learning_overview", "get_knowledge_map", "search_my_study_knowledge",
+    "get_concept_tracker_summary", "get_learning_insights_summary", "get_exam_prep_status",
+    "get_chat_memory", "get_agent_preferences", "get_autonomy_status", "submit_tool_request",
+  ]) assert.match(source, new RegExp(`name: "${tool}"`));
+  assert.match(source, /hasExplicitToolRequestConsent\(userMessage\)/);
+  assert.match(source, /never submit one automatically/);
+  assert.match(source, /Never expose a raw transcript, internal scratchpad, hidden reasoning, or raw tool output/);
+});

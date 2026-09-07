@@ -8,7 +8,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { CHAT_TOOLS, executeChatTool } from "../adaptive-learning/chat.js";
+import { executeChatTool, getLearnerChatTools } from "../adaptive-learning/chat.js";
 import { getLearnerProfileContext } from "../adaptive-learning/learner-profile-context.js";
 import { isIanaTimeZone, localiseInstant } from "../adaptive-learning/learner-time-context.js";
 import { getToolsForTask } from "../tasks/tools/index.js";
@@ -26,6 +26,7 @@ import conversationContextRouter from "./conversation-context-routes.js";
 import conceptStateRouter from "./concept-state-routes.js";
 import learningInsightsRouter from "./learning-insights-routes.js";
 import soulStateRouter from "./soul-state-routes.js";
+import { normaliseToolRequest } from "../agent-tool-requests/validation.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
@@ -34,6 +35,7 @@ const STUDENT_WRITE_TOOLS = new Set([
   "create_task",
   "schedule_chat_follow_up",
   "cancel_scheduled_chat_follow_up",
+  "submit_tool_request",
 ]);
 // Separate private subresource: same service credential/capability boundary as
 // tools, but it never appears in the model's function catalogue.
@@ -191,16 +193,36 @@ function validateStudentArguments(name, arguments_) {
   };
 
   switch (name) {
+    case "get_agent_capabilities":
     case "get_learner_context":
     case "check_progress":
     case "list_tasks":
     case "find_battles":
     case "get_ranking":
+    case "get_learning_overview":
+    case "get_learning_insights_summary":
+    case "get_exam_prep_status":
+    case "get_chat_memory":
+    case "get_agent_preferences":
+    case "get_autonomy_status":
       only(new Set());
       return;
     case "get_weak_topics":
+    case "get_knowledge_map":
+    case "get_concept_tracker_summary":
       only(new Set(["subject"]));
-      shortText(arguments_.subject, "subject");
+      shortText(arguments_.subject, "subject", false, 180);
+      return;
+    case "search_my_study_knowledge":
+      only(new Set(["query", "subject"]));
+      shortText(arguments_.query, "query", true, 300);
+      shortText(arguments_.subject, "subject", false, 180);
+      if (arguments_.query.trim().length < 3) throw new GatewayError(422, "query must be at least three characters");
+      return;
+    case "submit_tool_request":
+      only(new Set(["title", "description", "category"]));
+      try { normaliseToolRequest(arguments_); }
+      catch (error) { throw new GatewayError(422, error.message); }
       return;
     case "create_task":
       only(new Set(["title", "description", "priority", "due", "dueAt", "timezone", "course"]));
@@ -280,7 +302,7 @@ async function catalogueFor(claims, principal) {
   if (claims.scope === "student") {
     // A student capability always operates on its signed principal, even when
     // that principal happens to have an instructor account too.
-    return CHAT_TOOLS.map((tool) => publicTool(tool, STUDENT_WRITE_TOOLS.has(tool.name)));
+    return getLearnerChatTools().map((tool) => publicTool(tool, STUDENT_WRITE_TOOLS.has(tool.name)));
   }
 
   const { task } = await teacherTaskContext(claims, principal);
@@ -384,6 +406,16 @@ async function confirmationPreview(name, arguments_, principalId) {
         scheduledAt: data.scheduled_at,
         scheduledLocal: localiseInstant(data.scheduled_at, data.timezone),
         timezone: data.timezone,
+      };
+    }
+    case "submit_tool_request": {
+      const request = normaliseToolRequest(arguments_);
+      return {
+        kind: "submit_tool_request",
+        title: request.title,
+        description: request.description,
+        category: request.category,
+        note: "This sends private product feedback to Akoro admins; it does not perform the requested feature now.",
       };
     }
     default:

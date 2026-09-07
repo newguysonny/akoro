@@ -46,8 +46,21 @@ import {
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
 import { requiresAgentCapabilitiesTool } from "./agent-chat-intent.js";
+import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
+import { createLearnerToolRequest } from "../agent-tool-requests/service.js";
+import {
+  getAgentPreferenceSummary,
+  getAutonomyStatus,
+  getChatMemory,
+  getConceptTrackerSummary,
+  getExamPrepStatus,
+  getKnowledgeMap,
+  getLearningInsightsSummary,
+  getLearningOverview,
+  searchMyStudyKnowledge,
+} from "./learner-chat-read-tools.js";
 import { localiseInstant } from "./learner-time-context.js";
 import {
   completedLearnerAgentConversationTurn,
@@ -65,6 +78,7 @@ const query      = (text, params) => pool.query(text, params);
 const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED || "").toLowerCase() === "true";
 const learnerSoulStateEnabled = String(process.env.AKORO_LEARNER_SOUL_STATE_ENABLED || "").toLowerCase() === "true";
 const conceptTrackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
+const examPrepConfidenceEnabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toLowerCase() === "true";
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
    Priority: block_history column (exact) → session_phase_progress (derived).
@@ -165,7 +179,7 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
   }
 }
 
-// ─── Global chat tools (added to /chat for mini-ChatGPT functionality) ────────
+// ─── Unified Agent Chat tools ────────────────────────────────────────────────
 // These execute against the student's real data when the agent needs them.
 
 export const CHAT_TOOLS = [
@@ -257,22 +271,117 @@ export const CHAT_TOOLS = [
       required: [],
     },
   },
+
+  {
+    name: "get_learning_overview",
+    description: "Read a bounded cross-subject overview of the signed-in learner's active courses, pending tasks, recorded knowledge subjects, and one deterministic next-study suggestion. Use for requests such as 'how is my study going?' or 'what should I do next?'. This is not a full account export.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_knowledge_map",
+    description: "Read the signed-in learner's recorded subject/topic knowledge health: topic counts, confidence bands, and review-due status. It never returns saved note bodies. Use when they ask what topics they have covered, which are due for review, or how their knowledge map looks.",
+    input_schema: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Optional exact subject to focus on (maximum 180 characters)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "search_my_study_knowledge",
+    description: "Search a small, bounded set of the signed-in learner's own saved study knowledge and notes. Use only when they ask to find their own notes, prior study material, or saved knowledge. A query is required; never search teacher/private material or another learner's records.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The learner's study term or question to find in their saved knowledge (3 to 300 characters)." },
+        subject: { type: "string", description: "Optional exact subject filter (maximum 180 characters)." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_concept_tracker_summary",
+    description: "When Concept Tracker is enabled, read the signed-in learner's bounded approved-concept statuses, resume points, and learner-visible confusion notes. Use for 'where was I stuck?' or 'what should I resume?'. Never expose raw chat, model rationale, or Guardian review internals.",
+    featureGate: "concept_tracker",
+    input_schema: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Optional exact subject filter (maximum 180 characters)." },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "get_learning_insights_summary",
+    description: "When Learning Insights is enabled, read only a privacy-minimised, expiry-aware study-signal summary: evidence confidence label, observed learning approach, pacing recommendation, and compact server-created study episodes. Use when a learner asks why their study guidance is adapting. Never present this as a diagnosis, identity, or hidden psychological profile.",
+    featureGate: "learning_insights",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_exam_prep_status",
+    description: "When generated exam-style practice is enabled, read the signed-in learner's recent generated-practice runs and workflow states: topic, attempt, score, status, and next workflow state. Use for resume/progress questions. Never return answer keys or call generated questions historical past papers.",
+    featureGate: "exam_prep_confidence",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_chat_memory",
+    description: "When durable Agent Chat memory is enabled, read the signed-in learner's bounded, learner-clearable study memories and the current chat's compact summary. Use only when they ask what the agent remembers about their study goals or context. Never expose a raw transcript, internal scratchpad, hidden reasoning, or raw tool output.",
+    featureGate: "durable_agent_chat_context",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_agent_preferences",
+    description: "Read only the signed-in learner's selected learning guide and its public teaching style. Use when they ask which guide or teaching setup they selected. Never expose private account settings, purchases, or system configuration.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_autonomy_status",
+    description: "Read the signed-in learner's visible Agent Online/Offline choice and the exact limited due-task behaviour. Use when they ask whether the agent is online, can remind them, or will initiate a due-task chat. Never claim the agent completes, changes, or schedules tasks autonomously.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "submit_tool_request",
+    description: "Create a compact product request for Akoro admins to consider a missing study tool or integration. Use ONLY after the learner explicitly asks you to submit the request after you have explained that it is feature feedback, not an immediate action. Never submit automatically merely because a request is unsupported, and never copy raw chat, attachments, passwords, contact details, or sensitive account data. Describe the needed capability concisely instead.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short feature or integration title (6 to 120 characters)." },
+        description: { type: "string", description: "Privacy-minimised description of the requested capability and study use case (20 to 800 characters). Do not include the original prompt, private data, or attachments." },
+        category: { type: "string", enum: ["study_support", "organisation", "integration", "accessibility", "other"], description: "Best matching requested capability category." },
+      },
+      required: ["title", "description", "category"],
+    },
+  },
 ];
 
-export async function executeChatTool(name, input, studentId) {
+/** Hide feature-gated tools from the model catalogue until the matching Akoro slice is enabled. */
+export function getLearnerChatTools({ allowToolRequest = true } = {}) {
+  const enabled = {
+    concept_tracker: conceptTrackerEnabled,
+    learning_insights: learnerInsightsEnabled,
+    exam_prep_confidence: examPrepConfidenceEnabled,
+    durable_agent_chat_context: durableAgentChatContextEnabled,
+  };
+  return CHAT_TOOLS.filter((tool) => (!tool.featureGate || enabled[tool.featureGate] === true)
+    && (tool.name !== "submit_tool_request" || allowToolRequest));
+}
+
+export async function executeChatTool(name, input, studentId, { conversationId = null } = {}) {
   switch (name) {
     case "get_agent_capabilities": {
       const enabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
       return {
         sections: [
-          { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss answers"] },
+          { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss answers", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked"] },
           { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress"] },
           { title: "Learning tools", items: [
-            ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Run generated exam-style practice checks with a teach-back and retest path"] : []),
+            ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
             ...(enabled("AKORO_CONCEPT_TRACKER_ENABLED") ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
-            ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") || enabled("AKORO_LEARNER_SOUL_STATE_ENABLED") ? ["Use learner-selected interaction controls and bounded learning insights"] : []),
+            ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
+            ...(enabled("AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED") ? ["Show learner-clearable compact Agent Chat memory on request"] : []),
           ] },
-          { title: "Limits", items: ["Read supported files attached to this chat", "Generated questions are not historical past papers", "Do not browse the live web, access private account secrets, or take unrequested actions"] },
+          { title: "Limits", items: ["Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Do not browse the live web, access private account secrets, or take unrequested actions"] },
         ].filter((section) => section.items.length),
       };
     }
@@ -384,6 +493,35 @@ export async function executeChatTool(name, input, studentId) {
       if (input.subject) q = q.eq("subject", input.subject);
       const { data } = await q.limit(8);
       return { weak_topics: (data ?? []).filter(t => t.confidence < 0.5).map(t => ({ topic: t.topic, subject: t.subject, confidence: Math.round((t.confidence ?? 0) * 100) + "%", priority: t.priority })) };
+    }
+    case "get_learning_overview":
+      return getLearningOverview(studentId);
+    case "get_knowledge_map":
+      return getKnowledgeMap(studentId, input);
+    case "search_my_study_knowledge":
+      return searchMyStudyKnowledge(studentId, input);
+    case "get_concept_tracker_summary":
+      return getConceptTrackerSummary(studentId, input);
+    case "get_learning_insights_summary":
+      return getLearningInsightsSummary(studentId);
+    case "get_exam_prep_status":
+      return getExamPrepStatus(studentId);
+    case "get_chat_memory":
+      return getChatMemory(studentId, { conversationId });
+    case "get_agent_preferences":
+      return getAgentPreferenceSummary(studentId);
+    case "get_autonomy_status":
+      return getAutonomyStatus(studentId);
+    case "submit_tool_request": {
+      const request = await createLearnerToolRequest({ learnerId: studentId, body: input });
+      return {
+        submitted: request.createdNew,
+        duplicate: !request.createdNew,
+        requestId: request.id,
+        status: request.status,
+        title: request.title,
+        category: request.category,
+      };
     }
     default: return { error: `Unknown tool: ${name}` };
   }
@@ -1400,14 +1538,14 @@ async function appendBasicChatTurn({ conversationId, userId, userMessage, assist
   if (updateError) throw updateError;
 }
 
-function openAiChatTools() {
-  return CHAT_TOOLS.map((tool) => ({
+function openAiChatTools({ allowToolRequest = true } = {}) {
+  return getLearnerChatTools({ allowToolRequest }).map((tool) => ({
     type: "function",
     function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
   }));
 }
 
-async function runAgentToolLoop({ systemContent, messages, studentId, status, tools = openAiChatTools(), requiredTool = null }) {
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -1439,13 +1577,13 @@ async function runAgentToolLoop({ systemContent, messages, studentId, status, to
       try { input = JSON.parse(call?.function?.arguments || "{}"); } catch { input = {}; }
       status?.("tool", "Checking your Akoro study data…");
       let toolResult;
-      try { toolResult = await executeChatTool(tool, input, studentId); }
+      try { toolResult = await executeChatTool(tool, input, studentId, { conversationId }); }
       catch (error) { toolResult = { success: false, error: "The requested Akoro action could not be completed." }; }
       const success = toolResult?.success !== false && !toolResult?.error;
       executions.push({
         tool,
         success,
-        sideEffecting: ["create_task", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up"].includes(tool),
+        sideEffecting: ["create_task", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request"].includes(tool),
       });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(toolResult) });
     }
@@ -1573,6 +1711,7 @@ router.post("/agent", async (req, res) => {
       `Use only an authorised tool when the learner asks about actual Akoro data or asks you to take a supported action. ` +
       `Before calling a tool, use the active working plan to identify the observable result needed. Never claim an action succeeded unless its tool result confirms it. ` +
       `When asked about your abilities or limitations, call get_agent_capabilities before replying. Do not claim live web access, licensed historical past-paper access, secrets, or unrequested autonomous actions. ` +
+      `If a learner asks for something Akoro cannot currently do, say so plainly. Offer to submit a concise product request only after they explicitly ask; never submit one automatically and never copy their raw prompt, attachments, or personal data into it. ` +
       `Generated exam-style questions must be labelled as generated practice, not historical papers.` +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
@@ -1590,8 +1729,11 @@ router.post("/agent", async (req, res) => {
       systemContent,
       messages: [...dialogue, { role: "user", content: userContent }],
       studentId: req.user.id,
+      conversationId,
       status: wantsStream ? status : null,
-      tools: role === "student" ? openAiChatTools() : [],
+      tools: role === "student" ? openAiChatTools({
+        allowToolRequest: hasExplicitToolRequestConsent(userMessage),
+      }) : [],
       requiredTool: role === "student" && requiresAgentCapabilitiesTool(userMessage)
         ? "get_agent_capabilities" : null,
     });

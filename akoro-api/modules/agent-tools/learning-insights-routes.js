@@ -1,9 +1,11 @@
 /**
  * Private, capability-bound storage for measured learner study signals.
  *
- * This resource is intentionally absent from the model tool catalogue. It can
- * read/write only the signed learner's bounded profile and episodes, never raw
- * conversation text, private account data, or autonomous actions.
+ * This raw private resource is intentionally absent from the model tool
+ * catalogue. A separate learner-facing tool may expose only its curated public
+ * projection; this gateway itself can read/write only the signed learner's
+ * bounded profile and episodes, never raw conversation text, private account
+ * data, or autonomous actions.
  */
 import { Router } from "express";
 
