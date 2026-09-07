@@ -14,12 +14,14 @@ from typing import Any
 from agent.adaptive.concepts import CurriculumConcept, LearnerConceptState, encode_concept_condition
 from agent.adaptive.guide import NaNaGuide
 from agent.adaptive.learner_signals import LearningMeasurement, LearningSignalJudge, LearnerTeachingProfile, episode_from_observations
+from agent.adaptive.soul_state import SoulState
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import LearningRepository
 from agent.adaptive.student import StudentAgent
 from agent.adaptive.types import AdaptiveSession
 from agent.memory.akoro_conversation import AkoroConversationError, AkoroConversationSession
 from agent.adaptive.akoro_learning_insights import AkoroLearningInsightsError, AkoroLearningInsightsSession
+from agent.adaptive.akoro_soul_state import AkoroSoulStateError, AkoroSoulStateSession
 from agent.memory.conversation import ConversationMemoryUpdate, LearnerMemory, MAX_MEMORY_ITEMS
 from agent.memory.scratchpad import WorkingScratchpad
 from agent.reasoning.teaching import TeachingPlan
@@ -54,7 +56,8 @@ class AdaptiveTeachingLoop:
     def __init__(self, repository: LearningRepository, model: TeachingModel, session: AdaptiveSession,
                  tools: AkoroToolSession | None = None,
                  conversation_store: AkoroConversationSession | None = None,
-                 learning_insights_store: AkoroLearningInsightsSession | None = None) -> None:
+                 learning_insights_store: AkoroLearningInsightsSession | None = None,
+                 soul_state_store: AkoroSoulStateSession | None = None) -> None:
         self._repository = repository
         self._model = model
         self.session = session
@@ -70,6 +73,12 @@ class AdaptiveTeachingLoop:
         self._learning_episodes: tuple[dict[str, object], ...] = ()
         self._last_learning_measurement = LearningMeasurement()
         self._learning_insights_status: dict[str, object] = {"enabled": bool(learning_insights_store), "saved": False}
+        # The Soul layer is a read-only prompt projection of learner-selected
+        # controls and compact Akoro-generated episode cues. It has no access
+        # to hidden reasoning, tools, or state transitions.
+        self._soul_state_store = soul_state_store
+        self._soul_state = SoulState()
+        self._soul_state_status: dict[str, object] = {"enabled": bool(soul_state_store), "loaded": False}
         self._guide = NaNaGuide(model)
         self._cognitive_engine = CognitiveProgressionEngine()
         self._profile = None
@@ -92,6 +101,7 @@ class AdaptiveTeachingLoop:
             raise ValueError("student_id and topic are required")
         self._profile = self._repository.get_or_create_agent(self.session.student_id)
         self._load_learning_insights()
+        self._load_soul_state()
         self._active_concepts = self._repository.resolve_active_concepts(
             self.session.student_id, self.session.subject, self.session.topic,
         )
@@ -157,6 +167,7 @@ class AdaptiveTeachingLoop:
             "initialState": cognitive.as_percentages(),
             "conceptTracking": self._concept_tracking_public(),
             "learningInsights": self._learning_insights_public(),
+            "soulState": self._soul_state_public(),
             # Metadata only: source text never crosses the service boundary.
             "reference": self.session.reference.metadata() if self.session.reference else None,
             # No raw conversation or memory is echoed to the caller. The bridge
@@ -249,7 +260,25 @@ class AdaptiveTeachingLoop:
         profile = self._learning_profile.prompt_line() if self._learning_profile else (
             "Learner teaching profile: no durable profile is available; do not assume a preferred pace."
         )
-        return f"{concepts}\n\n{profile}"
+        soul = self._soul_state.prompt_condition() if self._soul_state_store else ""
+        return f"{concepts}\n\n{profile}\n\n{soul}".strip()
+
+    def _load_soul_state(self) -> None:
+        if not self._soul_state_store:
+            return
+        try:
+            self._soul_state = self._soul_state_store.snapshot()
+            self._soul_state_status = {"enabled": True, "loaded": True}
+        except AkoroSoulStateError:
+            # Learner controls are optional enrichment. Do not invent a mood or
+            # persona when their Akoro-owned projection is unavailable.
+            self._soul_state = SoulState()
+            self._soul_state_status = {"enabled": True, "loaded": False, "reason": "unavailable"}
+
+    def _soul_state_public(self) -> dict[str, object]:
+        if not self._soul_state_store:
+            return {"enabled": False}
+        return {**self._soul_state_status, **self._soul_state.public()}
 
     def _load_learning_insights(self) -> None:
         if not self._learning_insights_store:
@@ -416,6 +445,7 @@ class AdaptiveTeachingLoop:
             # bounded learner-memory lookup informed this turn's prompt.
             "memoryRetrieval": dict(self._last_memory_retrieval),
             "learningInsights": self._learning_insights_public(),
+            "soulState": self._soul_state_public(),
             # This structured audit field is intentionally result-free. The
             # model may use bounded data to answer the teacher's question, but
             # callers do not receive a second raw tool-result payload here.

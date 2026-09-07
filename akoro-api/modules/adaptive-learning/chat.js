@@ -56,6 +56,7 @@ const query      = (text, params) => pool.query(text, params);
 // the legacy JavaScript teaching/session engine unchanged while its migration
 // and learner controls are being rolled out.
 const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED || "").toLowerCase() === "true";
+const learnerSoulStateEnabled = String(process.env.AKORO_LEARNER_SOUL_STATE_ENABLED || "").toLowerCase() === "true";
 
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
@@ -551,6 +552,109 @@ router.delete("/learning-insights", async (req, res) => {
     return res.json({ success: true, cleared: scope });
   } catch (error) {
     return res.status(503).json({ success: false, error: "Learning insights could not be cleared" });
+  }
+});
+
+// =============================================================
+// LEARNER-SELECTED SOUL-STATE CONTROLS — no inferred emotion or identity
+// =============================================================
+
+const SOUL_VALUES = {
+  interactionStyle: new Set(["balanced", "collaborative", "independent", "socratic"]),
+  responseTone: new Set(["calm", "curious", "direct", "celebratory"]),
+  challengeLevel: new Set(["gentle", "adaptive", "stretch"]),
+  encouragementLevel: new Set(["minimal", "balanced", "frequent"]),
+  feeling: new Set(["steady", "energised", "tired", "stuck", "celebrating"]),
+  studyContext: new Set(["unknown", "quiet", "distracted", "rushed"]),
+  studyIntent: new Set(["explore", "practise", "prepare", "recover"]),
+  requestedSupport: new Set(["none", "slower_steps", "more_examples", "challenge_me", "celebrate_progress"]),
+};
+const safeSoulValue = (value, field) => {
+  const selected = String(value || "").trim().toLowerCase();
+  return SOUL_VALUES[field]?.has(selected) ? selected : null;
+};
+
+router.get("/soul-state", async (req, res) => {
+  if (!learnerSoulStateEnabled) return res.json({ success: true, enabled: false, preferences: null, checkIns: [] });
+  try {
+    const [preferenceResult, checkinsResult] = await Promise.all([
+      db.schema("edu").from("learner_soul_preferences")
+        .select("interaction_style, response_tone, challenge_level, encouragement_level, policy_version")
+        .eq("learner_id", req.user.id).maybeSingle(),
+      db.schema("edu").from("learner_soul_checkins")
+        .select("source_session_id, feeling, study_context, study_intent, requested_support, expires_at")
+        .eq("learner_id", req.user.id).gt("expires_at", new Date().toISOString())
+        .order("checked_in_at", { ascending: false }).limit(4),
+    ]);
+    if (preferenceResult.error || checkinsResult.error) throw preferenceResult.error || checkinsResult.error;
+    const preferences = preferenceResult.data ? {
+      interactionStyle: preferenceResult.data.interaction_style, responseTone: preferenceResult.data.response_tone,
+      challengeLevel: preferenceResult.data.challenge_level, encouragementLevel: preferenceResult.data.encouragement_level,
+      policyVersion: preferenceResult.data.policy_version,
+    } : null;
+    const checkIns = (checkinsResult.data || []).map((item) => ({
+      sessionId: item.source_session_id, feeling: item.feeling, studyContext: item.study_context,
+      studyIntent: item.study_intent, requestedSupport: item.requested_support, expiresAt: item.expires_at,
+    }));
+    return res.json({ success: true, enabled: true, preferences, checkIns });
+  } catch {
+    return res.status(503).json({ success: false, error: "Soul-state controls are unavailable" });
+  }
+});
+
+router.put("/soul-state/preferences", async (req, res) => {
+  if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
+  const values = Object.fromEntries(Object.keys(SOUL_VALUES).slice(0, 4).map((key) => [key, safeSoulValue(req.body?.[key], key)]));
+  if (Object.values(values).some((value) => !value)) return res.status(422).json({ success: false, error: "All preference values must be recognised options" });
+  try {
+    const { error } = await db.schema("edu").from("learner_soul_preferences").upsert({
+      learner_id: req.user.id,
+      interaction_style: values.interactionStyle, response_tone: values.responseTone,
+      challenge_level: values.challengeLevel, encouragement_level: values.encouragementLevel,
+      policy_version: "learner-soul-v1", updated_at: new Date().toISOString(),
+    }, { onConflict: "learner_id" });
+    if (error) throw error;
+    return res.json({ success: true, preferences: values });
+  } catch {
+    return res.status(503).json({ success: false, error: "Soul preferences could not be saved" });
+  }
+});
+
+router.put("/soul-state/check-in", async (req, res) => {
+  if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
+  const sessionId = String(req.body?.sessionId || "").trim();
+  const values = Object.fromEntries(Object.keys(SOUL_VALUES).slice(4).map((key) => [key, safeSoulValue(req.body?.[key], key)]));
+  if (!/^[A-Za-z0-9_-]{1,180}$/.test(sessionId) || Object.values(values).some((value) => !value)) {
+    return res.status(422).json({ success: false, error: "sessionId and recognised check-in values are required" });
+  }
+  try {
+    const now = new Date();
+    const { error } = await db.schema("edu").from("learner_soul_checkins").upsert({
+      learner_id: req.user.id, source_session_id: sessionId,
+      feeling: values.feeling, study_context: values.studyContext, study_intent: values.studyIntent,
+      requested_support: values.requestedSupport, policy_version: "learner-soul-v1",
+      checked_in_at: now.toISOString(), expires_at: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(), updated_at: now.toISOString(),
+    }, { onConflict: "learner_id,source_session_id" });
+    if (error) throw error;
+    return res.json({ success: true, checkIn: { sessionId, ...values } });
+  } catch {
+    return res.status(503).json({ success: false, error: "Soul check-in could not be saved" });
+  }
+});
+
+router.delete("/soul-state", async (req, res) => {
+  if (!learnerSoulStateEnabled) return res.status(409).json({ success: false, error: "Soul-state controls are not enabled" });
+  const scope = String(req.body?.scope || "all").toLowerCase();
+  if (!["all", "preferences", "checkins"].includes(scope)) return res.status(422).json({ success: false, error: "scope must be all, preferences, or checkins" });
+  try {
+    const removals = [];
+    if (scope === "all" || scope === "preferences") removals.push(db.schema("edu").from("learner_soul_preferences").delete().eq("learner_id", req.user.id));
+    if (scope === "all" || scope === "checkins") removals.push(db.schema("edu").from("learner_soul_checkins").delete().eq("learner_id", req.user.id));
+    const results = await Promise.all(removals);
+    if (results.some(({ error }) => error)) throw new Error("clear failed");
+    return res.json({ success: true, cleared: scope });
+  } catch {
+    return res.status(503).json({ success: false, error: "Soul-state controls could not be cleared" });
   }
 });
 

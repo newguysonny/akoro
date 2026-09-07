@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from agent.adaptive.akoro_concept_state import AkoroConceptStateClient, AkoroConceptStateError
 from agent.adaptive.akoro_learning_insights import AkoroLearningInsightsClient, AkoroLearningInsightsError
+from agent.adaptive.akoro_soul_state import AkoroSoulStateClient, AkoroSoulStateError
 from agent.adaptive.concept_repository import AkoroConceptLearningRepository
 from agent.adaptive.model import OpenAIAdaptiveModel, TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
@@ -28,11 +29,13 @@ class AdaptiveServiceRuntime:
     conversation_client: AkoroConversationClient | None = None
     concept_state_client: AkoroConceptStateClient | None = None
     learning_insights_client: AkoroLearningInsightsClient | None = None
+    soul_state_client: AkoroSoulStateClient | None = None
     tool_max_calls_per_session: int = 4
     write_confirmation_proposals: bool = False
     allow_side_effecting_tools: bool = False
     enable_concept_state: bool = False
     enable_learning_insights: bool = False
+    enable_soul_state: bool = False
 
     @property
     def tools_configured(self) -> bool:
@@ -43,9 +46,11 @@ class AdaptiveServiceRuntime:
         conversation_store = self._open_conversation(session)
         repository = self._repository_for_session(session)
         insights_store = self._open_learning_insights(session)
+        soul_state_store = self._open_soul_state(session)
         loop = AdaptiveTeachingLoop(
             repository, self.model, session, tools=tools,
             conversation_store=conversation_store, learning_insights_store=insights_store,
+            soul_state_store=soul_state_store,
         )
         ready = loop.initialize()
         self.sessions.create(loop)
@@ -73,6 +78,13 @@ class AdaptiveServiceRuntime:
         return self.learning_insights_client.open_session(
             session_id=session.session_id, tool_context=session.tool_context,
         )
+
+    def _open_soul_state(self, session: AdaptiveSession):
+        if not self.enable_soul_state:
+            return None
+        if not self.soul_state_client or not session.tool_context:
+            raise AkoroSoulStateError("Akoro soul state is not configured for this session")
+        return self.soul_state_client.open_session(session_id=session.session_id, tool_context=session.tool_context)
 
     def _open_conversation(self, session: AdaptiveSession) -> AkoroConversationSession | None:
         if not session.conversation_id:
@@ -114,6 +126,7 @@ def build_adaptive_service_runtime(
     conversation_client: AkoroConversationClient | None = None,
     concept_state_client: AkoroConceptStateClient | None = None,
     learning_insights_client: AkoroLearningInsightsClient | None = None,
+    soul_state_client: AkoroSoulStateClient | None = None,
 ) -> AdaptiveServiceRuntime:
     repository = repository or InMemoryLearningRepository()
     model = model or OpenAIAdaptiveModel(OpenAIChatClient(settings.llm))
@@ -143,6 +156,12 @@ def build_adaptive_service_runtime(
             settings.akoro_tools_api_secret or "",
             settings.tool_timeout_seconds,
         )
+    if soul_state_client is None and settings.enable_soul_state:
+        soul_state_client = AkoroSoulStateClient(
+            settings.akoro_tools_api_url or "",
+            settings.akoro_tools_api_secret or "",
+            settings.tool_timeout_seconds,
+        )
     return AdaptiveServiceRuntime(
         repository=repository,
         model=model,
@@ -152,9 +171,11 @@ def build_adaptive_service_runtime(
         conversation_client=conversation_client,
         concept_state_client=concept_state_client,
         learning_insights_client=learning_insights_client,
+        soul_state_client=soul_state_client,
         tool_max_calls_per_session=settings.tool_max_calls_per_session,
         write_confirmation_proposals=settings.write_confirmation_proposals,
         allow_side_effecting_tools=settings.allow_side_effecting_tools,
         enable_concept_state=settings.enable_concept_state,
         enable_learning_insights=settings.enable_learning_insights,
+        enable_soul_state=settings.enable_soul_state,
     )

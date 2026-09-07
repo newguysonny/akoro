@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from agent.adaptive.akoro_concept_state import AkoroConceptStateError
+from agent.adaptive.akoro_soul_state import AkoroSoulStateError
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
 from agent.adaptive.types import AdaptiveSession, SessionReference
@@ -72,6 +73,11 @@ def create_app(
                 "durableOwner": "akoro-api" if runtime.enable_learning_insights else None,
                 "rawReplyStored": False,
             },
+            "soulState": {
+                "enabled": runtime.enable_soul_state,
+                "durableOwner": "akoro-api" if runtime.enable_soul_state else None,
+                "mode": "learner_selected_and_clearable",
+            },
             "tools": {
                 "configured": runtime.tools_configured,
                 "provider": "akoro-api" if runtime.tools_configured else None,
@@ -116,7 +122,7 @@ def create_app(
             return runtime.start(session)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-        except (AkoroConversationError, AkoroConceptStateError) as exc:
+        except (AkoroConversationError, AkoroConceptStateError, AkoroSoulStateError) as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/turns", dependencies=[Depends(require_internal_caller)])

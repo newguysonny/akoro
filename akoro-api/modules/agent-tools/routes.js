@@ -25,6 +25,7 @@ import {
 import conversationContextRouter from "./conversation-context-routes.js";
 import conceptStateRouter from "./concept-state-routes.js";
 import learningInsightsRouter from "./learning-insights-routes.js";
+import soulStateRouter from "./soul-state-routes.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
@@ -43,6 +44,9 @@ router.use("/concept-state", conceptStateRouter);
 // Slow-moving learner signals and compact episodes use the same private
 // credential/capability boundary but are never advertised as model functions.
 router.use("/learning-insights", learningInsightsRouter);
+// Learner-selected interaction preferences and a short-lived self-report are
+// read-only prompt context; this route is not a model function.
+router.use("/soul-state", soulStateRouter);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);

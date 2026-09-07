@@ -34,6 +34,9 @@ internal credential.
    # Keep false until 2026-learner-signal-profile-v1.sql is applied and the
    # authenticated learner visibility/clear controls are enabled in Akoro API.
    AGENT_ENABLE_LEARNING_INSIGHTS=false
+   # Keep false until 2026-learner-soul-state-v1.sql is deployed. This is a
+   # learner-selected interaction layer, not an inferred emotion profile.
+   AGENT_ENABLE_SOUL_STATE=false
    ```
 
 3. Verify the unauthenticated health endpoint:
@@ -150,6 +153,35 @@ A signed-in learner can inspect only their own compact projection at
 `profile` (which also removes measurements), or `episodes` with
 `DELETE /api/adaptive/chat/learning-insights`. Do not enable either flag until
 the migration, private gateway, and learner control surface have been deployed.
+
+## Learner-selected Soul interaction layer
+
+The first broader Soul Stack deployment is intentionally not an inferred
+emotion/identity/relationship profile. `2026-learner-soul-state-v1.sql` stores
+only learner-selected interaction preferences plus a self-reported, session-
+bound check-in that expires after eight hours. It accepts no free text. The
+prompt layer may honour a learner's requested pace/examples/challenge style and
+use up to four existing server-generated verified-learning episode summaries as
+a compact narrative thread. It may not claim to know the learner's feelings,
+form dependency, diagnose, alter cognition, invoke tools, create a task, or
+send a notification.
+
+Deploy the migration, then enable both sides deliberately:
+
+```bash
+# Python service
+AGENT_ENABLE_SOUL_STATE=true
+
+# Akoro API learner-owned read/update/clear controls
+AKORO_LEARNER_SOUL_STATE_ENABLED=true
+```
+
+Authenticated controls are `GET /api/adaptive/chat/soul-state`,
+`PUT /api/adaptive/chat/soul-state/preferences`,
+`PUT /api/adaptive/chat/soul-state/check-in`, and
+`DELETE /api/adaptive/chat/soul-state` (`all`, `preferences`, or `checkins`).
+The private Python resource is read-only at `/soul-state/snapshot` and always
+uses a signed learner capability rather than a client-supplied learner ID.
 
 ## Durable learner conversation context
 

@@ -44,6 +44,9 @@ class ServiceSettings:
     # profile/episodes. This remains off until the corresponding Akoro migration
     # and authenticated learner controls are deployed.
     enable_learning_insights: bool = False
+    # Learner-selected interaction preferences / short-lived check-ins. It is
+    # intentionally separate from measured cognition and off by default.
+    enable_soul_state: bool = False
 
     @property
     def tools_configured(self) -> bool:
@@ -70,10 +73,13 @@ class ServiceSettings:
             raise ValueError("AKORO_AGENT_TOOLS_URL and AKORO_AGENT_TOOLS_SECRET must be configured together")
         enable_concept_state = _as_bool(source.get("AGENT_ENABLE_CONCEPT_STATE"), name="AGENT_ENABLE_CONCEPT_STATE")
         enable_learning_insights = _as_bool(source.get("AGENT_ENABLE_LEARNING_INSIGHTS"), name="AGENT_ENABLE_LEARNING_INSIGHTS")
+        enable_soul_state = _as_bool(source.get("AGENT_ENABLE_SOUL_STATE"), name="AGENT_ENABLE_SOUL_STATE")
         if enable_concept_state and not (tools_url and tools_secret):
             raise ValueError("AGENT_ENABLE_CONCEPT_STATE requires the configured Akoro private gateway")
         if enable_learning_insights and not (tools_url and tools_secret):
             raise ValueError("AGENT_ENABLE_LEARNING_INSIGHTS requires the configured Akoro private gateway")
+        if enable_soul_state and not (tools_url and tools_secret):
+            raise ValueError("AGENT_ENABLE_SOUL_STATE requires the configured Akoro private gateway")
         if tools_url:
             parsed = urlparse(tools_url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -110,4 +116,5 @@ class ServiceSettings:
             allow_side_effecting_tools=_as_bool(source.get("AGENT_ALLOW_SIDE_EFFECTING_TOOLS"), name="AGENT_ALLOW_SIDE_EFFECTING_TOOLS"),
             enable_concept_state=enable_concept_state,
             enable_learning_insights=enable_learning_insights,
+            enable_soul_state=enable_soul_state,
         )

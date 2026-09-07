@@ -158,6 +158,26 @@ The learner can view the bounded projection at
 and always derive the learner from the token; the private Python endpoint never
 accepts a learner ID.
 
+### Learner-selected Soul interaction layer
+
+The broader Soul Stack starts with a deliberately non-manipulative, **off by
+default** interaction layer (`AGENT_ENABLE_SOUL_STATE=false`). It does not
+infer emotion, identity, mental health, relationships, loyalty, or ability. The
+learner can explicitly choose interaction style, response tone, challenge, and
+encouragement preferences, and can create a short-lived current-session
+check-in using bounded categorical values for feeling, study context, intent,
+and requested support. It has no free-text diary or relationship-memory field.
+
+When enabled, the Python agent fetches this read-only Akoro projection once at
+session start and uses it only as a presentation prompt condition. The compact
+narrative cue is drawn from the already safe, server-generated verified-learning
+episodes—not raw transcript text. It cannot change cognitive state, run a tool,
+create a task, send a notification, or treat a check-in as a diagnosis. Learners
+may inspect, update, and clear their own controls through the authenticated
+`/api/adaptive/chat/soul-state` endpoints. Deployment requires
+`2026-learner-soul-state-v1.sql`, `AGENT_ENABLE_SOUL_STATE=true`, and
+`AKORO_LEARNER_SOUL_STATE_ENABLED=true`.
+
 | Capability | Current implementation |
 |---|---|
 | Tools | Akoro API-provided, per-session function catalogue; Python has no direct database tools. |
