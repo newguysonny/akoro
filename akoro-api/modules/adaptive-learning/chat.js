@@ -952,13 +952,6 @@ router.get("/student/agent/:studentId/knowledge-search", async (req, res) => {
 // STANDARD CHAT
 // =============================================================
 
-// Response generation is deliberately centralised at POST /agent. Keep this
-// explicit error instead of silently maintaining a second learner reply path.
-// Session persistence remains under /sessions below.
-router.post("/chat", (req, res) => res.status(410).json({
-  error: "This Agent Chat endpoint has moved to /api/adaptive/chat/agent.",
-}));
-
 // ─── Persistent chat sessions ────────────────────────────────────────────────
 // Per-user conversations for the Agent Chat tab, browsable + resumable from
 // the sessions drawer. All routes are already behind authenticateToken.

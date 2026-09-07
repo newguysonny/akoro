@@ -7,7 +7,7 @@ const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
 test("the sole Agent Chat response authority is the unified /agent route", () => {
   assert.match(source, /router\.post\("\/agent", async \(req, res\) =>/);
   assert.doesNotMatch(source, /router\.post\("\/tutor"/);
-  assert.match(source, /router\.post\("\/chat", \(req, res\) => res\.status\(410\)/);
+  assert.doesNotMatch(source, /router\.post\("\/chat"/);
 });
 
 test("the unified route assembles study grounding and invokes the authorised tool loop", () => {
