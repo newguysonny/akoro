@@ -479,7 +479,11 @@ class AdaptiveTeachingLoop:
             turn_xp = round(turn_xp * 1.5)
         self.session.xp_earned += turn_xp
 
-        action = "CLEAR_MISTAKE" if analysis.misconception_detected and not analysis.misconception_cleared else guide["nextAction"]
+        guardian_contradiction = any(item.claim_status == "contradicted" for item in observations)
+        # A Guardian contradiction is an evidence-backed repair cue. It does
+        # not claim diagnosis/certainty to the learner and cannot itself alter
+        # the concept policy; the Akoro gateway records it separately.
+        action = "CLEAR_MISTAKE" if guardian_contradiction or (analysis.misconception_detected and not analysis.misconception_cleared) else guide["nextAction"]
         scratchpad = self._student.update_scratchpad(human_message, student_reply, self.session.topic)
         self.session.scratchpad = scratchpad
         response = {

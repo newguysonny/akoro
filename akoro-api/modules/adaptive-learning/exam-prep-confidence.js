@@ -14,6 +14,7 @@ import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { parseJsonLoose } from "../tasks/tools/_json.js";
 import { normaliseExamConfidenceQuestions } from "./exam-prep-confidence-validation.js";
+import { listLearnerWorkflows, startExamPrepWorkflow, transitionExamPrepWorkflow } from "./adaptive-workflows.js";
 
 const router = express.Router();
 const enabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toLowerCase() === "true";
@@ -109,7 +110,18 @@ router.post("/confidence-runs", async (req, res) => {
       run_id: run.id, attempt_number: 1, kind: "diagnostic", questions: publicQuestions, answer_key: answerKey,
     }).select("*").single();
     if (attemptError) throw attemptError;
-    return res.status(201).json({ success: true, run: publicRun(run), attempt: publicAttempt(attempt) });
+    let workflow = null;
+    try {
+      workflow = await startExamPrepWorkflow({
+        learnerId: req.user.id, examPrepRunId: run.id, topic: run.topic, subject: run.subject,
+        examBoard: run.exam_board, policyVersion: run.policy_version, attempt: 1,
+      });
+    } catch (workflowError) {
+      // The exam attempt remains authoritative. A workflow projection outage is
+      // visible in logs and never causes a second generated diagnostic.
+      console.error("[exam-prep-confidence/workflow-start]", workflowError?.message || workflowError);
+    }
+    return res.status(201).json({ success: true, run: publicRun(run), attempt: publicAttempt(attempt), workflow });
   } catch (error) {
     if (error instanceof ExamPrepRequestError) return fail(res, 422, error.message);
     console.error("[exam-prep-confidence/start]", error?.message || error);
@@ -129,6 +141,15 @@ router.get("/confidence-runs", async (req, res) => {
   } catch (error) {
     console.error("[exam-prep-confidence/list]", error?.message || error);
     return fail(res, 503, "Exam-prep runs are unavailable");
+  }
+});
+
+router.get("/workflows", async (req, res) => {
+  try {
+    return res.json({ success: true, workflows: await listLearnerWorkflows(req.user.id) });
+  } catch (error) {
+    console.error("[exam-prep-confidence/workflows]", error?.message || error);
+    return fail(res, 503, "Adaptive workflows are unavailable");
   }
 });
 
@@ -181,8 +202,17 @@ router.post("/confidence-runs/:runId/submit", async (req, res) => {
     ]);
     if (attemptWrite.error || runWrite.error) throw attemptWrite.error || runWrite.error;
     const updated = { ...run, status: nextStatus, last_score: score, completed_at: passed ? now : null };
+    let workflow = null;
+    try {
+      workflow = await transitionExamPrepWorkflow({
+        learnerId: req.user.id, examPrepRunId: run.id, from: run.status, to: nextStatus,
+        attempt: Number(run.current_attempt), score,
+      });
+    } catch (workflowError) {
+      console.error("[exam-prep-confidence/workflow-transition]", workflowError?.message || workflowError);
+    }
     return res.json({
-      success: true, run: publicRun(updated), score, correct, total, passed,
+      success: true, run: publicRun(updated), workflow, score, correct, total, passed,
       teachBack: nextStatus === "teach_back_required" ? {
         available: true, learnerInitiated: true,
         config: { topic: run.topic, subject: run.subject, mode: "fresh" },
@@ -217,7 +247,16 @@ router.post("/confidence-runs/:runId/retest", async (req, res) => {
       current_attempt: attemptNumber, status: "retest_ready", updated_at: new Date().toISOString(),
     }).eq("id", run.id).eq("learner_id", req.user.id).select("*").single();
     if (runError) throw runError;
-    return res.status(201).json({ success: true, run: publicRun(updated), attempt: publicAttempt(attempt) });
+    let workflow = null;
+    try {
+      workflow = await transitionExamPrepWorkflow({
+        learnerId: req.user.id, examPrepRunId: run.id, from: run.status, to: "retest_ready",
+        attempt: attemptNumber,
+      });
+    } catch (workflowError) {
+      console.error("[exam-prep-confidence/workflow-retest]", workflowError?.message || workflowError);
+    }
+    return res.status(201).json({ success: true, run: publicRun(updated), attempt: publicAttempt(attempt), workflow });
   } catch (error) {
     console.error("[exam-prep-confidence/retest]", error?.message || error);
     return fail(res, 503, "Fresh exam-prep retest could not be prepared");

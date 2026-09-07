@@ -23,6 +23,7 @@ import {
 
 const router = Router();
 const trackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
+const guardianReviewQueueEnabled = String(process.env.AKORO_GUARDIAN_REVIEW_QUEUE_ENABLED || "").toLowerCase() === "true";
 
 class ConceptStateGatewayError extends Error {
   constructor(status, message) {
@@ -80,6 +81,19 @@ async function approvedConcepts(ids, scope) {
     throw new ConceptStateGatewayError(422, "Every concept must be an active approved curriculum concept");
   }
   return concepts;
+}
+
+async function enqueueGuardianReview(principalId, request, observation) {
+  if (!guardianReviewQueueEnabled || observation.claimStatus !== "contradicted") return;
+  // This is an operational signal, not another copy of the evidence ledger.
+  // In particular, do not write `evidenceSummary`: it may contain a learner
+  // quote, which belongs only in the tightly scoped evidence record.
+  const { error } = await db.schema("edu").from("curriculum_guardian_reviews").upsert({
+    learner_id: principalId, concept_id: observation.conceptId,
+    source_session_id: request.sessionId, source_turn_id: request.turnId,
+    review_reason: "contradicted_claim", status: "open",
+  }, { onConflict: "learner_id,concept_id,source_session_id,source_turn_id,review_reason", ignoreDuplicates: true });
+  if (error) console.error("[agent-tools/guardian-review]", error.message || error);
 }
 
 router.post("/resolve", requireAgentToolsCredential, async (req, res) => {
@@ -181,6 +195,7 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
         },
       });
       if (error) throw new ConceptStateGatewayError(503, "Learner concept evidence could not be recorded");
+      await enqueueGuardianReview(principal.id, request, observation);
       if (trackerEnabled) {
         const { error: trackerError } = await db.schema("edu").rpc("record_learner_concept_tracker", {
           p_learner_id: principal.id, p_concept_id: observation.conceptId,

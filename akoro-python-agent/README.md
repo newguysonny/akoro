@@ -133,6 +133,15 @@ can view their own projection at `GET /api/adaptive/chat/concept-tracker` and
 clear only compact confusion notes at
 `DELETE /api/adaptive/chat/concept-tracker/confusion-notes`.
 
+For a Guardian-supported contradiction, the teaching loop chooses a repair cue;
+it does not manufacture an error or claim certainty. After the additive
+`2026-curriculum-guardian-review-v1.sql` migration and explicit
+`AKORO_GUARDIAN_REVIEW_QUEUE_ENABLED=true`, Akoro also records a metadata-only
+review item for curriculum administrators. It contains concept/session/turn IDs
+and the status only—not the learner reply, quote, model rationale, or raw tool
+output. Administrators review and close items at authenticated
+`/api/curriculum/guardian-reviews` endpoints.
+
 ### Measured learner-signals substrate
 
 The next additive slice is also **off by default**
@@ -189,6 +198,14 @@ straight into the existing `TeachAgentModal` only after the learner chooses it.
 A low score starts no session, task, notification, autonomy flow, or instructor
 escalation automatically. Apply `2026-exam-prep-confidence-loop-v1.sql` before
 enabling it.
+
+When `AKORO_ADAPTIVE_WORKFLOWS_ENABLED=true` is deliberately enabled after
+`2026-adaptive-workflows-v1.sql`, the confidence loop additionally writes a
+learner-owned, observable workflow run and append-only public status steps. The
+states are versioned and bounded (`diagnostic_ready`, `teach_back_required`,
+`retest_ready`, `passed`, `change_approach`, or `cancelled`); they do not expose
+chain-of-thought, raw tool output, or scratchpad contents. A learner can list
+this projection at `GET /api/adaptive/exam-prep/workflows`.
 
 ### Learner-selected Soul interaction layer
 
