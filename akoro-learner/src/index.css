@@ -68,6 +68,18 @@
   outline-offset: 2px;
 }
 
+/* Text inputs commonly sit inside a rounded field shell. A global rectangular
+   outline cuts across that shell on mobile (and was visible on every focused
+   learner input). Their component-level border/focus treatment plus the caret
+   already identifies focus, so retain the global keyboard ring for controls
+   while removing only the geometry-breaking text-entry outline. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none !important;
+  outline-offset: 0;
+}
+
 /* ═══ Reduced motion ══════════════════════════════════════════════════════
    Honour the OS setting globally instead of per-component: animations snap to
    their end state and transitions become instantaneous. Covers pulse-dot,

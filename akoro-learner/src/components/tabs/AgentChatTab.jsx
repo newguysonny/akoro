@@ -14,10 +14,22 @@ import AgentStatsTab from './AgentStatsTab.jsx';
 // ordinary study prompts continue to use the streaming tutor route.
 const ACCOUNT_ACTION_INTENTS = [
   /\b(remind me|set (?:a )?reminder|create (?:a )?task|add (?:a )?task)\b/i,
+  /\b(?:schedule|plan|set) (?:a )?(?:study )?(?:task|to-?do|reminder)\b/i,
+  /\b(?:what(?:'s| is) due|my (?:tasks?|to-?dos?|reminders?))\b/i,
   /\b(message|send|notify|check in with) me\b/i,
   /\b(schedule|reschedule|cancel) (?:a |the )?(?:reminder|message|check-?in|follow-?up)\b/i,
 ];
 const isAccountActionIntent = (text) => ACCOUNT_ACTION_INTENTS.some((re) => re.test(text));
+
+// Scheduling usually takes two turns: the learner first asks to schedule, then
+// gives the task and deadline. Keep that answer on the tool-capable route even
+// though the detail turn itself may simply be “Revise Maths tomorrow at 8 am”.
+// The short lookback avoids turning a later, unrelated teaching chat into a
+// task operation, while preserving the context the agent needs to resolve the
+// account-local date and time safely.
+const isAccountActionFollowUp = (messages) => messages.slice(-3).some((message) =>
+  /\b(?:create|add|set|schedule|reschedule|cancel|task|to-?do|reminder|follow-?up|check-?in)\b/i.test(message?.text || ""),
+);
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -295,11 +307,13 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     // Show an agent bubble AND persist it, so a refresh reloads the same text.
     const say = (txt) => { pushAgent(txt); persistToSession(sid, "agent", txt); };
 
-    // Explicit task/reminder/message requests go through the bounded tool
-    // loop, where the API derives identity and supplies safe profile/time
-    // context. Do not put arbitrary study questions through a write-capable
-    // route; attachments always stay on the tutor path.
-    if(!sentAttachments.length && isAccountActionIntent(text)){
+    // Explicit task/reminder/message requests—and their short detail
+    // follow-ups—go through the bounded tool loop, where the API derives
+    // identity and supplies safe profile/time context. This lets “Revise Maths
+    // tomorrow at 8 am” complete the preceding “schedule a task” request
+    // instead of falling back to the read-only tutor. Attachments always stay
+    // on the tutor path.
+    if(!sentAttachments.length && (isAccountActionIntent(text) || isAccountActionFollowUp(messages))){
       try {
         const history = messages.slice(-10).map(m => ({
           role: m.from === "me" ? "user" : "assistant", content: m.text,
