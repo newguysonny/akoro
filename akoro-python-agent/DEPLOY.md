@@ -154,6 +154,25 @@ A signed-in learner can inspect only their own compact projection at
 `DELETE /api/adaptive/chat/learning-insights`. Do not enable either flag until
 the migration, private gateway, and learner control surface have been deployed.
 
+## Exam-Prep Confidence Loop
+
+`2026-exam-prep-confidence-loop-v1.sql` adds the learner-owned, generated
+exam-style MCQ workflow without changing the existing teacher `exam_prep` task
+tool. Enable it only after migration with:
+
+```bash
+AKORO_EXAM_PREP_CONFIDENCE_ENABLED=true
+```
+
+The scoped authenticated route is `/api/adaptive/exam-prep/confidence-runs`.
+A run stores a board/subject policy threshold and capped number of attempts,
+keeps answer keys server-side, scores one submitted diagnostic or retest, and
+returns a clear learner-initiated teach-back handoff when below threshold. The
+retest endpoint requires `learnerConfirmedReady: true`, generates fresh
+questions, and ends at `change_approach` after the configured cap. Do not
+represent this content as real historical papers: every run is explicitly
+`generated_exam_style` until an authorised past-paper ingestion pipeline exists.
+
 ## Learner-selected Soul interaction layer
 
 The first broader Soul Stack deployment is intentionally not an inferred

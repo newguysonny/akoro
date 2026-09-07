@@ -29,6 +29,7 @@ import chatRouter                from "./chat.js";
 import drawRouter                from "./draw.js";
 import { syllabusRouter }        from "./syllabus.js";
 import teachingSessionRouter     from "./teachingSession.js";
+import examPrepConfidenceRouter  from "./exam-prep-confidence.js";
 // Side-effect import: schedules the off-peak lesson-ladder pre-warm so the
 // first learner on a scheme-of-work topic never waits for generation.
 import "./ladderPrewarm.js";
@@ -69,6 +70,9 @@ router.use("/marketplace",  marketplaceRouter);
 // Teaching session — phase engine (configure + start + message + state + assess)
 // Mounted BEFORE chatRouter so /teaching/* is handled here, not by chat.js
 router.use("/teaching",      authenticateToken, teachingSessionRouter);
+// Additive learner-owned diagnostic/retest workflow. It does not change the
+// legacy phase-oriented teaching route or the teacher task exam-prep tool.
+router.use("/exam-prep",     authenticateToken, examPrepConfidenceRouter);
 
 router.use("/chat",          authenticateToken, chatRouter);
 router.use("/draw",          authenticateToken, drawRouter);

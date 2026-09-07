@@ -158,6 +158,24 @@ The learner can view the bounded projection at
 and always derive the learner from the token; the private Python endpoint never
 accepts a learner ID.
 
+### Exam-Prep Confidence Loop
+
+The learner-owned Exam-Prep Confidence Loop is a separate, **off-by-default**
+workflow in Akoro API (`AKORO_EXAM_PREP_CONFIDENCE_ENABLED=true`). It provides
+a bounded single-topic path: generated exam-style MCQ diagnostic → transparent
+score/threshold branch → learner-initiated scoped teach-back handoff → fresh
+MCQ retest → pass or capped `change_approach` fallback. Board/subject thresholds
+and maximum attempts are configurable in `edu.exam_prep_confidence_policies`;
+the fallback is 70% and three attempts. Every run carries the explicit
+`generated_exam_style` provenance—it is not a historic past-paper corpus.
+
+The authenticated endpoints are under `/api/adaptive/exam-prep/confidence-runs`:
+create a run, read its current attempt, submit answers, and request a fresh
+retest only after an explicit `learnerConfirmedReady` value. A low score offers
+configuration for the existing teach-back experience but starts no session,
+task, notification, autonomy flow, or instructor escalation automatically.
+Apply `2026-exam-prep-confidence-loop-v1.sql` before enabling it.
+
 ### Learner-selected Soul interaction layer
 
 The broader Soul Stack starts with a deliberately non-manipulative, **off by
