@@ -46,7 +46,8 @@ import {
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
-import { isIanaTimeZone, localiseInstant } from "./learner-time-context.js";
+import { validateLearnerTaskInput } from "./learner-task-validation.js";
+import { localiseInstant } from "./learner-time-context.js";
 
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -241,33 +242,6 @@ export const CHAT_TOOLS = [
   },
 ];
 
-function limitedToolText(value, label, { required = false, max = 800 } = {}) {
-  if (value === undefined || value === null || value === "") {
-    if (required) throw new Error(`${label} is required`);
-    return null;
-  }
-  if (typeof value !== "string" || !value.trim() || value.trim().length > max) {
-    throw new Error(`${label} must be a non-empty string of at most ${max} characters`);
-  }
-  return value.trim();
-}
-
-function parsePreciseTaskDueAt(value) {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())) {
-    throw new Error("dueAt must be an ISO 8601 timestamp with a timezone offset");
-  }
-  const due = new Date(value);
-  if (!Number.isFinite(due.getTime())) throw new Error("dueAt is not a valid time");
-  return due.toISOString();
-}
-
-function taskTimeZone(input, context) {
-  const timezone = limitedToolText(input.timezone, "timezone", { max: 80 }) || context.timeZone;
-  if (!isIanaTimeZone(timezone)) throw new Error("timezone must be a valid IANA timezone");
-  return timezone;
-}
-
 export async function executeChatTool(name, input, studentId) {
   switch (name) {
     case "get_learner_context":
@@ -287,21 +261,15 @@ export async function executeChatTool(name, input, studentId) {
     case "create_task": {
       try {
         const context = await getLearnerProfileContext(studentId);
-        const title = limitedToolText(input.title, "title", { required: true, max: 180 });
-        const description = limitedToolText(input.description, "description", { max: 800 });
-        const dueLabel = limitedToolText(input.due, "due", { max: 120 });
-        const course = limitedToolText(input.course, "course", { max: 120 });
-        const priority = ["high", "medium", "low"].includes(input.priority) ? input.priority : "medium";
-        const dueAt = parsePreciseTaskDueAt(input.dueAt);
-        const timezone = taskTimeZone(input, context);
+        const taskInput = validateLearnerTaskInput(input, { defaultTimezone: context.timeZone });
         const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
         const { data: task, error } = await db.from("tasks").insert({
           creator_id: studentId, agent_id: agentRow?.id,
-          title, description, priority,
+          title: taskInput.title, description: taskInput.description, priority: taskInput.priority,
           status: "pending", task_type: "general",
-          payload: { due: dueLabel, course },
-          due_at: dueAt,
-          timezone,
+          payload: { due: taskInput.due, course: taskInput.course },
+          due_at: taskInput.dueAt,
+          timezone: taskInput.timezone,
         }).select().single();
         if (error) return { error: error.message };
         // This is intentionally best-effort: creating a learner-requested task
@@ -312,7 +280,7 @@ export async function executeChatTool(name, input, studentId) {
         return {
           created: true, taskId: task.id, title: task.title, description: task.description,
           priority: task.priority, dueAt: task.due_at ?? null, timezone: task.timezone,
-          dueLocal: task.due_at ? localiseInstant(task.due_at, timezone) : null,
+          dueLocal: task.due_at ? localiseInstant(task.due_at, taskInput.timezone) : null,
           autonomyEligible: Boolean(task.due_at && !task.is_recurring),
         };
       } catch (error) {

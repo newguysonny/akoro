@@ -8,28 +8,7 @@ import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
 import AgentStatsTab from './AgentStatsTab.jsx';
-
-// Explicit account actions use the authenticated tool-chat route. It can read
-// the learner's safe profile/time context before it creates a task or schedule;
-// ordinary study prompts continue to use the streaming tutor route.
-const ACCOUNT_ACTION_INTENTS = [
-  /\b(remind me|set (?:a )?reminder|create (?:a )?task|add (?:a )?task)\b/i,
-  /\b(?:schedule|plan|set) (?:a )?(?:study )?(?:task|to-?do|reminder)\b/i,
-  /\b(?:what(?:'s| is) due|my (?:tasks?|to-?dos?|reminders?))\b/i,
-  /\b(message|send|notify|check in with) me\b/i,
-  /\b(schedule|reschedule|cancel) (?:a |the )?(?:reminder|message|check-?in|follow-?up)\b/i,
-];
-const isAccountActionIntent = (text) => ACCOUNT_ACTION_INTENTS.some((re) => re.test(text));
-
-// Scheduling usually takes two turns: the learner first asks to schedule, then
-// gives the task and deadline. Keep that answer on the tool-capable route even
-// though the detail turn itself may simply be “Revise Maths tomorrow at 8 am”.
-// The short lookback avoids turning a later, unrelated teaching chat into a
-// task operation, while preserving the context the agent needs to resolve the
-// account-local date and time safely.
-const isAccountActionFollowUp = (messages) => messages.slice(-3).some((message) =>
-  /\b(?:create|add|set|schedule|reschedule|cancel|task|to-?do|reminder|follow-?up|check-?in)\b/i.test(message?.text || ""),
-);
+import { routesToAccountTools } from '../../lib/agentAccountActionRouting.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -313,7 +292,7 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     // tomorrow at 8 am” complete the preceding “schedule a task” request
     // instead of falling back to the read-only tutor. Attachments always stay
     // on the tutor path.
-    if(!sentAttachments.length && (isAccountActionIntent(text) || isAccountActionFollowUp(messages))){
+    if(!sentAttachments.length && routesToAccountTools(text, messages)){
       try {
         const history = messages.slice(-10).map(m => ({
           role: m.from === "me" ? "user" : "assistant", content: m.text,

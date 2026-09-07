@@ -32,6 +32,27 @@ test("cancellation accepts only a generated follow-up UUID", () => {
   assert.throws(() => validateFollowUpId("follow-up-1"), /followUpId is invalid/);
 });
 
+test("diverse future-message actions preserve their exact title, message, and timezone", () => {
+  const actions = [
+    ["Message me tomorrow with a Biology revision check-in", {
+      title: "Biology revision check-in", message: "Ready for your Biology revision?", timezone: "Africa/Lagos",
+    }],
+    ["Send me a London essay reminder", {
+      title: "Essay reminder", message: "Time to complete your English essay.", timezone: "Europe/London",
+    }],
+    ["Schedule a New York Physics practice prompt", {
+      title: "Physics practice", message: "Try five Physics past questions now.", timezone: "America/New_York",
+    }],
+  ];
+  for (const [prompt, input] of actions) {
+    const parsed = validateFollowUpInput({ ...input, scheduledAt: future() });
+    assert.equal(parsed.title, input.title, prompt);
+    assert.equal(parsed.message, input.message, prompt);
+    assert.equal(parsed.timezone, input.timezone, prompt);
+    assert.ok(parsed.delayMs >= 60_000, prompt);
+  }
+});
+
 test("a follow-up uses the authenticated learner's supplied account timezone by default", () => {
   const parsed = validateFollowUpInput({
     message: "Good morning!", scheduledAt: future(),
