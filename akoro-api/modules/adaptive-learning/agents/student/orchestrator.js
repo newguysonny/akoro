@@ -7,7 +7,7 @@
 //            triggered by DecayEngine when confidence drops
 // =============================================================
 
-import { BaseOrchestrator, openai } from "../base-orchestrator.js";
+import { BaseOrchestrator } from "../base-orchestrator.js";
 import { StudentAgent } from "./agent.js";
 import {
   getOrCreateStudentAgent,
@@ -16,8 +16,14 @@ import {
   finalizeSessionDelta,
   retrieveAgentKnowledgeByTopic,
 } from "./knowledge.js";
-import { decayEngine, getPriority } from "./decayEngine.js";
+import { decayEngine } from "./decayEngine.js";
 import { getStudentState, updateStudentState } from "../../student-state.js";
+import {
+  applyTeachingObservation,
+  capProtegeAnalysis,
+  createTeachingEvidenceState,
+  publicTeachingEvidence,
+} from "../../teaching-evidence.js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -32,6 +38,16 @@ export const STUDENT_PHASES = {
   PHASE_4: "Phase 4 — Push a little further!",
   MASTERY: "Mastery",
 };
+
+const ACTION_FOR_DIALOGUE_MOVE = Object.freeze({
+  clarify_core: "DIG_DEEPER",
+  repair_misconception: "CLEAR_MISTAKE",
+  apply_in_context: "USE_ANALOGY",
+  connect_and_explain: "ONE_MORE_PUSH",
+  stretch_transfer: "CHALLENGE",
+  consolidate_and_advance: "GAP_CLOSED",
+  synthesise: "TRIGGER_RECALL",
+});
 
 export class StudentSessionOrchestrator extends BaseOrchestrator {
 
@@ -50,7 +66,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
                 sessionType = "free_teaching",   // "free_teaching" | "decay_review"
                 subject = null,                  // free-teaching subject (decay carries its own)
                 decayPayload = null,
-                referenceMaterial = null }) {     // short-lived learner-supplied session source
+                referenceMaterial = null,
+                teachingEvidence = null }) {      // compact server-derived evidence for a continuation
     super();
     this.studentId          = studentId;
     this.teacherAgentId     = teacherAgentId;
@@ -61,6 +78,10 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     // The REST upload route already caps this value; keep only this object in
     // live memory and never write its raw source text to adaptive_sessions.
     this.referenceMaterial  = referenceMaterial?.text ? referenceMaterial : null;
+    // Compact, transcript-free evidence may be restored for a continuation.
+    // It is normalised only after the lesson ladder is known in initialize().
+    this.resumeTeachingEvidence = teachingEvidence;
+    this.teachingEvidence       = null;
     this.studentAgentRecord = null;
     this.studentAgent       = null;
     this.sessionDeltaId     = null;
@@ -78,6 +99,34 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     };
 
     this.session.phase = "PHASE_1";
+  }
+
+  // Learner pace is derived from an expiry-aware, aggregate-only profile. If
+  // the optional profile migration is unavailable or has too little evidence,
+  // the evidence model safely uses the neutral standard pace.
+  async _loadLearnerPaceProfile() {
+    try {
+      const { data, error } = await supabase
+        .schema("edu").from("learner_teaching_profiles")
+        .select("evidence_count, profile_confidence, pacing_recommendation, expires_at")
+        .eq("learner_id", this.studentId)
+        .maybeSingle();
+      if (error) throw error;
+      return data || null;
+    } catch (error) {
+      console.warn("[teaching-evidence] learner pace profile unavailable:", error.message);
+      return null;
+    }
+  }
+
+  getTeachingEvidenceSnapshot() {
+    return publicTeachingEvidence(this.teachingEvidence, this.session.mustKnowIndex);
+  }
+
+  getTeachingEvidenceScore() {
+    const concepts = this.teachingEvidence?.concepts || [];
+    if (!concepts.length) return 0;
+    return Math.round((concepts.reduce((sum, concept) => sum + Number(concept.learnerMastery || 0), 0) / concepts.length) * 100);
   }
 
   // ── INIT ─────────────────────────────────────────────────────
@@ -156,8 +205,24 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         this.session.mustKnowIndex = Math.min(idx, Math.max(0, mustKnow.length - 1));
       }
       const ph = String(this.resumeFrom.phase || "").toUpperCase();
-      if (/^PHASE_[1-4]$/.test(ph)) this.session.phase = ph;
+      if (/^PHASE_[1-4]$/.test(ph) || ph === "MASTERY") this.session.phase = ph;
     }
+
+    // A stale continuation cannot select an out-of-range concept.
+    this.session.mustKnowIndex = Math.max(0, Math.min(
+      Number(this.session.mustKnowIndex) || 0,
+      Math.max(0, mustKnow.length - 1),
+    ));
+
+    // The pace comes from the authenticated learner's bounded profile, while
+    // each concept's state comes only from demonstrated session evidence.
+    const paceProfile = await this._loadLearnerPaceProfile();
+    this.teachingEvidence = createTeachingEvidenceState({
+      paceProfile,
+      persisted: this.resumeTeachingEvidence,
+      conceptCount: mustKnow.length || 1,
+    });
+    this.session.teachingEvidence = this.teachingEvidence;
 
     // Topic boundary
     const boundary = this.guideOrchestrator.control?.getTopicBoundary
@@ -286,6 +351,9 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       totalSessions:    agentRecord.total_sessions,
       knowledgeScore:   Math.round(agentRecord.knowledge_score),
       initialState:     { understanding: u, confusion: 30 },
+      // This compact server-owned snapshot lets the transport report progress
+      // without putting any mastery decision in the browser.
+      teachingEvidence: this.getTeachingEvidenceSnapshot(),
       agentPairId:      "student-session",
       sessionType:      this.sessionType,
       decayPayload:     this.decayPayload || null,
@@ -307,30 +375,51 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const studentId = this.studentId;
     const state     = await getStudentState(agentId);
 
-    // 1. The Student Agent replies.
-    //
-    // There used to be a second call beside this one: a separate agent checking
-    // for topic drift, whose verdict could discard the reply below before
-    // anyone saw it. It was wrong about it constantly — it read "Hello" as
-    // off-topic and told a learner to get back to work on their opening
-    // message — and being wrong was expensive twice over: the drift check was
-    // billed, the reply it threw away was billed, and a teaching turn was spent
-    // producing nothing but a red warning.
-    //
-    // Staying on topic is now NaNa's job, decided from context she already has,
-    // and expressed as a nudge inside a normal teaching turn. See her prompt.
-    const studentReply = await (
-      this.studentAgent.reply(
-        humanMessage, topic,
-        state.cognitive,
+    // 1. Evaluate the human's explanation BEFORE generating the protege reply.
+    // A friendly model response is not independent proof that the protege—or
+    // the learner—understood a message they just received.
+    if (!this.teachingEvidence) {
+      this.teachingEvidence = createTeachingEvidenceState({ conceptCount: mustKnowParts.length || 1 });
+      this.session.teachingEvidence = this.teachingEvidence;
+    }
+    let rawObservation = {};
+    try {
+      rawObservation = await this.studentAgent.assessTeachingEvidence({
+        humanMessage,
+        topic,
+        currentSubtopic: mustKnowParts[mustKnowIndex] || topic,
         history,
-        STUDENT_PHASES[phase],
-        onStudentChunk || null
-      )
+      });
+    } catch (error) {
+      // Never turn an unavailable evaluator into invented learning evidence.
+      console.warn("[teaching-evidence] turn evaluation unavailable:", error.message);
+      rawObservation = { notChecked: true };
+    }
+    const evidenceUpdate = applyTeachingObservation(this.teachingEvidence, mustKnowIndex, rawObservation);
+    this.teachingEvidence = evidenceUpdate.state;
+    this.session.teachingEvidence = this.teachingEvidence;
+
+    // 2. The protege replies from the server-selected dialogue move. It is
+    // explicitly prevented from claiming mastery until the evidence rule below
+    // is satisfied, and it uses discussion rather than a disconnected quiz.
+    const studentReply = await this.studentAgent.reply(
+      humanMessage,
+      topic,
+      state.cognitive,
+      history,
+      STUDENT_PHASES[phase],
+      onStudentChunk || null,
+      {
+        dialogue: evidenceUpdate.dialogue,
+        evidence: evidenceUpdate.current,
+      },
     );
 
-    // 2. Analyze understanding
-    const analysis = await this.studentAgent.analyzeUnderstanding(studentReply, topic, history);
+    // 3. Analyse the generated protege reply, then cap it by the human's
+    // demonstrated evidence. A model cannot promote itself from exposure to
+    // understanding simply because it produced a fluent answer.
+    const agentAnalysis = await this.studentAgent.analyzeUnderstanding(studentReply, topic, history);
+    const analysis = capProtegeAnalysis(agentAnalysis, evidenceUpdate.current);
 
     // 3. Persist state
     const updatedState = await updateStudentState(
@@ -343,27 +432,34 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         understanding: Math.round(updatedState.cognitive.understanding * 100),
         confusion:     Math.round(updatedState.cognitive.confusion     * 100),
         engagement:    Math.round(updatedState.cognitive.engagement    * 100),
+        teachingEvidence: this.getTeachingEvidenceSnapshot(),
       });
     }
 
     // 4. Extract and queue knowledge — now with subject
     const extracted = await this.studentAgent.extractKnowledgeFromTurn(
-      humanMessage, studentReply, topic, subject, analysis
+      humanMessage, studentReply, topic, subject, analysis, evidenceUpdate.current
     );
     if (extracted) this.stats.agentKnowledgeAdded++;
 
-    // 5. Save student knowledge references
-    await this.studentAgent.extractStudentKnowledge(humanMessage, topic, subject, analysis);
+    // 5. Save learner knowledge references only after the same evidence rule
+    // has verified the concept; a first pasted/copyable definition is not a
+    // durable learner-strength signal.
+    await this.studentAgent.extractStudentKnowledge(
+      humanMessage, topic, subject, analysis, evidenceUpdate.current
+    );
     this.stats.studentKnowledgeRefs = this.studentAgent.studentKnowledgeRefs;
     this.stats.teacherChunksUsed    = this.studentAgent.teacherChunksUsed;
 
-    if (analysis.newConceptLearned)    this.stats.conceptsLearned.push(analysis.newConceptLearned);
-    if (analysis.misconceptionCleared) {
-      this.stats.misconceptionsCleared.push(analysis.misconceptionDetected || "concept");
+    if (evidenceUpdate.current.masteryStatus === "verified" && analysis.newConceptLearned) {
+      this.stats.conceptsLearned.push(analysis.newConceptLearned);
+    }
+    if (evidenceUpdate.misconceptionRepaired) {
+      this.stats.misconceptionsCleared.push(mustKnowParts[mustKnowIndex] || "concept");
     }
 
     // 6. Guide tip
-    const guideResult = this.guideOrchestrator.guide?.getTip
+    let guideResult = this.guideOrchestrator.guide?.getTip
       ? await this.guideOrchestrator.guide.getTip(
           {
             topic, phase: STUDENT_PHASES[phase],
@@ -372,22 +468,51 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
             understanding: Math.round(updatedState.cognitive.understanding * 100),
             confusion:     Math.round(updatedState.cognitive.confusion     * 100),
             history, mustKnowParts, mustKnowIndex,
+            teachingEvidence: this.getTeachingEvidenceSnapshot(),
+            dialogue: evidenceUpdate.dialogue,
           },
           onGuideChunk || null
         )
       : { tip: null, nextAction: "NEXT_SUBTOPIC", nextPhase: null,
           nextMustKnowIndex: mustKnowIndex, isUrgent: false };
 
-    // 7. Advance phase / subtopic
+    // 7. Server-owned mastery gate. Guide suggestions can shape the coaching
+    // language, but cannot move a concept on just because the protege received
+    // a fluent answer. A verified core explanation plus separate elaboration is
+    // required before a subtopic or mastery phase can advance.
     let phaseChanged = false, phaseLabel = null, subtopicAdvanced = false;
-    if (guideResult.nextPhase && guideResult.nextPhase !== phase) {
-      this.session.phase = guideResult.nextPhase;
-      phaseChanged       = true;
-      phaseLabel         = STUDENT_PHASES[guideResult.nextPhase];
+    const hasNextSubtopic = mustKnowIndex < Math.max(0, mustKnowParts.length - 1);
+    const mayAdvance = evidenceUpdate.dialogue.canAdvance;
+    const requestedPhase = Object.hasOwn(STUDENT_PHASES, guideResult?.nextPhase)
+      ? guideResult.nextPhase
+      : null;
+
+    if (mayAdvance && hasNextSubtopic) {
+      this.session.mustKnowIndex = mustKnowIndex + 1;
+      subtopicAdvanced = true;
+      // Keep the response metadata honest when the guide happened to request a
+      // different action: the mastery rule, not a client/model claim, advanced.
+      guideResult = { ...guideResult, nextAction: "NEXT_SUBTOPIC", nextMustKnowIndex: this.session.mustKnowIndex };
+    } else {
+      // Do not leak a guide/model recommendation to advance into persisted UI
+      // state when the independently evaluated evidence has not earned it.
+      guideResult = {
+        ...guideResult,
+        nextAction: ACTION_FOR_DIALOGUE_MOVE[evidenceUpdate.dialogue.move] || "DIG_DEEPER",
+        nextMustKnowIndex: mustKnowIndex,
+      };
     }
-    if (guideResult.nextMustKnowIndex > mustKnowIndex) {
-      this.session.mustKnowIndex = guideResult.nextMustKnowIndex;
-      subtopicAdvanced           = true;
+
+    const mayEnterMastery = mayAdvance && !hasNextSubtopic && evidenceUpdate.dialogue.allConceptsVerified;
+    if (mayEnterMastery && this.session.phase !== "MASTERY") {
+      this.session.phase = "MASTERY";
+      phaseChanged = true;
+      phaseLabel = STUDENT_PHASES.MASTERY;
+      guideResult = { ...guideResult, nextAction: "MASTERY", nextPhase: "MASTERY" };
+    } else if (mayAdvance && requestedPhase && requestedPhase !== "MASTERY" && requestedPhase !== phase) {
+      this.session.phase = requestedPhase;
+      phaseChanged = true;
+      phaseLabel = STUDENT_PHASES[requestedPhase];
     }
 
     // 8. Persist final state
@@ -435,7 +560,16 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         agentKnowledgeAdded:  this.stats.agentKnowledgeAdded,
         knowledgeScore:       Math.round(this.studentAgentRecord.knowledge_score),
         agentLevel:           this.studentAgentRecord.level,
+        // Compact evidence metadata is informative only; the server retains
+        // ownership of pacing, dialogue selection, and advancement.
+        learnerMastery:       evidenceUpdate.current.learnerMastery,
+        protegeUnderstanding: evidenceUpdate.current.protegeUnderstanding,
+        teachingSkill:        evidenceUpdate.current.teachingSkill,
+        masteryStatus:        evidenceUpdate.current.masteryStatus,
+        dialogueMove:         evidenceUpdate.dialogue.move,
+        pace:                 evidenceUpdate.dialogue.pace,
       },
+      teachingEvidence: this.getTeachingEvidenceSnapshot(),
       phaseChanged, phaseLabel, subtopicAdvanced,
       currentSubtopic: mustKnowParts[this.session.mustKnowIndex] || null,
       currentPhase:    this.session.phase,
@@ -464,26 +598,43 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const agentId = this.studentAgentRecord.id;
 
     const state = await getStudentState(agentId);
-    const u = Math.round(state.cognitive.understanding * 100);
+    const protegeUnderstanding = Math.round(state.cognitive.understanding * 100);
+    const learnerEvidenceScore = this.getTeachingEvidenceScore();
 
     const evaluation = this.guideOrchestrator.guide?.evaluateSession
-      ? await this.guideOrchestrator.guide.evaluateSession(topic, history, u)
+      ? await this.guideOrchestrator.guide.evaluateSession(topic, history, learnerEvidenceScore)
       : {
-          overallScore: Math.round(u * 0.9),
+          overallScore: Math.round(learnerEvidenceScore * 0.9),
           strengths:    this.stats.conceptsLearned.map(c => `Taught: ${c}`).slice(0, 3),
           nextTimeTip:  "Keep building on this foundation!",
           nextLesson:   `Continue with ${topic}`,
         };
 
+    const evidence = this.getTeachingEvidenceSnapshot();
+    const qualitativeScore = Number(evaluation?.overallScore);
+    const boundedTeachingScore = Math.max(0, Math.min(
+      100,
+      learnerEvidenceScore,
+      Number.isFinite(qualitativeScore) ? qualitativeScore : learnerEvidenceScore,
+    ));
+    const evidenceGaps = evidence.currentConcept?.masteryStatus === "verified"
+      ? []
+      : ["Build one more real-life explanation or application before moving on."];
     return {
-      teachingScore:  evaluation.overallScore ?? Math.round(u * 0.9),
+      // Teaching score reflects the learner's demonstrated evidence, not merely
+      // a fluent protege reply. The guide's qualitative evaluation can refine
+      // it but cannot inflate it beyond demonstrated evidence.
+      teachingScore:  boundedTeachingScore,
+      protegeUnderstanding,
+      learnerEvidenceScore,
+      teachingEvidence: evidence,
       xpEarned:       this.stats.xpEarned,
       agentFeedback:  evaluation.nextTimeTip || `Good work teaching ${topic}.`,
       keyConcepts:    (this.stats.conceptsLearned || []).slice(0, 5),
       strengthAreas:  evaluation.strengths || [],
       gapsIdentified: this.stats.misconceptionsCleared?.length
         ? this.stats.misconceptionsCleared.slice(0, 3)
-        : (evaluation.nextLesson ? [evaluation.nextLesson] : []),
+        : (evidenceGaps.length ? evidenceGaps : (evaluation.nextLesson ? [evaluation.nextLesson] : [])),
     };
   }
 
@@ -496,6 +647,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     const state = await getStudentState(agentId);
     const u = Math.round(state.cognitive.understanding * 100);
     const c = Math.round(state.cognitive.confusion     * 100);
+    const learnerEvidenceScore = this.getTeachingEvidenceScore();
 
     // Flush knowledge buffer
     const sessionId  = this.session.sessionId || `session_${agentId}_${Date.now()}`;
@@ -509,7 +661,7 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
         agentId, studentId,
         this.decayPayload.subject,
         this.decayPayload.topic,
-        u / 100,   // performance score
+        learnerEvidenceScore / 100,   // demonstrated teaching evidence, not delivery
         sessionId
       );
 
@@ -552,14 +704,26 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
     }
 
     // Guide evaluation
-    const evaluation = this.guideOrchestrator.guide?.evaluateSession
-      ? await this.guideOrchestrator.guide.evaluateSession(topic, history, u)
+    let evaluation = this.guideOrchestrator.guide?.evaluateSession
+      ? await this.guideOrchestrator.guide.evaluateSession(topic, history, learnerEvidenceScore)
       : {
-          overallScore: Math.round(u * 0.9),
+          overallScore: Math.round(learnerEvidenceScore * 0.9),
           strengths:    this.stats.conceptsLearned.map(c => `Taught: ${c}`).slice(0, 3),
           nextTimeTip:  "Keep building on this foundation!",
           nextLesson:   `Continue with ${topic}`,
         };
+
+    // Qualitative guide feedback is helpful, but its score may never claim more
+    // than the learner actually demonstrated in server-owned evidence.
+    const guideScore = Number(evaluation?.overallScore);
+    evaluation = {
+      ...evaluation,
+      overallScore: Math.max(0, Math.min(
+        100,
+        learnerEvidenceScore,
+        Number.isFinite(guideScore) ? guideScore : learnerEvidenceScore,
+      )),
+    };
 
     const controlReport = this.guideOrchestrator.control?.getFinalReport?.() ||
       { summary: `✅ Session complete — ${this.stats.turnsCompleted} turns` };
@@ -568,6 +732,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       evaluation,
       controlReport,
       finalState:  { understanding: u, confusion: c },
+      learnerEvidenceScore,
+      teachingEvidence: this.getTeachingEvidenceSnapshot(),
       totalTurns:  this.session.turnCount,
       topic,
       agentPairId: "student-session",

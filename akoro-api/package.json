@@ -14,6 +14,7 @@
     "test:task-scheduling": "node --test modules/adaptive-learning/learner-task-validation.test.mjs modules/adaptive-learning/chat-follow-ups.test.mjs modules/adaptive-learning/learner-time-context.test.mjs",
     "test:agent-context": "node --test modules/agent-tools/conversation-context-validation.test.mjs modules/agent-tool-requests/validation.test.mjs modules/agent-tool-requests/routes.contract.test.mjs",
     "test:agent-chat": "node --test modules/adaptive-learning/agent-chat-route.contract.test.mjs modules/adaptive-learning/agent-chat-intent.test.mjs modules/adaptive-learning/agent-tool-request-intent.test.mjs modules/adaptive-learning/websocket-identity.contract.test.mjs",
+    "test:adaptive-teaching": "node --test modules/adaptive-learning/teaching-evidence.test.mjs",
     "smoke:instructor": "node scripts/smoke-instructor.mjs",
     "preflight": "node scripts/preflight-security.mjs"
   },

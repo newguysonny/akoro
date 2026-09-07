@@ -24,9 +24,20 @@ import { decayEngine } from "./agents/student/decayEngine.js";
 import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
 import { normalizeSessionReference } from "./sessionReference.js";
+import { serialiseTeachingEvidence } from "./teaching-evidence.js";
 import db from "../../db.js";
 
 export const activeSessions = new Map();
+
+// Rolling deploys can briefly run this code against a database that has not
+// received the compact-evidence migration yet. Retry without the optional
+// column so normal teaching/session persistence remains available; never fall
+// back to storing transcript text as evidence.
+function isMissingColumn(error, column) {
+  const message = String(error?.message || "").toLowerCase();
+  return error?.code === "42703" || error?.code === "PGRST204" ||
+    (message.includes(column.toLowerCase()) && /column|schema cache|could not find/i.test(message));
+}
 
 // ── Session reap grace window ────────────────────────────────────────────────
 // When a socket drops we keep its orchestrator alive briefly so a reconnecting
@@ -80,22 +91,35 @@ async function createSessionRecord(orchestrator, { studentId, topic, subject, op
     session_history:        [],
     objectives_covered:     {},
     confidence_by_subtopic: {},
+    // Compact scores/categories only. The conversation itself remains in the
+    // existing transcript column, never duplicated as assessment evidence.
+    teaching_evidence:      serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
     block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
   };
 
   try {
+    let insertRow = row;
     let { data, error } = await db.schema("edu").from("adaptive_sessions")
-      .insert(row).select("id").single();
+      .insert(insertRow).select("id").single();
+
+    // The new field is intentionally optional during a rolling migration.
+    if (error && isMissingColumn(error, "teaching_evidence")) {
+      console.warn("[adaptive_sessions create] teaching_evidence migration pending; saving without it");
+      const { teaching_evidence: _evidence, ...legacyRow } = row;
+      insertRow = legacyRow;
+      ({ data, error } = await db.schema("edu").from("adaptive_sessions")
+        .insert(insertRow).select("id").single());
+    }
 
     // The session row is what makes a session visible in the Sessions tab, so
     // never let one optional column take the whole row down with it.
     // student_agent_id is a decoration; student_id/topic/subject are the row.
     // (Its FK pointed at public.user_agents while we write edu.student_agents
     // ids — that silently killed EVERY insert.)
-    if (error && row.student_agent_id) {
+    if (error && insertRow.student_agent_id) {
       console.warn("[adaptive_sessions create] retrying without student_agent_id:", error.message);
       ({ data, error } = await db.schema("edu").from("adaptive_sessions")
-        .insert({ ...row, student_agent_id: null }).select("id").single());
+        .insert({ ...insertRow, student_agent_id: null }).select("id").single());
     }
     if (error) throw error;
     orchestrator.dbSessionId = data.id;
@@ -141,15 +165,22 @@ async function appendSessionBlocks(orchestrator, newBlocks) {
     // created, so the row was written with whatever was known at insert time,
     // which for a resolved-later ladder is an empty array.
     const sess = orchestrator?.session ?? {};
-    await db.schema("edu").from("adaptive_sessions").update({
+    const update = {
       block_history:        [...existing, ...newBlocks],
       current_phase:        String(sess.phase ?? "1").replace(/^PHASE_/, ""),
       current_subtopic_idx: Number.isInteger(sess.mustKnowIndex) ? sess.mustKnowIndex : 0,
       ...(Array.isArray(sess.mustKnowParts) && sess.mustKnowParts.length
         ? { subtopics: sess.mustKnowParts }
         : {}),
+      teaching_evidence: serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
       updated_at:           new Date().toISOString(),
-    }).eq("id", id);
+    };
+    let { error } = await db.schema("edu").from("adaptive_sessions").update(update).eq("id", id);
+    if (error && isMissingColumn(error, "teaching_evidence")) {
+      const { teaching_evidence: _evidence, ...legacyUpdate } = update;
+      ({ error } = await db.schema("edu").from("adaptive_sessions").update(legacyUpdate).eq("id", id));
+    }
+    if (error) throw error;
   } catch (e) {
     console.warn("[adaptive_sessions append]", e.message);
   }
@@ -163,11 +194,18 @@ async function completeSessionRecord(orchestrator) {
     const { data: prior } = await db.schema("edu").from("adaptive_sessions")
       .select("status, student_id, subject").eq("id", id).maybeSingle();
 
-    await db.schema("edu").from("adaptive_sessions").update({
+    const completion = {
       status:       "complete",
       completed_at: new Date().toISOString(),
+      teaching_evidence: serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
       updated_at:   new Date().toISOString(),
-    }).eq("id", id);
+    };
+    let { error } = await db.schema("edu").from("adaptive_sessions").update(completion).eq("id", id);
+    if (error && isMissingColumn(error, "teaching_evidence")) {
+      const { teaching_evidence: _evidence, ...legacyCompletion } = completion;
+      ({ error } = await db.schema("edu").from("adaptive_sessions").update(legacyCompletion).eq("id", id));
+    }
+    if (error) throw error;
 
     if (prior && prior.status !== "complete" && prior.student_id) {
       try {
@@ -528,6 +566,7 @@ export function setupWebSocket(io) {
           topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
           agentLevel: init.agentLevel, totalSessions: init.totalSessions,
           knowledgeScore: init.knowledgeScore, initialState: init.initialState,
+          teachingEvidence: init.teachingEvidence || null,
         });
       } catch (err) { console.error("[start_student_session]", err); socket.emit("error", { message: err.message }); }
     });
@@ -568,7 +607,8 @@ export function setupWebSocket(io) {
           message: init.openingPrompt, mustKnowParts: init.mustKnowParts,
           topicBoundary: init.topicBoundary, studentAgentName: init.studentAgentName,
           agentLevel: init.agentLevel, knowledgeScore: init.knowledgeScore,
-          initialState: init.initialState, decayPayload: decaySessionPayload,
+          initialState: init.initialState, teachingEvidence: init.teachingEvidence || null,
+          decayPayload: decaySessionPayload,
         });
       } catch (err) { console.error("[start_decay_session]", err); socket.emit("error", { message: err.message }); }
     });
@@ -609,6 +649,7 @@ export function setupWebSocket(io) {
         let decayPayload  = null;
         let sessionType   = "free_teaching";
         let resumeFrom    = null;
+        let resumeTeachingEvidence = null;
         let ownedNotificationId = null;
 
         // ── Continuation: load block history from DB ─────────
@@ -617,21 +658,34 @@ export function setupWebSocket(io) {
           try {
             // The continuation id comes from the browser, so ownership belongs
             // in this query rather than in client-side navigation state.
-            const { data: prevSession } = await db.schema("edu")
+            let { data: prevSession, error: continuationError } = await db.schema("edu")
               .from("adaptive_sessions")
-              .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
+              .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase, teaching_evidence")
               .eq("id", prevSessionId)
               .eq("student_id", studentId)
               .maybeSingle();
+            // Compatibility with API/schema caches while the migration rolls
+            // out. This does not weaken ownership filtering.
+            if (continuationError && isMissingColumn(continuationError, "teaching_evidence")) {
+              ({ data: prevSession, error: continuationError } = await db.schema("edu")
+                .from("adaptive_sessions")
+                .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
+                .eq("id", prevSessionId)
+                .eq("student_id", studentId)
+                .maybeSingle());
+            }
+            if (continuationError) throw continuationError;
 
             // The position, not just the transcript. Loading only the words
             // meant a continuation showed the previous lesson greyed out and
             // then began teaching subtopic 1 again.
             if (prevSession) {
+              const savedPhase = String(prevSession.current_phase || "1").toUpperCase().replace(/^PHASE_/, "");
               resumeFrom = {
                 subtopicIdx: Number(prevSession.current_subtopic_idx) || 0,
-                phase: `PHASE_${String(prevSession.current_phase || "1").replace(/^PHASE_/, "")}`,
+                phase: savedPhase === "MASTERY" ? "MASTERY" : `PHASE_${savedPhase}`,
               };
+              resumeTeachingEvidence = prevSession.teaching_evidence || null;
             }
 
             if (prevSession?.block_history?.length) {
@@ -674,6 +728,7 @@ export function setupWebSocket(io) {
           // Capped source material from the higher-ed start-session modal.
           // It is session-memory only; no file or raw text is persisted.
           referenceMaterial: sessionReference,
+          teachingEvidence: resumeTeachingEvidence,
         });
 
         // Read by initialize() once the ladder is resolved, so the session
@@ -730,6 +785,7 @@ export function setupWebSocket(io) {
           agentLevel:        init.agentLevel,
           knowledgeScore:    init.knowledgeScore,
           initialState:      init.initialState,
+          teachingEvidence:  init.teachingEvidence || null,
           decayPayload,
           historyBlocks,
           reference: sessionReference ? {
@@ -807,8 +863,9 @@ export function setupWebSocket(io) {
           sessionType:    result.sessionType,
         });
 
-        // Persist the turn (human message + response blocks) to the transcript.
-        appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
+        // Persist the turn and compact server-owned evidence before another
+        // socket event (especially end_session) can observe this session.
+        await appendSessionBlocks(orchestrator, [{ type: "user", text: message }, ...blocks]);
       } catch (err) {
         console.error("[teacher_message]", err);
         socket.emit("student_done"); socket.emit("guide_done");
@@ -870,6 +927,7 @@ export function setupWebSocket(io) {
         currentSubtopic: orchestrator.session?.mustKnowParts?.[orchestrator.session?.mustKnowIndex] || null,
         topic:        orchestrator.session?.topic   || null,
         subject:      orchestrator.subject          || null,
+        teachingEvidence: orchestrator.getTeachingEvidenceSnapshot?.() || null,
       });
     });
 
@@ -882,6 +940,7 @@ export function setupWebSocket(io) {
       try {
         const endResult = await orchestrator.endSession();
         const formatted = fmtSessionEnd(endResult);
+        await ensureSessionRecord(orchestrator);
         await completeSessionRecord(orchestrator);   // mark the session row complete
         activeSessions.delete(sessionId);
         await clearStateCache(agentId);
@@ -939,7 +998,16 @@ export function setupWebSocket(io) {
           userId:   caller,
           teacherAgentId,
           referenceMaterial: priorOrchestrator?.referenceMaterial || null,
+          teachingEvidence: serialiseTeachingEvidence(priorOrchestrator?.teachingEvidence),
         });
+        if (priorOrchestrator?.session) {
+          orchestrator.resumeFrom = {
+            subtopicIdx: priorOrchestrator.session.mustKnowIndex || 0,
+            phase: priorOrchestrator.session.phase || "PHASE_1",
+          };
+          orchestrator.dbSessionId = priorOrchestrator.dbSessionId || null;
+          orchestrator.sessionMeta = priorOrchestrator.sessionMeta || null;
+        }
         const init = await orchestrator.initialize(studentId, topic);
 
         // Swap in place under the same sessionId so the socket room stays valid
@@ -955,6 +1023,7 @@ export function setupWebSocket(io) {
           agentLevel:       init.agentLevel,
           knowledgeScore:   init.knowledgeScore,
           initialState:     init.initialState,
+          teachingEvidence: init.teachingEvidence || null,
           studentAgentName: init.studentAgentName,
           guideProfile: {
             name:        orchestrator.guideOrchestrator?.guide?.name  || "NaNa Esumai",
