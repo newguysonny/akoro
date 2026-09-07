@@ -85,10 +85,15 @@ Content-Type: application/json
 {"success":true,"result":{"completion":61}}
 ```
 
-A student-scoped capability currently receives nine adaptive-chat functions:
-`check_progress`, `create_task`, `schedule_chat_follow_up`,
-`list_scheduled_chat_follow_ups`, `cancel_scheduled_chat_follow_up`,
-`list_tasks`, `find_battles`, `get_ranking`, and `get_weak_topics`. `create_task`,
+A student-scoped capability currently receives ten adaptive-chat functions:
+`get_learner_context`, `check_progress`, `create_task`,
+`schedule_chat_follow_up`, `list_scheduled_chat_follow_ups`,
+`cancel_scheduled_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`,
+and `get_weak_topics`. `get_learner_context` is a read-only, privacy-minimised
+profile/account-context lookup: preferred name, learning context, account timezone,
+and current local/UTC time only. It omits contact, payment, and authentication data.
+The agent calls it before it resolves relative dates/times or personalises a reply.
+`create_task`,
 `schedule_chat_follow_up`, and `cancel_scheduled_chat_follow_up` are marked
 side-effecting. The follow-up tool stores a delayed delivery, then opens a new
 persistent Agent Chat and notifies the learner at its offset-aware scheduled
@@ -105,7 +110,10 @@ single persistent proactive Agent Chat plus normal notification. It does not
 execute, modify, complete, or spend for the task, and it performs no periodic
 task polling. The worker must be running anywhere `REDIS_URL` is configured;
 Offline pauses outstanding reviews. `create_task` accepts optional exact,
-offset-aware `dueAt`; a human-friendly `due` label does not create a schedule.
+offset-aware `dueAt`, a concise optional `description`, and an IANA `timezone`;
+a human-friendly `due` label does not create a schedule. Task and schedule tools
+use the account timezone from `get_learner_context` when no timezone is supplied,
+and label the Africa/Lagos platform fallback rather than claiming a location.
 
 A teacher-task capability
 receives the existing task-agent tool catalogue,

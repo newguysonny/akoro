@@ -9,6 +9,7 @@ import { Router } from "express";
 
 import db from "../../db.js";
 import { CHAT_TOOLS, executeChatTool } from "../adaptive-learning/chat.js";
+import { isIanaTimeZone } from "../adaptive-learning/learner-time-context.js";
 import { getToolsForTask } from "../tasks/tools/index.js";
 import {
   isTeacherRole,
@@ -168,6 +169,7 @@ function validateStudentArguments(name, arguments_) {
   };
 
   switch (name) {
+    case "get_learner_context":
     case "check_progress":
     case "list_tasks":
     case "find_battles":
@@ -179,24 +181,31 @@ function validateStudentArguments(name, arguments_) {
       shortText(arguments_.subject, "subject");
       return;
     case "create_task":
-      only(new Set(["title", "priority", "due", "dueAt", "course"]));
-      shortText(arguments_.title, "title", true);
+      only(new Set(["title", "description", "priority", "due", "dueAt", "timezone", "course"]));
+      shortText(arguments_.title, "title", true, 180);
+      shortText(arguments_.description, "description", false, 800);
       if (!["high", "medium", "low"].includes(arguments_.priority)) {
         throw new GatewayError(422, "priority is invalid");
       }
-      shortText(arguments_.due, "due");
+      shortText(arguments_.due, "due", false, 120);
       if (arguments_.dueAt !== undefined) {
         if (typeof arguments_.dueAt !== "string" || arguments_.dueAt.length > 64 || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:?\d{2})$/i.test(arguments_.dueAt.trim()) || !Number.isFinite(new Date(arguments_.dueAt).getTime())) {
           throw new GatewayError(422, "dueAt must be an ISO 8601 timestamp with a timezone offset");
         }
       }
-      shortText(arguments_.course, "course");
+      if (arguments_.timezone !== undefined && !isIanaTimeZone(arguments_.timezone)) {
+        throw new GatewayError(422, "timezone must be a valid IANA timezone");
+      }
+      shortText(arguments_.course, "course", false, 120);
       return;
     case "schedule_chat_follow_up":
       only(new Set(["message", "scheduledAt", "timezone", "title"]));
       shortText(arguments_.message, "message", true, 800);
       shortText(arguments_.scheduledAt, "scheduledAt", true, 64);
       shortText(arguments_.timezone, "timezone", false, 80);
+      if (arguments_.timezone !== undefined && !isIanaTimeZone(arguments_.timezone)) {
+        throw new GatewayError(422, "timezone must be a valid IANA timezone");
+      }
       shortText(arguments_.title, "title", false, 80);
       return;
     case "list_scheduled_chat_follow_ups":

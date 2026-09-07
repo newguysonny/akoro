@@ -45,6 +45,8 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
+import { getLearnerProfileContext } from "./learner-profile-context.js";
+import { isIanaTimeZone, localiseInstant } from "./learner-time-context.js";
 
 const router     = express.Router();
 const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -155,34 +157,41 @@ async function reconstructHistoryBlocks(sessionId, topic, subject, agentName, ag
 
 export const CHAT_TOOLS = [
   {
+    name: "get_learner_context",
+    description: "Read the signed-in learner's safe personalisation context: preferred name, language, study level, subjects, account timezone, and current local/UTC time. Use before interpreting relative dates or times such as 'tomorrow at 8am', and before personalising a response. Never ask for or expose contact, payment, authentication, or other sensitive account data.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "check_progress",
     description: "Check the student's progress across all enrolled courses. Returns completion % and overall XP.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "create_task",
-    description: "Create a study task or reminder for the student. Use when they ask to be reminded about something.",
+    description: "Create one learner-owned study task or reminder after the learner explicitly asks. First call get_learner_context when the request contains a relative date/time or needs personalisation. Never infer a precise deadline from an incomplete time request.",
     input_schema: {
       type: "object",
       properties: {
-        title:    { type: "string", description: "Short task title" },
-        priority: { type: "string", enum: ["high", "medium", "low"] },
-        due:      { type: "string", description: "Human-friendly display label, e.g. 'Tomorrow' (optional)." },
-        dueAt:    { type: "string", description: "Optional exact due instant in ISO 8601 format with Z or a numeric timezone offset. Supply this only when the student specified a precise time; it makes an Online agent eligible to offer a proactive chat at that time." },
-        course:   { type: "string", description: "Related course or subject (optional)" },
+        title:       { type: "string", description: "A concise, action-led task title, not the learner's entire request." },
+        description: { type: "string", description: "Optional useful details, scope, or starting point for the learner (maximum 800 characters)." },
+        priority:    { type: "string", enum: ["high", "medium", "low"], description: "Use high only for an explicit urgency/deadline." },
+        due:         { type: "string", description: "Optional human-friendly display label, e.g. 'Tomorrow at 1 PM'." },
+        dueAt:       { type: "string", description: "Optional exact due instant in ISO 8601 format with Z or a numeric timezone offset. Call get_learner_context before resolving relative times. Supply this only when the learner stated a precise date and time; never infer it from 'tomorrow' alone." },
+        timezone:    { type: "string", description: "Optional IANA timezone for display, e.g. Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
+        course:      { type: "string", description: "Related course or subject (optional)" },
       },
       required: ["title", "priority"],
     },
   },
   {
     name: "schedule_chat_follow_up",
-    description: "Schedule the agent to open a new chat and send the student a message at a specific future time. Only use after the student explicitly asks for the schedule. scheduledAt must be an ISO 8601 timestamp with a timezone offset, for example 2026-09-08T14:00:00+01:00.",
+    description: "Schedule the agent to open a new chat and send the learner a message at a specific future time. Only use after the learner explicitly asks for the schedule. Call get_learner_context before resolving relative time; scheduledAt must be an ISO 8601 timestamp with a timezone offset, for example 2026-09-08T14:00:00+01:00.",
     input_schema: {
       type: "object",
       properties: {
         message: { type: "string", description: "The exact helpful opening message the agent will send in the new chat." },
         scheduledAt: { type: "string", description: "Future ISO 8601 timestamp including timezone offset." },
-        timezone: { type: "string", description: "IANA timezone for display, for example Africa/Lagos. Defaults to Africa/Lagos." },
+        timezone: { type: "string", description: "Optional IANA timezone for display, for example Africa/Lagos. Defaults to the account timezone returned by get_learner_context." },
         title: { type: "string", description: "Optional title for the new chat, for example 'Biology revision check-in'." },
       },
       required: ["message", "scheduledAt"],
@@ -232,6 +241,17 @@ export const CHAT_TOOLS = [
   },
 ];
 
+function limitedToolText(value, label, { required = false, max = 800 } = {}) {
+  if (value === undefined || value === null || value === "") {
+    if (required) throw new Error(`${label} is required`);
+    return null;
+  }
+  if (typeof value !== "string" || !value.trim() || value.trim().length > max) {
+    throw new Error(`${label} must be a non-empty string of at most ${max} characters`);
+  }
+  return value.trim();
+}
+
 function parsePreciseTaskDueAt(value) {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())) {
@@ -242,8 +262,16 @@ function parsePreciseTaskDueAt(value) {
   return due.toISOString();
 }
 
+function taskTimeZone(input, context) {
+  const timezone = limitedToolText(input.timezone, "timezone", { max: 80 }) || context.timeZone;
+  if (!isIanaTimeZone(timezone)) throw new Error("timezone must be a valid IANA timezone");
+  return timezone;
+}
+
 export async function executeChatTool(name, input, studentId) {
   switch (name) {
+    case "get_learner_context":
+      return getLearnerProfileContext(studentId);
     case "check_progress": {
       const { data: enrollments } = await db.from("enrollments")
         .select("course_id, progress, courses!inner(title, subject)")
@@ -257,27 +285,54 @@ export async function executeChatTool(name, input, studentId) {
       };
     }
     case "create_task": {
-      const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
-      const { data: task, error } = await db.from("tasks").insert({
-        creator_id: studentId, agent_id: agentRow?.id,
-        title: input.title, priority: input.priority ?? "medium",
-        status: "pending", task_type: "general",
-        payload: { due: input.due ?? "This week" },
-        due_at: parsePreciseTaskDueAt(input.dueAt),
-        timezone: "Africa/Lagos",
-      }).select().single();
-      if (error) return { error: error.message };
-      // This is intentionally best-effort: creating a learner-requested task
-      // never depends on Redis, and the worker re-checks the persisted opt-in.
-      try { await scheduleAutonomyReviewForTask(task); }
-      catch (autonomyError) { console.warn("[chat/create-task] autonomy schedule skipped:", autonomyError.message); }
-      global.io?.to(`user:${studentId}`).emit("task:created", task);
-      return { created: true, title: task.title, priority: task.priority, dueAt: task.due_at ?? null };
+      try {
+        const context = await getLearnerProfileContext(studentId);
+        const title = limitedToolText(input.title, "title", { required: true, max: 180 });
+        const description = limitedToolText(input.description, "description", { max: 800 });
+        const dueLabel = limitedToolText(input.due, "due", { max: 120 });
+        const course = limitedToolText(input.course, "course", { max: 120 });
+        const priority = ["high", "medium", "low"].includes(input.priority) ? input.priority : "medium";
+        const dueAt = parsePreciseTaskDueAt(input.dueAt);
+        const timezone = taskTimeZone(input, context);
+        const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
+        const { data: task, error } = await db.from("tasks").insert({
+          creator_id: studentId, agent_id: agentRow?.id,
+          title, description, priority,
+          status: "pending", task_type: "general",
+          payload: { due: dueLabel, course },
+          due_at: dueAt,
+          timezone,
+        }).select().single();
+        if (error) return { error: error.message };
+        // This is intentionally best-effort: creating a learner-requested task
+        // never depends on Redis, and the worker re-checks the persisted opt-in.
+        try { await scheduleAutonomyReviewForTask(task); }
+        catch (autonomyError) { console.warn("[chat/create-task] autonomy schedule skipped:", autonomyError.message); }
+        global.io?.to(`user:${studentId}`).emit("task:created", task);
+        return {
+          created: true, taskId: task.id, title: task.title, description: task.description,
+          priority: task.priority, dueAt: task.due_at ?? null, timezone: task.timezone,
+          dueLocal: task.due_at ? localiseInstant(task.due_at, timezone) : null,
+          autonomyEligible: Boolean(task.due_at && !task.is_recurring),
+        };
+      } catch (error) {
+        return { error: error.message || "Could not create the task" };
+      }
     }
     case "schedule_chat_follow_up": {
       try {
-        const schedule = await scheduleChatFollowUp({ userId: studentId, input });
-        return { scheduled: true, ...schedule };
+        const context = await getLearnerProfileContext(studentId);
+        const schedule = await scheduleChatFollowUp({
+          userId: studentId,
+          input,
+          defaultTimezone: context.timeZone,
+        });
+        return {
+          scheduled: true,
+          ...schedule,
+          timezoneSource: input.timezone ? "explicit_request" : context.timeZoneSource,
+          localScheduledAt: localiseInstant(schedule.scheduledAt, schedule.timezone),
+        };
       } catch (error) {
         return { error: error.message || "Could not schedule the chat follow-up" };
       }
@@ -1238,9 +1293,10 @@ async function handleStudentChatWithTools(req, res, studentId, message, history,
     `\nYou have been taught across ${agent.total_sessions} sessions.` +
     knowledgeCtx +
     (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
-    `\n\nYou can also use tools to check the student's real progress, tasks, battles, rankings, and manage future Agent Chat messages.` +
+    `\n\nYou can also use tools to check the student's real progress, tasks, battles, rankings, safe personalisation context, and manage future Agent Chat messages.` +
     `\nAnswer from your knowledge when you can. Use tools when the student asks about their actual data.` +
-    `\nOnly schedule or cancel a future chat after the student explicitly asks for it. scheduledAt must be a future ISO 8601 timestamp with a timezone offset. Current UTC time: ${currentUtc}. Use the student's stated timezone, or Africa/Lagos only if none is stated. List pending follow-ups before cancelling unless the request includes a valid followUpId.` +
+    `\nBefore using a name, language/year context, or interpreting relative time such as “tomorrow at 8am”, call get_learner_context. Its timeZone is the account preference when timeZoneSource is account_preference; platform_default means Africa/Lagos is the platform fallback, not a claimed physical location. Current UTC time: ${currentUtc}.` +
+    `\nOnly create a task or schedule/cancel a future chat after the student explicitly asks for it. Use create_task for a learner-owned to-do/reminder such as “remind me to revise”, and schedule_chat_follow_up when they ask the agent to message/send/check in with them. For a precise task deadline, create_task must use an offset-aware dueAt only when the learner supplied both a date and time; never invent a deadline from “tomorrow” alone. Only schedule a future chat after an explicit request; scheduledAt must be an offset-aware future ISO 8601 instant. Pass the context timeZone unless the learner explicitly supplies another valid IANA timezone. List pending follow-ups before cancelling unless the request includes a valid followUpId.` +
     `\nIf you don't know something: "I haven't been taught about that yet — teach me!"`;
 
   const messages = [

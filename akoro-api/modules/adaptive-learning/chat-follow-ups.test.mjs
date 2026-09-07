@@ -31,3 +31,17 @@ test("cancellation accepts only a generated follow-up UUID", () => {
   assert.equal(validateFollowUpId("7de311f4-a5dd-4be5-b37a-c87fdb036823"), "7de311f4-a5dd-4be5-b37a-c87fdb036823");
   assert.throws(() => validateFollowUpId("follow-up-1"), /followUpId is invalid/);
 });
+
+test("a follow-up uses the authenticated learner's supplied account timezone by default", () => {
+  const parsed = validateFollowUpInput({
+    message: "Good morning!", scheduledAt: future(),
+  }, { defaultTimezone: "Europe/London" });
+  assert.equal(parsed.timezone, "Europe/London");
+});
+
+test("an omitted account default retains the explicit Lagos platform fallback", () => {
+  const parsed = validateFollowUpInput({
+    message: "Good morning!", scheduledAt: future(),
+  }, { defaultTimezone: undefined });
+  assert.equal(parsed.timezone, "Africa/Lagos");
+});

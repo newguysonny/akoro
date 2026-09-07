@@ -175,17 +175,25 @@ derives authority from the signed capability plus current user/task state,
 validates tool arguments, applies entitlement gates, and honours the durable
 idempotency key. It never trusts `studentId` in a Python request as authority.
 
-Student sessions receive nine account tools: `check_progress`, `create_task`,
-`schedule_chat_follow_up`, `list_scheduled_chat_follow_ups`,
-`cancel_scheduled_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`,
-and `get_weak_topics`. `schedule_chat_follow_up` creates a durable delayed job;
+Student sessions receive ten account tools: `get_learner_context`,
+`check_progress`, `create_task`, `schedule_chat_follow_up`,
+`list_scheduled_chat_follow_ups`, `cancel_scheduled_chat_follow_up`,
+`list_tasks`, `find_battles`, `get_ranking`, and `get_weak_topics`.
+`get_learner_context` is read-only and returns only safe personalisation data:
+preferred name, language/study context, account timezone, and current local/UTC
+time—never contact, payment, or authentication data. The agent calls it before
+resolving relative dates and times. `schedule_chat_follow_up` creates a durable delayed job;
 at delivery Akoro creates a new persistent Agent Chat, seeds its message, and
 sends the learner an in-app/socket/push notification. The list tool shows
 pending deliveries and the cancellation tool can cancel one by its `followUpId`.
 Scheduling requires a future ISO 8601 `scheduledAt` value with an offset and an
 explicit learner request; Akoro's Redis-backed worker delivers it. `create_task`
 may also include an exact offset-aware `dueAt` when the learner supplied a precise
-due time; plain-language `due` remains display-only and never infers a schedule.
+due time, an IANA `timezone`, and a concise `description`; plain-language `due`
+remains display-only and never infers a schedule. Task and schedule tools default
+to the account timezone returned by `get_learner_context` and return local-time
+confirmation details. A `platform_default` timezone source is presented honestly
+as an Akoro fallback, not a claim about the learner's location.
 
 ## Learner-controlled task autonomy
 

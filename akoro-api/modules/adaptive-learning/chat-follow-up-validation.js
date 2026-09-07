@@ -17,10 +17,14 @@ function limitedText(value, label, { required = false, max = 800 } = {}) {
   return value.trim();
 }
 
-export function validateFollowUpInput(input = {}) {
+export function validateFollowUpInput(input = {}, { defaultTimezone = TIME_ZONE_FALLBACK } = {}) {
   const message = limitedText(input.message, "message", { required: true, max: 800 });
   const title = limitedText(input.title, "title", { max: 80 }) || "Scheduled check-in";
-  const timezone = limitedText(input.timezone, "timezone", { max: 80 }) || TIME_ZONE_FALLBACK;
+  // The caller supplies the authenticated learner's saved time zone. The
+  // fallback preserves the platform's established Africa/Lagos default.
+  // An older internal caller can omit defaultTimezone; never let Intl silently
+  // fall back to the server's own zone in that case.
+  const timezone = limitedText(input.timezone, "timezone", { max: 80 }) || defaultTimezone || TIME_ZONE_FALLBACK;
   try {
     Intl.DateTimeFormat("en-US", { timeZone: timezone });
   } catch {

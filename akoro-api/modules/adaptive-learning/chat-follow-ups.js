@@ -54,9 +54,9 @@ function chatFollowUpQueue() {
  * Schedule a new Agent Chat conversation for the authorised learner. The user
  * is always supplied by the verified gateway capability, never tool arguments.
  */
-export async function scheduleChatFollowUp({ userId, input }) {
+export async function scheduleChatFollowUp({ userId, input, defaultTimezone }) {
   if (!userId) throw new Error("An authenticated learner is required");
-  const validated = validateFollowUpInput(input);
+  const validated = validateFollowUpInput(input, { defaultTimezone });
   const id = randomUUID();
   const chatSessionId = randomUUID();
   const chatMessageId = randomUUID();

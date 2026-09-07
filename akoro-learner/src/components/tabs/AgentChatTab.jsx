@@ -1,25 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { API,  apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
+import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
-import { formatTaskOutputs } from '../../utils/formatTaskOutput.js';
 import AgentStatsTab from './AgentStatsTab.jsx';
 
-// Detect when a chat message should run an agentic task (student tools).
-// Mirrors the backend intent keywords so the agent acts instead of just chatting.
-const TASK_INTENTS = [
-  /\bquiz me\b/i, /\btest me\b/i, /\bpractice questions?\b/i,
-  /\bexplain\b/i, /\bwhat is\b/i, /\bteach me\b/i, /\bhelp me understand\b/i,
-  /\bstudy plan\b/i, /\brevision plan\b/i, /\bplan my\b/i,
-  /\bremind me\b/i, /\bset a reminder\b/i,
-  /\bchallenge\b/i, /\bduel\b/i, /\bcompete with\b/i,
+// Explicit account actions use the authenticated tool-chat route. It can read
+// the learner's safe profile/time context before it creates a task or schedule;
+// ordinary study prompts continue to use the streaming tutor route.
+const ACCOUNT_ACTION_INTENTS = [
+  /\b(remind me|set (?:a )?reminder|create (?:a )?task|add (?:a )?task)\b/i,
+  /\b(message|send|notify|check in with) me\b/i,
+  /\b(schedule|reschedule|cancel) (?:a |the )?(?:reminder|message|check-?in|follow-?up)\b/i,
 ];
-const isTaskIntent = (text) => TASK_INTENTS.some((re) => re.test(text));
+const isAccountActionIntent = (text) => ACCOUNT_ACTION_INTENTS.some((re) => re.test(text));
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -238,64 +236,12 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { tasks, loading: tasksLoading, createTask, updateTask, toggleTask, deleteTask, getOutputs } = useTaskAPI();
-
-  // Socket for instant task results; resolvers map taskId → fn called on push.
-  const socketRef       = useRef(null);
-  const taskResolvers   = useRef(new Map());
+  const { tasks, createTask, updateTask, toggleTask, deleteTask, refetch: refetchTasks } = useTaskAPI();
 
   const pushAgent = (text) => {
     const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     setMessages(prev => [...prev, { id: Date.now() + Math.random(), from: "agent", text, time: t }]);
   };
-
-  // Connect to the backend WebSocket and listen for task lifecycle events.
-  // The worker emits task.completed / task.failed to room user:<studentId>.
-  useEffect(() => {
-    let socket;
-    try {
-      if (typeof window !== 'undefined' && window.io) {
-        socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
-        socketRef.current = socket;
-        socket.on('connect', () => {
-          socket.emit('subscribe-student', STUDENT_ID);
-          socket.emit('join-student-room',  STUDENT_ID);
-        });
-        socket.on('task.completed', (p) => { const r = taskResolvers.current.get(p?.taskId); if (r) r({}); });
-        socket.on('task.failed',    (p) => { const r = taskResolvers.current.get(p?.taskId); if (r) r({ failed: true }); });
-      }
-    } catch { /* WS unavailable — polling still works */ }
-    return () => socket?.disconnect?.();
-  }, []);
-
-  // Resolve as soon as EITHER the socket pushes completion OR polling finds
-  // outputs (whichever is first), with a hard timeout. Deduped via `settled`.
-  const waitForTask = (taskId, { timeoutMs = 60000, intervalMs = 2500 } = {}) =>
-    new Promise((resolve) => {
-      let settled = false;
-      const cleanup = () => taskResolvers.current.delete(taskId);
-      const finish  = (val) => { if (!settled) { settled = true; cleanup(); resolve(val); } };
-
-      // Fast path: socket push
-      taskResolvers.current.set(taskId, async (evt) => {
-        if (evt?.failed) return finish({ failed: true });
-        const outputs = await getOutputs(taskId);
-        finish({ outputs });
-      });
-
-      // Fallback path: poll
-      const deadline = Date.now() + timeoutMs;
-      const tick = async () => {
-        if (settled) return;
-        const outputs = await getOutputs(taskId);
-        if (outputs.length) return finish({ outputs });
-        const fresh = await apiGet(`/api/tasks/${taskId}`).catch(() => null);
-        if (fresh?.task?.status === 'failed') return finish({ failed: true });
-        if (Date.now() > deadline) return finish({ timedOut: true });
-        setTimeout(tick, intervalMs);
-      };
-      setTimeout(tick, intervalMs);
-    });
 
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
@@ -349,23 +295,24 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
     // Show an agent bubble AND persist it, so a refresh reloads the same text.
     const say = (txt) => { pushAgent(txt); persistToSession(sid, "agent", txt); };
 
-    // Agentic task intents ("quiz me", "explain…", "study plan", "remind me",
-    // "challenge…") run a real task and stream the result back into the chat.
-    // With attachments in play the message is about THOSE files — always tutor.
-    if(!sentAttachments.length && isTaskIntent(text)){
-      pushAgent(t('agent.error_working'));   // transient status — not persisted
+    // Explicit task/reminder/message requests go through the bounded tool
+    // loop, where the API derives identity and supplies safe profile/time
+    // context. Do not put arbitrary study questions through a write-capable
+    // route; attachments always stay on the tutor path.
+    if(!sentAttachments.length && isAccountActionIntent(text)){
       try {
-        const task = await createTask({ title: text, priority: "medium" });
-        if(!task?.id) throw new Error("no task");
-        const { outputs, failed, timedOut } = await waitForTask(task.id);
-        if(failed){
-          say(t('agent.error_problem'));
-        } else if(timedOut){
-          say(t('agent.error_timeout'));
-        } else {
-          const texts = formatTaskOutputs(outputs);
-          if(texts.length) texts.forEach(say);
-          else say(t('agent.all_done_tasks'));
+        const history = messages.slice(-10).map(m => ({
+          role: m.from === "me" ? "user" : "assistant", content: m.text,
+        }));
+        const data = await apiPost("/api/adaptive/chat/chat", {
+          message: text, history, studentId: true,
+        });
+        const reply = data?.response || "I couldn't complete that request. Please try again.";
+        say(reply);
+        // A task may have been created through the API tool rather than the
+        // task sheet, so refresh the local Tasks tab after the tool turn.
+        if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task")) {
+          refetchTasks();
         }
       } catch {
         say(t('agent.error_task'));

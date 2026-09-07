@@ -72,6 +72,14 @@ const runValidation = (req, res, next) => {
 
 const now = () => new Date().toISOString();
 
+// Keep generic JSON settings from turning an arbitrary display string into a
+// timezone used by notifications, tasks, or the learner agent.
+const isIanaTimeZone = (value) => {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 80) return false;
+  try { Intl.DateTimeFormat("en-US", { timeZone: value.trim() }); return true; }
+  catch { return false; }
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const FREE_STUDENT_LIMIT     = 20;
@@ -832,10 +840,11 @@ const PROFILE_SELECT_BASE = [
 router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  let [{ data: user, error: userErr }, { data: agent }, { data: notif }] = await Promise.all([
+  let [{ data: user, error: userErr }, { data: agent }, { data: notif }, { data: accountSettings }] = await Promise.all([
     db.from("users").select(PROFILE_SELECT).eq("id", userId).maybeSingle(),
     db.from("user_agents").select("*").eq("user_id", userId).eq("is_active", true).maybeSingle(),
     db.from("user_notification_preferences").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("user_settings").select("settings").eq("user_id", userId).maybeSingle(),
   ]);
 
   // If the full select fails (e.g. pending migration columns), retry with base columns
@@ -860,6 +869,9 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
     yearGroup:       user.year_group,
     studyLevel:      user.study_level,
     language:        user.language        || "English",
+    // Stored in generic account settings so the users table needs no new
+    // column. It is consumed by learner time-aware task/chat tools.
+    timeZone:        isIanaTimeZone(accountSettings?.settings?.timezone) ? accountSettings.settings.timezone.trim() : null,
     displayMode:     user.display_mode    || "system",
     accentColor:     user.accent_color    || "#6C3BFF",
     teachingGuide:   user.teaching_guide,
@@ -914,6 +926,7 @@ router.patch("/me", authenticateToken, [
   body("yearGroup").optional().trim(),
   body("studyLevel").optional().trim(),
   body("language").optional().trim(),
+  body("timeZone").optional().trim().isLength({ min: 1, max: 80 }),
   body("displayMode").optional().isIn(["light","dark","system"]),
   body("accentColor").optional().trim(),
   body("teachingGuide").optional().trim(),
@@ -925,7 +938,7 @@ router.patch("/me", authenticateToken, [
   const userId = req.user.id;
   const {
     fullName, username, phone, avatarEmoji, country, schoolName, schoolType,
-    yearGroup, studyLevel, language, displayMode, accentColor,
+    yearGroup, studyLevel, language, timeZone, displayMode, accentColor,
     teachingGuide, guideEmoji, subjects, twoFactorEnabled, onboardingCompleted,
   } = req.body;
 
@@ -952,6 +965,9 @@ router.patch("/me", authenticateToken, [
   if (teachingGuide  !== undefined) patch.teaching_guide   = teachingGuide;
   if (guideEmoji     !== undefined) patch.guide_emoji      = guideEmoji;
   if (subjects       !== undefined) patch.subjects         = subjects;
+  if (timeZone !== undefined && !isIanaTimeZone(timeZone)) {
+    return res.status(422).json({ success: false, message: "timeZone must be a valid IANA timezone" });
+  }
   // two_factor_enabled is intentionally NOT settable here — it can only be
   // toggled via the code-verified /2fa/enable and /2fa/disable routes, so a
   // session holder can't silently disable 2FA without a TOTP code.
@@ -966,10 +982,27 @@ router.patch("/me", authenticateToken, [
     return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
 
+  if (timeZone !== undefined) {
+    const canonicalTimeZone = timeZone.trim();
+    // Merge rather than replace generic settings: this account setting shares
+    // the JSONB row with unrelated integrations/preferences.
+    const { data: prior, error: settingsReadError } = await db.from("user_settings")
+      .select("settings").eq("user_id", userId).maybeSingle();
+    if (settingsReadError) return res.status(500).json({ success: false, message: "Failed to save account time zone" });
+    const current = prior?.settings && typeof prior.settings === "object" ? prior.settings : {};
+    const { error: settingsError } = await db.from("user_settings").upsert({
+      user_id: userId,
+      settings: { ...current, timezone: canonicalTimeZone },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (settingsError) return res.status(500).json({ success: false, message: "Failed to save account time zone" });
+  }
+
   res200(res, {
     fullName: updated.full_name,
     username: updated.username,
     accentColor: updated.accent_color,
+    timeZone: timeZone !== undefined ? timeZone.trim() : undefined,
     onboardingCompleted: updated.onboarding_completed ?? false,
   });
 }));

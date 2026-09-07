@@ -129,6 +129,7 @@ export default function SettingsPage() {
           guideEmoji:    data.guideEmoji    || '🧠',
           subjects:      data.subjects      || [],
           language,
+          timeZone:      data.timeZone || null,
           displayMode,
           accentColor:   accent,
           twoFactor:     data.twoFactorEnabled || false,

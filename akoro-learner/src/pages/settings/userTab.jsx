@@ -16,6 +16,17 @@ import {
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
 import { isHigherEdUI } from '../../utils/studyLevel.js';
 
+// A concise, recognisable list keeps the mobile selector usable. The API still
+// validates IANA identifiers, so the agent never treats a display label as a
+// timezone authority.
+const TIME_ZONES = [
+  'Africa/Lagos', 'Africa/Accra', 'Africa/Johannesburg', 'Africa/Nairobi',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Toronto', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo',
+  'Australia/Sydney', 'Pacific/Auckland',
+];
+
 /* ─── Notification section ────────────────────────────────────── */
 /* ─── Notification section ────────────────────────────────────── */
 function NotifSection({ notif, setNotif, onSaveNotif }) {
@@ -183,7 +194,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       fullName:'fullName', username:'username', phone:'phone',
       country:'country', school:'schoolName', schoolType:'schoolType',
       year:'yearGroup', teachingGuide:'teachingGuide',
-      language:'language', displayMode:'displayMode',
+      language:'language', timeZone:'timeZone', displayMode:'displayMode',
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
     };
     const apiKey = fieldMap[field] || field;
@@ -271,6 +282,9 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>openSheet('phone',t('settings.phone'),'text')}/>
         <Row icon="ti-map-pin" label={t('settings.country')}    value={profile.country||t('settings.not_set')}
           onClick={()=>openSheet('country',t('settings.country'),'select',COUNTRIES)}/>
+        <Row icon="ti-clock" label="Time zone" value={profile.timeZone||'Africa/Lagos (Akoro default)'}
+          sub="Used for your agent chats, tasks and reminders"
+          onClick={()=>openSheet('timeZone','Time zone','select',TIME_ZONES)}/>
       </Section>
 
       <Section title={t('settings.learn_study')}>
