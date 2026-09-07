@@ -1011,13 +1011,32 @@ router.patch("/me", authenticateToken, [
   if (onboardingCompleted !== undefined) patch.onboarding_completed = onboardingCompleted;
   patch.updated_at = new Date().toISOString();
 
-  const { data: updated, error } = await db.from("users")
-    .update(patch).eq("id", userId).select(PROFILE_SELECT).maybeSingle();
+  // Keep the write independent from the read projection. PROFILE_SELECT has
+  // additive fields (for example city); a pending read-schema migration must
+  // not turn an otherwise valid update to an unrelated profile field into a
+  // failed save.
+  const { error: updateError } = await db.from("users")
+    .update(patch).eq("id", userId);
 
-  if (error) {
-    console.error("[profiles/me PATCH]", error.message);
+  if (updateError) {
+    console.error("[profiles/me PATCH]", updateError.message);
     return res.status(500).json({ success: false, message: "Failed to update profile" });
   }
+
+  // Match GET /me's compatibility behaviour while additive columns are
+  // rolling out. The base projection includes the values returned below,
+  // including school_type, so clients can still confirm a persisted setting.
+  let { data: updated, error: profileReadError } = await db.from("users")
+    .select(PROFILE_SELECT).eq("id", userId).maybeSingle();
+  if (profileReadError) {
+    ({ data: updated, error: profileReadError } = await db.from("users")
+      .select(PROFILE_SELECT_BASE).eq("id", userId).maybeSingle());
+  }
+  if (profileReadError) {
+    console.error("[profiles/me PATCH confirmation]", profileReadError.message);
+    return res.status(500).json({ success: false, message: "Profile was updated but could not be confirmed. Please refresh and try again." });
+  }
+  if (!updated) return res.status(404).json({ success: false, message: "User not found" });
 
   if (timeZone !== undefined) {
     const canonicalTimeZone = timeZone.trim();
