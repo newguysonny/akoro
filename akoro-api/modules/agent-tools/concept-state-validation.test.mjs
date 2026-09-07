@@ -49,6 +49,6 @@ test("empty state is rendered as canonical fraction values", () => {
   assert.deepEqual(publicState(null, conceptId), {
     conceptId, mastery: 0, retention: 0, evidenceConfidence: 0,
     misconceptionActive: false, evidenceCount: 0, lastEvidenceAt: null,
-    nextReviewDue: null, stateVersion: 1,
+    nextReviewDue: null, lastRetentionDecayAt: null, stateVersion: 1,
   });
 });

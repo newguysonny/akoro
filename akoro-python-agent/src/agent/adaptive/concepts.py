@@ -95,6 +95,7 @@ class LearnerConceptState:
     evidence_count: int = 0
     last_evidence_at: str | None = None
     next_review_due: str | None = None
+    last_retention_decay_at: str | None = None
     state_version: int = 1
 
     @classmethod
@@ -116,6 +117,7 @@ class LearnerConceptState:
             evidence_count=count,
             last_evidence_at=_text(value.get("lastEvidenceAt", value.get("last_evidence_at")), 64) or None,
             next_review_due=_text(value.get("nextReviewDue", value.get("next_review_due")), 64) or None,
+            last_retention_decay_at=_text(value.get("lastRetentionDecayAt", value.get("last_retention_decay_at")), 64) or None,
             state_version=version,
         )
 
@@ -129,6 +131,7 @@ class LearnerConceptState:
             "misconceptionActive": self.misconception_active,
             "evidenceCount": self.evidence_count,
             "nextReviewDue": self.next_review_due,
+            "lastRetentionDecayAt": self.last_retention_decay_at,
         }
 
 

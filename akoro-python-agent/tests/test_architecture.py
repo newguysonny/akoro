@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import unittest
 
+from agent.adaptive.concepts import LearnerConceptState
 from agent.memory.session_memory import SessionTranscript
 from agent.permissions.internal import InternalServicePolicy
-from agent.state.teaching_state import ProgressionPolicy, TeachingState
+from agent.state.teaching_state import CognitiveProgressState, CognitiveProgressionEngine
 
 
 class SessionTranscriptTests(unittest.TestCase):
@@ -20,24 +21,103 @@ class SessionTranscriptTests(unittest.TestCase):
             transcript.append({"role": "system", "content": "not a teaching turn"})
 
 
-class ProgressionPolicyTests(unittest.TestCase):
-    def test_policy_allows_one_rung_and_one_phase_at_a_time(self) -> None:
-        state = TeachingState()
-        transition = ProgressionPolicy().apply(
-            state, requested_phase="PHASE_4", requested_index=99, total_subtopics=4, understanding=0.9,
+class CognitiveProgressionEngineTests(unittest.TestCase):
+    def test_high_demonstrated_understanding_advances_one_objective_without_model_phase_input(self) -> None:
+        state = CognitiveProgressState()
+        transition = CognitiveProgressionEngine().apply(
+            state,
+            total_objectives=4,
+            understanding=0.90,
+            confusion=0.10,
+            engagement=0.90,
+            turn_understanding=0.95,
+            agent_level=1,
+            knowledge_score=0,
         )
-        self.assertEqual(state.phase, "PHASE_1")
-        self.assertEqual(state.subtopic_index, 1)
-        self.assertFalse(transition.phase_changed)
-        self.assertTrue(transition.subtopic_advanced)
+        self.assertTrue(transition.objective_advanced)
+        self.assertEqual(transition.current_objective_index, 1)
+        self.assertEqual(transition.learning_mode, "advance")
+        self.assertEqual(transition.reason, "readiness_threshold_met")
+        self.assertFalse(transition.canonical_evidence_used)
 
-    def test_mastery_needs_final_rung_and_sufficient_evidence(self) -> None:
-        state = TeachingState(phase="PHASE_4", subtopic_index=2)
-        policy = ProgressionPolicy()
-        policy.apply(state, requested_phase="MASTERY", requested_index=3, total_subtopics=4, understanding=0.5)
-        self.assertEqual(state.phase, "PHASE_4")
-        policy.apply(state, requested_phase="MASTERY", requested_index=3, total_subtopics=4, understanding=0.8)
-        self.assertEqual(state.phase, "MASTERY")
+    def test_misconception_blocks_advancement_even_if_other_signals_are_high(self) -> None:
+        state = CognitiveProgressState()
+        transition = CognitiveProgressionEngine().apply(
+            state,
+            total_objectives=3,
+            understanding=0.95,
+            confusion=0.05,
+            engagement=0.95,
+            turn_understanding=0.95,
+            agent_level=10,
+            knowledge_score=1_000,
+            concept_states=[LearnerConceptState(
+                "concept-1", mastery=0.9, retention=0.9, evidence_confidence=0.9,
+                evidence_count=3, misconception_active=True,
+            )],
+        )
+        self.assertFalse(transition.objective_advanced)
+        self.assertEqual(state.objective_index, 0)
+        self.assertEqual(transition.learning_mode, "repair")
+        self.assertEqual(transition.reason, "active_misconception")
+
+    def test_reviewed_evidence_and_learned_profile_adjust_threshold_transparently(self) -> None:
+        novice = CognitiveProgressState()
+        experienced = CognitiveProgressState()
+        signals = dict(
+            total_objectives=2,
+            understanding=0.70,
+            confusion=0.10,
+            engagement=0.80,
+            turn_understanding=0.75,
+            concept_states=[LearnerConceptState(
+                "concept-1", mastery=0.72, retention=0.72, evidence_confidence=0.8, evidence_count=2,
+            )],
+        )
+        engine = CognitiveProgressionEngine()
+        novice_transition = engine.apply(novice, agent_level=1, knowledge_score=0, **signals)
+        experienced_transition = engine.apply(experienced, agent_level=10, knowledge_score=1_000, **signals)
+        self.assertTrue(novice_transition.canonical_evidence_used)
+        self.assertLess(experienced_transition.advancement_threshold, novice_transition.advancement_threshold)
+        self.assertGreaterEqual(experienced_transition.readiness, novice_transition.readiness)
+
+    def test_low_retention_requests_retrieval_instead_of_advancing(self) -> None:
+        state = CognitiveProgressState()
+        transition = CognitiveProgressionEngine().apply(
+            state,
+            total_objectives=3,
+            understanding=0.95,
+            confusion=0.05,
+            engagement=0.95,
+            turn_understanding=0.95,
+            agent_level=5,
+            knowledge_score=300,
+            concept_states=[LearnerConceptState(
+                "concept-1", mastery=0.95, retention=0.20, evidence_confidence=0.95, evidence_count=3,
+            )],
+        )
+        self.assertFalse(transition.objective_advanced)
+        self.assertEqual(transition.learning_mode, "retrieve")
+        self.assertEqual(transition.reason, "low_retention")
+
+    def test_mastery_is_recognised_only_at_final_objective_with_high_evidence(self) -> None:
+        state = CognitiveProgressState(objective_index=2)
+        transition = CognitiveProgressionEngine().apply(
+            state,
+            total_objectives=3,
+            understanding=0.97,
+            confusion=0.02,
+            engagement=0.95,
+            turn_understanding=0.98,
+            agent_level=1,
+            knowledge_score=0,
+            concept_states=[LearnerConceptState(
+                "concept-1", mastery=0.98, retention=0.95, evidence_confidence=0.98, evidence_count=4,
+            )],
+        )
+        self.assertTrue(transition.mastery_recognised)
+        self.assertTrue(state.mastery_recognised)
+        self.assertEqual(transition.learning_mode, "mastery_review")
 
 
 class InternalServicePolicyTests(unittest.TestCase):

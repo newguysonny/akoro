@@ -8,7 +8,7 @@ from uuid import uuid4
 from agent.memory.conversation import LearnerConversationContext
 from agent.memory.scratchpad import WorkingScratchpad
 from agent.memory.session_memory import SessionTranscript
-from agent.state.teaching_state import PHASES, PHASE_LABELS, TeachingState
+from agent.state.teaching_state import CognitiveProgressState
 
 MAX_REFERENCE_CHARS = 12_000
 
@@ -139,7 +139,7 @@ class AdaptiveSession:
     # Opaque, signed-by-Akoro context. Python stores and relays this only; it
     # never treats browser-provided identity fields as tool authority.
     tool_context: str | None = None
-    progress: TeachingState = field(default_factory=TeachingState)
+    progress: CognitiveProgressState = field(default_factory=CognitiveProgressState)
     must_know_parts: list[str] = field(default_factory=list)
     knowledge_map: list[LessonStep] = field(default_factory=list)
     # The adaptive transcript records this service's teaching exchanges. A

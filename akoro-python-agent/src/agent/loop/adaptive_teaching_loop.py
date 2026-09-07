@@ -1,8 +1,8 @@
 """Bounded adaptive-teaching lifecycle built from the shared agent modules.
 
 This is the Python peer of JavaScript's StudentSessionOrchestrator. Domain
-roles stay under `adaptive/`; transcript storage, phase state, progression
-rules, and service composition live in their dedicated top-level modules.
+roles stay under `adaptive/`; transcript storage, cognitive progression state,
+and decision rules, and service composition live in their dedicated top-level modules.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from agent.memory.akoro_conversation import AkoroConversationError, AkoroConvers
 from agent.memory.conversation import ConversationMemoryUpdate, LearnerMemory, MAX_MEMORY_ITEMS
 from agent.memory.scratchpad import WorkingScratchpad
 from agent.reasoning.teaching import TeachingPlan
-from agent.state.teaching_state import PHASE_LABELS, ProgressionPolicy
+from agent.state.teaching_state import CognitiveProgressionEngine
 from agent.tools.akoro_api import AkoroToolSession
 
 _ACTION_LABELS = {
@@ -60,7 +60,7 @@ class AdaptiveTeachingLoop:
         # standalone/evaluation sessions and never owns database credentials.
         self._conversation_store = conversation_store
         self._guide = NaNaGuide(model)
-        self._progression = ProgressionPolicy()
+        self._cognitive_engine = CognitiveProgressionEngine()
         self._profile = None
         self._student = None
         self._ended = False
@@ -113,7 +113,7 @@ class AdaptiveTeachingLoop:
                 "subtopic": current,
                 "items": self.session.must_know_parts,
                 "map": plan.public_map(),
-                "idx": self.session.progress.subtopic_index,
+                "idx": self.session.progress.objective_index,
                 "total": len(self.session.must_know_parts) or 1,
                 "topic": self.session.topic,
                 "subject": self.session.subject or "",
@@ -122,7 +122,7 @@ class AdaptiveTeachingLoop:
                 "type": "guide",
                 "agent": self._guide.name,
                 "emoji": self._guide.emoji,
-                "phase": self.session.progress.label(),
+                "learningMode": self.session.progress.learning_mode,
                 "text": f"Let's teach {self.session.topic} to your agent. Start by explaining {current} in your own words.",
             },
         ]
@@ -302,23 +302,29 @@ class AdaptiveTeachingLoop:
                 self._profile.id, self.session.student_id, self.session.topic, self.session.subject, analysis.strengths,
             )
 
+        transition = self._cognitive_engine.apply(
+            self.session.progress,
+            total_objectives=len(self.session.must_know_parts),
+            understanding=cognitive.understanding,
+            confusion=cognitive.confusion,
+            engagement=cognitive.engagement,
+            turn_understanding=analysis.understanding,
+            agent_level=self._profile.level,
+            knowledge_score=self._profile.knowledge_score,
+            concept_states=self._concept_states,
+        )
+        cognitive_decision = transition.public()
         guide = self._guide.coaching_tip(
             topic=self.session.topic,
-            phase=self.session.progress.label(),
+            learning_mode=transition.learning_mode,
             current_subtopic=self._current_subtopic(),
             human_message=human_message,
             student_response=student_reply,
             state=state,
             history=self.session.history,
             must_know_parts=self.session.must_know_parts,
-            current_index=self.session.progress.subtopic_index,
-        )
-        transition = self._progression.apply(
-            self.session.progress,
-            requested_phase=guide["nextPhase"],
-            requested_index=guide["nextMustKnowIndex"],
-            total_subtopics=len(self.session.must_know_parts),
-            understanding=analysis.understanding,
+            current_index=self.session.progress.objective_index,
+            cognitive_decision=cognitive_decision,
         )
 
         self.session.history.extend([
@@ -365,16 +371,18 @@ class AdaptiveTeachingLoop:
                 "knowledgeScore": round(self._profile.knowledge_score),
                 "agentLevel": self._profile.level,
             },
-            "phaseChanged": transition.phase_changed,
-            "phaseLabel": PHASE_LABELS[transition.current_phase] if transition.phase_changed else None,
-            "subtopicAdvanced": transition.subtopic_advanced,
-            "currentSubtopic": self._current_subtopic(),
-            "currentPhase": transition.current_phase,
+            "learningModeChanged": transition.learning_mode_changed,
+            "learningModeLabel": self.session.progress.label() if transition.learning_mode_changed else None,
+            "objectiveAdvanced": transition.objective_advanced,
+            "masteryRecognised": transition.mastery_recognised,
+            "cognitiveDecision": cognitive_decision,
+            "currentObjective": self._current_subtopic(),
+            "learningMode": transition.learning_mode,
             "topic": self.session.topic,
             "subject": self.session.subject or "",
-            "subtopicIdx": transition.current_subtopic_index,
-            "totalSubtopics": len(self.session.must_know_parts) or 1,
-            "subtopicObjectives": self.session.must_know_parts if transition.subtopic_advanced else [],
+            "objectiveIdx": transition.current_objective_index,
+            "totalObjectives": len(self.session.must_know_parts) or 1,
+            "objectiveMap": self.session.must_know_parts if transition.objective_advanced else [],
             "driftInfo": {"isDrifting": guide["offTopic"], "driftLevel": "edge" if guide["offTopic"] else "none"},
             "agentPairId": "student-session",
             "sessionType": self.session.session_type,
@@ -525,4 +533,4 @@ class AdaptiveTeachingLoop:
     def _current_subtopic(self) -> str:
         if not self.session.must_know_parts:
             return self.session.topic
-        return self.session.must_know_parts[self.session.progress.subtopic_index]
+        return self.session.must_know_parts[self.session.progress.objective_index]

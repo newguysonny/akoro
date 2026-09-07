@@ -71,12 +71,23 @@ maximum of six compact concept conditions in the reply prompt, and returns only
 bounded observations using those existing IDs. Akoro—not the model—then writes
 an immutable evidence row and applies the deterministic database transition.
 The three evidence dimensions remain separate: demonstrated response quality,
-the model's curriculum-objective claim assessment, and model confidence.
-`not_checked` evidence is kept for audit but cannot create or modify cognitive
-state. This Phase 0/1 slice does **not** yet claim to provide an independent
-fact Guardian: its model observation is constrained to the reviewed concept
-objective, and it cannot use arbitrary web/RAG material. The next delivery
-slice adds schema-validated judge observations and Guardian/source validation.
+the Guardian's curriculum-objective claim assessment, and Guardian confidence.
+The Student Agent first emits a schema-bounded candidate; a separate
+`CurriculumGuardian` pass may mark it `supported`, `contradicted`, or
+`not_checked` only against the reviewed objective and an exact quote from the
+completed learner reply. It cannot use arbitrary web/RAG material. A malformed,
+ungrounded, or unavailable Guardian result becomes `not_checked`, which remains
+an immutable audit record but cannot create or modify cognitive state.
+
+There are no ordered hardcoded teaching phases. After each completed turn, the
+versioned `CognitiveProgressionEngine` calculates a bounded readiness score
+from smoothed understanding/confusion/engagement, the current turn's
+understanding, reviewed concept mastery/retention/evidence (when available),
+and the accumulated agent level/knowledge profile. It may independently select
+clarify, repair, retrieval, practice, challenge, advance, or mastery-review;
+only this deterministic engine can advance one objective. Its policy version,
+signals, threshold adjustment, decision, and reason are returned as bounded
+`cognitiveDecision` metadata for calibration.
 
 The migration `akoro-api/migrations/2026-concept-state-v1.sql` owns:
 
@@ -85,7 +96,9 @@ The migration `akoro-api/migrations/2026-concept-state-v1.sql` owns:
   are `0..1` fractions, alongside misconception, review-timing, count, and
   version fields); and
 - append-only, per-turn-idempotent `edu.learner_concept_evidence` plus the
-  `edu.record_learner_concept_evidence` policy function.
+  `edu.record_learner_concept_evidence` policy function; and
+- `edu.learner_concept_retention_events` plus a bounded, idempotent retention
+  refresh using the documented existing Akoro decay curve.
 
 This does **not** reinterpret or replace legacy `edu.student_knowledge`
 (retrieval weighting fraction) or `edu.knowledge_confidence` (assessment
@@ -105,7 +118,9 @@ AKORO_AGENT_TOOLS_SECRET=<outbound-only-secret>
 
 An empty reviewed catalogue is a safe, explicit no-op: the Python service keeps
 its existing evaluation lifecycle rather than inventing concepts or persisting
-local cognitive state.
+local cognitive state. A non-empty snapshot refreshes only its bounded concept
+scope's retention using the same documented decay coefficients as the existing JS decay
+engine; it never creates a task, notification, or other learner action.
 
 | Capability | Current implementation |
 |---|---|

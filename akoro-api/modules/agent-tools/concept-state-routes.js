@@ -113,8 +113,16 @@ router.post("/snapshot", requireAgentToolsCredential, async (req, res) => {
     const { claims, scope } = authorised(request);
     const principal = await activePrincipal(claims);
     await approvedConcepts(request.conceptIds, scope);
+    // Match canonical retention to the existing decay curve before handing a
+    // bounded condition to Python. This is time-based state refresh only; it
+    // cannot create tasks, notifications, or learner-side actions.
+    const { error: decayError } = await db.schema("edu").rpc("refresh_learner_concept_retention", {
+      p_learner_id: principal.id,
+      p_concept_ids: request.conceptIds,
+    });
+    if (decayError) throw new ConceptStateGatewayError(503, "Concept retention refresh is unavailable");
     const { data, error } = await db.schema("edu").from("learner_concept_state")
-      .select("concept_id, mastery, retention, evidence_confidence, misconception_active, evidence_count, last_evidence_at, next_review_due, state_version")
+      .select("concept_id, mastery, retention, evidence_confidence, misconception_active, evidence_count, last_evidence_at, next_review_due, last_retention_decay_at, state_version")
       .eq("learner_id", principal.id)
       .in("concept_id", request.conceptIds);
     if (error) throw new ConceptStateGatewayError(503, "Learner concept state is unavailable");
@@ -150,7 +158,11 @@ router.post("/observations", requireAgentToolsCredential, async (req, res) => {
         p_model_confidence: observation.modelConfidence,
         p_claim_status: observation.claimStatus,
         p_evidence_summary: observation.evidenceSummary,
-        p_provenance: { source: "akoro_python_agent", contract: "concept-state-v1" },
+        p_provenance: {
+          source: "akoro_python_agent",
+          contract: "concept-state-v1",
+          validation: "curriculum_guardian-v1",
+        },
       });
       if (error) throw new ConceptStateGatewayError(503, "Learner concept evidence could not be recorded");
       const state = Array.isArray(data) ? data[0] : data;

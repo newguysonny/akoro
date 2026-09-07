@@ -112,6 +112,7 @@ export function publicState(row, conceptId) {
     evidenceCount: Number(row?.evidence_count ?? 0),
     lastEvidenceAt: row?.last_evidence_at ?? null,
     nextReviewDue: row?.next_review_due ?? null,
+    lastRetentionDecayAt: row?.last_retention_decay_at ?? null,
     stateVersion: Number(row?.state_version ?? 1),
   };
 }

@@ -164,8 +164,14 @@ class ConceptSliceModel:
                 "responseQuality": 0.85, "claimValidity": 0.9, "modelConfidence": 0.8,
                 "claimStatus": "supported", "evidenceSummary": "The reply named light, water, and carbon dioxide.",
             }]},
+            {"validations": [{
+                "conceptId": PHOTOSYNTHESIS_INPUTS.id, "claimStatus": "supported",
+                "claimValidity": 0.95, "modelConfidence": 0.85,
+                "evidenceQuote": "plants need light, water, and carbon dioxide",
+                "reason": "The quote agrees with the reviewed objective.",
+            }]},
             {"shouldSave": True, "topic": "Photosynthesis", "content": "Plants use light, water, and carbon dioxide in photosynthesis.", "chunkType": "taught", "confidence": 0.8},
-            {"tip": "Ask your agent to connect those inputs to the products.", "nextAction": "NEXT_SUBTOPIC", "nextPhase": "PHASE_2", "nextMustKnowIndex": 1, "isUrgent": False, "offTopic": False},
+            {"tip": "Ask your agent to connect those inputs to the products.", "nextAction": "CHALLENGE", "isUrgent": False, "offTopic": False},
             {"goal": "Revise photosynthesis.", "completed": ["Named inputs."], "plan": [{"step": "Explain products.", "status": "pending"}], "nextSteps": ["Explain products."], "openQuestions": []},
         ]
 

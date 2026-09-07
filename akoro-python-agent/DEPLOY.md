@@ -91,11 +91,23 @@ idempotent `(learner, session, turn, concept)` ledger and bounded state
 transition. `not_checked` observations remain audit records only and cannot
 alter cognitive state.
 
-Apply `2026-concept-state-v1.sql` through the standard API migration manifest
-and import/review the initial catalogue before enabling the flag. There is no
-built-in AI seed data: a scope without approved concepts remains an intentional
-non-canonical no-op. This avoids presenting generated/web-retrieved material as
-an approved curriculum brain.
+Apply `2026-concept-state-v1.sql` and
+`2026-concept-state-retention-v1.sql` through the standard API migration
+manifest, then import/review the initial catalogue before enabling the flag.
+The latter refreshes only a requested 1–8 concept snapshot using Akoro's documented existing decay curve, with an immutable retention event; it does not send a
+notification or take a learner action. There is no built-in AI seed data: a
+scope without approved concepts remains an intentional non-canonical no-op.
+This avoids presenting generated/web-retrieved material as an approved
+curriculum brain.
+
+A candidate observation is now checked by the bounded `CurriculumGuardian`
+against the approved objective and a quote actually present in the completed
+Student Agent reply. An invalid/uncertain check is persisted only as
+`not_checked` evidence. The `CognitiveProgressionEngine` rather than NaNa or
+the Student Agent decides whether to hold, repair, retrieve, challenge, move
+one objective, or recognise mastery. Its thresholds are versioned and returned
+in `cognitiveDecision` for monitoring; the UI must not turn a model suggestion
+into an advancement.
 
 ## Durable learner conversation context
 

@@ -7,7 +7,7 @@ from agent.llm.messages import Message
 
 from .ladder import normalise_ladder
 from .model import TeachingModel
-from .types import LessonStep, PHASES
+from .types import LessonStep
 
 
 class NaNaGuide:
@@ -28,30 +28,37 @@ and use exactly one synthesis step at the end."""
         payload = self._model.complete_json([Message.system(system), Message.user(f"Topic: {topic}\nSubject: {subject or 'General'}{source}")], temperature=0.25)
         return normalise_ladder(payload.get("steps"), topic)
 
-    def coaching_tip(self, *, topic: str, phase: str, current_subtopic: str, human_message: str,
+    def coaching_tip(self, *, topic: str, learning_mode: str, current_subtopic: str, human_message: str,
                     student_response: str, state: dict[str, int], history: list[dict[str, str]],
-                    must_know_parts: list[str], current_index: int) -> dict[str, Any]:
+                    must_know_parts: list[str], current_index: int,
+                    cognitive_decision: dict[str, object]) -> dict[str, Any]:
+        """Offer teacher-facing wording; the cognitive engine owns advancement.
+
+        NaNa receives the engine decision as bounded context but cannot request
+        an objective jump or an ordered learning stage.  This keeps an
+        encouraging LLM coach separate from deterministic learner progression.
+        """
         system = f"""You are NaNa Esumai, an encouraging coach for a human teaching their Student Agent.
 You never lecture on the topic yourself. Give one brief, actionable 1–2 sentence coaching tip.
-Topic: {topic}; phase: {phase}; current subtopic: {current_subtopic}; understanding: {state['understanding']}%; confusion: {state['confusion']}%.
+Topic: {topic}; learning mode: {learning_mode}; current objective: {current_subtopic}; understanding: {state['understanding']}%; confusion: {state['confusion']}%.
+The cognitive engine has already decided progression. Respect it; do not claim a learner has advanced or mastered a topic unless the supplied decision says so.
 A greeting or clarification is not off-topic. Gently reconnect genuine drift rather than scolding.
 Return JSON only:
-{{"tip":"...", "nextAction":"DIG_DEEPER|CLEAR_MISTAKE|NAME_IT|NEXT_SUBTOPIC|ONE_MORE_PUSH|USE_ANALOGY|GAP_CLOSED|TRIGGER_RECALL|CHALLENGE|MASTERY", "nextPhase":"PHASE_1|PHASE_2|PHASE_3|PHASE_4|MASTERY|null", "nextMustKnowIndex":{current_index}, "isUrgent":false, "offTopic":false}}"""
+{{"tip":"...", "nextAction":"DIG_DEEPER|CLEAR_MISTAKE|NAME_IT|ONE_MORE_PUSH|USE_ANALOGY|GAP_CLOSED|TRIGGER_RECALL|CHALLENGE|REVIEW", "isUrgent":false, "offTopic":false}}"""
         payload = self._model.complete_json(
-            [Message.system(system), Message.user(str({"teacher": human_message, "studentAgent": student_response, "history": history[-4:], "mustKnowParts": must_know_parts}))],
+            [Message.system(system), Message.user(str({
+                "teacher": human_message,
+                "studentAgent": student_response,
+                "history": history[-4:],
+                "mustKnowParts": must_know_parts,
+                "currentIndex": current_index,
+                "cognitiveDecision": cognitive_decision,
+            }))],
             temperature=0.3,
         )
-        requested_phase = str(payload.get("nextPhase") or "").upper()
-        requested_index = payload.get("nextMustKnowIndex", current_index)
-        try:
-            next_index = int(requested_index)
-        except (TypeError, ValueError):
-            next_index = current_index
         return {
             "tip": str(payload.get("tip") or "Good start. What is one concrete example you could use next?").strip()[:700],
             "nextAction": str(payload.get("nextAction") or "DIG_DEEPER").upper(),
-            "nextPhase": requested_phase if requested_phase in PHASES else None,
-            "nextMustKnowIndex": max(current_index, min(next_index, max(0, len(must_know_parts) - 1))),
             "isUrgent": bool(payload.get("isUrgent")),
             "offTopic": bool(payload.get("offTopic")),
         }

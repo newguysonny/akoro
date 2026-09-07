@@ -31,7 +31,7 @@ class FakeTeachingModel:
             # student.extract_knowledge
             {"shouldSave": True, "topic": "Photosynthesis", "content": "Photosynthesis uses light, water, and carbon dioxide to make glucose and oxygen.", "chunkType": "taught", "confidence": 0.82},
             # guide.coaching_tip
-            {"tip": "Great foundation. Ask your agent to connect those inputs to the products next.", "nextAction": "NEXT_SUBTOPIC", "nextPhase": "PHASE_2", "nextMustKnowIndex": 1, "isUrgent": False, "offTopic": False},
+            {"tip": "Great foundation. Ask your agent to connect those inputs to the products next.", "nextAction": "CHALLENGE", "isUrgent": False, "offTopic": False},
             # student.update_scratchpad
             {"goal": "Support the learner with photosynthesis.", "progressSummary": "Covered the inputs to photosynthesis.", "completed": ["Identified the photosynthesis inputs."], "plan": [{"step": "Connect inputs to products.", "status": "pending"}], "nextSteps": ["Connect inputs to products."], "openQuestions": []},
             # generate_summary evaluation
@@ -91,8 +91,9 @@ class AdaptiveOrchestratorTests(unittest.TestCase):
 
         turn = orchestrator.process_teaching_message("Plants use sunlight, water, and carbon dioxide.")
         self.assertEqual(turn["type"], "teaching_response")
-        self.assertEqual(turn["currentPhase"], "PHASE_2")
-        self.assertTrue(turn["subtopicAdvanced"])
+        self.assertEqual(turn["learningMode"], "practise")
+        self.assertFalse(turn["objectiveAdvanced"])
+        self.assertEqual(turn["cognitiveDecision"]["reason"], "more_evidence_needed")
         self.assertEqual(turn["scratchpad"]["goal"], "Support the learner with photosynthesis.")
         self.assertEqual(turn["scratchpad"]["nextSteps"], ["Connect inputs to products."])
         self.assertEqual(turn["scratchpad"]["plan"], [{"step": "Connect inputs to products.", "status": "pending"}])

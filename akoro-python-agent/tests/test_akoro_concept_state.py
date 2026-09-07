@@ -27,7 +27,7 @@ class ConceptTransport:
             return {"success": True, "states": [{
                 "conceptId": CONCEPT_ID, "mastery": 0.2, "retention": 0.1,
                 "evidenceConfidence": 0.4, "misconceptionActive": False,
-                "evidenceCount": 2, "stateVersion": 3,
+                "evidenceCount": 2, "lastRetentionDecayAt": "2026-09-06T00:00:00Z", "stateVersion": 3,
             }]}
         if url.endswith("/observations"):
             return {"success": True, "states": [{
@@ -55,6 +55,7 @@ class AkoroConceptStateClientTests(unittest.TestCase):
         )])
         self.assertEqual(concepts[0].id, CONCEPT_ID)
         self.assertEqual(before[0].evidence_count, 2)
+        self.assertEqual(before[0].last_retention_decay_at, "2026-09-06T00:00:00Z")
         self.assertEqual(states[0].evidence_count, 3)
         self.assertEqual(transport.calls[0][1]["curriculumKey"], "nerdc-jss2-basic-science-v1")
         self.assertEqual(transport.calls[0][1]["subject"], "Basic Science")

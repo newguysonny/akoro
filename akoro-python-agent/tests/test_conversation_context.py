@@ -28,7 +28,7 @@ class CaptureModel:
             {"goal": "Understand how plants use light.", "progressSummary": "", "completed": [], "plan": [{"step": "Connect light to glucose production.", "status": "in_progress"}], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
             {"understanding": 70, "confusion": 10, "engagement": 80, "newConceptLearned": "Plants use light energy", "strengths": []},
             {"shouldSave": True, "topic": "Plants", "content": "Plants use light energy to make glucose.", "chunkType": "taught", "confidence": 0.8},
-            {"tip": "Ask for one example.", "nextAction": "DIG_DEEPER", "nextPhase": None, "nextMustKnowIndex": 0},
+            {"tip": "Ask for one example.", "nextAction": "DIG_DEEPER"},
             {"goal": "Understand how plants use light.", "progressSummary": "Reviewed the role of light.", "completed": ["Reviewed light energy."], "plan": [{"step": "Connect light to glucose production.", "status": "pending"}], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
         ]
 
