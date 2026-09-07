@@ -113,6 +113,7 @@ router.use(authenticateToken, assessmentRouter);
  *     student_done             student agent finished streaming
  *     guide_done               guide agent finished streaming
  *     typing_start             agent is generating a response
+ *     teaching_workflow_step   public server-run teaching workflow step
  *     turn_complete            full turn result with XP + adaptive engine
  *     state_update             real-time cognitive state update
  *     session_ended            session complete with evaluation

@@ -17,13 +17,9 @@ import {
   retrieveAgentKnowledgeByTopic,
 } from "./knowledge.js";
 import { decayEngine } from "./decayEngine.js";
-import { getStudentState, updateStudentState } from "../../student-state.js";
-import {
-  applyTeachingObservation,
-  capProtegeAnalysis,
-  createTeachingEvidenceState,
-  publicTeachingEvidence,
-} from "../../teaching-evidence.js";
+import { getStudentState } from "../../student-state.js";
+import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
+import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -362,229 +358,96 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
 
   // ── PROCESS ONE TURN ─────────────────────────────────────────
   async processTeachingMessage(humanMessage, callbacks = {}) {
-    const { onStudentChunk, onGuideChunk, onStateUpdate } = callbacks;
-    const { topic, phase, mustKnowParts, mustKnowIndex, history } = this.session;
-
-    // Resolve subject — from decay payload or infer from topic
-    const subject = this.decayPayload?.subject || null;
-
+    // The turn is a fixed server workflow, not a model-routed collection of
+    // capabilities. Its named tools run in an evidence-first sequence and the
+    // final deterministic gate is the sole authority for lesson progress.
     this.session.turnCount++;
     this.stats.turnsCompleted++;
 
-    const agentId   = this.studentAgentRecord.id;
-    const studentId = this.studentId;
-    const state     = await getStudentState(agentId);
-
-    // 1. Evaluate the human's explanation BEFORE generating the protege reply.
-    // A friendly model response is not independent proof that the protege—or
-    // the learner—understood a message they just received.
-    if (!this.teachingEvidence) {
-      this.teachingEvidence = createTeachingEvidenceState({ conceptCount: mustKnowParts.length || 1 });
-      this.session.teachingEvidence = this.teachingEvidence;
-    }
-    let rawObservation = {};
-    try {
-      rawObservation = await this.studentAgent.assessTeachingEvidence({
-        humanMessage,
-        topic,
-        currentSubtopic: mustKnowParts[mustKnowIndex] || topic,
-        history,
-      });
-    } catch (error) {
-      // Never turn an unavailable evaluator into invented learning evidence.
-      console.warn("[teaching-evidence] turn evaluation unavailable:", error.message);
-      rawObservation = { notChecked: true };
-    }
-    const evidenceUpdate = applyTeachingObservation(this.teachingEvidence, mustKnowIndex, rawObservation);
-    this.teachingEvidence = evidenceUpdate.state;
-    this.session.teachingEvidence = this.teachingEvidence;
-
-    // 2. The protege replies from the server-selected dialogue move. It is
-    // explicitly prevented from claiming mastery until the evidence rule below
-    // is satisfied, and it uses discussion rather than a disconnected quiz.
-    const studentReply = await this.studentAgent.reply(
+    const workflow = await executeTeachingTurnWorkflow({
+      orchestrator: this,
       humanMessage,
-      topic,
-      state.cognitive,
-      history,
-      STUDENT_PHASES[phase],
-      onStudentChunk || null,
-      {
-        dialogue: evidenceUpdate.dialogue,
-        evidence: evidenceUpdate.current,
-      },
-    );
-
-    // 3. Analyse the generated protege reply, then cap it by the human's
-    // demonstrated evidence. A model cannot promote itself from exposure to
-    // understanding simply because it produced a fluent answer.
-    const agentAnalysis = await this.studentAgent.analyzeUnderstanding(studentReply, topic, history);
-    const analysis = capProtegeAnalysis(agentAnalysis, evidenceUpdate.current);
-
-    // 3. Persist state
-    const updatedState = await updateStudentState(
-      agentId, topic, analysis,
-      { phase, mustKnowIndex, lastAction: null }
-    );
-
-    if (onStateUpdate) {
-      onStateUpdate({
-        understanding: Math.round(updatedState.cognitive.understanding * 100),
-        confusion:     Math.round(updatedState.cognitive.confusion     * 100),
-        engagement:    Math.round(updatedState.cognitive.engagement    * 100),
-        teachingEvidence: this.getTeachingEvidenceSnapshot(),
-      });
-    }
-
-    // 4. Extract and queue knowledge — now with subject
-    const extracted = await this.studentAgent.extractKnowledgeFromTurn(
-      humanMessage, studentReply, topic, subject, analysis, evidenceUpdate.current
-    );
-    if (extracted) this.stats.agentKnowledgeAdded++;
-
-    // 5. Save learner knowledge references only after the same evidence rule
-    // has verified the concept; a first pasted/copyable definition is not a
-    // durable learner-strength signal.
-    await this.studentAgent.extractStudentKnowledge(
-      humanMessage, topic, subject, analysis, evidenceUpdate.current
-    );
-    this.stats.studentKnowledgeRefs = this.studentAgent.studentKnowledgeRefs;
-    this.stats.teacherChunksUsed    = this.studentAgent.teacherChunksUsed;
-
-    if (evidenceUpdate.current.masteryStatus === "verified" && analysis.newConceptLearned) {
-      this.stats.conceptsLearned.push(analysis.newConceptLearned);
-    }
-    if (evidenceUpdate.misconceptionRepaired) {
-      this.stats.misconceptionsCleared.push(mustKnowParts[mustKnowIndex] || "concept");
-    }
-
-    // 6. Guide tip
-    let guideResult = this.guideOrchestrator.guide?.getTip
-      ? await this.guideOrchestrator.guide.getTip(
-          {
-            topic, phase: STUDENT_PHASES[phase],
-            currentSubtopic: mustKnowParts[mustKnowIndex] || null,
-            humanMessage, studentResponse: studentReply,
-            understanding: Math.round(updatedState.cognitive.understanding * 100),
-            confusion:     Math.round(updatedState.cognitive.confusion     * 100),
-            history, mustKnowParts, mustKnowIndex,
-            teachingEvidence: this.getTeachingEvidenceSnapshot(),
-            dialogue: evidenceUpdate.dialogue,
-          },
-          onGuideChunk || null
-        )
-      : { tip: null, nextAction: "NEXT_SUBTOPIC", nextPhase: null,
-          nextMustKnowIndex: mustKnowIndex, isUrgent: false };
-
-    // 7. Server-owned mastery gate. Guide suggestions can shape the coaching
-    // language, but cannot move a concept on just because the protege received
-    // a fluent answer. A verified core explanation plus separate elaboration is
-    // required before a subtopic or mastery phase can advance.
-    let phaseChanged = false, phaseLabel = null, subtopicAdvanced = false;
-    const hasNextSubtopic = mustKnowIndex < Math.max(0, mustKnowParts.length - 1);
-    const mayAdvance = evidenceUpdate.dialogue.canAdvance;
-    const requestedPhase = Object.hasOwn(STUDENT_PHASES, guideResult?.nextPhase)
-      ? guideResult.nextPhase
-      : null;
-
-    if (mayAdvance && hasNextSubtopic) {
-      this.session.mustKnowIndex = mustKnowIndex + 1;
-      subtopicAdvanced = true;
-      // Keep the response metadata honest when the guide happened to request a
-      // different action: the mastery rule, not a client/model claim, advanced.
-      guideResult = { ...guideResult, nextAction: "NEXT_SUBTOPIC", nextMustKnowIndex: this.session.mustKnowIndex };
-    } else {
-      // Do not leak a guide/model recommendation to advance into persisted UI
-      // state when the independently evaluated evidence has not earned it.
-      guideResult = {
-        ...guideResult,
-        nextAction: ACTION_FOR_DIALOGUE_MOVE[evidenceUpdate.dialogue.move] || "DIG_DEEPER",
-        nextMustKnowIndex: mustKnowIndex,
-      };
-    }
-
-    const mayEnterMastery = mayAdvance && !hasNextSubtopic && evidenceUpdate.dialogue.allConceptsVerified;
-    if (mayEnterMastery && this.session.phase !== "MASTERY") {
-      this.session.phase = "MASTERY";
-      phaseChanged = true;
-      phaseLabel = STUDENT_PHASES.MASTERY;
-      guideResult = { ...guideResult, nextAction: "MASTERY", nextPhase: "MASTERY" };
-    } else if (mayAdvance && requestedPhase && requestedPhase !== "MASTERY" && requestedPhase !== phase) {
-      this.session.phase = requestedPhase;
-      phaseChanged = true;
-      phaseLabel = STUDENT_PHASES[requestedPhase];
-    }
-
-    // 8. Persist final state
-    await updateStudentState(agentId, topic, analysis, {
-      phase: this.session.phase, mustKnowIndex: this.session.mustKnowIndex,
-      lastAction: guideResult.nextAction,
+      callbacks,
+      phaseLabels: STUDENT_PHASES,
+      actionForDialogueMove: ACTION_FOR_DIALOGUE_MOVE,
     });
+    const {
+      topic,
+      mustKnowParts,
+      analysis,
+      evidenceUpdate,
+      studentReply,
+      updatedState,
+      guideResult,
+      phaseChanged,
+      phaseLabel,
+      subtopicAdvanced,
+    } = workflow;
 
-    // 9. Status line
-    //
-    // Nothing is announced for staying on topic — a learner who is doing fine
-    // does not need to be told so by a second voice, and "✅ On topic." on every
-    // turn was noise that made the red warning harder to notice when it did
-    // matter. Wandering is now handled inside NaNa's tip instead.
-    const guideName   = this.guideOrchestrator.guide?.name   || "Guide";
-    const controlName = this.guideOrchestrator.control?.name || "Control";
-    const controlStatusLine = null;
+    const evidenceVerifiedConcept = evidenceUpdate.current.masteryStatus === "verified"
+      ? analysis.newConceptLearned
+      : null;
+    const misconceptionCleared = evidenceUpdate.misconceptionRepaired;
 
-    // 10. History
-    history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
-    history.push({ role: "student_agent", content: studentReply,  timestamp: new Date() });
+    // Conversation content remains in the existing bounded session history.
+    // The workflow trace itself carries only named public steps, never raw
+    // messages, LLM rationale, or hidden chain-of-thought.
+    this.session.history.push({ role: "human_teacher", content: humanMessage, timestamp: new Date() });
+    this.session.history.push({ role: "student_agent", content: studentReply, timestamp: new Date() });
 
-    // XP calculation — decay sessions earn bonus XP
-    const baseXP  = 5 +
-      (analysis.newConceptLearned    ? 20 : 0) +
-      (analysis.misconceptionCleared ? 15 : 0);
-    const turnXP  = this.sessionType === "decay_review" ? Math.round(baseXP * 1.5) : baseXP;
+    // Reward verified work, not an unverified well-worded response.
+    const baseXP = 5 +
+      (evidenceVerifiedConcept ? 20 : 0) +
+      (misconceptionCleared ? 15 : 0);
+    const turnXP = this.sessionType === "decay_review" ? Math.round(baseXP * 1.5) : baseXP;
     this.stats.xpEarned += turnXP;
 
+    const guideName = this.guideOrchestrator.guide?.name || "Guide";
+    const controlName = this.guideOrchestrator.control?.name || "Control";
+
     return {
-      type:                 "teaching_response",
+      type: "teaching_response",
       studentAgentResponse: studentReply,
-      guideMessage:         guideResult.tip,
-      guideIsUrgent:        guideResult.isUrgent || false,
+      guideMessage: guideResult.tip,
+      guideIsUrgent: guideResult.isUrgent || false,
       guideName,
-      controlStatusLine,
+      controlStatusLine: null,
       controlName,
+      workflow: workflow.publicWorkflow,
       adaptiveEngine: {
-        understanding:        Math.round(updatedState.cognitive.understanding * 100),
-        confusion:            Math.round(updatedState.cognitive.confusion     * 100),
-        actionLabel:          this._friendlyAction(guideResult.nextAction, analysis),
-        misconception:        analysis.misconceptionDetected  || null,
-        misconceptionCleared: analysis.misconceptionCleared   || false,
-        newConceptLearned:    analysis.newConceptLearned      || null,
-        agentKnowledgeAdded:  this.stats.agentKnowledgeAdded,
-        knowledgeScore:       Math.round(this.studentAgentRecord.knowledge_score),
-        agentLevel:           this.studentAgentRecord.level,
-        // Compact evidence metadata is informative only; the server retains
-        // ownership of pacing, dialogue selection, and advancement.
-        learnerMastery:       evidenceUpdate.current.learnerMastery,
+        understanding: Math.round(updatedState.cognitive.understanding * 100),
+        confusion: Math.round(updatedState.cognitive.confusion * 100),
+        actionLabel: this._friendlyAction(guideResult.nextAction, analysis),
+        misconception: analysis.misconceptionDetected || null,
+        misconceptionCleared,
+        newConceptLearned: evidenceVerifiedConcept,
+        agentKnowledgeAdded: this.stats.agentKnowledgeAdded,
+        knowledgeScore: Math.round(this.studentAgentRecord.knowledge_score),
+        agentLevel: this.studentAgentRecord.level,
+        learnerMastery: evidenceUpdate.current.learnerMastery,
         protegeUnderstanding: evidenceUpdate.current.protegeUnderstanding,
-        teachingSkill:        evidenceUpdate.current.teachingSkill,
-        masteryStatus:        evidenceUpdate.current.masteryStatus,
-        dialogueMove:         evidenceUpdate.dialogue.move,
-        pace:                 evidenceUpdate.dialogue.pace,
+        teachingSkill: evidenceUpdate.current.teachingSkill,
+        masteryStatus: evidenceUpdate.current.masteryStatus,
+        dialogueMove: evidenceUpdate.dialogue.move,
+        pace: evidenceUpdate.dialogue.pace,
       },
       teachingEvidence: this.getTeachingEvidenceSnapshot(),
-      phaseChanged, phaseLabel, subtopicAdvanced,
+      phaseChanged,
+      phaseLabel,
+      subtopicAdvanced,
       currentSubtopic: mustKnowParts[this.session.mustKnowIndex] || null,
-      currentPhase:    this.session.phase,
-      // Structured-block context — lets the UI render the subtopic header,
-      // phase plan and objectives checklist on each advance (real data).
+      currentPhase: this.session.phase,
       topic,
-      subject:            this.subject || "",
-      subtopicIdx:        this.session.mustKnowIndex,
-      totalSubtopics:     (mustKnowParts || []).length || 1,
-      subtopicObjectives: subtopicAdvanced ? (mustKnowParts || []) : [],
-      // Kept in the payload so anything reading it still finds the shape it
-      // expects; the judgement now lives in guideResult.offTopic.
-      driftInfo:       { isDrifting: !!guideResult?.offTopic, driftLevel: guideResult?.offTopic ? "edge" : "none" },
-      agentPairId:     "student-session",
-      sessionType:     this.sessionType,
+      subject: this.subject || "",
+      subtopicIdx: this.session.mustKnowIndex,
+      totalSubtopics: mustKnowParts.length || 1,
+      subtopicObjectives: subtopicAdvanced ? mustKnowParts : [],
+      driftInfo: {
+        isDrifting: !!guideResult?.offTopic,
+        driftLevel: guideResult?.offTopic ? "edge" : "none",
+      },
+      agentPairId: "student-session",
+      sessionType: this.sessionType,
       turnXP,
     };
   }

@@ -845,6 +845,9 @@ export function setupWebSocket(io) {
           onStudentChunk: (token) => socket.emit("student_token",  { token }),
           onStateUpdate:  (state) => socket.emit("state_update",   state),
           onGuideChunk:   (token) => socket.emit("guide_token",    { token }),
+          // Observable workflow labels only—never raw messages, model rationale,
+          // or an instruction that the browser may use to choose a tool.
+          onWorkflowStep: (step) => socket.emit("teaching_workflow_step", step),
         });
 
         socket.emit("student_done");
@@ -861,6 +864,7 @@ export function setupWebSocket(io) {
           agentPairId,
           turnXP:         result.turnXP || 0,
           sessionType:    result.sessionType,
+          workflow:       result.workflow || null,
         });
 
         // Persist the turn and compact server-owned evidence before another
