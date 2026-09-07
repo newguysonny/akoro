@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 
 from agent.adaptive.akoro_concept_state import AkoroConceptStateError
 from agent.adaptive.akoro_soul_state import AkoroSoulStateError
+from agent.adaptive.akoro_teaching_workflow import AkoroTeachingWorkflowError
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
 from agent.adaptive.types import AdaptiveSession, SessionReference
@@ -78,6 +79,12 @@ def create_app(
                 "durableOwner": "akoro-api" if runtime.enable_soul_state else None,
                 "mode": "learner_selected_and_clearable",
             },
+            "teachingWorkflow": {
+                "preferredAuthority": "akoro-api" if runtime.prefer_node_teaching_workflow else "python_local",
+                "configured": runtime.teaching_workflow_client is not None,
+                "fallback": "session_start_only",
+                "sessionAffinityRequired": True,
+            },
             "tools": {
                 "configured": runtime.tools_configured,
                 "provider": "akoro-api" if runtime.tools_configured else None,
@@ -122,7 +129,7 @@ def create_app(
             return runtime.start(session)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-        except (AkoroConversationError, AkoroConceptStateError, AkoroSoulStateError) as exc:
+        except (AkoroConversationError, AkoroConceptStateError, AkoroSoulStateError, AkoroTeachingWorkflowError) as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/turns", dependencies=[Depends(require_internal_caller)])
@@ -139,7 +146,7 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A teaching stream is active for this session") from exc
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-        except AkoroConceptStateError as exc:
+        except (AkoroConceptStateError, AkoroTeachingWorkflowError) as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/confirmed-actions", dependencies=[Depends(require_internal_caller)])
@@ -214,6 +221,8 @@ def create_app(
                 return {"summary": loop.generate_summary()}
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
+        except AkoroTeachingWorkflowError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/end", dependencies=[Depends(require_internal_caller)])
     def end_session(session_id: str) -> dict:
@@ -223,6 +232,8 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
         except SessionBusyError as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stop the active teaching stream before ending this session") from exc
+        except AkoroTeachingWorkflowError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     return app
 

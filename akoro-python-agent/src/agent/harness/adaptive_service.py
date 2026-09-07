@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from agent.adaptive.akoro_concept_state import AkoroConceptStateClient, AkoroConceptStateError
 from agent.adaptive.akoro_learning_insights import AkoroLearningInsightsClient, AkoroLearningInsightsError
 from agent.adaptive.akoro_soul_state import AkoroSoulStateClient, AkoroSoulStateError
+from agent.adaptive.akoro_teaching_workflow import AkoroTeachingWorkflowClient, AkoroTeachingWorkflowError
 from agent.adaptive.concept_repository import AkoroConceptLearningRepository
 from agent.adaptive.model import OpenAIAdaptiveModel, TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
 from agent.adaptive.types import AdaptiveSession
 from agent.llm.client import OpenAIChatClient
 from agent.loop.adaptive_teaching_loop import AdaptiveTeachingLoop
+from agent.loop.remote_teaching_workflow import RemoteTeachingWorkflowProxy
 from agent.memory.akoro_conversation import AkoroConversationClient, AkoroConversationError, AkoroConversationSession
 from agent.permissions.internal import InternalServicePolicy
 from agent.service.settings import ServiceSettings
@@ -30,18 +32,43 @@ class AdaptiveServiceRuntime:
     concept_state_client: AkoroConceptStateClient | None = None
     learning_insights_client: AkoroLearningInsightsClient | None = None
     soul_state_client: AkoroSoulStateClient | None = None
+    teaching_workflow_client: AkoroTeachingWorkflowClient | None = None
     tool_max_calls_per_session: int = 4
     write_confirmation_proposals: bool = False
     allow_side_effecting_tools: bool = False
     enable_concept_state: bool = False
     enable_learning_insights: bool = False
     enable_soul_state: bool = False
+    prefer_node_teaching_workflow: bool = True
 
     @property
     def tools_configured(self) -> bool:
         return self.tools_client is not None
 
     def start(self, session: AdaptiveSession) -> dict:
+        """Choose one authority for the complete session, before any turn starts.
+
+        A canonical Node session remains canonical for its full lifetime.  We
+        fall back only when establishing it reports an explicitly recoverable
+        outage; we never turn a previously started Node session into a local
+        one, because its evidence and progression state would diverge.
+        """
+        if self._can_use_node_workflow(session):
+            remote = self.teaching_workflow_client.open_session(  # type: ignore[union-attr]
+                session_id=session.session_id, tool_context=session.tool_context or "",
+            )
+            proxy = RemoteTeachingWorkflowProxy(session, remote)
+            try:
+                ready = proxy.initialize()
+                self.sessions.create(proxy)  # type: ignore[arg-type]
+                return ready
+            except AkoroTeachingWorkflowError as exc:
+                if not exc.recoverable:
+                    raise
+                fallback_reason = "canonical_workflow_unavailable"
+        else:
+            fallback_reason = "not_eligible" if self.teaching_workflow_client else "not_configured"
+
         tools = self._open_tools(session)
         conversation_store = self._open_conversation(session)
         repository = self._repository_for_session(session)
@@ -53,8 +80,28 @@ class AdaptiveServiceRuntime:
             soul_state_store=soul_state_store,
         )
         ready = loop.initialize()
+        ready["workflowAuthority"] = "python_local"
+        # This is deliberately coarse operational metadata: it does not reveal
+        # transport failures, secrets, model output, or learner content.
+        if self.prefer_node_teaching_workflow and self.teaching_workflow_client:
+            ready["workflowFallback"] = fallback_reason
         self.sessions.create(loop)
         return ready
+
+    def _can_use_node_workflow(self, session: AdaptiveSession) -> bool:
+        # The Node workflow owns its own conversation/evidence lifecycle. Keep
+        # Python-only durable context and canonical-concept deployments local
+        # until their state contracts are deliberately unified.
+        return bool(
+            self.prefer_node_teaching_workflow
+            and self.teaching_workflow_client
+            and session.tool_context
+            and session.session_type == "free_teaching"
+            and not session.conversation_id
+            and not self.enable_concept_state
+            and not self.enable_learning_insights
+            and not self.enable_soul_state
+        )
 
     def _repository_for_session(self, session: AdaptiveSession) -> LearningRepository:
         if not self.enable_concept_state:
@@ -127,6 +174,7 @@ def build_adaptive_service_runtime(
     concept_state_client: AkoroConceptStateClient | None = None,
     learning_insights_client: AkoroLearningInsightsClient | None = None,
     soul_state_client: AkoroSoulStateClient | None = None,
+    teaching_workflow_client: AkoroTeachingWorkflowClient | None = None,
 ) -> AdaptiveServiceRuntime:
     repository = repository or InMemoryLearningRepository()
     model = model or OpenAIAdaptiveModel(OpenAIChatClient(settings.llm))
@@ -162,6 +210,12 @@ def build_adaptive_service_runtime(
             settings.akoro_tools_api_secret or "",
             settings.tool_timeout_seconds,
         )
+    if teaching_workflow_client is None and settings.tools_configured and settings.prefer_node_teaching_workflow:
+        teaching_workflow_client = AkoroTeachingWorkflowClient(
+            settings.akoro_tools_api_url or "",
+            settings.akoro_tools_api_secret or "",
+            settings.teaching_workflow_timeout_seconds,
+        )
     return AdaptiveServiceRuntime(
         repository=repository,
         model=model,
@@ -172,10 +226,12 @@ def build_adaptive_service_runtime(
         concept_state_client=concept_state_client,
         learning_insights_client=learning_insights_client,
         soul_state_client=soul_state_client,
+        teaching_workflow_client=teaching_workflow_client,
         tool_max_calls_per_session=settings.tool_max_calls_per_session,
         write_confirmation_proposals=settings.write_confirmation_proposals,
         allow_side_effecting_tools=settings.allow_side_effecting_tools,
         enable_concept_state=settings.enable_concept_state,
         enable_learning_insights=settings.enable_learning_insights,
         enable_soul_state=settings.enable_soul_state,
+        prefer_node_teaching_workflow=settings.prefer_node_teaching_workflow,
     )

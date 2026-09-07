@@ -55,6 +55,37 @@ credentials or a browser token. The feature-flagged canonical concept slice is
 also Akoro-owned: it uses a narrow protected repository decorator rather than a
 wholesale Python database port.
 
+## Canonical Node teaching-workflow bridge
+
+Set these values only after the private agent-tools gateway is deployed:
+
+```bash
+# Python service; true is the default when the gateway is configured.
+AGENT_PREFER_AKORO_TEACHING_WORKFLOW=true
+AGENT_TEACHING_WORKFLOW_TIMEOUT_SECONDS=90
+
+# Akoro API; existing agent-tool credentials remain the sole private boundary.
+AKORO_TEACHING_WORKFLOW_SESSION_TTL_SECONDS=1800
+```
+
+For an eligible fresh session with a signed learner `toolContext`, Python calls
+`POST {AKORO_AGENT_TOOLS_URL}/teaching-workflow/sessions`, then relays turns,
+summaries, and session end calls beneath that resource. Akoro API obtains the
+learner only from the capability and runs the exact fixed
+`adaptive_teaching_turn` sequence; neither Python nor a model can select or
+skip `load_session_state`, evidence observation, protégé generation,
+assessment, persistence, verified-learning recording, coaching, or the final
+progress gate.
+
+The selection is session-sticky: if Akoro API is explicitly unavailable before
+creation, Python starts its local conservative loop; once the Node session has
+started, a later outage is returned as an error rather than silently switching
+progress authority. Configure session affinity (or one API replica) for the
+private bridge because Node owns live workflow state. Python-only conversation,
+concept-state, learner-insights, and Soul-state sessions remain local until
+those durable state contracts are unified. Remote streaming is one atomic
+terminal turn—not a second path for partial raw tokens or workflow internals.
+
 ## Canonical concept-state vertical slice
 
 `AGENT_ENABLE_CONCEPT_STATE=true` enables only the first reviewed,
@@ -383,11 +414,35 @@ Content-Type: application/json
 {"success":true,"result":{"completion":61}}
 ```
 
-A student-scoped capability currently receives ten adaptive-chat functions:
-`get_learner_context`, `check_progress`, `create_task`,
+The canonical teaching-workflow bridge is a separate private resource, never a
+model function:
+
+```http
+POST /api/internal/agent-tools/v1/teaching-workflow/sessions/{sessionId}/turns
+X-Akoro-Tools-Secret: <outbound secret>
+Content-Type: application/json
+
+{"sessionId":"...","toolContext":"<opaque capability>","message":"...","turnId":"optional-stable-retry-key"}
+```
+
+Akoro derives the learner from the capability, verifies the session owner, and
+executes `StudentSessionOrchestrator.processTeachingMessage()`—which invokes the
+sealed `adaptive_teaching_turn` workflow. The request contains no learner ID,
+workflow-tool name, step order, evidence score, or progression decision. It may
+return only the normal learner-facing turn payload plus bounded workflow
+metadata. The bridge maintains at most 32 replayable turn keys per live session.
+
+A student-scoped capability currently receives **17 baseline adaptive-chat
+functions**, with **four more** available only when their feature gates are on
+(21 total). The baseline catalogue includes `get_learner_context`,
+`get_agent_capabilities`, `check_progress`, `create_task`,
 `schedule_chat_follow_up`, `list_scheduled_chat_follow_ups`,
 `cancel_scheduled_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`,
-and `get_weak_topics`. `get_learner_context` is a read-only, privacy-minimised
+`get_weak_topics`, `get_learning_overview`, `get_knowledge_map`,
+`search_my_study_knowledge`, `get_agent_preferences`,
+`get_autonomy_status`, and `submit_tool_request`. The feature-gated tools are
+`get_concept_tracker_summary`, `get_learning_insights_summary`,
+`get_exam_prep_status`, and `get_chat_memory`. `get_learner_context` is a read-only, privacy-minimised
 profile/account-context lookup: preferred name, self-reported city/country,
 learning context, account timezone, and current local/UTC time only. City/country
 never infer a timezone; it omits contact, payment, and authentication data.

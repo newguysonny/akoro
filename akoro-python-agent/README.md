@@ -55,6 +55,41 @@ This separation makes each layer unit-testable and lets the current evaluation
 repository be swapped for a protected Akoro API repository without changing
 LLM roles, browser code, or HTTP contracts.
 
+### Canonical Node teaching-workflow bridge
+
+The default hybrid mode prefers Akoro API's canonical
+`adaptive_teaching_turn` workflow for an eligible **new** teaching session. It
+calls the private `teaching-workflow` gateway with the existing outbound service
+credential and the same short-lived, learner-bound `toolContext` used for other
+Akoro resources. Python neither chooses the workflow tools nor accepts a learner
+identity: Node executes its fixed evidence-first sequence and the deterministic
+progress gate.
+
+```bash
+AGENT_PREFER_AKORO_TEACHING_WORKFLOW=true
+AGENT_TEACHING_WORKFLOW_TIMEOUT_SECONDS=90
+AKORO_AGENT_TOOLS_URL=https://api.akoro.app/api/internal/agent-tools/v1
+AKORO_AGENT_TOOLS_SECRET=<outbound-only-secret>
+```
+
+The authority is selected once at session start:
+
+- an eligible, reachable canonical workflow session is **Akoro API-owned** for
+  its whole lifetime;
+- an explicitly unavailable canonical service before a session starts selects
+  Python's conservative local adaptive loop; and
+- an active remote session never silently fails over locally, because that
+  would split teaching evidence and progression state.
+
+The current bridge intentionally keeps Python-only durable conversation,
+canonical-concept, learner-insights, and Soul-state sessions local until their
+state contracts are unified. It also requires API session affinity because the
+canonical Node workflow owns live session state. A remote streaming request is
+therefore delivered as one atomic terminal response rather than leaking partial
+model tokens through a second service. The public `workflowAuthority` field is
+bounded operational metadata only; raw learner text, evaluator output, tool
+outputs, and hidden reasoning remain private.
+
 ## Agent-system coverage
 
 ### Canonical concept-state vertical slice
@@ -344,6 +379,8 @@ The implemented Akoro API contract is intentionally small:
 | `POST {AKORO_AGENT_TOOLS_URL}/invoke` | `sessionId`, `toolContext`, `tool`, `arguments`, `idempotencyKey` | Read-tool result only: `{"success":true,"result":{...}}` |
 | `POST {AKORO_AGENT_TOOLS_URL}/confirmations` | `sessionId`, `toolContext`, `tool`, `arguments`, `proposalKey` | Non-executing review preview and `confirmationId` |
 | `POST {AKORO_AGENT_TOOLS_URL}/execute-confirmed` | `sessionId`, `toolContext`, `confirmationToken`, `idempotencyKey` | Executes the server-stored reviewed action once |
+| `POST {AKORO_AGENT_TOOLS_URL}/teaching-workflow/sessions` | `sessionId`, `toolContext`, topic/session metadata | Starts a session-owned canonical Node teaching workflow |
+| `POST {AKORO_AGENT_TOOLS_URL}/teaching-workflow/sessions/{sessionId}/turns` | `sessionId`, `toolContext`, `message`, optional `turnId` | Runs the fixed evidence-first turn; no workflow tool name is accepted |
 
 Python sends `X-Akoro-Tools-Secret` only on those private outbound requests.
 The Akoro API validates that secret, validates and expires `toolContext`,
@@ -351,10 +388,16 @@ derives authority from the signed capability plus current user/task state,
 validates tool arguments, applies entitlement gates, and honours the durable
 idempotency key. It never trusts `studentId` in a Python request as authority.
 
-Student sessions receive ten account tools: `get_learner_context`,
-`check_progress`, `create_task`, `schedule_chat_follow_up`,
-`list_scheduled_chat_follow_ups`, `cancel_scheduled_chat_follow_up`,
-`list_tasks`, `find_battles`, `get_ranking`, and `get_weak_topics`.
+Student sessions receive **17 baseline account tools**, with **four more** available
+when their matching feature gates are enabled (21 total). The baseline catalogue
+includes `get_learner_context`, `get_agent_capabilities`, `check_progress`,
+`create_task`, `schedule_chat_follow_up`, `list_scheduled_chat_follow_ups`,
+`cancel_scheduled_chat_follow_up`, `list_tasks`, `find_battles`, `get_ranking`,
+`get_weak_topics`, `get_learning_overview`, `get_knowledge_map`,
+`search_my_study_knowledge`, `get_agent_preferences`, `get_autonomy_status`,
+and `submit_tool_request`. The feature-gated tools are
+`get_concept_tracker_summary`, `get_learning_insights_summary`,
+`get_exam_prep_status`, and `get_chat_memory`.
 `get_learner_context` is read-only and returns only safe personalisation data:
 preferred name, self-reported city/country, language/study context, account
 timezone, and current local/UTC time—never contact, payment, or authentication

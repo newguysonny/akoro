@@ -47,6 +47,11 @@ class ServiceSettings:
     # Learner-selected interaction preferences / short-lived check-ins. It is
     # intentionally separate from measured cognition and off by default.
     enable_soul_state: bool = False
+    # Prefer the canonical Node evidence-first workflow whenever the private
+    # gateway and a learner capability are present. The safe Python loop remains
+    # the session-start fallback when that authority is unavailable.
+    prefer_node_teaching_workflow: bool = True
+    teaching_workflow_timeout_seconds: float = 90
 
     @property
     def tools_configured(self) -> bool:
@@ -93,6 +98,12 @@ class ServiceSettings:
         if not 1 <= tool_timeout <= 60:
             raise ValueError("AGENT_TOOL_TIMEOUT_SECONDS must be between 1 and 60")
         try:
+            workflow_timeout = float(source.get("AGENT_TEACHING_WORKFLOW_TIMEOUT_SECONDS", "90"))
+        except ValueError as exc:
+            raise ValueError("AGENT_TEACHING_WORKFLOW_TIMEOUT_SECONDS must be a number") from exc
+        if not 15 <= workflow_timeout <= 180:
+            raise ValueError("AGENT_TEACHING_WORKFLOW_TIMEOUT_SECONDS must be between 15 and 180")
+        try:
             tool_max_calls = int(source.get("AGENT_TOOL_MAX_CALLS_PER_SESSION", "4"))
         except ValueError as exc:
             raise ValueError("AGENT_TOOL_MAX_CALLS_PER_SESSION must be an integer") from exc
@@ -117,4 +128,9 @@ class ServiceSettings:
             enable_concept_state=enable_concept_state,
             enable_learning_insights=enable_learning_insights,
             enable_soul_state=enable_soul_state,
+            prefer_node_teaching_workflow=_as_bool(
+                source.get("AGENT_PREFER_AKORO_TEACHING_WORKFLOW", "true"),
+                name="AGENT_PREFER_AKORO_TEACHING_WORKFLOW",
+            ),
+            teaching_workflow_timeout_seconds=workflow_timeout,
         )

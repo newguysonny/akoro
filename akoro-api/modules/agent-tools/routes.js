@@ -26,6 +26,7 @@ import conversationContextRouter from "./conversation-context-routes.js";
 import conceptStateRouter from "./concept-state-routes.js";
 import learningInsightsRouter from "./learning-insights-routes.js";
 import soulStateRouter from "./soul-state-routes.js";
+import teachingWorkflowRouter from "./teaching-workflow-routes.js";
 import { normaliseToolRequest } from "../agent-tool-requests/validation.js";
 
 const router = Router();
@@ -49,6 +50,9 @@ router.use("/learning-insights", learningInsightsRouter);
 // Learner-selected interaction preferences and a short-lived self-report are
 // read-only prompt context; this route is not a model function.
 router.use("/soul-state", soulStateRouter);
+// A Python service may relay a complete teaching turn to the canonical Node
+// workflow. This is not exposed in the model tool catalogue.
+router.use("/teaching-workflow", teachingWorkflowRouter);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);
