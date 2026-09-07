@@ -147,6 +147,7 @@ class AdaptiveTeachingLoop:
         if turn_id and turn_id in self._durable_turn_cache:
             return self._replay_durable_turn(turn_id, normalised)
         human_message, prior = self._prepare_teaching_turn(normalised)
+        self.session.scratchpad = self._student.plan_scratchpad(human_message, self.session.topic)  # type: ignore[union-attr]
         student_reply = self._student.reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,
             self.session.progress.label(),
@@ -170,6 +171,7 @@ class AdaptiveTeachingLoop:
             yield {"event": "turn_complete", "data": replayed}
             return
         human_message, prior = self._prepare_teaching_turn(normalised)
+        self.session.scratchpad = self._student.plan_scratchpad(human_message, self.session.topic)  # type: ignore[union-attr]
         fragments: list[str] = []
         for token in self._student.stream_reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,

@@ -114,7 +114,7 @@ async function loadConversationSnapshot(conversationId, userId) {
       .eq("user_id", userId)
       .maybeSingle(),
     db.schema("edu").from("learner_agent_conversation_scratchpads")
-      .select("goal, completed, next_steps, open_questions, tool_state")
+      .select("goal, progress_summary, completed, plan, next_steps, open_questions, tool_state")
       .eq("chat_session_id", conversationId)
       .eq("user_id", userId)
       .maybeSingle(),
@@ -276,7 +276,9 @@ async function persistTurn({ request, userId }) {
         chat_session_id: request.conversationId,
         user_id: userId,
         goal: request.scratchpad.goal,
+        progress_summary: request.scratchpad.progressSummary,
         completed: request.scratchpad.completed,
+        plan: request.scratchpad.plan,
         next_steps: request.scratchpad.nextSteps,
         open_questions: request.scratchpad.openQuestions,
         tool_state: request.scratchpad.toolState,

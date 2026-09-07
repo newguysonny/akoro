@@ -37,8 +37,21 @@ export function normaliseScratchpad(value) {
     if (clean.length !== new Set(clean).size) throw new Error("scratchpad checklist must not contain duplicates");
     return clean;
   };
-  const scratchpad = { goal };
+  const scratchpad = { goal, progressSummary: boundedText(value.progressSummary, 1_200) };
   for (const name of SCRATCHPAD_SECTIONS) scratchpad[name] = normaliseItems(value[name]);
+  if (!Array.isArray(value.plan) || value.plan.length > 6) throw new Error("scratchpad plan is invalid");
+  scratchpad.plan = value.plan.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad plan is invalid");
+    const step = boundedText(item.step, 320);
+    const status = boundedText(item.status, 32).toLowerCase() || "pending";
+    if (!step || !["pending", "in_progress", "completed", "blocked"].includes(status)) {
+      throw new Error("scratchpad plan is invalid");
+    }
+    return { step, status };
+  });
+  if (new Set(scratchpad.plan.map((item) => item.step)).size !== scratchpad.plan.length) {
+    throw new Error("scratchpad plan must not contain duplicates");
+  }
   if (!Array.isArray(value.toolState) || value.toolState.length > 4) throw new Error("scratchpad tool state is invalid");
   scratchpad.toolState = value.toolState.map((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad tool state is invalid");
@@ -80,7 +93,9 @@ export function publicScratchpad(row = {}) {
   try {
     return normaliseScratchpad({
       goal: row.goal,
+      progressSummary: row.progress_summary ?? row.progressSummary,
       completed: row.completed,
+      plan: row.plan,
       nextSteps: row.next_steps ?? row.nextSteps,
       openQuestions: row.open_questions ?? row.openQuestions,
       toolState: row.tool_state ?? row.toolState,

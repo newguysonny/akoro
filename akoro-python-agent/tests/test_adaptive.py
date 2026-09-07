@@ -24,6 +24,8 @@ class FakeTeachingModel:
                 {"title": "Applying photosynthesis", "kind": "application", "buildsOn": "How photosynthesis works", "whyNow": "Use the model."},
                 {"title": "The whole system", "kind": "synthesis", "buildsOn": "Applying photosynthesis", "whyNow": "Combine the ideas."},
             ]},
+            # student.plan_scratchpad (before response/tool execution)
+            {"goal": "Support the learner with photosynthesis.", "progressSummary": "", "completed": [], "plan": [{"step": "Connect inputs to products.", "status": "in_progress"}], "nextSteps": ["Connect inputs to products."], "openQuestions": []},
             # student.analyse_understanding
             {"understanding": 72, "confusion": 18, "engagement": 86, "newConceptLearned": "Plants turn light energy into stored chemical energy", "strengths": ["Identified water, carbon dioxide, and light"], "priorKnowledgeUsed": False},
             # student.extract_knowledge
@@ -31,7 +33,7 @@ class FakeTeachingModel:
             # guide.coaching_tip
             {"tip": "Great foundation. Ask your agent to connect those inputs to the products next.", "nextAction": "NEXT_SUBTOPIC", "nextPhase": "PHASE_2", "nextMustKnowIndex": 1, "isUrgent": False, "offTopic": False},
             # student.update_scratchpad
-            {"goal": "Support the learner with photosynthesis.", "completed": ["Identified the photosynthesis inputs."], "nextSteps": ["Connect inputs to products."], "openQuestions": []},
+            {"goal": "Support the learner with photosynthesis.", "progressSummary": "Covered the inputs to photosynthesis.", "completed": ["Identified the photosynthesis inputs."], "plan": [{"step": "Connect inputs to products.", "status": "pending"}], "nextSteps": ["Connect inputs to products."], "openQuestions": []},
             # generate_summary evaluation
             {"overallScore": 78, "strengths": ["Used the key inputs clearly"], "nextTimeTip": "Ask for one worked real-world example.", "nextLesson": "Explore factors that affect photosynthesis."},
             # end_session evaluation
@@ -93,7 +95,9 @@ class AdaptiveOrchestratorTests(unittest.TestCase):
         self.assertTrue(turn["subtopicAdvanced"])
         self.assertEqual(turn["scratchpad"]["goal"], "Support the learner with photosynthesis.")
         self.assertEqual(turn["scratchpad"]["nextSteps"], ["Connect inputs to products."])
+        self.assertEqual(turn["scratchpad"]["plan"], [{"step": "Connect inputs to products.", "status": "pending"}])
         self.assertIn("## Active working scratchpad", model.text_calls[0][0].content)
+        self.assertIn("[in_progress] Connect inputs to products.", model.text_calls[0][0].content)
         self.assertEqual(turn["adaptiveEngine"]["newConceptLearned"], "Plants turn light energy into stored chemical energy")
 
         summary = orchestrator.generate_summary()

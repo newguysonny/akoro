@@ -25,10 +25,11 @@ class FakeServiceModel:
     def __init__(self) -> None:
         self.json_responses = [
             {"steps": [{"title": "Foundation", "kind": "foundation", "buildsOn": None, "whyNow": "Start here."}]},
+            {"goal": "Support the learner with Plants.", "progressSummary": "", "completed": [], "plan": [{"step": "Clarify the learner's need.", "status": "in_progress"}], "nextSteps": ["Clarify the learner's need."], "openQuestions": []},
             {"understanding": 60, "confusion": 20, "engagement": 80, "strengths": ["Named the foundation"]},
             {"shouldSave": False},
             {"tip": "Ask for one concrete example next.", "nextAction": "DIG_DEEPER", "nextPhase": None, "nextMustKnowIndex": 0},
-            {"goal": "Support the learner with Plants.", "completed": ["Discussed the foundation."], "nextSteps": ["Ask for an example."], "openQuestions": []},
+            {"goal": "Support the learner with Plants.", "progressSummary": "Discussed the foundation.", "completed": ["Discussed the foundation."], "plan": [{"step": "Ask for an example.", "status": "pending"}], "nextSteps": ["Ask for an example."], "openQuestions": []},
             {"overallScore": 70, "strengths": ["Clear explanation"], "nextTimeTip": "Use an example.", "nextLesson": "Keep practising."},
             {"overallScore": 70, "strengths": ["Clear explanation"], "nextTimeTip": "Use an example.", "nextLesson": "Keep practising."},
         ]

@@ -13,6 +13,7 @@ from agent.harness.adaptive_service import build_adaptive_service_runtime
 from agent.llm.config import LLMConfig
 from agent.memory.akoro_conversation import AkoroConversationClient
 from agent.memory.conversation import LearnerConversationContext
+from agent.memory.scratchpad import WorkingScratchpad
 from agent.service.api import create_app
 from agent.service.settings import ServiceSettings
 from fastapi.testclient import TestClient
@@ -23,10 +24,11 @@ class CaptureModel:
         self.calls = []
         self.json_responses = [
             {"steps": [{"title": "Foundation", "kind": "foundation", "buildsOn": None, "whyNow": "Start here."}]},
+            {"goal": "Understand how plants use light.", "progressSummary": "", "completed": [], "plan": [{"step": "Connect light to glucose production.", "status": "in_progress"}], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
             {"understanding": 70, "confusion": 10, "engagement": 80, "newConceptLearned": "Plants use light energy", "strengths": []},
             {"shouldSave": True, "topic": "Plants", "content": "Plants use light energy to make glucose.", "chunkType": "taught", "confidence": 0.8},
             {"tip": "Ask for one example.", "nextAction": "DIG_DEEPER", "nextPhase": None, "nextMustKnowIndex": 0},
-            {"goal": "Understand how plants use light.", "completed": ["Reviewed light energy."], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
+            {"goal": "Understand how plants use light.", "progressSummary": "Reviewed the role of light.", "completed": ["Reviewed light energy."], "plan": [{"step": "Connect light to glucose production.", "status": "pending"}], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
         ]
 
     def complete_text(self, messages, temperature=0.4):
@@ -52,7 +54,9 @@ class ContextTransport:
                     "summary": "Earlier study focused on photosynthesis inputs.",
                     "scratchpad": {
                         "goal": "Continue the learner's photosynthesis revision.",
+                        "progressSummary": "Earlier work covered the inputs.",
                         "completed": ["Reviewed photosynthesis inputs."],
+                        "plan": [{"step": "Explain the role of light.", "status": "pending"}],
                         "nextSteps": ["Explain the role of light."],
                         "openQuestions": [],
                         "toolState": [],
@@ -115,12 +119,31 @@ class ConversationContextTests(unittest.TestCase):
         self.assertLessEqual(sum(len(message.content) for message in bounded), 24_000)
         self.assertTrue(bounded[-1].content.startswith("39"))
 
+    def test_scratchpad_compresses_evicted_completed_steps_and_keeps_a_bounded_plan(self) -> None:
+        previous = WorkingScratchpad.from_wire({
+            "goal": "Revise plants.", "progressSummary": "Started photosynthesis revision.",
+            "completed": ["Identified water.", "Identified carbon dioxide."],
+            "plan": [{"step": "Explain light.", "status": "in_progress"}],
+            "nextSteps": ["Explain light."], "openQuestions": [], "toolState": [],
+        }, topic="Plants")
+        updated = WorkingScratchpad.from_model({
+            "goal": "Revise plants.", "completed": ["Explained light."],
+            "plan": [{"step": "Connect light to glucose.", "status": "pending"}],
+            "nextSteps": ["Connect light to glucose."], "openQuestions": [],
+        }, previous=previous, topic="Plants", tool_state=[])
+        self.assertIn("Identified water.", updated.progress_summary)
+        self.assertIn("Identified carbon dioxide.", updated.progress_summary)
+        self.assertEqual([item.wire() for item in updated.plan], [
+            {"step": "Connect light to glucose.", "status": "pending"},
+        ])
+        self.assertIn("[pending] Connect light to glucose.", updated.prompt())
+
     def test_llm_gets_summary_memory_prior_user_assistant_and_current_prompt_in_order(self) -> None:
         model = CaptureModel()
         context = LearnerConversationContext.from_wire({
             "conversationId": "conversation-2",
             "summary": "Earlier study focused on photosynthesis inputs.",
-            "scratchpad": {"goal": "Answer the learner's light question.", "completed": ["Recalled inputs."], "nextSteps": ["Explain light."], "openQuestions": []},
+            "scratchpad": {"goal": "Answer the learner's light question.", "progressSummary": "Reviewed inputs.", "completed": ["Recalled inputs."], "plan": [{"step": "Explain light.", "status": "pending"}], "nextSteps": ["Explain light."], "openQuestions": []},
             "messages": [
                 {"role": "user", "content": "Can we continue plants?"},
                 {"role": "assistant", "content": "Yes, let us continue photosynthesis."},
@@ -185,6 +208,7 @@ class ConversationContextTests(unittest.TestCase):
         self.assertEqual(saved["userMessage"], "Light helps plants make food.")
         self.assertIn("Plants use light energy", saved["summary"])
         self.assertEqual(saved["scratchpad"]["goal"], "Understand how plants use light.")
+        self.assertEqual(saved["scratchpad"]["plan"], [{"step": "Connect light to glucose production.", "status": "pending"}])
         self.assertEqual(saved["scratchpad"]["nextSteps"], ["Connect light to glucose production."])
         self.assertEqual(saved["memories"][0]["kind"], "learning_summary")
 

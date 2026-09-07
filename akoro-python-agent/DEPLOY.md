@@ -87,18 +87,27 @@ chain-of-thought log:
 | Field | Purpose |
 |---|---|
 | `goal` | One concise learner-facing objective |
-| `completed` | Up to six observable completed facts/actions |
+| `progressSummary` | A 1,200-character compressed record of older completed work |
+| `completed` | Up to six recent observable completed facts/actions |
+| `plan` | Up to six future steps, each marked `pending`, `in_progress`, `completed`, or `blocked` |
 | `nextSteps` | Up to six concrete next actions |
 | `openQuestions` | Up to six unresolved questions |
 | `toolState` | Up to four result-free tool statuses, including whether a learner review is pending |
 
-After a complete reply, the LLM returns only this structured checklist as JSON
-and Python validates/bounds it before storing it. It never asks the model to
-reveal private reasoning, stores no hidden chain-of-thought, and does not put
-raw tool results into durable context. The scratchpad gives the next iteration
-compact progress state without requiring it to infer a plan from a long chat.
-It is restored with the conversation on a later session and is updated only
-when the corresponding user/assistant turn completes.
+Before the response/tool loop, the LLM produces a constrained plan update. The
+reply then sees that plan in its own prompt, so a planned action is visible
+before any tool may be called. After the reply, it produces a second constrained
+checklist update based on the completed response and result-free tool status.
+Python validates and bounds both updates before storing the final one.
+
+When recent `completed` rows are replaced, their factual text is folded into
+`progressSummary` instead of being silently discarded. This keeps the
+scratchpad compact as a conversation grows while retaining the essential trail
+of progress. It never asks the model to reveal private reasoning, stores no
+hidden chain-of-thought, and does not put raw tool results into durable context.
+The scratchpad is restored with the conversation on a later session; because it
+lives in Akoro’s database rather than local disk, it also survives a Python
+instance crash, restart, or instance change.
 
 For a durable turn, the trusted Node bridge must supply a unique retry-safe
 `turnId` with `POST /v1/sessions/{sessionId}/turns` (or the streaming variant):
@@ -116,13 +125,14 @@ nothing. If persistence is temporarily unavailable, the completed response says
 rather than generate a second answer. This route is independent of the model
 function-tool catalogue and never becomes an LLM-callable tool.
 
-Apply `2026-python-agent-conversation-memory.sql` and
-`2026-python-agent-conversation-scratchpad.sql` before enabling this path. They
-extend the existing chat-message schema with nullable Python turn IDs, add
+Apply `2026-python-agent-conversation-memory.sql`,
+`2026-python-agent-conversation-scratchpad.sql`, and
+`2026-python-agent-conversation-scratchpad-plan.sql` before enabling this path.
+They extend the existing chat-message schema with nullable Python turn IDs, add
 durable summaries and bounded `edu.learner_agent_memories`, persist the
-conversation scratchpad, and record idempotent cross-service turns. Both are in
-`migrations/manifest.json` for the API deployment's normal `npm run db:deploy`
-pre-deploy process.
+conversation scratchpad/plan, and record idempotent cross-service turns. All
+three are in `migrations/manifest.json` for the API deployment's normal
+`npm run db:deploy` pre-deploy process.
 
 The current JavaScript Agent Chat remains unchanged until its authenticated Node
 bridge is deliberately switched to this Python session flow. It continues to

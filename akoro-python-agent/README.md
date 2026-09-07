@@ -62,7 +62,7 @@ LLM roles, browser code, or HTTP contracts.
 | Tools | Akoro API-provided, per-session function catalogue; Python has no direct database tools. |
 | Loop | Generic permissioned `AgentLoop`, adaptive `AdaptiveTeachingLoop`, and bounded `TeachingToolLoop`. |
 | State | Explicit agent run state, validated teaching progression, TTL live sessions, per-session locks, stream-stop signals, and an optional capability-bound durable conversation attachment. |
-| Memory/context | The service keeps a bounded live teaching transcript. When Akoro attaches a learner conversation, it restores role-correct user/assistant history, a compact summary, learner-clearable study notes, and a structured goal/completed/next-steps scratchpad on every turn; Akoro API—not Python—owns durable storage. |
+| Memory/context | The service keeps a bounded live teaching transcript. When Akoro attaches a learner conversation, it restores role-correct user/assistant history, a compact summary, learner-clearable study notes, and a structured scratchpad with compressed progress plus an explicit plan on every turn; Akoro API—not Python—owns durable storage. |
 | Permissions | Default-deny local tools; separate inbound service and outbound Akoro-tools credentials; backend remains the authority for account actions. |
 | Error handling | Validated settings/contracts, bounded remote calls, safe tool failures, typed session/stream conflicts, and generic SSE error events after a stream starts. |
 | Stopping conditions | Provider timeout, maximum model/tool rounds, per-session tool caps, single-stream ownership, explicit stop, client disconnect, end-session guard, and TTL cleanup for idle sessions. |
