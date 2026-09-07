@@ -22,6 +22,13 @@ class StartSessionRequest(Contract):
     subject: str | None = Field(default=None, max_length=180)
     teacher_agent_id: str | None = Field(default=None, alias="teacherAgentId", max_length=180)
     session_id: str | None = Field(default=None, alias="sessionId", max_length=180)
+    # Existing public Agent Chat uses UUID session ids. Supplying one tells the
+    # trusted bridge to hydrate the user/assistant transcript from Akoro API;
+    # clients cannot pass raw history directly to this internal service.
+    conversation_id: str | None = Field(
+        default=None, alias="conversationId", min_length=36, max_length=36,
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+    )
     mode: Literal["fresh", "continuation", "decay"] = "fresh"
     # Opaque, short-lived capability created by Akoro API after it authenticates
     # and authorises the browser request. Python only relays it to the private
@@ -32,6 +39,12 @@ class StartSessionRequest(Contract):
 
 class TeachingTurnRequest(Contract):
     message: str = Field(min_length=1, max_length=12_000)
+    # The bridge creates this opaque retry key before calling Python. It binds
+    # one user prompt/assistant answer pair to one durable Akoro write.
+    turn_id: str | None = Field(
+        default=None, alias="turnId", min_length=8, max_length=180,
+        pattern=r"^[A-Za-z0-9_-]+$",
+    )
 
 
 class ConfirmedActionRequest(Contract):

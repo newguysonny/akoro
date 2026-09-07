@@ -22,6 +22,7 @@ import {
   consumeWriteConfirmation,
   requestWriteConfirmation,
 } from "./write-confirmations.js";
+import conversationContextRouter from "./conversation-context-routes.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
@@ -31,6 +32,9 @@ const STUDENT_WRITE_TOOLS = new Set([
   "schedule_chat_follow_up",
   "cancel_scheduled_chat_follow_up",
 ]);
+// Separate private subresource: same service credential/capability boundary as
+// tools, but it never appears in the model's function catalogue.
+router.use("/conversations", conversationContextRouter);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);

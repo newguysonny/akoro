@@ -8,6 +8,7 @@ from agent.adaptive.repository import InMemoryLearningRepository, LearningReposi
 from agent.adaptive.types import AdaptiveSession
 from agent.llm.client import OpenAIChatClient
 from agent.loop.adaptive_teaching_loop import AdaptiveTeachingLoop
+from agent.memory.akoro_conversation import AkoroConversationClient, AkoroConversationError, AkoroConversationSession
 from agent.permissions.internal import InternalServicePolicy
 from agent.service.settings import ServiceSettings
 from agent.state.live_sessions import LiveSessionStore
@@ -21,6 +22,7 @@ class AdaptiveServiceRuntime:
     sessions: LiveSessionStore
     internal_policy: InternalServicePolicy
     tools_client: AkoroToolsClient | None = None
+    conversation_client: AkoroConversationClient | None = None
     tool_max_calls_per_session: int = 4
     write_confirmation_proposals: bool = False
     allow_side_effecting_tools: bool = False
@@ -31,10 +33,27 @@ class AdaptiveServiceRuntime:
 
     def start(self, session: AdaptiveSession) -> dict:
         tools = self._open_tools(session)
-        loop = AdaptiveTeachingLoop(self.repository, self.model, session, tools=tools)
+        conversation_store = self._open_conversation(session)
+        loop = AdaptiveTeachingLoop(
+            self.repository, self.model, session, tools=tools,
+            conversation_store=conversation_store,
+        )
         ready = loop.initialize()
         self.sessions.create(loop)
         return ready
+
+    def _open_conversation(self, session: AdaptiveSession) -> AkoroConversationSession | None:
+        if not session.conversation_id:
+            return None
+        if not self.conversation_client or not session.tool_context:
+            raise AkoroConversationError("Durable conversation context is not configured for this service")
+        conversation = self.conversation_client.open_session(
+            session_id=session.session_id,
+            tool_context=session.tool_context,
+            conversation_id=session.conversation_id,
+        )
+        session.conversation = conversation.context
+        return conversation
 
     def _open_tools(self, session: AdaptiveSession) -> AkoroToolSession | None:
         if not self.tools_client or not session.tool_context:
@@ -60,11 +79,20 @@ def build_adaptive_service_runtime(
     repository: LearningRepository | None = None,
     sessions: LiveSessionStore | None = None,
     tools_client: AkoroToolsClient | None = None,
+    conversation_client: AkoroConversationClient | None = None,
 ) -> AdaptiveServiceRuntime:
     repository = repository or InMemoryLearningRepository()
     model = model or OpenAIAdaptiveModel(OpenAIChatClient(settings.llm))
     if tools_client is None and settings.tools_configured:
         tools_client = AkoroToolsClient(
+            settings.akoro_tools_api_url or "",
+            settings.akoro_tools_api_secret or "",
+            settings.tool_timeout_seconds,
+        )
+    if conversation_client is None and settings.tools_configured:
+        # Conversation context uses the same private, capability-bound Akoro
+        # gateway as account tools, but lives in a separate client/module.
+        conversation_client = AkoroConversationClient(
             settings.akoro_tools_api_url or "",
             settings.akoro_tools_api_secret or "",
             settings.tool_timeout_seconds,
@@ -75,6 +103,7 @@ def build_adaptive_service_runtime(
         sessions=sessions or LiveSessionStore(settings.session_ttl_seconds),
         internal_policy=InternalServicePolicy(settings.internal_secret, settings.environment),
         tools_client=tools_client,
+        conversation_client=conversation_client,
         tool_max_calls_per_session=settings.tool_max_calls_per_session,
         write_confirmation_proposals=settings.write_confirmation_proposals,
         allow_side_effecting_tools=settings.allow_side_effecting_tools,

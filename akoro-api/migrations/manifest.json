@@ -122,7 +122,8 @@
     "2026-scheduled-chat-follow-ups-delivery-state.sql",
     "2026-learner-agent-autonomy.sql",
     "2026-learner-location.sql",
-    "2026-agent-tool-write-confirmations.sql"
+    "2026-agent-tool-write-confirmations.sql",
+    "2026-python-agent-conversation-memory.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

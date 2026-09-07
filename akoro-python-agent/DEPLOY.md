@@ -17,9 +17,10 @@ internal credential.
    AGENT_SERVICE_ENVIRONMENT=production
    AKORO_AGENT_SERVICE_SECRET=<long random value>
    AGENT_SESSION_TTL_SECONDS=1800
-   AKORO_API_URL=https://api.akoro.app       # reserved for persistence bridge
+   AKORO_API_URL=https://api.akoro.app       # service metadata; never a database URL
 
-   # Optional: Akoro API's private account-aware tools gateway.
+   # Akoro API's private account-tools AND durable-conversation gateway.
+   # Both variables are required to hydrate/persist conversation context.
    AKORO_AGENT_TOOLS_URL=https://api.akoro.app/api/internal/agent-tools/v1
    AKORO_AGENT_TOOLS_SECRET=<different long random value>
    AGENT_TOOL_TIMEOUT_SECONDS=12
@@ -37,9 +38,81 @@ internal credential.
    ```
 
 `/ready` reports `mode: evaluation` until an `AkoroApiLearningRepository` is
-introduced. In that mode, active sessions and memory are process-local and are
-lost at restart. This is intentional for isolated testing; it is not a durable
-production data path.
+introduced. The adaptive cognitive repository is therefore process-local in
+that mode. **Durable learner conversation history is separate:** when the
+private gateway variables below are configured and the bridge supplies a
+`conversationId`, Akoro API owns the conversation transcript, its compact
+summary, and learner-clearable study-memory notes. Python never uses database
+credentials or a browser token.
+
+## Durable learner conversation context
+
+The existing Akoro Agent Chat tables remain the canonical raw transcript. The
+additive Python service can attach to one existing user-owned `chat_sessions`
+row using a short-lived learner `toolContext` and this start payload:
+
+```json
+{
+  "studentId": "derived-by-akoro-api",
+  "sessionId": "python-live-session-1",
+  "conversationId": "8ca0532e-20be-49c2-b4df-566d87f0e0e4",
+  "toolContext": "<opaque Akoro-issued learner capability>",
+  "topic": "Photosynthesis"
+}
+```
+
+At start, Python asks the private Akoro gateway for only the authorised
+conversation snapshot:
+
+- a most-recent window of up to 24 persisted user/assistant messages and
+  24,000 total characters, in native `user` and `assistant` roles (the full
+  raw history remains in Akoro’s existing session drawer);
+- one compact conversation summary (maximum 4,000 characters); and
+- up to eight compact, learner-scoped study notes (maximum 1,500 characters
+  each).
+
+The current user prompt is sent as the final `user` message—not embedded in a
+system prompt. Earlier dialogue is role-labelled as actual conversation, while
+summary and memory are clearly labelled as untrusted reference data. Neither
+past conversation text nor memory can override the service system instructions.
+
+For a durable turn, the trusted Node bridge must supply a unique retry-safe
+`turnId` with `POST /v1/sessions/{sessionId}/turns` (or the streaming variant):
+
+```json
+{"message":"Light helps plants make food.", "turnId":"chat_turn_0001"}
+```
+
+Only after a complete assistant response does Python call
+`POST /api/internal/agent-tools/v1/conversations/turns`. Akoro stores the user
+message, assistant message, compact conversation summary, and any bounded
+study-memory note with the session/turn idempotency key. A stopped stream writes
+nothing. If persistence is temporarily unavailable, the completed response says
+`conversationPersistence.saved: false`; the bridge must retry the same `turnId`
+rather than generate a second answer. This route is independent of the model
+function-tool catalogue and never becomes an LLM-callable tool.
+
+Apply `2026-python-agent-conversation-memory.sql` before enabling this path. It
+extends the existing chat-message schema with nullable Python turn IDs, adds
+durable summaries and bounded `edu.learner_agent_memories`, and records
+idempotent cross-service turns. Add it to the API deployment's normal
+`npm run db:deploy` pre-deploy process through `migrations/manifest.json`.
+
+The current JavaScript Agent Chat remains unchanged until its authenticated Node
+bridge is deliberately switched to this Python session flow. It continues to
+own its session list, transcript browsing, rename, and delete controls. Learners
+can also manage compact memory through these authenticated API routes, suitable
+for a future Settings/Agent Memory screen:
+
+| Purpose | Route |
+|---|---|
+| List active compact memory notes | `GET /api/agent-memory/v1/memories` |
+| Forget one note | `DELETE /api/agent-memory/v1/memories/{memoryId}` |
+| Clear a conversation’s compact summary | `DELETE /api/agent-memory/v1/conversations/{conversationId}/summary` |
+
+Forgetting a note does not delete the raw chat. Deleting an existing chat
+session continues to cascade its associated summary and turn records; source
+links on independent memory notes are retained only as nullable references.
 
 ## Akoro API tools gateway contract
 
@@ -218,10 +291,12 @@ shape that the current Socket.IO layer emits:
 | Finalise a session | `POST /v1/sessions/{id}/end` | `session_ended` summary |
 
 The Node bridge remains responsible for user authentication, ownership checks,
-Socket.IO delivery, database persistence, rate limiting, and reference-file
-extraction. It must never forward a browser's `studentId` as authority; it
-should derive the identity from the authenticated request exactly as the
-current Socket.IO middleware does.
+Socket.IO delivery, rate limiting, reference-file extraction, and issuing the
+short-lived capability. Akoro API remains the database owner: the private
+conversation gateway, not Python, reads and persists durable history/memory.
+The bridge must never forward a browser's `studentId` as authority; it should
+derive identity from the authenticated request exactly as the current Socket.IO
+middleware does.
 
 ## Reference privacy
 

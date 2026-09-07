@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from uuid import uuid4
 
+from agent.memory.conversation import LearnerConversationContext
 from agent.memory.session_memory import SessionTranscript
 from agent.state.teaching_state import PHASES, PHASE_LABELS, TeachingState
 
@@ -135,7 +136,12 @@ class AdaptiveSession:
     progress: TeachingState = field(default_factory=TeachingState)
     must_know_parts: list[str] = field(default_factory=list)
     knowledge_map: list[LessonStep] = field(default_factory=list)
+    # The adaptive transcript records this service's teaching exchanges. A
+    # separate user/assistant transcript is restored from Akoro API when a
+    # trusted bridge attaches a durable learner conversation to this session.
     history: SessionTranscript = field(default_factory=SessionTranscript)
+    conversation_id: str | None = None
+    conversation: LearnerConversationContext | None = None
     reference: SessionReference | None = None
     knowledge_buffer: list[KnowledgeChunk] = field(default_factory=list)
     turns_completed: int = 0

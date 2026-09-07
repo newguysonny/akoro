@@ -18,6 +18,7 @@ from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
 from agent.adaptive.types import AdaptiveSession, SessionReference
 from agent.harness.adaptive_service import AdaptiveServiceRuntime, build_adaptive_service_runtime
+from agent.memory.akoro_conversation import AkoroConversationError
 
 from .contracts import ConfirmedActionRequest, StartSessionRequest, TeachingTurnRequest
 from .settings import ServiceSettings
@@ -56,6 +57,11 @@ def create_app(
             "persistence": type(runtime.repository).__name__,
             "akoroApiConfigured": bool(settings.akoro_api_url),
             "authConfigured": bool(settings.internal_secret),
+            "conversationContext": {
+                "configured": runtime.conversation_client is not None,
+                "provider": "akoro-api" if runtime.conversation_client else None,
+                "durableOwner": "akoro-api",
+            },
             "tools": {
                 "configured": runtime.tools_configured,
                 "provider": "akoro-api" if runtime.tools_configured else None,
@@ -85,6 +91,7 @@ def create_app(
             subject=payload.subject.strip() if payload.subject else None,
             teacher_agent_id=payload.teacher_agent_id,
             tool_context=payload.tool_context,
+            conversation_id=payload.conversation_id,
             session_type=session_type,
             reference=SessionReference.from_payload(payload.reference.model_dump() if payload.reference else None),
         )
@@ -92,13 +99,17 @@ def create_app(
             return runtime.start(session)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        except AkoroConversationError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/turns", dependencies=[Depends(require_internal_caller)])
     def teaching_turn(session_id: str, payload: TeachingTurnRequest) -> dict:
         try:
             runtime.sessions.assert_not_streaming(session_id)
             with runtime.sessions.session(session_id) as loop:
-                return loop.process_teaching_message(payload.message)
+                if loop.session.conversation and not payload.turn_id:
+                    raise ValueError("turnId is required when durable conversation context is attached")
+                return loop.process_teaching_message(payload.message, turn_id=payload.turn_id)
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
         except SessionBusyError as exc:
@@ -132,7 +143,11 @@ def create_app(
             try:
                 yield sse_event("stream_started", {"sessionId": session_id})
                 with runtime.sessions.session(session_id) as loop:
-                    for item in loop.stream_teaching_message(payload.message, should_stop=stop_signal.is_set):
+                    if loop.session.conversation and not payload.turn_id:
+                        raise ValueError("turnId is required when durable conversation context is attached")
+                    for item in loop.stream_teaching_message(
+                        payload.message, should_stop=stop_signal.is_set, turn_id=payload.turn_id,
+                    ):
                         yield sse_event(item["event"], item["data"])
             except GeneratorExit:
                 # The client disconnected. The loop has not finalised a partial

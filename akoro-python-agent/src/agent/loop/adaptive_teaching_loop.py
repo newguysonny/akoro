@@ -7,6 +7,8 @@ rules, and service composition live in their dedicated top-level modules.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from agent.adaptive.guide import NaNaGuide
@@ -14,6 +16,8 @@ from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import LearningRepository
 from agent.adaptive.student import StudentAgent
 from agent.adaptive.types import AdaptiveSession
+from agent.memory.akoro_conversation import AkoroConversationError, AkoroConversationSession
+from agent.memory.conversation import ConversationMemoryUpdate, LearnerMemory, MAX_MEMORY_ITEMS
 from agent.reasoning.teaching import TeachingPlan
 from agent.state.teaching_state import PHASE_LABELS, ProgressionPolicy
 from agent.tools.akoro_api import AkoroToolSession
@@ -32,20 +36,35 @@ _ACTION_LABELS = {
 }
 
 
+@dataclass(slots=True)
+class _CachedConversationTurn:
+    user_message: str
+    assistant_message: str
+    update: ConversationMemoryUpdate
+    response: dict[str, Any]
+
+
 class AdaptiveTeachingLoop:
     """Coordinates agent roles while preserving hard state and privacy limits."""
 
     def __init__(self, repository: LearningRepository, model: TeachingModel, session: AdaptiveSession,
-                 tools: AkoroToolSession | None = None) -> None:
+                 tools: AkoroToolSession | None = None,
+                 conversation_store: AkoroConversationSession | None = None) -> None:
         self._repository = repository
         self._model = model
         self.session = session
         self._tools = tools
+        # The store is an Akoro API capability-bound handle. It is optional for
+        # standalone/evaluation sessions and never owns database credentials.
+        self._conversation_store = conversation_store
         self._guide = NaNaGuide(model)
         self._progression = ProgressionPolicy()
         self._profile = None
         self._student = None
         self._ended = False
+        # Retains only recent completed turns during the live session so a
+        # bridge retry never regenerates a different answer for one turn id.
+        self._durable_turn_cache: dict[str, _CachedConversationTurn] = {}
 
     def initialize(self) -> dict[str, Any]:
         if not self.session.student_id or not self.session.topic.strip():
@@ -61,6 +80,7 @@ class AdaptiveTeachingLoop:
         self.session.must_know_parts = plan.titles
         self._student = StudentAgent(
             self._profile, self._repository, self._model, self.session.subject, self.session.reference, self._tools,
+            self.session.conversation,
         )
         cognitive = self._repository.get_cognitive_state(self._profile.id, self.session.topic)
         current = self._current_subtopic()
@@ -102,6 +122,9 @@ class AdaptiveTeachingLoop:
             "initialState": cognitive.as_percentages(),
             # Metadata only: source text never crosses the service boundary.
             "reference": self.session.reference.metadata() if self.session.reference else None,
+            # No raw conversation or memory is echoed to the caller. The bridge
+            # already owns it; this merely confirms whether it was restored.
+            "conversation": self.session.conversation.public_metadata() if self.session.conversation else None,
             "tools": {
                 "enabled": bool(self._tools and self._tools.enabled),
                 "available": self._tools.public_catalogue() if self._tools else [],
@@ -110,16 +133,20 @@ class AdaptiveTeachingLoop:
             "agentPairId": "student-session",
         }
 
-    def process_teaching_message(self, human_message: str) -> dict[str, Any]:
-        human_message, prior = self._prepare_teaching_turn(human_message)
+    def process_teaching_message(self, human_message: str, turn_id: str | None = None) -> dict[str, Any]:
+        normalised = human_message.strip()
+        if turn_id and turn_id in self._durable_turn_cache:
+            return self._replay_durable_turn(turn_id, normalised)
+        human_message, prior = self._prepare_teaching_turn(normalised)
         student_reply = self._student.reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,
             self.session.progress.label(),
         )
-        return self._complete_teaching_turn(human_message, student_reply)
+        return self._complete_teaching_turn(human_message, student_reply, turn_id=turn_id)
 
     def stream_teaching_message(
         self, human_message: str, should_stop: Callable[[], bool] | None = None,
+        turn_id: str | None = None,
     ) -> Iterator[dict[str, Any]]:
         """Yield ordered token and terminal events for one teaching turn.
 
@@ -127,7 +154,13 @@ class AdaptiveTeachingLoop:
         transcript, XP, or knowledge persistence. Those mutations occur only
         once a complete Student Agent reply has been received.
         """
-        human_message, prior = self._prepare_teaching_turn(human_message)
+        normalised = human_message.strip()
+        if turn_id and turn_id in self._durable_turn_cache:
+            replayed = self._replay_durable_turn(turn_id, normalised)
+            yield {"event": "student_token", "data": {"text": replayed["studentAgentResponse"]}}
+            yield {"event": "turn_complete", "data": replayed}
+            return
+        human_message, prior = self._prepare_teaching_turn(normalised)
         fragments: list[str] = []
         for token in self._student.stream_reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,
@@ -145,7 +178,7 @@ class AdaptiveTeachingLoop:
         if not student_reply:
             yield {"event": "stopped", "data": {"sessionId": self.session.session_id}}
             return
-        yield {"event": "turn_complete", "data": self._complete_teaching_turn(human_message, student_reply)}
+        yield {"event": "turn_complete", "data": self._complete_teaching_turn(human_message, student_reply, turn_id=turn_id)}
 
     def _prepare_teaching_turn(self, human_message: str):
         if self._ended:
@@ -159,7 +192,9 @@ class AdaptiveTeachingLoop:
             raise ValueError("message is limited to 12,000 characters")
         return human_message, self._repository.get_cognitive_state(self._profile.id, self.session.topic)
 
-    def _complete_teaching_turn(self, human_message: str, student_reply: str) -> dict[str, Any]:
+    def _complete_teaching_turn(
+        self, human_message: str, student_reply: str, *, turn_id: str | None = None,
+    ) -> dict[str, Any]:
         if not self._student or not self._profile:
             raise RuntimeError("Initialize the session before processing messages")
         analysis = self._student.analyse_understanding(student_reply, self.session.topic, self.session.history)
@@ -210,7 +245,7 @@ class AdaptiveTeachingLoop:
         self.session.xp_earned += turn_xp
 
         action = "CLEAR_MISTAKE" if analysis.misconception_detected and not analysis.misconception_cleared else guide["nextAction"]
-        return {
+        response = {
             "type": "teaching_response",
             "studentAgentResponse": student_reply,
             # This structured audit field is intentionally result-free. The
@@ -247,6 +282,90 @@ class AdaptiveTeachingLoop:
             "sessionType": self.session.session_type,
             "turnXP": turn_xp,
         }
+        if self.session.conversation:
+            self.session.conversation.append_turn(human_message, student_reply)
+        if self._conversation_store:
+            # Durable persistence is attempted only after a complete model
+            # response. A stopped/partial stream never reaches this point.
+            if not turn_id:
+                response["conversationPersistence"] = {
+                    "saved": False,
+                    "reason": "A turnId is required for durable conversation persistence",
+                }
+            else:
+                self._remember_durable_turn(
+                    turn_id, human_message, student_reply,
+                    self._conversation_memory_update(analysis, chunk), response,
+                )
+                return self._replay_durable_turn(turn_id, human_message)
+        return response
+
+    def _remember_durable_turn(
+        self, turn_id: str, user_message: str, assistant_message: str,
+        update: ConversationMemoryUpdate, response: dict[str, Any],
+    ) -> None:
+        if self.session.conversation:
+            self.session.conversation.summary = update.summary
+            for item in update.memories:
+                memory = LearnerMemory.from_wire(item)
+                if memory:
+                    self.session.conversation.memories.insert(0, memory)
+            del self.session.conversation.memories[MAX_MEMORY_ITEMS:]
+        self._durable_turn_cache[turn_id] = _CachedConversationTurn(
+            user_message=user_message,
+            assistant_message=assistant_message,
+            update=update,
+            response=deepcopy(response),
+        )
+        if len(self._durable_turn_cache) > 32:
+            oldest = next(iter(self._durable_turn_cache))
+            self._durable_turn_cache.pop(oldest, None)
+
+    def _replay_durable_turn(self, turn_id: str, user_message: str) -> dict[str, Any]:
+        cached = self._durable_turn_cache[turn_id]
+        if cached.user_message != user_message:
+            raise ValueError("turnId cannot be reused for a different message")
+        response = deepcopy(cached.response)
+        try:
+            if not self._conversation_store:
+                raise AkoroConversationError("Durable conversation context is unavailable")
+            saved = self._conversation_store.persist_turn(
+                turn_id=turn_id,
+                user_message=cached.user_message,
+                assistant_message=cached.assistant_message,
+                update=cached.update,
+            )
+            response["conversationPersistence"] = {"saved": True, **saved}
+        except AkoroConversationError:
+            # A retry always returns the original model response. This prevents
+            # one browser/network retry from creating a different answer and a
+            # divergent durable transcript.
+            response["conversationPersistence"] = {
+                "saved": False,
+                "reason": "Akoro conversation persistence is unavailable",
+            }
+        cached.response = deepcopy(response)
+        return response
+
+    def _conversation_memory_update(self, analysis, chunk=None) -> ConversationMemoryUpdate:
+        """Create compact study context without copying raw prompts into memory."""
+        concepts = self.session.concepts_learned[-3:]
+        concept_text = "; ".join(concepts) if concepts else "Continue building the current foundation"
+        cleared = self.session.misconceptions_cleared[-2:]
+        correction = f" Corrections covered: {'; '.join(cleared)}." if cleared else ""
+        summary = (
+            f"Adaptive study session on {self.session.topic}. "
+            f"Current learning focus: {concept_text}.{correction}"
+        )[:4_000]
+        memories: tuple[dict[str, str], ...] = ()
+        if chunk:
+            memories = ({
+                "kind": "learning_summary",
+                "content": chunk.content[:1_500],
+                "topic": chunk.topic[:180],
+                "subject": (chunk.subject or "")[:180],
+            },)
+        return ConversationMemoryUpdate(summary=summary, memories=memories)
 
     def execute_confirmed_action(self, confirmation_token: str) -> dict[str, Any]:
         """Redeem a server-issued learner confirmation without re-prompting the model."""

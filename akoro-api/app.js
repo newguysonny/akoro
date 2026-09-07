@@ -66,6 +66,7 @@ import contactModule            from "./modules/contact/routes.js";
 import {
   agentToolsRouter as agentToolsModule,
   agentActionConfirmationsRouter as agentActionConfirmationsModule,
+  agentMemoryRouter as agentMemoryModule,
 } from "./modules/agent-tools/index.js";
 import passport                  from "passport";
 
@@ -389,6 +390,9 @@ app.use("/api/internal/agent-tools/v1", standardLimit, agentToolsModule);
 // proposals. They authenticate the learner and never expose the private tools
 // credential.
 app.use("/api/agent-actions/v1", standardLimit, agentActionConfirmationsModule);
+// Learner-visible controls to inspect and clear compact study memory created by
+// the additive Python agent. Raw chat history remains at /api/adaptive/chat.
+app.use("/api/agent-memory/v1", standardLimit, agentMemoryModule);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);
