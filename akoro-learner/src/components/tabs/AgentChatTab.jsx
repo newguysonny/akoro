@@ -58,7 +58,11 @@ function ThoughtBlock({ thinking, streaming }) {
   );
 }
 
-function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActive }) {
+function AgentChatTab({
+  onStartTeach, agentNameProp, agentEmojiProp, onChatActive,
+  agentOnline = false, agentAutonomyLoaded = false, agentAutonomySaving = false,
+  onToggleAgentAutonomy,
+}) {
   const { t } = useLang();
   const initName  = agentNameProp  || '';
   const initEmoji = agentEmojiProp || '🤖';
@@ -80,6 +84,9 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
   const [draftEmoji, setDraftEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
   const shownName = agentName || t('agent.learning_agent');
+  const autonomyStatus = !agentAutonomyLoaded ? "Checking agent…"
+    : agentAutonomySaving ? "Saving…"
+    : agentOnline ? "Agent online" : "Agent offline";
   const [taskOpen,   setTaskOpen]   = useState(false);
   const [taskFilter, setTaskFilter] = useState("pending");
   const [tTitle,     setTTitle]     = useState("");
@@ -433,7 +440,13 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
       await updateTask({ id:tEditing.id, title:tTitle, description:tDesc, priority:tPriority, dueAt });
     } else {
       await createTask({ title:tTitle, description:tDesc, priority:tPriority, dueAt });
-      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]),time:ts}]);
+      const taskSaved = t('agent.task_assigned').replace('{title}',tTitle).replace('{priority}',PRI_LABEL[tPriority]);
+      const autonomyNote = dueAt
+        ? agentOnline
+          ? "\n\nYour agent is online and may open one helpful chat when this task becomes due. It will not complete the task for you."
+          : "\n\nThis task has a due time, but your agent is offline. Tap “Agent offline” above to allow one helpful chat when it becomes due."
+        : "";
+      setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:taskSaved+autonomyNote,time:ts}]);
     }
     closeTaskSheet();
     if(innerTab!=="tasks") setInnerTab("tasks");
@@ -462,11 +475,17 @@ function AgentChatTab({ onStartTeach, agentNameProp, agentEmojiProp, onChatActiv
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px 11px",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,position:"relative" }}>
-            {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:GREEN,border:"2px solid #fff",animation:"pulse-dot 2s ease-in-out infinite" }}/>
+            {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
           </div>
           <div>
             <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{shownName}</p>
-            <div style={{ display:"flex",alignItems:"center",gap:4 }}><div style={{ width:5,height:5,borderRadius:"50%",background:GREEN }}/><span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${t('common.online')} · ${t('agent.learning_agent')}`}</span></div>
+            <button type="button" onClick={onToggleAgentAutonomy} disabled={!agentAutonomyLoaded||agentAutonomySaving||!onToggleAgentAutonomy}
+              aria-pressed={agentOnline} aria-label={agentOnline?"Turn autonomous Agent offline":"Turn autonomous Agent online"}
+              title={agentOnline?"Agent online: it may open one chat when a precisely due task is due.":"Agent offline: tap to allow one due-task chat."}
+              style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
+              <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
+              <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${autonomyStatus} · ${t('agent.learning_agent')}`}</span>
+            </button>
           </div>
         </div>
         <button onClick={()=>{setDraftName(agentName);setDraftEmoji(agentEmoji);setCustOpen(true);}} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:11.5,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
