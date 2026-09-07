@@ -13,6 +13,7 @@ const ACCOUNT_ACTION_INTENTS = [
   /\b(?:what(?:'s| is) due|my (?:tasks?|to-?dos?|reminders?))\b/i,
   /\b(message|send|notify|check in with) me\b/i,
   /\b(?:schedule|reschedule|cancel)\b(?=[\s\S]{0,60}\b(?:reminder|message|check-?in|follow-?up)\b)/i,
+  /\b(?:what|which)\s+(?:can|do).*?\b(?:you|agent)\b|\b(?:your|agent)\s+(?:abilities|capabilities)\b|\bwhat are you able to do\b/i,
 ];
 
 // A generic noun such as “task” is not enough to keep a later study turn on

@@ -293,19 +293,6 @@ function AgentChatTab({
     // Show an agent bubble AND persist it, so a refresh reloads the same text.
     const say = (txt) => { pushAgent(txt); persistToSession(sid, "agent", txt); };
 
-    // Capability questions receive a server-authored, feature-aware inventory
-    // rather than a model improvisation. It therefore cannot advertise hidden
-    // tools, web access, or historical-paper content that is not available.
-    if (!sentAttachments.length && /(?:what|which)\s+(?:can|do).*?(?:you|agent)|(?:your|agent)\s+(?:abilities|capabilities)|what are you able to do/i.test(text)) {
-      try {
-        const inventory = await apiGet("/api/adaptive/chat/capabilities", { cache:false });
-        const reply = [inventory.title || "What I can do", ...(inventory.sections || []).map(section => `\n${section.title}\n${section.items.map(item => `• ${item}`).join("\n")}`)].join("\n");
-        say(reply);
-      } catch { say("I can help with study support, learner-owned tasks, planning, and available practice tools. I will only describe features available to your account."); }
-      setLoading(false);
-      return;
-    }
-
     // Explicit task/reminder/message requests—and their short detail
     // follow-ups—go through the bounded tool loop, where the API derives
     // identity and supplies safe profile/time context. This lets “Revise Maths
