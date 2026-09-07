@@ -55,7 +55,57 @@ This separation makes each layer unit-testable and lets the current evaluation
 repository be swapped for a protected Akoro API repository without changing
 LLM roles, browser code, or HTTP contracts.
 
-### Agent-system coverage
+## Agent-system coverage
+
+### Canonical concept-state vertical slice
+
+The first adaptive-cognition implementation is deliberately narrow and
+**off by default** (`AGENT_ENABLE_CONCEPT_STATE=false`). When it is enabled,
+the trusted Akoro bridge must provide `curriculumKey` and `topicKey` alongside
+the normal `subject`; the Python service will not select a durable curriculum
+scope from free text alone.
+
+For that explicit scope, Python asks the private Akoro gateway for no more than
+eight **approved** concepts, reads the learner's fraction-based state, places a
+maximum of six compact concept conditions in the reply prompt, and returns only
+bounded observations using those existing IDs. Akoro—not the model—then writes
+an immutable evidence row and applies the deterministic database transition.
+The three evidence dimensions remain separate: demonstrated response quality,
+the model's curriculum-objective claim assessment, and model confidence.
+`not_checked` evidence is kept for audit but cannot create or modify cognitive
+state. This Phase 0/1 slice does **not** yet claim to provide an independent
+fact Guardian: its model observation is constrained to the reviewed concept
+objective, and it cannot use arbitrary web/RAG material. The next delivery
+slice adds schema-validated judge observations and Guardian/source validation.
+
+The migration `akoro-api/migrations/2026-concept-state-v1.sql` owns:
+
+- `edu.concept_catalog` and reviewed prerequisite edges with source provenance;
+- `edu.learner_concept_state` (`mastery`, `retention`, and evidence confidence
+  are `0..1` fractions, alongside misconception, review-timing, count, and
+  version fields); and
+- append-only, per-turn-idempotent `edu.learner_concept_evidence` plus the
+  `edu.record_learner_concept_evidence` policy function.
+
+This does **not** reinterpret or replace legacy `edu.student_knowledge`
+(retrieval weighting fraction) or `edu.knowledge_confidence` (assessment
+percentage). The private endpoints are `/concept-state/resolve`, `/snapshot`,
+and `/observations` beneath `AKORO_AGENT_TOOLS_URL`; they require both the
+service credential and the learner's session-bound capability. They are not
+model-callable tools and never accept a learner ID from Python.
+
+Enable the slice only after importing/reviewing curriculum concepts and adding
+the trusted Node bridge fields:
+
+```bash
+AGENT_ENABLE_CONCEPT_STATE=true
+AKORO_AGENT_TOOLS_URL=https://api.akoro.app/api/internal/agent-tools/v1
+AKORO_AGENT_TOOLS_SECRET=<outbound-only-secret>
+```
+
+An empty reviewed catalogue is a safe, explicit no-op: the Python service keeps
+its existing evaluation lifecycle rather than inventing concepts or persisting
+local cognitive state.
 
 | Capability | Current implementation |
 |---|---|

@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from agent.adaptive.akoro_concept_state import AkoroConceptStateError
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import InMemoryLearningRepository, LearningRepository
 from agent.adaptive.types import AdaptiveSession, SessionReference
@@ -62,6 +63,10 @@ def create_app(
                 "provider": "akoro-api" if runtime.conversation_client else None,
                 "durableOwner": "akoro-api",
             },
+            "conceptState": {
+                "enabled": runtime.enable_concept_state,
+                "durableOwner": "akoro-api" if runtime.enable_concept_state else None,
+            },
             "tools": {
                 "configured": runtime.tools_configured,
                 "provider": "akoro-api" if runtime.tools_configured else None,
@@ -83,6 +88,11 @@ def create_app(
 
     @app.post("/v1/sessions", dependencies=[Depends(require_internal_caller)])
     def start_session(payload: StartSessionRequest) -> dict:
+        if runtime.enable_concept_state and not (payload.tool_context and payload.curriculum_key and payload.subject and payload.topic_key):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Concept state requires toolContext, curriculumKey, subject, and topicKey",
+            )
         session_type = "decay_review" if payload.mode == "decay" else "continuation" if payload.mode == "continuation" else "free_teaching"
         session = AdaptiveSession(
             session_id=payload.session_id or AdaptiveSession().session_id,
@@ -90,6 +100,8 @@ def create_app(
             topic=payload.topic.strip(),
             subject=payload.subject.strip() if payload.subject else None,
             teacher_agent_id=payload.teacher_agent_id,
+            curriculum_key=payload.curriculum_key,
+            topic_key=payload.topic_key,
             tool_context=payload.tool_context,
             conversation_id=payload.conversation_id,
             session_type=session_type,
@@ -99,7 +111,7 @@ def create_app(
             return runtime.start(session)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-        except AkoroConversationError as exc:
+        except (AkoroConversationError, AkoroConceptStateError) as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/turns", dependencies=[Depends(require_internal_caller)])
@@ -107,8 +119,8 @@ def create_app(
         try:
             runtime.sessions.assert_not_streaming(session_id)
             with runtime.sessions.session(session_id) as loop:
-                if loop.session.conversation and not payload.turn_id:
-                    raise ValueError("turnId is required when durable conversation context is attached")
+                if (loop.session.conversation or loop.concept_state_active) and not payload.turn_id:
+                    raise ValueError("turnId is required when durable conversation context or concept state is attached")
                 return loop.process_teaching_message(payload.message, turn_id=payload.turn_id)
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session with that id") from exc
@@ -116,6 +128,8 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A teaching stream is active for this session") from exc
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        except AkoroConceptStateError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     @app.post("/v1/sessions/{session_id}/confirmed-actions", dependencies=[Depends(require_internal_caller)])
     def execute_confirmed_action(session_id: str, payload: ConfirmedActionRequest) -> dict:
@@ -143,8 +157,8 @@ def create_app(
             try:
                 yield sse_event("stream_started", {"sessionId": session_id})
                 with runtime.sessions.session(session_id) as loop:
-                    if loop.session.conversation and not payload.turn_id:
-                        raise ValueError("turnId is required when durable conversation context is attached")
+                    if (loop.session.conversation or loop.concept_state_active) and not payload.turn_id:
+                        raise ValueError("turnId is required when durable conversation context or concept state is attached")
                     for item in loop.stream_teaching_message(
                         payload.message, should_stop=stop_signal.is_set, turn_id=payload.turn_id,
                     ):

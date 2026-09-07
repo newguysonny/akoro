@@ -233,3 +233,54 @@ class ServiceContractTests(unittest.TestCase):
         self.assertEqual(gateway_payload["confirmationToken"], "opaque-learner-reviewed-token")
         self.assertTrue(gateway_payload["idempotencyKey"].startswith("confirmed-"))
         self.assertEqual(len(transport.calls), 2)
+
+
+class EmptyConceptStateSession:
+    """Reviewed-catalogue lookup stub: deliberate no-op scope."""
+
+    def resolve_active_concepts(self):
+        return []
+
+    def snapshot(self, _concept_ids):
+        return []
+
+    def record(self, _turn_id, _observations):
+        return []
+
+
+class EmptyConceptStateClient:
+    def open_session(self, **_kwargs):
+        return EmptyConceptStateSession()
+
+
+class ConceptStateServiceContractTests(unittest.TestCase):
+    def test_enabled_slice_requires_trusted_scope_and_is_a_noop_without_reviewed_concepts(self) -> None:
+        settings = ServiceSettings(
+            llm=LLMConfig(api_key="test"), environment="development", internal_secret="shared-secret",
+            akoro_api_url="https://api.example.test", session_ttl_seconds=600,
+            enable_concept_state=True,
+        )
+        runtime = build_adaptive_service_runtime(
+            settings, model=FakeServiceModel(), repository=InMemoryLearningRepository(),
+            concept_state_client=EmptyConceptStateClient(),
+        )
+        client = TestClient(create_app(settings, runtime=runtime))
+        headers = {"X-Akoro-Agent-Secret": "shared-secret"}
+
+        missing_scope = client.post("/v1/sessions", headers=headers, json={
+            "studentId": "learner-1", "topic": "Plants", "subject": "Biology",
+        })
+        self.assertEqual(missing_scope.status_code, 422)
+
+        start = client.post("/v1/sessions", headers=headers, json={
+            "studentId": "learner-1", "sessionId": "concept-noop-session", "topic": "Plants",
+            "subject": "Biology", "curriculumKey": "nerdc-jss2-basic-science-v1",
+            "topicKey": "plants", "toolContext": "opaque-signed-context",
+        })
+        self.assertEqual(start.status_code, 200)
+        self.assertFalse(start.json()["conceptTracking"]["enabled"])
+
+        # A review-empty scope stays on the existing lifecycle and does not add
+        # a new turn-id requirement merely because the deployment flag is on.
+        turn = client.post("/v1/sessions/concept-noop-session/turns", headers=headers, json={"message": "Plants use light."})
+        self.assertEqual(turn.status_code, 200)

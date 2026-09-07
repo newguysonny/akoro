@@ -21,6 +21,10 @@ class StartSessionRequest(Contract):
     topic: str = Field(min_length=1, max_length=500)
     subject: str | None = Field(default=None, max_length=180)
     teacher_agent_id: str | None = Field(default=None, alias="teacherAgentId", max_length=180)
+    # Required together when the feature-flagged canonical concept slice is
+    # enabled. They are resolved by Akoro against approved curriculum rows.
+    curriculum_key: str | None = Field(default=None, alias="curriculumKey", min_length=1, max_length=180)
+    topic_key: str | None = Field(default=None, alias="topicKey", min_length=1, max_length=180)
     session_id: str | None = Field(default=None, alias="sessionId", max_length=180)
     # Existing public Agent Chat uses UUID session ids. Supplying one tells the
     # trusted bridge to hydrate the user/assistant transcript from Akoro API;

@@ -14,6 +14,7 @@ const AUDIENCE = "akoro-python-agent-tools";
 const CONFIRMATION_AUDIENCE = "akoro-python-agent-write-confirmation";
 const SESSION_ID = /^[A-Za-z0-9_-]{1,180}$/;
 const TASK_ID = /^[A-Za-z0-9_-]{1,180}$/;
+const LEARNING_SCOPE_KEY = /^[a-z0-9][a-z0-9._:-]{0,179}$/;
 const TEACHER_ROLES = new Set(["instructor", "teacher", "school", "school_admin", "admin"]);
 
 function gatewaySecret() {
@@ -22,6 +23,22 @@ function gatewaySecret() {
 
 function capabilitySecret() {
   return (process.env.AKORO_AGENT_TOOLS_CAPABILITY_SECRET || "").trim();
+}
+
+function normaliseLearningKey(value) {
+  return String(value || "").trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
+}
+
+function learningScope(value) {
+  if (value == null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("learningScope is invalid");
+  const curriculumKey = normaliseLearningKey(value.curriculumKey);
+  const topicKey = normaliseLearningKey(value.topicKey);
+  const subject = String(value.subject || "").trim().replace(/\s+/g, " ");
+  if (!LEARNING_SCOPE_KEY.test(curriculumKey) || !LEARNING_SCOPE_KEY.test(topicKey) || !subject || subject.length > 180) {
+    throw new Error("learningScope needs a curriculumKey, subject, and topicKey");
+  }
+  return { curriculumKey, subject, topicKey };
 }
 
 function safeEqual(left, right) {
@@ -50,13 +67,19 @@ export function requireAgentToolsCredential(req, res, next) {
  * browser endpoint. Teacher task tools additionally need an owned task and run
  * id; both are re-checked by the gateway before every execution.
  */
-export function issueAgentToolsCapability({ user, sessionId, taskId = null, runId = null, courseId = null, ttlSeconds = 600 }) {
+export function issueAgentToolsCapability({
+  user, sessionId, taskId = null, runId = null, courseId = null, learningScope: requestedLearningScope = null, ttlSeconds = 600,
+}) {
   const secret = capabilitySecret();
   if (!secret) throw new Error("AKORO_AGENT_TOOLS_CAPABILITY_SECRET is required to issue a tool context");
   if (!user?.id || !SESSION_ID.test(String(sessionId))) throw new Error("A valid user and sessionId are required");
 
   const isTeacher = TEACHER_ROLES.has(user.role);
   const hasTaskContext = taskId !== null || runId !== null;
+  const scopeBinding = learningScope(requestedLearningScope);
+  if (scopeBinding && (isTeacher || hasTaskContext)) {
+    throw new Error("learningScope is available only for learner capabilities");
+  }
   if (hasTaskContext && (!isTeacher || !TASK_ID.test(String(taskId || "")) || !TASK_ID.test(String(runId || "")))) {
     throw new Error("Teacher task tool contexts require a valid taskId and runId");
   }
@@ -69,6 +92,7 @@ export function issueAgentToolsCapability({ user, sessionId, taskId = null, runI
     scope,
     jti: randomUUID(),
     ...(hasTaskContext ? { taskId: String(taskId), runId: String(runId), courseId: courseId ? String(courseId) : null } : {}),
+    ...(scopeBinding ? { learningScope: scopeBinding } : {}),
   };
   return jwt.sign(payload, secret, { algorithm: "HS256", issuer: ISSUER, audience: AUDIENCE, expiresIn: boundedTtl });
 }

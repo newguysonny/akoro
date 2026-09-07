@@ -23,6 +23,7 @@ import {
   requestWriteConfirmation,
 } from "./write-confirmations.js";
 import conversationContextRouter from "./conversation-context-routes.js";
+import conceptStateRouter from "./concept-state-routes.js";
 
 const router = Router();
 const MAX_IDEMPOTENCY_KEY = 180;
@@ -35,6 +36,9 @@ const STUDENT_WRITE_TOOLS = new Set([
 // Separate private subresource: same service credential/capability boundary as
 // tools, but it never appears in the model's function catalogue.
 router.use("/conversations", conversationContextRouter);
+// Canonical curriculum concept state is a separate bounded resource. It never
+// appears in the model tool catalogue and cannot be used by teacher contexts.
+router.use("/concept-state", conceptStateRouter);
 class GatewayError extends Error {
   constructor(status, message) {
     super(message);

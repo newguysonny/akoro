@@ -131,6 +131,11 @@ class AdaptiveSession:
     subject: str | None = None
     session_type: Literal["free_teaching", "continuation", "decay_review"] = "free_teaching"
     teacher_agent_id: str | None = None
+    # Canonical concept tracking is available only for an explicit reviewed
+    # curriculum/topic scope supplied by Akoro's trusted bridge. Free text is
+    # not enough to select a durable curriculum catalogue.
+    curriculum_key: str | None = None
+    topic_key: str | None = None
     # Opaque, signed-by-Akoro context. Python stores and relays this only; it
     # never treats browser-provided identity fields as tool authority.
     tool_context: str | None = None

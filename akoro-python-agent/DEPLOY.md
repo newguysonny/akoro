@@ -28,6 +28,9 @@ internal credential.
    # Keep both false until the Node bridge and learner review UI are deployed.
    AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS=false
    AGENT_ALLOW_SIDE_EFFECTING_TOOLS=false
+   # Keep false until reviewed concept-catalogue rows AND the bridge's signed
+   # curriculum scope are deployed.
+   AGENT_ENABLE_CONCEPT_STATE=false
    ```
 
 3. Verify the unauthenticated health endpoint:
@@ -37,13 +40,62 @@ internal credential.
    curl https://your-agent-service.example/ready
    ```
 
-`/ready` reports `mode: evaluation` until an `AkoroApiLearningRepository` is
-introduced. The adaptive cognitive repository is therefore process-local in
-that mode. **Durable learner conversation history is separate:** when the
+`/ready` reports `mode: evaluation` while the legacy teaching repository is
+process-local. **Durable learner conversation history is separate:** when the
 private gateway variables below are configured and the bridge supplies a
 `conversationId`, Akoro API owns the conversation transcript, its compact
 summary, and learner-clearable study-memory notes. Python never uses database
-credentials or a browser token.
+credentials or a browser token. The feature-flagged canonical concept slice is
+also Akoro-owned: it uses a narrow protected repository decorator rather than a
+wholesale Python database port.
+
+## Canonical concept-state vertical slice
+
+`AGENT_ENABLE_CONCEPT_STATE=true` enables only the first reviewed,
+curriculum-grounded cognitive slice. It is not a generic feature flag for the
+legacy JSON `student-state.js` path, and it does not replace that JavaScript
+agent. The trusted Akoro bridge must mint the learner's `toolContext` with a
+matching signed `learningScope` and pass the same explicit fields when starting
+Python:
+
+```js
+const toolContext = issueAgentToolsCapability({
+  user: req.user,
+  sessionId: pythonSessionId,
+  learningScope: {
+    curriculumKey: "nerdc-jss2-basic-science-v1",
+    subject: "Biology",
+    topicKey: "photosynthesis",
+  },
+});
+```
+
+```json
+{
+  "studentId": "derived-by-akoro-api",
+  "sessionId": "python-live-session-1",
+  "toolContext": "<opaque learner capability>",
+  "curriculumKey": "nerdc-jss2-basic-science-v1",
+  "subject": "Biology",
+  "topic": "Photosynthesis",
+  "topicKey": "photosynthesis"
+}
+```
+
+Akoro's private gateway resolves at most eight `status=approved` catalog
+concepts for that exact signed scope, returns state only for those concepts,
+and accepts no more than four observations per source turn. The gateway
+re-checks the user on every request; no Python `studentId` is used as database
+authority. Its `record_learner_concept_evidence` SQL function provides the
+idempotent `(learner, session, turn, concept)` ledger and bounded state
+transition. `not_checked` observations remain audit records only and cannot
+alter cognitive state.
+
+Apply `2026-concept-state-v1.sql` through the standard API migration manifest
+and import/review the initial catalogue before enabling the flag. There is no
+built-in AI seed data: a scope without approved concepts remains an intentional
+non-canonical no-op. This avoids presenting generated/web-retrieved material as
+an approved curriculum brain.
 
 ## Durable learner conversation context
 

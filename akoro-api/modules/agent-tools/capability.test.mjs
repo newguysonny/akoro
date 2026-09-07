@@ -78,3 +78,18 @@ test("gateway credential check uses the required header and rejects mismatches",
   assert.equal(denied.statusCode, 401);
   assert.equal(denied.body.success, false);
 });
+
+test("a concept-state capability is additionally bound to one reviewed curriculum scope", () => {
+  const token = issueAgentToolsCapability({
+    user: { id: "learner-1", role: "student" }, sessionId: "python-session-1",
+    learningScope: { curriculumKey: "NERDC-JSS2-BASIC-SCIENCE-V1", subject: "Biology", topicKey: "Photosynthesis" },
+  });
+  const claims = verifyAgentToolsCapability(token, "python-session-1");
+  assert.deepEqual(claims.learningScope, {
+    curriculumKey: "nerdc-jss2-basic-science-v1", subject: "Biology", topicKey: "photosynthesis",
+  });
+  assert.throws(() => issueAgentToolsCapability({
+    user: { id: "teacher-1", role: "instructor" }, sessionId: "python-session-1",
+    learningScope: { curriculumKey: "scope", subject: "Biology", topicKey: "plants" },
+  }), /only for learner/);
+});

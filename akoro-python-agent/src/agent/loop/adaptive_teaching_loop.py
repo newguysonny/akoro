@@ -11,6 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from agent.adaptive.concepts import CurriculumConcept, LearnerConceptState, encode_concept_condition
 from agent.adaptive.guide import NaNaGuide
 from agent.adaptive.model import TeachingModel
 from agent.adaptive.repository import LearningRepository
@@ -69,11 +70,22 @@ class AdaptiveTeachingLoop:
         # Public metadata only; semantic hits themselves stay inside the model
         # prompt and never become an extra raw context payload to the browser.
         self._last_memory_retrieval: dict[str, Any] = {"attempted": False, "mode": "not_available", "matches": 0}
+        # The canonical cognitive slice is opt-in: no approved catalogue rows
+        # means the existing evaluation lifecycle continues unchanged.
+        self._active_concepts: list[CurriculumConcept] = []
+        self._concept_states: list[LearnerConceptState] = []
+        self._last_concept_observations: dict[str, Any] = {"enabled": False, "submitted": 0, "states": []}
 
     def initialize(self) -> dict[str, Any]:
         if not self.session.student_id or not self.session.topic.strip():
             raise ValueError("student_id and topic are required")
         self._profile = self._repository.get_or_create_agent(self.session.student_id)
+        self._active_concepts = self._repository.resolve_active_concepts(
+            self.session.student_id, self.session.subject, self.session.topic,
+        )
+        self._concept_states = self._repository.get_learner_concept_states(
+            self.session.student_id, (concept.id for concept in self._active_concepts),
+        )
         reference_text = self.session.reference.text if self.session.reference else ""
         plan = TeachingPlan(
             topic=self.session.topic,
@@ -91,7 +103,7 @@ class AdaptiveTeachingLoop:
             self.session.conversation.scratchpad = self.session.scratchpad
         self._student = StudentAgent(
             self._profile, self._repository, self._model, self.session.subject, self.session.reference, self._tools,
-            self.session.conversation, self.session.scratchpad,
+            self.session.conversation, self.session.scratchpad, tuple(self._active_concepts),
         )
         cognitive = self._repository.get_cognitive_state(self._profile.id, self.session.topic)
         current = self._current_subtopic()
@@ -131,6 +143,7 @@ class AdaptiveTeachingLoop:
             "agentLevel": self._profile.level,
             "knowledgeScore": round(self._profile.knowledge_score),
             "initialState": cognitive.as_percentages(),
+            "conceptTracking": self._concept_tracking_public(),
             # Metadata only: source text never crosses the service boundary.
             "reference": self.session.reference.metadata() if self.session.reference else None,
             # No raw conversation or memory is echoed to the caller. The bridge
@@ -154,7 +167,7 @@ class AdaptiveTeachingLoop:
         self.session.scratchpad = self._student.plan_scratchpad(human_message, self.session.topic)  # type: ignore[union-attr]
         student_reply = self._student.reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,
-            self.session.progress.label(),
+            self.session.progress.label(), concept_condition=self._concept_condition(),
         )
         return self._complete_teaching_turn(human_message, student_reply, turn_id=turn_id)
 
@@ -180,7 +193,7 @@ class AdaptiveTeachingLoop:
         fragments: list[str] = []
         for token in self._student.stream_reply(  # type: ignore[union-attr]
             human_message, self.session.topic, prior.as_percentages(), self.session.history,
-            self.session.progress.label(), should_stop,
+            self.session.progress.label(), should_stop, concept_condition=self._concept_condition(),
         ):
             if should_stop and should_stop():
                 yield {"event": "stopped", "data": {"sessionId": self.session.session_id}}
@@ -207,6 +220,25 @@ class AdaptiveTeachingLoop:
         if len(human_message) > 12_000:
             raise ValueError("message is limited to 12,000 characters")
         return human_message, self._repository.get_cognitive_state(self._profile.id, self.session.topic)
+
+    @property
+    def concept_state_active(self) -> bool:
+        """Whether this session resolved reviewed canonical concepts."""
+        return bool(self._active_concepts)
+
+    def _concept_condition(self) -> str:
+        return encode_concept_condition(self._active_concepts, self._concept_states)
+
+    def _concept_tracking_public(self) -> dict[str, Any]:
+        states_by_id = {state.concept_id: state for state in self._concept_states}
+        return {
+            "enabled": bool(self._active_concepts),
+            "concepts": [concept.public() for concept in self._active_concepts],
+            "states": [
+                states_by_id.get(concept.id, LearnerConceptState(concept.id)).public(concept)
+                for concept in self._active_concepts
+            ],
+        }
 
     def _refresh_relevant_memory(self, human_message: str) -> None:
         """Hydrate bounded semantic context before planning or replying.
@@ -235,8 +267,30 @@ class AdaptiveTeachingLoop:
         if not self._student or not self._profile:
             raise RuntimeError("Initialize the session before processing messages")
         analysis = self._student.analyse_understanding(student_reply, self.session.topic, self.session.history)
+
+        # The LLM returns observations only. The repository owns idempotency and
+        # applies the deterministic transition policy to approved concepts.
+        # Persist this durable slice before altering the compatibility-only
+        # evaluation state, so a failed Akoro call leaves no local half-turn.
+        observations = self._student.observe_concepts(student_reply)
+        if observations:
+            stable_turn_id = turn_id or f"turn-{self.session.turns_completed + 1}"
+            updated_states = self._repository.record_concept_observations(
+                self.session.student_id, self.session.session_id, stable_turn_id, observations,
+            )
+            by_id = {state.concept_id: state for state in self._concept_states}
+            by_id.update({state.concept_id: state for state in updated_states})
+            self._concept_states = [
+                by_id.get(concept.id, LearnerConceptState(concept.id))
+                for concept in self._active_concepts
+            ]
         cognitive = self._repository.update_cognitive_state(self._profile.id, self.session.topic, analysis)
         state = cognitive.as_percentages()
+        self._last_concept_observations = {
+            "enabled": bool(self._active_concepts),
+            "submitted": len(observations),
+            "states": self._concept_tracking_public()["states"],
+        }
 
         chunk = self._student.extract_knowledge(
             human_message, student_reply, self.session.topic, self.session.subject, analysis, self.session.session_id,
@@ -302,6 +356,7 @@ class AdaptiveTeachingLoop:
             "controlName": "Focus Monitor",
             "adaptiveEngine": {
                 **state,
+                "conceptTracking": dict(self._last_concept_observations),
                 "actionLabel": _ACTION_LABELS.get(action, "Continue"),
                 "misconception": analysis.misconception_detected,
                 "misconceptionCleared": analysis.misconception_cleared,

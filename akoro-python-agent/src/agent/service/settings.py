@@ -36,6 +36,10 @@ class ServiceSettings:
     write_confirmation_proposals: bool = False
     # Master deployment gate for redeeming an already learner-confirmed write.
     allow_side_effecting_tools: bool = False
+    # Feature gate for the Akoro-owned canonical concept/evidence vertical
+    # slice. It is intentionally off until reviewed curriculum rows and the
+    # trusted Node bridge are deployed.
+    enable_concept_state: bool = False
 
     @property
     def tools_configured(self) -> bool:
@@ -60,6 +64,9 @@ class ServiceSettings:
         tools_secret = source.get("AKORO_AGENT_TOOLS_SECRET", "").strip() or None
         if bool(tools_url) != bool(tools_secret):
             raise ValueError("AKORO_AGENT_TOOLS_URL and AKORO_AGENT_TOOLS_SECRET must be configured together")
+        enable_concept_state = _as_bool(source.get("AGENT_ENABLE_CONCEPT_STATE"), name="AGENT_ENABLE_CONCEPT_STATE")
+        if enable_concept_state and not (tools_url and tools_secret):
+            raise ValueError("AGENT_ENABLE_CONCEPT_STATE requires the configured Akoro private gateway")
         if tools_url:
             parsed = urlparse(tools_url)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -94,4 +101,5 @@ class ServiceSettings:
                 name="AGENT_ENABLE_WRITE_CONFIRMATION_PROPOSALS",
             ),
             allow_side_effecting_tools=_as_bool(source.get("AGENT_ALLOW_SIDE_EFFECTING_TOOLS"), name="AGENT_ALLOW_SIDE_EFFECTING_TOOLS"),
+            enable_concept_state=enable_concept_state,
         )
