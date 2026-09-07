@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping
 
 from agent.llm.messages import Message
+from agent.memory.scratchpad import WorkingScratchpad
 
 ConversationRole = Literal["user", "assistant"]
 MemoryKind = Literal["learning_summary", "study_preference", "learner_goal"]
@@ -99,6 +100,7 @@ class LearnerConversationContext:
     summary: str | None = None
     messages: list[ConversationMessage] = field(default_factory=list)
     memories: list[LearnerMemory] = field(default_factory=list)
+    scratchpad: WorkingScratchpad | None = None
     restored_message_count: int = 0
 
     @classmethod
@@ -123,12 +125,18 @@ class LearnerConversationContext:
                     if parsed:
                         memories.append(parsed)
         summary = _text(value.get("summary"), MAX_CONVERSATION_SUMMARY_CHARS) or None
+        # Topic is not part of the wire envelope deliberately; the session
+        # creates a topic-aware initial scratchpad after hydration when none
+        # has previously been stored for this conversation.
+        raw_scratchpad = value.get("scratchpad")
+        scratchpad = WorkingScratchpad.from_wire(raw_scratchpad, topic="the current learning goal") if isinstance(raw_scratchpad, Mapping) else None
         return cls(
             conversation_id=conversation_id,
             title=_text(value.get("title"), 180) or None,
             summary=summary,
             messages=messages,
             memories=memories,
+            scratchpad=scratchpad,
             restored_message_count=len(messages),
         )
 
@@ -165,16 +173,22 @@ class LearnerConversationContext:
             "restoredMessages": self.restored_message_count,
             "savedMemoryNotes": len(self.memories),
             "hasSummary": bool(self.summary),
+            "hasScratchpad": self.scratchpad is not None,
             "persistence": persistence,
         }
 
 
 @dataclass(frozen=True, slots=True)
 class ConversationMemoryUpdate:
-    """Bounded, non-raw durable context emitted after a completed teaching turn."""
+    """Bounded non-raw context emitted after one completed teaching turn."""
 
     summary: str
+    scratchpad: WorkingScratchpad
     memories: tuple[dict[str, str], ...] = ()
 
     def wire(self) -> dict[str, Any]:
-        return {"summary": self.summary, "memories": [dict(item) for item in self.memories]}
+        return {
+            "summary": self.summary,
+            "scratchpad": self.scratchpad.wire(),
+            "memories": [dict(item) for item in self.memories],
+        }

@@ -67,14 +67,38 @@ conversation snapshot:
 - a most-recent window of up to 24 persisted user/assistant messages and
   24,000 total characters, in native `user` and `assistant` roles (the full
   raw history remains in Akoro’s existing session drawer);
-- one compact conversation summary (maximum 4,000 characters); and
+- one compact conversation summary (maximum 4,000 characters);
 - up to eight compact, learner-scoped study notes (maximum 1,500 characters
-  each).
+  each); and
+- one conversation-scoped structured working scratchpad.
 
 The current user prompt is sent as the final `user` message—not embedded in a
 system prompt. Earlier dialogue is role-labelled as actual conversation, while
-summary and memory are clearly labelled as untrusted reference data. Neither
-past conversation text nor memory can override the service system instructions.
+summary, memory, and scratchpad are clearly labelled as untrusted reference
+data. Neither past conversation text nor memory can override the service system
+instructions.
+
+### Structured working scratchpad
+
+Every iteration also receives an **Active working scratchpad** before the
+current prompt. Its fixed schema is deliberately operational rather than a
+chain-of-thought log:
+
+| Field | Purpose |
+|---|---|
+| `goal` | One concise learner-facing objective |
+| `completed` | Up to six observable completed facts/actions |
+| `nextSteps` | Up to six concrete next actions |
+| `openQuestions` | Up to six unresolved questions |
+| `toolState` | Up to four result-free tool statuses, including whether a learner review is pending |
+
+After a complete reply, the LLM returns only this structured checklist as JSON
+and Python validates/bounds it before storing it. It never asks the model to
+reveal private reasoning, stores no hidden chain-of-thought, and does not put
+raw tool results into durable context. The scratchpad gives the next iteration
+compact progress state without requiring it to infer a plan from a long chat.
+It is restored with the conversation on a later session and is updated only
+when the corresponding user/assistant turn completes.
 
 For a durable turn, the trusted Node bridge must supply a unique retry-safe
 `turnId` with `POST /v1/sessions/{sessionId}/turns` (or the streaming variant):
@@ -92,11 +116,13 @@ nothing. If persistence is temporarily unavailable, the completed response says
 rather than generate a second answer. This route is independent of the model
 function-tool catalogue and never becomes an LLM-callable tool.
 
-Apply `2026-python-agent-conversation-memory.sql` before enabling this path. It
-extends the existing chat-message schema with nullable Python turn IDs, adds
-durable summaries and bounded `edu.learner_agent_memories`, and records
-idempotent cross-service turns. Add it to the API deployment's normal
-`npm run db:deploy` pre-deploy process through `migrations/manifest.json`.
+Apply `2026-python-agent-conversation-memory.sql` and
+`2026-python-agent-conversation-scratchpad.sql` before enabling this path. They
+extend the existing chat-message schema with nullable Python turn IDs, add
+durable summaries and bounded `edu.learner_agent_memories`, persist the
+conversation scratchpad, and record idempotent cross-service turns. Both are in
+`migrations/manifest.json` for the API deployment's normal `npm run db:deploy`
+pre-deploy process.
 
 The current JavaScript Agent Chat remains unchanged until its authenticated Node
 bridge is deliberately switched to this Python session flow. It continues to
@@ -109,6 +135,7 @@ for a future Settings/Agent Memory screen:
 | List active compact memory notes | `GET /api/agent-memory/v1/memories` |
 | Forget one note | `DELETE /api/agent-memory/v1/memories/{memoryId}` |
 | Clear a conversation’s compact summary | `DELETE /api/agent-memory/v1/conversations/{conversationId}/summary` |
+| Clear a conversation’s working scratchpad | `DELETE /api/agent-memory/v1/conversations/{conversationId}/scratchpad` |
 
 Forgetting a note does not delete the raw chat. Deleting an existing chat
 session continues to cascade its associated summary and turn records; source

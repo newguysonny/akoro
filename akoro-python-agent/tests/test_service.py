@@ -28,6 +28,7 @@ class FakeServiceModel:
             {"understanding": 60, "confusion": 20, "engagement": 80, "strengths": ["Named the foundation"]},
             {"shouldSave": False},
             {"tip": "Ask for one concrete example next.", "nextAction": "DIG_DEEPER", "nextPhase": None, "nextMustKnowIndex": 0},
+            {"goal": "Support the learner with Plants.", "completed": ["Discussed the foundation."], "nextSteps": ["Ask for an example."], "openQuestions": []},
             {"overallScore": 70, "strengths": ["Clear explanation"], "nextTimeTip": "Use an example.", "nextLesson": "Keep practising."},
             {"overallScore": 70, "strengths": ["Clear explanation"], "nextTimeTip": "Use an example.", "nextLesson": "Keep practising."},
         ]

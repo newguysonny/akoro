@@ -26,6 +26,7 @@ class CaptureModel:
             {"understanding": 70, "confusion": 10, "engagement": 80, "newConceptLearned": "Plants use light energy", "strengths": []},
             {"shouldSave": True, "topic": "Plants", "content": "Plants use light energy to make glucose.", "chunkType": "taught", "confidence": 0.8},
             {"tip": "Ask for one example.", "nextAction": "DIG_DEEPER", "nextPhase": None, "nextMustKnowIndex": 0},
+            {"goal": "Understand how plants use light.", "completed": ["Reviewed light energy."], "nextSteps": ["Connect light to glucose production."], "openQuestions": []},
         ]
 
     def complete_text(self, messages, temperature=0.4):
@@ -49,6 +50,13 @@ class ContextTransport:
                     "conversationId": "8ca0532e-20be-49c2-b4df-566d87f0e0e4",
                     "title": "Plant revision",
                     "summary": "Earlier study focused on photosynthesis inputs.",
+                    "scratchpad": {
+                        "goal": "Continue the learner's photosynthesis revision.",
+                        "completed": ["Reviewed photosynthesis inputs."],
+                        "nextSteps": ["Explain the role of light."],
+                        "openQuestions": [],
+                        "toolState": [],
+                    },
                     "messages": [
                         {"role": "user", "content": "Can we continue plants?"},
                         {"role": "assistant", "content": "Yes, let us continue photosynthesis."},
@@ -112,6 +120,7 @@ class ConversationContextTests(unittest.TestCase):
         context = LearnerConversationContext.from_wire({
             "conversationId": "conversation-2",
             "summary": "Earlier study focused on photosynthesis inputs.",
+            "scratchpad": {"goal": "Answer the learner's light question.", "completed": ["Recalled inputs."], "nextSteps": ["Explain light."], "openQuestions": []},
             "messages": [
                 {"role": "user", "content": "Can we continue plants?"},
                 {"role": "assistant", "content": "Yes, let us continue photosynthesis."},
@@ -126,6 +135,8 @@ class ConversationContextTests(unittest.TestCase):
         messages = model.calls[0]
         self.assertIn("Earlier study focused", messages[0].content)
         self.assertIn("Water and carbon dioxide", messages[0].content)
+        self.assertIn("## Active working scratchpad", messages[0].content)
+        self.assertIn("Answer the learner's light question.", messages[0].content)
         self.assertEqual([(message.role, message.content) for message in messages[1:]], [
             ("user", "Can we continue plants?"),
             ("assistant", "Yes, let us continue photosynthesis."),
@@ -155,7 +166,7 @@ class ConversationContextTests(unittest.TestCase):
         self.assertEqual(started.status_code, 200)
         self.assertEqual(started.json()["conversation"], {
             "conversationId": "8ca0532e-20be-49c2-b4df-566d87f0e0e4", "title": "Plant revision",
-            "restoredMessages": 2, "savedMemoryNotes": 1, "hasSummary": True, "persistence": "active",
+            "restoredMessages": 2, "savedMemoryNotes": 1, "hasSummary": True, "hasScratchpad": True, "persistence": "active",
         })
         missing_turn_id = client.post("/v1/sessions/python-session-1/turns", headers=headers, json={
             "message": "This must not be generated without durable turn identity.",
@@ -166,12 +177,15 @@ class ConversationContextTests(unittest.TestCase):
         })
         self.assertEqual(completed.status_code, 200)
         self.assertTrue(completed.json()["conversationPersistence"]["saved"])
+        self.assertEqual(completed.json()["scratchpad"]["goal"], "Understand how plants use light.")
         self.assertTrue(transport.calls[1][0].endswith("/conversations/turns"))
         saved = transport.calls[1][1]
         self.assertEqual(saved["conversationId"], "8ca0532e-20be-49c2-b4df-566d87f0e0e4")
         self.assertEqual(saved["turnId"], "turn_context_0001")
         self.assertEqual(saved["userMessage"], "Light helps plants make food.")
         self.assertIn("Plants use light energy", saved["summary"])
+        self.assertEqual(saved["scratchpad"]["goal"], "Understand how plants use light.")
+        self.assertEqual(saved["scratchpad"]["nextSteps"], ["Connect light to glucose production."])
         self.assertEqual(saved["memories"][0]["kind"], "learning_summary")
 
     def test_same_turn_id_retries_persistence_without_generating_a_second_answer(self) -> None:

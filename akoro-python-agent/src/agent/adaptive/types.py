@@ -6,6 +6,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from agent.memory.conversation import LearnerConversationContext
+from agent.memory.scratchpad import WorkingScratchpad
 from agent.memory.session_memory import SessionTranscript
 from agent.state.teaching_state import PHASES, PHASE_LABELS, TeachingState
 
@@ -140,6 +141,10 @@ class AdaptiveSession:
     # separate user/assistant transcript is restored from Akoro API when a
     # trusted bridge attaches a durable learner conversation to this session.
     history: SessionTranscript = field(default_factory=SessionTranscript)
+    # Working state is deliberately structured, compact, and separate from the
+    # raw user/assistant transcript. It persists per conversation only through
+    # the authorised Akoro API gateway.
+    scratchpad: WorkingScratchpad | None = None
     conversation_id: str | None = None
     conversation: LearnerConversationContext | None = None
     reference: SessionReference | None = None

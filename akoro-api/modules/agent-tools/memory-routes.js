@@ -70,4 +70,27 @@ router.delete("/conversations/:conversationId/summary", authenticateToken, async
   }
 });
 
+// Scratchpad is working state, not the immutable chat record. A learner can
+// clear it independently and the next completed Python turn will create a new,
+// concise checklist from the current conversation.
+router.delete("/conversations/:conversationId/scratchpad", authenticateToken, async (req, res) => {
+  if (!CONVERSATION_ID.test(req.params.conversationId)) {
+    return res.status(422).json({ success: false, error: "conversationId is invalid" });
+  }
+  try {
+    const { data, error } = await db.schema("edu").from("learner_agent_conversation_scratchpads")
+      .delete()
+      .eq("chat_session_id", req.params.conversationId)
+      .eq("user_id", req.user.id)
+      .select("chat_session_id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, error: "Conversation scratchpad was not found" });
+    return res.json({ success: true, clearedConversationId: data.chat_session_id });
+  } catch (error) {
+    console.error("[agent-memory/scratchpad DELETE]", error.message);
+    return res.status(503).json({ success: false, error: "Agent scratchpad is unavailable" });
+  }
+});
+
 export default router;

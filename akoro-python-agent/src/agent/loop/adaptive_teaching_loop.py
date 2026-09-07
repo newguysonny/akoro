@@ -18,6 +18,7 @@ from agent.adaptive.student import StudentAgent
 from agent.adaptive.types import AdaptiveSession
 from agent.memory.akoro_conversation import AkoroConversationError, AkoroConversationSession
 from agent.memory.conversation import ConversationMemoryUpdate, LearnerMemory, MAX_MEMORY_ITEMS
+from agent.memory.scratchpad import WorkingScratchpad
 from agent.reasoning.teaching import TeachingPlan
 from agent.state.teaching_state import PHASE_LABELS, ProgressionPolicy
 from agent.tools.akoro_api import AkoroToolSession
@@ -78,9 +79,16 @@ class AdaptiveTeachingLoop:
         )
         self.session.knowledge_map = list(plan.steps)
         self.session.must_know_parts = plan.titles
+        self.session.scratchpad = (
+            self.session.conversation.scratchpad
+            if self.session.conversation and self.session.conversation.scratchpad
+            else WorkingScratchpad.initial(self.session.topic)
+        )
+        if self.session.conversation:
+            self.session.conversation.scratchpad = self.session.scratchpad
         self._student = StudentAgent(
             self._profile, self._repository, self._model, self.session.subject, self.session.reference, self._tools,
-            self.session.conversation,
+            self.session.conversation, self.session.scratchpad,
         )
         cognitive = self._repository.get_cognitive_state(self._profile.id, self.session.topic)
         current = self._current_subtopic()
@@ -125,6 +133,7 @@ class AdaptiveTeachingLoop:
             # No raw conversation or memory is echoed to the caller. The bridge
             # already owns it; this merely confirms whether it was restored.
             "conversation": self.session.conversation.public_metadata() if self.session.conversation else None,
+            "scratchpad": self.session.scratchpad.wire() if self.session.scratchpad else None,
             "tools": {
                 "enabled": bool(self._tools and self._tools.enabled),
                 "available": self._tools.public_catalogue() if self._tools else [],
@@ -245,9 +254,12 @@ class AdaptiveTeachingLoop:
         self.session.xp_earned += turn_xp
 
         action = "CLEAR_MISTAKE" if analysis.misconception_detected and not analysis.misconception_cleared else guide["nextAction"]
+        scratchpad = self._student.update_scratchpad(human_message, student_reply, self.session.topic)
+        self.session.scratchpad = scratchpad
         response = {
             "type": "teaching_response",
             "studentAgentResponse": student_reply,
+            "scratchpad": scratchpad.wire(),
             # This structured audit field is intentionally result-free. The
             # model may use bounded data to answer the teacher's question, but
             # callers do not receive a second raw tool-result payload here.
@@ -295,7 +307,7 @@ class AdaptiveTeachingLoop:
             else:
                 self._remember_durable_turn(
                     turn_id, human_message, student_reply,
-                    self._conversation_memory_update(analysis, chunk), response,
+                    self._conversation_memory_update(scratchpad, chunk), response,
                 )
                 return self._replay_durable_turn(turn_id, human_message)
         return response
@@ -347,7 +359,7 @@ class AdaptiveTeachingLoop:
         cached.response = deepcopy(response)
         return response
 
-    def _conversation_memory_update(self, analysis, chunk=None) -> ConversationMemoryUpdate:
+    def _conversation_memory_update(self, scratchpad: WorkingScratchpad, chunk=None) -> ConversationMemoryUpdate:
         """Create compact study context without copying raw prompts into memory."""
         concepts = self.session.concepts_learned[-3:]
         concept_text = "; ".join(concepts) if concepts else "Continue building the current foundation"
@@ -365,7 +377,7 @@ class AdaptiveTeachingLoop:
                 "topic": chunk.topic[:180],
                 "subject": (chunk.subject or "")[:180],
             },)
-        return ConversationMemoryUpdate(summary=summary, memories=memories)
+        return ConversationMemoryUpdate(summary=summary, scratchpad=scratchpad, memories=memories)
 
     def execute_confirmed_action(self, confirmation_token: str) -> dict[str, Any]:
         """Redeem a server-issued learner confirmation without re-prompting the model."""

@@ -19,6 +19,7 @@ import {
   persistenceRequest,
   publicConversationMessage,
   publicMemory,
+  publicScratchpad,
 } from "./conversation-context-validation.js";
 
 const router = Router();
@@ -100,7 +101,7 @@ function boundedConversationMessages(rows) {
 }
 
 async function loadConversationSnapshot(conversationId, userId) {
-  const [messagesResult, summaryResult, memoriesResult] = await Promise.all([
+  const [messagesResult, summaryResult, scratchpadResult, memoriesResult] = await Promise.all([
     db.from("chat_messages")
       .select("role, text, created_at")
       .eq("session_id", conversationId)
@@ -112,6 +113,11 @@ async function loadConversationSnapshot(conversationId, userId) {
       .eq("chat_session_id", conversationId)
       .eq("user_id", userId)
       .maybeSingle(),
+    db.schema("edu").from("learner_agent_conversation_scratchpads")
+      .select("goal, completed, next_steps, open_questions, tool_state")
+      .eq("chat_session_id", conversationId)
+      .eq("user_id", userId)
+      .maybeSingle(),
     db.schema("edu").from("learner_agent_memories")
       .select("id, kind, content, subject, topic")
       .eq("user_id", userId)
@@ -119,12 +125,13 @@ async function loadConversationSnapshot(conversationId, userId) {
       .order("updated_at", { ascending: false })
       .limit(8),
   ]);
-  if (messagesResult.error || summaryResult.error || memoriesResult.error) {
+  if (messagesResult.error || summaryResult.error || scratchpadResult.error || memoriesResult.error) {
     throw new ConversationGatewayError(503, "Conversation context storage is unavailable");
   }
   return {
     messages: boundedConversationMessages(messagesResult.data),
     summary: boundedText(summaryResult.data?.summary, 4_000) || null,
+    scratchpad: scratchpadResult.data ? publicScratchpad(scratchpadResult.data) : null,
     memories: (memoriesResult.data || []).map(publicMemory).filter(Boolean),
   };
 }
@@ -257,12 +264,22 @@ async function persistTurn({ request, userId }) {
       .eq("session_id", request.conversationId)
       .eq("user_id", userId);
     if (countResult.error) throw new ConversationGatewayError(503, "Conversation message count is unavailable");
-    const [summaryResult, memoryResult, sessionResult] = await Promise.all([
+    const [summaryResult, scratchpadResult, memoryResult, sessionResult] = await Promise.all([
       db.schema("edu").from("learner_agent_conversation_summaries").upsert({
         chat_session_id: request.conversationId,
         user_id: userId,
         summary: request.summary,
         source_message_count: Number(countResult.count || 0),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "chat_session_id" }),
+      db.schema("edu").from("learner_agent_conversation_scratchpads").upsert({
+        chat_session_id: request.conversationId,
+        user_id: userId,
+        goal: request.scratchpad.goal,
+        completed: request.scratchpad.completed,
+        next_steps: request.scratchpad.nextSteps,
+        open_questions: request.scratchpad.openQuestions,
+        tool_state: request.scratchpad.toolState,
         updated_at: new Date().toISOString(),
       }, { onConflict: "chat_session_id" }),
       request.memories.length
@@ -281,7 +298,7 @@ async function persistTurn({ request, userId }) {
         updated_at: new Date().toISOString(),
       }).eq("id", request.conversationId).eq("user_id", userId),
     ]);
-    if (summaryResult.error || memoryResult.error || sessionResult.error) {
+    if (summaryResult.error || scratchpadResult.error || memoryResult.error || sessionResult.error) {
       throw new ConversationGatewayError(503, "Conversation context could not be completed");
     }
     await markTurn({

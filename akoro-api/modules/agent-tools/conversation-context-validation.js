@@ -7,7 +7,9 @@
 export const CONVERSATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const AGENT_ID = /^[A-Za-z0-9_-]{1,180}$/;
 export const TURN_ID = /^[A-Za-z0-9_-]{8,180}$/;
+export const TOOL_NAME = /^[a-z][a-z0-9_]{0,79}$/;
 export const MEMORY_KINDS = new Set(["learning_summary", "study_preference", "learner_goal"]);
+const SCRATCHPAD_SECTIONS = ["completed", "nextSteps", "openQuestions"];
 
 export function boundedText(value, maximum) {
   return typeof value === "string"
@@ -25,6 +27,31 @@ export function conversationRequest(body = {}) {
   return { sessionId, toolContext, conversationId };
 }
 
+export function normaliseScratchpad(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("scratchpad is invalid");
+  const goal = boundedText(value.goal, 500);
+  if (!goal) throw new Error("scratchpad goal is required");
+  const normaliseItems = (items) => {
+    if (!Array.isArray(items) || items.length > 6) throw new Error("scratchpad checklist is invalid");
+    const clean = items.map((item) => boundedText(item, 320)).filter(Boolean);
+    if (clean.length !== new Set(clean).size) throw new Error("scratchpad checklist must not contain duplicates");
+    return clean;
+  };
+  const scratchpad = { goal };
+  for (const name of SCRATCHPAD_SECTIONS) scratchpad[name] = normaliseItems(value[name]);
+  if (!Array.isArray(value.toolState) || value.toolState.length > 4) throw new Error("scratchpad tool state is invalid");
+  scratchpad.toolState = value.toolState.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("scratchpad tool state is invalid");
+    const tool = boundedText(item.tool, 80);
+    if (!TOOL_NAME.test(tool) || typeof item.success !== "boolean") throw new Error("scratchpad tool state is invalid");
+    const safe = { tool, success: item.success };
+    if (item.sideEffecting === true) safe.sideEffecting = true;
+    if (item.requiresConfirmation === true) safe.requiresConfirmation = true;
+    return safe;
+  });
+  return scratchpad;
+}
+
 export function persistenceRequest(body = {}) {
   const { sessionId, toolContext, conversationId } = conversationRequest(body);
   const turnId = typeof body.turnId === "string" ? body.turnId : "";
@@ -34,6 +61,7 @@ export function persistenceRequest(body = {}) {
   if (!TURN_ID.test(turnId) || !userMessage || !assistantMessage || !summary) {
     throw new Error("turnId, userMessage, assistantMessage, and summary are required");
   }
+  const scratchpad = normaliseScratchpad(body.scratchpad);
   const raw = Array.isArray(body.memories) ? body.memories : [];
   if (raw.length > 4) throw new Error("At most four memory notes may be saved per turn");
   const memories = raw.map((item) => {
@@ -45,7 +73,21 @@ export function persistenceRequest(body = {}) {
     if (!MEMORY_KINDS.has(kind) || !content) throw new Error("memory note is invalid");
     return { kind, content, topic, subject };
   });
-  return { sessionId, toolContext, conversationId, turnId, userMessage, assistantMessage, summary, memories };
+  return { sessionId, toolContext, conversationId, turnId, userMessage, assistantMessage, summary, scratchpad, memories };
+}
+
+export function publicScratchpad(row = {}) {
+  try {
+    return normaliseScratchpad({
+      goal: row.goal,
+      completed: row.completed,
+      nextSteps: row.next_steps ?? row.nextSteps,
+      openQuestions: row.open_questions ?? row.openQuestions,
+      toolState: row.tool_state ?? row.toolState,
+    });
+  } catch {
+    return null;
+  }
 }
 
 export function publicConversationMessage(row = {}) {
