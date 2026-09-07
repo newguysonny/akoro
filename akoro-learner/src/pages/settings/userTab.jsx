@@ -198,24 +198,45 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
     };
     const apiKey = fieldMap[field] || field;
+    const previousValue = profile[field];
+    const reloadsApp = ['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
+      && val && val !== previousValue;
+
+    // Optimistic feedback keeps the sheet responsive, but the API response is
+    // still the source of truth. A profile field must never be described as
+    // "saved locally" unless it has actually entered the offline write queue.
     setProfile(p => ({ ...p, [field]: val }));
     try {
-      await onSaveProfile({ [apiKey]: val });
-      showToast('Saved');
-    } catch {
-      showToast('Saved locally');
-    }
+      const result = await onSaveProfile({ [apiKey]: val });
+      if (result?.queued || result?._offline) {
+        showToast('Saved on this device — it will sync when you are online');
+        return;
+      }
+      if (result?.success !== true) {
+        throw new Error('The change was not confirmed by Akoro. Please try again.');
+      }
 
-    /* Level, language and theme switches all re-derive the whole app (the
-       school ↔ higher-ed tier reads studyLevel/schoolType; language and
-       theme come from storage at boot), so a plain state update isn't
-       enough — stage the branded boot splash and hard-reload so every
-       screen re-renders from the new setting. Runs on the saved-locally
-       path too: the queued write replays after the reload. */
-    if (['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
-        && val && val !== profile[field]) {
-      try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
-      setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      // School Type controls the school / higher-ed experience, so confirm the
+      // value the database actually saved before reloading into that experience.
+      if (field === 'schoolType' && result?.data?.schoolType !== val) {
+        throw new Error('School Type was not confirmed. Please try again.');
+      }
+
+      showToast('Saved');
+
+      // Level, language and theme switches re-derive the app at boot. Reload
+      // only after the server has confirmed the update—not after a rejected or
+      // queued request, which previously restored the old database value.
+      if (reloadsApp) {
+        try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+        setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      }
+    } catch (error) {
+      // Do not leave a rejected optimistic value on screen. Guard the rollback
+      // so a later save to the same field cannot be overwritten by this one.
+      setProfile(p => p?.[field] === val ? { ...p, [field]: previousValue } : p);
+      console.warn('[settings] profile save failed', error);
+      showToast(error?.message || 'Could not save this change. Please try again.');
     }
   }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);
 

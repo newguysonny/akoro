@@ -1040,6 +1040,7 @@ router.patch("/me", authenticateToken, [
     username: updated.username,
     city: updated.city ?? null,
     country: updated.country ?? null,
+    schoolType: updated.school_type ?? null,
     accentColor: updated.accent_color,
     timeZone: timeZone !== undefined ? timeZone.trim() : undefined,
     onboardingCompleted: updated.onboarding_completed ?? false,
