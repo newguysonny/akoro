@@ -5,6 +5,24 @@ import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
+/* ── Streaming caret — the blinking cursor at the end of a reply
+   that is still being generated. A block caret (not a thin one) reads as
+   "text is arriving here" even at 13px. Honours reduced motion. ── */
+const STREAM_CSS = `
+@keyframes ak-caret-blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+.ak-caret{display:inline-block;width:8px;height:1em;margin-left:2px;vertical-align:-0.15em;
+  background:currentColor;border-radius:1.5px;animation:ak-caret-blink 1s step-end infinite;}
+@media (prefers-reduced-motion: reduce){.ak-caret{animation:none;opacity:.75}}
+`;
+function StreamCaret() {
+  return (
+    <>
+      <style>{STREAM_CSS}</style>
+      <span className="ak-caret" aria-hidden="true"/>
+    </>
+  );
+}
+
 /* ── Mic level meter ──────────────────────────────────────────────
    Twelve segments lit in proportion to RMS loudness. Segments rather than a
    continuous bar because movement is the signal: a bar sliding smoothly near
@@ -173,6 +191,11 @@ function SessionChatView({
   chatMode = "teach",
   onToggleChatMode,
   guide = null,
+  // Streaming token feedback — the Protégé / Guide reply for the turn in
+  // flight, accumulated token-by-token by the host from student_token /
+  // guide_token events. Non-null renders a live bubble with a caret.
+  liveStudent = null,
+  liveGuide = null,
 }) {
   const { t } = useLang();
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
@@ -182,7 +205,7 @@ function SessionChatView({
 
   useEffect(()=>{
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [blocks, loading, chatMode, guide?.messages?.length]);
+  }, [blocks, loading, chatMode, guide?.messages?.length, liveStudent, liveGuide]);
 
   const handleKey = e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
@@ -342,7 +365,36 @@ function SessionChatView({
         {blocks.map((b,i) => (
           <BlockRenderer key={i} block={b} agentName={agentName} agentEmoji={agentEmoji}/>
         ))}
-        {loading && (
+        {/* ── Streaming token feedback — the turn in flight, drawn as it is
+            generated. Styles mirror BlockRenderer's protégé / guide bubbles
+            so the finished block simply replaces this in place. ── */}
+        {liveStudent != null && liveStudent !== "" && (
+          <div style={{ display:"flex",alignItems:"flex-end",gap:8,marginBottom:4 }}>
+            <div style={{ width:28,height:28,borderRadius:"50%",background:AGENT_STYLES.student.bg,
+              border:`1.5px solid ${AGENT_STYLES.student.ring}`,flexShrink:0,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>{agentEmoji || AGENT_STYLES.student.emoji}</div>
+            <div style={{ maxWidth:"84%",padding:"9px 13px",borderRadius:"4px 18px 18px 18px",
+              background:AGENT_STYLES.student.bg,border:`1px solid ${AGENT_STYLES.student.ring}`,
+              color:AGENT_STYLES.student.color,fontSize:13.5,lineHeight:1.6,
+              whiteSpace:"pre-wrap",fontWeight:500 }}>
+              {liveStudent}<StreamCaret/>
+            </div>
+          </div>
+        )}
+        {liveGuide != null && liveGuide !== "" && (
+          <div style={{ display:"flex",alignItems:"flex-end",gap:8,marginBottom:4 }}>
+            <div style={{ width:28,height:28,borderRadius:"50%",background:AGENT_STYLES.nana.bg,
+              border:`1.5px solid ${AGENT_STYLES.nana.ring}`,flexShrink:0,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>🧠</div>
+            <div style={{ maxWidth:"84%",padding:"9px 13px",borderRadius:"4px 18px 18px 18px",
+              background:AGENT_STYLES.nana.bg,border:`1px solid ${AGENT_STYLES.nana.ring}`,
+              color:AGENT_STYLES.nana.color,fontSize:13.5,lineHeight:1.6,
+              whiteSpace:"pre-wrap",fontWeight:500 }}>
+              {liveGuide}<StreamCaret/>
+            </div>
+          </div>
+        )}
+        {loading && !liveStudent && !liveGuide && (
           <div style={{ display:"flex",alignItems:"flex-end",gap:8 }}>
             <div style={{ width:28,height:28,borderRadius:"50%",background:AGENT_STYLES.nana.bg,
               border:`1.5px solid ${AGENT_STYLES.nana.ring}`,flexShrink:0,

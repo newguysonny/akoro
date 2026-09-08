@@ -27,6 +27,10 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
   const [seconds,   setSeconds]   = useState(0);
   const [loading,   setLoading]   = useState(false);
   const [wsReady,   setWsReady]   = useState(false);
+  // Streaming tokens for the turn in flight (same contract as TeachAgentModal).
+  const [liveStudent, setLiveStudent] = useState(null);
+  const [liveGuide,   setLiveGuide]   = useState(null);
+  const clearLiveStream = () => { setLiveStudent(null); setLiveGuide(null); };
   // Socket lifecycle for the connection chip: "connecting" | "connected" | "reconnecting"
   const [connState, setConnState] = useState("connecting");
   const timerRef    = useRef(null);
@@ -111,8 +115,14 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
 
       ws.on("typing_start", () => setLoading(true));
 
+      // Streaming token feedback — protégé/guide replies draw as they are
+      // generated; turn_complete replaces the live bubbles with real blocks.
+      ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+      ws.on("guide_token",   (d) => setLiveGuide(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+
       ws.on("turn_complete", ({ blocks: newBlocks }) => {
         setLoading(false);
+        clearLiveStream();
         if (newBlocks?.length) setBlocks(prev => [...prev, ...newBlocks]);
       });
 
@@ -121,6 +131,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       ws.on("error", err => {
         console.warn("[DecayModal WS]", err.message);
         setLoading(false);
+        clearLiveStream();
         if (!sessionIdRef.current) {
           setInitLoading(false);
           setBlocks(prev => prev.some(b => b.type === "system-divider") ? prev : [...prev, {
@@ -199,6 +210,8 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       onToggleRecording={toggleRecording}
       seconds={seconds}
       connState={connState}
+      liveStudent={liveStudent}
+      liveGuide={liveGuide}
       onClose={onClose}
     />
   );

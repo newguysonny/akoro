@@ -126,6 +126,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [interimText,    setInterimText]   = useState("");     // audio chunks
   const [voiceLevel,     setVoiceLevel]    = useState(0);      // 0..1 mic loudness, for the meter
   const [cogState,       setCogState]      = useState(null);   // live cognitive state
+  // Streaming tokens for the turn in flight — Protégé and Guide replies
+  // appear token-by-token with a blinking cursor until turn_complete lands.
+  const [liveStudent, setLiveStudent] = useState(null);
+  const [liveGuide,   setLiveGuide]   = useState(null);
+  const clearLiveStream = () => { setLiveStudent(null); setLiveGuide(null); };
 
   // Mid-session teacher switching
   const [guide,        setGuide]        = useState({ name: guideNm, emoji: guideEm });
@@ -241,6 +246,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       // — fall back to a fresh session, marking the break in the transcript.
       ws.on("resume_failed", () => {
         sessionIdRef.current = null;
+        clearLiveStream();
         setBlocks(prev => prev.length
           ? [...prev, { type:"system-divider", label:"Reconnected — starting a new session" }]
           : prev);
@@ -310,8 +316,18 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       });
 
       ws.on("typing_start", () => setLoading(true));
+      // ── Streaming token feedback ───────────────────────────────
+      // The orchestrator streams Protégé and Guide tokens as they are
+      // generated (student_token / guide_token). We accumulate them into
+      // live bubbles with a blinking cursor; turn_complete then replaces
+      // them with the authoritative blocks. Both payload shapes are
+      // accepted ({token} from the node socket path, {text} from the
+      // python SSE bridge contract).
+      ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+      ws.on("guide_token",   (d) => setLiveGuide(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
       ws.on("turn_complete", ({ blocks: newBlocks, currentPhase }) => {
         setLoading(false);
+        clearLiveStream();
         if (newBlocks?.length) {
           setBlocks(prev => [...prev, ...newBlocks]);
           // TTS only when the human used voice — modality mirrors input.
@@ -362,6 +378,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       ws.on("error", err => {
         console.warn("[TeachModal WS]", err.message);
         setLoading(false); setSwitching(false);
+        clearLiveStream();   // a failed turn leaves no half-drawn bubbles
         // If the session never came up, surface the failure instead of leaving
         // the user on a silent spinner.
         if (!sessionIdRef.current) {
@@ -777,6 +794,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         guideName: guide.name,
         guideEmoji: guide.emoji,
       }}
+      liveStudent={liveStudent}
+      liveGuide={liveGuide}
     />
   );
 
