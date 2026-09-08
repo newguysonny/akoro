@@ -3,7 +3,8 @@ import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
 import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
-import { SendIcon, ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
+import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
+import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
@@ -429,6 +430,21 @@ function AgentChatTab({
   const doneCount=tasks.filter(tk=>tk.status==="done").length;
   const highCount=tasks.filter(tk=>tk.priority==="high"&&tk.status!=="done").length;
 
+  // The menu presents existing, server-recognised chat modes. It does not
+  // choose a model in the browser: the API remains the authority that routes
+  // the supported mode and any authorised tool work.
+  const selectedChatMode = thinkMode ? "think" : researchMode ? "research" : "default";
+  const chatModes = [
+    { id:"default", label:"Standard", description:"Balanced learning support" },
+    { id:"think", label:t('agent.mode_think'), description:t('agent.mode_think_hint') },
+    { id:"research", label:t('agent.mode_research'), description:t('agent.mode_research_hint') },
+  ];
+  const selectedChatModeLabel = chatModes.find(option => option.id === selectedChatMode)?.label || "Standard";
+  const chooseChatMode = mode => {
+    setThinkMode(mode === "think");
+    setResearchMode(mode === "research");
+  };
+
   return (
     <div style={{ display:"flex",flexDirection:"column",height:"100%",background:"var(--ak-surface)" }}>
       {/* Ensure chat/task inputs stay readable in dark mode (WebKit text-fill + placeholder) */}
@@ -548,22 +564,25 @@ function AgentChatTab({
                 ))}
               </div>
             )}
-            <div style={{ display:"flex",gap:8,alignItems:"center",background:"var(--ak-surface-hover)",borderRadius:50,border:"1.5px solid var(--ak-border2)",padding:"7px 8px 7px 8px" }}>
-              <button onClick={()=>fileInputRef.current?.click()} disabled={loading} title={t('agent.attach_add')} aria-label={t('agent.attach_add')} style={{ width:34,height:34,borderRadius:"50%",border:"1.5px dashed var(--ak-border3)",background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:loading?"not-allowed":"pointer",flexShrink:0,opacity:loading?.45:1,transition:"border-color .15s" }}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </button>
-              <input className="ak-chat-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder={t('agent.ask_anything').replace('{name}', shownName)} style={{ flex:1,background:"transparent",border:"none",outline:"none",fontSize:13.5,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif" }}/>
-              <button onClick={()=>sendMessage()} disabled={loading||!input.trim()&&!attachments.length} style={{ width:36,height:36,borderRadius:"50%",background:(input.trim()||attachments.length)?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",border:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:(input.trim()||attachments.length)?"pointer":"default",flexShrink:0,transition:"background .2s" }}><SendIcon size={15} color={(input.trim()||attachments.length)?"#fff":"var(--ak-text-muted)"}/></button>
-            </div>
-            {/* Mode pills — Think & Research switch the tutor's engine; Task
-                keeps its gold accent and opens the task sheet. */}
+            <FortizoChatComposer
+              value={input}
+              onChange={setInput}
+              onSend={()=>sendMessage()}
+              placeholder={t('agent.ask_anything').replace('{name}', shownName)}
+              disabled={loading}
+              attachmentAction={()=>fileInputRef.current?.click()}
+              attachmentLabel={t('agent.attach_add')}
+              voiceLabel="Voice input is not available in AI Chat yet"
+              audioLabel="Audio notes are not available in AI Chat yet"
+              modelId={selectedChatMode}
+              modelLabel={selectedChatModeLabel}
+              modelOptions={chatModes}
+              onModelChange={chooseChatMode}
+              sendDisabled={!input.trim()&&!attachments.length}
+            />
+            {/* Think and Research now live in the Fortizo-style model menu.
+                The remaining learning/session actions stay in their familiar row. */}
             <div style={{ display:"flex",alignItems:"center",gap:6,marginTop:9 }}>
-              <button onClick={()=>{setThinkMode(v=>!v);setResearchMode(false);}} disabled={loading} title={t('agent.mode_think_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${thinkMode?`${BRAND}55`:"var(--ak-border2)"}`,background:thinkMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:thinkMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
-                <Icon name="ti-brain" size={12}/> {t('agent.mode_think')}
-              </button>
-              <button onClick={()=>{setResearchMode(v=>!v);setThinkMode(false);}} disabled={loading} title={t('agent.mode_research_hint')} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${researchMode?`${BRAND}55`:"var(--ak-border2)"}`,background:researchMode?`${BRAND}14`:"transparent",fontSize:11,fontWeight:800,color:researchMode?BRAND:"var(--ak-text-muted)",cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",transition:"all .15s",flexShrink:0 }}>
-                <Icon name="ti-microscope" size={12}/> {t('agent.mode_research')}
-              </button>
               <button type="button" onClick={()=>onStartExamPrep?.()} disabled={loading || !onStartExamPrep} title="Start generated exam-style practice" style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:20,border:`1px solid ${GREEN}45`,background:`${GREEN}10`,fontSize:10.5,fontWeight:800,color:GREEN,cursor:loading?"not-allowed":"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
                 <Icon name="ti-clipboard-check" size={12}/> Practice
               </button>

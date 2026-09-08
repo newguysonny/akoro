@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
-import { MicIcon, SendIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, Icon } from '../common/Icons.jsx';
+import { MicIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, Icon } from '../common/Icons.jsx';
+import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
@@ -244,54 +245,28 @@ function SessionChatView({
           </div>
         )}
 
-        {/* ── Normal mode — text input + two voice buttons ── */}
+        {/* Fortizo reference composer — compact icon rail, adapted to Akoro.
+            The teaching WebSocket currently accepts text and the two existing
+            voice paths only, so the attachment control is intentionally visible
+            but unavailable rather than pretending to upload a file. */}
         {!recording && !voiceStreaming && (
-          <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
-            {/* Audio button — hold to record full blob */}
-            <div onClick={onToggleRecording}
-              style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,
-                background:"rgba(255,255,255,.07)",border:"1.5px solid rgba(255,255,255,.10)",
-                borderRadius:12,padding:"9px 11px",cursor:"pointer",transition:"all .2s" }}>
-              <MicIcon size={13} color="#64748B"/>
-              <span style={{ fontSize:10,fontWeight:700,color:"#64748B" }}>{t('teaching.audio')}</span>
-            </div>
-            {/* Text input */}
-            <div style={{ flex:1,display:"flex",alignItems:"center",
-              background:"rgba(255,255,255,.07)",border:"1.5px solid rgba(255,255,255,.10)",
-              borderRadius:12,padding:"8px 12px" }}>
-              <input value={input} onChange={e=>onInputChange(e.target.value)}
-                onKeyDown={handleKey}
-                placeholder={t('teaching.explain_ph').replace('{name}', agentName)}
-                style={{ flex:1,background:"none",border:"none",outline:"none",
-                  fontSize:13,fontWeight:600,color:"#CBD5E1",
-                  fontFamily:"'Nunito',sans-serif" }}/>
-            </div>
-            {/* Send when typing — Voice when not */}
-            {input.trim() ? (
-              <div onClick={()=>onSend()}
-                style={{ width:40,height:40,borderRadius:12,flexShrink:0,
-                  background:`linear-gradient(135deg,${sc},${sc}BB)`,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  cursor:"pointer",transition:"all .2s" }}>
-                <SendIcon size={16} color="#fff"/>
-              </div>
-            ) : onToggleVoice ? (
-              <div onClick={onToggleVoice}
-                style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,
-                  background:`${RED}18`,border:`1.5px solid ${RED}44`,
-                  borderRadius:12,padding:"9px 11px",cursor:"pointer",transition:"all .2s" }}>
-                <div style={{ width:8,height:8,borderRadius:"50%",background:RED }}/>
-                <span style={{ fontSize:10,fontWeight:700,color:RED }}>{t('teaching.voice')}</span>
-              </div>
-            ) : (
-              <div onClick={()=>onSend()}
-                style={{ width:40,height:40,borderRadius:12,flexShrink:0,
-                  background:"rgba(255,255,255,.06)",
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  cursor:"pointer",transition:"all .2s" }}>
-                <SendIcon size={16} color="#475569"/>
-              </div>
-            )}
+          <div style={{ marginBottom:8 }}>
+            <FortizoChatComposer
+              dark
+              value={input}
+              onChange={onInputChange}
+              onSend={onSend}
+              placeholder={t('teaching.explain_ph').replace('{name}', agentName)}
+              voiceAction={onToggleVoice}
+              voiceLabel={t('teaching.voice')}
+              audioAction={onToggleRecording}
+              audioLabel={t('teaching.audio')}
+              attachmentUnavailable
+              attachmentLabel="Attachments are not available in teaching sessions yet"
+              modelLabel="Adaptive"
+              modelLabelDescription="The teaching guide selects the response mode"
+              sendDisabled={!input.trim()}
+            />
           </div>
         )}
 
