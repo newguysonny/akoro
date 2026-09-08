@@ -162,6 +162,37 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     if (isMobileView) setReaderOpen(false);
   };
 
+  // ── Session mode toggle (LEARN BY TEACHING ↔ LEARNING WITH GUIDE) ────────
+  // "guide" is UI-only for now: just the teaching guide and the human, no
+  // protégé, no WebSocket. The live teaching session (if running) is kept
+  // intact underneath — toggling back restores it untouched.
+  const [chatMode,      setChatMode]      = useState("teach");
+  const [guideMessages, setGuideMessages] = useState([]);
+  const guideNotedRef   = useRef(false);
+  const toggleChatMode  = () => {
+    setChatMode(m => (m === "teach" ? "guide" : "teach"));
+    // Seed the guide's opening line once (local, no backend).
+    setGuideMessages(prev => prev.length ? prev : [{
+      role: "guide",
+      text: t('teaching.guide_open').replace('{name}', guide.name),
+    }]);
+  };
+  const sendGuideMessage = (text) => {
+    const clean = String(text || "").trim();
+    if (!clean) return;
+    setInput("");
+    setGuideMessages(prev => {
+      const next = [...prev, { role: "user", text: clean }];
+      // One honest note that live guide replies are not wired yet — never
+      // fabricate a guide answer.
+      if (!guideNotedRef.current) {
+        guideNotedRef.current = true;
+        next.push({ role: "system", text: t('teaching.guide_note') });
+      }
+      return next;
+    });
+  };
+
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
@@ -642,7 +673,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       <div style={{ position:"fixed",inset:0,zIndex:3000,background:"#080812",
         display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif" }}>
         <div style={{ display:"flex",alignItems:"center",background:"rgba(255,255,255,.04)",
-          borderBottom:"1px solid rgba(255,255,255,.06)",paddingTop:52 }}>
+          borderBottom:"1px solid rgba(255,255,255,.06)",paddingTop:"calc(env(safe-area-inset-top, 0px) + 14px)" }}>
           {["chat","summary"].map(tab=>(
             <button key={tab} onClick={()=>setActiveTab(tab)}
               style={{ flex:1,padding:"10px 0",background:"none",border:"none",cursor:"pointer",
@@ -737,6 +768,15 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       onClose={onClose}
       embedded={embedded}
       onOpenReader={readerOpen ? closeReader : openReader}
+      chatMode={chatMode}
+      onToggleChatMode={toggleChatMode}
+      guide={{
+        messages: guideMessages,
+        onSend: sendGuideMessage,
+        onSuggestion: setInput,
+        guideName: guide.name,
+        guideEmoji: guide.emoji,
+      }}
     />
   );
 
