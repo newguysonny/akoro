@@ -12,6 +12,8 @@ const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const teach = await read("../src/components/teaching/TeachAgentModal.jsx");
 const decay = await read("../src/components/teaching/DecaySessionModal.jsx");
 const chatView = await read("../src/components/teaching/SessionChatView.jsx");
+const aiChat = await read("../src/components/tabs/AgentChatTab.jsx");
+const caret = await read("../src/components/common/StreamCaret.jsx");
 
 test("session modals observe protégé and guide token streams", () => {
   for (const [name, src] of [["TeachAgentModal", teach], ["DecaySessionModal", decay]]) {
@@ -28,10 +30,22 @@ test("session modals observe protégé and guide token streams", () => {
 test("SessionChatView draws the stream with a blinking caret", () => {
   assert.match(chatView, /liveStudent/);
   assert.match(chatView, /liveGuide/);
-  assert.match(chatView, /ak-caret/);
-  assert.match(chatView, /ak-caret-blink/);
-  // Reduced motion gets a static caret, not a blinking one.
-  assert.match(chatView, /prefers-reduced-motion/);
+  // Caret comes from the shared component (keyframes live there).
+  assert.match(chatView, /import StreamCaret from '\.\.\/common\/StreamCaret\.jsx';/);
+  assert.match(chatView, /<StreamCaret\/>/);
   // The "waiting" dots yield to the stream once tokens arrive.
   assert.match(chatView, /loading && !liveStudent && !liveGuide/);
+});
+
+test("AI chat ends its streaming answer and thought process with the caret", () => {
+  // The caret is the one shared implementation, not a local copy.
+  assert.match(caret, /ak-caret-blink/);
+  assert.match(caret, /prefers-reduced-motion/);
+  assert.match(chatView, /import StreamCaret from '\.\.\/common\/StreamCaret\.jsx';/);
+  // The answer bubble shows the caret only while tokens still arrive
+  // (phase "answering"); onDone flips the phase and the caret drops.
+  assert.match(aiChat, /msg\.phase==="answering"&&<StreamCaret\/>/);
+  // The reasoning summary streams into the ThoughtBlock with a caret too.
+  assert.match(aiChat, /streaming && expanded && <StreamCaret\/>/);
+  assert.match(aiChat, /import StreamCaret from '\.\.\/common\/StreamCaret\.jsx';/);
 });

@@ -10,6 +10,7 @@ import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
 import AgentStatsTab from './AgentStatsTab.jsx';
 import { agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
+import StreamCaret from '../common/StreamCaret.jsx';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -52,7 +53,7 @@ function ThoughtBlock({ thinking, streaming }) {
       </button>
       {expanded && (
         <div style={{ maxHeight: 150, overflowY: "auto", padding: "2px 12px 9px", fontSize: 11.5, lineHeight: 1.55, color: "var(--ak-text-muted)", whiteSpace: "pre-wrap", fontStyle: "italic" }}>
-          {thinking || "…"}
+          {thinking || "…"}{streaming && expanded && <StreamCaret/>}
         </div>
       )}
     </div>
@@ -507,7 +508,7 @@ function AgentChatTab({
                   <div style={{ maxWidth:"78%" }}>
                     {!isMe&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                     {(!msg.phase||msg.text)&&(
-                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}</div>
+                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}{msg.phase==="answering"&&<StreamCaret/>}</div>
                     )}
                     {isMe&&msg.attachments?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
