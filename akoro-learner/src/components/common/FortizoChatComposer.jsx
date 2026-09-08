@@ -46,6 +46,9 @@ export default function FortizoChatComposer({
   placeholder,
   disabled = false,
   dark = false,
+  bookAction,
+  bookActive = false,
+  bookLabel = 'Open reading material',
   voiceAction,
   voiceActive = false,
   voiceLabel = 'Start voice input',
@@ -116,6 +119,12 @@ export default function FortizoChatComposer({
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        {/* Book control renders only when the host provides it — hosts without
+            reading material (AI chat, decay sessions) keep the original rail. */}
+        {bookAction && (
+          <ComposerTool icon="ti-book-2" label={bookLabel} onClick={bookAction}
+            disabled={disabled} active={bookActive} dark={dark}/>
+        )}
         <ComposerTool icon="ti-microphone" label={voiceLabel} onClick={voiceAction}
           disabled={disabled || !voiceAction} active={voiceActive} dark={dark}/>
         <ComposerTool icon="ti-paperclip" label={attachmentLabel} onClick={attachmentAction}

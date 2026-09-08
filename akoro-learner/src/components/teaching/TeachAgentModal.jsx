@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { startMicCapture } from '../../utils/micCapture.js';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
@@ -7,6 +7,7 @@ import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
+import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted }) {
@@ -132,6 +133,34 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [switchOpen,   setSwitchOpen]   = useState(false);
   const [switching,    setSwitching]    = useState(false);
   const [agentChoices, setAgentChoices] = useState(null);   // null = not yet loaded
+
+  // ── Session reader (Fortizo split: reader left, this chat right) ─────────
+  // Opened from the book control in the chat composer. Mobile gets a
+  // full-screen reader modal over the session; desktop/tablet get the
+  // Fortizo split with this chat embedded as the right column. The session
+  // itself (WebSocket, blocks, voice) never restarts — only the shell moves.
+  const [readerOpen, setReaderOpen]   = useState(false);
+  const isMobileView                  = useIsMobileView();
+  const readerReference = config?.reference || session?.reference || null;
+  const readerPages = useMemo(
+    () => buildSessionReaderPages({
+      topic, subject,
+      reference: readerReference,
+      subtopics: config?.subtopics || session?.subtopics || [],
+      objectives: config?.objectives || session?.objectives || {},
+    }),
+    // The material is fixed at session start; topic/subject don't change mid-session.
+    [readerReference, config?.subtopics, session?.subtopics],
+  );
+  const openReader      = () => setReaderOpen(true);
+  const closeReader     = () => setReaderOpen(false);
+  // "Ask the tutor" in the reader's selection popover: prefill the live
+  // session's input with the selection. On mobile the reader closes so the
+  // chat (and the prefill) is actually visible.
+  const explainSelection = (text) => {
+    setInput(`Please explain: "${text}"`);
+    if (isMobileView) setReaderOpen(false);
+  };
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -670,40 +699,70 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     );
   }
 
-  // Chat view — SessionChatView is the root, no wrapper needed
+  // Chat view — SessionChatView is the root, no wrapper needed. When the
+  // reader is open, the same live session is reused: embedded as the right
+  // column on desktop/tablet (the Fortizo split — reader left, chat right),
+  // or sitting underneath the full-screen reader modal on mobile. All session
+  // state lives here, so opening/closing the reader never restarts anything.
+  const sessionChat = (embedded) => (
+    <SessionChatView
+      blocks={blocks}
+      loading={loading || (initLoading && blocks.length === 0)}
+      loadingNote={initLoading && blocks.length === 0 ? prepNote : ''}
+      input={input}
+      onInputChange={setInput}
+      onSend={handleSend}
+      topic={topic}
+      subject={subject}
+      reference={config?.reference || null}
+      agentName={agentNm}
+      agentEmoji={agentEm}
+      mode={mode}
+      userTurns={userTurns}
+      showSummarize={userTurns >= 2 && !summary}
+      onSummarize={generateSummary}
+      onMinimize={onMinimize}
+      recording={recording}
+      onToggleRecording={toggleRecording}
+      seconds={seconds}
+      voiceStreaming={voiceStreaming}
+      interimText={interimText}
+      voiceLevel={voiceLevel}
+      onToggleVoice={toggleVoiceStream}
+      cognitive={cogState}
+      guideLabel={`${guide.emoji} ${guide.name}`}
+      onSwitchAgent={wsReady ? openSwitch : null}
+      switching={switching}
+      connState={connState}
+      onClose={onClose}
+      embedded={embedded}
+      onOpenReader={readerOpen ? closeReader : openReader}
+    />
+  );
+
+  const readerProps = {
+    docTitle: `${subject} — ${topic}`,
+    sourceName: readerReference?.name || "Session guide",
+    pages: readerPages,
+    onClose: closeReader,
+    onExplainSelection: explainSelection,
+  };
+
   return (
     <>
-      <SessionChatView
-        blocks={blocks}
-        loading={loading || (initLoading && blocks.length === 0)}
-        loadingNote={initLoading && blocks.length === 0 ? prepNote : ''}
-        input={input}
-        onInputChange={setInput}
-        onSend={handleSend}
-        topic={topic}
-        subject={subject}
-        reference={config?.reference || null}
-        agentName={agentNm}
-        agentEmoji={agentEm}
-        mode={mode}
-        userTurns={userTurns}
-        showSummarize={userTurns >= 2 && !summary}
-        onSummarize={generateSummary}
-        onMinimize={onMinimize}
-        recording={recording}
-        onToggleRecording={toggleRecording}
-        seconds={seconds}
-        voiceStreaming={voiceStreaming}
-        interimText={interimText}
-        voiceLevel={voiceLevel}
-        onToggleVoice={toggleVoiceStream}
-        cognitive={cogState}
-        guideLabel={`${guide.emoji} ${guide.name}`}
-        onSwitchAgent={wsReady ? openSwitch : null}
-        switching={switching}
-        connState={connState}
-        onClose={onClose}
-      />
+      {isMobileView ? (
+        // Mobile: full-screen reader modal over the session chat (the chat
+        // button inside the reader returns here).
+        <>
+          {sessionChat(false)}
+          {readerOpen && <SessionReaderModal {...readerProps} onOpenChat={closeReader}/>}
+        </>
+      ) : readerOpen ? (
+        // Desktop/tablet: the Fortizo split — reader left, live session right.
+        <SessionReaderModal {...readerProps} chatNode={sessionChat(true)}/>
+      ) : (
+        sessionChat(false)
+      )}
 
       {switchOpen && (
         <div onClick={() => !switching && setSwitchOpen(false)}

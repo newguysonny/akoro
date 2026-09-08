@@ -42,6 +42,13 @@ function SessionChatView({
   connState = "connected",
   onClose,
   onMinimize,
+  // Reader split (Fortizo concept): when embedded, this view is the right
+  // column of the session reader instead of a full-screen sheet. All state
+  // still lives in the parent — only the shell changes.
+  embedded = false,
+  // Opens the Fortizo-style reader (book icon in the composer). Absent →
+  // no book control is rendered.
+  onOpenReader,
 }) {
   const { t } = useLang();
   const sc      = SUBJECT_COLORS[subject?.toLowerCase?.()] || BRAND;
@@ -64,13 +71,15 @@ function SessionChatView({
   };
 
   return (
-    <div style={{ position:"fixed",inset:0,zIndex:3000,background:"#080812",
+    <div style={{ position: embedded ? "relative" : "fixed", inset: embedded ? "auto" : 0,
+      width: "100%", height: embedded ? "100%" : undefined,
+      zIndex: embedded ? "auto" : 3000, background:"#080812",
       display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif",
       animation:"sheet-up .36s cubic-bezier(.32,1.1,.64,1)" }}>
 
       {/* Header */}
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding:"52px 20px 14px",borderBottom:"1px solid rgba(255,255,255,.06)" }}>
+        padding: embedded ? "12px 16px 12px" : "52px 20px 14px",borderBottom:"1px solid rgba(255,255,255,.06)" }}>
         <div>
           <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:3 }}>
             <div style={{ width:7,height:7,borderRadius:"50%",background:sc,animation:"pulse-dot 1.4s ease-in-out infinite" }}/>
@@ -192,7 +201,7 @@ function SessionChatView({
       </div>
 
       {/* Input bar */}
-      <div style={{ padding:"10px 14px 28px",background:"rgba(255,255,255,.03)",
+      <div style={{ padding: embedded ? "10px 14px 12px" : "10px 14px 28px",background:"rgba(255,255,255,.03)",
         borderTop:"1px solid rgba(255,255,255,.06)" }}>
 
         {/* ── Voice Streaming mode — live transcript ── */}
@@ -248,7 +257,9 @@ function SessionChatView({
         {/* Fortizo reference composer — compact icon rail, adapted to Akoro.
             The teaching WebSocket currently accepts text and the two existing
             voice paths only, so the attachment control is intentionally visible
-            but unavailable rather than pretending to upload a file. */}
+            but unavailable rather than pretending to upload a file. The book
+            control opens the session reader (Fortizo split: reader left, this
+            chat right on desktop/tablet; full-screen modal on mobile). */}
         {!recording && !voiceStreaming && (
           <div style={{ marginBottom:8 }}>
             <FortizoChatComposer
@@ -257,6 +268,8 @@ function SessionChatView({
               onChange={onInputChange}
               onSend={onSend}
               placeholder={t('teaching.explain_ph').replace('{name}', agentName)}
+              bookAction={onOpenReader}
+              bookLabel="Open reading material"
               voiceAction={onToggleVoice}
               voiceLabel={t('teaching.voice')}
               audioAction={onToggleRecording}
