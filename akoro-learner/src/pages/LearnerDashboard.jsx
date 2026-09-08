@@ -937,17 +937,9 @@ export default function LearnerDashboard() {
           )}
           {tab==="discovery" && (higherEd
             ? (discoverView==="courses"
-              ? <>
-                  {/* Back to the hub — the courses feed is one of the discovery
-                      types, not the whole tab, for higher-ed learners. */}
-                  <div style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 14px 0",background:"var(--ak-surface)" }}>
-                    <button onClick={()=>navigate("/app?tab=discovery")} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:20,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-sub)",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif",flexShrink:0 }}>
-                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>{t('dhub.title')}
-                    </button>
-                    {discoverQuery&&<span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}><Icon name="ti-search" size={10} color="var(--ak-text-muted)"/> {discoverQuery}</span>}
-                  </div>
-                  <DiscoveryTab initialQuery={discoverQuery}/>
-                </>
+              // No header on the courses feed — it opens straight into the
+              // catalogue. Back to the hub is the Discover tab in the bottom nav.
+              ? <DiscoveryTab initialQuery={discoverQuery}/>
               : <DiscoverHub
                   userId={userProfile?.id}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
