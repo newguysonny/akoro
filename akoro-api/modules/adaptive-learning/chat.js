@@ -18,6 +18,7 @@ import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 const { Pool } = pkg;
 import db from "../../db.js";
+import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
@@ -1548,6 +1549,17 @@ function openAiChatTools({ allowToolRequest = true } = {}) {
   }));
 }
 
+// Every tool message the model sees is a structured observation
+// (utils/toolObservation.js): REASON → ACT → OBSERVE → LLM. The instruction
+// keeps confirmations grounded — the reply reports what the backend returned
+// (success flag, request_id, action, result) instead of what was intended.
+const TOOL_OBSERVATION_GUIDE =
+  `\n\n## Tool observations (read before confirming anything)\n` +
+  `Each tool result arrives as {"success": boolean, "request_id": string, "action": string, "result": object|null, "error": string|null}. ` +
+  `success=true means Akoro's backend completed the action — confirm it to the learner and cite the concrete details in result (id, title, date, status). ` +
+  `success=false or a non-null error means it did NOT complete — say so plainly; never pretend the action happened or invent a request_id. ` +
+  `If the result contains alreadyDone, the action was completed earlier in this conversation — say so instead of doing it twice.`;
+
 async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null }) {
   const executions = [];
   const transcript = [...messages];
@@ -1582,13 +1594,16 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       let toolResult;
       try { toolResult = await executeChatTool(tool, input, studentId, { conversationId }); }
       catch (error) { toolResult = { success: false, error: "The requested Akoro action could not be completed." }; }
-      const success = toolResult?.success !== false && !toolResult?.error;
+      // Structured observation: the tool's real backend outcome becomes the
+      // model's next input, so the reply confirms facts, not intent.
+      const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
       executions.push({
         tool,
-        success,
+        success: observation.success,
+        requestId: observation.request_id,
         sideEffecting: ["create_task", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request"].includes(tool),
       });
-      transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(toolResult) });
+      transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
   }
   return { messages: transcript, toolExecutions: executions };
@@ -1716,6 +1731,7 @@ router.post("/agent", async (req, res) => {
       `When asked about your abilities or limitations, call get_agent_capabilities before replying. Do not claim live web access, licensed historical past-paper access, secrets, or unrequested autonomous actions. ` +
       `If a learner asks for something Akoro cannot currently do, say so plainly. Offer to submit a concise product request only after they explicitly ask; never submit one automatically and never copy their raw prompt, attachments, or personal data into it. ` +
       `Generated exam-style questions must be labelled as generated practice, not historical papers.` +
+      (role === "student" ? TOOL_OBSERVATION_GUIDE : "") +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
