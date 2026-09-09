@@ -6,10 +6,11 @@ import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
 /* Emoji + accent per activity kind (matches the learner app's emoji style) */
 const TYPE_META = {
-  assignment: { emoji: 'ti-edit', color: BRAND    },
-  project:    { emoji: 'ti-folder', color: GREEN    },
-  multistage: { emoji: 'ti-puzzle', color: '#A855F7' },
-  self_study: { emoji: 'ti-book-2', color: GOLD     },
+  assignment:  { emoji: 'ti-edit', color: BRAND    },
+  project:     { emoji: 'ti-folder', color: GREEN    },
+  multistage:  { emoji: 'ti-puzzle', color: '#A855F7' },
+  self_study:  { emoji: 'ti-book-2', color: GOLD     },
+  live_course: { emoji: 'ti-device-tv', color: '#E11D48' },
 };
 
 const KINDS = [
@@ -18,6 +19,7 @@ const KINDS = [
   { key: 'project',    label: 'Projects'    },
   { key: 'multistage', label: 'Multi stage' },
   { key: 'self_study', label: 'Self study'  },
+  { key: 'live_course', label: 'Live courses' },
 ];
 
 /* Same status map the self-study list uses, so a card reads the same in

@@ -22,22 +22,24 @@ async function fetchSelfStudy() {
     const d = await apiGet('/api/self-study/mine');
     return (d?.data ?? []).map(a => ({
       id:         a.targetId || `ss-${a.id}`,
-      kind:       'self_study',
+      kind:       a.type || 'self_study',   // assignment | project | live_course | self_study
       title:      a.title || a.topic || 'Self study',
       subtitle:   [a.subject, a.topic].filter(Boolean).join(' · '),
       details:    a.instructions || null,
       status:     a.status || 'assigned',
-      dueAt:      a.dueAt || null,
+      dueAt:      a.dueAt || a.details?.scheduled_at || null,
       assignedBy: a.assignedBy || null,
       source:     'self-study',
     }));
   } catch { return []; }
 }
 
-/* The other kinds have no learner endpoint yet — seams for when they land. */
-const fetchAssignments = () => Promise.resolve([]); // TODO: /api/activities?kind=assignment
-const fetchProjects    = () => Promise.resolve([]); // TODO: /api/activities?kind=project
-const fetchMultiStage  = () => Promise.resolve([]); // TODO: /api/activities?kind=multistage
+/* Assignments, projects and live courses are created as self-study briefs
+   with a `type` (modules/self-study), so fetchSelfStudy already carries them;
+   these stay open for kinds that ever grow their own endpoints. */
+const fetchAssignments = () => Promise.resolve([]);
+const fetchProjects    = () => Promise.resolve([]);
+const fetchMultiStage  = () => Promise.resolve([]);
 
 /**
  * All of the learner's activities, merged and ordered: open work first,

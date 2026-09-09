@@ -46,6 +46,23 @@ const missing = (res, m) => res.status(404).json({ success: false, error: m });
 // has used both "school" and "school_admin" over time, so accept both.
 const TEACHER_ROLES = ["instructor", "teacher", "school", "school_admin", "admin"];
 
+/**
+ * The four activity kinds an instructor can assign. They all share this
+ * module's machinery — one brief, targeting, per-learner progress — and are
+ * separated only by `type` and what lands in `details`. Learner surfaces read
+ * `type` and file the card under the matching pill.
+ */
+const ACTIVITY_TYPES = Object.freeze(["self_study", "assignment", "project", "live_course"]);
+
+/** How an activity announces itself in a learner's notifications. */
+const ACTIVITY_ANNOUNCE = {
+  self_study:  { emoji: "\u{1F4D6}", label: "Self study" },
+  assignment:  { emoji: "\u270F\uFE0F",  label: "Assignment" },
+  project:     { emoji: "\u{1F4C2}", label: "Project" },
+  live_course: { emoji: "\u{1F4FA}", label: "Live course" },
+};
+const announceFor = (type) => ACTIVITY_ANNOUNCE[type] ?? ACTIVITY_ANNOUNCE.self_study;
+
 /** The school this user administers, if any. */
 async function mySchool(userId) {
   const { data } = await db.from("school_profiles")
@@ -153,9 +170,11 @@ router.post("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
     instructions = null, difficulty = "intermediate", due_at = null,
     course_id = null, classroom_id = null,
     usernames = [], user_ids = [], whole_class = false,
+    type = "self_study", details = {},
   } = req.body;
 
   if (!title?.trim())   return bad(res, "title is required");
+  if (!ACTIVITY_TYPES.includes(type)) return bad(res, `Unknown activity type: ${type}`);
   if (!subject?.trim()) return bad(res, "subject is required");
   if (!topic?.trim())   return bad(res, "topic is required");
 
@@ -174,7 +193,8 @@ router.post("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
     topic:        topic.trim(),
     subtopics, objectives,
     instructions, difficulty,
-    due_at,
+    due_at, type,
+    details: details && typeof details === "object" && !Array.isArray(details) ? details : {},
   }).select().single();
   if (error) throw new Error(error.message);
 
@@ -186,9 +206,10 @@ router.post("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   // notify() rather than a bare insert: a PostgREST builder is a THENABLE with
   // no .catch, so `.insert({…}).catch(() => {})` threw synchronously and made
   // this endpoint a guaranteed 500 — assignments could never be created at all.
+  const announce = announceFor(type);
   await notifyAll(ids, {
-    type: "self_study_assigned",
-    title: `📖 Self study: ${assignment.title}`,
+    type: "self_study_assigned",   // kept: learner notification handlers key on this string
+    title: `${announce.emoji} ${announce.label}: ${assignment.title}`,
     content: `${assignment.subject} · ${assignment.topic}${due_at ? ` · due ${new Date(due_at).toLocaleDateString("en-GB")}` : ""}`,
     related_id: assignment.id,
   });
@@ -248,6 +269,8 @@ router.get("/mine", asyncHandler(async (req, res) => {
       return {
         id:           a.id,
         targetId:     t.id,
+        type:         a.type ?? "self_study",
+        details:      a.details ?? {},
         title:        a.title,
         subject:      a.subject,
         topic:        a.topic,
@@ -297,7 +320,8 @@ router.patch("/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
   if (error === "not_found") return missing(res, "Assignment not found");
   if (error === "forbidden") return denied(res, "Not your assignment");
 
-  const allowed = ["title", "subject", "topic", "subtopics", "objectives", "instructions", "difficulty", "due_at", "status"];
+  const allowed = ["title", "subject", "topic", "subtopics", "objectives", "instructions", "difficulty", "due_at", "status", "type", "details"];
+  if (req.body.type && !ACTIVITY_TYPES.includes(req.body.type)) return bad(res, `Unknown activity type: ${req.body.type}`);
   const updates = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
   if (!Object.keys(updates).length) return bad(res, "No editable fields provided");
   updates.updated_at = now();
@@ -329,9 +353,10 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
             { onConflict: "assignment_id,student_id" });
   if (tErr) throw new Error(tErr.message);
 
+  const announce = announceFor(assignment.type);
   await notifyAll(ids, {
-    type: "self_study_assigned",
-    title: `📖 Self study: ${assignment.title}`,
+    type: "self_study_assigned",   // kept: learner notification handlers key on this string
+    title: `${announce.emoji} ${announce.label}: ${assignment.title}`,
     content: `${assignment.subject} · ${assignment.topic}`,
     related_id: assignment.id,
   });

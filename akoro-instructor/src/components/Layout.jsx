@@ -12,6 +12,7 @@ const NAV = [
   { to: '/sales',    icon: Wallet,        label: 'Sales & Earnings' },
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
+  { to: '/activities', icon: ClipboardList, label: 'Activities' },
   { to: '/self-study', icon: BookOpenCheck, label: 'AI Self Study' },
   { to: '/documents', icon: FileText,     label: 'Documents' },
   { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
