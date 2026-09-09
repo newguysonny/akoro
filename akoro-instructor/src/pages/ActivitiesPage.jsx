@@ -624,7 +624,7 @@ function BattlePanel({ onDone }) {
       scheduled_for: scheduledIso,
       ...audienceBody(form.audience),
     });
-    const d = res?.data ?? {};
+    const d = res?.data ?? res ?? {};   // invite responses are top-level bodies
     const bits = [];
     if (d.skipped?.not_enrolled?.length) bits.push(`not on this course: ${d.skipped.not_enrolled.join(', ')}`);
     if (d.skipped?.not_in_class?.length)  bits.push(`not in this class: ${d.skipped.not_in_class.join(', ')}`);
@@ -767,11 +767,15 @@ function MultiStageForm({ onAssigned }) {
     finally { setDraftingKey(null); }
   };
 
-  const battleCreated = async (form) => {
-    // The stage keeps the battle's title; the battle itself is already live
-    // for its audience — the journey just references it, in order.
+  const battleCreated = async (form, battleId) => {
+    // The stage keeps the battle's id + title; the battle itself is already
+    // live for its audience — the journey references it, in order, and the
+    // learner's participation in it completes the stage.
     const stage = stages.find(st => st.key === battleFor);
-    if (stage) patchStage(stage.key, { battle: { title: form.title.trim(), kind: form.kind }, title: stage.title || form.title.trim() });
+    if (stage) patchStage(stage.key, {
+      battle: { title: form.title.trim(), kind: form.kind, battleId: battleId ?? null },
+      title: stage.title || form.title.trim(),
+    });
     setBattleFor(null);
   };
 
@@ -976,7 +980,14 @@ function BattleStageModal({ open, onClose, onCreated }) {
     <Modal open={open} onClose={onClose} title="Stage battle" width={540}>
       <BattleForm
         courses={courses} submitLabel="Create battle for this stage"
-        onSubmit={async (form) => { await createBattleForStage(form, createBattle); onCreated(form); onClose(); }}
+        onSubmit={async (form) => {
+          // The journey needs the battle's id: stage completion is derived
+          // from this learner's participant row in a FINISHED battle.
+          const res = await createBattleForStage(form, createBattle);
+          const battleId = res?.battle_id ?? res?.data?.battle_id ?? null;
+          onCreated(form, battleId);
+          onClose();
+        }}
         onCancel={onClose}
       />
     </Modal>
@@ -985,7 +996,7 @@ function BattleStageModal({ open, onClose, onCreated }) {
 
 async function createBattleForStage(form, createBattle) {
   const scheduledIso = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null;
-  await createBattle({
+  return createBattle({
     kind: form.kind, courseId: form.courseId, classId: form.classId,
     question_source: form.questionSource,
     ...(form.kind !== 'course' ? { subject: form.subject } : {}),

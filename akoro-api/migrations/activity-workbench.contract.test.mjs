@@ -9,7 +9,7 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket] = await Promise.all([
+const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList] = await Promise.all([
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
@@ -22,6 +22,7 @@ const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, ba
   read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
   read("../../akoro-learner/src/pages/ActivityPage.jsx"),
   read("../../akoro-learner/src/services/activitySocket.js"),
+  read("../../akoro-learner/src/components/sessions/SelfStudyList.jsx"),
 ]);
 
 test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activities", () => {
@@ -122,7 +123,7 @@ test("multi-stage activities chain real work into one journey", () => {
   assert.match(routes, /"multi_stage"/);
   assert.match(migration, /'multi_stage'/);
   // Learners see the journey as a roadmap.
-  assert.match(activityApi, /stageList\.map\(st => st\.title\)\.join\(' → '\)/);
+  assert.ok(activityApi.includes("a.stages ?? a.details?.stages"), "roadmap reads the derived stages");
 });
 
 test("a new assignment dings the learner in real time", () => {
@@ -137,4 +138,41 @@ test("a new assignment dings the learner in real time", () => {
   assert.match(dashboard, /AudioContext/);
   // A mounted Activity page refetches when the ding fires.
   assert.match(learnerActivity, /ak:activity-changed/);
+});
+
+test("journey stages unlock sequentially, derived from real progress", () => {
+  // The learner's /mine derives stage state server-side — never from the client:
+  // study stages from the learner's target status, battle stages from their
+  // participant row in a FINISHED battle.
+  assert.match(routes, /battle_participants/);
+  assert.ok(routes.includes('status === "completed" ? "complete" : "started"'), "battle stage completes with a finished battle");
+  assert.ok(routes.includes('myTargetByAssignment.get(ref.refId)?.status'), "study stage uses the learner's own target status");
+  // The active stage is the first resolvable, unfinished one; untracked
+  // stages are skipped by the gate so a legacy journey cannot dead-end.
+  assert.ok(routes.includes('findIndex((st) => st === "assigned" || st === "started")'), "active stage = first resolvable unfinished");
+  assert.ok(routes.includes('? "complete" : i === activeIndex ? "active" : "locked"'), "ordered states");
+  // Children know their journey, position, and whether their turn has come.
+  assert.ok(routes.includes('journeyInfoById.set(ref.refId'), "children tagged with their journey");
+  assert.ok(routes.includes('locked: i > activeIndex'), "later stages start locked");
+});
+
+test("learner surfaces honour the lock", () => {
+  // Locked stages never appear as standalone work in the feed…
+  assert.ok(activityApi.includes("!a.journey?.locked"), "locked stages never appear standalone");
+  // …nor as startable sessions in the agent-session list.
+  assert.ok(selfStudyList.includes("!a.journey?.locked"), "locked stages are not startable");
+  assert.ok(learnerActivity.includes("st.status === 'complete' ? '✓'"), "done stages are checked");
+});
+
+test("the journey card shows the roadmap with each stage's state", () => {
+  assert.ok(learnerActivity.includes("a.stages?.length > 0"), "journey cards render the roadmap");
+  assert.match(learnerActivity, /'🔒'/);
+  assert.match(learnerActivity, /NOW<\/span>/);
+  // The subtitle names the step to do now.
+  assert.ok(activityApi.includes("Step ${(a.journeyProgress?.done ?? doneCount) + 1} of ${stageList.length}"), "subtitle names the current step");
+});
+
+test("stage battles are captured with their id so completion can be derived", () => {
+  assert.ok(page.includes("res?.battle_id ?? res?.data?.battle_id"), "battle id captured from the invite response");
+  assert.ok(page.includes("battleId: battleId ?? null"), "the stage ref keeps the battle id");
 });

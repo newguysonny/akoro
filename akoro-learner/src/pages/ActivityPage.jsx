@@ -8,7 +8,9 @@ import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 const TYPE_META = {
   assignment:  { emoji: 'ti-edit', color: BRAND    },
   project:     { emoji: 'ti-folder', color: GREEN    },
-  multistage:  { emoji: 'ti-puzzle', color: '#A855F7' },
+  battle:      { emoji: 'ti-swords', color: RED      },
+  multi_stage: { emoji: 'ti-puzzle', color: '#A855F7' },
+  multistage:  { emoji: 'ti-puzzle', color: '#A855F7' },  // legacy key
   self_study:  { emoji: 'ti-book-2', color: GOLD     },
   live_course: { emoji: 'ti-device-tv', color: '#E11D48' },
 };
@@ -17,7 +19,7 @@ const KINDS = [
   { key: 'all',        label: 'All'        },
   { key: 'assignment', label: 'Assignments' },
   { key: 'project',    label: 'Projects'    },
-  { key: 'multistage', label: 'Multi stage' },
+  { key: 'multi_stage', label: 'Multi stage' },
   { key: 'self_study', label: 'Self study'  },
   { key: 'live_course', label: 'Live courses' },
 ];
@@ -90,6 +92,29 @@ function ActivityCard({ a }) {
         {a.details && (
           <div style={{ fontSize: 12, color: 'var(--ak-text-muted)', marginTop: 3, lineHeight: 1.5, fontFamily: "'Nunito',sans-serif" }}>
             {a.details}
+          </div>
+        )}
+        {/* Journey roadmap — sequential unlocking: ✓ done · ▶ your turn ·
+            🔒 waiting for the stage before it. */}
+        {a.stages?.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, padding: '8px 10px', background: 'rgba(168,85,247,.07)', borderRadius: 10, border: '1px solid rgba(168,85,247,.18)' }}>
+            {a.stages.map((st, i) => {
+              const glyph = st.status === 'complete' ? '✓' : st.status === 'active' ? '▶' : st.status === 'locked' ? '🔒' : '·';
+              const tint = st.status === 'complete' ? GREEN : st.status === 'active' ? BRAND : 'var(--ak-text-muted)';
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, fontFamily: "'Nunito',sans-serif" }}>
+                  <span style={{ width: 16, textAlign: 'center', color: tint, fontWeight: 900, flexShrink: 0 }}>{glyph}</span>
+                  <span style={{ flexShrink: 0 }}>{st.emoji || '📌'}</span>
+                  <span style={{ color: st.status === 'locked' ? 'var(--ak-text-muted)' : 'var(--ak-text)', fontWeight: st.status === 'active' ? 900 : 600,
+                    opacity: st.status === 'locked' ? 0.72 : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {st.title || st.kind}
+                  </span>
+                  {st.status === 'active' && (
+                    <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 900, color: BRAND, background: `${BRAND}14`, borderRadius: 100, padding: '2px 8px', flexShrink: 0 }}>NOW</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 7 }}>

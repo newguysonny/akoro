@@ -264,10 +264,80 @@ router.get("/mine", asyncHandler(async (req, res) => {
     : { data: [] };
   const teacherById = new Map((teachers ?? []).map((u) => [u.id, u.full_name]));
 
+  // ── Multi-stage journeys: sequential unlocking ──────────────────────────
+  // A journey's stages complete IN ORDER. Stage state is derived, never
+  // trusted from the client: a study stage is this learner's target status
+  // on the child assignment; a battle stage is their participant row in a
+  // finished battle. Stages with no resolvable ref are "open" — displayed
+  // but never gating, so a legacy journey cannot dead-end its learners.
+  const journeys = (assignments ?? []).filter((a) => (a.type ?? "self_study") === "multi_stage" && a.status !== "archived");
+  const myTargetByAssignment = new Map((targets ?? []).map((t) => [t.assignment_id, t]));
+
+  const journeyInfoById = new Map();   // child assignment id → { journey, position, total, locked }
+  const journeyStateById = new Map();  // journey id → computed stage list
+
+  for (const journey of journeys) {
+    const refs = Array.isArray(journey.details?.stages) ? journey.details.stages : [];
+
+    const battleIds = refs.map((r) => r.battleId).filter(Boolean);
+    const { data: myBattleRows } = battleIds.length
+      ? await db.from("battle_participants")
+          .select("battle_id, joined_at").eq("user_id", req.user.id).in("battle_id", battleIds)
+      : { data: [] };
+    const { data: battleRows } = battleIds.length
+      ? await db.from("battles").select("id, status").in("id", battleIds)
+      : { data: [] };
+    const myBattleBy = new Map((myBattleRows ?? []).map((r) => [r.battle_id, r]));
+    const battleBy = new Map((battleRows ?? []).map((r) => [r.id, r]));
+
+    const resolve = (ref) => {
+      if (ref.kind === "battle") {
+        if (!ref.battleId) return null;                     // legacy: battle id was not captured
+        const me = myBattleBy.get(ref.battleId);
+        if (!me) return "assigned";                         // invited, never joined
+        return battleBy.get(ref.battleId)?.status === "completed" ? "complete" : "started";
+      }
+      if (!ref.refId) return null;                          // not tracked
+      return myTargetByAssignment.get(ref.refId)?.status ?? null;
+    };
+
+    const resolved = refs.map(resolve);
+    // The active stage is the FIRST resolvable, unfinished one — "open"
+    // stages are skipped by the gate so they can never dead-end a journey.
+    let activeIndex = resolved.findIndex((st) => st === "assigned" || st === "started");
+    if (activeIndex === -1) activeIndex = refs.length;
+
+    const stages = refs.map((ref, i) => ({
+      title: ref.title ?? null,
+      kind: ref.kind ?? null,
+      emoji: ref.emoji ?? null,
+      status: resolved[i] === null
+        ? (i < activeIndex ? "passed" : i > activeIndex ? "locked" : "open")
+        : i < activeIndex ? "complete" : i === activeIndex ? "active" : "locked",
+    }));
+
+    const doneCount = stages.filter((st) => st.status === "complete").length;
+    const allDone = resolved.every((st, i) => st === "complete" || st === null);
+    journeyStateById.set(journey.id, {
+      stages,
+      progress: { done: doneCount, total: refs.length },
+      status: allDone && refs.length ? "complete" : (myTargetByAssignment.get(journey.id)?.status ?? "assigned"),
+    });
+
+    refs.forEach((ref, i) => {
+      if (ref.refId) journeyInfoById.set(ref.refId, {
+        journeyId: journey.id, journeyTitle: journey.title,
+        position: i + 1, total: refs.length, locked: i > activeIndex,
+      });
+    });
+  }
+
   ok(res, (targets ?? [])
     .filter((t) => byId.has(t.assignment_id) && byId.get(t.assignment_id).status !== "archived")
     .map((t) => {
       const a = byId.get(t.assignment_id);
+      const isJourney = (a.type ?? "self_study") === "multi_stage";
+      const jState = isJourney ? journeyStateById.get(a.id) : null;
       return {
         id:           a.id,
         targetId:     t.id,
@@ -282,10 +352,16 @@ router.get("/mine", asyncHandler(async (req, res) => {
         difficulty:   a.difficulty,
         dueAt:        a.due_at,
         assignedBy:   teacherById.get(a.created_by) ?? null,
-        status:       t.status,
+        status:       jState?.status ?? t.status,
         sessionId:    t.session_id,
         startedAt:    t.started_at,
         completedAt:  t.completed_at,
+        // The journey's roadmap with per-stage state — the learner surface
+        // for sequential unlocking.
+        ...(jState ? { stages: jState.stages, journeyProgress: jState.progress } : {}),
+        // A child stage knows which journey it belongs to and whether its
+        // turn has come. Locked stages are hidden by learner surfaces.
+        ...(journeyInfoById.has(a.id) ? { journey: journeyInfoById.get(a.id) } : {}),
       };
     }));
 }));
