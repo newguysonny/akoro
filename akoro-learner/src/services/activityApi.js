@@ -20,17 +20,24 @@ import { apiGet } from './api.js';
 async function fetchSelfStudy() {
   try {
     const d = await apiGet('/api/self-study/mine');
-    return (d?.data ?? []).map(a => ({
+    return (d?.data ?? []).map(a => {
+      // A multi-stage row IS the roadmap: subtitle walks the journey.
+      const stageList = a.type === 'multi_stage' ? (a.details?.stages ?? []) : null;
+      return {
       id:         a.targetId || `ss-${a.id}`,
-      kind:       a.type || 'self_study',   // assignment | project | live_course | self_study
+      kind:       a.type || 'self_study',   // assignment | project | live_course | self_study | multi_stage | battle-ref
       title:      a.title || a.topic || 'Self study',
-      subtitle:   [a.subject, a.topic].filter(Boolean).join(' · '),
+      subtitle:   stageList
+        ? `${stageList.length} stages: ${stageList.map(st => st.title).join(' → ')}`
+        : [a.subject, a.topic].filter(Boolean).join(' · '),
       details:    a.instructions || null,
       status:     a.status || 'assigned',
       dueAt:      a.dueAt || a.details?.scheduled_at || null,
       assignedBy: a.assignedBy || null,
       source:     'self-study',
-    }));
+      stages:     stageList,   // the journey, for the card to render
+      };
+    });
   } catch { return []; }
 }
 

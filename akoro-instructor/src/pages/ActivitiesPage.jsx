@@ -15,16 +15,19 @@
  * notifications, per-learner progress and the learner's Activity feed come for
  * free, and past work here reads the same rows that page wrote.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  BookOpen, Pencil, FolderKanban, MonitorPlay, Plus, Users, Clock, Trash2,
-  ChevronRight, Sparkles, Loader2, CheckCircle2, Info,
+  BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Plus, Users,
+  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../services/api.js';
 import AudiencePicker, { audienceBody, parseHandles, BLANK_AUDIENCE } from '../components/AudiencePicker.jsx';
 import PlanEditor from '../components/PlanEditor.jsx';
+import BattleForm from '../components/battles/BattleForm.jsx';
+import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
+import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
@@ -65,6 +68,22 @@ const ACTIVITY_TYPES = [
     blurb: 'You, live, at a scheduled time with a join link.',
     note: ['First exposure belongs to a human.',
       'A scheduled session with a start time and a link. Use it for introducing something new, discussion, and anything learners cannot do alone — then let assignments and self study carry the practice.'],
+    planLabel: null,
+    planHint: null,
+  },
+  {
+    key: 'battle', emoji: '⚔️', name: 'Battle', icon: Swords, color: RED,
+    blurb: 'A timed quiz duel from your question bank — the same battle form.',
+    note: ['Energy that makes recall competitive.',
+      'Timed questions, an XP prize, a leaderboard moment. Use it to revise a finished topic — the competition surfaces who recalls what, faster than a quiz ever will.'],
+    planLabel: null,
+    planHint: null,
+  },
+  {
+    key: 'multi_stage', emoji: '🧩', name: 'Multi stage', icon: ListChecks, color: '#A855F7',
+    blurb: 'Chain activities into one journey: learn, practise, compete.',
+    note: ['One journey, several kinds of work.',
+      'Chain self study, assignments, projects and battles into an ordered path — e.g. study the topic, then the assignment, then the battle. Learners see the roadmap; each step is real, tracked work.'],
     planLabel: null,
     planHint: null,
   },
@@ -553,14 +572,433 @@ export default function ActivitiesPage() {
 
         {/* Right card — the creation form for the picked type */}
         <section style={{ flex: 1, minWidth: 300, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '22px 24px' }}>
-          <ActivityForm key={key} type={key} onAssigned={() => setRefreshKey(k => k + 1)} />
+          {key === 'battle'
+            ? <BattlePanel onDone={() => setRefreshKey(k => k + 1)} />
+            : key === 'multi_stage'
+              ? <MultiStageForm onAssigned={() => setRefreshKey(k => k + 1)} />
+              : <ActivityForm key={key} type={key} onAssigned={() => setRefreshKey(k => k + 1)} />}
         </section>
       </div>
 
-      <PastActivities type={key} refreshKey={refreshKey} onOpen={(a) => setDetail(a)} />
+      {key === 'battle'
+        ? <BattlePastStrip refreshKey={refreshKey} />
+        : <PastActivities type={key} refreshKey={refreshKey} onOpen={(a) => setDetail(a)} />}
       <DetailModal open={!!detail} activity={detail} onClose={() => setDetail(null)}
         onDeleted={() => { setRefreshKey(k => k + 1); setToast({ message: 'Activity deleted', type: 'success' }); }} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );
+}
+
+
+/* ── Battle panel — the same battle creation form, inline ────────────────── */
+function BattlePanel({ onDone }) {
+  const { createBattle, getBattles } = useBattlesAPI();
+  const { getCourses } = useCoursesAPI();
+  const [courses, setCourses] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [error, setError] = useState('');
+
+  const getCoursesRef = useRef(getCourses);
+  getCoursesRef.current = getCourses;
+  useEffect(() => {
+    getCoursesRef.current().then(d => setCourses(d?.data ?? [])).catch(() => setCourses([]));
+  }, []);
+
+  const submit = async (form) => {
+    setError('');
+    const scheduledIso = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null;
+    const res = await createBattle({
+      kind: form.kind, courseId: form.courseId, classId: form.classId,
+      question_source: form.questionSource,
+      ...(form.kind !== 'course' ? { subject: form.subject } : {}),
+      ...(form.kind === 'review' ? { mode: 'review' } : {}),
+      title: form.title.trim(),
+      description: form.description || null,
+      topic: form.topic || null,
+      difficulty: form.difficulty,
+      total_questions: parseInt(form.totalQuestions, 10) || 15,
+      time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
+      xp_prize: parseInt(form.xpPrize, 10) || 200,
+      expires_in_minutes: parseInt(form.expiresInMinutes, 10) || 60,
+      scheduled_for: scheduledIso,
+      ...audienceBody(form.audience),
+    });
+    const d = res?.data ?? {};
+    const bits = [];
+    if (d.skipped?.not_enrolled?.length) bits.push(`not on this course: ${d.skipped.not_enrolled.join(', ')}`);
+    if (d.skipped?.not_in_class?.length)  bits.push(`not in this class: ${d.skipped.not_in_class.join(', ')}`);
+    if (d.skipped?.no_agent?.length)     bits.push(`no agent yet: ${d.skipped.no_agent.join(', ')}`);
+    const src = d.generated ? `${d.fromBank} from the bank + ${d.generated} generated` : `${d.questions} questions`;
+    setToast({ message: `Battle created — ${d.invited} challenged, ${src}${bits.length ? `. Left out — ${bits.join('; ')}` : ''}`, type: 'success' });
+    setTimeout(() => setToast(null), 4200);
+    onDone();
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: `${RED}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Swords size={19} color={RED} />
+        </div>
+        <div>
+          <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>New battle</div>
+          <div style={{ fontSize: 11.5, color: MUTED }}>The same battle you create on the Battles page — timed questions, XP, leaderboard.</div>
+        </div>
+      </div>
+      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT, marginBottom: 8 }}>{error}</div>}
+      <BattleForm onSubmit={submit} courses={courses} submitLabel="Create battle" embedded />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </>
+  );
+}
+
+/* ── Past battles — read-only strip; management lives on the Battles page ── */
+const BATTLE_STATUS = {
+  live:      { color: GREEN, bg: '#DCFCE7', label: 'Live' },
+  scheduled: { color: BLUE,  bg: '#EFF6FF', label: 'Scheduled' },
+  completed: { color: MUTED, bg: LIGHT,     label: 'Completed' },
+  draft:     { color: MUTED, bg: LIGHT,     label: 'Draft' },
+};
+
+function BattlePastStrip({ refreshKey }) {
+  const { getBattles } = useBattlesAPI();
+  const [past, setPast] = useState(null);
+  const getBattlesRef = useRef(getBattles);
+  getBattlesRef.current = getBattles;
+
+  useEffect(() => {
+    getBattlesRef.current().then(d => setPast(d?.data ?? [])).catch(() => setPast([]));
+  }, [refreshKey]);
+
+  if (past && past.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 22, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '16px 18px', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: INK }}>Past battles</div>
+        <div style={{ fontSize: 11, color: MUTED2 }}>manage on the Battles page</div>
+      </div>
+      {past === null ? (
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 96, borderRadius: 12, background: LIGHT }} />)}</div>
+      ) : (
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity' }}>
+          {past.slice(0, 12).map(b => {
+            const st = BATTLE_STATUS[b.status] || BATTLE_STATUS.draft;
+            return (
+              <div key={b.id} style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ fontSize: 14 }}>⚔️</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</span>
+                </div>
+                <Badge color={st.color} bg={st.bg}>{st.label}</Badge>
+                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={10} />{b.scheduled_start || b.scheduledAt ? fmtWhen(b.scheduled_start || b.scheduledAt) : b.topic || '—'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtWhen(iso) {
+  try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  catch { return '—'; }
+}
+
+/* ── Multi-stage composer — several activities chained as one journey ────── */
+const STAGE_KINDS = [
+  { key: 'self_study', label: 'Self study',  emoji: '📖' },
+  { key: 'assignment', label: 'Assignment',  emoji: '✏️' },
+  { key: 'project',    label: 'Project',     emoji: '🗂️' },
+  { key: 'battle',     label: 'Battle',      emoji: '⚔️' },
+];
+
+function MultiStageForm({ onAssigned }) {
+  const [title, setTitle]           = useState('');
+  const [stages, setStages]         = useState([]);
+  const [classes, setClasses]       = useState([]);
+  const [classId, setClassId]       = useState('');
+  const [audience, setAudience]     = useState(BLANK_AUDIENCE);
+  const [dueAt, setDueAt]           = useState('');
+  const [battleFor, setBattleFor]   = useState(null);   // stage key awaiting a battle
+  const [draftingKey, setDraftingKey] = useState(null);
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState('');
+  const [done, setDone]             = useState(null);
+
+  useEffect(() => {
+    apiGet('/api/instructor/classrooms')
+      .then(d => setClasses(d?.data ?? []))
+      .catch(() => setClasses([]));
+  }, []);
+  useEffect(() => { if (classes.length && !classId) setClassId(classes[0].id); }, [classes, classId]);
+
+  const addStage = (kind) => setStages(ss => [...ss, {
+    key: `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    kind, title: '', topic: '', subject: 'Basic Science', instructions: '',
+    subtopics: [], objectives: {}, battle: null,
+  }]);
+  const patchStage = (key, patch) => setStages(ss => ss.map(st => st.key === key ? { ...st, ...patch } : st));
+  const removeStage = (key) => setStages(ss => ss.filter(st => st.key !== key));
+  const moveStage = (i, dir) => setStages(ss => {
+    const next = [...ss];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return ss;
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+
+  const draftStage = async (stage) => {
+    if (!stage.topic.trim()) return setError('Enter the stage topic first.');
+    setError(''); setDraftingKey(stage.key);
+    try {
+      const d = await apiPost('/api/self-study/plan', { topic: stage.topic.trim(), subject: stage.subject });
+      const pl = d?.data ?? {};
+      patchStage(stage.key, {
+        subtopics: pl.subtopics ?? [],
+        objectives: pl.objectives ?? {},
+        title: stage.title || `${stage.topic.trim()} — ${STAGE_KINDS.find(k => k.key === stage.kind)?.label.toLowerCase()}`,
+      });
+    } catch (e) { setError(e?.message || 'Could not draft the plan.'); }
+    finally { setDraftingKey(null); }
+  };
+
+  const battleCreated = async (form) => {
+    // The stage keeps the battle's title; the battle itself is already live
+    // for its audience — the journey just references it, in order.
+    const stage = stages.find(st => st.key === battleFor);
+    if (stage) patchStage(stage.key, { battle: { title: form.title.trim(), kind: form.kind }, title: stage.title || form.title.trim() });
+    setBattleFor(null);
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!title.trim()) return setError('Give the journey a title.');
+    if (!stages.length) return setError('Add at least one stage.');
+    if (!classId) return setError('Pick a class.');
+    const aud = audience;
+    if (aud.mode === 'class' && !aud.classroomId) return setError('Pick which class this is for.');
+    if (aud.mode === 'picked' && !(aud.selected.length + parseHandles(aud.typed).length))
+      return setError('Choose at least one learner, or send it to the whole class.');
+    const badStage = stages.find(st => st.kind !== 'battle' && (!st.title.trim() || !st.topic.trim()));
+    if (badStage) return setError('Every stage needs a title and a topic.');
+    const noBattle = stages.find(st => st.kind === 'battle' && !st.battle);
+    if (noBattle) return setError('Create the battle for every battle stage before assigning.');
+
+    setSaving(true);
+    try {
+      const dueIso = dueAt ? new Date(dueAt).toISOString() : null;
+      const refs = [];
+      for (const st of stages) {
+        if (st.kind === 'battle') {
+          refs.push({ kind: 'battle', title: st.battle.title, emoji: '⚔️' });
+          continue;
+        }
+        const clean = st.subtopics.map(x => x.trim()).filter(Boolean);
+        const objectives = {};
+        for (const x of clean) objectives[x] = (st.objectives[x] ?? []).map(o => o.trim()).filter(Boolean);
+        const t = audienceBody(audience);
+        const d = await apiPost('/api/self-study', {
+          type: st.kind,
+          title: st.title.trim(), subject: st.subject, topic: st.topic.trim(),
+          instructions: st.instructions || null,
+          subtopics: clean, objectives,
+          due_at: dueIso,
+          ...t,
+          classroom_id: t.whole_class ? classId : null,
+        });
+        refs.push({ kind: st.kind, refId: d?.data?.id ?? null, title: st.title.trim(), emoji: STAGE_KINDS.find(k => k.key === st.kind)?.emoji || '📌' });
+      }
+      const t = audienceBody(audience);
+      await apiPost('/api/self-study', {
+        type: 'multi_stage',
+        title: title.trim(),
+        subject: stages.find(st => st.kind !== 'battle')?.subject || 'General',
+        topic: title.trim(),
+        instructions: `A ${refs.length}-step journey: ${refs.map(r => r.title).join(' → ')}`,
+        due_at: dueIso,
+        details: { stages: refs },
+        ...t,
+        classroom_id: t.whole_class ? classId : null,
+      });
+      setDone(`Journey assigned — ${refs.length} stage${refs.length === 1 ? '' : 's'}, in order.`);
+      setTitle(''); setStages([]); setDueAt(''); setAudience(BLANK_AUDIENCE);
+      onAssigned();
+    } catch (err) {
+      setError(err?.message || 'Could not assign the journey.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <>
+    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: '#A855F718', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ListChecks size={19} color="#A855F7" />
+        </div>
+        <div>
+          <div style={{ fontSize: 15.5, fontWeight: 900, color: INK }}>New multi-stage activity</div>
+          <div style={{ fontSize: 11.5, color: MUTED }}>Chain activities into one ordered journey — learners see the roadmap.</div>
+        </div>
+      </div>
+
+      {done && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 10, background: '#DCFCE7', border: '1px solid #BBF7D0', fontSize: 12.5, fontWeight: 800, color: GREEN }}>
+          <CheckCircle2 size={14} /> {done}
+        </div>
+      )}
+
+      <Inp label="Journey title *" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Photosynthesis: learn it, prove it, win it" />
+
+      {/* Stages */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 8 }}>Stages * <span style={{ fontWeight: 600, color: MUTED2 }}>— learners do them top to bottom</span></div>
+        {stages.length === 0 && (
+          <div style={{ padding: '18px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: 12, background: LIGHT, fontSize: 12, color: MUTED }}>
+            No stages yet — add the first one below.
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {stages.map((st, i) => {
+            const meta = STAGE_KINDS.find(k => k.key === st.kind);
+            return (
+              <div key={st.key} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px', background: WHITE }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: st.kind === 'battle' ? 0 : 10 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, background: '#A855F718', color: '#A855F7', fontSize: 11, fontWeight: 900, textAlign: 'center', lineHeight: '22px' }}>{i + 1}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{meta.emoji} {meta.label}</span>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" onClick={() => moveStage(i, -1)} disabled={i === 0} title="Move up"
+                    style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? BORDER : MUTED, display: 'flex', padding: 2 }}><ArrowUp size={13} /></button>
+                  <button type="button" onClick={() => moveStage(i, 1)} disabled={i === stages.length - 1} title="Move down"
+                    style={{ background: 'none', border: 'none', cursor: i === stages.length - 1 ? 'default' : 'pointer', color: i === stages.length - 1 ? BORDER : MUTED, display: 'flex', padding: 2 }}><ArrowDown size={13} /></button>
+                  <button type="button" onClick={() => removeStage(st.key)} title="Remove stage"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: RED, display: 'flex', padding: 2 }}><Trash2 size={13} /></button>
+                </div>
+
+                {st.kind === 'battle' ? (
+                  st.battle
+                    ? <div style={{ fontSize: 12, fontWeight: 700, color: GREEN }}>⚔️ {st.battle.title} — battle is live for its audience</div>
+                    : <Btn size="sm" variant="secondary" type="button" onClick={() => setBattleFor(st.key)}>
+                        <Swords size={13} /> Create the battle for this stage
+                      </Btn>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      <Sel value={st.subject} onChange={e => patchStage(st.key, { subject: e.target.value })} label="Subject *">
+                        {SUBJECTS.map(x => <option key={x} value={x}>{x}</option>)}
+                      </Sel>
+                      <Inp label="Stage title *" value={st.title} onChange={e => patchStage(st.key, { title: e.target.value })} placeholder="What learners see" />
+                    </div>
+                    <Inp label="Topic *" value={st.topic} onChange={e => patchStage(st.key, { topic: e.target.value })} placeholder="e.g. Photosynthesis" />
+                    <Txa label="Instructions" value={st.instructions} onChange={e => patchStage(st.key, { instructions: e.target.value })} rows={2} style={{ marginTop: 8 }} />
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 0 6px' }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: INK }}>Stage plan *</div>
+                      <Btn size="sm" variant="secondary" type="button" onClick={() => draftStage(st)} disabled={draftingKey === st.key}>
+                        {draftingKey === st.key
+                          ? <><Loader2 size={12} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                          : <><Sparkles size={12} /> {st.subtopics.length ? 'Redraft' : 'Draft with AI'}</>}
+                      </Btn>
+                    </div>
+                    <PlanEditor
+                      subtopics={st.subtopics} objectives={st.objectives}
+                      onChange={(subtopics, objectives) => patchStage(st.key, { subtopics, objectives })}
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+          {STAGE_KINDS.map(k => (
+            <button key={k.key} type="button" onClick={() => addStage(k.key)}
+              style={{ padding: '7px 13px', borderRadius: 20, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontSize: 11.5, fontWeight: 800, color: INK, fontFamily: FONT }}>
+              + {k.emoji} {k.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Who — shared by every stage */}
+      <div>
+        <Sel label="Class *" value={classId} onChange={e => setClassId(e.target.value)}>
+          {classes.length === 0 && <option value="">No classes set up yet</option>}
+          {classes.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}
+            </option>
+          ))}
+        </Sel>
+        <div style={{ marginTop: 12 }}>
+          <AudiencePicker
+            value={audience} onChange={setAudience}
+            modes={['course', 'picked']}
+            allLabel={{ label: 'Everyone in the class', hint: 'All active members' }}
+            rosterUrl={classId ? `/api/instructor/classrooms/${classId}/students` : null}
+          />
+        </div>
+      </div>
+
+      <Inp label="Due for every stage (optional)" type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} />
+
+      {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+        <Btn type="submit" disabled={saving}>
+          {saving ? 'Assigning…' : <><ListChecks size={14} /> Assign journey</>}
+        </Btn>
+      </div>
+
+    </form>
+
+    {/* The same battle creation form, in a modal, for battle stages — a
+        sibling of the journey form: a form must never nest inside a form. */}
+    <BattleStageModal open={!!battleFor} onClose={() => setBattleFor(null)} onCreated={battleCreated} />
+    </>
+  );
+}
+
+function BattleStageModal({ open, onClose, onCreated }) {
+  const { createBattle } = useBattlesAPI();
+  const { getCourses } = useCoursesAPI();
+  const [courses, setCourses] = useState([]);
+  const getCoursesRef = useRef(getCourses);
+  getCoursesRef.current = getCourses;
+  useEffect(() => { if (open) getCoursesRef.current().then(d => setCourses(d?.data ?? [])).catch(() => setCourses([])); }, [open]);
+  return (
+    <Modal open={open} onClose={onClose} title="Stage battle" width={540}>
+      <BattleForm
+        courses={courses} submitLabel="Create battle for this stage"
+        onSubmit={async (form) => { await createBattleForStage(form, createBattle); onCreated(form); onClose(); }}
+        onCancel={onClose}
+      />
+    </Modal>
+  );
+}
+
+async function createBattleForStage(form, createBattle) {
+  const scheduledIso = form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null;
+  await createBattle({
+    kind: form.kind, courseId: form.courseId, classId: form.classId,
+    question_source: form.questionSource,
+    ...(form.kind !== 'course' ? { subject: form.subject } : {}),
+    ...(form.kind === 'review' ? { mode: 'review' } : {}),
+    title: form.title.trim(),
+    description: form.description || null,
+    topic: form.topic || null,
+    difficulty: form.difficulty,
+    total_questions: parseInt(form.totalQuestions, 10) || 15,
+    time_limit_seconds: (parseInt(form.duration, 10) || 15) * 60,
+    xp_prize: parseInt(form.xpPrize, 10) || 200,
+    expires_in_minutes: parseInt(form.expiresInMinutes, 10) || 60,
+    scheduled_for: scheduledIso,
+    ...audienceBody(form.audience),
+  });
 }

@@ -52,7 +52,7 @@ const TEACHER_ROLES = ["instructor", "teacher", "school", "school_admin", "admin
  * separated only by `type` and what lands in `details`. Learner surfaces read
  * `type` and file the card under the matching pill.
  */
-const ACTIVITY_TYPES = Object.freeze(["self_study", "assignment", "project", "live_course"]);
+const ACTIVITY_TYPES = Object.freeze(["self_study", "assignment", "project", "live_course", "multi_stage"]);
 
 /** How an activity announces itself in a learner's notifications. */
 const ACTIVITY_ANNOUNCE = {
@@ -60,6 +60,7 @@ const ACTIVITY_ANNOUNCE = {
   assignment:  { emoji: "\u270F\uFE0F",  label: "Assignment" },
   project:     { emoji: "\u{1F4C2}", label: "Project" },
   live_course: { emoji: "\u{1F4FA}", label: "Live course" },
+  multi_stage: { emoji: "\u{1F9E9}", label: "Multi-stage activity" },
 };
 const announceFor = (type) => ACTIVITY_ANNOUNCE[type] ?? ACTIVITY_ANNOUNCE.self_study;
 
@@ -362,6 +363,9 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
     related_id: assignment.id,
     link: "/activities",           // tapping the bell item opens the Activity feed
   });
+  // The real-time "ding": same event the create path emits, so work added to
+  // an assignment later is announced exactly like new work.
+  for (const sid of ids) global.io?.to(`user:${sid}`).emit("self_study_assigned", { assignment });
   ok(res, { assigned: ids.length });
 }));
 

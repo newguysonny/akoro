@@ -121,6 +121,14 @@ export default function ActivityPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // An assigned activity announces itself in real time (the dashboard's
+  // ambient socket); refetch so the new card is here when the learner looks.
+  useEffect(() => {
+    const onChange = () => load();
+    window.addEventListener('ak:activity-changed', onChange);
+    return () => window.removeEventListener('ak:activity-changed', onChange);
+  }, [load]);
+
   const openCount = items.filter(a => a.status !== 'complete').length;
 
   const displayed = filter === 'all' ? items : items.filter(a => a.kind === filter);

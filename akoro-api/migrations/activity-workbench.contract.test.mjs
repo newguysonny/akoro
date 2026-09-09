@@ -9,7 +9,7 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [page, selfStudy, planEditor, routes, migration, manifest, activityApi] = await Promise.all([
+const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket] = await Promise.all([
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
@@ -17,6 +17,11 @@ const [page, selfStudy, planEditor, routes, migration, manifest, activityApi] = 
   read("../../akoro-api/migrations/2026-activity-types.sql"),
   read("../../akoro-api/migrations/manifest.json"),
   read("../../akoro-learner/src/services/activityApi.js"),
+  read("../../akoro-instructor/src/components/battles/BattleForm.jsx"),
+  read("../../akoro-instructor/src/pages/BattlesPage.jsx"),
+  read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
+  read("../../akoro-learner/src/pages/ActivityPage.jsx"),
+  read("../../akoro-learner/src/services/activitySocket.js"),
 ]);
 
 test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activities", () => {
@@ -33,7 +38,7 @@ test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activi
 
 test("all kinds ride the self-study machinery, separated by type", () => {
   // API accepts and persists the type, and validates it.
-  assert.match(routes, /ACTIVITY_TYPES = Object\.freeze\(\["self_study", "assignment", "project", "live_course"\]\)/);
+  assert.match(routes, /ACTIVITY_TYPES = Object\.freeze\(\["self_study", "assignment", "project", "live_course", "multi_stage"\]\)/);
   assert.match(routes, /Unknown activity type/);
   assert.match(routes, /due_at, type,/);
   // Learner /mine passes the kind through so cards file under the right pill.
@@ -88,4 +93,48 @@ test("past activities carry the same data as self study, for every kind", () => 
   assert.match(page, /data\.objectives\?\.\[st\]/);
   assert.match(page, /ASSIGNED LEARNERS/);
   assert.match(page, /\{done\} of \{targets\.length\} done/);
+});
+
+test("battles use the same creation form everywhere", () => {
+  // One BattleForm implementation; the Battles page wraps it in a modal, the
+  // workbench renders it inline.
+  assert.match(battlesPage, /import BattleForm from '\.\.\/components\/battles\/BattleForm\.jsx';/);
+  assert.match(battlesPage, /<BattleForm/);
+  assert.match(page, /import BattleForm from '\.\.\/components\/battles\/BattleForm\.jsx';/);
+  assert.match(page, /key === 'battle'\s*\?/);
+  assert.match(page, /BattlePastStrip/);
+  // Battle creation calls the same invite endpoint the Battles page uses.
+  assert.match(page, /createBattle\(/);
+  assert.match(page, /question_source: form\.questionSource/);
+});
+
+test("multi-stage activities chain real work into one journey", () => {
+  // The composer: ordered stages, all four kinds, shared audience, battle
+  // stages created through the same battle form.
+  assert.match(page, /function MultiStageForm/);
+  for (const k of ["'self_study'", "'assignment'", "'project'", "'battle'"]) {
+    assert.ok(page.includes(`key: ${k}`), `stage kind ${k}`);
+  }
+  assert.match(page, /type: 'multi_stage'/);
+  assert.match(page, /details: \{ stages: refs \}/);
+  assert.match(page, /BattleStageModal/);
+  // The backend knows the type and announces it.
+  assert.match(routes, /"multi_stage"/);
+  assert.match(migration, /'multi_stage'/);
+  // Learners see the journey as a roadmap.
+  assert.match(activityApi, /stageList\.map\(st => st\.title\)\.join\(' → '\)/);
+});
+
+test("a new assignment dings the learner in real time", () => {
+  // Backend: the create path AND the add-learners-later path both emit.
+  const emitCount = (routes.match(/emit\("self_study_assigned"/g) || []).length;
+  assert.ok(emitCount >= 2, `both assign paths emit (found ${emitCount})`);
+  // Learner: one ambient socket listening for it.
+  assert.match(activitySocket, /socket\.on\('self_study_assigned'/);
+  assert.match(dashboard, /onActivityEvent/);
+  assert.match(dashboard, /New \$\{label\.toLowerCase\(\)\}/);
+  // The chime is best-effort; the toast still lands without audio.
+  assert.match(dashboard, /AudioContext/);
+  // A mounted Activity page refetches when the ding fires.
+  assert.match(learnerActivity, /ak:activity-changed/);
 });

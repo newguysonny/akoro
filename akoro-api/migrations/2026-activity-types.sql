@@ -29,7 +29,7 @@ DO $$
 DECLARE v_vals text[];
 BEGIN
   SELECT array_agg(DISTINCT s ORDER BY s) INTO v_vals
-  FROM (SELECT unnest(ARRAY['self_study','assignment','project','live_course']) AS s
+  FROM (SELECT unnest(ARRAY['self_study','assignment','project','live_course','multi_stage']) AS s
         UNION SELECT DISTINCT type FROM edu.self_study_assignments WHERE type IS NOT NULL) t;
 
   ALTER TABLE edu.self_study_assignments DROP CONSTRAINT IF EXISTS self_study_assignments_type_check;

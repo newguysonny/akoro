@@ -8,6 +8,7 @@ import { useCart } from '../contexts/CartContext.jsx';
 
 // Components
 import TeacherNudge   from '../components/TeacherNudge.jsx';
+import { onActivityEvent } from '../services/activitySocket.js';
 import InstallBanner  from '../components/common/InstallBanner.jsx';
 import SessionCard    from '../components/sessions/SessionCard.jsx';
 import SelfStudyList  from '../components/sessions/SelfStudyList.jsx';
@@ -68,6 +69,42 @@ export default function LearnerDashboard() {
   const [discoverView,  setDiscoverView]  = useState(discoverViewFromUrl);
   const [discoverQuery, setDiscoverQuery] = useState(discoverQFromUrl);
   // Keep tab in sync when the URL changes (Back/Forward, deep link).
+
+  // ── "Ding, new assignment" ─────────────────────────────────────────────
+  // The teacher's assign action emits self_study_assigned into this learner's
+  // user room. One ambient socket hears it: chime, toast, and poke any
+  // mounted Activity page to refetch. Best-effort end to end — a missed
+  // announcement never blocks the work itself, which is already saved.
+  useEffect(() => {
+    const TYPE_LABEL = { self_study: 'Self study', assignment: 'Assignment', project: 'Project', live_course: 'Live course', multi_stage: 'Multi-stage journey' };
+    const TYPE_EMOJI = { self_study: '📖', assignment: '✏️', project: '🗂️', live_course: '📺', multi_stage: '🧩' };
+    return onActivityEvent(({ assignment } = {}) => {
+      if (!assignment?.title) return;
+      const label = TYPE_LABEL[assignment.type] || 'Activity';
+      const emoji = TYPE_EMOJI[assignment.type] || '📌';
+      // A two-note chime — a courtesy, never a requirement (autoplay rules
+      // may silence it until the learner has interacted; the toast still lands).
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+          const ctx = new AC();
+          [[880, 0], [1174.66, 0.13]].forEach(([freq, at]) => {
+            const o = ctx.createOscillator(), g = ctx.createGain();
+            const t0 = ctx.currentTime + at;
+            o.type = 'sine'; o.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, t0);
+            g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(t0); o.stop(t0 + 0.55);
+          });
+          setTimeout(() => ctx.close?.(), 1200);
+        }
+      } catch { /* no audio — fine */ }
+      setToast({ msg: `${emoji} New ${label.toLowerCase()}: ${assignment.title}`, color: BRAND });
+      window.dispatchEvent(new CustomEvent('ak:activity-changed', { detail: assignment }));
+    });
+  }, []);
   useEffect(() => {
     setTab(tabFromUrl());
     setDiscoverView(discoverViewFromUrl());
