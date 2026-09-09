@@ -62,6 +62,20 @@ test("the learner feed files the new kinds", () => {
   assert.match(activityApi, /a\.details\?\.scheduled_at/);
 });
 
+test("a learner receives every assigned kind on their Activity page", async () => {
+  const list = await read("../../akoro-learner/src/components/sessions/SelfStudyList.jsx");
+  const pageLearner = await read("../../akoro-learner/src/pages/ActivityPage.jsx");
+  // The feed reads /mine, which returns every type with its details.
+  assert.ok(routes.includes('router.get("/mine"'), "/mine serves assigned work");
+  assert.match(activityApi, /apiGet\('\/api\/self-study\/mine'\)/);
+  // The announcement deep-links the learner to the feed.
+  assert.match(routes, /link: "\/activities"/);
+  // Live courses are not agent sessions — they surface only in the feed.
+  assert.match(list, /!== 'live_course'/);
+  // The page offers a pill per kind, including live courses.
+  assert.match(pageLearner, /live_course/);
+});
+
 test("past activities carry the same data as self study, for every kind", () => {
   // Cards: assigned / started / done badges plus the self-study progress bar.
   assert.match(page, /\{p\.started\} started/);

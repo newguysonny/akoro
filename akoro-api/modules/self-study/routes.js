@@ -212,6 +212,7 @@ router.post("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
     title: `${announce.emoji} ${announce.label}: ${assignment.title}`,
     content: `${assignment.subject} · ${assignment.topic}${due_at ? ` · due ${new Date(due_at).toLocaleDateString("en-GB")}` : ""}`,
     related_id: assignment.id,
+    link: "/activities",           // tapping the bell item opens the Activity feed
   });
   for (const sid of ids) global.io?.to(`user:${sid}`).emit("self_study_assigned", { assignment });
 
@@ -359,6 +360,7 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
     title: `${announce.emoji} ${announce.label}: ${assignment.title}`,
     content: `${assignment.subject} · ${assignment.topic}`,
     related_id: assignment.id,
+    link: "/activities",           // tapping the bell item opens the Activity feed
   });
   ok(res, { assigned: ids.length });
 }));
