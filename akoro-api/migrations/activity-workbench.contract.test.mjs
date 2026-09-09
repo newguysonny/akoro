@@ -61,3 +61,17 @@ test("the learner feed files the new kinds", () => {
   assert.match(activityApi, /kind:\s+a\.type \|\| 'self_study'/);
   assert.match(activityApi, /a\.details\?\.scheduled_at/);
 });
+
+test("past activities carry the same data as self study, for every kind", () => {
+  // Cards: assigned / started / done badges plus the self-study progress bar.
+  assert.match(page, /\{p\.started\} started/);
+  assert.match(page, /p\.assigned \? Math\.round\(\(p\.complete \/ p\.assigned\) \* 100\) : 0/);
+  assert.match(page, /linear-gradient\(90deg, \$\{AMBER\}, \$\{GREEN\}\)/);
+  // Detail: the full brief — schedule or due line, the approved plan with its
+  // objectives, and the per-learner roster with statuses.
+  assert.match(page, /Holds \{new Date\(data\.details\.scheduled_at\)/);
+  assert.match(page, /planLabel \|\| 'Plan'/);
+  assert.match(page, /data\.objectives\?\.\[st\]/);
+  assert.match(page, /ASSIGNED LEARNERS/);
+  assert.match(page, /\{done\} of \{targets\.length\} done/);
+});

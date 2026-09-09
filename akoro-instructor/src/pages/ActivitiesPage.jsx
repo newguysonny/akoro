@@ -325,17 +325,22 @@ function PastActivities({ type, refreshKey, onOpen }) {
       </div>
 
       {past === null ? (
-        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 96, borderRadius: 12, background: LIGHT }} />)}</div>
+        <div style={{ display: 'flex', gap: 12 }}>{[0, 1, 2].map(i => <div key={i} style={{ flex: '0 0 224px', height: 128, borderRadius: 12, background: LIGHT }} />)}</div>
       ) : (
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x proximity' }}>
           {past.map(a => {
             const p = a.progress ?? { assigned: 0, started: 0, complete: 0 };
-            const when = fmtDate(a.details?.scheduled_at || a.due_at || a.created_at);
+            const due = a.details?.scheduled_at || a.due_at;
+            const when = fmtDate(due || a.created_at);
+            const whenLabel = a.details?.scheduled_at ? 'Holds' : a.due_at ? 'Due' : 'Created';
+            const dueDate = due ? new Date(due) : null;
+            const overdue = dueDate && dueDate < new Date() && p.complete < p.assigned;
+            const pct = p.assigned ? Math.round((p.complete / p.assigned) * 100) : 0;
             return (
               <div key={a.id} onClick={() => onOpen(a)} title="See who's done it"
-                style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', cursor: 'pointer', border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}
+                style={{ flex: '0 0 auto', width: 224, scrollSnapAlign: 'start', cursor: 'pointer', border: `1px solid ${overdue ? '#FECACA' : BORDER}`, borderRadius: 12, padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = meta.color; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; }}>
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = overdue ? '#FECACA' : BORDER; }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <span style={{ fontSize: 14 }}>{meta.emoji}</span>
@@ -345,10 +350,17 @@ function PastActivities({ type, refreshKey, onOpen }) {
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 800, color: meta.color }}>{a.subject}</span>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  <Badge color={BLUE} bg="#EFF6FF">{p.assigned} assigned</Badge>
+                  <Badge color={BLUE} bg="#EFF6FF"><Users size={10} style={{ marginRight: 2 }} />{p.assigned} assigned</Badge>
+                  <Badge color={AMBER} bg="#FFF7ED">{p.started} started</Badge>
                   <Badge color={GREEN} bg="#DCFCE7"><CheckCircle2 size={10} style={{ marginRight: 2 }} />{p.complete} done</Badge>
                 </div>
-                <div style={{ fontSize: 10, color: MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} />{when || '—'}</div>
+                {/* Same progress bar the self-study cards carry. */}
+                <div style={{ height: 6, borderRadius: 3, background: LIGHT, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${AMBER}, ${GREEN})`, transition: 'width .3s' }} />
+                </div>
+                <div style={{ fontSize: 10, color: overdue ? RED : MUTED2, marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={10} />{whenLabel} {when || '—'}
+                </div>
               </div>
             );
           })}
@@ -385,32 +397,96 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
         <div style={{ fontSize: 13, color: MUTED, fontFamily: FONT, padding: '10px 0' }}>Loading…</div>
       ) : (
         <div style={{ fontFamily: FONT }}>
-          <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
+          {/* The brief — same data the self-study detail shows, whatever the kind. */}
+          <div style={{ fontSize: 12, color: MUTED, marginBottom: 10 }}>
             {meta.emoji} {data.subject} · {data.topic}
-            {(data.subtopics ?? []).length ? ` · ${(data.subtopics ?? []).length} ${byKey(data.type || 'self_study')?.planLabel === 'Task breakdown' ? 'tasks' : 'parts'}` : ''}
-            {data.details?.scheduled_at && ` · holds ${new Date(data.details.scheduled_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
+            {data.difficulty ? ` · ${data.difficulty}` : ''}
           </div>
+
+          {data.details?.scheduled_at && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: AMBER, marginBottom: 10 }}>
+              <Clock size={12} />
+              Holds {new Date(data.details.scheduled_at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              {data.details.duration_mins ? ` · ${data.details.duration_mins} minutes` : ''}
+            </div>
+          )}
+          {data.due_at && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 10 }}>
+              <Clock size={12} /> Due {new Date(data.due_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
+
           {data.instructions && (
             <div style={{ fontSize: 12, color: MUTED, background: LIGHT, borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.55 }}>{data.instructions}</div>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 340, overflowY: 'auto' }}>
-            {(data.targets ?? []).map(t => {
-              const s = STATUS[t.status] || STATUS.assigned;
-              return (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
-                  <span style={{ fontSize: 16 }}>{t.emoji || '🧑‍🎓'}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{t.full_name}</div>
-                    <div style={{ fontSize: 11, color: MUTED }}>@{t.username}</div>
+
+          {/* The plan — the subtopics and objectives the teacher approved,
+              labelled the way the creation form labelled them. */}
+          {(data.subtopics ?? []).length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2, marginBottom: 7 }}>
+                {(byKey(data.type || 'self_study')?.planLabel || 'Plan').toUpperCase()}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {(data.subtopics ?? []).map((st, i) => (
+                  <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 11px', background: WHITE }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: `${meta.color}18`, color: meta.color, fontSize: 10.5, fontWeight: 900, textAlign: 'center', lineHeight: '18px' }}>{i + 1}</span>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{st}</span>
+                    </div>
+                    {(data.objectives?.[st] ?? []).length > 0 && (
+                      <div style={{ paddingLeft: 26, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {data.objectives[st].map((o, j) => (
+                          <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: MUTED }}>
+                            <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: MUTED2, flexShrink: 0 }} />{o}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <Badge color={s.color} bg={s.bg}>{s.label}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Who has it, and where each of them stands. */}
+          {(() => {
+            const targets = data.targets ?? [];
+            const done = targets.filter(t => t.status === 'complete').length;
+            const pct = targets.length ? Math.round((done / targets.length) * 100) : 0;
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2 }}>ASSIGNED LEARNERS</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: MUTED }}>{done} of {targets.length} done</div>
                 </div>
-              );
-            })}
-            {(data.targets ?? []).length === 0 && (
-              <div style={{ fontSize: 12, color: MUTED, padding: '10px 0' }}>Nobody is assigned yet.</div>
-            )}
-          </div>
+                {targets.length > 0 && (
+                  <div style={{ height: 6, borderRadius: 3, background: LIGHT, overflow: 'hidden', marginBottom: 10 }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${AMBER}, ${GREEN})`, transition: 'width .3s' }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>
+                  {targets.map(t => {
+                    const st = STATUS[t.status] || STATUS.assigned;
+                    return (
+                      <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 10, background: WHITE }}>
+                        <span style={{ fontSize: 16 }}>{t.emoji || '🧑‍🎓'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{t.full_name}</div>
+                          <div style={{ fontSize: 11, color: MUTED }}>@{t.username}</div>
+                        </div>
+                        <Badge color={st.color} bg={st.bg}>{st.label}</Badge>
+                      </div>
+                    );
+                  })}
+                  {targets.length === 0 && (
+                    <div style={{ fontSize: 12, color: MUTED, padding: '10px 0' }}>Nobody is assigned yet.</div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14 }}>
             <Btn size="sm" variant="secondary" onClick={del}><Trash2 size={13} /> Delete activity</Btn>
             <Btn size="sm" variant="secondary" onClick={onClose}>Close</Btn>
