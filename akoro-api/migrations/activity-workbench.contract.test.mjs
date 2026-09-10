@@ -96,6 +96,16 @@ test("past activities carry the same data as self study, for every kind", () => 
   assert.match(page, /\{done\} of \{targets\.length\} done/);
 });
 
+test("BattleForm is self-contained — no identifiers from its old modal host", () => {
+  // Regression: the extracted form once called onClose(), which only existed
+  // in the Battles page modal — clicking battles in the workbench crashed.
+  assert.ok(!battleForm.includes("onClose"), "BattleForm must not reference onClose");
+  assert.match(battleForm, /onCancel\?\.\(\)/);
+  assert.match(battleForm, /submitLabel \|\| \(editing \? 'Save changes' : 'Create Battle'\)/);
+  // Cancel only renders when the host offers a way back.
+  assert.match(battleForm, /\{onCancel && <Btn variant="secondary" type="button" onClick=\{onCancel\}>Cancel<\/Btn>\}/);
+});
+
 test("battles use the same creation form everywhere", () => {
   // One BattleForm implementation; the Battles page wraps it in a modal, the
   // workbench renders it inline.

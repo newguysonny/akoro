@@ -105,7 +105,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
     setLoading(true);
     try {
       await onSubmit(form);
-      onClose();
+      onCancel?.();   // the host closes its modal / resets the panel
     } catch (err) {
       setError(err?.message || 'Could not save the battle.');
     } finally {
@@ -254,9 +254,9 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
         {error && <div style={{ fontSize: 12, color: RED, fontWeight: 700, fontFamily: FONT }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-          <Btn variant="secondary" type="button" onClick={onClose}>Cancel</Btn>
+          {onCancel && <Btn variant="secondary" type="button" onClick={onCancel}>Cancel</Btn>}
           <Btn type="submit" disabled={loading || !form.title.trim() || (form.kind === 'course' && !form.courseId)}>
-            {loading ? 'Saving…' : editing ? 'Save changes' : 'Create Battle'}
+            {loading ? 'Saving…' : submitLabel || (editing ? 'Save changes' : 'Create Battle')}
           </Btn>
         </div>
       </form>
