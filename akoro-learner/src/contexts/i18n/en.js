@@ -354,6 +354,8 @@ export const EN = {
   'settings.order_history_sub':'Your payments & receipts',
   'settings.activities':       'Activities',
   'settings.activities_sub':   'Your learning activity',
+  'settings.gradebook':        'Gradebook',
+  'settings.gradebook_sub':    'Your marks, subject by subject',
   'settings.communities':      'Communities',
   'settings.communities_sub':  'Groups you’ve joined',
   'settings.library':          'Library',
