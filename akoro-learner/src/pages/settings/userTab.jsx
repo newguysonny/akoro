@@ -251,12 +251,14 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
         isHigherEdUI(profile)
           ? { icon:'ti-users', title:'settings.communities',  sub:'settings.communities_sub',  go:()=>navigate('/communities') }
+          // lowerEd gets BOTH its cards — flattened, or the nested array
+          // renders as one blank card (which is exactly what happened).
           : [
               { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
               { icon:'ti-books-2',  title:'settings.gradebook',  sub:'settings.gradebook_sub',   go:()=>navigate('/gradebook') },
             ],
         { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
-      ].map(card => (
+      ].flat().map(card => (
         <button key={card.title} onClick={card.go}
           style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
             margin:'0 16px 14px',borderRadius:16,padding:'14px 16px',cursor:'pointer',

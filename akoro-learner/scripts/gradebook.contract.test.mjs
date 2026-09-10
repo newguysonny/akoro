@@ -46,6 +46,10 @@ test("the page is routed and reachable for lowerEd learners", () => {
   assert.match(appRoutes, /path="\/gradebook"/);
   // The settings card sits beside Activities, lowerEd only.
   assert.match(userTab, /title:'settings\.gradebook'/);
+  // REGRESSION: the lowerEd branch returns TWO cards as an array — the list
+  // must be flattened before .map, or the array itself renders as one blank
+  // card and Activities/Gradebook vanish from Settings.
+  assert.match(userTab, /\]\.flat\(\)\.map\(card =>/);
   assert.match(userTab, /navigate\('\/gradebook'\)/);
   const gradebookPos = userTab.indexOf("navigate('/gradebook')");
   const activitiesPos = userTab.indexOf("navigate('/activities')");
