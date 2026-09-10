@@ -8,6 +8,7 @@ const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideE
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
+import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted }) {
@@ -145,6 +146,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   // Fortizo split with this chat embedded as the right column. The session
   // itself (WebSocket, blocks, voice) never restarts — only the shell moves.
   const [readerOpen, setReaderOpen]   = useState(false);
+  const [boardOpen, setBoardOpen]     = useState(false);
   const isMobileView                  = useIsMobileView();
   const readerReference = config?.reference || session?.reference || null;
   const readerPages = useMemo(
@@ -785,6 +787,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       onClose={onClose}
       embedded={embedded}
       onOpenReader={readerOpen ? closeReader : openReader}
+      onOpenBoard={() => setBoardOpen(true)}
       chatMode={chatMode}
       onToggleChatMode={toggleChatMode}
       guide={{
@@ -821,6 +824,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         <SessionReaderModal {...readerProps} chatNode={sessionChat(true)}/>
       ) : (
         sessionChat(false)
+      )}
+
+      {boardOpen && (
+        <WhiteboardModal topic={topic} subject={subject} onClose={() => setBoardOpen(false)} />
       )}
 
       {switchOpen && (

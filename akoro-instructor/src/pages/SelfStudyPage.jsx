@@ -11,8 +11,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, BookOpen, Sparkles, Users, Clock, Trash2, Pencil, ChevronRight,
-  Search, Loader2, X, CheckCircle2,
+  Search, Loader2, X, CheckCircle2, BarChart3,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
 import PlanEditor from '../components/PlanEditor.jsx';
@@ -256,7 +257,7 @@ function DetailModal({ open, onClose, assignmentId }) {
 }
 
 /* ── Card ────────────────────────────────────────────────────────────────── */
-function AssignmentCard({ a, onOpen, onEdit, onDelete }) {
+function AssignmentCard({ a, onOpen, onEdit, onDelete, onAnalytics }) {
   const p = a.progress ?? { assigned: 0, started: 0, complete: 0 };
   const pct = p.assigned ? Math.round((p.complete / p.assigned) * 100) : 0;
   const due = a.due_at ? new Date(a.due_at) : null;
@@ -278,6 +279,10 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete }) {
           <div style={{ fontSize: 14, fontWeight: 700, color: INK, fontFamily: FONT }}>{a.title}</div>
           <div style={{ fontSize: 11, color: MUTED, fontFamily: FONT }}>{a.subject} · {a.topic}</div>
         </div>
+        <button onClick={() => onAnalytics(a)} title="Analytics"
+          style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: MUTED, display: 'flex' }}>
+          <BarChart3 size={13} />
+        </button>
         <button onClick={() => onEdit(a)} title="Edit"
           style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '5px 6px', cursor: 'pointer', color: MUTED, display: 'flex' }}>
           <Pencil size={13} />
@@ -313,6 +318,7 @@ function AssignmentCard({ a, onOpen, onEdit, onDelete }) {
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 export default function SelfStudyPage() {
+  const navigate = useNavigate();
   const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);
@@ -424,7 +430,7 @@ export default function SelfStudyPage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {items.map(a => (
-            <AssignmentCard key={a.id} a={a} onOpen={x => setDetail(x.id)} onEdit={openEdit} onDelete={handleDelete} />
+            <AssignmentCard key={a.id} a={a} onOpen={x => setDetail(x.id)} onEdit={openEdit} onDelete={handleDelete} onAnalytics={x => navigate(`/self-study/${x.id}/analytics`)} />
           ))}
         </div>
       )}

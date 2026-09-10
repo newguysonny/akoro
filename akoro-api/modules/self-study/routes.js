@@ -30,6 +30,7 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { NaNaEsumai }                     from "../adaptive-learning/agents/nana-esumai/guide.js";
+import { getStudentState }               from "../adaptive-learning/student-state.js";
 
 const router = Router();
 const nana   = new NaNaEsumai();
@@ -364,6 +365,115 @@ router.get("/mine", asyncHandler(async (req, res) => {
         ...(journeyInfoById.has(a.id) ? { journey: journeyInfoById.get(a.id) } : {}),
       };
     }));
+}));
+
+/**
+ * classRows — per-learner analytics rows for one assignment.
+ *
+ * Joins each learner's progress (self_study_targets) with their agent's
+ * live cognitive state (edu.student_states via getStudentState). Reads only;
+ * never creates agents or states.
+ */
+async function classRows(assignment) {
+  const { data: targets } = await edu().from("self_study_targets")
+    .select("*").eq("assignment_id", assignment.id);
+  const rows = targets ?? [];
+  const ids = rows.map((t) => t.student_id);
+
+  const { data: users } = ids.length
+    ? await db.from("users").select("id, full_name, username, avatar_emoji").in("id", ids)
+    : { data: [] };
+  const { data: agents } = ids.length
+    ? await edu().from("student_agents").select("id, student_id, knowledge_score, level").in("student_id", ids)
+    : { data: [] };
+  const userBy   = new Map((users ?? []).map((u) => [u.id, u]));
+  const agentBy  = new Map((agents ?? []).map((a) => [a.student_id, a]));
+
+  return Promise.all(rows.map(async (t) => {
+    const u = userBy.get(t.student_id);
+    const agent = agentBy.get(t.student_id);
+    let cognitive = null;
+    if (agent?.id) {
+      const st = await getStudentState(agent.id);
+      const c = st?.cognitive ?? {};
+      cognitive = {
+        understanding: Math.round((c.understanding ?? 0) * 100),
+        confusion:     Math.round((c.confusion ?? 0) * 100),
+        engagement:    Math.round((c.engagement ?? 0.5) * 100),
+      };
+    }
+    return {
+      student:     { id: t.student_id, name: u?.full_name ?? "Unknown", username: u?.username ?? null, emoji: u?.avatar_emoji || "🧑‍🎓" },
+      status:      t.status,
+      startedAt:   t.started_at,
+      completedAt: t.completed_at,
+      knowledgeScore: agent ? Math.round(Number(agent.knowledge_score ?? 0)) : null,
+      agentLevel:     agent?.level ?? null,
+      cognitive,
+    };
+  }));
+}
+
+/** GET /api/self-study/:id/analytics — class results for one activity, plus any saved AI report. */
+router.get("/:id/analytics", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+
+  const rows = await classRows(assignment);
+  const avg  = (key) => {
+    const vals = rows.map((r) => r.cognitive?.[key]).filter((v) => typeof v === "number");
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  };
+
+  ok(res, {
+    assignment: {
+      id: assignment.id, title: assignment.title, subject: assignment.subject,
+      topic: assignment.topic, subtopics: assignment.subtopics ?? [],
+      difficulty: assignment.difficulty, type: assignment.type ?? "self_study",
+    },
+    summary: {
+      assigned: rows.length,
+      started:  rows.filter((r) => r.status === "started").length,
+      complete: rows.filter((r) => r.status === "complete").length,
+      avgUnderstanding: avg("understanding"),
+      avgConfusion:     avg("confusion"),
+      avgEngagement:    avg("engagement"),
+    },
+    learners: rows,
+    report: assignment.details?.ai_report ?? null,   // { report, generatedAt } when one was generated
+  });
+}));
+
+/** POST /api/self-study/:id/report — generate (and save) the AI report for this activity. */
+router.post("/:id/report", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+
+  const rows = await classRows(assignment);
+  if (!rows.length) return bad(res, "Assign it to at least one learner before asking for a report.");
+
+  const report = await nana.classAnalytics({
+    topic: assignment.topic, subject: assignment.subject,
+    subtopics: assignment.subtopics ?? [], difficulty: assignment.difficulty,
+    type: assignment.type ?? "self_study",
+  }, rows.map((r) => ({
+    name: (r.student.name || "Learner").split(" ")[0],   // first names only in the prompt
+    status: r.status,
+    understanding: r.cognitive?.understanding ?? null,
+    confusion: r.cognitive?.confusion ?? null,
+    engagement: r.cognitive?.engagement ?? null,
+    knowledgeScore: r.knowledgeScore,
+  })));
+
+  const generatedAt = now();
+  const details = { ...(assignment.details ?? {}), ai_report: { report, generatedAt } };
+  const { error: uErr } = await edu().from("self_study_assignments")
+    .update({ details, updated_at: generatedAt }).eq("id", assignment.id);
+  if (uErr) throw new Error(uErr.message);
+
+  ok(res, { report, generatedAt });
 }));
 
 /** GET /api/self-study/:id — the brief plus every learner's state. */

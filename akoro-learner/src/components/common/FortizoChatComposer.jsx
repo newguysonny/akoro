@@ -47,6 +47,7 @@ export default function FortizoChatComposer({
   disabled = false,
   dark = false,
   bookAction,
+  boardAction,
   bookActive = false,
   bookLabel = 'Open reading material',
   voiceAction,
@@ -124,6 +125,11 @@ export default function FortizoChatComposer({
         {bookAction && (
           <ComposerTool icon="ti-book-2" label={bookLabel} onClick={bookAction}
             disabled={disabled} active={bookActive} dark={dark}/>
+        )}
+        {/* Sketchpad control renders only when the host opens a whiteboard. */}
+        {boardAction && (
+          <ComposerTool icon="ti-edit" label="Whiteboard" onClick={boardAction}
+            disabled={disabled} dark={dark}/>
         )}
         <ComposerTool icon="ti-microphone" label={voiceLabel} onClick={voiceAction}
           disabled={disabled || !voiceAction} active={voiceActive} dark={dark}/>

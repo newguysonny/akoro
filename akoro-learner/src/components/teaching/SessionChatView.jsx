@@ -168,6 +168,7 @@ function SessionChatView({
   // Opens the Fortizo-style reader (book icon in the composer). Absent →
   // no book control is rendered.
   onOpenReader,
+  onOpenBoard,
   // Session mode toggle: "teach" (LEARN BY TEACHING — guide + protégé over
   // the WebSocket) or "guide" (LEARNING WITH GUIDE — just the guide and the
   // human, local UI only). `guide` carries the local messages + handlers.
@@ -467,6 +468,7 @@ function SessionChatView({
               onSend={guide?.onSend ? () => guide.onSend(input) : undefined}
               placeholder={t('teaching.guide_ph')}
               bookAction={onOpenReader}
+              boardAction={onOpenBoard}
               bookLabel="Open reading material"
               modelLabel="Guide"
               modelLabelDescription="Your guide leads this session"
@@ -482,6 +484,7 @@ function SessionChatView({
             onSend={onSend}
             placeholder={t('teaching.explain_ph').replace('{name}', agentName)}
             bookAction={onOpenReader}
+              boardAction={onOpenBoard}
             bookLabel="Open reading material"
             voiceAction={onToggleVoice}
             voiceLabel={t('teaching.voice')}

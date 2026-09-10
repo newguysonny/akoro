@@ -9,7 +9,7 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList] = await Promise.all([
+const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes] = await Promise.all([
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
@@ -23,6 +23,9 @@ const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, ba
   read("../../akoro-learner/src/pages/ActivityPage.jsx"),
   read("../../akoro-learner/src/services/activitySocket.js"),
   read("../../akoro-learner/src/components/sessions/SelfStudyList.jsx"),
+  read("../../akoro-api/modules/adaptive-learning/agents/nana-esumai/guide.js"),
+  read("../../akoro-instructor/src/pages/SelfStudyAnalyticsPage.jsx"),
+  read("../../akoro-instructor/src/App.jsx"),
 ]);
 
 test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activities", () => {
@@ -185,4 +188,26 @@ test("the journey card shows the roadmap with each stage's state", () => {
 test("stage battles are captured with their id so completion can be derived", () => {
   assert.ok(page.includes("res?.battle_id ?? res?.data?.battle_id"), "battle id captured from the invite response");
   assert.ok(page.includes("battleId: battleId ?? null"), "the stage ref keeps the battle id");
+});
+
+test("every activity has a per-class analytics page with an AI report", () => {
+  // API: aggregate class rows from real progress + agent cognitive state.
+  assert.ok(routes.includes('router.get("/:id/analytics"'), "analytics endpoint");
+  assert.ok(routes.includes('router.post("/:id/report"'), "report generation endpoint");
+  assert.ok(routes.includes("classRows(assignment)"), "per-learner rows");
+  assert.ok(routes.includes("getStudentState(agent.id)"), "reads live cognitive state");
+  assert.ok(routes.includes("ai_report: { report, generatedAt }"), "the report is saved with the activity");
+  // The report generator consumes signals, never transcripts (first names only).
+  assert.ok(guide.includes("async classAnalytics(brief, learners)"), "NaNa classAnalytics");
+  assert.ok(routes.includes('name: (r.student.name || "Learner").split(" ")[0]'), "first names only");
+  // Instructor surface: a routed page consuming both endpoints.
+  assert.ok(appRoutes.includes('path="/self-study/:id/analytics"'), "analytics route");
+  assert.ok(analyticsPage.includes("`/api/self-study/${id}/analytics`"), "page loads the aggregate");
+  assert.ok(analyticsPage.includes("`/api/self-study/${id}/report`"), "page generates the report");
+  assert.ok(analyticsPage.includes("LIKELY MISCONCEPTIONS"), "misconceptions section");
+  assert.ok(analyticsPage.includes("Difficulty: {r.difficulty.rating}"), "difficulty verdict");
+  // Reachable from both surfaces: the self-study card and the activity detail.
+  assert.ok(selfStudy.includes("onAnalytics(a)"), "card analytics button");
+  assert.ok(selfStudy.includes("navigate(`/self-study/${x.id}/analytics`)"), "card navigates");
+  assert.ok(page.includes("`/self-study/${activity.id}/analytics`"), "activity detail links out");
 });

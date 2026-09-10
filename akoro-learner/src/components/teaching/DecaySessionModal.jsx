@@ -5,6 +5,7 @@ import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
+import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
@@ -33,6 +34,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
   const clearLiveStream = () => { setLiveStudent(null); setLiveGuide(null); };
   // Socket lifecycle for the connection chip: "connecting" | "connected" | "reconnecting"
   const [connState, setConnState] = useState("connecting");
+  const [boardOpen, setBoardOpen] = useState(false);   // sketchpad over the session
   const timerRef    = useRef(null);
   const wsRef       = useRef(null);
   const sessionIdRef = useRef(null);   // live session id — drives seamless resume on reconnect
@@ -192,6 +194,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
   };
 
   return (
+    <>
     <SessionChatView
       blocks={blocks}
       loading={loading || (initLoading && blocks.length === 0)}
@@ -210,10 +213,13 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       onToggleRecording={toggleRecording}
       seconds={seconds}
       connState={connState}
+      onOpenBoard={() => setBoardOpen(true)}
       liveStudent={liveStudent}
       liveGuide={liveGuide}
       onClose={onClose}
     />
+    {boardOpen && <WhiteboardModal topic={topic} subject={subject} onClose={() => setBoardOpen(false)} />}
+    </>
   );
 }
 

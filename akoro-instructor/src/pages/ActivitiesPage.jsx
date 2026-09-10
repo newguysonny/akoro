@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Plus, Users,
-  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown,
+  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
@@ -28,6 +28,7 @@ import PlanEditor from '../components/PlanEditor.jsx';
 import BattleForm from '../components/battles/BattleForm.jsx';
 import { useBattlesAPI } from '../hooks/useBattlesAPI.js';
 import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
+import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
 
@@ -391,6 +392,7 @@ function PastActivities({ type, refreshKey, onOpen }) {
 
 /* ── Per-learner progress modal — same brief view the self-study page uses ── */
 function DetailModal({ open, onClose, activity, onDeleted }) {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const meta = byKey(activity?.type || 'self_study');
 
@@ -508,7 +510,12 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14 }}>
             <Btn size="sm" variant="secondary" onClick={del}><Trash2 size={13} /> Delete activity</Btn>
-            <Btn size="sm" variant="secondary" onClick={onClose}>Close</Btn>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn size="sm" variant="secondary" onClick={() => navigate(`/self-study/${activity.id}/analytics`)}>
+                <BarChart3 size={13} /> Analytics
+              </Btn>
+              <Btn size="sm" variant="secondary" onClick={onClose}>Close</Btn>
+            </div>
           </div>
         </div>
       )}
