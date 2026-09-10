@@ -59,7 +59,8 @@ export async function fetchMyGradebook() {
           subject: a.subject || 'General',
           date:    due,                       // when it was due / holds
           status:  a.status || 'assigned',
-          mark:    a.status === 'complete' ? '✓' : overdue ? 'X' : '–',
+          // A published grade IS the mark; states fill in until grading lands.
+          mark:    a.graded ? a.grade : a.status === 'complete' ? '✓' : overdue ? 'X' : '–',
         };
       });
 

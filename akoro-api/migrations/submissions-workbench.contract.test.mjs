@@ -1,0 +1,87 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+/**
+ * Submissions workbench contract — grading mirrors the workbench family
+ * (activities rail on one side, roster on the other, grading as a full-page
+ * workspace). Drafts autosave locally until publish; the published grade
+ * lands on the learner's target row, flows to /mine, and fills the learner
+ * gradebook's graded seam.
+ */
+const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
+const [routes, migration, manifest, page, modal, drafts, nowGrading, appRoutes, layout, activityApi, gradebookApi] = await Promise.all([
+  read("../../akoro-api/modules/self-study/routes.js"),
+  read("../../akoro-api/migrations/2026-submission-grading.sql"),
+  read("../../akoro-api/migrations/manifest.json"),
+  read("../../akoro-instructor/src/pages/SubmissionsPage.jsx"),
+  read("../../akoro-instructor/src/components/grading/GradeSubmissionModal.jsx"),
+  read("../../akoro-instructor/src/components/grading/gradingDrafts.js"),
+  read("../../akoro-instructor/src/components/grading/NowGrading.jsx"),
+  read("../../akoro-instructor/src/App.jsx"),
+  read("../../akoro-instructor/src/components/Layout.jsx"),
+  read("../../akoro-learner/src/services/activityApi.js"),
+  read("../../akoro-learner/src/services/gradebookApi.js"),
+]);
+
+test("the workbench mirrors the family: activities rail, roster, guidance note", () => {
+  assert.ok(page.includes("SUBMITTED ACTIVITIES"), "left rail of submitted activities");
+  assert.ok(page.includes("WHO TO GRADE FIRST"), "guidance note in the workbench voice");
+  assert.ok(page.includes("apiGet('/api/self-study')"), "activities come from the real feed");
+  assert.ok(page.includes("apiGet(`/api/self-study/${key}`)"), "roster from the activity detail");
+  assert.ok(page.includes("<NowGrading"), "the resume strip sits above the workbench");
+  assert.ok(page.includes("<GradeSubmissionModal"), "grading opens the full-page workspace");
+  // Submitted-first sorting + a submitted-count badge on each rail row.
+  assert.ok(page.includes("y.submitted - x.submitted"), "busiest activities first");
+  assert.ok(page.includes("{a.submitted}"), "submission badges");
+});
+
+test("grading is the reference workspace, honest about the paper", () => {
+  // Full-page workspace with student stepper and status pill.
+  assert.ok(modal.includes("Grade submission —"), "topbar crumb");
+  assert.ok(modal.includes("{index + 1} of {students.length}"), "student stepper");
+  assert.ok(modal.includes("Graded ·"), "status pill");
+  // Paper = the brief, question by question; no invented submissions.
+  assert.ok(modal.includes("WHAT THEY WERE ASKED"), "objectives render as the brief");
+  assert.ok(modal.includes("submission capture"), "honest about artifacts to come");
+  // Rubric with worded levels + a total, and a manual override.
+  assert.ok(modal.includes("Understanding of concept"), "rubric criteria");
+  assert.ok(modal.includes("Enter score manually instead"), "manual toggle");
+  assert.ok(modal.includes("pick a level in every row"), "total nudges completion");
+  // Publish is the only server write.
+  assert.ok(modal.includes("/grade`"), "publishes to the grade endpoint");
+  assert.ok(modal.includes("clearDraft(brief.id, current.student.id)"), "a published draft is consumed");
+  assert.ok(modal.includes("st.grade == null"), "advance to the next ungraded student");
+});
+
+test("drafts autosave locally and resume through NowGrading", () => {
+  assert.ok(drafts.includes("localStorage.setItem"), "drafts live in localStorage");
+  assert.ok(drafts.includes("listDrafts"), "drafts are enumerable for the strip");
+  assert.ok(modal.includes("saveDraft({"), "every change autosaves");
+  assert.ok(modal.includes("loadDraft(brief?.id, current.student.id)"), "opening resumes the draft");
+  assert.ok(modal.includes("Draft saved"), "the autosave label is visible");
+  // NowGrading mirrors NowStudying: who, what, continue, dismiss.
+  assert.ok(nowGrading.includes("Now grading —"), "the strip names the session");
+  assert.ok(nowGrading.includes("Continue"), "one tap resumes");
+  assert.ok(nowGrading.includes("clearDraft(d.assignmentId, d.studentId)"), "dismiss discards");
+  // Routed.
+  assert.ok(appRoutes.includes('path="/submissions"'), "workbench route");
+  assert.ok(layout.includes("label: 'Submissions'"), "nav entry");
+});
+
+test("a published grade reaches the learner end to end", () => {
+  // Migration: the grade lives on the learner's target row.
+  assert.ok(migration.includes("ADD COLUMN IF NOT EXISTS grade"), "grade column");
+  assert.ok(migration.includes("ADD COLUMN IF NOT EXISTS feedback"), "feedback column");
+  assert.ok(manifest.includes('"2026-submission-grading.sql"'), "migration registered");
+  // API: publish route validates, notifies, and emits.
+  assert.ok(routes.includes('router.patch("/:id/targets/:studentId/grade"'), "publish endpoint");
+  assert.ok(routes.includes('n < 0 || n > 100'), "0–100 validation");
+  assert.ok(routes.includes('type: "activity_graded"'), "learner notified");
+  assert.ok(routes.includes('emit("activity_graded"'), "learner dinged live");
+  // /mine carries the grade, so the graded seams light up.
+  assert.ok(routes.includes("graded:       t.grade != null"), "graded flag in /mine");
+  assert.ok(activityApi.includes("graded:     !!a.graded"), "learner feed passes the flag");
+  // The gradebook's mark becomes the number.
+  assert.ok(gradebookApi.includes("a.graded ? a.grade :"), "gradebook shows the published mark");
+});

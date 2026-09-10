@@ -354,6 +354,9 @@ router.get("/mine", asyncHandler(async (req, res) => {
         dueAt:        a.due_at,
         assignedBy:   teacherById.get(a.created_by) ?? null,
         status:       jState?.status ?? t.status,
+        grade:        t.grade ?? null,                       // published 0–100, null until graded
+        graded:       t.grade != null,
+        feedbackText: t.feedback?.text || null,
         sessionId:    t.session_id,
         startedAt:    t.started_at,
         completedAt:  t.completed_at,
@@ -584,6 +587,53 @@ router.post("/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
 }));
 
 /** DELETE /api/self-study/:id/targets/:studentId — unassign one learner. */
+/**
+ * PATCH /api/self-study/:id/targets/:studentId/grade — publish a grade.
+ *
+ * The workbench autosaves drafts locally (they never touch the server);
+ * this is the deliberate PUBLISH: the number becomes the learner's grade,
+ * the feedback (text + rubric levels) travels with it, the learner is
+ * notified, and their gradebook files the work under "Graded activity".
+ * Republishing overwrites — the latest deliberate grade wins.
+ */
+router.patch("/:id/targets/:studentId/grade", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { assignment, error } = await ownedAssignment(req, req.params.id);
+  if (error === "not_found") return missing(res, "Assignment not found");
+  if (error === "forbidden") return denied(res, "Not your assignment");
+
+  const studentId = req.params.studentId;
+  const { grade, feedback = {} } = req.body;
+  const n = Number(grade);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return bad(res, "grade must be a number from 0 to 100");
+  if (feedback && typeof feedback !== "object") return bad(res, "feedback must be an object");
+
+  const { data: target, error: tErr } = await edu().from("self_study_targets")
+    .update({
+      grade: Math.round(n),
+      feedback: {
+        text: typeof feedback.text === "string" ? feedback.text.slice(0, 4000) : "",
+        rubric: Array.isArray(feedback.rubric) ? feedback.rubric.slice(0, 12) : [],
+        mode: feedback.mode === "manual" ? "manual" : "rubric",
+      },
+      graded_at: now(),
+      graded_by: req.user.id,
+    })
+    .eq("assignment_id", assignment.id).eq("student_id", studentId)
+    .select().single();
+  if (tErr || !target) return missing(res, "That learner is not assigned this activity");
+
+  await notifyAll([studentId], {
+    type: "activity_graded",
+    title: `📋 Graded: ${assignment.title}`,
+    content: `Your score: ${Math.round(n)}%${feedback.text ? " · feedback waiting" : ""}`,
+    related_id: assignment.id,
+    link: "/activities",
+  });
+  global.io?.to(`user:${studentId}`).emit("activity_graded", { assignmentId: assignment.id, grade: Math.round(n) });
+
+  ok(res, { grade: target.grade, graded_at: target.graded_at });
+}));
+
 router.delete("/:id/targets/:studentId", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
   const { assignment, error } = await ownedAssignment(req, req.params.id);
   if (error === "not_found") return missing(res, "Assignment not found");

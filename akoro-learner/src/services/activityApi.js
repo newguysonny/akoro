@@ -46,6 +46,9 @@ async function fetchSelfStudy() {
       assignedBy: a.assignedBy || null,
       source:     'self-study',
       stages:     stageList,   // [{title, emoji, kind, status}] — the card renders the roadmap
+      graded:     !!a.graded,  // teacher published a grade
+      grade:      a.grade ?? null,
+      feedbackText: a.feedbackText || null,
       };
     });
   } catch { return []; }
