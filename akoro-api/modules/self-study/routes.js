@@ -476,6 +476,34 @@ router.post("/:id/report", requireRole(TEACHER_ROLES), asyncHandler(async (req, 
   ok(res, { report, generatedAt });
 }));
 
+/**
+ * GET /api/self-study/streak — the learner's activity streak.
+ *
+ * Consecutive days ending today (or yesterday, so an early visit keeps a
+ * streak alive) with at least one completed activity, derived from the
+ * learner's own completion timestamps. No new state: it is computed from
+ * what really happened, so it can never show a number the learner did not
+ * earn. Registered before /:id so "streak" is never read as an id.
+ */
+router.get("/streak", asyncHandler(async (req, res) => {
+  const { data: targets } = await edu().from("self_study_targets")
+    .select("completed_at").eq("student_id", req.user.id);
+  const days = new Set((targets ?? [])
+    .filter((t) => t.completed_at)
+    .map((t) => String(t.completed_at).slice(0, 10)));   // YYYY-MM-DD (UTC)
+
+  const key = (d) => d.toISOString().slice(0, 10);
+  const cursor = new Date();
+  if (!days.has(key(cursor))) cursor.setUTCDate(cursor.getUTCDate() - 1);   // grace: yesterday counts
+
+  let streak = 0;
+  while (days.has(key(cursor))) {
+    streak += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  ok(res, { streak });
+}));
+
 /** GET /api/self-study/:id — the brief plus every learner's state. */
 router.get("/:id", asyncHandler(async (req, res) => {
   const { assignment, error } = await ownedAssignment(req, req.params.id);

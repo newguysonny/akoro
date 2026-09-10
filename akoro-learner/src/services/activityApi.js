@@ -73,3 +73,12 @@ export function fetchMyActivities() {
       });
     });
 }
+
+/* My activity streak — consecutive days with at least one completed
+   activity, computed server-side from real completions. */
+export async function fetchMyStreak() {
+  try {
+    const d = await apiGet('/api/self-study/streak');
+    return d?.data?.streak ?? 0;
+  } catch { return 0; }
+}

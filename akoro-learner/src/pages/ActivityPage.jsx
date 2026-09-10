@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchMyActivities } from '../services/activityApi.js';
+import { fetchMyActivities, fetchMyStreak } from '../services/activityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
@@ -23,6 +23,22 @@ const KINDS = [
   { key: 'self_study', label: 'Self study'  },
   { key: 'live_course', label: 'Live courses' },
 ];
+
+/* Stage categories — where each activity sits in the submit → grade flow.
+   Derived from real status: open work is pending; finished work is awaiting
+   grading (no grading data exists yet); `graded` is the seam that flips the
+   moment grading lands on an activity. */
+const STAGES = [
+  { key: 'pending',  label: 'Pending submissions', empty: 'Nothing pending — submit what is due' },
+  { key: 'awaiting', label: 'Awaiting grading',    empty: 'Nothing awaiting grading right now' },
+  { key: 'graded',   label: 'Graded activity',     empty: 'No graded activity yet' },
+];
+
+function stageOf(a) {
+  if (a.graded) return 'graded';
+  if (a.status === 'complete') return 'awaiting';
+  return 'pending';
+}
 
 /* Same status map the self-study list uses, so a card reads the same in
    both places. */
@@ -134,9 +150,11 @@ function ActivityCard({ a }) {
 
 export default function ActivityPage() {
   const navigate = useNavigate();
-  const [items, setItems]   = useState([]);
+  const [items, setItems]     = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter]   = useState('all');
+  const [stage, setStage]     = useState('pending');   // default: what's due
+  const [streak, setStreak]   = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -145,6 +163,7 @@ export default function ActivityPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { fetchMyStreak().then(setStreak).catch(() => {}); }, []);
 
   // An assigned activity announces itself in real time (the dashboard's
   // ambient socket); refetch so the new card is here when the learner looks.
@@ -156,8 +175,11 @@ export default function ActivityPage() {
 
   const openCount = items.filter(a => a.status !== 'complete').length;
 
-  const displayed = filter === 'all' ? items : items.filter(a => a.kind === filter);
+  const displayed = (filter === 'all' ? items : items.filter(a => a.kind === filter))
+    .filter(a => stageOf(a) === stage);
   const activeLabel = KINDS.find(k => k.key === filter)?.label || 'Activity';
+  const stageCount = (key) => (filter === 'all' ? items : items.filter(a => a.kind === filter))
+    .filter(a => stageOf(a) === key).length;
 
   const TAB = (active) => ({
     padding: '6px 16px', borderRadius: 100, border: 'none', cursor: 'pointer',
@@ -182,6 +204,16 @@ export default function ActivityPage() {
                 {openCount > 0 ? `${openCount} open` : 'All caught up'}
               </p>
             </div>
+            {/* Streak — consecutive days with at least one completed activity.
+                Derived from real completions, so it only shows what the
+                learner actually did. */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5,
+              background: streak > 0 ? '#FFF1E7' : 'var(--ak-bg)', border: `1px solid ${streak > 0 ? '#FFD9BF' : 'var(--ak-border)'}`,
+              borderRadius: 100, padding: '6px 13px' }}
+              title={streak > 0 ? `${streak}-day streak — complete an activity every day to keep it going` : 'Complete an activity today to start a streak'}>
+              <span style={{ fontSize: 14, lineHeight: 1 }}>🔥</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: streak > 0 ? '#C2410C' : 'var(--ak-text-muted)', lineHeight: 1 }}>{streak}</span>
+            </div>
           </div>
         </div>
 
@@ -193,6 +225,18 @@ export default function ActivityPage() {
 
       {/* CONTENT */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 80px' }}>
+        {/* Stage categories — pending → awaiting grading → graded */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+          {STAGES.map(st => (
+            <button key={st.key} style={{ ...TAB(stage === st.key), display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() => setStage(st.key)}>
+              {st.label}
+              <span style={{ fontSize: 10, fontWeight: 900, background: stage === st.key ? 'rgba(255,255,255,.25)' : '#E4DBFF',
+                borderRadius: 100, padding: '1px 7px' }}>{stageCount(st.key)}</span>
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[1,2,3,4].map(i => <div key={i} style={{ height: 70, borderRadius: 14, background: 'var(--ak-border)', opacity: .4 }} />)}
@@ -203,7 +247,7 @@ export default function ActivityPage() {
               <Icon name={getMeta(filter).emoji} size={40}/>
             </div>
             <p style={{ fontSize: 14, color: 'var(--ak-text-muted)', fontWeight: 700 }}>
-              {filter === 'all' ? 'No activities yet' : `No ${activeLabel.toLowerCase()} yet`}
+              {STAGES.find(x => x.key === stage)?.empty || 'No activities yet'}
             </p>
           </div>
         ) : (

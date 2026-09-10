@@ -9,7 +9,7 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes] = await Promise.all([
+const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes, activityFeed] = await Promise.all([
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
@@ -26,6 +26,7 @@ const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, ba
   read("../../akoro-api/modules/adaptive-learning/agents/nana-esumai/guide.js"),
   read("../../akoro-instructor/src/pages/SelfStudyAnalyticsPage.jsx"),
   read("../../akoro-instructor/src/App.jsx"),
+  read("../../akoro-learner/src/pages/ActivityPage.jsx"),
 ]);
 
 test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activities", () => {
@@ -210,4 +211,27 @@ test("every activity has a per-class analytics page with an AI report", () => {
   assert.ok(selfStudy.includes("onAnalytics(a)"), "card analytics button");
   assert.ok(selfStudy.includes("navigate(`/self-study/${x.id}/analytics`)"), "card navigates");
   assert.ok(page.includes("`/self-study/${activity.id}/analytics`"), "activity detail links out");
+});
+
+test("the Activities header shows a real streak and the feed splits by stage", () => {
+  // Streak: computed server-side from the learner's own completion days —
+  // never a stored number the learner did not earn — and registered before
+  // /:id so "streak" is never parsed as an id.
+  const streakPos = routes.indexOf('router.get("/streak"');
+  const idPos = routes.indexOf('router.get("/:id"');
+  assert.ok(streakPos > -1 && idPos > -1 && streakPos < idPos, "streak endpoint precedes /:id");
+  assert.ok(routes.includes('filter((t) => t.completed_at)'), "derived from real completions");
+  assert.ok(routes.includes("cursor.setUTCDate(cursor.getUTCDate() - 1)"), "yesterday grace");
+  assert.ok(activityFeed.includes("fetchMyStreak"), "the page loads the streak");
+  // 🔥 chip sits on the header's right, beside the title.
+  assert.ok(activityFeed.includes("marginLeft: 'auto'"), "chip pinned right");
+  assert.ok(activityFeed.includes("🔥"), "fire icon");
+  // Stage pills: pending (default) → awaiting grading → graded, before the
+  // cards, combining with the kind filter.
+  assert.ok(activityFeed.includes("Pending submissions"), "pending pill");
+  assert.ok(activityFeed.includes("Awaiting grading"), "awaiting pill");
+  assert.ok(activityFeed.includes("Graded activity"), "graded pill");
+  assert.ok(activityFeed.includes("useState('pending')"), "pending is the default");
+  assert.ok(activityFeed.includes(".filter(a => stageOf(a) === stage)"), "cards respect the stage");
+  assert.ok(activityFeed.indexOf("STAGES.map") > -1 && activityFeed.indexOf("STAGES.map") < activityFeed.indexOf("{displayed.map"), "pills render before the cards");
 });
