@@ -7,6 +7,7 @@ import { runWithRouteUsage, countQuery, currentRouteKey, usageSnapshot } from ".
 const dbSource = await readFile(new URL("../../db.js", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../../app.js", import.meta.url), "utf8");
 const adminSource = await readFile(new URL("./routes.js", import.meta.url), "utf8");
+const workerJs = await readFile(new URL("../../worker.js", import.meta.url), "utf8");
 
 test("usage meter attributes commands to the route in context", () => {
   assert.equal(currentRouteKey(), "(background)");
@@ -36,4 +37,17 @@ test("the /api middleware attributes requests, and admins can read the burn", ()
   assert.match(appSource, /app\.use\("\/api", \(req, res, next\) => \{\s*\n  const norm = req\.path/);
   assert.match(appSource, /runWithRouteUsage\(`\$\{req\.method\} \$\{norm\}`, next\)/);
   assert.match(adminSource, /router\.get\("\/usage", adminOnly, asyncHandler\(async \(req, res\) => \{\s*\n  ok\(res, usageSnapshot/);
+});
+
+test("health checks and the encoding worker no longer bill per-command Redis/DB", () => {
+  // /health caches the deep verdict — Render pings it around the clock.
+  assert.match(appSource, /let healthCache = \{ at: 0, dbOk: false, redisOk: false \};/);
+  assert.match(appSource, /Date\.now\(\) - healthCache\.at < 30_000/);
+  assert.match(appSource, /req\.query\.deep === "1"/);
+  // The video-encoding worker got the battle worker's Upstash treatment.
+  const workerSource = workerJs;
+  assert.match(workerSource, /drainDelay:\s+60/);
+  assert.match(workerSource, /stalledInterval: 300_000/);
+  // A stand-down switch exits before any Redis connection is made.
+  assert.match(workerSource, /VIDEO_WORKER_ENABLED/);
 });

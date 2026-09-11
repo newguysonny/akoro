@@ -253,16 +253,28 @@ app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId)
 
 // ─── Health & readiness ───────────────────────────────────────────────────────
 let serverReady = false;
-app.get("/health", async (_req, res) => {
-  const [dbOk, redisOk] = await Promise.all([
-    checkDb(),
-    redisPub.ping().then((r) => r === "PONG").catch(() => false),
-  ]);
+// Render's healthCheckPath pings /health around the clock. Probing the DB and
+// Redis on every ping bills BOTH platforms for commands (the Postgres quota
+// AND the Upstash command quota) — so the deep verdict runs at most once per
+// 30s and is cached. `?deep=1` always probes now (humans, alerting).
+let healthCache = { at: 0, dbOk: false, redisOk: false };
+app.get("/health", async (req, res) => {
+  const deep = req.query.deep === "1";
+  const fresh = Date.now() - healthCache.at < 30_000;
+  if (deep || !fresh) {
+    const [dbOk, redisOk] = await Promise.all([
+      checkDb(),
+      redisPub.ping().then((r) => r === "PONG").catch(() => false),
+    ]);
+    healthCache = { at: Date.now(), dbOk, redisOk };
+  }
+  const { dbOk, redisOk } = healthCache;
   const healthy = dbOk && redisOk;
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded", instance: config.instanceId,
     uptime: Math.round(process.uptime()), env: config.nodeEnv,
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
+    cached: !deep && fresh,
   });
 });
 app.get("/ready", (_req, res) =>
