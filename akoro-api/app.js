@@ -34,6 +34,7 @@ import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
+import { traceRedis, startRedisTraceReporting } from "./lib/redisTrace.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
 import authModule, { authenticateSocket } from "./modules/auth/routes.js";
@@ -173,6 +174,10 @@ const corsDelegate = (req, cb) => {
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
+// Local quota forensics (AKORO_REDIS_TRACE=true) — inert when the flag is off.
+traceRedis(redisPub, "api/pub");
+traceRedis(redisSub, "api/sub");
+startRedisTraceReporting();
 redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
 redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
