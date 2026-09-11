@@ -5,6 +5,7 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import RichText from '../common/RichText.jsx';
+import CopyMessageButton from '../common/CopyMessageButton.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
@@ -517,7 +518,10 @@ function AgentChatTab({
                         ))}
                       </div>
                     )}
-                    <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,textAlign:isMe?"right":"left" }}>{msg.time}</div>
+                    <div style={{ fontSize:10,color:"var(--ak-text-muted)",marginTop:3,display:"flex",alignItems:"center",gap:4,justifyContent:isMe?"flex-end":"flex-start" }}>
+                      {msg.time}
+                      <CopyMessageButton text={msg.text} />
+                    </div>
                   </div>
                 </div>
               );

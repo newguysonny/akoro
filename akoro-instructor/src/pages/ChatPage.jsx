@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  Eye, History,
+  Eye, History, Copy, Check,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -16,6 +16,52 @@ import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
 import RichText from '../components/common/RichText.jsx';
+
+/* Subtle per-message copy affordance: copies the exact text, flips to a
+   check briefly. Clipboard API with an execCommand fallback for old
+   webviews; a failure never throws into the chat. */
+async function copyPlainText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return true;
+  } catch { return false; }
+}
+
+function CopyMsgButton({ text }) {
+  const [done, setDone] = useState(false);
+  if (!text) return null;
+  return (
+    <button
+      type="button"
+      title="Copy message"
+      aria-label="Copy message"
+      onClick={async () => {
+        if (await copyPlainText(text)) {
+          setDone(true);
+          setTimeout(() => setDone(false), 1400);
+        }
+      }}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 22, height: 18, padding: 0, border: 'none', background: 'transparent',
+        cursor: 'pointer', color: MUTED2, opacity: .6, borderRadius: 5,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
+      onMouseLeave={(e) => { e.currentTarget.style.opacity = .6; }}
+    >
+      {done ? <Check size={12} color={GREEN} /> : <Copy size={12} />}
+    </button>
+  );
+}
+
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
@@ -629,7 +675,10 @@ export default function ChatPage() {
                       })}
                     </div>
                   )}
-                  <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, textAlign: isMe ? 'right' : 'left' }}>{msg.time}</div>
+                  <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                    {msg.time}
+                    <CopyMsgButton text={textPart} />
+                  </div>
                 </div>
               </div>
             );

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import CopyMessageButton from "../common/CopyMessageButton.jsx";
 import RichText from "../common/RichText.jsx";
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { MicIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
@@ -87,19 +88,25 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
             display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>
             {guideEmoji || AGENT_STYLES.nana.emoji}
           </div>
-          <div style={{ maxWidth:"84%", padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
-            background:AGENT_STYLES.nana.bg, border:`0.5px solid ${AGENT_STYLES.nana.ring}`,
-            color:AGENT_STYLES.nana.color, fontSize:13.5, lineHeight:1.6,
-            fontWeight:500 }}>
-            <RichText text={m.text} />
+          <div style={{ maxWidth:"84%", display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1 }}>
+            <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
+              background:AGENT_STYLES.nana.bg, border:`0.5px solid ${AGENT_STYLES.nana.ring}`,
+              color:AGENT_STYLES.nana.color, fontSize:13.5, lineHeight:1.6,
+              fontWeight:500, width:"100%", boxSizing:"border-box" }}>
+              <RichText text={m.text} />
+            </div>
+            <CopyMessageButton text={m.text} dark />
           </div>
         </div>
       ) : (
-        <div key={i} style={{ alignSelf:"flex-end", maxWidth:"84%", padding:"9px 13px",
-          borderRadius:"18px 4px 18px 18px", background:"rgba(255,255,255,.08)",
-          border:"1px solid rgba(255,255,255,.12)", color:"#E2E8F0",
-          fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:600 }}>
-          {m.text}
+        <div key={i} style={{ alignSelf:"flex-end", maxWidth:"84%", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:1 }}>
+          <div style={{ padding:"9px 13px",
+            borderRadius:"18px 4px 18px 18px", background:"rgba(255,255,255,.08)",
+            border:"1px solid rgba(255,255,255,.12)", color:"#E2E8F0",
+            fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:600 }}>
+            {m.text}
+          </div>
+          <CopyMessageButton text={m.text} dark />
         </div>
       ))}
 
