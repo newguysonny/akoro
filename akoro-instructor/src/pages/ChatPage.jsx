@@ -15,6 +15,7 @@ import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
+import RichText from '../components/common/RichText.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
@@ -605,7 +606,9 @@ export default function ChatPage() {
                         ))}
                       </div>
                     )}
-                    {textPart && <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>}
+                    {textPart && (isMe
+                      ? <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>
+                      : <RichText text={textPart} color={INK} />)}
                   </div>
                   {!isMe && (msg.previews || []).length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>

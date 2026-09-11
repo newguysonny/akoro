@@ -4,6 +4,7 @@ import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
+import RichText from '../common/RichText.jsx';
 import { useTaskAPI } from '../../hooks/useTaskAPI.js';
 import NoAgentSheet, { isNoAgentError } from '../battles/NoAgentSheet.jsx';
 import { confirmDialog } from '../common/ConfirmHost.jsx';
@@ -489,7 +490,7 @@ function AgentChatTab({
                   <div style={{ maxWidth:"78%" }}>
                     {!isMe&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                     {(!msg.phase||msg.text)&&(
-                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,whiteSpace:"pre-wrap",fontWeight:500 }}>{msg.text}{msg.phase==="answering"&&<StreamCaret/>}</div>
+                      <div style={{ padding:"10px 14px",borderRadius:isMe?"18px 18px 4px 18px":"4px 18px 18px 18px",background:isMe?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-surface-hover)",border:isMe?"none":`1px solid ${BRAND}25`,color:isMe?"#fff":"var(--ak-text)",fontSize:13.5,lineHeight:1.6,fontWeight:500 }}>{isMe?<span style={{whiteSpace:"pre-wrap"}}>{msg.text}</span>:<RichText text={msg.text}/>}{msg.phase==="answering"&&<StreamCaret/>}</div>
                     )}
                     {isMe&&msg.attachments?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5,justifyContent:"flex-end" }}>
