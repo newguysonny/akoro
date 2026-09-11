@@ -28,6 +28,11 @@ import {
  *  (the one shared BattleForm), so they are valid drafts, not bench assigns. */
 export const DRAFT_TYPES = Object.freeze([...ACTIVITY_TYPES, "battle"]);
 
+/** Pending drafts older than this are lazily expired on read (no cron). */
+const DRAFT_TTL_DAYS = 7;
+/** Prepare calls are LLM-backed (nana plan generation) — a soft hourly cap. */
+const PREPARE_HOURLY_CAP = 10;
+
 const TYPE_NAMES = {
   self_study: "self study", assignment: "assignment", project: "project",
   live_course: "live course", multi_stage: "multi-stage journey", battle: "battle",
@@ -77,6 +82,18 @@ async function resolveAudience(instructor, audience) {
 
   // Resolve now so the preview shows the real count before anyone assigns.
   const { ids, notFound } = await resolveStudents({ usernames, user_ids, classroom_id, whole_class });
+
+  // A few real names make the preview reviewable at a glance ("@amina, @musa
+  // +3 more") — picked audiences only; whole-class shows the count.
+  let names;
+  if (!whole_class && ids.length) {
+    try {
+      const { data: people } = await db.from("users")
+        .select("username").in("id", ids.slice(0, 8));
+      names = (people ?? []).map(u => u.username).filter(Boolean);
+    } catch { /* names are cosmetic — never block a draft on them */ }
+  }
+
   const bits = [];
   if (whole_class) bits.push(a.classroom_name || "the whole class");
   if (usernames.length) bits.push(usernames.map(u => `@${String(u).replace(/^@/, "")}`).join(", "));
@@ -85,6 +102,7 @@ async function resolveAudience(instructor, audience) {
     body: { usernames, user_ids, whole_class, classroom_id: whole_class ? classroom_id : (classroom_id ?? null) },
     label: bits.join(" + ") || `${ids.length} learner${ids.length === 1 ? "" : "s"}`,
     resolvedCount: ids.length,
+    names,
     notFound,
   };
 }
@@ -116,9 +134,18 @@ async function enforceDraftCap(instructorId, cap = 20) {
  * `input` (model-shaped) becomes a validated, plan-filled, audience-resolved
  * draft row. Returns { draft, audienceLabel, clarified }.
  */
-export async function createActivityDraft({ instructor, input, sessionId = null }) {
+export async function createActivityDraft({ instructor, input, sessionId = null, channel = "ai_chat" }) {
   const type = input?.type || "self_study";
   if (!DRAFT_TYPES.includes(type)) throw invalid(`Unknown activity type: ${type}. Valid: ${DRAFT_TYPES.join(", ")}`);
+
+  // Soft cost guard: each prepare runs the plan generator (several LLM calls).
+  const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count: recent } = await db.from("activity_drafts")
+    .select("id", { count: "exact", head: true })
+    .eq("created_by", instructor.id).gte("created_at", hourAgo);
+  if ((recent ?? 0) >= PREPARE_HOURLY_CAP) {
+    throw invalid(`Prepare limit reached (${PREPARE_HOURLY_CAP}/hour). Review or assign your existing drafts, or try again later.`, 429);
+  }
 
   const audience = await resolveAudience(instructor, input.audience);
   if (audience.notFound.length) {
@@ -130,6 +157,16 @@ export async function createActivityDraft({ instructor, input, sessionId = null 
   if (!topic)   throw invalid("topic is required");
   if (!subject && type !== "battle") throw invalid("subject is required");
 
+  // A precise due time follows the create_task convention: ISO 8601 with an
+  // offset, supplied only when the instructor actually stated one. Unresolvable
+  // hints stay hints — never silently invented deadlines.
+  let dueAt = null;
+  if (input?.due_at) {
+    const parsed = new Date(input.due_at);
+    if (Number.isNaN(parsed.getTime())) throw invalid("due_at must be an ISO 8601 timestamp with a timezone offset");
+    if (parsed.getTime() < Date.now() - 60 * 1000) throw invalid("due_at is in the past — check the date and time");
+    dueAt = parsed.toISOString();
+  }
   const payload = {
     type,
     title: String(input?.title || "").trim() || `${topic} — ${typeName(type)}`,
@@ -137,7 +174,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null 
     topic,
     instructions: String(input?.instructions || "").trim() || null,
     difficulty: ["easy", "intermediate", "hard"].includes(input?.difficulty) ? input.difficulty : "intermediate",
-    due_at: null,
+    due_at: dueAt,
     ...audience.body,
   };
   // classroom_id is scope AND the whole-class target — the self-study rule.
@@ -181,6 +218,7 @@ export async function createActivityDraft({ instructor, input, sessionId = null 
   if (input?.due_hint) payload.due_hint = String(input.due_hint).trim();
   await enforceDraftCap(instructor.id);
 
+  const source = channel === "task_run" ? "task_run" : "ai_chat";
   const school = await mySchool(instructor.id);
   const { data: draft, error } = await db.from("activity_drafts").insert({
     created_by: instructor.id,
@@ -190,11 +228,28 @@ export async function createActivityDraft({ instructor, input, sessionId = null 
     subject: payload.subject,
     topic: payload.topic,
     payload,
-    audience: { label: audienceLabel, resolved_count: audience.resolvedCount, ...audience.body },
-    source: "ai_chat",
+    audience: { label: audienceLabel, resolved_count: audience.resolvedCount, names: audience.names ?? null, ...audience.body },
+    source,
     session_id: sessionId,
   }).select().single();
   if (error) throw invalid(error.message, 500);
+
+  // A draft prepared by a task run never appears in a live chat — without a
+  // nudge the instructor would not know it exists. Chat drafts carry their own
+  // Preview button, so they stay bell-free.
+  if (source === "task_run") {
+    try {
+      const { error: nErr } = await db.from("notifications").insert({
+        user_id: instructor.id,
+        type: "activity_draft_prepared",
+        title: `\u{1F916} Draft ready for review: ${draft.title}`,
+        content: `${typeName(type)} prepared by your agent — preview and assign it from Activities.`,
+        related_id: draft.id,
+        link: "/activities",
+      });
+      if (nErr) console.warn("[drafts] instructor notify failed:", nErr.message);
+    } catch (e) { console.warn("[drafts] instructor notify threw:", e.message); }
+  }
 
   return { draft, audienceLabel, clarified: false };
 }
@@ -207,8 +262,20 @@ export async function getActivityDraft(instructor, id) {
   return data;
 }
 
-/** The instructor's pending drafts, newest first. */
+/**
+ * expireStaleDrafts — lazy TTL sweep; a stale pending draft is never shown
+ * and never assignable. Runs on read, so no worker is needed.
+ */
+async function expireStaleDrafts(instructorId) {
+  const cutoff = new Date(Date.now() - DRAFT_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  await db.from("activity_drafts")
+    .update({ status: "expired", resolved_at: new Date().toISOString() })
+    .eq("created_by", instructorId).eq("status", "draft").lt("created_at", cutoff);
+}
+
+/** The instructor's pending drafts, newest first (stale ones swept first). */
 export async function listActivityDrafts(instructor) {
+  await expireStaleDrafts(instructor.id);
   const { data } = await db.from("activity_drafts")
     .select("*").eq("created_by", instructor.id).eq("status", "draft")
     .order("created_at", { ascending: false }).limit(50);
@@ -324,6 +391,8 @@ export async function reviseDraftPayload(instructor, id, changes) {
 
   if (!applied.length) throw invalid("None of those fields apply to this draft type");
 
+  if (c.changeNote) payload.last_change = { note: String(c.changeNote).slice(0, 200), at: new Date().toISOString() };
+
   const { data, error } = await db.from("activity_drafts")
     .update({ payload })
     .eq("id", draft.id)
@@ -340,14 +409,32 @@ export async function reviseDraftPayload(instructor, id, changes) {
  */
 export async function assignActivityDraft({ instructor, id, overrides = null }) {
   const draft = await getActivityDraft(instructor, id);
-  if (draft.status !== "draft") throw invalid("This draft was already resolved", 409);
+
+  // Claim-first: win the draft atomically BEFORE creating anything, so two
+  // rapid taps (or chat + the workbench strip) can never assign twice. The
+  // winner carries the claim; losers get a clean 409.
+  const { data: claim, error: claimErr } = await db.from("activity_drafts")
+    .update({ status: "assigned", resolved_at: new Date().toISOString() })
+    .eq("id", draft.id).eq("status", "draft")
+    .select();
+  if (claimErr) throw invalid(claimErr.message, 500);
+  if (!claim?.length) throw invalid("This draft was already resolved", 409);
 
   const payload = { ...(draft.payload || {}), ...(overrides && typeof overrides === "object" ? overrides : {}) };
   const type = payload.type || draft.type;
-  if (type === "battle") throw invalid("Battles are assigned from their battle form in the preview", 400);
+
+  // Battle drafts are completed through their battle form, not this path —
+  // release the claim so the instructor can still finish it there.
+  if (type === "battle") {
+    await db.from("activity_drafts")
+      .update({ status: "draft", resolved_at: null })
+      .eq("id", draft.id).eq("status", "assigned");
+    throw invalid("Battles are assigned from their battle form in the preview", 400);
+  }
 
   let result;
-  if (type === "multi_stage") {
+  try {
+    if (type === "multi_stage") {
     const stages = Array.isArray(payload.details?.stages) ? payload.details.stages.slice(0, 6) : [];
     if (!stages.length) throw invalid("The journey has no stages", 400);
     const refs = [];
@@ -376,9 +463,20 @@ export async function assignActivityDraft({ instructor, id, overrides = null }) 
   } else {
     result = await createAssignment(instructor, payload);
   }
+  } catch (e) {
+    // Creation failed after the claim — release it so the human can fix the
+    // draft (edit the audience, set the missing schedule) and try again. A
+    // claim that 409s forever would be worse than the race it prevented.
+    await db.from("activity_drafts")
+      .update({ status: "draft", resolved_at: null })
+      .eq("id", draft.id).eq("status", "assigned");
+    throw e;
+  }
 
+  // Status was claimed up front; only the provenance link remains. If this
+  // fails the assignment still stands (learners were notified) — it is a log.
   const { error } = await db.from("activity_drafts")
-    .update({ status: "assigned", assignment_id: result.assignment.id, resolved_at: new Date().toISOString() })
+    .update({ assignment_id: result.assignment.id })
     .eq("id", draft.id);
   if (error) console.warn("[drafts] assign bookkeeping failed:", error.message);
 

@@ -403,7 +403,8 @@ export const INSTRUCTOR_TOOLS = [
         topic: { type: "string", description: "The topic the activity is built from." },
         instructions: { type: "string", description: "Optional instructions to learners." },
         difficulty: { type: "string", enum: ["easy", "intermediate", "hard"], description: "Only when the instructor said, or the level is obvious." },
-        due_hint: { type: "string", description: "Human-friendly due date exactly as the instructor said it, e.g. 'Friday at 1 PM'. Do not invent one." },
+        due_hint: { type: "string", description: "The due date as a human-friendly label exactly as the instructor said it, e.g. 'Friday at 1 PM'. Never invent one." },
+        due_at: { type: "string", description: "Optional exact due instant in ISO 8601 with a timezone offset. Supply it only when you can resolve the instructor's stated time precisely; when you cannot, keep due_hint as the label or ask — never guess an exact time." },
         scheduled_hint: { type: "string", description: "For live_course: when the session holds, as the instructor said it." },
         stages: { type: "array", maxItems: 6, description: "For multi_stage: the ordered journey.", items: { type: "object", properties: {
           kind: { type: "string", enum: ["self_study", "assignment", "project"] },
@@ -429,6 +430,11 @@ export const INSTRUCTOR_TOOLS = [
     name: "discard_activity_draft",
     description: "Discard one pending activity draft at the instructor's request. A draft reaches nobody, so discarding it touches no learner.",
     input_schema: { type: "object", properties: { draftId: { type: "string", description: "The draft id from prepare_activity or list_activity_drafts." } }, required: ["draftId"] },
+  },
+  {
+    name: "list_my_classrooms",
+    description: "List the instructor's classes with their learner counts. Use it to confirm the audience before prepare_activity when the instructor refers to a class by name or asks which classes they have — never guess a class.",
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "get_activity_draft",
@@ -462,13 +468,16 @@ export const INSTRUCTOR_TOOLS = [
 ];
 
 export function openAiInstructorTools() {
+  // Kill-switch: AKORO_ACTIVITY_DRAFTS_ENABLED=false removes the draft tools
+  // everywhere at once (chat loop and gateway catalogue) without a deploy.
+  if (String(process.env.AKORO_ACTIVITY_DRAFTS_ENABLED || "").toLowerCase() === "false") return [];
   return INSTRUCTOR_TOOLS.map((tool) => ({
     type: "function",
     function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
   }));
 }
 
-export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student" } = {}) {
+export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   switch (name) {
     // ── Instructor: activity creation, human-in-the-loop ──────────────────
     // These prepare drafts only. Assigning is the instructor's tap on the
@@ -477,7 +486,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       if (role !== "instructor") return { error: "Activity preparation is only available to instructor accounts" };
       try {
         const { draft, audienceLabel } = await createActivityDraft({
-          instructor: { id: studentId, role }, input, sessionId: conversationId,
+          instructor: { id: studentId, role }, input, sessionId: conversationId, channel,
         });
         return {
           prepared: true, draftId: draft.id, title: draft.title, type: draft.type,
@@ -506,6 +515,27 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const draft = await discardActivityDraft({ id: studentId, role }, String(input?.draftId || ""));
         return { discarded: true, draftId: draft.id, title: draft.title };
       } catch (error) { return { discarded: false, error: error.message || "Could not discard the draft" }; }
+    }
+    case "list_my_classrooms": {
+      if (role !== "instructor") return { error: "Class lists are only available to instructor accounts" };
+      try {
+        const owned = await db.from("classrooms")
+          .select("id, name, classroom_students(user_id)").eq("created_by", studentId).limit(25);
+        const rooms = (owned.data ?? []).map((c) => ({
+          id: c.id, name: c.name,
+          learners: (c.classroom_students ?? []).length,
+        }));
+        if (rooms.length) return { classrooms: rooms };
+        // School admins may not own classrooms directly — try the school scope.
+        const { data: school } = await db.from("school_profiles")
+          .select("id").eq("admin_user_id", studentId).limit(1).maybeSingle();
+        if (school?.id) {
+          const scoped = await db.from("classrooms")
+            .select("id, name, classroom_students(user_id)").eq("school_id", school.id).limit(25);
+          return { classrooms: (scoped.data ?? []).map((c) => ({ id: c.id, name: c.name, learners: (c.classroom_students ?? []).length })) };
+        }
+        return { classrooms: [] };
+      } catch (error) { return { error: error.message || "Could not list the classes" }; }
     }
     case "get_activity_draft": {
       if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
@@ -1764,7 +1794,9 @@ const INSTRUCTOR_HITL_GUIDE =
   `When prepare_activity succeeds, a DRAFT exists — say exactly that: "Draft ready — preview it to assign." ` +
   `Never say an activity was assigned, sent, or that learners were notified: only the instructor's Assign action in the preview does that. ` +
   `If the tool result carries needsClarification (audience_required), ask who the work is for before preparing anything. ` +
-  `Do not guess an audience, a due date, or a schedule the instructor did not state.`;
+  `Do not guess an audience, a due date, or a schedule the instructor did not state. ` +
+  `Pass due_at only when you can resolve their stated time to an exact ISO 8601 instant; otherwise keep it as a due_hint label or ask. ` +
+  `Use list_my_classrooms to confirm a class name before preparing.`;
 
 /**
  * clarify — the ONE no-guess shape every tool returns when a required input

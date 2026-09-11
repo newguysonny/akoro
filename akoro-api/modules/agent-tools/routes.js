@@ -326,7 +326,11 @@ async function catalogueFor(claims, principal) {
   );
   // The instructor's activity-creation tools ride every teacher task context:
   // the agent may PREPARE activity drafts (private until the instructor
-  // previews and assigns them in the instructor app).
+  // previews and assigns them in the instructor app). Same kill-switch as
+  // the chat loop.
+  if (String(process.env.AKORO_ACTIVITY_DRAFTS_ENABLED || "").toLowerCase() === "false") {
+    return taskTools;
+  }
   const draftTools = INSTRUCTOR_TOOLS.map((tool) =>
     publicTool(tool, true), // prepare_activity writes a draft row; the others manage drafts
   );
@@ -514,7 +518,9 @@ async function executeInvocation({ claims, principal, name, arguments_, idempote
       // Instructor activity drafts: executed against the principal's own
       // account under the instructor role. No task registration and no
       // course scoping — a draft reaches nobody until a human assigns it.
-      outcome = await executeChatTool(name, arguments_, principal.id, { role: "instructor" });
+      // channel: task_run — a draft prepared outside live chat nudges the
+      // instructor (bell), since there is no Preview button in a conversation.
+      outcome = await executeChatTool(name, arguments_, principal.id, { role: "instructor", channel: "task_run" });
     } else {
       const teacherTool = await registeredTeacherTool(claims, principal, name);
       const courseId = await assertCourseScopedArguments(arguments_, teacherTool.context, principal);

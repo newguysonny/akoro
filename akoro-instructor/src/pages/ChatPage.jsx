@@ -12,7 +12,7 @@ import LiveRecorder from '../components/LiveRecorder.jsx';
 import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
-import { apiGet, apiPost } from '../services/api.js';
+import { apiGet, apiPost, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
@@ -190,15 +190,19 @@ export default function ChatPage() {
         pushAgent(REPLIES[Math.floor(Math.random() * REPLIES.length)]);
       }
     } else {
-      // Normal AI chat — OpenAI educational tutor (no tasks/tools)
+      // Normal AI chat — the unified agent endpoint, streamed for live status.
       try {
         const history = [...messages, { from: 'me', text: bodyText }]
           .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
           .slice(-8);
-        const data = await apiPost('/api/adaptive/chat/agent', {
-          message: bodyText, history, agentName, role: 'instructor',
-        });
-        // Human-in-the-loop: a successful prepare_activity execution rides
+        let data;
+        try {
+          data = await sendStreaming({ message: bodyText, history, agentName, role: 'instructor' }, setAiStatus);
+        } catch (streamErr) {
+          console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
+          data = await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor' });
+        } finally { setAiStatus(''); }
+        // Human-in-the-loop: a successful prepare/revise execution rides
         // with the reply as a draft echo — render its Preview affordance.
         const previews = (data.toolExecutions || [])
           .filter((e) => (e.tool === 'prepare_activity' && e.success || e.tool === 'revise_activity_draft' && e.revised) && e.draft)
@@ -211,6 +215,7 @@ export default function ChatPage() {
           previews.length ? { previews } : {},
         );
       } catch (e) {
+        setAiStatus('');
         console.warn('[chat] tutor reply failed:', e.message);
         pushAgent('Sorry — I had trouble responding just now. Please try again.');
       }
@@ -330,6 +335,7 @@ export default function ChatPage() {
 
   // ── Human-in-the-loop preview — side-by-side with the chat ──────────────
   const [previewDraft, setPreviewDraft] = useState(null);   // draft id or null
+  const [aiStatus, setAiStatus] = useState('');             // live tool status ("Resolving your class…")
   const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
   const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
   // Resolutions are pushed as chat messages: the instructor sees the outcome,
@@ -341,6 +347,44 @@ export default function ChatPage() {
     pushAgent(state === 'assigned'
       ? '✅ Assigned — the learners on this draft have been notified and it is on their Activities feed.'
       : '🗑️ Draft discarded — nothing was sent to anyone.');
+  };
+
+  // Streaming status: the agent endpoint speaks SSE (status events while the
+  // tool loop runs — drafting plans, resolving classes). Falls back to the
+  // plain JSON reply if the stream never starts; the reply handling after is
+  // identical for both.
+  const sendStreaming = async (payload, onStatus) => {
+    const res = await fetch(`${API}/api/adaptive/chat/agent?stream=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.body) throw new Error('Streaming is not available');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '', finalData = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const dataLine = block.split('\n').find((l) => l.startsWith('data: '));
+        const isDone = block.split('\n').some((l) => l.startsWith('event: done'));
+        if (!dataLine) continue;
+        try {
+          const evt = JSON.parse(dataLine.slice(6));
+          if (isDone) finalData = evt;
+          else onStatus(evt.label || '');
+        } catch { /* keep-alive or partial frame */ }
+      }
+    }
+    if (!finalData) throw new Error('The stream ended without a reply');
+    return finalData;
   };
 
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
@@ -489,6 +533,12 @@ export default function ChatPage() {
               <div style={{ padding: '10px 15px', borderRadius: '17px 17px 17px 4px', background: '#F0ECE6', display: 'flex', gap: 2 }}>
                 <span className="ci-typing" /><span className="ci-typing" style={{ animationDelay: '.2s' }} /><span className="ci-typing" style={{ animationDelay: '.4s' }} />
               </div>
+            </div>
+          )}
+          {!trainingInChat && aiStatus && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '-4px 0 0 36px' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: AMBER, display: 'inline-block', animation: 'ciTyping 1.4s infinite ease-in-out' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, fontFamily: FONT }}>{aiStatus}</span>
             </div>
           )}
         </div>

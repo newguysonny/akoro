@@ -52,7 +52,9 @@ test("one creation path: the bench route and the draft approval share it", () =>
   // Draft assign replays through the same service.
   assert.match(drafts, /import \{[\s\S]*createAssignment[\s\S]*\} from "\.\/createAssignment\.js"/);
   assert.match(drafts, /await createAssignment\(instructor, payload\)/);
-  assert.match(drafts, /status: "assigned", assignment_id: result\.assignment\.id/);
+  // Claim-first: status flips before creation; the assignment id links after.
+  assert.match(drafts, /update\({ status: "assigned", resolved_at: new Date\(\)\.toISOString\(\) }\)/);
+  assert.match(drafts, /update\({ assignment_id: result.assignment.id }\)/);
 });
 
 test("the agent prepares but never assigns — tools, gating, and honesty", () => {
@@ -143,7 +145,7 @@ test("the python agent inherits the activities tools through the gateway", () =>
   // Invocation routes draft tools to the instructor role — drafts touch the
   // principal's own account, never the task's course scope.
   assert.match(gateway, /TEACHER_DRAFT_TOOLS\.has\(name\)/);
-  assert.match(gateway, /executeChatTool\(name, arguments_, principal\.id, \{ role: "instructor" \}\)/);
+  assert.match(gateway, /executeChatTool\(name, arguments_, principal\.id, \{ role: "instructor", channel: "task_run" \}\)/);
   // The student branch is untouched — learner capabilities never widen.
   assert.match(gateway, /outcome = await executeChatTool\(name, arguments_, principal\.id\);/);
   const studentWrites = gateway.slice(
@@ -184,4 +186,52 @@ test("assignment feedback reaches the conversation; previews stay live", () => {
   assert.match(chatPage, /revision=\{draftRevisions\[previewDraft\] \|\| 0\}/);
   // An open side-by-side panel refetches when its draft is revised.
   assert.match(panel, /\[load, revision\]/);
+});
+
+test("production hardening: races, expiry, cost, deadlines, visibility", () => {
+  // Assign claims the draft atomically before creating anything — double taps
+  // and chat-vs-workbench races resolve to one 409, never two assignments.
+  // assignActivityDraft is the module's last export — slice it to the end.
+  const assign = drafts.slice(drafts.indexOf("export async function assignActivityDraft"));
+  const claimPos = assign.indexOf('eq("id", draft.id).eq("status", "draft")');
+  const createPos = assign.indexOf("createAssignment(instructor, ");
+  assert.ok(claimPos >= 0 && createPos > claimPos, "claim happens before creation");
+  assert.match(drafts, /This draft was already resolved", 409/);
+  assert.match(drafts, /release it so the human can fix the/, "failed creations release the claim");
+  // Lazy TTL — stale pending drafts expire on read, no cron.
+  assert.match(drafts, /DRAFT_TTL_DAYS = 7/);
+  assert.match(drafts, /expireStaleDrafts/);
+  // Soft hourly cap on prepare (each call runs the LLM plan generator).
+  assert.match(drafts, /PREPARE_HOURLY_CAP = 10/);
+  assert.match(drafts, /Prepare limit reached/);
+  // Precise due times follow the create_task convention: ISO or hint, never invented.
+  assert.match(chat, /Supply it only when you can resolve the instructor's stated time precisely/);
+  assert.match(drafts, /due_at must be an ISO 8601 timestamp with a timezone offset/);
+  assert.match(drafts, /due_at is in the past/);
+  // Task-run drafts nudge the instructor — a draft no one sees is a draft lost.
+  assert.match(gateway, /channel: "task_run"/);
+  assert.match(drafts, /activity_draft_prepared/);
+  assert.match(drafts, /Draft ready for review/);
+  // Kill-switch removes the tools from chat loop and gateway catalogue alike.
+  assert.match(chat, /AKORO_ACTIVITY_DRAFTS_ENABLED/);
+  assert.match(gateway, /AKORO_ACTIVITY_DRAFTS_ENABLED/);
+});
+
+test("premium seams: classes by name, real audience names, live status", () => {
+  // The agent confirms classes instead of fuzzy-guessing them.
+  assert.match(chat, /name: "list_my_classrooms"/);
+  assert.match(chat, /never guess a class/);
+  assert.match(chat, /case "list_my_classrooms": \{[\s\S]*?classroom_students/);
+  // The preview shows WHO, not just how many.
+  assert.match(drafts, /names = \(people \?\? \[\]\)\.map/);
+  assert.match(drafts, /names: audience\.names \?\? null/);
+  assert.match(panel, /\+\{audience\.resolved_count - audience\.names\.length\} more/);
+  // Revision chips: the panel says what the agent changed.
+  assert.match(drafts, /payload\.last_change = \{ note:/);
+  assert.match(panel, /payload\.last_change\?\.note/);
+  // Streaming status: SSE first, JSON fallback, identical handling after.
+  assert.match(chatPage, /sendStreaming/);
+  assert.match(chatPage, /api\/adaptive\/chat\/agent\?stream=1/);
+  assert.match(chatPage, /data = await apiPost\('\/api\/adaptive\/chat\/agent', \{ message: bodyText, history, agentName, role: 'instructor' \}\)/);
+  assert.match(chatPage, /\{!trainingInChat && aiStatus && \(/);
 });

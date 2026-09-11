@@ -210,6 +210,17 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
         </span>
       </div>
 
+      {/* What the agent last changed in chat — re-preview at a glance. */}
+      {payload.last_change?.note && phase === 'ready' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 11px', borderRadius: 10, background: 'rgba(232,136,74,.09)', border: '1px solid rgba(232,136,74,.35)', marginBottom: 12 }}>
+          <Pencil size={12} color={AMBER} />
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER, fontFamily: FONT, flex: 1 }}>{payload.last_change.note}</span>
+          {payload.last_change.at && <span style={{ fontSize: 10, color: MUTED2, fontFamily: FONT, flexShrink: 0 }}>
+            {new Date(payload.last_change.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>}
+        </div>
+      )}
+
       {phase === 'editing' ? (
         /* The SAME form the workbench uses — prefilled, posting to the
            draft-assign approval instead of the bench. */
@@ -256,8 +267,24 @@ export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, o
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
-          <Row label="Audience">{audience.label || '—'}{audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} resolved</Chip> : null}</Row>
+          <Row label="Audience">
+            {audience.label || '—'}{audience.resolved_count ? <Chip color={GREEN} bg="#DCFCE7">{audience.resolved_count} resolved</Chip> : null}
+            {(audience.names || []).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                {audience.names.map((n) => <Chip key={n} color={INK} bg={LIGHT}>@{n}</Chip>)}
+                {(audience.resolved_count || 0) > audience.names.length && (
+                  <Chip color={MUTED2} bg={LIGHT}>+{audience.resolved_count - audience.names.length} more</Chip>
+                )}
+              </div>
+            )}
+          </Row>
           <Row label={isLive ? 'Session focus' : 'Topic'}>{payload.topic}</Row>
+          {payload.due_at && (
+            <Row label="Due">
+              {new Date(payload.due_at).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              <Chip color={GREEN} bg="#DCFCE7">set</Chip>
+            </Row>
+          )}
           <Row label="Instructions to learners">{payload.instructions || <span style={{ color: MUTED2 }}>None</span>}</Row>
           {isLive && (
             <Row label="Holds on">{payload.details?.scheduled_hint || <span style={{ color: RED }}>Not set yet — add the exact date and time before assigning.</span>}</Row>

@@ -186,6 +186,28 @@ Submissions modal (the biggest single piece, because of the form reuse).
 
 Still open (phase 3): `list_my_classrooms` tool, TTL cron if the lazy sweep/cap proves insufficient.
 
+## Production hardening + premium layer (shipped)
+
+Hardening:
+- **Race-safe assign** — claim-first (`UPDATE … WHERE status='draft'` wins before any creation); losers get 409; failed creations and battle drafts **release the claim** so the human can retry.
+- **Lazy 7-day TTL** — `expireStaleDrafts` sweeps stale pending drafts on read; no cron.
+- **Prepare rate cap** — 10/hour/instructor (each prepare runs the LLM plan generator).
+- **Precise due times** — `due_at` (ISO, create_task convention) alongside the `due_hint` label; unresolvable times stay hints, past dates rejected. Shown as a resolved "Due … set" row in preview.
+- **Task-run drafts nudge the instructor** — `channel: "task_run"` from the gateway stores `source` and files a bell notification (`activity_draft_prepared` → /activities); chat drafts stay bell-free (they carry their own Preview button).
+- **Kill-switch** — `AKORO_ACTIVITY_DRAFTS_ENABLED=false` removes the draft tools from the chat loop AND the gateway catalogue in one move.
+
+Premium:
+- **Streaming status** — the instructor chat now speaks SSE (`?stream=1`): "Checking your Akoro study data…" style status events render under the typing dots; one honest JSON fallback if the stream never starts.
+- **`list_my_classrooms`** — the agent confirms class names/counts before preparing; never fuzzy-guesses an audience.
+- **Audience names** — picked audiences resolve up to 8 real usernames into the preview (chips + "+N more").
+- **Revision chips** — `revise_activity_draft` stamps `payload.last_change`; the panel shows "✏️ what changed · time" so re-preview is a glance.
+
+## Bigger bets (scoped, next)
+
+- **Recurring routines, human-approved** — "Every Friday, prep a multiplication drill battle": a routines table + weekly scheduler that PREPARES drafts; the human still assigns each one (HITL-consistent automation).
+- **Batch flows** — "Prep this week's activities" → multiple drafts in one turn → a queued preview strip.
+- **Outcomes → drafts** — `check_activity_outcomes` over GET /:id/analytics: "your osmosis assignment averaged 54% — prepare a revision self-study?" 
+
 ## Assignment feedback + conversational revision (shipped)
 
 - **Assign/discard lands in the conversation** (Q1): resolving a preview pushes a chat message ("✅ Assigned — the learners on this draft have been notified…"), so the instructor sees the outcome and the agent carries it in history next turn. The LEARNERS are always notified by the platform itself at assign time (notification + live ding) — no agent relay involved, or needed.
