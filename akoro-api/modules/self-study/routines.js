@@ -13,7 +13,11 @@
  */
 
 import db from "../../db.js";
-import { createActivityDraft, DRAFT_TYPES, invalid } from "./drafts.js";
+import { createActivityDraft, DRAFT_TYPES } from "./drafts.js";
+
+// `invalid` (an Error carrying an HTTP status) is createAssignment.js's —
+// drafts.js imports it from there too.
+import { invalid } from "./createAssignment.js";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const dayIndex = (name) => DAY_NAMES.indexOf(String(name || "").toLowerCase());

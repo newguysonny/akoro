@@ -30,6 +30,7 @@ import {
 
 import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
+import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
@@ -374,6 +375,12 @@ function isNonRoutable(ip) {
 }
 
 app.use("/api", attachRateLimitIdentity);
+// Usage metering: attribute every DB command this request causes to its
+// route (ids normalised out so cardinality stays bounded).
+app.use("/api", (req, res, next) => {
+  const norm = req.path.replace(/\/[0-9a-f-]{16,}/gi, "/:id").replace(/\/\d+/g, "/:id");
+  runWithRouteUsage(`${req.method} ${norm}`, next);
+});
 // Background jobs call this same API over loopback as the user who scheduled
 // the work. They skip the per-user limiters and are counted here instead, so a
 // cron firing six assignments cannot trip a 10/min ceiling — while a runaway

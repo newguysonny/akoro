@@ -28,6 +28,7 @@ import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole, invalidateCachedUser } from "../auth/routes.js";
 import { notify }                         from "../notifications/events.js";
+import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -47,6 +48,11 @@ const validate = (req, res) => {
 };
 
 // ── Stats ────────────────────────────────────────────────────────────────────
+
+// GET /api/admin/usage — where the DB "command" quota is going, per route.
+router.get("/usage", adminOnly, asyncHandler(async (req, res) => {
+  ok(res, usageSnapshot({ topN: Math.min(Number(req.query.top) || 12, 50) }));
+}));
 
 router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
   const [
