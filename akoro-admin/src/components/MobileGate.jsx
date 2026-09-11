@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { AkoroWordmark } from './common/AkoroLogo.jsx';
+import AkoroLogo from './common/AkoroLogo.jsx';
 import { AMBER, INK, MUTED, BORDER, LIGHT, WHITE, PURPLE, FONT } from '../constants.js';
 
 const PHONE_QUERY = '(max-width: 767px)';
@@ -80,8 +80,10 @@ export default function MobileGate({ children, product = 'console' }) {
       padding: '24px 20px calc(24px + env(safe-area-inset-bottom))',
     }}>
       <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-          <AkoroWordmark height={40} />
+        {/* Same lockup as the sign-in page: mark + wordmark text. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 18 }}>
+          <AkoroLogo size={44} radius={12} />
+          <span style={{ fontSize: 21, fontWeight: 800, color: INK }}>Akoro</span>
         </div>
         <h1 style={{ fontSize: 21, lineHeight: 1.35, fontWeight: 800, margin: '0 0 12px', color: INK }}>
           We're hard at work bringing the {product} to mobile browsers soon ✨

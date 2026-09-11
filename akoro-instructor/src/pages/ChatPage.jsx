@@ -14,6 +14,7 @@ import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
+import FortizoChatComposer from '../components/common/FortizoChatComposer.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
@@ -36,6 +37,14 @@ const PROMPT_CHIPS = [
   { label: 'Weekly routine', fill: 'Schedule a weekly revision draft every ' },
 ];
 
+// Chat modes map to the unified agent endpoint's `mode` — the same trio the
+// learner app offers. The label never reaches the API; the id does.
+const CHAT_MODES = [
+  { id: 'default', label: 'Standard', description: 'Balanced everyday support' },
+  { id: 'think', label: 'Deep think', description: 'Slower, step-by-step reasoning' },
+  { id: 'research', label: 'Research', description: 'Leans on syllabus and past questions' },
+];
+
 const REPLIES = [
   'Understood! Working on it now.',
   "Done! Here's what I've prepared...",
@@ -55,6 +64,7 @@ export default function ChatPage() {
   const [messages, setMessages]   = useState(CHAT_INIT);
   const [input, setInput]         = useState('');
   const [isTask, setIsTask]       = useState(false);
+  const [chatMode, setChatMode]   = useState('default');
   const [taskChips, setTaskChips] = useState([]);
   const [toast, setToast]         = useState(null);
   const [myTools, setMyTools]     = useState([]);   // unlocked Tools & Assets
@@ -275,10 +285,10 @@ export default function ChatPage() {
         const turnId = newTurnId();
         let data;
         try {
-          data = await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId }, setAiStatus);
+          data = await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
         } catch (streamErr) {
           console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
-          data = await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId });
+          data = await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
         } finally { setAiStatus(''); }
         // Human-in-the-loop: a successful prepare/revise execution rides
         // with the reply as a draft echo — render its Preview affordance.
@@ -663,13 +673,38 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: LIGHT, borderRadius: taskChips.length > 0 ? 18 : 50, border: bdr(1.5, isTask ? AMBER : BORDER), padding: taskChips.length > 0 ? '10px 10px 8px 12px' : '6px 8px', minHeight: 50 }}>
-            <div ref={attachRef} style={{ position: 'relative', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <button onClick={() => setAttachMenu((p) => !p)} style={{ width: 32, height: 32, borderRadius: '50%', background: attachMenu ? 'rgba(232,136,74,.15)' : WHITE, border: bdr(1, attachMenu ? AMBER : BORDER), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <Plus size={14} color={attachMenu ? AMBER : MUTED2} />
-              </button>
-              {attachMenu && (
-                <div className="ci-attach-menu">
+          {/* Tool chips (unlocked agent tools) render above the composer. */}
+          {taskChips.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingBottom: 8 }}>
+              {taskChips.map((chip) => (
+                <span key={chip} className="ci-task-chip"><CheckSquare size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><X size={9} /></button></span>
+              ))}
+            </div>
+          )}
+
+          <div style={{ position: 'relative' }}>
+            <FortizoChatComposer
+              value={input}
+              onChange={setInput}
+              onSend={send}
+              inputRef={inputRef}
+              placeholder={taskChips.length > 0 ? 'Add a note… (optional)' : `Ask ${agentName} anything…`}
+              sendDisabled={!hasInput}
+              taskAction={() => setIsTask((p) => !p)}
+              taskActive={isTask}
+              taskLabel="Mark as task"
+              attachmentAction={() => setAttachMenu((p) => !p)}
+              attachmentLabel="Attach — photo OCR, file, or document"
+              voiceLabel="Voice input is not available in the instructor console yet"
+              audioLabel="Audio notes are not available in the instructor console yet"
+              modelId={chatMode}
+              modelLabel={CHAT_MODES.find((o) => o.id === chatMode)?.label || 'Standard'}
+              modelOptions={CHAT_MODES}
+              onModelChange={setChatMode}
+              modelLabelDescription="Choose a supported chat mode"
+            />
+            {attachMenu && (
+              <div className="ci-attach-menu">
                   {[
                     { icon: <Camera size={15} color={GREEN} />, label: 'Photo / Image OCR', desc: 'Scan & extract text', act: () => { setAttachType('ocr'); setAttachModal(true); setAttachMenu(false); } },
                     { icon: <Upload size={15} color={PURPLE} />, label: 'Upload file', desc: 'PDF, Word, Excel…', act: () => { setAttachType('file'); setAttachModal(true); setAttachMenu(false); } },
@@ -688,31 +723,6 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
-
-            <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, minWidth: 0 }}>
-              {taskChips.map((chip) => (
-                <span key={chip} className="ci-task-chip"><CheckSquare size={9} />{chip}<button onClick={() => removeChip(chip)} tabIndex={-1}><X size={9} /></button></span>
-              ))}
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-                  if (e.key === 'Backspace' && input === '' && taskChips.length > 0) removeChip(taskChips[taskChips.length - 1]);
-                }}
-                placeholder={taskChips.length > 0 ? 'Add a note… (optional)' : `Ask ${agentName} anything…`}
-                style={{ flex: 1, minWidth: 80, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: INK, fontFamily: FONT, padding: '2px 0' }}
-              />
-            </div>
-
-            <button onClick={() => setIsTask((p) => !p)} title="Mark as task" style={{ width: 30, height: 30, borderRadius: '50%', background: isTask ? 'rgba(232,136,74,.15)' : LIGHT, border: bdr(1, isTask ? AMBER : BORDER), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <CheckSquare size={13} color={isTask ? AMBER : MUTED2} />
-            </button>
-            <button onClick={send} disabled={!hasInput} style={{ width: 34, height: 34, borderRadius: '50%', background: hasInput ? AMBER : BORDER, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasInput ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <Send size={14} color={WHITE} />
-            </button>
-          </div>
         </div>
         </div>
 

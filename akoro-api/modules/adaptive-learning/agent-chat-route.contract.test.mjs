@@ -47,3 +47,18 @@ test("learner study projections remain bounded tools and product feedback needs 
   assert.match(source, /never submit one automatically/);
   assert.match(source, /Never expose a raw transcript, internal scratchpad, hidden reasoning, or raw tool output/);
 });
+
+test("the instructor chat is durable and uses the shared Fortizo composer", () => {
+  // Same session store as learners: lazily created owned session, resume on
+  // mount, and both transports carry the durable turn key + chat mode.
+  assert.match(instructorChatPage, /ensureChatSession/);
+  assert.match(instructorChatPage, /openChatSession\(list\[0\]\.id\)/);
+  assert.match(instructorChatPage, /role: 'instructor', conversationId: sid, turnId, mode: chatMode/);
+  // The composer is the learner app's Fortizo one; modes mirror its trio.
+  assert.match(instructorChatPage, /<FortizoChatComposer/);
+  assert.match(instructorChatPage, /const CHAT_MODES = \[/);
+  assert.match(instructorChatPage, /id: 'research', label: 'Research'/);
+  // Prompt chips fill the composer — they never auto-send.
+  assert.match(instructorChatPage, /setInput\(chip\.fill\)/);
+  assert.doesNotMatch(instructorChatPage, /onClick=\{\(\) => send\(chip/);
+});

@@ -26,7 +26,23 @@ test("both consoles gate phones with a full-page notice", () => {
     assert.match(src, /if \(!phone || bypassed\) return children;/, `${name}: gating mounts NOTHING (no API calls)`);
     assert.match(src, /bringing the .* to mobile browsers soon/, `${name}: friendly copy`);
     assert.match(src, /Continue to the full app anyway/, `${name}: discreet continue link`);
+    // The gate uses the SAME logo as the sign-in page (mark + wordmark text),
+    // not the header lockup variant.
+    assert.match(src, /import AkoroLogo from '\.\/common\/AkoroLogo\.jsx';/);
+    assert.match(src, /<AkoroLogo size=\{44\} radius=\{12\} \/>/);
+    assert.doesNotMatch(src, /AkoroWordmark/);
   }
+});
+
+test("the instructor chat uses the learner app's Fortizo composer", () => {
+  const composer = readFile(
+    new URL("../../akoro-instructor/src/components/common/FortizoChatComposer.jsx", import.meta.url), "utf8",
+  );
+  return composer.then((src) => {
+    assert.match(src, /export default function FortizoChatComposer/);
+    assert.match(src, /taskAction/);   // instructor-only task toggle
+    assert.match(src, /sendFromKeyboard/);
+  });
 });
 
 test("the gate wraps the app root in admin and instructor — and spares the learner app", () => {
