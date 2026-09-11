@@ -201,8 +201,11 @@ export default function ChatPage() {
         // Human-in-the-loop: a successful prepare_activity execution rides
         // with the reply as a draft echo — render its Preview affordance.
         const previews = (data.toolExecutions || [])
-          .filter((e) => e.tool === 'prepare_activity' && e.success && e.draft)
+          .filter((e) => (e.tool === 'prepare_activity' && e.success || e.tool === 'revise_activity_draft' && e.revised) && e.draft)
           .map((e) => e.draft);
+        (data.toolExecutions || [])
+          .filter((e) => e.tool === 'revise_activity_draft' && e.revised && e.draft)
+          .forEach((e) => setDraftRevisions((prev) => ({ ...prev, [e.draft.id]: (prev[e.draft.id] || 0) + 1 })));
         pushAgent(
           data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
           previews.length ? { previews } : {},
@@ -328,7 +331,17 @@ export default function ChatPage() {
   // ── Human-in-the-loop preview — side-by-side with the chat ──────────────
   const [previewDraft, setPreviewDraft] = useState(null);   // draft id or null
   const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
-  const resolveDraft = (id, state) => setDraftStates((prev) => ({ ...prev, [id]: state }));
+  const [draftRevisions, setDraftRevisions] = useState({}); // { [id]: bump count }
+  // Resolutions are pushed as chat messages: the instructor sees the outcome,
+  // and because replies ride the history, the agent knows it too next turn —
+  // it can then confirm to the instructor that the work was assigned (the
+  // LEARNERS are notified by the platform itself at assign time, not by the agent).
+  const resolveDraft = (id, state) => {
+    setDraftStates((prev) => ({ ...prev, [id]: state }));
+    pushAgent(state === 'assigned'
+      ? '✅ Assigned — the learners on this draft have been notified and it is on their Activities feed.'
+      : '🗑️ Draft discarded — nothing was sent to anyone.');
+  };
 
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
 
@@ -546,6 +559,7 @@ export default function ChatPage() {
           <div className="ci-preview-panel" style={{ width: 430, flexShrink: 0, minHeight: 0 }}>
             <ActivityPreviewPanel
               draftId={previewDraft}
+              revision={draftRevisions[previewDraft] || 0}
               onClose={() => setPreviewDraft(null)}
               onResolved={resolveDraft}
             />

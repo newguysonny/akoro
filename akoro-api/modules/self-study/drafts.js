@@ -247,6 +247,91 @@ export async function discardActivityDraft(instructor, id) {
   return data;
 }
 
+const asText = (v, max) => {
+  const t = String(v ?? "").trim();
+  return t ? t.slice(0, max) : undefined;
+};
+const asPlan = (subtopics, objectives, existing) => {
+  if (!Array.isArray(subtopics)) return undefined;
+  const items = subtopics.map(st => String(st ?? "").trim()).filter(Boolean).slice(0, 12);
+  if (!items.length) throw invalid("The plan needs at least one entry");
+  const next = {};
+  for (const st of items) {
+    const source = (objectives && typeof objectives === "object" && Array.isArray(objectives[st]))
+      ? objectives[st]
+      : (Array.isArray(existing?.[st]) ? existing[st] : []);
+    next[st] = source.map(o => String(o ?? "").trim()).filter(Boolean).slice(0, 8);
+  }
+  return { items, objectives: next };
+};
+
+/**
+ * reviseDraftPayload — conversational revision of a PENDING draft.
+ *
+ * The model supplies the new content (it is the writer; the human saw the
+ * preview and said what to change). The server only validates shape and
+ * persists — the topic itself never changes here: a different topic is a
+ * different activity (discard and prepare again). Returns the fresh draft.
+ */
+export async function reviseDraftPayload(instructor, id, changes) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be revised", 409);
+  const c = changes && typeof changes === "object" ? changes : {};
+  if (!Object.keys(c).length) throw invalid("Say what to change — e.g. which entry to make easier, add, or remove");
+
+  const payload = { ...(draft.payload || {}) };
+  const applied = [];
+
+  const title = asText(c.title, 200);
+  if (title) { payload.title = title; applied.push("title"); }
+  const instructions = asText(c.instructions, 2000);
+  if (instructions !== undefined) { payload.instructions = instructions || null; applied.push("instructions"); }
+  if (["easy", "intermediate", "hard"].includes(c.difficulty) && c.difficulty !== payload.difficulty) {
+    payload.difficulty = c.difficulty; applied.push("difficulty");
+  }
+
+  const type = draft.type;
+  if (type === "live_course") {
+    const hint = asText(c.scheduled_hint, 120);
+    if (hint !== undefined) { payload.details = { ...payload.details, scheduled_hint: hint || null }; applied.push("scheduled_hint"); }
+  } else if (type === "battle") {
+    const note = asText(c.note, 600);
+    if (note !== undefined) { payload.details = { ...payload.details, note: note || null }; applied.push("note"); }
+    const topic = asText(c.topic, 200);
+    if (topic) { payload.topic = topic; applied.push("topic"); }
+  } else if (type === "multi_stage") {
+    if (Array.isArray(c.stages)) {
+      const stages = c.stages.slice(0, 6).map((st, i) => ({
+        kind: ["self_study", "assignment", "project"].includes(st?.kind) ? st.kind : "self_study",
+        title: String(st?.title || st?.topic || `Stage ${i + 1}`).trim(),
+        topic: String(st?.topic || st?.title || "").trim(),
+        subject: String(st?.subject || payload.subject || "General").trim(),
+      })).filter(st => st.topic);
+      if (!stages.length) throw invalid("A journey needs at least one stage with a topic");
+      payload.details = { ...payload.details, stages };
+      applied.push("stages");
+    }
+  } else {
+    // self_study | assignment | project: the plan (entries + their objectives).
+    const wantsPlan = Array.isArray(c.subtopics) || (c.objectives && typeof c.objectives === "object");
+    if (wantsPlan) {
+      const plan = asPlan(c.subtopics ?? payload.subtopics, c.objectives ?? {}, payload.objectives);
+      payload.subtopics = plan.items;
+      payload.objectives = plan.objectives;
+      applied.push("plan");
+    }
+  }
+
+  if (!applied.length) throw invalid("None of those fields apply to this draft type");
+
+  const { data, error } = await db.from("activity_drafts")
+    .update({ payload })
+    .eq("id", draft.id)
+    .select().single();
+  if (error) throw invalid(error.message, 500);
+  return { draft: data, applied };
+}
+
 /**
  * assignActivityDraft — THE approval. Replays the stored bench payload
  * through the one shared create path. For journeys, each stage is created

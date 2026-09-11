@@ -44,6 +44,8 @@ const STUDENT_WRITE_TOOLS = new Set([
 const TEACHER_DRAFT_TOOLS = new Set([
   "prepare_activity",
   "list_activity_drafts",
+  "get_activity_draft",
+  "revise_activity_draft",
   "discard_activity_draft",
 ]);
 // Separate private subresource: same service credential/capability boundary as

@@ -430,6 +430,35 @@ export const INSTRUCTOR_TOOLS = [
     description: "Discard one pending activity draft at the instructor's request. A draft reaches nobody, so discarding it touches no learner.",
     input_schema: { type: "object", properties: { draftId: { type: "string", description: "The draft id from prepare_activity or list_activity_drafts." } }, required: ["draftId"] },
   },
+  {
+    name: "get_activity_draft",
+    description: "Read one of your pending activity drafts — the title, audience, and the full plan (entries and their objectives). Use it before revising a draft, so your changes build on what is actually written rather than what you remember.",
+    input_schema: { type: "object", properties: { draftId: { type: "string", description: "The draft id from prepare_activity or list_activity_drafts." } }, required: ["draftId"] },
+  },
+  {
+    name: "revise_activity_draft",
+    description: "Apply the instructor's requested changes to a PENDING activity draft after they previewed it — e.g. make entry 2 easier, entry 1 harder, add one more entry, change the title or instructions. First call get_activity_draft, write the revised content yourself, then send the changed fields here. The topic cannot change (discard and prepare again instead); drafts already assigned cannot be revised.",
+    input_schema: {
+      type: "object",
+      properties: {
+        draftId: { type: "string", description: "The draft id being revised." },
+        changeNote: { type: "string", description: "One short line summarising what changed, e.g. 'Entry 2 made easier, added a recap entry'." },
+        title: { type: "string", description: "Replacement title." },
+        instructions: { type: "string", description: "Replacement instructions to learners." },
+        difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
+        subtopics: { type: "array", items: { type: "string" }, description: "The FULL revised entry list for the plan (study plan / task breakdown / milestones), in order. Send every entry, changed or not." },
+        objectives: { type: "object", description: "Map of entry title to its objective lines. Omitted entries keep their existing objectives." },
+        stages: { type: "array", description: "multi_stage only: the full revised ordered journey.", items: { type: "object", properties: {
+          kind: { type: "string", enum: ["self_study", "assignment", "project"] },
+          title: { type: "string" }, topic: { type: "string" }, subject: { type: "string" },
+        } } },
+        scheduled_hint: { type: "string", description: "live_course only." },
+        note: { type: "string", description: "battle only: the intent note the instructor completes in the battle form." },
+        topic: { type: "string", description: "battle only: the question topic." },
+      },
+      required: ["draftId"],
+    },
+  },
 ];
 
 export function openAiInstructorTools() {
@@ -477,6 +506,35 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const draft = await discardActivityDraft({ id: studentId, role }, String(input?.draftId || ""));
         return { discarded: true, draftId: draft.id, title: draft.title };
       } catch (error) { return { discarded: false, error: error.message || "Could not discard the draft" }; }
+    }
+    case "get_activity_draft": {
+      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
+      try {
+        const draft = await getActivityDraft({ id: studentId, role }, String(input?.draftId || ""));
+        return {
+          draftId: draft.id, status: draft.status, title: draft.title, type: draft.type,
+          subject: draft.subject, topic: draft.topic,
+          instructions: draft.payload?.instructions ?? null,
+          difficulty: draft.payload?.difficulty ?? null,
+          subtopics: draft.payload?.subtopics ?? null,
+          objectives: draft.payload?.objectives ?? null,
+          stages: draft.payload?.details?.stages ?? null,
+          scheduledHint: draft.payload?.details?.scheduled_hint ?? null,
+          audience: draft.audience ?? null,
+        };
+      } catch (error) { return { error: error.message || "Could not read the draft" }; }
+    }
+    case "revise_activity_draft": {
+      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
+      try {
+        const { draft, applied } = await reviseDraftPayload({ id: studentId, role }, String(input?.draftId || ""), input);
+        return {
+          revised: true, draftId: draft.id, title: draft.title, type: draft.type,
+          audience: draft.audience?.label ?? null, applied,
+          changeNote: String(input?.changeNote || "").slice(0, 200) || null,
+          previewHint: "The updated draft is awaiting the instructor's preview again — still not assigned.",
+        };
+      } catch (error) { return { revised: false, error: error.message || "Could not revise the draft" }; }
     }
     case "get_agent_capabilities": {
       const enabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
@@ -1759,10 +1817,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         tool,
         success: observation.success,
         requestId: observation.request_id,
-        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity"].includes(tool),
+        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity", "revise_activity_draft"].includes(tool),
         // A small echo so the chat UI can render the Preview affordance for
         // the human-in-the-loop approval without parsing the model's prose.
-        ...(tool === "prepare_activity" && toolResult?.prepared && toolResult?.draftId
+        ...((tool === "prepare_activity" && toolResult?.prepared
+            || tool === "revise_activity_draft" && toolResult?.revised)
+          && toolResult?.draftId
           ? { draft: { id: toolResult.draftId, title: toolResult.title, type: toolResult.type, audience: toolResult.audience } }
           : {}),
       });

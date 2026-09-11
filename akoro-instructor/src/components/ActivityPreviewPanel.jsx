@@ -62,7 +62,7 @@ const Row = ({ label, children }) => (
   </div>
 );
 
-export default function ActivityPreviewPanel({ draftId, onClose, onResolved }) {
+export default function ActivityPreviewPanel({ draftId, revision = 0, onClose, onResolved }) {
   const [draft, setDraft] = useState(null);
   const [phase, setPhase] = useState('loading');   // loading|ready|editing|assigning|assigned|discarded|error
   const [error, setError] = useState('');
@@ -82,7 +82,7 @@ export default function ActivityPreviewPanel({ draftId, onClose, onResolved }) {
     }
   }, [draftId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, revision]);   // revision bumps when the agent revises the draft in chat
 
   const markResolved = (state, count = 0) => {
     setAssignedCount(count);

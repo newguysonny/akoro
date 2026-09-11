@@ -186,6 +186,11 @@ Submissions modal (the biggest single piece, because of the form reuse).
 
 Still open (phase 3): `list_my_classrooms` tool, TTL cron if the lazy sweep/cap proves insufficient.
 
+## Assignment feedback + conversational revision (shipped)
+
+- **Assign/discard lands in the conversation** (Q1): resolving a preview pushes a chat message ("✅ Assigned — the learners on this draft have been notified…"), so the instructor sees the outcome and the agent carries it in history next turn. The LEARNERS are always notified by the platform itself at assign time (notification + live ding) — no agent relay involved, or needed.
+- **Conversational revision** (Q2): `get_activity_draft` (read the real plan before editing) + `revise_activity_draft` (model writes the revised content; server validates shape and persists — pending drafts only, topic immutable). "Question 2 too difficult" → agent reads the draft, rewrites entry 2, the Preview button re-renders, and an open side-by-side panel refreshes in place via a `revision` signal. The python gateway serves both tools to teacher task runs as well.
+
 ## Follow-up (shipped same branch)
 
 - **Universal no-guess clarification** — `clarify()` is the one shape every tool returns for an unstated required input (`needsClarification/missing/question`); the base prompt (both roles) now carries the missing-details rule, `create_task`, `schedule_chat_follow_up`, `cancel_scheduled_chat_follow_up` and `prepare_activity` all clarify instead of guessing/failing, and `get_agent_capabilities` admits the behaviour. The python teaching agent's rules carry the same line.

@@ -69,7 +69,7 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   assert.match(chat, /role !== "instructor"\) return \{ error: "Activity drafts are only available to instructor accounts" \}/);
   // /agent arms the instructor loop (students keep the learner set untouched).
   assert.match(chat, /\}\) : openAiInstructorTools\(\)/);
-  assert.match(chat, /prepare_activity"\]\.includes\(tool\)/, "prepare_activity is side-effecting");
+  assert.match(chat, /"prepare_activity", "revise_activity_draft"\]\.includes\(tool\)/, "prepare + revise are side-effecting");
   // HITL honesty guide replaces the learner observation guide for instructors.
   assert.match(chat, /INSTRUCTOR_HITL_GUIDE/);
   assert.match(chat, /Never say an activity was assigned, sent, or that learners were notified/);
@@ -91,7 +91,7 @@ test("all six workbench types are draftable; journeys stage through the shared p
 
 test("the chat hands the human a Preview button and a side-by-side panel", () => {
   // The button rides the real toolExecutions echo, not the model's prose.
-  assert.match(chatPage, /e\.tool === 'prepare_activity' && e\.success && e\.draft/);
+  assert.match(chatPage, /e\.tool === 'prepare_activity' && e\.success \|\| e\.tool === 'revise_activity_draft' && e\.revised/);
   assert.match(chatPage, /Preview — \{d\.title\}/);
   assert.match(chatPage, /Assigned ✓/);
   // Side-by-side: the container widens and hosts the panel next to the chat.
@@ -137,7 +137,7 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
 test("the python agent inherits the activities tools through the gateway", () => {
   // teacher_task scope: task tools first (with room reserved), then the drafts.
   assert.match(gateway, /import \{ executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS \} from "\.\.\/adaptive-learning\/chat\.js";/);
-  assert.match(gateway, /TEACHER_DRAFT_TOOLS = new Set\(\[\s*"prepare_activity",\s*"list_activity_drafts",\s*"discard_activity_draft",\s*\]\)/);
+  assert.match(gateway, /TEACHER_DRAFT_TOOLS = new Set\(\[\s*"prepare_activity",\s*"list_activity_drafts",\s*"get_activity_draft",\s*"revise_activity_draft",\s*"discard_activity_draft",\s*\]\)/);
   assert.match(gateway, /MAX_CATALOGUE - INSTRUCTOR_TOOLS\.length/);
   assert.match(gateway, /\.\.\.taskTools, \.\.\.draftTools/);
   // Invocation routes draft tools to the instructor role — drafts touch the
@@ -153,4 +153,35 @@ test("the python agent inherits the activities tools through the gateway", () =>
   assert.ok(!studentWrites.includes("prepare_activity"), "drafts never become learner write-confirmable tools");
   // Drafts are private: no learner write confirmation path involves them.
   assert.match(gateway, /no learner-facing write confirmation applies here/);
+});
+
+test("the agent can read and revise its drafts — and the loop closes in chat", () => {
+  assert.match(chat, /name: "get_activity_draft"/);
+  assert.match(chat, /name: "revise_activity_draft"/);
+  // Revise builds on reality: read first, then write.
+  assert.match(chat, /Use it before revising a draft/);
+  // The topic is identity — changing it means a new draft, never a silent edit.
+  assert.match(chat, /The topic cannot change \(discard and prepare again instead\)/);
+  // Revision is validated server-side and only ever touches pending drafts.
+  assert.match(drafts, /export async function reviseDraftPayload/);
+  assert.match(drafts, /if \(draft\.status !== "draft"\) throw invalid\("Only pending drafts can be revised", 409\)/);
+  assert.match(drafts, /The plan needs at least one entry/);
+  // The revise echo re-renders the Preview affordance with the same draft id.
+  assert.match(chat, /tool === "revise_activity_draft" && toolResult\?\.revised/);
+  assert.match(chat, /still not assigned/);
+  // The python gateway serves the revision pair to teacher task runs too.
+  assert.match(gateway, /"get_activity_draft",\s*"revise_activity_draft",/);
+});
+
+test("assignment feedback reaches the conversation; previews stay live", () => {
+  // Q1: resolving a draft is pushed into the chat, so the transcript — and
+  // next turn's history — carry the outcome the agent can speak about.
+  assert.match(chatPage, /'✅ Assigned — the learners on this draft have been notified and it is on their Activities feed\.'/);
+  assert.match(chatPage, /'🗑️ Draft discarded — nothing was sent to anyone\.'/);
+  // Q2: a revise echo bumps the draft's revision counter and re-renders Preview.
+  assert.match(chatPage, /e\.tool === 'revise_activity_draft' && e\.revised/);
+  assert.match(chatPage, /setDraftRevisions\(\(prev\) => \(\{ \.\.\.prev, \[e\.draft\.id\]: \(prev\[e\.draft\.id\] \|\| 0\) \+ 1 \}\)\)/);
+  assert.match(chatPage, /revision=\{draftRevisions\[previewDraft\] \|\| 0\}/);
+  // An open side-by-side panel refetches when its draft is revised.
+  assert.match(panel, /\[load, revision\]/);
 });
