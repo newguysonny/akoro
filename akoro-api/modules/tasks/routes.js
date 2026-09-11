@@ -259,6 +259,69 @@ router.get("/", async (req, res) => {
   }
 });
 
+// ═══ Agent suggestions ════════════════════════════════════════════════════════
+// Proactive ideas the agent files for the learner (the chat tool
+// `suggest_help`). They are advice only: nothing executes and no task exists
+// until the learner accepts one — accept creates the real task, dismiss
+// closes the idea. Declared before /:taskId so "suggestions" is never read
+// as a task id.
+
+/** GET /api/tasks/suggestions — the learner's open suggestions, newest first. */
+router.get("/suggestions", async (req, res) => {
+  try {
+    const { data, error } = await db.from("agent_suggestions")
+      .select("*").eq("user_id", req.user.id).eq("status", "open")
+      .order("created_at", { ascending: false }).limit(50);
+    if (error) throw new Error(error.message);
+    res.json({ suggestions: data ?? [], count: (data ?? []).length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/tasks/suggestions/:id/accept — turn one suggestion into a real task. */
+router.post("/suggestions/:id/accept", async (req, res) => {
+  try {
+    const { data: suggestion } = await db.from("agent_suggestions")
+      .select("*").eq("id", req.params.id).eq("user_id", req.user.id).single();
+    if (!suggestion || suggestion.status !== "open")
+      return res.status(404).json({ error: "Suggestion not found" });
+
+    const { data: task, error } = await db.from("tasks").insert({
+      creator_id: req.user.id, agent_id: suggestion.agent_id,
+      title: suggestion.title, description: suggestion.rationale || null,
+      priority: "medium", status: "pending", task_type: "general",
+    }).select().single();
+    if (error) throw new Error(error.message);
+
+    const { data: updated, error: upErr } = await db.from("agent_suggestions")
+      .update({ status: "accepted", task_id: task.id, resolved_at: new Date().toISOString() })
+      .eq("id", suggestion.id).select().single();
+    if (upErr) throw new Error(upErr.message);
+
+    // Same signal the agent's own create_task emits, so any open UI refreshes.
+    global.io?.to(`user:${req.user.id}`).emit("task:created", task);
+    res.json({ task, suggestion: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /api/tasks/suggestions/:id/dismiss — close one suggestion for good. */
+router.patch("/suggestions/:id/dismiss", async (req, res) => {
+  try {
+    const { data: updated, error } = await db.from("agent_suggestions")
+      .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+      .eq("id", req.params.id).eq("user_id", req.user.id).eq("status", "open")
+      .select();
+    if (error) throw new Error(error.message);
+    if (!updated?.length) return res.status(404).json({ error: "Suggestion not found" });
+    res.json({ suggestion: updated[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/tasks/:taskId ───────────────────────────────────────────────────
 router.get("/:taskId", async (req, res) => {
   try {

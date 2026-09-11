@@ -217,6 +217,19 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "suggest_help",
+    description: "File one proactive suggestion for the learner's Suggestions list when you notice a way to help beyond this conversation: a task idea, a goal worth aiming at, or a conversation worth starting. Use sparingly — at most one per reply, only when genuinely useful, and never for something the learner already asked you to do. The learner chooses to accept it as a task or dismiss it; filing it changes nothing else.",
+    input_schema: {
+      type: "object",
+      properties: {
+        kind:      { type: "string", enum: ["task", "goal", "conversation"], description: "task = something worth doing; goal = something worth aiming at; conversation = a check-in or topic worth talking through." },
+        title:     { type: "string", description: "Concise, action-led suggestion title (maximum 120 characters)." },
+        rationale: { type: "string", description: "One or two sentences on why this would help them right now (maximum 280 characters)." },
+      },
+      required: ["kind", "title", "rationale"],
+    },
+  },
+  {
     name: "schedule_chat_follow_up",
     description: "Schedule the agent to open a new chat and send the learner a message at a specific future time. Only use after the learner explicitly asks for the schedule. Call get_learner_context before resolving relative time; scheduledAt must be an ISO 8601 timestamp with a timezone offset, for example 2026-09-08T14:00:00+01:00.",
     input_schema: {
@@ -427,6 +440,25 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         };
       } catch (error) {
         return { error: error.message || "Could not create the task" };
+      }
+    }
+    case "suggest_help": {
+      try {
+        const kind = ["task", "goal", "conversation"].includes(input?.kind) ? input.kind : "task";
+        const title = String(input?.title || "").trim().slice(0, 140);
+        const rationale = String(input?.rationale || "").trim().slice(0, 400);
+        if (!title) return { error: "A suggestion needs a title" };
+        const { data: agentRow } = await db.from("user_agents").select("id").eq("user_id", studentId).single();
+        const { data: suggestion, error } = await db.from("agent_suggestions").insert({
+          user_id: studentId, agent_id: agentRow?.id ?? null,
+          kind, title, rationale: rationale || null,
+          source: "chat", session_id: conversationId,
+        }).select().single();
+        if (error) return { error: error.message };
+        global.io?.to(`user:${studentId}`).emit("agent:suggestion", suggestion);
+        return { saved: true, suggestionId: suggestion.id, kind, title };
+      } catch (error) {
+        return { error: error.message || "Could not save the suggestion" };
       }
     }
     case "schedule_chat_follow_up": {
@@ -1601,7 +1633,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         tool,
         success: observation.success,
         requestId: observation.request_id,
-        sideEffecting: ["create_task", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request"].includes(tool),
+        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request"].includes(tool),
       });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }

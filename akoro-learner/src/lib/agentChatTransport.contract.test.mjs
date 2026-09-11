@@ -9,7 +9,7 @@ const decaySource = await readFile(new URL("../components/teaching/DecaySessionM
 const between = (text, start, end) => text.slice(text.indexOf(start), text.indexOf(end));
 
 test("Agent Chat delegates every reply to the unified authenticated API authority", () => {
-  const sendMessage = between(source, "const sendMessage=async", "const saveCustomise");
+  const sendMessage = between(source, "const sendMessage=async", "const toLocalInput=");
 
   assert.match(sendMessage, /streamPost\(agentChatEndpoint\(\{ stream: true \}\), payload/);
   assert.match(sendMessage, /apiPost\(agentChatEndpoint\(\), payload\)/);

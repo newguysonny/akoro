@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
-import { putAgent } from '../../services/settingsApi.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
@@ -30,9 +29,6 @@ const relTime = (iso) => {
   if (s < 604800) return `${Math.floor(s/86400)}d`;
   return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
 };
-
-const AGENT_AVATARS = ["🤖","🧠","👾","🦉","🎓","⚡","🌟","🔮","🦋","🎯","🚀","💡"];
-const AGENT_CONFIG = { name: '', avatars: AGENT_AVATARS };
 
 /* Collapsible "Thought process" — the reasoning model's streamed summary.
    While the thoughts are still streaming it sits open (with a live shimmer);
@@ -81,9 +77,6 @@ function AgentChatTab({
   const [loading,    setLoading]    = useState(false);
   const [agentName,  setAgentName]  = useState(initName);
   const [agentEmoji, setAgentEmoji] = useState(initEmoji);
-  const [custOpen,   setCustOpen]   = useState(false);
-  const [draftName,  setDraftName]  = useState(initName);
-  const [draftEmoji, setDraftEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
   const shownName = agentName || t('agent.learning_agent');
   const autonomyStatus = !agentAutonomyLoaded ? "Checking agent…"
@@ -230,7 +223,24 @@ function AgentChatTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { tasks, createTask, updateTask, toggleTask, deleteTask, refetch: refetchTasks } = useTaskAPI();
+  const { tasks, createTask, updateTask, toggleTask, deleteTask, refetch: refetchTasks,
+    suggestions, refetchSuggestions, acceptSuggestion: acceptSuggestionApi, dismissSuggestion: dismissSuggestionApi } = useTaskAPI();
+
+  // Agent suggestions: accept turns the idea into a real task (the agent
+  // confirms it in the transcript, like a task the learner assigned); dismiss
+  // just closes the idea. Both are optimistic and server-reconciled.
+  const acceptSuggestion=async(sg)=>{
+    setListError("");
+    try {
+      const d=await acceptSuggestionApi(sg);
+      pushAgent(t('agent.suggestion_added').replace('{title}',d?.task?.title||sg.title));
+    } catch(e){ setListError(e?.message||"Couldn't add that suggestion."); refetchSuggestions(); }
+  };
+  const dismissSuggestion=async(sg)=>{
+    setListError("");
+    try { await dismissSuggestionApi(sg.id); }
+    catch(e){ setListError(e?.message||"Couldn't dismiss that suggestion."); }
+  };
 
   const pushAgent = (text) => {
     const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -240,11 +250,6 @@ function AgentChatTab({
   const PRI_COLOR = {high:RED,medium:GOLD,low:GREEN};
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
-
-  // Update greeting when agent name changes (customise flow)
-  const updateAgentName = (name, emoji) => {
-    setAgentName(name); setAgentEmoji(emoji);
-  };
 
   // The parent fetches the agent profile asynchronously; if it resolves after
   // this tab mounts, sync the incoming name/emoji so the header isn't blank.
@@ -332,6 +337,7 @@ function AgentChatTab({
           ensureBubble(); setStatusLabel("");
           setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done"}:m));
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
+          if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         },
       });
       if(!started){ // stream produced nothing — show fallback text
@@ -349,6 +355,7 @@ function AgentChatTab({
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[]}]);
           if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
+          if ((data?.toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         } catch {
           finalReply="";
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:t('agent.error_connection'),time:t2}]);
@@ -359,16 +366,6 @@ function AgentChatTab({
     sentAttachments.forEach(a=>a.previewUrl&&URL.revokeObjectURL(a.previewUrl));
     setAttachments([]);
     setLoading(false);
-  };
-
-  const saveCustomise=()=>{
-    const name=draftName||agentName||'My Agent';
-    updateAgentName(name, draftEmoji);
-    // Persist to backend (non-critical). The endpoint is a PUT upsert; POST 404s.
-    putAgent({ name, emoji: draftEmoji }).catch(()=>{});
-    setCustOpen(false);
-    const t2=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-    setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:t('agent.updated').replace('{name}',name).replace('{emoji}',draftEmoji),time:t2}]);
   };
 
   // datetime-local gives local wall-clock; the API wants ISO.
@@ -423,6 +420,7 @@ function AgentChatTab({
       setMessages(prev=>[...prev,{id:Date.now(),from:"agent",text:taskSaved+autonomyNote,time:ts}]);
     }
     closeTaskSheet();
+    if(!tEditing) setTaskFilter("pending");
     if(innerTab!=="tasks") setInnerTab("tasks");
   };
 
@@ -461,26 +459,9 @@ function AgentChatTab({
           opacity: 1;
         }
       `}</style>
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px 11px",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
-        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-          <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,position:"relative" }}>
-            {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
-          </div>
-          <div>
-            <p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{shownName}</p>
-            <button type="button" onClick={onToggleAgentAutonomy} disabled={!agentAutonomyLoaded||agentAutonomySaving||!onToggleAgentAutonomy}
-              aria-pressed={agentOnline} aria-label={agentOnline?"Turn autonomous Agent offline":"Turn autonomous Agent online"}
-              title={agentOnline?"Agent online: it may open one chat when a precisely due task is due.":"Agent offline: tap to allow one due-task chat."}
-              style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
-              <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
-              <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${autonomyStatus} · ${t('agent.learning_agent')}`}</span>
-            </button>
-          </div>
-        </div>
-        <button onClick={()=>{setDraftName(agentName);setDraftEmoji(agentEmoji);setCustOpen(true);}} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:11.5,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
-          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-sub)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>{t('agent.customise')}
-        </button>
-      </div>
+      {/* The chat header (avatar, name, online status) lives in the sessions
+          drawer now — the conversation gets the room, and agent identity is
+          one hamburger away. Customisation lives on the Settings page. */}
       <div style={{ display:"flex",borderBottom:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
         {[{key:"chat",label:t('agent.chat'),icon:"ti-message-circle",badge:null},{key:"tasks",label:t('agent.tasks'),icon:"ti-clipboard",badge:pendingCount},{key:"stats",label:t('agent.stats'),icon:"ti-chart-bar",badge:null}].map(({key,label,icon,badge})=>(
           <button key={key} onClick={()=>setInnerTab(key)} style={{ flex:1,padding:"9px 4px 10px",background:"none",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:innerTab===key?800:600,color:innerTab===key?BRAND:"var(--ak-text-muted)",borderBottom:`2.5px solid ${innerTab===key?BRAND:"transparent"}`,transition:"all .2s",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}>
@@ -613,10 +594,10 @@ function AgentChatTab({
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6 }}>{[["pending",t('agent.to_do')],["done",t('agent.done')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{l}</button>)}</div>
-            <button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{l}{k==="suggestions"&&suggestions.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestions.length}</span>}</button>)}</div>
+            {taskFilter!=="suggestions"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
-            </button>
+            </button>}
           </div>
           {listError&&(
             <div style={{ margin:"0 16px 8px",padding:"9px 12px",borderRadius:12,background:"rgba(239,68,68,.10)",border:`1px solid ${RED}35`,display:"flex",alignItems:"center",gap:8 }}>
@@ -625,7 +606,31 @@ function AgentChatTab({
             </div>
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
-            {filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
+            {taskFilter==="suggestions"?(
+              suggestions.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.suggestions_empty')}</p></div>
+              :suggestions.map(sg=>{
+                const kindKey=sg.kind==="goal"?"agent.sugg_goal":sg.kind==="conversation"?"agent.sugg_chat":"agent.sugg_task";
+                const kindIcon=sg.kind==="goal"?"ti-target":sg.kind==="conversation"?"ti-message-circle":"ti-clipboard";
+                return (
+                <div key={sg.id} style={{ padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:`1px dashed ${BRAND}45` }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6 }}>
+                    <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${BRAND}12`,border:`1px solid ${BRAND}30`,color:BRAND,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={kindIcon} size={10}/>{t(kindKey)}</span>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(sg.created_at)}</span>
+                  </div>
+                  <p style={{ fontSize:13.5,fontWeight:700,color:"var(--ak-text)",margin:"0 0 4px",lineHeight:1.45 }}>{sg.title}</p>
+                  {sg.rationale&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 10px",lineHeight:1.5 }}>{sg.rationale}</p>}
+                  <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+                    <button onClick={()=>acceptSuggestion(sg)} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>{t('agent.suggestion_accept')}
+                    </button>
+                    <button onClick={()=>dismissSuggestion(sg)} title={t('agent.suggestion_dismiss')} aria-label={t('agent.suggestion_dismiss')} style={{ width:27,height:27,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><Icon name="ti-x" size={12}/></button>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600,fontStyle:"italic" }}>{t('agent.suggestions_sub')}</span>
+                  </div>
+                </div>
+                );
+              })
+            ):(taskFilter==="done"||taskFilter==="pending")&&(
+            filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
               <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
                 <button onClick={()=>toggleTask(tk.id).catch(e=>setListError(e?.message||"Couldn't update that task."))} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                   {tk.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -648,7 +653,7 @@ function AgentChatTab({
                     style={{ width:26,height:26,borderRadius:8,border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",cursor:tk.status==="running"?"not-allowed":"pointer",opacity:tk.status==="running"?.4:1,fontSize:11 }}><Icon name="ti-trash" size={11}/></button>
                 </div>
               </div>
-            ))}
+            )))}
           </div>
         </div>
       )}
@@ -684,32 +689,28 @@ function AgentChatTab({
         </div></>
       )}
       <NoAgentSheet open={needsAgent} onClose={()=>setNeedsAgent(false)} defaultName={agentName||'My Agent'} onCreated={saveTask}/>
-      {custOpen&&(
-        <><div onClick={()=>setCustOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:2100,background:"var(--ak-surface)",borderRadius:"22px 22px 0 0",padding:"0 20px 48px",boxShadow:"0 -8px 40px rgba(0,0,0,.14)",animation:"sheet-up .3s cubic-bezier(.32,1.2,.64,1)",fontFamily:"'Nunito',sans-serif",maxHeight:"80vh",overflowY:"auto" }}>
-          <div style={{ width:38,height:4,borderRadius:2,background:"var(--ak-border3)",margin:"14px auto 20px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 18px" }}>{t('agent.customise_title')}</p>
-          <div style={{ marginBottom:16 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:6,letterSpacing:.3 }}>{t('agent.agent_name')}</label><input className="ak-chat-input" value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder={t('agent.name_ph')} style={{ width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:14,fontWeight:600,color:"var(--ak-text)",fontFamily:"'Nunito',sans-serif",outline:"none" }} onFocus={e=>e.target.style.borderColor=BRAND} onBlur={e=>e.target.style.borderColor="var(--ak-border2)"}/></div>
-          <div style={{ marginBottom:22 }}><label style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-sub)",display:"block",marginBottom:10,letterSpacing:.3 }}>{t('agent.avatar')}</label><div style={{ display:"flex",flexWrap:"wrap",gap:8 }}>{AGENT_CONFIG.avatars.map(em=><button key={em} onClick={()=>setDraftEmoji(em)} style={{ width:46,height:46,borderRadius:12,border:`2px solid ${draftEmoji===em?BRAND:"var(--ak-border2)"}`,background:draftEmoji===em?`${BRAND}12`:"var(--ak-surface-hover)",fontSize:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s" }}>{em}</button>)}</div></div>
-          <div style={{ display:"flex",alignItems:"center",gap:12,background:`${BRAND}08`,border:`1px solid ${BRAND}20`,borderRadius:14,padding:"12px 14px",marginBottom:20 }}>
-            <div style={{ width:44,height:44,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{draftEmoji}</div>
-            <div><p style={{ fontSize:14,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{draftName||t('agent.unnamed')}</p><p style={{ fontSize:11,color:"var(--ak-text-muted)",margin:0 }}>{t('common.online')}</p></div>
-          </div>
-          <div style={{ display:"flex",gap:10 }}>
-            <button onClick={()=>setCustOpen(false)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
-            <button onClick={saveCustomise} style={{ flex:1.5,padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{t('agent.save_agent')}
-            </button>
-          </div>
-        </div></>
-      )}
       {/* Chat sessions drawer (hamburger) */}
       {drawerOpen&&(
         <><div onClick={()=>setDrawerOpen(false)} style={{ position:"fixed",inset:0,zIndex:2000,background:"rgba(6,6,18,.55)",backdropFilter:"blur(5px)" }}/>
         <div style={{ position:"fixed",top:0,bottom:0,left:0,zIndex:2100,width:"min(86vw,320px)",background:"var(--ak-surface)",boxShadow:"6px 0 40px rgba(0,0,0,.18)",animation:"drawer-in .28s cubic-bezier(.32,1,.64,1)",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column" }}>
           <style>{`@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 16px 12px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
-            <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0 }}>{t('agent.chats')}</p>
+          <div style={{ display:"flex",alignItems:"center",gap:12,padding:"16px 16px 13px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+            <div style={{ width:46,height:46,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:23,position:"relative",flexShrink:0 }}>
+              {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
+            </div>
+            <div style={{ flex:1,minWidth:0 }}>
+              <p style={{ fontSize:14.5,fontWeight:900,color:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{shownName}</p>
+              <button type="button" onClick={onToggleAgentAutonomy} disabled={!agentAutonomyLoaded||agentAutonomySaving||!onToggleAgentAutonomy}
+                aria-pressed={agentOnline} aria-label={agentOnline?"Turn autonomous Agent offline":"Turn autonomous Agent online"}
+                title={agentOnline?"Agent online: it may open one chat when a precisely due task is due.":"Agent offline: tap to allow one due-task chat."}
+                style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,marginTop:2,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
+                <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
+                <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${autonomyStatus} · ${t('agent.learning_agent')}`}</span>
+              </button>
+            </div>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 12px",flexShrink:0 }}>
+            <p style={{ fontSize:13,fontWeight:900,letterSpacing:.4,textTransform:"uppercase",color:"var(--ak-text-muted)",margin:0 }}>{t('agent.chats')}</p>
             <button onClick={()=>setDrawerOpen(false)} style={{ background:"none",border:"none",cursor:"pointer",padding:4,display:"flex" }}><XIcon size={17} color="var(--ak-text-muted)"/></button>
           </div>
           <div style={{ padding:"12px 16px",flexShrink:0 }}>

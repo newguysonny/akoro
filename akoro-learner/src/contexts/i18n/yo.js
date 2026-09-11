@@ -338,6 +338,15 @@ export const YO = {
   'agent.save_agent': 'Fi àṣojú pamọ́',
   'agent.task_title_ph': 'Àkọlé iṣẹ́…',
   'agent.to_do': 'Láti ṣe',
+  'agent.suggestions':      'Àbáwọ́n',
+  'agent.suggestions_sub':  'Èrò láti ọ̀dọ̀ aṣàfihàn rẹ — gba ọ̀kan kí ó di iṣẹ́.',
+  'agent.suggestions_empty':'Kò sí àbáwọ́n báyìí. Aṣàfihàn rẹ yóò fi èrò síbí nígbà tí ó bá rí ọ̀nà láti ràn ọ́ lọ́wọ́.',
+  'agent.suggestion_accept':'Fi sí iṣẹ́',
+  'agent.suggestion_dismiss':'Kọ àbáwọ́n sílẹ̀',
+  'agent.suggestion_added': 'A fi sí iṣẹ́ rẹ: {title}',
+  'agent.sugg_task':        'Èrò iṣẹ́',
+  'agent.sugg_goal':        'Àyàn',
+  'agent.sugg_chat':        'Ìjíròrò',
   'agent.unnamed': 'Àṣojú tí kò ní orúkọ',
 
   /* ── Battles ── */

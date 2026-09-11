@@ -101,6 +101,7 @@
     "2026-self-study.sql",
     "2026-activity-types.sql",
     "2026-submission-grading.sql",
+    "2026-agent-suggestions.sql",
     "2026-task-output-types-2.sql",
     "2026-class-battles.sql",
     "2026-battle-invitations.sql",
