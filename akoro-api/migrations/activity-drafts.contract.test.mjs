@@ -14,7 +14,7 @@ import test from "node:test";
  * create path the activities workbench uses (targets, notifications, ding).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent] = await Promise.all([
+const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage] = await Promise.all([
   read("./2026-activity-drafts.sql"),
   read("./manifest.json"),
   read("../../akoro-api/modules/self-study/createAssignment.js"),
@@ -26,6 +26,11 @@ const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
   read("../../akoro-api/modules/agent-tools/routes.js"),
   read("../../akoro-python-agent/src/agent/adaptive/student.py"),
+  read("../../akoro-api/migrations/2026-draft-routines.sql"),
+  read("../../akoro-api/modules/self-study/routines.js"),
+  read("../../akoro-api/modules/self-study/outcomes.js"),
+  read("../../akoro-api/app.js"),
+  read("../../akoro-instructor/src/pages/ChatPage.jsx"),
 ]);
 
 test("the migration keeps drafts private and provenance-carrying", () => {
@@ -94,7 +99,7 @@ test("all six workbench types are draftable; journeys stage through the shared p
 test("the chat hands the human a Preview button and a side-by-side panel", () => {
   // The button rides the real toolExecutions echo, not the model's prose.
   assert.match(chatPage, /e\.tool === 'prepare_activity' && e\.success \|\| e\.tool === 'revise_activity_draft' && e\.revised/);
-  assert.match(chatPage, /Preview — \{d\.title\}/);
+  assert.match(chatPage, /\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'\} — \{d\.title\}/);
   assert.match(chatPage, /Assigned ✓/);
   // Side-by-side: the container widens and hosts the panel next to the chat.
   assert.match(chatPage, /previewDraft \? 'min\(1180px, 97vw\)' : 720/);
@@ -139,7 +144,13 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
 test("the python agent inherits the activities tools through the gateway", () => {
   // teacher_task scope: task tools first (with room reserved), then the drafts.
   assert.match(gateway, /import \{ executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS \} from "\.\.\/adaptive-learning\/chat\.js";/);
-  assert.match(gateway, /TEACHER_DRAFT_TOOLS = new Set\(\[\s*"prepare_activity",\s*"list_activity_drafts",\s*"get_activity_draft",\s*"revise_activity_draft",\s*"discard_activity_draft",\s*\]\)/);
+  const teacherSet = gateway.slice(
+    gateway.indexOf("TEACHER_DRAFT_TOOLS"),
+    gateway.indexOf("]);", gateway.indexOf("TEACHER_DRAFT_TOOLS")),
+  );
+  for (const tool of ["prepare_activity", "list_activity_drafts", "get_activity_draft", "revise_activity_draft", "discard_activity_draft", "check_activity_outcomes", "schedule_activity_routine", "list_activity_routines", "cancel_activity_routine"]) {
+    assert.ok(teacherSet.includes(`"${tool}"`), `gateway serves ${tool}`);
+  }
   assert.match(gateway, /MAX_CATALOGUE - INSTRUCTOR_TOOLS\.length/);
   assert.match(gateway, /\.\.\.taskTools, \.\.\.draftTools/);
   // Invocation routes draft tools to the instructor role — drafts touch the
@@ -234,4 +245,48 @@ test("premium seams: classes by name, real audience names, live status", () => {
   assert.match(chatPage, /api\/adaptive\/chat\/agent\?stream=1/);
   assert.match(chatPage, /data = await apiPost\('\/api\/adaptive\/chat\/agent', \{ message: bodyText, history, agentName, role: 'instructor' \}\)/);
   assert.match(chatPage, /\{!trainingInChat && aiStatus && \(/);
+});
+
+test("bigger bets: weekly routines prepare drafts — assignment stays human", () => {
+  assert.match(routinesMigration, /CREATE TABLE IF NOT EXISTS draft_routines/);
+  assert.match(routinesMigration, /last_run_at   TIMESTAMPTZ/);
+  assert.match(manifest, /2026-draft-routines\.sql/);
+  // The agent schedules conversationally — but never without an audience.
+  assert.match(chat, /name: "schedule_activity_routine"/);
+  assert.match(chat, /clarify\("audience", "Who is this weekly activity for/);
+  assert.match(routines, /hasAudience/);
+  assert.match(routines, /throw invalid\("audience_required"\)/);
+  // The scheduler claims the slot before preparing (multi-instance safe) and
+  // only ever PREPARES: it rides the draft flow with the task_run channel.
+  assert.match(routines, /\.is\("last_run_at", null\)/);
+  assert.match(routines, /\.eq\("last_run_at", routine\.last_run_at\)/);
+  assert.match(routines, /channel: "task_run"/);
+  assert.match(routines, /startRoutineScheduler/);
+  assert.match(appJs, /startRoutineScheduler\(\)/);
+  // Honesty: the guide forbids claiming a routine assigned anything.
+  assert.match(chat, /Routines only ever prepare drafts at their weekly slot/);
+  // Managed from the workbench strip: pause/resume/cancel chips.
+  assert.match(page, /\/api\/self-study\/routines/);
+  assert.match(page, /Weekly routines/);
+});
+
+test("bigger bets: outcomes close the loop — data in, decision human", () => {
+  assert.match(chat, /name: "check_activity_outcomes"/);
+  // Owned summaries only, and never per-learner rows.
+  assert.match(outcomes, /export async function activityOutcomeSummary/);
+  assert.match(outcomes, /if \(data\.created_by !== instructor\.id && instructor\.role !== "admin"\) return null/);
+  assert.ok(!outcomes.includes("learners:"), "no per-learner rows to the model");
+  // Pick-one flow when no id is given.
+  assert.match(chat, /pickOne: true/);
+  assert.match(chat, /then call again with its assignmentId/);
+  // Weak results suggest a revision draft — the instructor still decides.
+  assert.match(chat, /suggest a revision draft and let the instructor decide/);
+});
+
+test("bigger bets: batch preparation is first-class", () => {
+  assert.match(chat, /For a batch request/);
+  assert.match(chat, /call this once per activity in the same reply/);
+  // Each draft in a batch gets its own numbered Preview button.
+  assert.match(instructorChatPage, /msg\.previews\.map\(\(d, pi\) =>/);
+  assert.match(instructorChatPage, /\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'/);
 });

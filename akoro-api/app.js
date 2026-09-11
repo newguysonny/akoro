@@ -48,6 +48,7 @@ import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./m
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
+import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule          from "./modules/communities/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
@@ -502,6 +503,9 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+// Weekly routine preparation (drafts only — assignment stays human).
+startRoutineScheduler();
+
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
 

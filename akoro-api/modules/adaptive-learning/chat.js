@@ -23,8 +23,12 @@ import { newToolRequestId, toolObservation } from "../../utils/toolObservation.j
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
 import {
-  createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft,
+  createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
 } from "../self-study/drafts.js";
+import { activityOutcomeSummary, listRecentActivities } from "../self-study/outcomes.js";
+import {
+  listRoutines, createRoutine, updateRoutine, deleteRoutine,
+} from "../self-study/routines.js";
 import { getSyllabusGrounding } from "./syllabus.js";
 import { getPastQuestionGrounding } from "../past-questions/routes.js";
 import { getCurriculumGrounding } from "../curriculum/routes.js";
@@ -393,7 +397,7 @@ export function getLearnerChatTools({ allowToolRequest = true } = {}) {
 export const INSTRUCTOR_TOOLS = [
   {
     name: "prepare_activity",
-    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. You may fill content gaps yourself (the server drafts the study plan with the same generator the workbench uses).",
+    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. You may fill content gaps yourself (the server drafts the study plan with the same generator the workbench uses). For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button.",
     input_schema: {
       type: "object",
       properties: {
@@ -435,6 +439,40 @@ export const INSTRUCTOR_TOOLS = [
     name: "list_my_classrooms",
     description: "List the instructor's classes with their learner counts. Use it to confirm the audience before prepare_activity when the instructor refers to a class by name or asks which classes they have — never guess a class.",
     input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "check_activity_outcomes",
+    description: "See how one assigned activity actually went: completion counts and class-average understanding, confusion and engagement. Use when the instructor asks how an activity went or wants to act on results (revision work, a follow-up). Without an assignment id you get their recent activities to pick from. Suggest next steps - but any new activity still goes through prepare_activity and their preview.",
+    input_schema: { type: "object", properties: { assignmentId: { type: "string", description: "From prepare/list flows or the workbench. Omit to list recent activities." } }, required: [] },
+  },
+  {
+    name: "schedule_activity_routine",
+    description: "Schedule a recurring weekly preparation: at the slot, a DRAFT is prepared automatically for the instructor to preview and assign (it is never assigned automatically). Use when the instructor says 'every <day>...'. The audience is required - ask who each occurrence is for before scheduling, and confirm the day. hour is UTC (default 7).",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "The routine's name, e.g. 'Friday multiplication drill'." },
+        day: { type: "string", enum: ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] },
+        hour: { type: "number", description: "UTC hour 0-23 the draft is prepared. Default 7 (mid-morning Lagos)." },
+        brief: { type: "object", description: "The prepare_activity template replayed every occurrence.", properties: {
+          type: { type: "string", enum: ["self_study", "assignment", "project", "live_course", "multi_stage", "battle"] },
+          title: { type: "string" }, subject: { type: "string" }, topic: { type: "string" },
+          instructions: { type: "string" }, difficulty: { type: "string", enum: ["easy", "intermediate", "hard"] },
+          audience: { type: "object", description: "Same shape as prepare_activity's audience - required." },
+        }, required: ["type", "topic", "audience"] },
+      },
+      required: ["title", "day", "brief"],
+    },
+  },
+  {
+    name: "list_activity_routines",
+    description: "List the instructor's weekly routines (what is scheduled, the day, and whether active or paused).",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "cancel_activity_routine",
+    description: "Cancel one weekly routine at the instructor's request.",
+    input_schema: { type: "object", properties: { routineId: { type: "string" } }, required: ["routineId"] },
   },
   {
     name: "get_activity_draft",
@@ -536,6 +574,48 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         }
         return { classrooms: [] };
       } catch (error) { return { error: error.message || "Could not list the classes" }; }
+    }
+    case "check_activity_outcomes": {
+      if (role !== "instructor") return { error: "Activity outcomes are only available to instructor accounts" };
+      try {
+        if (input?.assignmentId) {
+          const summary = await activityOutcomeSummary({ id: studentId, role }, String(input.assignmentId));
+          if (!summary) return { error: "Activity not found among your activities" };
+          return summary;
+        }
+        const recent = await listRecentActivities({ id: studentId, role }, 5);
+        return { pickOne: true, recent: recent.map((a) => ({ assignmentId: a.id, title: a.title, type: a.type, createdAt: a.created_at })),
+          hint: "Ask the instructor which one to look at, then call again with its assignmentId." };
+      } catch (error) { return { error: error.message || "Could not read the outcomes" }; }
+    }
+    case "schedule_activity_routine": {
+      if (role !== "instructor") return { error: "Routines are only available to instructor accounts" };
+      try {
+        const routine = await createRoutine({ id: studentId, role }, input);
+        return { scheduled: true, routineId: routine.id, title: routine.title, day: input?.day, hourUtc: routine.hour,
+          note: "Each occurrence prepares a DRAFT for review - never an automatic assignment." };
+      } catch (error) {
+        if (error.message === "audience_required") {
+          return clarify("audience", "Who is this weekly activity for - the whole class, or specific learners?",
+            { scheduled: false, error: "audience_required",
+              message: "Ask the instructor who each occurrence is for, then schedule with their answer." });
+        }
+        return { scheduled: false, error: error.message || "Could not schedule the routine" };
+      }
+    }
+    case "list_activity_routines": {
+      if (role !== "instructor") return { error: "Routines are only available to instructor accounts" };
+      try {
+        const routines = await listRoutines({ id: studentId, role });
+        return { routines: routines.map((r) => ({ routineId: r.id, title: r.title, day: r.day_of_week, hourUtc: r.hour, status: r.status, briefType: r.brief?.type })) };
+      } catch (error) { return { error: error.message || "Could not list routines" }; }
+    }
+    case "cancel_activity_routine": {
+      if (role !== "instructor") return { error: "Routines are only available to instructor accounts" };
+      try {
+        const out = await deleteRoutine({ id: studentId, role }, String(input?.routineId || ""));
+        return { cancelled: true, routineId: out.id };
+      } catch (error) { return { cancelled: false, error: error.message || "Could not cancel the routine" }; }
     }
     case "get_activity_draft": {
       if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
@@ -1796,7 +1876,9 @@ const INSTRUCTOR_HITL_GUIDE =
   `If the tool result carries needsClarification (audience_required), ask who the work is for before preparing anything. ` +
   `Do not guess an audience, a due date, or a schedule the instructor did not state. ` +
   `Pass due_at only when you can resolve their stated time to an exact ISO 8601 instant; otherwise keep it as a due_hint label or ask. ` +
-  `Use list_my_classrooms to confirm a class name before preparing.`;
+  `Use list_my_classrooms to confirm a class name before preparing. ` +
+  `Routines only ever prepare drafts at their weekly slot - never say a routine assigned anything. ` +
+  `When check_activity_outcomes shows weak results, suggest a revision draft and let the instructor decide.`;
 
 /**
  * clarify — the ONE no-guess shape every tool returns when a required input

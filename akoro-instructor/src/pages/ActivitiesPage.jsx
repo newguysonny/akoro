@@ -534,6 +534,7 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
    learner from this strip without the instructor's Preview → Assign. */
 function DraftsStrip({ refreshKey, onResolved }) {
   const [drafts, setDrafts]     = useState([]);
+  const [routines, setRoutines] = useState([]);
   const [openId, setOpenId]     = useState(null);
   const [loading, setLoading]   = useState(true);
 
@@ -543,9 +544,18 @@ function DraftsStrip({ refreshKey, onResolved }) {
       .catch(() => setDrafts([]))
       .finally(() => setLoading(false));
   }, []);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  const loadRoutines = useCallback(() => {
+    apiGet('/api/self-study/routines')
+      .then(d => setRoutines(d?.data?.routines ?? []))
+      .catch(() => setRoutines([]));
+  }, []);
+  useEffect(() => { load(); loadRoutines(); }, [load, loadRoutines, refreshKey]);
 
-  if (loading || !drafts.length) return null;
+  const flipRoutine = (r) => apiPatch(`/api/self-study/routines/${r.id}`, { status: r.status === 'active' ? 'paused' : 'active' }).then(loadRoutines).catch(() => {});
+  const dropRoutine = (r) => apiDelete(`/api/self-study/routines/${r.id}`).then(loadRoutines).catch(() => {});
+  const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  if (loading || (!drafts.length && !routines.length)) return null;
   return (
     <div style={{ background: `${PURPLE}08`, border: '1px solid rgba(168,85,247,.3)', borderRadius: 14, padding: '12px 16px', marginBottom: 18, fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -555,6 +565,24 @@ function DraftsStrip({ refreshKey, onResolved }) {
         </span>
         <span style={{ fontSize: 11, color: MUTED2 }}>— nothing was sent to learners.</span>
       </div>
+      {/* Weekly routines — preparation is automated, assignment stays human. */}
+      {routines.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: drafts.length ? 8 : 0 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: .4, color: MUTED2, textTransform: 'uppercase' }}>Weekly routines</span>
+          {routines.map(r => (
+            <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 11px', borderRadius: 20, background: WHITE, border: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 700, color: MUTED, fontFamily: FONT }}>
+              <span style={{ color: r.status === 'active' ? GREEN : MUTED2 }}>{'\u{1F501}'}</span>
+              {DAY[r.day_of_week]} · {r.title}
+              <button onClick={() => flipRoutine(r)} title={r.status === 'active' ? 'Pause' : 'Resume'}
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 800, color: r.status === 'active' ? AMBER : GREEN, fontFamily: FONT, padding: '2px 4px' }}>
+                {r.status === 'active' ? 'Pause' : 'Resume'}
+              </button>
+              <button onClick={() => dropRoutine(r)} title="Cancel routine"
+                style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: RED, fontFamily: FONT, padding: '2px 5px' }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
         {drafts.map(d => (
           <button key={d.id} onClick={() => setOpenId(d.id)}

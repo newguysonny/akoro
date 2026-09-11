@@ -38,6 +38,9 @@ import {
   createActivityDraft, assignActivityDraft, DRAFT_TYPES,
   listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
 } from "./drafts.js";
+import {
+  listRoutines, createRoutine, updateRoutine, deleteRoutine,
+} from "./routines.js";
 
 const router = Router();
 const now    = () => new Date().toISOString();
@@ -82,6 +85,45 @@ router.post("/plan", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
   subtopics.forEach((st, i) => { objectives[st] = lists[i]; });
 
   ok(res, { topic, subject, subtopics, objectives });
+}));
+
+/* ═══ Draft routines — recurring, human-approved preparation ══════════════════
+   The scheduler only PREPARES drafts at the slot; the instructor assigns each
+   occurrence. Declared before /:id so "routines" is never an assignment id. */
+
+/** GET /api/self-study/routines — my weekly routines. */
+router.get("/routines", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  ok(res, { routines: await listRoutines(req.user) });
+}));
+
+/** POST /api/self-study/routines — schedule a recurring prepare. */
+router.post("/routines", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { routine: await createRoutine(req.user, req.body) }); }
+  catch (e) {
+    if (e.status === 400 || e.message === "audience_required") return bad(res, e.message === "audience_required" ? "Say who each occurrence is for" : e.message);
+    throw e;
+  }
+}));
+
+/** PATCH /api/self-study/routines/:id — pause or resume. */
+router.patch("/routines/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { routine: await updateRoutine(req.user, req.params.id, req.body) }); }
+  catch (e) {
+    if (e.status === 404) return missing(res, e.message);
+    if (e.status === 403) return denied(res, e.message);
+    if (e.status === 400) return bad(res, e.message);
+    throw e;
+  }
+}));
+
+/** DELETE /api/self-study/routines/:id — cancel the routine. */
+router.delete("/routines/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, await deleteRoutine(req.user, req.params.id)); }
+  catch (e) {
+    if (e.status === 404) return missing(res, e.message);
+    if (e.status === 403) return denied(res, e.message);
+    throw e;
+  }
 }));
 
 /* ═══ AI activity drafts — human-in-the-loop ══════════════════════════════════

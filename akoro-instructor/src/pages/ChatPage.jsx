@@ -486,7 +486,7 @@ export default function ChatPage() {
                   </div>
                   {!isMe && (msg.previews || []).length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                      {msg.previews.map((d) => {
+                      {msg.previews.map((d, pi) => {
                         const st = draftStates[d.id];
                         return (
                           <button key={d.id} disabled={!!st} onClick={() => setPreviewDraft(d.id)}
@@ -497,7 +497,7 @@ export default function ChatPage() {
                               color: st === 'assigned' ? GREEN : st === 'discarded' ? MUTED2 : PURPLE }}>
                             {st === 'assigned' ? <><CheckCircle2 size={12} /> Assigned ✓</>
                               : st === 'discarded' ? <>Discarded</>
-                              : <><Eye size={12} /> Preview — {d.title}</>}
+                              : <><Eye size={12} /> {msg.previews.length > 1 ? `Preview ${pi + 1}` : 'Preview'} — {d.title}</>}
                           </button>
                         );
                       })}

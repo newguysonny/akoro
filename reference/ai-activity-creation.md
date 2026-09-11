@@ -202,6 +202,14 @@ Premium:
 - **Audience names** — picked audiences resolve up to 8 real usernames into the preview (chips + "+N more").
 - **Revision chips** — `revise_activity_draft` stamps `payload.last_change`; the panel shows "✏️ what changed · time" so re-preview is a glance.
 
+## Bigger bets (shipped)
+
+- **Weekly routines, human-approved** — `draft_routines` table + in-process scheduler (10-min tick, catch-up on boot, `AKORO_ROUTINES_ENABLED` kill-switch). The slot claims `last_run_at` before preparing (multi-instance safe) and only ever PREPARES a draft via the task_run channel — the instructor gets the bell nudge and assigns by hand. Conversational management: `schedule_activity_routine` (audience required — clarify otherwise, confirm the day), `list_activity_routines`, `cancel_activity_routine`; HTTP: GET/POST/PATCH/DELETE `/api/self-study/routines…`; pause/resume/cancel chips on the workbench strip.
+- **Batch preparation** — prepare once per activity in a single reply ("prep this week's activities"); each draft renders its own numbered Preview button (Preview 1 / Preview 2 / …), hourly cap still governs.
+- **Outcomes close the loop** — `check_activity_outcomes` returns owned activity summaries (completion + class-average understanding/confusion/engagement; no per-learner rows). No id → recent list to pick from. Weak results prompt the agent to *suggest* a revision draft — the instructor still decides.
+
+Note: the recovery reset exposed a latent bug — `revise_activity_draft` referenced `reviseDraftPayload` without importing it (ReferenceError at invoke time; static tests missed it). Fixed here with the new import block.
+
 ## Bigger bets (scoped, next)
 
 - **Recurring routines, human-approved** — "Every Friday, prep a multiplication drill battle": a routines table + weekly scheduler that PREPARES drafts; the human still assigns each one (HITL-consistent automation).

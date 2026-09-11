@@ -47,6 +47,10 @@ const TEACHER_DRAFT_TOOLS = new Set([
   "get_activity_draft",
   "revise_activity_draft",
   "discard_activity_draft",
+  "check_activity_outcomes",
+  "schedule_activity_routine",
+  "list_activity_routines",
+  "cancel_activity_routine",
 ]);
 // Separate private subresource: same service credential/capability boundary as
 // tools, but it never appears in the model's function catalogue.
