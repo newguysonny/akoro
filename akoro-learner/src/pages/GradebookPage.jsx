@@ -1,25 +1,25 @@
 /*
- * GradebookPage — the lowerEd report card, live: the learner's assigned work
- * organised subject by subject, with what is submitted, what was missed, and
- * what still waits. Same page language as the Activities feed (full-screen,
- * pill rows, cards), wearing Akoro's brand.
+ * GradebookPage — the lowerEd report card, structured exactly like the
+ * StudentGradebook reference (subject dropdown with mini averages, type
+ * filter, date sort, three summary cards, one row per assignment) wearing
+ * Akoro's branding, under the Activities/Notifications-style header.
  *
- * Marks are states, not invented numbers: ✓ submitted · X missed (past due,
- * still open) · – pending. A numeric score slots into the same badge the day
- * grading exists.
+ * Marks are honest states until grading lands: ✓ submitted · X missed (past
+ * due, still open) · – pending; a published teacher grade is the number, and
+ * the subject averages are computed from those published grades only.
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ChevronDown, ArrowUpDown, X } from 'lucide-react';
 import { fetchMyGradebook, TYPE_LABEL, TYPE_DOT } from '../services/gradebookApi.js';
-import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, GREEN, RED } from '../constants.js';
 
-/* Work-type pills, second row — mirrors the reference's type filter. */
+/* Work types — the reference's type filter, with Akoro's activity kinds. */
 const TYPES = [
-  { key: 'all',        label: 'All types' },
-  { key: 'self_study', label: 'Self study' },
-  { key: 'assignment', label: 'Assignment' },
-  { key: 'project',    label: 'Project' },
+  { key: 'all',         label: 'All types' },
+  { key: 'self_study',  label: 'Self study' },
+  { key: 'assignment',  label: 'Assignment' },
+  { key: 'project',     label: 'Project' },
   { key: 'multi_stage', label: 'Journey' },
 ];
 
@@ -30,89 +30,83 @@ const fmtDate = (iso) => {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
-/* The mark badge — bands ready for real scores, states for today. */
-function Mark({ mark }) {
-  const style =
-    mark === 'X' ? { color: RED,     background: 'rgba(239,68,68,.10)' }
-    : mark === '✓' ? { color: GREEN, background: 'rgba(16,185,129,.10)' }
-    : typeof mark === 'number' ? (
-        mark >= 80 ? { color: GREEN, background: 'rgba(16,185,129,.10)' }
-        : mark >= 60 ? { color: '#B45309', background: 'rgba(232,163,61,.14)' }
-        : { color: RED, background: 'rgba(239,68,68,.10)' }
-      )
-    : { color: 'var(--ak-text-muted)', background: 'var(--ak-bg)' };
-  return (
-    <span style={{ ...style, fontSize: 12, fontWeight: 900, borderRadius: 100,
-      padding: '4px 12px', minWidth: 44, textAlign: 'center', fontFamily: "'Nunito',sans-serif" }}>
-      {mark}
-    </span>
-  );
+/* A subject's average from its published numeric grades — never invented. */
+function averageOf(rows) {
+  const nums = rows.map(r => r.mark).filter(v => typeof v === 'number');
+  if (!nums.length) return null;
+  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
 }
 
-function Row({ a }) {
-  const date = fmtDate(a.date);
-  const overdue = a.mark === 'X';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-      padding: '11px 2px', borderBottom: '1px solid var(--ak-border)' }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'Nunito',sans-serif" }}>
-          {a.name}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: TYPE_DOT[a.type] || 'var(--ak-text-muted)', flexShrink: 0 }} />
-          {TYPE_LABEL[a.type] || a.type}
-          {date && <span style={{ opacity: overdue ? 0 : 1 }}>· {date}</span>}
-          {overdue && <span style={{ color: RED, fontWeight: 900 }}>· was due {date}</span>}
-        </div>
-      </div>
-      <Mark mark={a.mark} />
-    </div>
-  );
+/* Score badge — identical bands to the reference, Akoro tokens. */
+function badgeStyle(val) {
+  if (val === 'X')       return { color: RED,     background: 'rgba(239,68,68,.10)' };
+  if (val === '✓')       return { color: GREEN,   background: 'rgba(16,185,129,.10)' };
+  if (typeof val === 'number') {
+    if (val >= 80) return { color: GREEN,    background: 'rgba(16,185,129,.10)' };
+    if (val >= 60) return { color: '#B45309', background: 'rgba(232,163,61,.14)' };
+    return { color: RED, background: 'rgba(239,68,68,.10)' };
+  }
+  return { color: 'var(--ak-text-muted)', background: 'var(--ak-bg)' };
 }
+
+const N = "'Nunito',sans-serif";
 
 export default function GradebookPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [subject, setSubject] = useState('all');
+  const [activeSubjectId, setActiveSubjectId] = useState('all');
   const [type, setType] = useState('all');
-  const [sortDir, setSortDir] = useState('asc');   // by due date
+  const [sortDir, setSortDir] = useState('asc');
+  const [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
+  const subjectMenuRef = useRef(null);
 
   useEffect(() => {
     fetchMyGradebook().then(setData).finally(() => setLoading(false));
   }, []);
 
-  const shown = useMemo(() => {
-    if (!data) return [];
-    let rows = subject === 'all'
-      ? data.subjects.flatMap(s => s.assignments)
-      : (data.subjects.find(s => s.id === subject)?.assignments ?? []);
-    if (type !== 'all') rows = rows.filter(a => a.type === type);
-    return [...rows].sort((x, y) => sortDir === 'asc'
-      ? String(x.date || '9999').localeCompare(String(y.date || '9999'))
-      : String(y.date || '9999').localeCompare(String(x.date || '9999')));
-  }, [data, subject, type, sortDir]);
+  /* Close the subject menu on outside click / Escape — as the reference does. */
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (subjectMenuRef.current && !subjectMenuRef.current.contains(e.target)) setSubjectMenuOpen(false);
+    }
+    function onKey(e) { if (e.key === 'Escape') setSubjectMenuOpen(false); }
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
 
-  /* Stats for the chip + cards, scoped to the chosen subject. */
-  const scoped = subject === 'all'
-    ? (data?.totals ?? { submitted: 0, missed: 0, total: 0 })
-    : (data?.subjects.find(s => s.id === subject) ?? { submitted: 0, missed: 0, total: 0 });
-  const pct = scoped.total ? Math.round((scoped.submitted / scoped.total) * 100) : 0;
+  const subjects = data?.subjects ?? [];
+  const totals   = data?.totals ?? { submitted: 0, missed: 0, total: 0 };
 
-  const TAB = (active) => ({
-    padding: '6px 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
-    fontFamily: "'Nunito',sans-serif", fontSize: 11.5, fontWeight: active ? 800 : 600,
-    background: active ? BRAND : '#F0EBFF', color: active ? '#fff' : '#9CA3AF',
-    flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-  });
-  const subjectCount = (id) => id === 'all'
-    ? (data?.totals?.total ?? 0)
-    : (data?.subjects.find(s => s.id === id)?.assignments.length ?? 0);
+  const allRows = useMemo(() => subjects.flatMap(s => s.assignments), [subjects]);
+  const scopedRows = activeSubjectId === 'all'
+    ? allRows
+    : (subjects.find(s => s.id === activeSubjectId)?.assignments ?? []);
+
+  const visibleAssignments = useMemo(() => {
+    let list = scopedRows;
+    if (type !== 'all') list = list.filter(a => a.type === type);
+    return [...list].sort((a, b) => sortDir === 'asc'
+      ? String(a.date || '9999').localeCompare(String(b.date || '9999'))
+      : String(b.date || '9999').localeCompare(String(a.date || '9999')));
+  }, [scopedRows, type, sortDir]);
+
+  const activeSubject = subjects.find(s => s.id === activeSubjectId) ?? null;
+  const avg       = averageOf(scopedRows);
+  const completed = scopedRows.filter(r => r.mark === '✓' || typeof r.mark === 'number').length;
+  const missed    = scopedRows.filter(r => r.mark === 'X').length;
+  const rowCount  = activeSubjectId === 'all' ? totals.total : scopedRows.length;
+
+  const subjectMiniAvg = (s) => averageOf(s.assignments);
+  const activeName = activeSubjectId === 'all' ? 'All subjects' : (activeSubject?.name ?? 'Subjects');
 
   return (
-    <div style={{ width: '100vw', height: '100vh', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* HEADER — the Activities page's header, gradebook edition */}
+    <div style={{ width: '100vw', height: '100vh', fontFamily: N, background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* ── HEADER — the Notifications/Activities page style ── */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -123,91 +117,136 @@ export default function GradebookPage() {
             <div>
               <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>Gradebook</p>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0 }}>
-                {loading ? 'Loading…' : scoped.total ? `${scoped.submitted} of ${scoped.total} submitted` : 'No work assigned yet'}
+                {loading ? 'Loading…' : totals.total ? `${totals.submitted} of ${totals.total} submitted` : 'No work assigned yet'}
               </p>
             </div>
           </div>
-          {/* Submitted chip — the gradebook's headline number */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#F0FFF8', border: '1px solid #BBF7D0', borderRadius: 100, padding: '6px 13px' }}
             title="Submitted work across your subjects">
             <span style={{ fontSize: 14, lineHeight: 1 }}>✅</span>
-            <span style={{ fontSize: 14, fontWeight: 900, color: '#15803D', lineHeight: 1 }}>{loading ? '–' : `${pct}%`}</span>
+            <span style={{ fontSize: 14, fontWeight: 900, color: '#15803D', lineHeight: 1 }}>
+              {loading ? '–' : `${totals.total ? Math.round((totals.submitted / totals.total) * 100) : 0}%`}
+            </span>
           </div>
-        </div>
-
-        {/* Subject pills — the sidebar of the school report, phone-shaped */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 12, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-          {loading
-            ? [1, 2, 3].map(i => <span key={i} style={{ ...TAB(false), background: 'var(--ak-border)', color: 'transparent' }}>····</span>)
-            : (
-              <>
-                <button style={TAB(subject === 'all')} onClick={() => setSubject('all')}>All subjects</button>
-                {(data?.subjects ?? []).map(s => (
-                  <button key={s.id} style={TAB(subject === s.id)} onClick={() => setSubject(s.id)}>
-                    {s.name}
-                    <span style={{ fontSize: 10, fontWeight: 900, background: subject === s.id ? 'rgba(255,255,255,.25)' : '#E4DBFF', borderRadius: 100, padding: '1px 7px' }}>
-                      {s.assignments.length}
-                    </span>
-                  </button>
-                ))}
-              </>
-            )}
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px 80px' }}>
-        {/* Summary — submitted / missed, per scope */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <div style={{ background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: .5, color: 'var(--ak-text-muted)', textTransform: 'uppercase' }}>Submitted</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: GREEN, marginTop: 2 }}>{loading ? '–' : scoped.submitted}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)' }}> of {scoped.total}</span></div>
-            <div style={{ height: 5, borderRadius: 3, background: 'var(--ak-border)', overflow: 'hidden', marginTop: 7 }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg, ${BRAND}, ${GREEN})`, transition: 'width .3s' }} />
+      {/* ── MAIN — the reference gradebook, Akoro-branded ── */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 80px' }}>
+        <div style={{ background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 16, overflow: 'hidden' }}>
+
+          {/* Subject title + dropdown */}
+          <div style={{ padding: '16px 16px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ position: 'relative' }} ref={subjectMenuRef}>
+                <button onClick={() => setSubjectMenuOpen(v => !v)} aria-haspopup="listbox" aria-expanded={subjectMenuOpen}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: N }}>
+                  <span style={{ fontSize: 22, fontWeight: 900, color: 'var(--ak-text)' }}>{loading ? 'Gradebook' : activeName}</span>
+                  <ChevronDown size={19} color="var(--ak-text-muted)"
+                    style={{ transform: subjectMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                </button>
+
+                {subjectMenuOpen && (
+                  <div role="listbox"
+                    style={{ position: 'absolute', left: 0, top: '100%', marginTop: 8, width: 260, background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 12, boxShadow: '0 10px 30px rgba(33,31,53,.16)', zIndex: 60, padding: '4px 0', maxHeight: 300, overflowY: 'auto' }}>
+                    {[{ id: 'all', name: 'All subjects', assignments: allRows }, ...subjects].map(s => {
+                      const mini = s.id === 'all' ? averageOf(allRows) : subjectMiniAvg(s);
+                      const active = s.id === activeSubjectId;
+                      return (
+                        <button key={s.id} role="option" aria-selected={active}
+                          onClick={() => { setActiveSubjectId(s.id); setSubjectMenuOpen(false); }}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 14px', background: active ? '#F1ECFF' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: N }}>
+                          <span style={{ fontSize: 13, fontWeight: active ? 800 : 600, color: active ? BRAND : 'var(--ak-text)' }}>{s.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: mini == null ? 'var(--ak-text-muted)' : GREEN }}>
+                            {mini == null ? '–' : `${mini}%`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--ak-text-muted)', margin: '4px 0 12px', fontWeight: 600 }}>
+              {loading ? '—' : `${subjects.length} subject${subjects.length === 1 ? '' : 's'} · ${rowCount} ${rowCount === 1 ? 'activity' : 'activities'}`}
+            </p>
+
+            {/* Type filter + date sort */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <select value={type} onChange={e => setType(e.target.value)}
+                style={{ fontSize: 12.5, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', borderRadius: 10, padding: '8px 10px', cursor: 'pointer', fontFamily: N, fontWeight: 700 }}>
+                {TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+              <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text)', borderRadius: 10, padding: '8px 12px', cursor: 'pointer', fontWeight: 700, fontFamily: N }}>
+                <ArrowUpDown size={13} /> Date {sortDir === 'asc' ? '↑' : '↓'}
+              </button>
             </div>
           </div>
-          <div style={{ background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: .5, color: 'var(--ak-text-muted)', textTransform: 'uppercase' }}>Missed</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: scoped.missed ? RED : 'var(--ak-text-muted)', marginTop: 2 }}>
-              {loading ? '–' : scoped.missed}
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)' }}> {scoped.missed === 1 ? 'activity' : 'activities'}</span>
+
+          {/* Summary cards — average / completed / missed */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, padding: '14px 16px' }}>
+            <div style={{ background: 'var(--ak-bg)', border: '1px solid var(--ak-border)', borderRadius: 12, padding: '11px 12px' }}>
+              <div style={{ fontSize: 9.5, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--ak-text-muted)', fontWeight: 800, marginBottom: 4 }}>Average</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: GREEN, display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                {avg ?? '–'}<span style={{ fontSize: 11, color: 'var(--ak-text-muted)', fontWeight: 700 }}>%</span>
+              </div>
+              <div style={{ width: '100%', height: 5, background: 'var(--ak-border)', borderRadius: 999, overflow: 'hidden', marginTop: 6 }}>
+                <div style={{ height: '100%', background: GREEN, borderRadius: 999, width: `${avg ?? 0}%`, transition: 'width .3s' }} />
+              </div>
             </div>
-            {scoped.missed > 0 && (
-              <div style={{ fontSize: 10, fontWeight: 700, color: RED, marginTop: 5, opacity: .8 }}>Past due — still open</div>
+            <div style={{ background: 'var(--ak-bg)', border: '1px solid var(--ak-border)', borderRadius: 12, padding: '11px 12px' }}>
+              <div style={{ fontSize: 9.5, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--ak-text-muted)', fontWeight: 800, marginBottom: 4 }}>Submitted</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--ak-text)', display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                {loading ? '–' : completed}<span style={{ fontSize: 11, color: 'var(--ak-text-muted)', fontWeight: 700 }}>of {rowCount}</span>
+              </div>
+            </div>
+            <div style={{ background: 'var(--ak-bg)', border: '1px solid var(--ak-border)', borderRadius: 12, padding: '11px 12px' }}>
+              <div style={{ fontSize: 9.5, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--ak-text-muted)', fontWeight: 800, marginBottom: 4 }}>Missed</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: missed ? RED : 'var(--ak-text-muted)', display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                {loading ? '–' : missed}<span style={{ fontSize: 11, color: 'var(--ak-text-muted)', fontWeight: 700 }}>work</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Assignment list */}
+          <div style={{ padding: '0 16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--ak-text-muted)', fontWeight: 800, borderTop: '1px solid var(--ak-border)', padding: '9px 2px' }}>
+              <span>Assignment</span><span>Score</span>
+            </div>
+
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 0' }}>
+                {[1, 2, 3].map(i => <div key={i} style={{ height: 44, borderRadius: 10, background: 'var(--ak-border)', opacity: .4 }} />)}
+              </div>
+            ) : visibleAssignments.length === 0 ? (
+              <div style={{ padding: '36px 4px', textAlign: 'center', fontSize: 13, color: 'var(--ak-text-muted)', fontWeight: 700 }}>
+                Nothing here yet — assigned work shows up subject by subject.
+              </div>
+            ) : (
+              visibleAssignments.map(a => {
+                const date = fmtDate(a.date);
+                const overdue = a.mark === 'X';
+                return (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderBottom: '1px solid var(--ak-border)', padding: '11px 2px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: TYPE_DOT[a.type] || 'var(--ak-text-muted)', flexShrink: 0 }} />
+                        {TYPE_LABEL[a.type] || a.type}
+                        {date && !overdue && <span>· {date}</span>}
+                        {overdue && <span style={{ color: RED, fontWeight: 900 }}>· was due {date}</span>}
+                      </div>
+                    </div>
+                    <span style={{ ...badgeStyle(a.mark), fontSize: 12, fontWeight: 900, borderRadius: 8, padding: '6px 0', width: 52, textAlign: 'center', flexShrink: 0 }}>
+                      {a.mark}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
-
-        {/* Work-type pills + date sort */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', alignItems: 'center' }}>
-          {TYPES.map(t => <button key={t.key} style={TAB(type === t.key)} onClick={() => setType(t.key)}>{t.label}</button>)}
-          <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
-            style={{ ...TAB(false), marginLeft: 'auto', border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text-muted)' }}
-            title="Sort by due date">
-            Date {sortDir === 'asc' ? '↑' : '↓'}
-          </button>
-        </div>
-
-        {/* Rows */}
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3, 4].map(i => <div key={i} style={{ height: 56, borderRadius: 12, background: 'var(--ak-border)', opacity: .4 }} />)}
-          </div>
-        ) : shown.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '56px 20px' }}>
-            <div style={{ fontSize: 38, marginBottom: 10 }}><Icon name="ti-books" size={38} /></div>
-            <p style={{ fontSize: 14, color: 'var(--ak-text-muted)', fontWeight: 700, margin: 0 }}>
-              Nothing here yet
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--ak-text-muted)', margin: '4px 0 0', opacity: .8 }}>
-              Work your teachers assign shows up here, subject by subject.
-            </p>
-          </div>
-        ) : (
-          <div style={{ background: 'var(--ak-surface)', border: '1px solid var(--ak-border)', borderRadius: 14, padding: '4px 14px' }}>
-            {shown.map(a => <Row key={a.id} a={a} />)}
-          </div>
-        )}
       </div>
     </div>
   );

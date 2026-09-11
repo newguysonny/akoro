@@ -27,19 +27,25 @@ test("the gradebook reads real assigned work, grouped by subject", () => {
   assert.match(seam, /overdue = open && due && new Date\(due\) < new Date\(\)/);
 });
 
-test("the page is the Activities style, gradebook edition", () => {
-  // Header with back + title + headline chip; subject pills; type pills; sort.
+test("the page mirrors the StudentGradebook reference, Akoro-branded", () => {
+  // Header stays the Notifications/Activities style.
   assert.match(page, /navigate\('\/app'\)/);
   assert.match(page, /Gradebook<\/p>/);
-  assert.match(page, /All subjects/);
+  // Subject dropdown with per-subject mini averages + outside-click close.
+  assert.match(page, /aria-haspopup="listbox"/);
+  assert.match(page, /subjectMiniAvg/);
+  assert.match(page, /addEventListener\('mousedown', onClickOutside\)/);
+  // Reference sections: type filter, date sort, average/completed/missed cards.
   assert.match(page, /Date \{sortDir === 'asc' \? '↑' : '↓'\}/);
-  // Summary cards: submitted with a progress bar, missed with a red flag.
-  assert.match(page, /Submitted<\/div>/);
-  assert.match(page, /linear-gradient\(90deg, \$\{BRAND\}, \$\{GREEN\}\)/);
-  assert.match(page, /Past due — still open/);
-  // Mark badge already knows score bands for when grading lands.
-  assert.match(page, /mark >= 80/);
-  assert.match(page, /mark >= 60/);
+  assert.match(page, />Average</);
+  assert.match(page, />Submitted</);
+  assert.match(page, />Missed</);
+  assert.match(page, /Assignment<\/span><span>Score<\/span>/);
+  // Averages come from published numeric grades only — never invented.
+  assert.match(page, /filter\(v => typeof v === 'number'\)/);
+  // Mark badge knows the reference score bands.
+  assert.match(page, /val >= 80/);
+  assert.match(page, /val >= 60/);
 });
 
 test("the page is routed and reachable for lowerEd learners", () => {
