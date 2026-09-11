@@ -14,7 +14,7 @@ import test from "node:test";
  * create path the activities workbench uses (targets, notifications, ding).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage] = await Promise.all([
+const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent] = await Promise.all([
   read("./2026-activity-drafts.sql"),
   read("./manifest.json"),
   read("../../akoro-api/modules/self-study/createAssignment.js"),
@@ -24,6 +24,8 @@ const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/components/ActivityPreviewPanel.jsx"),
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
+  read("../../akoro-api/modules/agent-tools/routes.js"),
+  read("../../akoro-python-agent/src/agent/adaptive/student.py"),
 ]);
 
 test("the migration keeps drafts private and provenance-carrying", () => {
@@ -111,4 +113,44 @@ test("the preview reuses the workbench's own forms — no forked editors", () =>
   assert.match(panel, /phase === 'assigning'/);
   assert.match(panel, /nothing is sent until you assign/);
   assert.match(panel, /apiDelete\(`\/api\/self-study\/drafts\/\$\{draftId\}`\)/);
+});
+
+test("the no-guess rule is universal: every tool asks before it guesses", () => {
+  // One shared clarification shape, exported for any tool or workflow.
+  assert.match(chat, /export function clarify\(field, question, extra = \{\}\)/);
+  assert.match(chat, /needsClarification: true, missing: field, question/);
+  // The base prompt (both roles) carries the missing-details rule.
+  assert.match(chat, /Missing details rule: before calling any Akoro tool, check you hold every input the user actually stated/);
+  assert.match(chat, /ask one clear clarifying question and wait/);
+  // Side-effecting tools clarify instead of failing or inventing.
+  assert.match(chat, /return clarify\("title", "What should the task be called\?"/);
+  assert.match(chat, /return clarify\("message", "What should the future chat message say\?"/);
+  assert.match(chat, /return clarify\("scheduledAt", "When exactly should it be sent\? Please give the date and time\."/);
+  assert.match(chat, /return clarify\("followUpId", "Which scheduled message should be cancelled\?/);
+  assert.match(chat, /clarify\("audience", "Who is this activity for/);
+  // The capability inventory admits the behaviour.
+  assert.match(chat, /Asks a clarifying question when a tool needs a detail you did not give — it never guesses values/);
+  // The python teaching agent carries the same rule.
+  assert.match(studentAgent, /Never guess a tool input\. If a tool needs a detail the learner has not given/);
+});
+
+test("the python agent inherits the activities tools through the gateway", () => {
+  // teacher_task scope: task tools first (with room reserved), then the drafts.
+  assert.match(gateway, /import \{ executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS \} from "\.\.\/adaptive-learning\/chat\.js";/);
+  assert.match(gateway, /TEACHER_DRAFT_TOOLS = new Set\(\[\s*"prepare_activity",\s*"list_activity_drafts",\s*"discard_activity_draft",\s*\]\)/);
+  assert.match(gateway, /MAX_CATALOGUE - INSTRUCTOR_TOOLS\.length/);
+  assert.match(gateway, /\.\.\.taskTools, \.\.\.draftTools/);
+  // Invocation routes draft tools to the instructor role — drafts touch the
+  // principal's own account, never the task's course scope.
+  assert.match(gateway, /TEACHER_DRAFT_TOOLS\.has\(name\)/);
+  assert.match(gateway, /executeChatTool\(name, arguments_, principal\.id, \{ role: "instructor" \}\)/);
+  // The student branch is untouched — learner capabilities never widen.
+  assert.match(gateway, /outcome = await executeChatTool\(name, arguments_, principal\.id\);/);
+  const studentWrites = gateway.slice(
+    gateway.indexOf("STUDENT_WRITE_TOOLS"),
+    gateway.indexOf("]);", gateway.indexOf("STUDENT_WRITE_TOOLS")),
+  );
+  assert.ok(!studentWrites.includes("prepare_activity"), "drafts never become learner write-confirmable tools");
+  // Drafts are private: no learner write confirmation path involves them.
+  assert.match(gateway, /no learner-facing write confirmation applies here/);
 });

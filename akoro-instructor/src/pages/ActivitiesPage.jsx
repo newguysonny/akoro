@@ -31,6 +31,7 @@ import { useCoursesAPI } from '../hooks/useCoursesAPI.js';
 import { useNavigate } from 'react-router-dom';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../constants.js';
 import { confirmDialog } from '../components/ConfirmHost.jsx';
+import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 
 const SUBJECTS = [
   'Mathematics', 'English Language', 'Basic Science', 'Basic Technology',
@@ -527,6 +528,63 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
 }
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
+/* ── AI drafts strip — the human approval surface ────────────────────────────
+   Drafts the agent prepared (instructor chat or a python agent task run) sit
+   here until a human previews and assigns or discards them. Nothing reaches a
+   learner from this strip without the instructor's Preview → Assign. */
+function DraftsStrip({ refreshKey, onResolved }) {
+  const [drafts, setDrafts]     = useState([]);
+  const [openId, setOpenId]     = useState(null);
+  const [loading, setLoading]   = useState(true);
+
+  const load = useCallback(() => {
+    apiGet('/api/self-study/drafts')
+      .then(d => setDrafts(d?.data?.drafts ?? []))
+      .catch(() => setDrafts([]))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  if (loading || !drafts.length) return null;
+  return (
+    <div style={{ background: `${PURPLE}08`, border: '1px solid rgba(168,85,247,.3)', borderRadius: 14, padding: '12px 16px', marginBottom: 18, fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Sparkles size={14} color={PURPLE} />
+        <span style={{ fontSize: 12, fontWeight: 900, color: PURPLE, letterSpacing: .3 }}>
+          {drafts.length} AI-prepared draft{drafts.length === 1 ? '' : 's'} awaiting your review
+        </span>
+        <span style={{ fontSize: 11, color: MUTED2 }}>— nothing was sent to learners.</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+        {drafts.map(d => (
+          <button key={d.id} onClick={() => setOpenId(d.id)}
+            title="Preview this draft — assigning is your call"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 20,
+              border: '1px solid rgba(168,85,247,.45)', background: WHITE, color: PURPLE,
+              fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, maxWidth: 320 }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</span>
+            <span style={{ fontSize: 9.5, fontWeight: 900, background: 'rgba(168,85,247,.14)', padding: '1px 7px', borderRadius: 8, textTransform: 'uppercase', flexShrink: 0 }}>
+              {(d.type || '').replace('_', ' ')}
+            </span>
+            Preview
+          </button>
+        ))}
+      </div>
+      {openId && (
+        <Modal open onClose={() => setOpenId(null)} title="✨ AI-prepared activity — review & assign">
+          <div style={{ height: '72vh' }}>
+            <ActivityPreviewPanel
+              draftId={openId}
+              onClose={() => setOpenId(null)}
+              onResolved={(id, state) => { setOpenId(null); load(); onResolved?.(); }}
+            />
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export default function ActivitiesPage() {
   const [key, setKey] = useState('self_study');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -542,6 +600,7 @@ export default function ActivitiesPage() {
       subtitle="Create work, assign it to learners, and see what has been done"
       action={<Btn size="sm" onClick={() => setRefreshKey(k => k + 1)}><Plus size={14} /> Refresh</Btn>}
     >
+      <DraftsStrip refreshKey={refreshKey} onResolved={() => setRefreshKey(k => k + 1)} />
       <div style={{ display: 'flex', gap: 22, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         {/* Left rail — the activity types */}
         <aside style={{ width: 268, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>

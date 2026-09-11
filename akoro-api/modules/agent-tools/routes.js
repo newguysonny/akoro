@@ -8,7 +8,7 @@
 import { Router } from "express";
 
 import db from "../../db.js";
-import { executeChatTool, getLearnerChatTools } from "../adaptive-learning/chat.js";
+import { executeChatTool, getLearnerChatTools, INSTRUCTOR_TOOLS } from "../adaptive-learning/chat.js";
 import { getLearnerProfileContext } from "../adaptive-learning/learner-profile-context.js";
 import { isIanaTimeZone, localiseInstant } from "../adaptive-learning/learner-time-context.js";
 import { getToolsForTask } from "../tasks/tools/index.js";
@@ -37,6 +37,14 @@ const STUDENT_WRITE_TOOLS = new Set([
   "schedule_chat_follow_up",
   "cancel_scheduled_chat_follow_up",
   "submit_tool_request",
+]);
+// Instructor activity-creation tools (human-in-the-loop): they only PREPARE
+// private drafts — assigning is always the instructor's own action in the
+// instructor app, so no learner-facing write confirmation applies here.
+const TEACHER_DRAFT_TOOLS = new Set([
+  "prepare_activity",
+  "list_activity_drafts",
+  "discard_activity_draft",
 ]);
 // Separate private subresource: same service credential/capability boundary as
 // tools, but it never appears in the model's function catalogue.
@@ -311,9 +319,16 @@ async function catalogueFor(claims, principal) {
 
   const { task } = await teacherTaskContext(claims, principal);
   const tools = await entitledTeacherTools(task);
-  return tools.slice(0, MAX_CATALOGUE).map(({ definition }) =>
+  const taskTools = tools.slice(0, MAX_CATALOGUE - INSTRUCTOR_TOOLS.length).map(({ definition }) =>
     publicTool(definition, true), // task tools persist outputs or change platform state
   );
+  // The instructor's activity-creation tools ride every teacher task context:
+  // the agent may PREPARE activity drafts (private until the instructor
+  // previews and assigns them in the instructor app).
+  const draftTools = INSTRUCTOR_TOOLS.map((tool) =>
+    publicTool(tool, true), // prepare_activity writes a draft row; the others manage drafts
+  );
+  return [...taskTools, ...draftTools];
 }
 
 async function registeredTeacherTool(claims, principal, name) {
@@ -493,6 +508,11 @@ async function executeInvocation({ claims, principal, name, arguments_, idempote
     let outcome;
     if (claims.scope === "student") {
       outcome = await executeChatTool(name, arguments_, principal.id);
+    } else if (TEACHER_DRAFT_TOOLS.has(name)) {
+      // Instructor activity drafts: executed against the principal's own
+      // account under the instructor role. No task registration and no
+      // course scoping — a draft reaches nobody until a human assigns it.
+      outcome = await executeChatTool(name, arguments_, principal.id, { role: "instructor" });
     } else {
       const teacherTool = await registeredTeacherTool(claims, principal, name);
       const courseId = await assertCourseScopedArguments(arguments_, teacherTool.context, principal);

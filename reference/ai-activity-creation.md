@@ -184,4 +184,10 @@ Submissions modal (the biggest single piece, because of the form reuse).
 - Instructor UI: `ActivityPreviewPanel.jsx`, ChatPage Preview buttons + side-by-side split, `ActivityForm` prefill (`initial`) + `savePayload` seam — no forked form
 - Contracts: `activity-drafts.contract.test.mjs` (6 tests); activity-workbench pins updated to the shared service
 
-Still open (phase 3): workbench drafts strip, `list_my_classrooms` tool, TTL cron if the lazy sweep/cap proves insufficient.
+Still open (phase 3): `list_my_classrooms` tool, TTL cron if the lazy sweep/cap proves insufficient.
+
+## Follow-up (shipped same branch)
+
+- **Universal no-guess clarification** — `clarify()` is the one shape every tool returns for an unstated required input (`needsClarification/missing/question`); the base prompt (both roles) now carries the missing-details rule, `create_task`, `schedule_chat_follow_up`, `cancel_scheduled_chat_follow_up` and `prepare_activity` all clarify instead of guessing/failing, and `get_agent_capabilities` admits the behaviour. The python teaching agent's rules carry the same line.
+- **Python agent inherits the activities tools** through the private gateway (`modules/agent-tools/routes.js`): `teacher_task` scope appends `prepare_activity` / `list_activity_drafts` / `discard_activity_draft` after the task tools (catalogue cap reserves room), and `/invoke` routes them to `executeChatTool(…, { role: "instructor" })` — drafts touch the principal's own account, never the task's course scope, and never become learner write-confirmable tools.
+- **Workbench drafts strip** — `ActivitiesPage` shows pending AI-prepared drafts (from chat or python task runs) with Preview → `ActivityPreviewPanel` in a modal; nothing reaches a learner without the instructor's Assign.

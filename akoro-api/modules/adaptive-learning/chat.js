@@ -457,8 +457,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         };
       } catch (error) {
         if (error.status === "clarify") {
-          return { prepared: false, needsClarification: true, error: "audience_required",
-            message: "Ask the instructor who this activity is for, then call prepare_activity again with their answer." };
+          return clarify("audience", "Who is this activity for — the whole class, or specific learners?",
+            { prepared: false, error: "audience_required",
+              message: "Ask the instructor who this activity is for, then call prepare_activity again with their answer." });
         }
         return { prepared: false, error: error.message || "Could not prepare the draft" };
       }
@@ -489,7 +490,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
             ...(enabled("AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED") ? ["Show learner-clearable compact Agent Chat memory on request"] : []),
           ] },
-          { title: "Limits", items: ["Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Do not browse the live web, access private account secrets, or take unrequested actions"] },
+          { title: "Limits", items: ["Asks a clarifying question when a tool needs a detail you did not give — it never guesses values", "Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Do not browse the live web, access private account secrets, or take unrequested actions"] },
         ].filter((section) => section.items.length),
       };
     }
@@ -508,6 +509,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       };
     }
     case "create_task": {
+      if (!input?.title || !String(input.title).trim()) {
+        return clarify("title", "What should the task be called?", { action: "create_task" });
+      }
       try {
         const context = await getLearnerProfileContext(studentId);
         const taskInput = validateLearnerTaskInput(input, { defaultTimezone: context.timeZone });
@@ -556,6 +560,12 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       }
     }
     case "schedule_chat_follow_up": {
+      if (!input?.message || !String(input.message).trim()) {
+        return clarify("message", "What should the future chat message say?", { action: "schedule_chat_follow_up" });
+      }
+      if (!input?.scheduledAt) {
+        return clarify("scheduledAt", "When exactly should it be sent? Please give the date and time.", { action: "schedule_chat_follow_up" });
+      }
       try {
         const context = await getLearnerProfileContext(studentId);
         const schedule = await scheduleChatFollowUp({
@@ -581,6 +591,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       }
     }
     case "cancel_scheduled_chat_follow_up": {
+      if (!input?.followUpId) {
+        return clarify("followUpId", "Which scheduled message should be cancelled? Here are the pending ones — or ask me to list them.", { action: "cancel_scheduled_chat_follow_up" });
+      }
       try {
         return await cancelChatFollowUp({ userId: studentId, followUpId: input.followUpId });
       } catch (error) {
@@ -1471,7 +1484,8 @@ export function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}
   const base = `You are ${agentName}, an AI study assistant made by Akoro — a learning platform for Nigerian students and schools.
 Answer in clear, friendly English (simpler words for younger learners), and stay encouraging: find what's right in the person's question before correcting anything.
 Be accurate and honest — if you don't know, say so in one line; never invent exam details, mark schemes or facts.
-Keep answers well-structured: short sentences, plain lists where they help, worked examples step by step.`;
+Keep answers well-structured: short sentences, plain lists where they help, worked examples step by step.
+Missing details rule: before calling any Akoro tool, check you hold every input the user actually stated. If a required value is missing or ambiguous — a date, time, name, subject, audience, or amount — ask one clear clarifying question and wait. Never guess, invent, or default a value the user did not give.`;
 
   if (role === "instructor") {
     return base + `
@@ -1693,6 +1707,16 @@ const INSTRUCTOR_HITL_GUIDE =
   `Never say an activity was assigned, sent, or that learners were notified: only the instructor's Assign action in the preview does that. ` +
   `If the tool result carries needsClarification (audience_required), ask who the work is for before preparing anything. ` +
   `Do not guess an audience, a due date, or a schedule the instructor did not state.`;
+
+/**
+ * clarify — the ONE no-guess shape every tool returns when a required input
+ * was never stated by the user. The model must ask the question and wait,
+ * not call the tool again with an invented value. Used across every tool
+ * and workflow, both roles.
+ */
+export function clarify(field, question, extra = {}) {
+  return { needsClarification: true, missing: field, question, ...extra };
+}
 
 async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student" }) {
   const executions = [];

@@ -184,6 +184,18 @@ class ConversationContextTests(unittest.TestCase):
             ("user", "What does light do?"),
         ])
 
+    def test_tool_rules_include_the_never_guess_a_tool_input_policy(self) -> None:
+        model = CaptureModel()
+        student = StudentAgent(
+            AgentProfile(id="agent-1", student_id="learner-1"), InMemoryLearningRepository(), model,
+        )
+        student.reply("Create a task for me", "Plants", {"understanding": 20, "confusion": 30, "engagement": 60}, [], "Foundation")
+        system = model.calls[0][0].content
+        # Universal clarification policy: tools ask for what the learner never
+        # gave; they never guess dates, names, subjects, or amounts.
+        self.assertIn("Never guess a tool input.", system)
+        self.assertIn("ask one focused question and wait for their answer before calling the tool", system)
+
     def test_service_hydrates_authorised_context_and_persists_completed_turn(self) -> None:
         transport = ContextTransport()
         model = CaptureModel()
