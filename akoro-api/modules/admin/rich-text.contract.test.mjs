@@ -68,6 +68,15 @@ test("parser: blank lines split paragraphs; deep headings map to three tiers", (
   assert.equal(blocks[1].level, 3);
 });
 
+test("RichText has ONE span render path — list items can never render empty", () => {
+  for (const f of ["../../../akoro-instructor/src/components/common/RichText.jsx", "../../../akoro-learner/src/components/common/RichText.jsx"]) {
+    return readFile(new URL(f, import.meta.url), "utf8").then((src) => {
+      assert.match(src, /<SpanRun spans=\{item\} \/>/);   // list items render the full span run
+      assert.doesNotMatch(src, /<Spans s=\{item\}/);       // never a single-span component fed an array
+    });
+  }
+});
+
 test("all three agent chat surfaces render RichText; user bubbles stay plain", () => {
   assert.match(instructorPage, /<RichText text=\{textPart\} color=\{INK\} \/>/);
   assert.match(learnerTab, /<RichText text=\{msg\.text\}\/>/);
