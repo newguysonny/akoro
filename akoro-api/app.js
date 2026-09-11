@@ -256,11 +256,13 @@ let serverReady = false;
 // Render's healthCheckPath pings /health around the clock. Probing the DB and
 // Redis on every ping bills BOTH platforms for commands (the Postgres quota
 // AND the Upstash command quota) — so the deep verdict runs at most once per
-// 30s and is cached. `?deep=1` always probes now (humans, alerting).
+// AKORO_HEALTH_PROBE_SECONDS (default 120) and is cached. `?deep=1` always
+// probes now (humans, alerting).
+const HEALTH_PROBE_MS = 1000 * Math.max(Number(process.env.AKORO_HEALTH_PROBE_SECONDS) || 120, 15);
 let healthCache = { at: 0, dbOk: false, redisOk: false };
 app.get("/health", async (req, res) => {
   const deep = req.query.deep === "1";
-  const fresh = Date.now() - healthCache.at < 30_000;
+  const fresh = Date.now() - healthCache.at < HEALTH_PROBE_MS;
   if (deep || !fresh) {
     const [dbOk, redisOk] = await Promise.all([
       checkDb(),
