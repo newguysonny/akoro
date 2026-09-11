@@ -13,7 +13,7 @@
  */
 
 import db from "../../db.js";
-import { createActivityDraft, DRAFT_TYPES } from "./drafts.js";
+import { createActivityDraft, DRAFT_TYPES, instructorClassrooms } from "./drafts.js";
 
 // `invalid` (an Error carrying an HTTP status) is createAssignment.js's —
 // drafts.js imports it from there too.
@@ -48,6 +48,15 @@ export async function createRoutine(instructor, input) {
     || (Array.isArray(a.user_ids) && a.user_ids.length)
     || a.classroom_id || a.classroom_name || a.class_name;
   if (!hasAudience) throw invalid("audience_required");
+  // A routine whose "entire class" can never resolve would silently fail at
+  // every run — reject it now, while the instructor is still in the chat.
+  if ((a.whole_class === true || a.everyone === true) && !a.classroom_id) {
+    const rooms = await instructorClassrooms(instructor.id);
+    if (!rooms.length) throw invalid("You don't have a class yet — create one in Classes first");
+    if (rooms.length > 1) throw invalid(`Which class? You have: ${rooms.map(r => r.name).join(", ")}`, "clarify");
+    a.classroom_id = rooms[0].id;
+    a.classroom_name = rooms[0].name;
+  }
 
   const dow = dayIndex(input?.day);
   if (dow < 0) throw invalid(`day must be one of: ${DAY_NAMES.join(", ")}`);

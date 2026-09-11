@@ -533,7 +533,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         };
       } catch (error) {
         if (error.status === "clarify") {
-          return clarify("audience", "Who is this activity for — the whole class, or specific learners?",
+          // The message may carry a SPECIFIC question (e.g. "Which class?
+          // You have: JSS1, SS2") — surface it, not a generic re-ask.
+          return clarify("audience", error.message || "Who is this activity for — the whole class, or specific learners?",
             { prepared: false, error: "audience_required",
               message: "Ask the instructor who this activity is for, then call prepare_activity again with their answer." });
         }
@@ -557,8 +559,11 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     case "list_my_classrooms": {
       if (role !== "instructor") return { error: "Class lists are only available to instructor accounts" };
       try {
+        // Ownership is teacher_id (seeded/bench classes) or created_by — see
+        // instructorClassrooms() in drafts.js for the reasoning.
         const owned = await db.from("classrooms")
-          .select("id, name, classroom_students(user_id)").eq("created_by", studentId).limit(25);
+          .select("id, name, classroom_students(user_id)")
+          .or(`teacher_id.eq.${studentId},created_by.eq.${studentId}`).limit(25);
         const rooms = (owned.data ?? []).map((c) => ({
           id: c.id, name: c.name,
           learners: (c.classroom_students ?? []).length,
@@ -1880,6 +1885,8 @@ const INSTRUCTOR_HITL_GUIDE =
   `Do not guess an audience, a due date, or a schedule the instructor did not state. ` +
   `Pass due_at only when you can resolve their stated time to an exact ISO 8601 instant; otherwise keep it as a due_hint label or ask. ` +
   `Use list_my_classrooms to confirm a class name before preparing. ` +
+  `If it returns an empty list, the instructor has NO class yet — say exactly that and point them to Classes to create one. ` +
+  `Never ask them to name a class that does not exist, and never re-ask for details they already gave. ` +
   `Routines only ever prepare drafts at their weekly slot - never say a routine assigned anything. ` +
   `When check_activity_outcomes shows weak results, suggest a revision draft and let the instructor decide.`;
 

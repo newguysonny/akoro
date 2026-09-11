@@ -40,11 +40,23 @@ const TYPE_NAMES = {
 const typeName = (t) => TYPE_NAMES[t] || t;
 
 /** Find the instructor's classroom by loose name ("my jss2 class" → id). */
+// Classrooms an instructor can assign to. Ownership is `teacher_id` (the
+// seeded/bench path) OR `created_by` (rows created by other tools) — filtering
+// by created_by alone made every seeded class invisible to the agent, which
+// surfaced as "there are no classes listed in my system for you".
+export async function instructorClassrooms(instructorId) {
+  const { data } = await db.from("classrooms")
+    .select("id, name")
+    .or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`)
+    .order("created_at", { ascending: true }).limit(50);
+  return data ?? [];
+}
+
 async function resolveClassroomByName(instructorId, name) {
   const q = String(name || "").trim();
   if (!q) return null;
   const { data } = await db.from("classrooms")
-    .select("id, name").eq("created_by", instructorId).ilike("name", `%${q}%`).limit(1);
+    .select("id, name").or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`).ilike("name", `%${q}%`).limit(1);
   if (data?.length) return data[0];
   // School admins may not own classrooms directly — try their school scope.
   const { data: school } = await db.from("school_profiles")
@@ -78,6 +90,25 @@ async function resolveAudience(instructor, audience) {
   }
   if (!whole_class && !usernames.length && !user_ids.length && !classroom_id) {
     throw invalid("audience_required", "clarify");
+  }
+
+  // "The entire class" without a class id: resolve it for real instead of
+  // silently targeting nobody. One class → use it; several → ask which;
+  // none → say plainly that a class must be created first.
+  if (whole_class && !classroom_id) {
+    if (!classroom_id && (a.classroom_name || a.class_name || a.text)) {
+      const room = await resolveClassroomByName(instructor.id, a.classroom_name || a.class_name || a.text);
+      if (room) { classroom_id = room.id; a.classroom_name = room.name; }
+    }
+    if (!classroom_id) {
+      const rooms = await instructorClassrooms(instructor.id);
+      if (rooms.length === 1) { classroom_id = rooms[0].id; a.classroom_name = rooms[0].name; }
+      else if (rooms.length > 1) {
+        throw invalid(`Which class? You have: ${rooms.map(r => r.name).join(", ")}`, "clarify");
+      } else {
+        throw invalid("You don't have a class yet — create one in Classes first, then I can prepare work for it");
+      }
+    }
   }
 
   // Resolve now so the preview shows the real count before anyone assigns.

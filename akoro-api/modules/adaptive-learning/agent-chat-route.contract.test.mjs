@@ -61,4 +61,8 @@ test("the instructor chat is durable and uses the shared Fortizo composer", () =
   // Prompt chips fill the composer — they never auto-send.
   assert.match(instructorChatPage, /setInput\(chip\.fill\)/);
   assert.doesNotMatch(instructorChatPage, /onClick=\{\(\) => send\(chip/);
+  // A transient failure gets one quiet retry on a FRESH turn key before the
+  // honest error bubble — a dropped stream must not dead-end the instructor.
+  assert.match(instructorChatPage, /const attemptTurn = async \(turnId\) =>/);
+  assert.match(instructorChatPage, /data = await attemptTurn\(newTurnId\(\)\);\s*\n\s*\} catch \(e\) \{/);
 });

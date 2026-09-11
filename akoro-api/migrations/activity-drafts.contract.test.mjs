@@ -98,7 +98,7 @@ test("all six workbench types are draftable; journeys stage through the shared p
 
 test("the chat hands the human a Preview button and a side-by-side panel", () => {
   // The button rides the real toolExecutions echo, not the model's prose.
-  assert.match(chatPage, /e\.tool === 'prepare_activity' && e\.success \|\| e\.tool === 'revise_activity_draft' && e\.revised/);
+  assert.match(chatPage, /x\.tool === 'prepare_activity' && x\.success \|\| x\.tool === 'revise_activity_draft' && x\.revised/);
   assert.match(chatPage, /\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'\} — \{d\.title\}/);
   assert.match(chatPage, /Assigned ✓/);
   // Side-by-side: the container widens and hosts the panel next to the chat.
@@ -134,7 +134,7 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
   assert.match(chat, /return clarify\("message", "What should the future chat message say\?"/);
   assert.match(chat, /return clarify\("scheduledAt", "When exactly should it be sent\? Please give the date and time\."/);
   assert.match(chat, /return clarify\("followUpId", "Which scheduled message should be cancelled\?/);
-  assert.match(chat, /clarify\("audience", "Who is this activity for/);
+  assert.match(chat, /clarify\("audience", error\.message \|\| "Who is this activity for/);
   // The capability inventory admits the behaviour.
   assert.match(chat, /Asks a clarifying question when a tool needs a detail you did not give — it never guesses values/);
   // The python teaching agent carries the same rule.
@@ -192,8 +192,8 @@ test("assignment feedback reaches the conversation; previews stay live", () => {
   assert.match(chatPage, /'✅ Assigned — the learners on this draft have been notified and it is on their Activities feed\.'/);
   assert.match(chatPage, /'🗑️ Draft discarded — nothing was sent to anyone\.'/);
   // Q2: a revise echo bumps the draft's revision counter and re-renders Preview.
-  assert.match(chatPage, /e\.tool === 'revise_activity_draft' && e\.revised/);
-  assert.match(chatPage, /setDraftRevisions\(\(prev\) => \(\{ \.\.\.prev, \[e\.draft\.id\]: \(prev\[e\.draft\.id\] \|\| 0\) \+ 1 \}\)\)/);
+  assert.match(chatPage, /x\.tool === 'revise_activity_draft' && x\.revised/);
+  assert.match(chatPage, /setDraftRevisions\(\(prev\) => \(\{ \.\.\.prev, \[x\.draft\.id\]: \(prev\[x\.draft\.id\] \|\| 0\) \+ 1 \}\)\)/);
   assert.match(chatPage, /revision=\{draftRevisions\[previewDraft\] \|\| 0\}/);
   // An open side-by-side panel refetches when its draft is revised.
   assert.match(panel, /\[load, revision\]/);
@@ -243,7 +243,7 @@ test("premium seams: classes by name, real audience names, live status", () => {
   // Streaming status: SSE first, JSON fallback, identical handling after.
   assert.match(chatPage, /sendStreaming/);
   assert.match(chatPage, /api\/adaptive\/chat\/agent\?stream=1/);
-  assert.match(chatPage, /data = await apiPost\('\/api\/adaptive\/chat\/agent', \{ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode \}\)/);
+  assert.match(chatPage, /return await apiPost\('\/api\/adaptive\/chat\/agent', \{ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode \}\)/);
   assert.match(chatPage, /\{!trainingInChat && aiStatus && \(/);
 });
 
@@ -290,3 +290,29 @@ test("bigger bets: batch preparation is first-class", () => {
   assert.match(instructorChatPage, /msg\.previews\.map\(\(d, pi\) =>/);
   assert.match(instructorChatPage, /\{msg\.previews\.length > 1 \? `Preview \$\{pi \+ 1\}` : 'Preview'/);
 });
+
+test("the agent sees the instructor's real classes (teacher_id, not just created_by)", () => {
+  // Regression: classrooms are owned via teacher_id (bench + seeds) — the
+  // created_by-only filter made every seeded class invisible, so the agent
+  // claimed "there are no classes listed in my system for you".
+  assert.match(drafts, /export async function instructorClassrooms/);
+  assert.match(drafts, /\.or\(`teacher_id\.eq\.\$\{instructorId\},created_by\.eq\.\$\{instructorId\}`\)/);
+  assert.match(chat, /teacher_id\.eq\.\$\{studentId\},created_by\.eq\.\$\{studentId\}/);
+  assert.match(drafts, /resolveClassroomByName[\s\S]*?teacher_id\.eq/);
+});
+
+test("whole-class audiences resolve to a real class — never to zero learners", () => {
+  // "The entire class" with no class id: one class → auto-pick; several →
+  // ask which (named); none → tell them to create one.
+  assert.match(drafts, /if \(whole_class && !classroom_id\) \{/);
+  assert.match(drafts, /Which class\? You have: \$\{rooms\.map\(r => r\.name\)\.join\(", "\)\}/);
+  assert.match(drafts, /You don't have a class yet — create one in Classes first/);
+  // The prepare executor relays the SPECIFIC clarify question, not a generic re-ask.
+  assert.match(chat, /clarify\("audience", error\.message \|\| "Who is this activity for/);
+  // Routines reject an unresolvable audience at schedule time — not silently
+  // at every weekly run.
+  assert.match(routines, /create one in Classes first/);
+  // And the agent guide forbids asking for a class that does not exist.
+  assert.match(chat, /Never ask them to name a class that does not exist/);
+});
+

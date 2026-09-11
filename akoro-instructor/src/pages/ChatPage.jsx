@@ -274,39 +274,51 @@ export default function ChatPage() {
       }
     } else {
       // Normal AI chat — the unified agent endpoint, streamed for live status.
-      try {
-        const history = [...messages, { from: 'me', text: bodyText }]
-          .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
-          .slice(-8);
-        // Durable turn: an owned session plus an idempotent turn key — the
-        // same key on the JSON fallback lets the server repair a partial
-        // write instead of duplicating the exchange.
-        const sid = await ensureChatSession(bodyText);
-        const turnId = newTurnId();
-        let data;
+      const history = [...messages, { from: 'me', text: bodyText }]
+        .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
+        .slice(-8);
+      // Durable turn: an owned session plus an idempotent turn key — the same
+      // key on the JSON fallback lets the server repair a partial write
+      // instead of duplicating the exchange.
+      const sid = await ensureChatSession(bodyText);
+      const attemptTurn = async (turnId) => {
         try {
-          data = await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
+          return await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode }, setAiStatus);
         } catch (streamErr) {
           console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
-          data = await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
+          return await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId, mode: chatMode });
         } finally { setAiStatus(''); }
-        // Human-in-the-loop: a successful prepare/revise execution rides
-        // with the reply as a draft echo — render its Preview affordance.
-        const previews = (data.toolExecutions || [])
-          .filter((e) => (e.tool === 'prepare_activity' && e.success || e.tool === 'revise_activity_draft' && e.revised) && e.draft)
-          .map((e) => e.draft);
-        (data.toolExecutions || [])
-          .filter((e) => e.tool === 'revise_activity_draft' && e.revised && e.draft)
-          .forEach((e) => setDraftRevisions((prev) => ({ ...prev, [e.draft.id]: (prev[e.draft.id] || 0) + 1 })));
-        pushAgent(
-          data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
-          previews.length ? { previews } : {},
-        );
+      };
+      let data;
+      try {
+        data = await attemptTurn(newTurnId());
       } catch (e) {
-        setAiStatus('');
-        console.warn('[chat] tutor reply failed:', e.message);
-        pushAgent('Sorry — I had trouble responding just now. Please try again.');
+        // One quiet retry on a fresh turn key — a dropped stream or a cold
+        // model call is usually transient. The failed turn can have applied
+        // nothing durably, so a fresh key cannot double-apply anything.
+        try {
+          setAiStatus('Thinking…');
+          await new Promise((r) => setTimeout(r, 1200));
+          data = await attemptTurn(newTurnId());
+        } catch {
+          setAiStatus('');
+          console.warn('[chat] tutor reply failed:', e.message);
+          pushAgent('Sorry — I had trouble responding just now. Please try again.');
+          return;
+        }
       }
+      // Human-in-the-loop: a successful prepare/revise execution rides
+      // with the reply as a draft echo — render its Preview affordance.
+      const previews = (data.toolExecutions || [])
+        .filter((x) => (x.tool === 'prepare_activity' && x.success || x.tool === 'revise_activity_draft' && x.revised) && x.draft)
+        .map((x) => x.draft);
+      (data.toolExecutions || [])
+        .filter((x) => x.tool === 'revise_activity_draft' && x.revised && x.draft)
+        .forEach((x) => setDraftRevisions((prev) => ({ ...prev, [x.draft.id]: (prev[x.draft.id] || 0) + 1 })));
+      pushAgent(
+        data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
+        previews.length ? { previews } : {},
+      );
     }
   };
 
