@@ -45,18 +45,32 @@ const typeName = (t) => TYPE_NAMES[t] || t;
 // by created_by alone made every seeded class invisible to the agent, which
 // surfaced as "there are no classes listed in my system for you".
 export async function instructorClassrooms(instructorId) {
-  const { data } = await db.from("classrooms")
-    .select("id, name")
+  // created_by did not always exist on classrooms — if the combined filter
+  // runs on a not-yet-migrated env it ERRORS, so fall back to teacher_id
+  // instead of quietly answering "no classes".
+  let data, error;
+  ({ data, error } = await db.from("classrooms").select("id, name")
     .or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`)
-    .order("created_at", { ascending: true }).limit(50);
+    .order("created_at", { ascending: true }).limit(50));
+  if (error) {
+    ({ data, error } = await db.from("classrooms").select("id, name")
+      .eq("teacher_id", instructorId).order("created_at", { ascending: true }).limit(50));
+  }
+  if (error) throw invalid(error.message, 500);
   return data ?? [];
 }
 
 async function resolveClassroomByName(instructorId, name) {
   const q = String(name || "").trim();
   if (!q) return null;
-  const { data } = await db.from("classrooms")
-    .select("id, name").or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`).ilike("name", `%${q}%`).limit(1);
+  let data;
+  ({ data } = await db.from("classrooms")
+    .select("id, name").or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`).ilike("name", `%${q}%`).limit(1)
+    .catch(() => null));
+  if (!data) {
+    ({ data } = await db.from("classrooms")
+      .select("id, name").eq("teacher_id", instructorId).ilike("name", `%${q}%`).limit(1));
+  }
   if (data?.length) return data[0];
   // School admins may not own classrooms directly — try their school scope.
   const { data: school } = await db.from("school_profiles")

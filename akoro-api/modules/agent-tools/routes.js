@@ -48,6 +48,7 @@ const TEACHER_DRAFT_TOOLS = new Set([
   "revise_activity_draft",
   "discard_activity_draft",
   "check_activity_outcomes",
+  "get_my_profile",
   "schedule_activity_routine",
   "list_activity_routines",
   "cancel_activity_routine",

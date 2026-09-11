@@ -24,6 +24,7 @@ import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/r
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
 import {
   createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft, reviseDraftPayload,
+  instructorClassrooms,
 } from "../self-study/drafts.js";
 import { activityOutcomeSummary, listRecentActivities } from "../self-study/outcomes.js";
 import {
@@ -437,7 +438,12 @@ export const INSTRUCTOR_TOOLS = [
   },
   {
     name: "list_my_classrooms",
-    description: "List the instructor's classes with their learner counts. Use it to confirm the audience before prepare_activity when the instructor refers to a class by name or asks which classes they have — never guess a class.",
+    description: "List the instructor's classes with learner counts, the student roster (up to 40 names per class), and class details. Use it to confirm the audience before prepare_activity when the instructor refers to a class by name, or whenever they ask about their classes or who is in them — never guess a class.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_my_profile",
+    description: "The signed-in instructor's own account details: full name, email, username, role, school, and how many classes they have. Use when they ask about their account or want to confirm who the agent is acting for. Read-only.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -559,26 +565,67 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     case "list_my_classrooms": {
       if (role !== "instructor") return { error: "Class lists are only available to instructor accounts" };
       try {
-        // Ownership is teacher_id (seeded/bench classes) or created_by — see
-        // instructorClassrooms() in drafts.js for the reasoning.
-        const owned = await db.from("classrooms")
-          .select("id, name, classroom_students(user_id)")
-          .or(`teacher_id.eq.${studentId},created_by.eq.${studentId}`).limit(25);
-        const rooms = (owned.data ?? []).map((c) => ({
-          id: c.id, name: c.name,
-          learners: (c.classroom_students ?? []).length,
-        }));
-        if (rooms.length) return { classrooms: rooms };
+        // Ownership is teacher_id (bench + seeds) or created_by. On an env
+        // where the created_by column has not migrated in yet, the combined
+        // filter would ERROR — fall back to teacher_id rather than reporting
+        // an empty list (that fallback bug is exactly what once told an
+        // instructor with six seeded classes they had none).
+        let owned, ownedErr;
+        ({ data: owned, error: ownedErr } = await db.from("classrooms")
+          .select("id, name, description, student_limit, classroom_students(status, users ( full_name, username ))")
+          .or(`teacher_id.eq.${studentId},created_by.eq.${studentId}`).order("created_at", { ascending: true }).limit(25));
+        if (ownedErr) {
+          ({ data: owned, error: ownedErr } = await db.from("classrooms")
+            .select("id, name, description, student_limit, classroom_students(status, users ( full_name, username ))")
+            .eq("teacher_id", studentId).order("created_at", { ascending: true }).limit(25));
+        }
+        if (ownedErr) return { error: "Could not read your classes: " + ownedErr.message };
+        const shape = (c) => {
+          const active = (c.classroom_students ?? []).filter((r) => r.status === "active");
+          return {
+            id: c.id, name: c.name,
+            description: c.description || null,
+            studentLimit: c.student_limit ?? null,
+            learners: active.length,
+            students: active.slice(0, 40).map((r) => ({ fullName: r.users?.full_name || null, username: r.users?.username || null })),
+          };
+        };
+        if ((owned ?? []).length) return { classrooms: owned.map(shape) };
         // School admins may not own classrooms directly — try the school scope.
         const { data: school } = await db.from("school_profiles")
           .select("id").eq("admin_user_id", studentId).limit(1).maybeSingle();
         if (school?.id) {
-          const scoped = await db.from("classrooms")
-            .select("id, name, classroom_students(user_id)").eq("school_id", school.id).limit(25);
-          return { classrooms: (scoped.data ?? []).map((c) => ({ id: c.id, name: c.name, learners: (c.classroom_students ?? []).length })) };
+          const { data: scoped, error: scopedErr } = await db.from("classrooms")
+            .select("id, name, description, student_limit, classroom_students(status, users ( full_name, username ))")
+            .eq("school_id", school.id).order("created_at", { ascending: true }).limit(25);
+          if (scopedErr) return { error: "Could not read your school's classes: " + scopedErr.message };
+          return { classrooms: (scoped ?? []).map(shape) };
         }
         return { classrooms: [] };
       } catch (error) { return { error: error.message || "Could not list the classes" }; }
+    }
+    case "get_my_profile": {
+      if (role !== "instructor") return { error: "Your profile is only available to instructor accounts" };
+      try {
+        const { data: me, error: meErr } = await db.from("users")
+          .select("full_name, email, username, role").eq("id", studentId).maybeSingle();
+        if (meErr) return { error: "Could not load your profile: " + meErr.message };
+        let classes = null;
+        try {
+          const rooms = await instructorClassrooms(studentId);
+          classes = rooms.length;
+        } catch { /* the count is cosmetic — never fail the profile on it */ }
+        const { data: schoolRow } = await db.from("school_teachers")
+          .select("school_profiles ( name )").eq("teacher_id", studentId).limit(1).maybeSingle();
+        return {
+          profile: {
+            fullName: me?.full_name || null, email: me?.email || null,
+            username: me?.username || null, role: me?.role || null,
+            school: schoolRow?.school_profiles?.name || null,
+            classes,
+          },
+        };
+      } catch (error) { return { error: error.message || "Could not load your profile" }; }
     }
     case "check_activity_outcomes": {
       if (role !== "instructor") return { error: "Activity outcomes are only available to instructor accounts" };

@@ -14,7 +14,7 @@ import test from "node:test";
  * create path the activities workbench uses (targets, notifications, ding).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage] = await Promise.all([
+const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage, classroomsMigration] = await Promise.all([
   read("./2026-activity-drafts.sql"),
   read("./manifest.json"),
   read("../../akoro-api/modules/self-study/createAssignment.js"),
@@ -31,6 +31,7 @@ const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage
   read("../../akoro-api/modules/self-study/outcomes.js"),
   read("../../akoro-api/app.js"),
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
+  read("../../akoro-api/migrations/2026-classrooms-created-by.sql"),
 ]);
 
 test("the migration keeps drafts private and provenance-carrying", () => {
@@ -315,4 +316,33 @@ test("whole-class audiences resolve to a real class — never to zero learners",
   // And the agent guide forbids asking for a class that does not exist.
   assert.match(chat, /Never ask them to name a class that does not exist/);
 });
+
+test("classroom ownership: created_by exists, backfilled, and agent queries never answer empty on error", () => {
+  // The schema truth: created_by was missing entirely — the original
+  // "you have no classes" was an error swallowed into an empty list.
+  assert.match(classroomsMigration, /ADD COLUMN IF NOT EXISTS created_by uuid/);
+  assert.match(classroomsMigration, /SET created_by = teacher_id WHERE created_by IS NULL/);
+  assert.match(classroomsMigration, /trg_classrooms_sync_created_by/);
+  assert.match(manifest, /2026-classrooms-created-by\.sql/);
+  // Both ownership filters degrade to teacher_id when the column lags.
+  assert.match(drafts, /export async function instructorClassrooms/);
+  assert.match(chat, /\.eq\("teacher_id", studentId\)\.order\("created_at"/);
+});
+
+test("the agent can inspect class details and the instructor's own details", () => {
+  // list_my_classrooms returns roster + meta, not a bare count.
+  assert.match(chat, /students: active\.slice\(0, 40\)\.map/);
+  assert.match(chat, /studentLimit: c\.student_limit/);
+  // get_my_profile: the teacher-details tool, routed through the gateway too.
+  assert.match(chat, /name: "get_my_profile"/);
+  assert.match(chat, /case "get_my_profile"/);
+  assert.match(chat, /school_teachers/);
+  assert.ok(teacherSetIncludes(gateway, "get_my_profile"));
+});
+
+function teacherSetIncludes(source, tool) {
+  const start = source.indexOf("TEACHER_DRAFT_TOOLS");
+  const slice = source.slice(start, source.indexOf("]);", start));
+  return slice.includes(`"${tool}"`);
+}
 
