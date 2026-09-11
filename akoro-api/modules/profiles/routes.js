@@ -39,7 +39,7 @@ import bcrypt                             from "bcrypt";
 import crypto                             from "crypto";
 import db                                 from "../../db.js";
 import { notifyUser }                      from "../notify.js";
-import { authenticateToken, requireRole, endSession } from "../auth/routes.js";
+import { authenticateToken, requireRole, endSession, invalidateCachedUser } from "../auth/routes.js";
 import multerLib                           from "multer";
 
 const asyncHandler = (fn) => (req, res, next) =>
@@ -529,6 +529,7 @@ const schoolHandlers = {
 
     // Update user role to school_admin
     await db.from("users").update({ role: "school_admin" }).eq("id", req.user.id);
+    invalidateCachedUser(req.user.id);   // security field — never serve it stale
 
     res201(res, data);
   }),
@@ -620,6 +621,7 @@ const schoolHandlers = {
     if (existingUser) {
       // Upgrade existing user to instructor role
       await db.from("users").update({ role: "instructor" }).eq("id", existingUser.id);
+      invalidateCachedUser(existingUser.id);   // security field — never serve it stale
       const { data: u } = await db.from("users").select("id, full_name, email").eq("id", existingUser.id).single();
       teacherUser = u;
     } else {
@@ -1859,11 +1861,16 @@ router.post("/me/teacher-request", authenticateToken, [body("teacher_id").notEmp
   const classroomId = await ensureDefaultClassroom(teacher_id);
   const { data: existing } = await db.from("classroom_students").select("id, status").eq("classroom_id", classroomId).eq("user_id", req.user.id).maybeSingle();
   if (existing) {
-    if (existing.status === "removed") await db.from("classroom_students").update({ status: "pending", requested_at: new Date() }).eq("id", existing.id);
+    if (existing.status === "removed") {
+      await db.from("classroom_students").update({ status: "pending", requested_at: new Date() }).eq("id", existing.id);
+      // Live badge: the teacher's nav count updates without polling.
+      global.io?.to(`user:${teacher_id}`).emit("join-requests-changed", { classroomId });
+    }
     return res200(res, { status: existing.status === "removed" ? "pending" : existing.status, message: "Request updated." });
   }
   const { error } = await db.from("classroom_students").insert({ classroom_id: classroomId, user_id: req.user.id, status: "pending", requested_at: new Date() });
   if (error) throw new Error(error.message);
+  global.io?.to(`user:${teacher_id}`).emit("join-requests-changed", { classroomId });
   res201(res, { status: "pending", message: "Request sent — awaiting teacher approval." });
 }));
 
@@ -1893,6 +1900,7 @@ router.post("/teacher/join-requests/:id", authenticateToken, requireRole(["instr
   const { data: student } = await db.from("users").select("id, full_name, email").eq("id", reqRow.user_id).maybeSingle();
   const teacherName = me?.full_name || "Your teacher";
 
+  global.io?.to(`user:${req.user.id}`).emit("join-requests-changed", { classroomId: reqRow.classroom_id });
   if (req.body.decision === "reject") {
     await db.from("classroom_students").update({ status: "removed" }).eq("id", reqRow.id);
     notifyUser({

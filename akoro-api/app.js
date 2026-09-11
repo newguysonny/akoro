@@ -405,25 +405,41 @@ app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
 
+// ─── Background jobs kill switch ─────────────────────────────────────────────
+// Every recurring job (sweeps, crons, schedulers) burns DB "commands" while
+// the process runs — on a metered free tier that can outrun real usage with
+// ZERO users. Set AKORO_BACKGROUND_JOBS_ENABLED=false on such deployments;
+// the API stays fully functional, only the periodic jobs stand down.
+const backgroundJobsEnabled = String(process.env.AKORO_BACKGROUND_JOBS_ENABLED ?? "true").trim().toLowerCase() === "true";
+const skipJob = (name) => {
+  if (backgroundJobsEnabled) return false;
+  console.log(`[jobs] ${name} skipped (AKORO_BACKGROUND_JOBS_ENABLED=false)`);
+  return true;
+};
+
 // Eagerly start the BullMQ battle worker at boot (it was previously imported
 // lazily on the first enqueue, so battles could stall until some action kicked
 // it). Guarded by REDIS_URL so environments without Redis stay quiet.
-if (process.env.REDIS_URL) {
+if (process.env.REDIS_URL && !skipJob("battle worker")) {
   import("./modules/battle/worker.js")
     .then(() => console.log("[battle] worker started at boot"))
     .catch((e) => console.error("[battle] worker failed to start:", e.message));
 
   // Eval runs. Same guard: a suite is minutes of model calls, so it runs on a
   // queue and the admin page polls.
-  import("./lib/evalWorker.js")
-    .then((m) => m.startEvalWorker())
-    .catch((e) => console.error("[evals] worker failed to start:", e.message));
+  if (!skipJob("eval worker")) {
+    import("./lib/evalWorker.js")
+      .then((m) => m.startEvalWorker())
+      .catch((e) => console.error("[evals] worker failed to start:", e.message));
+  }
 
   // Learner-requested agent check-ins are durable delayed jobs. Their worker
   // creates the persistent chat and notification at the requested time.
   try {
-    startChatFollowUpWorker();
-    console.log("[chat-follow-ups] worker started at boot");
+    if (!skipJob("chat follow-ups worker")) {
+      startChatFollowUpWorker();
+      console.log("[chat-follow-ups] worker started at boot");
+    }
   } catch (e) {
     console.error("[chat-follow-ups] worker failed to start:", e.message);
   }
@@ -432,11 +448,13 @@ if (process.env.REDIS_URL) {
   // autonomous due-task nudge. Recovery only restores delayed due-time jobs;
   // it never enables autonomy for a learner.
   try {
-    startLearnerAutonomyWorker();
-    recoverLearnerAutonomySchedules()
-      .then(({ scheduled }) => console.log(`[learner-autonomy] recovered ${scheduled} due-task review(s)`))
-      .catch((e) => console.error("[learner-autonomy] schedule recovery failed:", e.message));
-    console.log("[learner-autonomy] worker started at boot");
+    if (!skipJob("learner-autonomy worker")) {
+      startLearnerAutonomyWorker();
+      recoverLearnerAutonomySchedules()
+        .then(({ scheduled }) => console.log(`[learner-autonomy] recovered ${scheduled} due-task review(s)`))
+        .catch((e) => console.error("[learner-autonomy] schedule recovery failed:", e.message));
+      console.log("[learner-autonomy] worker started at boot");
+    }
   } catch (e) {
     console.error("[learner-autonomy] worker failed to start:", e.message);
   }
@@ -445,15 +463,19 @@ if (process.env.REDIS_URL) {
 // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
 // a failed inline call) and rows get edited after being embedded; both leave
 // search quietly wrong, and nothing used to report either.
-import("./lib/embeddingSweeper.js")
-  .then((m) => m.startEmbeddingSweeper())
-  .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
+if (!skipJob("embedding sweeper")) {
+  import("./lib/embeddingSweeper.js")
+    .then((m) => m.startEmbeddingSweeper())
+    .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
+}
 
 // Alert rules — spend, latency, failures, and work that has silently stopped.
 // Needs no Redis: it reads the telemetry tables on a cron.
-import("./lib/alertWorker.js")
-  .then((m) => m.startAlertWorker())
-  .catch((e) => console.error("[alerts] worker failed to start:", e.message));
+if (!skipJob("alert worker")) {
+  import("./lib/alertWorker.js")
+    .then((m) => m.startAlertWorker())
+    .catch((e) => console.error("[alerts] worker failed to start:", e.message));
+}
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module
@@ -504,7 +526,7 @@ process.on("SIGINT",  () => shutdown("SIGINT"));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 // Weekly routine preparation (drafts only — assignment stays human).
-startRoutineScheduler();
+if (!skipJob("routine scheduler")) startRoutineScheduler();
 
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
@@ -515,7 +537,9 @@ httpServer.listen(config.server.port, config.server.host, () => {
   refreshTenantHosts()
     .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
     .catch(() => {});
-  setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
+  if (!skipJob("tenant host refresh")) {
+    setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
+  }
   console.log(`
 [API]  Akoro API  [${config.instanceId.slice(0, 8)}]  --  http://localhost:${config.server.port}
 

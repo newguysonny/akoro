@@ -13,7 +13,7 @@ export function useWebSocket({
     let socket;
     try {
       if (typeof window !== 'undefined' && window.io) {
-        socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true });
+        socket = window.io(API, { transports: ['websocket', 'polling'], withCredentials: true, reconnectionDelayMax: 30000 });
 
         socket.on('connect', () => {
           // The server joins only rooms for the authenticated socket identity.
