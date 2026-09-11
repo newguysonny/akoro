@@ -243,7 +243,7 @@ test("premium seams: classes by name, real audience names, live status", () => {
   // Streaming status: SSE first, JSON fallback, identical handling after.
   assert.match(chatPage, /sendStreaming/);
   assert.match(chatPage, /api\/adaptive\/chat\/agent\?stream=1/);
-  assert.match(chatPage, /data = await apiPost\('\/api\/adaptive\/chat\/agent', \{ message: bodyText, history, agentName, role: 'instructor' \}\)/);
+  assert.match(chatPage, /data = await apiPost\('\/api\/adaptive\/chat\/agent', \{ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId \}\)/);
   assert.match(chatPage, /\{!trainingInChat && aiStatus && \(/);
 });
 

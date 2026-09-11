@@ -3,6 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const instructorChatPage = await readFile(
+  new URL("../../../akoro-instructor/src/pages/ChatPage.jsx", import.meta.url), "utf8",
+);
+const learnerChatTab = await readFile(
+  new URL("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8",
+);
 
 test("the sole Agent Chat response authority is the unified /agent route", () => {
   assert.match(source, /router\.post\("\/agent", async \(req, res\) =>/);

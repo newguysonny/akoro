@@ -1751,7 +1751,10 @@ async function thinkOnce({ messages, model }) {
   return { reply: String(resp?.output_text || "").trim(), thinking };
 }
 
-const durableAgentChatContextEnabled = String(process.env.AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED || "").toLowerCase() === "true";
+// Durable Agent Chat context is the DEFAULT (the four 2026-python-agent-
+// conversation-* migrations ship in the manifest). Set the flag to "false"
+// only to force the plain-transcript fallback on a lagging environment.
+const durableAgentChatContextEnabled = String(process.env.AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED ?? "true").trim().toLowerCase() === "true";
 const AGENT_CHAT_SESSION_PREFIX = "agentchat_";
 const CHAT_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CHAT_TURN_ID = /^[A-Za-z0-9_-]{8,180}$/;
@@ -1997,7 +2000,8 @@ router.post("/agent", async (req, res) => {
     const role = ["instructor", "teacher", "school", "school_admin", "admin"].includes(req.user?.role)
       ? "instructor" : "student";
     const safeAgentName = typeof agentName === "string" ? agentName.replace(/[\r\n]+/g, " ").trim().slice(0, 80) : "Akoro";
-    const durable = Boolean(conversationId && durableAgentChatContextEnabled);
+    const durableRequested = Boolean(conversationId && durableAgentChatContextEnabled);
+    let durable = durableRequested;
     let conversation = null;
     let relevantMemories = [];
     let retrieval = "skipped";
@@ -2005,35 +2009,47 @@ router.post("/agent", async (req, res) => {
 
     if (wantsStream) beginStream();
     if (durable) {
-      if (wantsStream) status("memory", "Loading your saved study context…");
-      conversation = await loadLearnerAgentConversationContext({
-        conversationId,
-        userId: req.user.id,
-      });
-      // The server-owned exact transcript is authoritative for durable Agent
-      // Chat. Browser history is only a compatibility fallback for callers
-      // without a session (for example, the instructor assistant).
-      dialogue = conversation.messages;
-      const retrieved = await retrieveLearnerAgentMemory({
-        query: userMessage,
-        userId: req.user.id,
-      });
-      retrieval = retrieved.mode;
-      relevantMemories = retrieved.memories;
-      // A completed retry must return the original durable answer without
-      // re-running an action tool. The session-bound turn key therefore covers
-      // the visible response as well as transcript persistence.
-      const completedReply = await completedLearnerAgentConversationTurn({
-        conversationId,
-        userId: req.user.id,
-        sessionId: agentSessionId(conversationId),
-        turnId,
-      });
-      if (completedReply) {
-        const metadata = { responseTimeMs: Date.now() - t0, retrieval, durableContext: true, replayed: true, toolExecutions: [] };
-        if (!wantsStream) return res.json({ success: true, reply: completedReply, response: completedReply, thinking: "", syllabus: [], pastQuestions: [], curriculum: [], mode, metadata, toolExecutions: [] });
-        send("done", { reply: completedReply, thinking: "", syllabus: [], pastQuestions: [], curriculum: [], mode, metadata, toolExecutions: [] });
-        return res.end();
+      // A durable-context failure (pending migration, transient DB error)
+      // must never take the chat down: degrade to the plain-transcript path,
+      // which still saves every turn to the session.
+      try {
+        if (wantsStream) status("memory", "Loading your saved study context…");
+        conversation = await loadLearnerAgentConversationContext({
+          conversationId,
+          userId: req.user.id,
+        });
+        // The server-owned exact transcript is authoritative for durable Agent
+        // Chat. Browser history is only a compatibility fallback for callers
+        // without a session (for example, the instructor assistant).
+        dialogue = conversation.messages;
+        const retrieved = await retrieveLearnerAgentMemory({
+          query: userMessage,
+          userId: req.user.id,
+        });
+        retrieval = retrieved.mode;
+        relevantMemories = retrieved.memories;
+        // A completed retry must return the original durable answer without
+        // re-running an action tool. The session-bound turn key therefore covers
+        // the visible response as well as transcript persistence.
+        const completedReply = await completedLearnerAgentConversationTurn({
+          conversationId,
+          userId: req.user.id,
+          sessionId: agentSessionId(conversationId),
+          turnId,
+        });
+        if (completedReply) {
+          const metadata = { responseTimeMs: Date.now() - t0, retrieval, durableContext: true, replayed: true, toolExecutions: [] };
+          if (!wantsStream) return res.json({ success: true, reply: completedReply, response: completedReply, thinking: "", syllabus: [], pastQuestions: [], curriculum: [], mode, metadata, toolExecutions: [] });
+          send("done", { reply: completedReply, thinking: "", syllabus: [], pastQuestions: [], curriculum: [], mode, metadata, toolExecutions: [] });
+          return res.end();
+        }
+      } catch (durableError) {
+        console.error("[/chat/agent] durable context unavailable — continuing with basic transcript:", durableError.message);
+        durable = false;
+        conversation = null;
+        relevantMemories = [];
+        retrieval = "skipped";
+        dialogue = safeHistory(history);
       }
     }
 
@@ -2149,19 +2165,28 @@ router.post("/agent", async (req, res) => {
     if (conversationId && !req.destroyed && !res.destroyed) {
       if (durable) {
         if (wantsStream) status("saving", "Saving this study context…");
-        await persistLearnerAgentConversationTurn({
-          conversationId,
-          userId: req.user.id,
-          sessionId: agentSessionId(conversationId),
-          turnId,
-          userMessage,
-          assistantMessage: reply,
-          summary: compactAgentSummary(conversation?.summary, userMessage, reply),
-          scratchpad: nextScratchpad(conversation?.scratchpad, userMessage, prepared.toolExecutions),
-          memories: safeMemoryUpdates(userMessage),
-        });
+        try {
+          await persistLearnerAgentConversationTurn({
+            conversationId,
+            userId: req.user.id,
+            sessionId: agentSessionId(conversationId),
+            turnId,
+            userMessage,
+            assistantMessage: reply,
+            summary: compactAgentSummary(conversation?.summary, userMessage, reply),
+            scratchpad: nextScratchpad(conversation?.scratchpad, userMessage, prepared.toolExecutions),
+            memories: safeMemoryUpdates(userMessage),
+          });
+        } catch (persistError) {
+          // The reply already happened — never lose the transcript to a
+          // durable-write hiccup. Fall back to the plain two-row append.
+          console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
+          await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+            .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
+        }
       } else {
-        await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply });
+        await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+          .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
     }
 

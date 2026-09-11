@@ -210,11 +210,13 @@ Premium:
 
 Note: the recovery reset exposed a latent bug — `revise_activity_draft` referenced `reviseDraftPayload` without importing it (ReferenceError at invoke time; static tests missed it). Fixed here with the new import block.
 
-## Bigger bets (scoped, next)
+## Chat durability + premium layer (shipped)
 
-- **Recurring routines, human-approved** — "Every Friday, prep a multiplication drill battle": a routines table + weekly scheduler that PREPARES drafts; the human still assigns each one (HITL-consistent automation).
-- **Batch flows** — "Prep this week's activities" → multiple drafts in one turn → a queued preview strip.
-- **Outcomes → drafts** — `check_activity_outcomes` over GET /:id/analytics: "your osmosis assignment averaged 54% — prepare a revision self-study?" 
+- **The learner chat storage bug** — the whole durable pipeline existed (session store, drawer, idempotent turns) but `AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED` defaulted OFF, so the server ignored the session the client sent. It now defaults ON (`?? "true"`, env remains a kill-switch), and the durable path degrades gracefully: any durable load/persist failure falls back to the plain transcript append instead of eating the reply. The transcript saves whenever a session exists.
+- **Instructor chat durability** — the instructor chat shares the same session store: lazily created owned session, `conversationId` + idempotent `turnId` on both the SSE and JSON transports (retries repair, never duplicate), resume-most-recent on mount, and a History drawer (resume / new chat / delete). Drafts prepared in a chat are now stamped with that chat's `session_id`.
+- **Prompt chips** — a tap fills the composer (never auto-sends): "Draft a quiz", "Prep this week's activities", "Last assignment results", "Weekly routine" — the instructor completes class/subject/audience before sending (no-guess preserved).
+
+All three bigger bets shipped earlier this branch; see "Bigger bets (shipped)" above.
 
 ## Assignment feedback + conversational revision (shipped)
 

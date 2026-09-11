@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
-  Eye,
+  Eye, History,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -12,7 +12,7 @@ import LiveRecorder from '../components/LiveRecorder.jsx';
 import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
-import { apiGet, apiPost, API } from '../services/api.js';
+import { apiGet, apiPost, apiDelete, API } from '../services/api.js';
 import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
@@ -25,6 +25,15 @@ const AGENT_AVATARS = ['🤖', '🔮', '⚡', '🌀', '✨', '🔺', '🌙', '�
 
 const CHAT_INIT = [
   { id: 1, from: 'agent', text: "Good morning! I'm ready to help — training, quizzes, reminders, or student reports. What do you need?", time: '8:01 AM' },
+];
+
+// Prompt chips: one tap fills the composer — the instructor completes the
+// class, subject, or audience before sending (the agent never guesses one).
+const PROMPT_CHIPS = [
+  { label: 'Draft a quiz', fill: 'Draft a 10-question quiz for ' },
+  { label: 'Prep this week\'s activities', fill: 'Prep this week\'s activities — ' },
+  { label: 'Last assignment results', fill: 'How did the last assignment go? ' },
+  { label: 'Weekly routine', fill: 'Schedule a weekly revision draft every ' },
 ];
 
 const REPLIES = [
@@ -84,6 +93,70 @@ export default function ChatPage() {
   const feedRef   = useRef(null);
   const attachRef = useRef(null);
   const inputRef  = useRef(null);
+
+  // ── Durable conversations ────────────────────────────────────────────────
+  // The instructor chat shares the learner session store: the server owns the
+  // transcript, a refresh (or a return visit) resumes the last conversation,
+  // and every agent turn carries conversationId + turnId so drafts prepared in
+  // this chat are stamped with its session.
+  const [chatSessions, setChatSessions] = useState([]);
+  const [drawerOpen, setDrawerOpen]     = useState(false);
+  const chatSessionRef     = useRef(null);
+  const creatingSessionRef = useRef(null);
+  const CHAT_BASE = '/api/adaptive/chat';
+  const newTurnId = () => `turn_${(globalThis.crypto?.randomUUID?.() || `${Date.now()}_${Math.random().toString(36).slice(2)}`)}`;
+
+  const ensureChatSession = (firstText) => {
+    if (chatSessionRef.current) return Promise.resolve(chatSessionRef.current);
+    if (creatingSessionRef.current) return creatingSessionRef.current;
+    creatingSessionRef.current = apiPost(`${CHAT_BASE}/sessions`, { title: firstText || '' })
+      .then((d) => {
+        const id = d?.session?.id ?? null;
+        if (id) { chatSessionRef.current = id; setChatSessions((prev) => [d.session, ...prev]); }
+        return id;
+      })
+      .catch(() => null)
+      .finally(() => { creatingSessionRef.current = null; });
+    return creatingSessionRef.current;
+  };
+
+  const loadChatSessions = () => apiGet(`${CHAT_BASE}/sessions`)
+    .then((d) => { const list = d?.sessions ?? []; setChatSessions(list); return list; })
+    .catch(() => []);
+
+  const openChatSession = async (id) => {
+    setDrawerOpen(false);
+    if (id === chatSessionRef.current) return;
+    try {
+      const d = await apiGet(`${CHAT_BASE}/sessions/${id}/messages`);
+      const msgs = (d?.messages ?? []).map((m) => ({
+        id: m.id,
+        from: m.role === 'user' ? 'me' : 'agent',
+        text: m.text,
+        time: new Date(m.created_at).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
+      }));
+      chatSessionRef.current = id;
+      setMessages(msgs.length ? msgs : CHAT_INIT);
+    } catch { /* keep the current view if the load fails */ }
+  };
+
+  const newChat = () => { setDrawerOpen(false); chatSessionRef.current = null; setMessages(CHAT_INIT); setInput(''); };
+
+  const removeChatSession = async (id) => {
+    setChatSessions((prev) => prev.filter((x) => x.id !== id));
+    try { await apiDelete(`${CHAT_BASE}/sessions/${id}`); } catch { /* ignore */ }
+    if (chatSessionRef.current === id) newChat();
+  };
+
+  // On mount: load the session list and resume the most recent conversation
+  // so a refresh (or tomorrow's visit) picks up exactly where things stopped.
+  useEffect(() => {
+    (async () => {
+      const list = await loadChatSessions();
+      if (list.length && !chatSessionRef.current) openChatSession(list[0].id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Load agent profile ──
   useEffect(() => {
@@ -195,12 +268,17 @@ export default function ChatPage() {
         const history = [...messages, { from: 'me', text: bodyText }]
           .map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }))
           .slice(-8);
+        // Durable turn: an owned session plus an idempotent turn key — the
+        // same key on the JSON fallback lets the server repair a partial
+        // write instead of duplicating the exchange.
+        const sid = await ensureChatSession(bodyText);
+        const turnId = newTurnId();
         let data;
         try {
-          data = await sendStreaming({ message: bodyText, history, agentName, role: 'instructor' }, setAiStatus);
+          data = await sendStreaming({ message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId }, setAiStatus);
         } catch (streamErr) {
           console.warn('[chat] stream unavailable, using JSON reply:', streamErr.message);
-          data = await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor' });
+          data = await apiPost('/api/adaptive/chat/agent', { message: bodyText, history, agentName, role: 'instructor', conversationId: sid, turnId });
         } finally { setAiStatus(''); }
         // Human-in-the-loop: a successful prepare/revise execution rides
         // with the reply as a draft echo — render its Preview affordance.
@@ -429,9 +507,32 @@ export default function ChatPage() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, position: 'relative' }}>
             <Btn variant="secondary" size="sm" onClick={() => { setDraftName(agentName); setDraftEmoji(agentEmoji); setCustModal(true); }}><Edit3 size={13} />Edit</Btn>
+            <Btn variant="secondary" size="sm" onClick={() => setDrawerOpen((p) => !p)}><History size={13} />History</Btn>
             <Btn variant="primary" size="sm" onClick={() => setTrainModal(true)}><Brain size={13} />Train</Btn>
+            {drawerOpen && (
+              <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 300, maxHeight: 340, overflowY: 'auto', background: WHITE, border: bdr(1, BORDER), borderRadius: 14, boxShadow: '0 12px 32px rgba(23,23,23,.14)', padding: 6, zIndex: 40 }}>
+                <button onClick={newChat} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 10px', border: 'none', background: 'rgba(232,136,74,.08)', borderRadius: 10, cursor: 'pointer', fontSize: 12.5, fontWeight: 800, color: AMBER, fontFamily: FONT }}>
+                  <Plus size={13} /> New chat
+                </button>
+                {chatSessions.length > 0 && <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: .5, color: MUTED2, textTransform: 'uppercase', padding: '10px 10px 4px' }}>Past conversations</div>}
+                {chatSessions.map((sess) => (
+                  <div key={sess.id} onClick={() => openChatSession(sess.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, cursor: 'pointer' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = LIGHT; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sess.title || 'New chat'}</div>
+                      <div style={{ fontSize: 10.5, color: MUTED2 }}>{new Date(sess.last_message_at).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' })}</div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); removeChatSession(sess.id); }} title="Delete conversation"
+                      style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED2, padding: 4, display: 'flex' }}><X size={12} /></button>
+                  </div>
+                ))}
+                {chatSessions.length === 0 && <div style={{ padding: '10px', fontSize: 11.5, color: MUTED2 }}>Conversations you have with your agent will appear here.</div>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -545,6 +646,16 @@ export default function ChatPage() {
 
         {/* Input bar */}
         <div style={{ paddingTop: 10 }}>
+          {!isTask && input === '' && (
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }}>
+              {PROMPT_CHIPS.map((chip) => (
+                <button key={chip.label} className="ci-qp" onClick={() => { setInput(chip.fill); inputRef.current?.focus(); }}
+                  title="Tap to fill the composer — complete the details before sending">
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          )}
           {isTask && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 10, background: 'rgba(232,136,74,.1)', border: bdr(1, 'rgba(232,136,74,.3)'), marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><CheckSquare size={12} color={AMBER} /><span style={{ fontSize: 11.5, fontWeight: 700, color: AMBER }}>Sending as task</span></div>
