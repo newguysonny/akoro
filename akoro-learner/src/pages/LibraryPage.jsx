@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
 import { Icon } from '../components/common/Icons.jsx';
-import { BRAND, RED, GREEN, GOLD } from '../constants.js';
+import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
+import { useLang } from '../contexts/LanguageContext.jsx';
+import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
 const TYPE_META = {
@@ -145,9 +147,55 @@ function LibraryItem({ item, onOpen }) {
 
 export default function LibraryPage() {
   const navigate = useNavigate();
+  const { t } = useLang();
+  const [searchParams] = useSearchParams();
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+
+  // ── Add a record — the + in the header ────────────────────────────────────
+  // Moved here from the Learn tab's FAB so every learner (school and
+  // higher-ed alike) can add material from the shelf that holds it. The
+  // Now-Studying bar's + deep-links here with ?add=1 to open the sheet.
+  // Records stay device-local and keyed by the signed-in learner's id — the
+  // same key the Learn tab used, so nothing saved before is lost.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [toast, setToast] = useState('');
+  useEffect(() => {
+    if (searchParams.get('add')) setSheetOpen(true);
+  }, [searchParams]);
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(''), 2600);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  const recordsKey = `akoro_records_${STUDENT_ID || 'me'}`;
+  const loadRecordsLocal = () => {
+    try { const raw = JSON.parse(localStorage.getItem(recordsKey) || '[]'); return Array.isArray(raw) ? raw : []; }
+    catch { return []; }
+  };
+  const setRecordProgress = (id, progress) => {
+    const list = loadRecordsLocal().map(r => r.id === id
+      ? { ...r, progress: Math.max(0, Math.min(100, progress)), last_opened_at: new Date().toISOString() }
+      : r);
+    try { localStorage.setItem(recordsKey, JSON.stringify(list)); } catch { /* private mode */ }
+  };
+
+  // Opening a record: links open in a new tab right away; uploads/pastes say
+  // the in-app viewer is on its way instead of pretending the file opened.
+  const openRecord = (r) => {
+    if (!r) return;
+    if (!r.progress) setRecordProgress(r.id, 10);
+    if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
+    else setToast(t('records.viewer_soon'));
+    setSheetOpen(false);
+  };
+
+  // Self-reported completion (there's no playback to measure).
+  const toggleRecordDone = (r) => {
+    setRecordProgress(r.id, (r.progress || 0) >= 100 ? 10 : 100);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -184,6 +232,11 @@ export default function LibraryPage() {
               </p>
             </div>
           </div>
+          {/* Plus — add a record (upload / link / paste), for every learner */}
+          <button onClick={() => setSheetOpen(true)} aria-label={t('records.title')} title={t('records.title')}
+            style={{ background: BRAND, border: 'none', borderRadius: 100, width: 34, height: 34, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="ti-plus" size={18}/>
+          </button>
         </div>
 
         {/* Pills — scrollable area of library kinds */}
@@ -213,6 +266,22 @@ export default function LibraryPage() {
           </div>
         )}
       </div>
+
+      {/* Bottom toast */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 3000, background: 'var(--ak-text)', color: '#fff', fontSize: 12.5, fontWeight: 800, padding: '9px 18px', borderRadius: 100, boxShadow: '0 6px 20px rgba(0,0,0,.25)' }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Add-record sheet — upload / link / paste, for every learner */}
+      <AddRecordModal
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        user={{ id: STUDENT_ID }}
+        onOpenRecord={openRecord}
+        onToggleDone={toggleRecordDone}
+      />
     </div>
   );
 }

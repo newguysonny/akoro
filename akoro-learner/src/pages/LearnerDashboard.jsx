@@ -31,7 +31,6 @@ import DiscoverHub   from '../components/tabs/DiscoverHub.jsx';
 import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
-import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { isHigherEdUI } from '../utils/studyLevel.js';
@@ -159,21 +158,12 @@ export default function LearnerDashboard() {
   const [userProfile,  setUserProfile]  = useState(null);
   const [notifUnread,  setNotifUnread]  = useState(0);
 
-  // ── Level-aware UI: add-record action (higher-ed only) ───────────────────
-  // Sixth form / university / college / other see a + above Start Session;
-  // school learners don't. The profile fetch below decides which tier renders,
-  // so the button appears once the profile arrives — and never flashes for
-  // school learners. Records are device-local for now (frontend-only).
-  const [recordsOpen,  setRecordsOpen]  = useState(false);
-  const [recordCount,  setRecordCount]  = useState(0);
+  // ── Level-aware UI tier ──────────────────────────────────────────────────
+  // Sixth form / university / college / other get the discovery hub feed and
+  // the Now-Studying bar; school learners get the plain discovery feed.
+  // The profile fetch below decides which tier renders. The add-record +
+  // moved to the Library page header so every learner has it.
   const higherEd = isHigherEdUI(userProfile || {});
-  const refreshRecordCount = useCallback(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(`akoro_records_${userProfile?.id || 'me'}`) || '[]');
-      setRecordCount(Array.isArray(raw) ? Math.min(raw.length, 99) : 0);
-    } catch { setRecordCount(0); }
-  }, [userProfile?.id]);
-  useEffect(() => { if (higherEd) refreshRecordCount(); }, [higherEd, refreshRecordCount]);
 
   // ── Now studying — Spotify-style mini-bar ────────────────────────────────
   // Tracks the material or session the learner last opened, across all tabs
@@ -231,7 +221,6 @@ export default function LearnerDashboard() {
     if (!r.progress) { setRecordProgress(r.id, 10); nowActs.setProgress(r.id, 10); }
     if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
     else setToast({ msg: t('records.viewer_soon'), color: GOLD });
-    setRecordsOpen(false);
   }, [nowActs, setRecordProgress, t]);
 
   // Self-reported completion for records (there's no playback to measure).
@@ -245,7 +234,7 @@ export default function LearnerDashboard() {
   // full-screen sheet that has its own layout.
   const showNowBar = higherEd && !!now.item && !now.dismissed
     && !(tab === "agent" && chatActive) && !selectedSession && !selectedChallenge
-    && !teachSession && !liveBattleModal && !configOpen && !recordsOpen;
+    && !teachSession && !liveBattleModal && !configOpen;
 
   // ── Minimize — park a live session on the Now-Studying bar ──────────────
   const minimizeSessionSheet = () => {
@@ -997,7 +986,7 @@ export default function LearnerDashboard() {
           <NowStudyingBar
             item={now.item}
             onOpen={openNowItem}
-            onAdd={()=>{ setRecordsOpen(true); refreshRecordCount(); }}
+            onAdd={()=>navigate('/library?add=1')}
             onDismiss={nowActs.dismiss}/>
         )}
 
@@ -1029,15 +1018,6 @@ export default function LearnerDashboard() {
           </div>
         )}
 
-        {/* + FAB — add a record (upload / link / paste). Higher-ed learners only:
-            sixth form, university, college, other. Sits just above Start Session. */}
-        {higherEd&&!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&!recordsOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
-          <div onClick={()=>{setRecordsOpen(true);refreshRecordCount();}} title={t('records.title')} aria-label={t('records.title')} style={{ position:"fixed",bottom:showNowBar?198:126,right:18,zIndex:900,width:40,height:40,borderRadius:"50%",background:"var(--ak-surface)",border:`1.5px solid ${BRAND}66`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`0 3px 14px ${BRAND}33`,transition:"transform .15s" }}>
-            <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2.8" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            {recordCount>0&&<div style={{ position:"absolute",top:-4,right:-4,minWidth:16,height:16,borderRadius:9,background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",border:"1.5px solid var(--ak-surface)" }}><span style={{ fontSize:8.5,fontWeight:900,color:"#fff" }}>{recordCount}</span></div>}
-          </div>
-        )}
-
         {/* ── Overlays ── */}
 
         {/* ConfigModal → opens before TeachAgentModal */}
@@ -1054,15 +1034,6 @@ export default function LearnerDashboard() {
             onCancel={() => { setConfigOpen(false); setConfigInitial(null); }}
           />
         )}
-
-        {/* AddRecordModal — upload / link / paste (higher-ed learners only) */}
-        <AddRecordModal
-          open={recordsOpen}
-          onClose={() => { setRecordsOpen(false); refreshRecordCount(); }}
-          user={userProfile}
-          onOpenRecord={openRecordTracked}
-          onToggleDone={toggleRecordDone}
-        />
 
         {/* TeachAgentModal — now receives config OR session */}
         {teachSession && (
