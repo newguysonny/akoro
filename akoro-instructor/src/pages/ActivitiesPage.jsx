@@ -91,6 +91,7 @@ const ACTIVITY_TYPES = [
 ];
 
 const byKey = (k) => ACTIVITY_TYPES.find(t => t.key === k);
+export { ACTIVITY_TYPES as WORKBENCH_TYPES, byKey };
 
 function toLocalInput(iso) {
   if (!iso) return '';
@@ -109,10 +110,10 @@ const BLANK = {
   subtopics: [], objectives: {},
 };
 
-function ActivityForm({ type, onAssigned }) {
+export function ActivityForm({ type, onAssigned, initial = null, savePayload = null }) {
   const meta = byKey(type);
   const isLive = type === 'live_course';
-  const [form, setForm] = useState(BLANK);
+  const [form, setForm] = useState(() => (initial ? { ...BLANK, ...initial } : BLANK));
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [drafting, setDrafting] = useState(false);
@@ -188,7 +189,9 @@ function ActivityForm({ type, onAssigned }) {
         // the target rather than sit beside it (the self-study rule).
         classroom_id: t.whole_class ? form.classId : null,
       };
-      const d = await apiPost('/api/self-study', payload);
+      // The workbench posts the bench; the chat preview's copy posts the
+      // draft-assign approval — same payload shape, same form, no fork.
+      const d = savePayload ? await savePayload(payload) : await apiPost('/api/self-study', payload);
       setDone(`Assigned to ${d?.data?.assigned ?? 0} learner${d?.data?.assigned === 1 ? '' : 's'}`);
       setForm({ ...BLANK, classId: form.classId });
       onAssigned();

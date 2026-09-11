@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Send, Plus, Brain, Edit3, CheckSquare, X, Paperclip, Camera,
   Upload, FileText, ScanLine, Loader, CheckCircle2,
+  Eye,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, FileUploadZone, Toast } from '../components/Primitives.jsx';
@@ -12,6 +13,7 @@ import { uploadTraining } from '../services/trainingApi.js';
 import { useStatsAPI } from '../hooks/useStatsAPI.js';
 import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet, apiPost } from '../services/api.js';
+import ActivityPreviewPanel from '../components/ActivityPreviewPanel.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
@@ -142,8 +144,8 @@ export default function ChatPage() {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  const pushAgent = useCallback((text) => {
-    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'agent', text, time: now() }]);
+  const pushAgent = useCallback((text, extra = {}) => {
+    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), from: 'agent', text, time: now(), ...extra }]);
   }, []);
 
   const pushMe = useCallback((text, task = false, chips = []) => {
@@ -196,7 +198,15 @@ export default function ChatPage() {
         const data = await apiPost('/api/adaptive/chat/agent', {
           message: bodyText, history, agentName, role: 'instructor',
         });
-        pushAgent(data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?");
+        // Human-in-the-loop: a successful prepare_activity execution rides
+        // with the reply as a draft echo — render its Preview affordance.
+        const previews = (data.toolExecutions || [])
+          .filter((e) => e.tool === 'prepare_activity' && e.success && e.draft)
+          .map((e) => e.draft);
+        pushAgent(
+          data.reply || data.response || "I'm here to help with teaching and your subjects — what would you like to explore?",
+          previews.length ? { previews } : {},
+        );
       } catch (e) {
         console.warn('[chat] tutor reply failed:', e.message);
         pushAgent('Sorry — I had trouble responding just now. Please try again.');
@@ -315,6 +325,11 @@ export default function ChatPage() {
     }
   };
 
+  // ── Human-in-the-loop preview — side-by-side with the chat ──────────────
+  const [previewDraft, setPreviewDraft] = useState(null);   // draft id or null
+  const [draftStates, setDraftStates] = useState({});       // { [id]: 'assigned'|'discarded' }
+  const resolveDraft = (id, state) => setDraftStates((prev) => ({ ...prev, [id]: state }));
+
   const hasInput = taskChips.length > 0 || input.trim().length > 0;
 
   return (
@@ -336,9 +351,14 @@ export default function ChatPage() {
         .ci-attach-item:hover{background:${LIGHT}}
         .ci-typing{display:inline-block;width:6px;height:6px;border-radius:50%;background:${MUTED2};margin:0 2px;animation:ciTyping 1.4s infinite ease-in-out}
         @keyframes ciTyping{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
+        @media (max-width: 1100px){
+          .ci-preview-panel{position:fixed;inset:0;width:100%!important;z-index:400;background:#F7F5F1;padding:12px}
+        }
       `}</style>
 
-      <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)' }}>
+      <div style={{ maxWidth: previewDraft ? 'min(1180px, 97vw)' : 720, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)' }}>
+        <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0 }}>
+        <div className="ci-chat-col" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
 
         {/* Agent header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: WHITE, borderRadius: 16, border: bdr(1, BORDER), marginBottom: 12 }}>
@@ -407,6 +427,25 @@ export default function ChatPage() {
                     )}
                     {textPart && <span style={{ whiteSpace: 'pre-wrap' }}>{textPart}</span>}
                   </div>
+                  {!isMe && (msg.previews || []).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {msg.previews.map((d) => {
+                        const st = draftStates[d.id];
+                        return (
+                          <button key={d.id} disabled={!!st} onClick={() => setPreviewDraft(d.id)}
+                            title={st ? undefined : 'Preview this draft — assigning is your call'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, cursor: st ? 'default' : 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 800,
+                              border: st === 'assigned' ? '1px solid #BBF7D0' : st === 'discarded' ? `1px solid ${BORDER}` : '1px solid rgba(168,85,247,.45)',
+                              background: st === 'assigned' ? '#DCFCE7' : st === 'discarded' ? LIGHT : 'rgba(168,85,247,.08)',
+                              color: st === 'assigned' ? GREEN : st === 'discarded' ? MUTED2 : PURPLE }}>
+                            {st === 'assigned' ? <><CheckCircle2 size={12} /> Assigned ✓</>
+                              : st === 'discarded' ? <>Discarded</>
+                              : <><Eye size={12} /> Preview — {d.title}</>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div style={{ fontSize: 10, color: MUTED2, marginTop: 3, textAlign: isMe ? 'right' : 'left' }}>{msg.time}</div>
                 </div>
               </div>
@@ -500,6 +539,18 @@ export default function ChatPage() {
               <Send size={14} color={WHITE} />
             </button>
           </div>
+        </div>
+        </div>
+
+        {previewDraft && (
+          <div className="ci-preview-panel" style={{ width: 430, flexShrink: 0, minHeight: 0 }}>
+            <ActivityPreviewPanel
+              draftId={previewDraft}
+              onClose={() => setPreviewDraft(null)}
+              onResolved={resolveDraft}
+            />
+          </div>
+        )}
         </div>
       </div>
 

@@ -22,6 +22,9 @@ import { newToolRequestId, toolObservation } from "../../utils/toolObservation.j
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
 import { getAgentPreferences, saveAgentPreferences } from "./student-state.js";
+import {
+  createActivityDraft, listActivityDrafts, getActivityDraft, discardActivityDraft,
+} from "../self-study/drafts.js";
 import { getSyllabusGrounding } from "./syllabus.js";
 import { getPastQuestionGrounding } from "../past-questions/routes.js";
 import { getCurriculumGrounding } from "../curriculum/routes.js";
@@ -381,8 +384,99 @@ export function getLearnerChatTools({ allowToolRequest = true } = {}) {
     && (tool.name !== "submit_tool_request" || allowToolRequest));
 }
 
-export async function executeChatTool(name, input, studentId, { conversationId = null } = {}) {
+/**
+ * Instructor chat tools — activity creation with human-in-the-loop.
+ * The agent PREPARES a draft; assigning is a human action on the preview
+ * (POST /api/self-study/drafts/:id/assign), never a tool. All six workbench
+ * types are draftable; battles assign through their battle form.
+ */
+export const INSTRUCTOR_TOOLS = [
+  {
+    name: "prepare_activity",
+    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. You may fill content gaps yourself (the server drafts the study plan with the same generator the workbench uses).",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["self_study", "assignment", "project", "live_course", "multi_stage", "battle"], description: "The workbench activity type. multi_stage takes stages; battle drafts are completed by the instructor in the battle form at preview time." },
+        title: { type: "string", description: "What learners will see (optional — derived from the topic when omitted)." },
+        subject: { type: "string", description: "School subject, e.g. 'Basic Science' or 'Mathematics'." },
+        topic: { type: "string", description: "The topic the activity is built from." },
+        instructions: { type: "string", description: "Optional instructions to learners." },
+        difficulty: { type: "string", enum: ["easy", "intermediate", "hard"], description: "Only when the instructor said, or the level is obvious." },
+        due_hint: { type: "string", description: "Human-friendly due date exactly as the instructor said it, e.g. 'Friday at 1 PM'. Do not invent one." },
+        scheduled_hint: { type: "string", description: "For live_course: when the session holds, as the instructor said it." },
+        stages: { type: "array", maxItems: 6, description: "For multi_stage: the ordered journey.", items: { type: "object", properties: {
+          kind: { type: "string", enum: ["self_study", "assignment", "project"] },
+          title: { type: "string" }, topic: { type: "string" }, subject: { type: "string" },
+        }, required: ["topic"] } },
+        audience: { type: "object", description: "WHO this is for, from the instructor's own words. Ask first if unknown.", properties: {
+          whole_class: { type: "boolean", description: "True for 'my whole class' / 'everyone'." },
+          classroom_name: { type: "string", description: "The class as named, e.g. 'JSS 2'." },
+          classroom_id: { type: "string", description: "When the instructor referenced a specific class id." },
+          usernames: { type: "array", items: { type: "string" }, description: "Learner handles or emails for picked learners." },
+          user_ids: { type: "array", items: { type: "string" } },
+        } },
+      },
+      required: ["type", "topic", "audience"],
+    },
+  },
+  {
+    name: "list_activity_drafts",
+    description: "List the instructor's still-pending activity drafts (prepared, awaiting preview/assign). Use when they ask what is prepared or want to pick a draft back up.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "discard_activity_draft",
+    description: "Discard one pending activity draft at the instructor's request. A draft reaches nobody, so discarding it touches no learner.",
+    input_schema: { type: "object", properties: { draftId: { type: "string", description: "The draft id from prepare_activity or list_activity_drafts." } }, required: ["draftId"] },
+  },
+];
+
+export function openAiInstructorTools() {
+  return INSTRUCTOR_TOOLS.map((tool) => ({
+    type: "function",
+    function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
+  }));
+}
+
+export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student" } = {}) {
   switch (name) {
+    // ── Instructor: activity creation, human-in-the-loop ──────────────────
+    // These prepare drafts only. Assigning is the instructor's tap on the
+    // preview (POST /api/self-study/drafts/:id/assign) — no tool reaches it.
+    case "prepare_activity": {
+      if (role !== "instructor") return { error: "Activity preparation is only available to instructor accounts" };
+      try {
+        const { draft, audienceLabel } = await createActivityDraft({
+          instructor: { id: studentId, role }, input, sessionId: conversationId,
+        });
+        return {
+          prepared: true, draftId: draft.id, title: draft.title, type: draft.type,
+          audience: audienceLabel, status: draft.status,
+          previewHint: "Awaiting the instructor's preview — do not claim it was assigned.",
+        };
+      } catch (error) {
+        if (error.status === "clarify") {
+          return { prepared: false, needsClarification: true, error: "audience_required",
+            message: "Ask the instructor who this activity is for, then call prepare_activity again with their answer." };
+        }
+        return { prepared: false, error: error.message || "Could not prepare the draft" };
+      }
+    }
+    case "list_activity_drafts": {
+      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
+      try {
+        const drafts = await listActivityDrafts({ id: studentId, role });
+        return { drafts: drafts.map((d) => ({ draftId: d.id, title: d.title, type: d.type, preparedAt: d.created_at })) };
+      } catch (error) { return { error: error.message || "Could not list drafts" }; }
+    }
+    case "discard_activity_draft": {
+      if (role !== "instructor") return { error: "Activity drafts are only available to instructor accounts" };
+      try {
+        const draft = await discardActivityDraft({ id: studentId, role }, String(input?.draftId || ""));
+        return { discarded: true, draftId: draft.id, title: draft.title };
+      } catch (error) { return { discarded: false, error: error.message || "Could not discard the draft" }; }
+    }
     case "get_agent_capabilities": {
       const enabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
       return {
@@ -1592,7 +1686,15 @@ const TOOL_OBSERVATION_GUIDE =
   `success=false or a non-null error means it did NOT complete — say so plainly; never pretend the action happened or invent a request_id. ` +
   `If the result contains alreadyDone, the action was completed earlier in this conversation — say so instead of doing it twice.`;
 
-async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null }) {
+// Instructor HITL: preparation is the agent's job; assignment is the human's.
+const INSTRUCTOR_HITL_GUIDE =
+  `\n\n## Activity drafts (human-in-the-loop)\n` +
+  `When prepare_activity succeeds, a DRAFT exists — say exactly that: "Draft ready — preview it to assign." ` +
+  `Never say an activity was assigned, sent, or that learners were notified: only the instructor's Assign action in the preview does that. ` +
+  `If the tool result carries needsClarification (audience_required), ask who the work is for before preparing anything. ` +
+  `Do not guess an audience, a due date, or a schedule the instructor did not state.`;
+
+async function runAgentToolLoop({ systemContent, messages, studentId, conversationId = null, status, tools = openAiChatTools(), requiredTool = null, role = "student" }) {
   const executions = [];
   const transcript = [...messages];
   if (requiredTool && !tools.some((tool) => tool.function?.name === requiredTool)) {
@@ -1624,7 +1726,7 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       try { input = JSON.parse(call?.function?.arguments || "{}"); } catch { input = {}; }
       status?.("tool", "Checking your Akoro study data…");
       let toolResult;
-      try { toolResult = await executeChatTool(tool, input, studentId, { conversationId }); }
+      try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
       catch (error) { toolResult = { success: false, error: "The requested Akoro action could not be completed." }; }
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
@@ -1633,7 +1735,12 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
         tool,
         success: observation.success,
         requestId: observation.request_id,
-        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request"].includes(tool),
+        sideEffecting: ["create_task", "suggest_help", "schedule_chat_follow_up", "cancel_scheduled_chat_follow_up", "submit_tool_request", "prepare_activity"].includes(tool),
+        // A small echo so the chat UI can render the Preview affordance for
+        // the human-in-the-loop approval without parsing the model's prose.
+        ...(tool === "prepare_activity" && toolResult?.prepared && toolResult?.draftId
+          ? { draft: { id: toolResult.draftId, title: toolResult.title, type: toolResult.type, audience: toolResult.audience } }
+          : {}),
       });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });
     }
@@ -1763,7 +1870,7 @@ router.post("/agent", async (req, res) => {
       `When asked about your abilities or limitations, call get_agent_capabilities before replying. Do not claim live web access, licensed historical past-paper access, secrets, or unrequested autonomous actions. ` +
       `If a learner asks for something Akoro cannot currently do, say so plainly. Offer to submit a concise product request only after they explicitly ask; never submit one automatically and never copy their raw prompt, attachments, or personal data into it. ` +
       `Generated exam-style questions must be labelled as generated practice, not historical papers.` +
-      (role === "student" ? TOOL_OBSERVATION_GUIDE : "") +
+      (role === "student" ? TOOL_OBSERVATION_GUIDE : INSTRUCTOR_HITL_GUIDE) +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
@@ -1784,12 +1891,13 @@ router.post("/agent", async (req, res) => {
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage),
-      }) : [],
+      }) : openAiInstructorTools(),
       requiredTool: role === "student" && requiresAgentCapabilitiesTool(userMessage)
         ? "get_agent_capabilities" : null,
+      role,
     });
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];
-    const tools = role === "student" ? openAiChatTools() : null;
+    const tools = null;   // the preflight loop above is the only executor
     let reply = "";
     let thinking = "";
     let usedModel = "gpt-4o-mini";

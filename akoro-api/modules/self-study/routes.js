@@ -29,12 +29,17 @@
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
-import { NaNaEsumai }                     from "../adaptive-learning/agents/nana-esumai/guide.js";
 import { getStudentState }               from "../adaptive-learning/student-state.js";
+import {
+  nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
+  resolveStudents, notifyAll, createAssignment, invalid,
+} from "./createAssignment.js";
+import {
+  createActivityDraft, assignActivityDraft, DRAFT_TYPES,
+  listActivityDrafts, getActivityDraft, updateActivityDraft, discardActivityDraft,
+} from "./drafts.js";
 
 const router = Router();
-const nana   = new NaNaEsumai();
-const edu    = () => db.schema("edu");
 const now    = () => new Date().toISOString();
 
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -47,31 +52,6 @@ const missing = (res, m) => res.status(404).json({ success: false, error: m });
 // has used both "school" and "school_admin" over time, so accept both.
 const TEACHER_ROLES = ["instructor", "teacher", "school", "school_admin", "admin"];
 
-/**
- * The four activity kinds an instructor can assign. They all share this
- * module's machinery — one brief, targeting, per-learner progress — and are
- * separated only by `type` and what lands in `details`. Learner surfaces read
- * `type` and file the card under the matching pill.
- */
-const ACTIVITY_TYPES = Object.freeze(["self_study", "assignment", "project", "live_course", "multi_stage"]);
-
-/** How an activity announces itself in a learner's notifications. */
-const ACTIVITY_ANNOUNCE = {
-  self_study:  { emoji: "\u{1F4D6}", label: "Self study" },
-  assignment:  { emoji: "\u270F\uFE0F",  label: "Assignment" },
-  project:     { emoji: "\u{1F4C2}", label: "Project" },
-  live_course: { emoji: "\u{1F4FA}", label: "Live course" },
-  multi_stage: { emoji: "\u{1F9E9}", label: "Multi-stage activity" },
-};
-const announceFor = (type) => ACTIVITY_ANNOUNCE[type] ?? ACTIVITY_ANNOUNCE.self_study;
-
-/** The school this user administers, if any. */
-async function mySchool(userId) {
-  const { data } = await db.from("school_profiles")
-    .select("id, name").eq("admin_user_id", userId).limit(1).maybeSingle();
-  return data ?? null;
-}
-
 /** Load an assignment the caller is allowed to manage. */
 async function ownedAssignment(req, id) {
   const { data } = await edu().from("self_study_assignments").select("*").eq("id", id).maybeSingle();
@@ -80,67 +60,6 @@ async function ownedAssignment(req, id) {
   const school = await mySchool(req.user.id);
   if (school && data.school_id === school.id) return { assignment: data };
   return { error: "forbidden" };
-}
-
-/**
- * resolveStudents — the one targeting rule the whole platform uses.
- *
- * Accepts any mix of usernames (or emails), user ids, or "everyone in the
- * class". Unknown handles are reported rather than silently dropped: a typo
- * that quietly assigns work to nobody is worse than an error.
- *
- * `course_id` and `classroom_id` describe WHERE the assignment lives; they
- * expand into a target list ONLY when whole_class is set. Treating their mere
- * presence as "target everyone" is a live footgun — the create form always
- * sends course_id as scope, so a teacher who picked two learners would have
- * silently assigned the work to the entire course.
- */
-async function resolveStudents({ usernames = [], user_ids = [], classroom_id, course_id, whole_class }) {
-  const ids      = new Set((Array.isArray(user_ids) ? user_ids : []).filter(Boolean));
-  const notFound = [];
-
-  for (const raw of (Array.isArray(usernames) ? usernames : [])) {
-    const handle = String(raw).trim().replace(/^@/, "");
-    if (!handle) continue;
-    const { data: found } = await db.from("users")
-      .select("id").or(`username.ilike.${handle},email.ilike.${handle}`).limit(1);
-    if (found?.length) ids.add(found[0].id);
-    else notFound.push(handle);
-  }
-
-  // Only ever an explicit request, never inferred from scope.
-  if (whole_class) {
-    if (classroom_id) {
-      const { data } = await db.from("classroom_students")
-        .select("user_id").eq("classroom_id", classroom_id).eq("status", "active");
-      for (const r of (data ?? [])) ids.add(r.user_id);
-    } else if (course_id) {
-      const { data } = await db.from("enrollments")
-        .select("user_id").eq("course_id", course_id).eq("status", "active");
-      for (const r of (data ?? [])) ids.add(r.user_id);
-    }
-  }
-
-  return { ids: [...ids], notFound };
-}
-
-/**
- * notifyAll — best-effort notifications, in one insert.
- *
- * Deliberately try/catch rather than a trailing .catch(): the Supabase query
- * builder is a thenable WITHOUT a .catch method, so calling one on it throws
- * TypeError synchronously — which is how this route came to be a guaranteed
- * 500. A failed notification must never lose the assignment it announces.
- */
-async function notifyAll(userIds, payload) {
-  if (!userIds?.length) return;
-  try {
-    const { error } = await db.from("notifications")
-      .insert(userIds.map((user_id) => ({ user_id, ...payload })));
-    if (error) console.warn("[self-study] notify failed:", error.message);
-  } catch (e) {
-    console.warn("[self-study] notify threw:", e.message);
-  }
 }
 
 router.use(authenticateToken);
@@ -165,60 +84,70 @@ router.post("/plan", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
   ok(res, { topic, subject, subtopics, objectives });
 }));
 
-/** POST /api/self-study — create the brief and assign it. */
+/* ═══ AI activity drafts — human-in-the-loop ══════════════════════════════════
+   The agent PREPARES (via the prepare_activity chat tool); only these
+   endpoints — hit by the human's preview UI — can assign. Declared before
+   the /:id routes so "drafts" is never read as an assignment id. */
+
+/** GET /api/self-study/drafts — my pending drafts (chat reload + badges). */
+router.get("/drafts", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  ok(res, { drafts: await listActivityDrafts(req.user) });
+}));
+
+/** GET /api/self-study/drafts/:id — one draft for the preview panel. */
+router.get("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { draft: await getActivityDraft(req.user, req.params.id) }); }
+  catch (e) { if (e.status === 404) return missing(res, e.message); if (e.status === 403) return denied(res, e.message); throw e; }
+}));
+
+/**
+ * PATCH /api/self-study/drafts/:id — human edits before assign (the preview's
+ * Edit flow), or the battle completion bookkeeping when the shared battle
+ * form created the battle from this draft.
+ */
+router.patch("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { draft: await updateActivityDraft(req.user, req.params.id, req.body) }); }
+  catch (e) {
+    if (e.status === 404) return missing(res, e.message);
+    if (e.status === 403) return denied(res, e.message);
+    if (e.status === 409 || e.status === 400) return bad(res, e.message);
+    throw e;
+  }
+}));
+
+/**
+ * POST /api/self-study/drafts/:id/assign — the approval. The only way an
+ * AI-prepared activity reaches learners: replays the payload through the
+ * same create path as the workbench (targets, notifications, live ding).
+ * Body: optional human-edited overrides merged over the stored payload.
+ */
+router.post("/drafts/:id/assign", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try {
+    const { assignment, assigned } = await assignActivityDraft({ instructor: req.user, id: req.params.id, overrides: req.body });
+    res.status(201).json({ success: true, data: { ...assignment, assigned } });
+  } catch (e) {
+    if (e.status === 404) return missing(res, e.message);
+    if (e.status === 403) return denied(res, e.message);
+    if (e.status === 409 || e.status === 400) return bad(res, e.message);
+    throw e;
+  }
+}));
+
+/** DELETE /api/self-study/drafts/:id — discard a pending draft. */
+router.delete("/drafts/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  try { ok(res, { draft: await discardActivityDraft(req.user, req.params.id) }); }
+  catch (e) {
+    if (e.status === 404) return missing(res, e.message);
+    if (e.status === 403) return denied(res, e.message);
+    if (e.status === 409) return bad(res, e.message);
+    throw e;
+  }
+}));
+
+/** POST /api/self-study — create the brief and assign it (the shared path). */
 router.post("/", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
-  const {
-    title, subject, topic, subtopics = [], objectives = {},
-    instructions = null, difficulty = "intermediate", due_at = null,
-    course_id = null, classroom_id = null,
-    usernames = [], user_ids = [], whole_class = false,
-    type = "self_study", details = {},
-  } = req.body;
-
-  if (!title?.trim())   return bad(res, "title is required");
-  if (!ACTIVITY_TYPES.includes(type)) return bad(res, `Unknown activity type: ${type}`);
-  if (!subject?.trim()) return bad(res, "subject is required");
-  if (!topic?.trim())   return bad(res, "topic is required");
-
-  const { ids, notFound } = await resolveStudents({ usernames, user_ids, classroom_id, course_id, whole_class });
-  if (notFound.length) return bad(res, `No account found for: ${notFound.join(", ")}`);
-  if (!ids.length)     return bad(res, "Pick at least one learner to assign this to");
-
-  const school = await mySchool(req.user.id);
-
-  const { data: assignment, error } = await edu().from("self_study_assignments").insert({
-    created_by:   req.user.id,
-    school_id:    school?.id ?? null,
-    course_id, classroom_id,
-    title:        title.trim(),
-    subject:      subject.trim(),
-    topic:        topic.trim(),
-    subtopics, objectives,
-    instructions, difficulty,
-    due_at, type,
-    details: details && typeof details === "object" && !Array.isArray(details) ? details : {},
-  }).select().single();
-  if (error) throw new Error(error.message);
-
-  const { error: tErr } = await edu().from("self_study_targets")
-    .upsert(ids.map((student_id) => ({ assignment_id: assignment.id, student_id })),
-            { onConflict: "assignment_id,student_id" });
-  if (tErr) throw new Error(tErr.message);
-
-  // notify() rather than a bare insert: a PostgREST builder is a THENABLE with
-  // no .catch, so `.insert({…}).catch(() => {})` threw synchronously and made
-  // this endpoint a guaranteed 500 — assignments could never be created at all.
-  const announce = announceFor(type);
-  await notifyAll(ids, {
-    type: "self_study_assigned",   // kept: learner notification handlers key on this string
-    title: `${announce.emoji} ${announce.label}: ${assignment.title}`,
-    content: `${assignment.subject} · ${assignment.topic}${due_at ? ` · due ${new Date(due_at).toLocaleDateString("en-GB")}` : ""}`,
-    related_id: assignment.id,
-    link: "/activities",           // tapping the bell item opens the Activity feed
-  });
-  for (const sid of ids) global.io?.to(`user:${sid}`).emit("self_study_assigned", { assignment });
-
-  res.status(201).json({ success: true, data: { ...assignment, assigned: ids.length } });
+  const { assignment, assigned } = await createAssignment(req.user, req.body);
+  res.status(201).json({ success: true, data: { ...assignment, assigned } });
 }));
 
 /** GET /api/self-study — assignments I created (or my school's), with progress. */

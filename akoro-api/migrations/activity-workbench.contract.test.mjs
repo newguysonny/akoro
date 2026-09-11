@@ -9,11 +9,12 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [page, selfStudy, planEditor, routes, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes, activityFeed] = await Promise.all([
+const [page, selfStudy, planEditor, routes, service, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes, activityFeed] = await Promise.all([
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
   read("../../akoro-api/modules/self-study/routes.js"),
+  read("../../akoro-api/modules/self-study/createAssignment.js"),
   read("../../akoro-api/migrations/2026-activity-types.sql"),
   read("../../akoro-api/migrations/manifest.json"),
   read("../../akoro-learner/src/services/activityApi.js"),
@@ -42,10 +43,12 @@ test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activi
 });
 
 test("all kinds ride the self-study machinery, separated by type", () => {
-  // API accepts and persists the type, and validates it.
-  assert.match(routes, /ACTIVITY_TYPES = Object\.freeze\(\["self_study", "assignment", "project", "live_course", "multi_stage"\]\)/);
-  assert.match(routes, /Unknown activity type/);
-  assert.match(routes, /due_at, type,/);
+  // API accepts and persists the type, and validates it (the shared
+  // create path in createAssignment.js — the bench route and the AI
+  // draft-assign approval both ride it).
+  assert.match(service, /ACTIVITY_TYPES = Object\.freeze\(\["self_study", "assignment", "project", "live_course", "multi_stage"\]\)/);
+  assert.match(service, /Unknown activity type/);
+  assert.match(service, /due_at, type,/);
   // Learner /mine passes the kind through so cards file under the right pill.
   assert.match(routes, /type:\s+a\.type \?\? "self_study"/);
   // Migration adds the columns with self_study as the default.
@@ -142,7 +145,8 @@ test("multi-stage activities chain real work into one journey", () => {
 
 test("a new assignment dings the learner in real time", () => {
   // Backend: the create path AND the add-learners-later path both emit.
-  const emitCount = (routes.match(/emit\("self_study_assigned"/g) || []).length;
+  const emitCount = (routes.match(/emit\("self_study_assigned"/g) || []).length
+    + (service.match(/emit\("self_study_assigned"/g) || []).length;
   assert.ok(emitCount >= 2, `both assign paths emit (found ${emitCount})`);
   // Learner: one ambient socket listening for it.
   assert.match(activitySocket, /socket\.on\('self_study_assigned'/);

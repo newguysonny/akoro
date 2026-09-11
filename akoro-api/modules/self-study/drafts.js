@@ -1,0 +1,301 @@
+/**
+ * modules/self-study/drafts.js — AI-prepared activity drafts (human-in-the-loop).
+ *
+ * The instructor's agent files drafts from chat via the `prepare_activity`
+ * tool. A draft is a PRIVATE proposal: nothing is assigned, nobody is
+ * notified. `payload` stores the exact bench-shaped create body so the
+ * approval step can replay it through the one shared `createAssignment`
+ * path — same insert, same targets, same notifications and ding as the
+ * activities workbench.
+ *
+ * The human is the only actor who can cross the line: the draft endpoints
+ * are plain HTTP, called by the preview UI's Assign button. No chat tool
+ * reaches this module's assign.
+ *
+ * Audience rule: the instructor states the audience in their prompt. If the
+ * agent cannot say who the work is for, it must ASK — `prepare_activity`
+ * rejects a draft with `audience_required` and the model requests
+ * clarification instead of guessing.
+ */
+
+import db from "../../db.js";
+import {
+  nana, edu, ACTIVITY_TYPES, announceFor, mySchool,
+  resolveStudents, createAssignment, invalid,
+} from "./createAssignment.js";
+
+/** Battles ride the same drafting flow but assign through their battle form
+ *  (the one shared BattleForm), so they are valid drafts, not bench assigns. */
+export const DRAFT_TYPES = Object.freeze([...ACTIVITY_TYPES, "battle"]);
+
+const TYPE_NAMES = {
+  self_study: "self study", assignment: "assignment", project: "project",
+  live_course: "live course", multi_stage: "multi-stage journey", battle: "battle",
+};
+const typeName = (t) => TYPE_NAMES[t] || t;
+
+/** Find the instructor's classroom by loose name ("my jss2 class" → id). */
+async function resolveClassroomByName(instructorId, name) {
+  const q = String(name || "").trim();
+  if (!q) return null;
+  const { data } = await db.from("classrooms")
+    .select("id, name").eq("created_by", instructorId).ilike("name", `%${q}%`).limit(1);
+  if (data?.length) return data[0];
+  // School admins may not own classrooms directly — try their school scope.
+  const { data: school } = await db.from("school_profiles")
+    .select("id").eq("admin_user_id", instructorId).limit(1).maybeSingle();
+  if (school?.id) {
+    const { data: sc } = await db.from("classrooms")
+      .select("id, name").eq("school_id", school.id).ilike("name", `%${q}%`).limit(1);
+    if (sc?.length) return sc[0];
+  }
+  return null;
+}
+
+/**
+ * Normalise the agent's audience input into { body, label }.
+ * Throws `invalid("audience_required", "clarify")` when nothing usable was
+ * given — the tool turns that into an observation the model must act on by
+ * asking the instructor, never by guessing.
+ */
+async function resolveAudience(instructor, audience) {
+  const a = audience && typeof audience === "object" ? audience : {};
+  const usernames = (Array.isArray(a.usernames) ? a.usernames : []).map(u => String(u).trim()).filter(Boolean);
+  const user_ids  = (Array.isArray(a.user_ids)  ? a.user_ids  : []).filter(Boolean);
+  const whole_class = a.whole_class === true || a.everyone === true;
+  let classroom_id = a.classroom_id || null;
+
+  if (!whole_class && !usernames.length && !user_ids.length && !classroom_id) {
+    if (a.classroom_name || a.class_name || a.text) {
+      const room = await resolveClassroomByName(instructor.id, a.classroom_name || a.class_name || a.text);
+      if (room) { classroom_id = room.id; a.classroom_name = room.name; }
+    }
+  }
+  if (!whole_class && !usernames.length && !user_ids.length && !classroom_id) {
+    throw invalid("audience_required", "clarify");
+  }
+
+  // Resolve now so the preview shows the real count before anyone assigns.
+  const { ids, notFound } = await resolveStudents({ usernames, user_ids, classroom_id, whole_class });
+  const bits = [];
+  if (whole_class) bits.push(a.classroom_name || "the whole class");
+  if (usernames.length) bits.push(usernames.map(u => `@${String(u).replace(/^@/, "")}`).join(", "));
+  if (user_ids.length && !usernames.length) bits.push(`${user_ids.length} learner${user_ids.length === 1 ? "" : "s"} by id`);
+  return {
+    body: { usernames, user_ids, whole_class, classroom_id: whole_class ? classroom_id : (classroom_id ?? null) },
+    label: bits.join(" + ") || `${ids.length} learner${ids.length === 1 ? "" : "s"}`,
+    resolvedCount: ids.length,
+    notFound,
+  };
+}
+
+/** The plan generator behind POST /plan — the same one the workbench uses. */
+async function generatePlan(topic, subject) {
+  const { subtopics } = await nana.generateSubtopics(topic, subject);
+  const lists = await Promise.all(subtopics.map((st) => nana.generateObjectives(st, topic, subject)));
+  const objectives = {};
+  subtopics.forEach((st, i) => { objectives[st] = lists[i]; });
+  return { subtopics, objectives };
+}
+
+/** Cap open drafts per instructor; the oldest quietly expires to make room. */
+async function enforceDraftCap(instructorId, cap = 20) {
+  const { data } = await db.from("activity_drafts")
+    .select("id").eq("created_by", instructorId).eq("status", "draft")
+    .order("created_at", { ascending: true });
+  const rows = data ?? [];
+  if (rows.length < cap) return;
+  const excess = rows.slice(0, rows.length - cap + 1);
+  await db.from("activity_drafts")
+    .update({ status: "expired", resolved_at: new Date().toISOString() })
+    .in("id", excess.map(r => r.id));
+}
+
+/**
+ * createActivityDraft — the `prepare_activity` tool's engine.
+ * `input` (model-shaped) becomes a validated, plan-filled, audience-resolved
+ * draft row. Returns { draft, audienceLabel, clarified }.
+ */
+export async function createActivityDraft({ instructor, input, sessionId = null }) {
+  const type = input?.type || "self_study";
+  if (!DRAFT_TYPES.includes(type)) throw invalid(`Unknown activity type: ${type}. Valid: ${DRAFT_TYPES.join(", ")}`);
+
+  const audience = await resolveAudience(instructor, input.audience);
+  if (audience.notFound.length) {
+    throw invalid(`No account found for: ${audience.notFound.join(", ")}`);
+  }
+
+  const topic   = String(input?.topic || "").trim();
+  const subject = String(input?.subject || "").trim();
+  if (!topic)   throw invalid("topic is required");
+  if (!subject && type !== "battle") throw invalid("subject is required");
+
+  const payload = {
+    type,
+    title: String(input?.title || "").trim() || `${topic} — ${typeName(type)}`,
+    subject: subject || "General",
+    topic,
+    instructions: String(input?.instructions || "").trim() || null,
+    difficulty: ["easy", "intermediate", "hard"].includes(input?.difficulty) ? input.difficulty : "intermediate",
+    due_at: null,
+    ...audience.body,
+  };
+  // classroom_id is scope AND the whole-class target — the self-study rule.
+  if (audience.body.whole_class) payload.classroom_id = audience.body.classroom_id;
+  else if (!audience.body.whole_class) payload.classroom_id = audience.body.classroom_id ?? null;
+
+  let audienceLabel = audience.label;
+
+  if (type === "live_course") {
+    // The human picks the exact slot in preview; the agent's hint travels as text.
+    const hint = String(input?.scheduled_hint || input?.due_hint || "").trim();
+    payload.details = { scheduled_hint: hint || null };
+    if (hint) audienceLabel += ` · ${hint}`;
+  } else if (type === "battle") {
+    // The battle form (human) completes questions/XP; the agent drafts intent.
+    payload.details = {
+      topic,
+      difficulty: payload.difficulty,
+      note: String(input?.instructions || "").trim() || null,
+    };
+  } else if (type === "multi_stage") {
+    const stages = (Array.isArray(input?.stages) ? input.stages : []).slice(0, 6)
+      .map((st, i) => ({
+        kind: ["self_study", "assignment", "project"].includes(st?.kind) ? st.kind : "self_study",
+        title: String(st?.title || st?.topic || `Stage ${i + 1}`).trim(),
+        topic: String(st?.topic || st?.title || "").trim(),
+        subject: String(st?.subject || subject || "General").trim(),
+      }))
+      .filter(st => st.topic);
+    if (!stages.length) throw invalid("A multi-stage journey needs at least one stage with a topic");
+    payload.details = { stages };
+    payload.topic = topic;
+    audienceLabel += ` · ${stages.length} stages`;
+  } else {
+    // self_study | assignment | project: fill the plan exactly like /plan.
+    const { subtopics, objectives } = await generatePlan(topic, subject || "General");
+    payload.subtopics = subtopics;
+    payload.objectives = objectives;
+  }
+
+  if (input?.due_hint) payload.due_hint = String(input.due_hint).trim();
+  await enforceDraftCap(instructor.id);
+
+  const school = await mySchool(instructor.id);
+  const { data: draft, error } = await db.from("activity_drafts").insert({
+    created_by: instructor.id,
+    school_id:  school?.id ?? null,
+    type,
+    title: payload.title,
+    subject: payload.subject,
+    topic: payload.topic,
+    payload,
+    audience: { label: audienceLabel, resolved_count: audience.resolvedCount, ...audience.body },
+    source: "ai_chat",
+    session_id: sessionId,
+  }).select().single();
+  if (error) throw invalid(error.message, 500);
+
+  return { draft, audienceLabel, clarified: false };
+}
+
+/** Load one draft the caller owns (admin excepted). */
+export async function getActivityDraft(instructor, id) {
+  const { data } = await db.from("activity_drafts").select("*").eq("id", id).maybeSingle();
+  if (!data) throw invalid("Draft not found", 404);
+  if (data.created_by !== instructor.id && instructor.role !== "admin") throw invalid("Not your draft", 403);
+  return data;
+}
+
+/** The instructor's pending drafts, newest first. */
+export async function listActivityDrafts(instructor) {
+  const { data } = await db.from("activity_drafts")
+    .select("*").eq("created_by", instructor.id).eq("status", "draft")
+    .order("created_at", { ascending: false }).limit(50);
+  return data ?? [];
+}
+
+/** Human edits before assign — the preview's Edit flow saves here. */
+export async function updateActivityDraft(instructor, id, patch) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be edited", 409);
+  const updates = {};
+  if (patch?.payload && typeof patch.payload === "object") updates.payload = patch.payload;
+  if (patch?.audience && typeof patch.audience === "object") updates.audience = patch.audience;
+  if (patch?.status === "assigned") {
+    // Battle completion path: the shared BattleForm created the battle; the
+    // draft just records provenance.
+    updates.status = "assigned";
+    updates.assignment_id = patch.assignment_id ?? null;
+    updates.resolved_at = new Date().toISOString();
+  }
+  if (!Object.keys(updates).length) return draft;
+  const { data, error } = await db.from("activity_drafts")
+    .update(updates).eq("id", id).select().single();
+  if (error) throw invalid(error.message, 500);
+  return data;
+}
+
+/** Discard — always allowed while pending; never deletes the row. */
+export async function discardActivityDraft(instructor, id) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("Only pending drafts can be discarded", 409);
+  const { data, error } = await db.from("activity_drafts")
+    .update({ status: "discarded", resolved_at: new Date().toISOString() })
+    .eq("id", id).select().single();
+  if (error) throw invalid(error.message, 500);
+  return data;
+}
+
+/**
+ * assignActivityDraft — THE approval. Replays the stored bench payload
+ * through the one shared create path. For journeys, each stage is created
+ * first (same path) and the parent travels with the real stage refs.
+ * `overrides` lets the preview hand back human-edited fields.
+ */
+export async function assignActivityDraft({ instructor, id, overrides = null }) {
+  const draft = await getActivityDraft(instructor, id);
+  if (draft.status !== "draft") throw invalid("This draft was already resolved", 409);
+
+  const payload = { ...(draft.payload || {}), ...(overrides && typeof overrides === "object" ? overrides : {}) };
+  const type = payload.type || draft.type;
+  if (type === "battle") throw invalid("Battles are assigned from their battle form in the preview", 400);
+
+  let result;
+  if (type === "multi_stage") {
+    const stages = Array.isArray(payload.details?.stages) ? payload.details.stages.slice(0, 6) : [];
+    if (!stages.length) throw invalid("The journey has no stages", 400);
+    const refs = [];
+    for (const st of stages) {
+      if (st.refId) { refs.push(st); continue; }   // already-created stage ref
+      const stageOut = await createAssignment(instructor, {
+        type: st.kind || "self_study",
+        title: st.title, subject: st.subject || "General", topic: st.topic || st.title,
+        subtopics: st.subtopics ?? [], objectives: st.objectives ?? {},
+        instructions: st.instructions ?? null, difficulty: payload.difficulty || "intermediate",
+        due_at: payload.due_at ?? null,
+        usernames: payload.usernames ?? [], user_ids: payload.user_ids ?? [],
+        whole_class: payload.whole_class ?? false, classroom_id: payload.classroom_id ?? null,
+      });
+      refs.push({ kind: st.kind || "self_study", refId: stageOut.assignment.id, title: st.title });
+    }
+    result = await createAssignment(instructor, {
+      type: "multi_stage",
+      title: payload.title, subject: payload.subject, topic: payload.topic,
+      instructions: payload.instructions || `A ${refs.length}-step journey: ${refs.map(r => r.title).join(" → ")}`,
+      due_at: payload.due_at ?? null,
+      details: { stages: refs },
+      usernames: payload.usernames ?? [], user_ids: payload.user_ids ?? [],
+      whole_class: payload.whole_class ?? false, classroom_id: payload.classroom_id ?? null,
+    });
+  } else {
+    result = await createAssignment(instructor, payload);
+  }
+
+  const { error } = await db.from("activity_drafts")
+    .update({ status: "assigned", assignment_id: result.assignment.id, resolved_at: new Date().toISOString() })
+    .eq("id", draft.id);
+  if (error) console.warn("[drafts] assign bookkeeping failed:", error.message);
+
+  return { ...result, announce: announceFor(type) };
+}

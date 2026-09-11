@@ -168,8 +168,20 @@ audience resolution) — the draft is a proposal, never trusted input.
 Effort feel: Phase 1 ≈ the suggestions feature (moderate); Phase 2 ≈ the
 Submissions modal (the biggest single piece, because of the form reuse).
 
-## Open questions (block Phase 1)
+## Decisions (locked by product, then built)
 
-1. **Activity types in v1** — recommend `self_study`, `assignment`, `project` first; `multi_stage` (journey blocks) and `live_course` later. Confirm?
-2. **Audience authority** — agent proposes (resolved candidates shown in preview, human confirms/edits)? Or audience always picked fresh by the instructor in the modal?
-3. **Drafts visible outside chat in v1** — workbench strip from day one, or chat-only first?
+1. **All six workbench types** are draftable — `self_study`, `assignment`, `project`, `live_course`, `multi_stage`, `battle`. Journeys stage through the shared create path; battles complete through the one shared BattleForm inside the preview.
+2. **Audience comes from the instructor's prompt** — `audience` is a required tool input; when it's missing the tool returns `audience_required` / `needsClarification` and the agent asks instead of guessing. Resolved candidates + counts are shown in the preview.
+3. **Preview is side-by-side with the chat** (not a modal): the chat column narrows, a 430px panel opens beside it (`ActivityPreviewPanel`); below ~1100px it becomes a full-screen overlay. Assign and Discard live in the panel footer; Edit reuses `ActivityForm` pointed at the draft-assign endpoint.
+
+## Implemented (this branch)
+
+- `migrations/2026-activity-drafts.sql` + manifest entry
+- `modules/self-study/createAssignment.js` — the ONE create path (validation, `resolveStudents`, insert, targets, notify, socket ding); `POST /api/self-study` is now a thin wrapper
+- `modules/self-study/drafts.js` — draft lifecycle (draft → assigned | discarded | expired), nana plan-fill, audience resolution + clarification, journey staging, 20-open-draft cap
+- 5 endpoints under `/api/self-study/drafts…` (list / get / patch / assign / discard), `TEACHER_ROLES` + ownership
+- chat.js: `INSTRUCTOR_TOOLS` (prepare_activity / list_activity_drafts / discard_activity_draft), role cross-gating in `executeChatTool`, instructor tool loop armed in `/agent`, `INSTRUCTOR_HITL_GUIDE` (never claims assigned), draft echo on `toolExecutions`
+- Instructor UI: `ActivityPreviewPanel.jsx`, ChatPage Preview buttons + side-by-side split, `ActivityForm` prefill (`initial`) + `savePayload` seam — no forked form
+- Contracts: `activity-drafts.contract.test.mjs` (6 tests); activity-workbench pins updated to the shared service
+
+Still open (phase 3): workbench drafts strip, `list_my_classrooms` tool, TTL cron if the lazy sweep/cap proves insufficient.
