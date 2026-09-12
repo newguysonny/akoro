@@ -87,6 +87,9 @@ export class NaNaEsumai {
       // property is more than an assertion.
       model: opts.model || "gpt-4.1-mini", temperature: 0.25,
       __feature: opts.feature || undefined, __userId: opts.userId || undefined,
+      // Bounded: the SDK defaults (10-min timeout, 2 retries) once let one
+      // stalled call hang a whole chat turn past the browser's patience.
+      __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content:
@@ -123,6 +126,7 @@ export class NaNaEsumai {
   async generateObjectives(subtopic, topic, subject, groundingContext = "") {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.2,
+      __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: `Return 3 clear, measurable learning objectives for this subtopic.\nJSON only: { "objectives": ["By the end, the student can...", "..."] }` },

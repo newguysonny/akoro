@@ -537,7 +537,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
           audience: audienceLabel, status: draft.status,
           previewHint: "Awaiting the instructor's preview — do not claim it was assigned.",
         };
-        if (draft.payload?.planFallback) result.planNote = "The study-plan generator was unavailable — the draft carries the topic only; the instructor can edit objectives in the preview.";
+        if (draft.payload?.plan_status === "pending") result.planNote = "The full study plan is being generated right now — it lands in the preview moments after this reply; the objectives stay editable there.";
         if (draft.payload?.due_notice) result.dueNote = draft.payload.due_notice;
         return result;
       } catch (error) {
@@ -1943,7 +1943,8 @@ const INSTRUCTOR_HITL_GUIDE =
   `When prepare_activity succeeds, a DRAFT exists — say exactly that: "Draft ready — preview it to assign." ` +
   `Never say an activity was assigned, sent, or that learners were notified: only the instructor's Assign action in the preview does that. ` +
   `If a prepare fails, its error field says exactly why — repeat that reason to the instructor and fix that one thing together. NEVER call it a technical problem, NEVER retry with unchanged inputs. ` +
-  `If the instructor says "the whole class" and list_my_classrooms shows exactly ONE class, use it without asking. ` +
+  `If the instructor says "the whole class" or "everyone" or "use the class" and list_my_classrooms shows exactly ONE class, use it without asking. ` +
+  `When the instructor CONFIRMS ("yes", "go ahead", "do it", "use that class"), call prepare_activity immediately — every detail they gave is already in this conversation; never re-ask or restart the request. ` +
   `If the tool result carries needsClarification, ask the question it carries before preparing anything. ` +
   `Do not guess an audience, a due date, or a schedule the instructor did not state. ` +
   `Pass due_at only when you can resolve their stated time to an exact ISO 8601 instant; otherwise keep it as a due_hint label or ask. ` +

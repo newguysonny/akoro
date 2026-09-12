@@ -168,6 +168,54 @@ async function generatePlan(topic, subject) {
   return { subtopics, objectives };
 }
 
+// Ceiling for one background enrichment. The SDK calls are individually
+// bounded (45s ×1 retry), so this mostly exists so that even a pathological
+// run can't leave a draft stuck in `pending` forever.
+const PLAN_ENRICH_TIMEOUT_MS = 150_000;
+
+/**
+ * Fill a draft's plan in the background — never inside the chat turn.
+ * Read-modify-write so a teacher editing the preview while the model runs
+ * never loses their changes, and a draft that left `draft` status
+ * (assigned/discarded/expired) is left untouched. Never throws: the draft
+ * already exists and is previewable; a failed enrichment just leaves the
+ * editable topic-only plan and logs.
+ */
+async function enrichDraftPlan(draftId, topic, subject) {
+  const withDeadline = Promise.race([
+    generatePlan(topic, subject),
+    new Promise((_, rej) => {
+      const t = setTimeout(
+        () => rej(new Error(`plan generation exceeded ${PLAN_ENRICH_TIMEOUT_MS / 1000}s`)),
+        PLAN_ENRICH_TIMEOUT_MS,
+      );
+      t.unref?.(); // never hold process shutdown open for a plan
+    }),
+  ]);
+  try {
+    const { subtopics, objectives } = await withDeadline;
+    const { data: row, error: readErr } = await db.from("activity_drafts")
+      .select("status, payload").eq("id", draftId).maybeSingle();
+    if (readErr || !row) throw new Error(readErr?.message || "draft no longer readable");
+    if (row.status !== "draft") return; // assigned/discarded/expired — leave it be
+    const { error: updErr } = await db.from("activity_drafts")
+      .update({ payload: { ...row.payload, subtopics, objectives, plan_status: "ready" } })
+      .eq("id", draftId);
+    if (updErr) throw new Error(updErr.message);
+  } catch (e) {
+    console.error("[prepare_activity] plan generator failed:", e.message);
+    try {
+      const { data: row } = await db.from("activity_drafts")
+        .select("status, payload").eq("id", draftId).maybeSingle();
+      if (row?.status === "draft") {
+        await db.from("activity_drafts")
+          .update({ payload: { ...row.payload, plan_status: "fallback" } })
+          .eq("id", draftId);
+      }
+    } catch (markErr) { console.error("[prepare_activity] plan fallback mark failed:", markErr.message); }
+  }
+}
+
 /** Cap open drafts per instructor; the oldest quietly expires to make room. */
 async function enforceDraftCap(instructorId, cap = 20) {
   const { data } = await db.from("activity_drafts")
@@ -274,20 +322,17 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
     payload.topic = topic;
     audienceLabel += ` · ${stages.length} stages`;
   } else {
-    // self_study | assignment | project: fill the plan exactly like /plan.
-    // The generator runs LIVE model calls — if it fails (quota, timeout),
-    // the draft still exists with a minimal plan and the tool result says
-    // so. A prepare must never die to content generation.
-    try {
-      const { subtopics, objectives } = await generatePlan(topic, subject || "General");
-      payload.subtopics = subtopics;
-      payload.objectives = objectives;
-    } catch (planError) {
-      console.error("[prepare_activity] plan generator failed:", planError.message);
-      payload.subtopics = [topic];
-      payload.objectives = { [topic]: [`Study and complete the activities on ${topic}`] };
-      payload.planFallback = true;
-    }
+    // self_study | assignment | project. The plan generator is 1 + N LIVE
+    // model calls (up to ~9 per prepare). Awaited inline it once hung the
+    // whole chat turn — a stalled provider call sat on the SDK's 10-minute
+    // default timeout while the browser/proxy gave up, and the instructor
+    // just saw "trouble responding". So the draft carries the topic
+    // instantly and the plan is filled in the background (enrichDraftPlan
+    // below) — usually ready before the instructor opens the preview.
+    // A prepare must never wait on content generation.
+    payload.subtopics = [topic];
+    payload.objectives = { [topic]: [`Study and complete the activities on ${topic}`] };
+    payload.plan_status = "pending";
   }
 
   if (input?.due_hint) payload.due_hint = String(input.due_hint).trim();
@@ -326,6 +371,11 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
       if (nErr) console.warn("[drafts] instructor notify failed:", nErr.message);
     } catch (e) { console.warn("[drafts] instructor notify threw:", e.message); }
   }
+
+  // Plan enrichment runs OUTSIDE the chat turn: fire-and-forget, so the
+  // reply (and the Preview button) arrive instantly while the model fills
+  // the plan. Its catch is internal — never an unhandled rejection.
+  if (payload.plan_status === "pending") enrichDraftPlan(draft.id, topic, subject || "General");
 
   return { draft, audienceLabel, clarified: false };
 }

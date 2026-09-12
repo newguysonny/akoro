@@ -14,7 +14,7 @@ import test from "node:test";
  * create path the activities workbench uses (targets, notifications, ding).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage, classroomsMigration] = await Promise.all([
+const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage, classroomsMigration, guide, aiModel] = await Promise.all([
   read("./2026-activity-drafts.sql"),
   read("./manifest.json"),
   read("../../akoro-api/modules/self-study/createAssignment.js"),
@@ -32,6 +32,8 @@ const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage
   read("../../akoro-api/app.js"),
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
   read("../../akoro-api/migrations/2026-classrooms-created-by.sql"),
+  read("../../akoro-api/modules/adaptive-learning/agents/nana-esumai/guide.js"),
+  read("../../akoro-api/lib/aiModel.js"),
 ]);
 
 test("the migration keeps drafts private and provenance-carrying", () => {
@@ -213,7 +215,7 @@ test("production hardening: races, expiry, cost, deadlines, visibility", () => {
   // Lazy TTL — stale pending drafts expire on read, no cron.
   assert.match(drafts, /DRAFT_TTL_DAYS = 7/);
   assert.match(drafts, /expireStaleDrafts/);
-  // Soft hourly cap on prepare (each call runs the LLM plan generator).
+  // Soft hourly cap on prepare (a background plan fill rides on each call).
   assert.match(drafts, /PREPARE_HOURLY_CAP = 10/);
   assert.match(drafts, /Prepare limit reached/);
   // Precise due times follow the create_task convention: ISO or hint, never invented.
@@ -370,10 +372,21 @@ test("the node agent knows what day it is (due-date resolution)", () => {
 });
 
 test("prepare failures are diagnosable and survivable — no more silent thrash", () => {
-  // The live model LLM-calls the plan generator; its failure must not kill
-  // the draft — it degrades to a topic-only plan and says so.
+  // The plan generator is 1 + N live model calls; awaiting it inline once
+  // hung the whole chat turn (SDK default: a 10-minute timeout) until the
+  // browser gave up — the instructor just saw "trouble responding". Prepare
+  // now carries the topic instantly and the plan fills in the BACKGROUND.
+  assert.match(drafts, /payload\.plan_status = "pending"/);
+  assert.doesNotMatch(drafts, /await generatePlan\(/, "the chat turn must never wait on the plan generator");
+  assert.match(drafts, /if \(payload\.plan_status === "pending"\) enrichDraftPlan\(/);
+  // The background fill is deadline-bounded, read-modify-write, never
+  // touches a draft that left `draft` status, and marks total failure.
+  assert.match(drafts, /PLAN_ENRICH_TIMEOUT_MS = 150_000/);
+  assert.match(drafts, /plan_status: "ready"/);
+  assert.match(drafts, /plan_status: "fallback"/);
+  assert.match(drafts, /row\.status !== "draft"\) return/);
+  assert.match(drafts, /\.\.\.row\.payload,/);
   assert.match(drafts, /console\.error\("\[prepare_activity\] plan generator failed:/);
-  assert.match(drafts, /payload\.planFallback = true/);
   // A broken machine due_at degrades to the human hint, never a dead end.
   assert.match(drafts, /dueAtNotice = "The exact due time could not be parsed/);
   assert.match(drafts, /payload\.due_notice = dueAtNotice/);
@@ -383,6 +396,22 @@ test("prepare failures are diagnosable and survivable — no more silent thrash"
   assert.match(chat, /repeat that reason to the instructor and fix that one thing together\. NEVER call it a technical problem/);
   // One class + "the whole class" → no name-confirmation round trip.
   assert.match(chat, /list_my_classrooms shows exactly ONE class, use it without asking/);
+  // A bare "Yes" once landed as "what do you mean?" — confirmation must
+  // fire the tool, not restart the interview.
+  assert.match(chat, /call prepare_activity immediately — every detail they gave is already in this conversation/);
+  // The tool result says the plan is on its way (it no longer awaits it).
+  assert.match(chat, /plan_status === "pending"\) result\.planNote/);
+});
+
+test("the plan generator's model calls are individually bounded — no 10-minute stalls", () => {
+  // The SDK's defaults (timeout 10 min, 2 retries) let one stalled provider
+  // call hold a chat turn far past any client's patience. The two plan
+  // calls opt into tighter bounds via the metered client's dunder options.
+  assert.equal((guide.match(/__timeoutMs: 45_000, __maxRetries: 1/g) || []).length, 2,
+    "generateSubtopics and generateObjectives both bounded");
+  // ...and the metered client actually forwards them as SDK request options.
+  assert.match(aiModel, /clean\.__timeoutMs != null \|\| clean\.__maxRetries != null/);
+  assert.match(aiModel, /create\(clean, reqOpts\)/);
 });
 
 test("classroom name resolution never chains .catch on a Supabase builder", () => {
