@@ -146,7 +146,8 @@
     "2026-adaptive-workflows-v1.sql",
     "2026-curriculum-guardian-review-v1.sql",
     "2026-agent-tool-requests-v1.sql",
-    "2026-adaptive-teaching-evidence.sql"
+    "2026-adaptive-teaching-evidence.sql",
+    "2026-community-activity-types.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

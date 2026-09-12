@@ -298,6 +298,20 @@ router.post("/:id/activities", asyncHandler(async (req, res) => {
   const className    = String(req.body?.["class"] || req.body?.class_name || "").trim() || null;
   const instructions = String(req.body?.instructions || "").trim() || null;
 
+  // Workbench parity: an activity carries its type, and multi_stage
+  // journeys carry their ordered stages — the same five types (and stage
+  // kinds ≤ 6) the activities workbench drafts.
+  const TYPE_KEYS   = ["assignment", "project", "multi_stage", "self_study", "live_course"];
+  const STAGE_KINDS = ["self_study", "assignment", "project"];
+  const type = TYPE_KEYS.includes(req.body?.type) ? req.body.type : "assignment";
+  let stages = [];
+  if (type === "multi_stage") {
+    stages = (Array.isArray(req.body?.stages) ? req.body.stages : []).slice(0, 6)
+      .map((s) => ({ kind: STAGE_KINDS.includes(s?.kind) ? s.kind : "self_study", title: String(s?.title || "").trim() }))
+      .filter((s) => s.title);
+    if (!stages.length) return bad(res, "A multi-stage journey needs at least one stage with a title.");
+  }
+
   if (!name) return bad(res, "Give the activity a name.");
   if (name.length > 120) return bad(res, "Activity name is too long (max 120).");
   if (subject && subject.length > 80) return bad(res, "Subject is too long (max 80).");
@@ -314,6 +328,7 @@ router.post("/:id/activities", asyncHandler(async (req, res) => {
     .insert({
       community_id: c.id, creator_id: req.user.id,
       name, subject, class_name: className, instructions, due_at: dueAt,
+      type, stages,
     })
     .select("*")
     .single();
