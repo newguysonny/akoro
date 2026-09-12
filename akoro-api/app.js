@@ -69,6 +69,7 @@ import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
 import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
 import learnerGoalsModule       from "./modules/learner-goals/routes.js";
+import agentProposalsModule      from "./modules/agent-proposals/routes.js";
 import {
   agentToolsRouter as agentToolsModule,
   agentActionConfirmationsRouter as agentActionConfirmationsModule,
@@ -521,6 +522,19 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
   } catch (e) {
     console.error("[learner-autonomy] worker failed to start:", e.message);
   }
+
+  // Full Autonomy level 2 (Planner): the nightly background cycle. The
+  // scheduler ticks once a minute and enqueues at most one small batch
+  // inside the 21:00-22:00 Africa/Lagos window — O(learners) jobs per day.
+  try {
+    if (!skipJob("autonomy cycle worker")) {
+      const autonomy = await import("./modules/autonomy/index.js");
+      autonomy.startAutonomyCycleWorker();
+      console.log("[autonomy] planner worker started at boot");
+    }
+  } catch (e) {
+    console.error("[autonomy] planner worker failed to start:", e.message);
+  }
 }
 
 // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
@@ -558,6 +572,7 @@ app.use("/api/content",    standardLimit, contentModule);   // public blog + car
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
 app.use("/api",            standardLimit, agentToolRequestsModule); // explicit learner Agent Chat feature/tool requests
 app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
+app.use("/api/agent/proposals", standardLimit, agentProposalsModule); // Full Autonomy proposal inbox (approve executes via chat tools)
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────

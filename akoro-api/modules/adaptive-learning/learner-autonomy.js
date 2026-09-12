@@ -64,7 +64,12 @@ async function enabledFor(userId, { strict = false } = {}) {
 
 export async function getLearnerAutonomy(userId) {
   if (!userId) throw new Error("An authenticated learner is required");
-  return { enabled: await enabledFor(userId, { strict: true }) };
+  // level 1 = due-task check-ins (the original consent); level 2 = the
+  // background planner may PROPOSE (docs/learner-full-autonomy-plan.md §6).
+  const { data, error } = await db.schema("edu").from("learner_agent_autonomy")
+    .select("enabled, level").eq("user_id", userId).maybeSingle();
+  if (error) throw new Error("Could not load agent autonomy preference");
+  return { enabled: Boolean(data?.enabled), level: data?.level ?? 1 };
 }
 
 function validDueAt(value) {
@@ -192,14 +197,13 @@ export async function schedulePendingAutonomyReviews(userId) {
   return { scheduled };
 }
 
-export async function setLearnerAutonomy({ userId, enabled }) {
+export async function setLearnerAutonomy({ userId, enabled, level }) {
   if (!userId || typeof enabled !== "boolean") throw new Error("A boolean enabled value is required");
   const now = new Date().toISOString();
-  const { error } = await db.schema("edu").from("learner_agent_autonomy").upsert({
-    user_id: userId,
-    enabled,
-    updated_at: now,
-  }, { onConflict: "user_id" });
+  const patch = { user_id: userId, enabled, updated_at: now };
+  if (Number.isInteger(level) && [1, 2].includes(level)) patch.level = level;
+  const { error } = await db.schema("edu").from("learner_agent_autonomy").upsert(
+    patch, { onConflict: "user_id" });
   if (error) throw new Error("Could not save agent autonomy preference");
 
   if (!enabled) {
@@ -209,11 +213,11 @@ export async function setLearnerAutonomy({ userId, enabled }) {
       .update({ status: "paused", updated_at: now })
       .eq("user_id", userId)
       .eq("status", "scheduled");
-    return { enabled: false, scheduled: 0 };
+    return { enabled: false, scheduled: 0, ...(patch.level && { level: patch.level }) };
   }
 
   const { scheduled } = await schedulePendingAutonomyReviews(userId);
-  return { enabled: true, scheduled };
+  return { enabled: true, scheduled, ...(patch.level && { level: patch.level }) };
 }
 
 async function loadReview(reviewId) {

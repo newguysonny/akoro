@@ -148,7 +148,9 @@
     "2026-agent-tool-requests-v1.sql",
     "2026-adaptive-teaching-evidence.sql",
     "2026-community-activity-types.sql",
-    "2026-learner-goals.sql"
+    "2026-learner-goals.sql",
+    "2026-agent-proposals.sql",
+    "2026-autonomy-planner.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

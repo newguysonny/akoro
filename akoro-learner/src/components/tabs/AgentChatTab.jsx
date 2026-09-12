@@ -231,6 +231,49 @@ function AgentChatTab({
   const { tasks, createTask, updateTask, toggleTask, deleteTask, refetch: refetchTasks,
     suggestions, refetchSuggestions, acceptSuggestion: acceptSuggestionApi, dismissSuggestion: dismissSuggestionApi } = useTaskAPI();
 
+  // Full Autonomy (level 2): the background planner's proposals land in the
+  // SAME inbox as chat suggestions. Only approval executes — the backend
+  // replays the proposal through the exact tool the chat itself uses.
+  const [proposals,setProposals]=useState([]);
+  const [proposalBusyId,setProposalBusyId]=useState(null);
+  const [plannerOn,setPlannerOn]=useState(false);
+  const [plannerBusy,setPlannerBusy]=useState(false);
+  const pendingProposals=proposals.filter(p=>p.status==="proposed");
+  const suggestionCount=suggestions.length+pendingProposals.length;
+  const refetchProposals=async()=>{ try{ const d=await apiGet('/api/agent/proposals'); setProposals(Array.isArray(d?.data)?d.data:[]); }catch{} };
+  useEffect(()=>{ refetchProposals(); },[]);
+  useEffect(()=>{ let live=true;
+    apiGet('/api/adaptive/chat/autonomy').then(d=>{ if(live) setPlannerOn(Number(d?.level??1)>=2); }).catch(()=>{});
+    return ()=>{ live=false; };
+  },[]);
+  const approveProposal=async(p)=>{
+    if(proposalBusyId) return;
+    setProposalBusyId(p.id); setListError("");
+    try {
+      const d=await apiPost(`/api/agent/proposals/${p.id}/approve`,{});
+      setProposals(prev=>prev.map(x=>x.id===p.id?{...x,status:'executed'}:x));
+      if(p.kind==='session') pushAgent(t('agent.proposal_done_session'));
+      else if(p.kind==='goal') pushAgent(t('agent.proposal_done_goal').replace('{title}',d?.data?.title||p.title));
+      else { pushAgent(t('agent.proposal_done_task').replace('{title}',d?.data?.title||p.title)); refetchTasks(); }
+    } catch(e){ setListError(e?.message||t('agent.proposal_failed')); refetchProposals(); }
+    finally{ setProposalBusyId(null); }
+  };
+  const dismissProposal=async(p)=>{
+    if(proposalBusyId) return;
+    setProposalBusyId(p.id); setListError("");
+    try { await apiPost(`/api/agent/proposals/${p.id}/dismiss`,{}); setProposals(prev=>prev.filter(x=>x.id!==p.id)); }
+    catch(e){ setListError(e?.message||t('agent.proposal_failed')); }
+    finally{ setProposalBusyId(null); }
+  };
+  const togglePlanner=async()=>{
+    if(plannerBusy) return;
+    const prev=plannerOn, next=!prev;
+    setPlannerBusy(true); setPlannerOn(next);
+    try { await apiPatch('/api/adaptive/chat/autonomy',{ enabled:true, level:next?2:1 }); }
+    catch(e){ setPlannerOn(prev); setListError(e?.message||t('agent.planner_error')); }
+    finally{ setPlannerBusy(false); }
+  };
+
   // Agent suggestions: accept turns the idea into a real task (the agent
   // confirms it in the transcript, like a task the learner assigned); dismiss
   // just closes the idea. Both are optimistic and server-reconciled.
@@ -607,7 +650,7 @@ function AgentChatTab({
             ))}
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px 8px" }}>
-            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{l}{k==="suggestions"&&suggestions.length>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestions.length}</span>}</button>)}</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>{[["pending",t('agent.to_do')],["done",t('agent.done')],["suggestions",t('agent.suggestions')]].map(([k,l])=><button key={k} onClick={()=>setTaskFilter(k)} style={{ padding:"5px 12px",borderRadius:20,border:`1.5px solid ${taskFilter===k?BRAND:"var(--ak-border2)"}`,background:taskFilter===k?`${BRAND}10`:"transparent",color:taskFilter===k?BRAND:"var(--ak-text-muted)",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",gap:5 }}>{l}{k==="suggestions"&&suggestionCount>0&&<span style={{ fontSize:9,fontWeight:900,background:taskFilter===k?BRAND:"var(--ak-border)",color:taskFilter===k?"#fff":"var(--ak-text-muted)",borderRadius:8,padding:"1px 5px" }}>{suggestionCount}</span>}</button>)}</div>
             {taskFilter!=="suggestions"&&<button onClick={openNewTask} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11.5,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>{t('agent.new_task')}
             </button>}
@@ -620,8 +663,31 @@ function AgentChatTab({
           )}
           <div style={{ flex:1,padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:8 }}>
             {taskFilter==="suggestions"?(
-              suggestions.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.suggestions_empty')}</p></div>
-              :suggestions.map(sg=>{
+              suggestionCount===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-bulb" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8,maxWidth:260,marginInline:"auto",lineHeight:1.5 }}>{t('agent.suggestions_empty')}</p></div>
+              :(<>{pendingProposals.length>0&&<div style={{ marginBottom:10 }}>
+              <p style={{ fontSize:10,fontWeight:900,color:"var(--ak-text-muted)",textTransform:"uppercase",letterSpacing:.5,margin:"2px 2px 8px" }}>{t('agent.proposals_from_review')}</p>
+              {pendingProposals.map(p=>{
+                const pkKey=p.kind==="session"?"agent.proposal_kind_session":p.kind==="practice"?"agent.proposal_kind_practice":p.kind==="goal"?"agent.proposal_kind_goal":"agent.proposal_kind_task";
+                const pkIcon=p.kind==="session"?"ti-clock":p.kind==="practice"?"ti-pencil":p.kind==="goal"?"ti-target":"ti-clipboard";
+                return (
+                <div key={p.id} style={{ padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:`1px dashed ${GOLD}70`,marginBottom:8 }}>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap" }}>
+                    <span style={{ display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,fontWeight:900,padding:"2px 8px",borderRadius:20,background:`${GOLD}15`,border:`1px solid ${GOLD}40`,color:GOLD,letterSpacing:.3,textTransform:"uppercase" }}><Icon name={pkIcon} size={10}/>{t(pkKey)}</span>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600 }}>{relTime(p.created_at)}</span>
+                  </div>
+                  <p style={{ fontSize:13.5,fontWeight:700,color:"var(--ak-text)",margin:"0 0 4px",lineHeight:1.45 }}>{p.title}</p>
+                  {p.rationale&&<p style={{ fontSize:12,color:"var(--ak-text-sub)",margin:"0 0 10px",lineHeight:1.5 }}>{p.rationale}</p>}
+                  <div style={{ display:"flex",alignItems:"center",gap:7 }}>
+                    <button onClick={()=>approveProposal(p)} disabled={!!proposalBusyId} style={{ display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"none",background:proposalBusyId?"var(--ak-border)":`linear-gradient(135deg,${BRAND},#4C1DCC)`,color:"#fff",fontSize:11,fontWeight:800,cursor:proposalBusyId?"wait":"pointer",opacity:proposalBusyId&&proposalBusyId!==p.id?0.55:1,fontFamily:"'Nunito',sans-serif" }}>
+                      {proposalBusyId===p.id?<Spinner size={11} color="#fff"/>:<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>}{t('agent.proposal_approve')}
+                    </button>
+                    <button onClick={()=>dismissProposal(p)} disabled={!!proposalBusyId} title={t('agent.proposal_dismiss')} aria-label={t('agent.proposal_dismiss')} style={{ width:27,height:27,borderRadius:"50%",border:"1px solid var(--ak-border2)",background:"var(--ak-surface-hover)",color:"var(--ak-text-muted)",cursor:proposalBusyId?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center" }}><Icon name="ti-x" size={12}/></button>
+                    <span style={{ fontSize:10,color:"var(--ak-text-muted)",fontWeight:600,fontStyle:"italic" }}>{t('agent.proposals_sub')}</span>
+                  </div>
+                </div>
+                );
+              })}
+            </div>}{suggestions.map(sg=>{
                 const kindKey=sg.kind==="goal"?"agent.sugg_goal":sg.kind==="conversation"?"agent.sugg_chat":"agent.sugg_task";
                 const kindIcon=sg.kind==="goal"?"ti-target":sg.kind==="conversation"?"ti-message-circle":"ti-clipboard";
                 return (
@@ -641,7 +707,7 @@ function AgentChatTab({
                   </div>
                 </div>
                 );
-              })
+              })}</>)
             ):(taskFilter==="done"||taskFilter==="pending")&&(
             filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
               <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
@@ -728,6 +794,20 @@ function AgentChatTab({
                 </span>
               </button>
             </div>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"11px 16px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+            <div style={{ minWidth:0 }}>
+              <p style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)",margin:0 }}>{t('agent.planner')}</p>
+              <p style={{ fontSize:10,color:"var(--ak-text-muted)",margin:0,marginTop:1,lineHeight:1.4 }}>{t('agent.planner_sub')}</p>
+            </div>
+            <button type="button" role="switch" aria-checked={plannerOn} aria-label={t('agent.planner')}
+              onClick={togglePlanner} disabled={plannerBusy}
+              title={plannerOn?"The background planner proposes next steps overnight — you approve each one.":"Let the background planner review your goals nightly and propose next steps."}
+              style={{ flexShrink:0,width:38,height:22,borderRadius:20,border:`1.5px solid ${plannerOn?BRAND:"var(--ak-border2)"}`,background:plannerOn?BRAND:"transparent",cursor:plannerBusy?"wait":"pointer",position:"relative",transition:"background .18s ease",padding:0 }}>
+              <span style={{ position:"absolute",top:2,left:plannerOn?18:3,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.25)",transition:"left .18s ease",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                {plannerBusy&&<Spinner size={9}/>}
+              </span>
+            </button>
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 12px",flexShrink:0 }}>
             <p style={{ fontSize:13,fontWeight:900,letterSpacing:.4,textTransform:"uppercase",color:"var(--ak-text-muted)",margin:0 }}>{t('agent.chats')}</p>

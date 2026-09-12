@@ -1018,7 +1018,10 @@ router.patch("/autonomy", async (req, res) => {
     return res.status(422).json({ error: "enabled must be a boolean" });
   }
   try {
-    const result = await setLearnerAutonomy({ userId: req.user.id, enabled: req.body.enabled });
+    const result = await setLearnerAutonomy({
+      userId: req.user.id, enabled: req.body.enabled,
+      level: typeof req.body.level === "number" ? req.body.level : undefined,
+    });
     res.json({ success: true, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message || "Could not save agent autonomy" });
