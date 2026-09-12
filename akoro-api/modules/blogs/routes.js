@@ -10,6 +10,7 @@
 import { Router } from "express";
 import db from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
+import { syncPublishedBlogMirror, removeBlogMirror } from "./mirror.js";
 
 const router = Router();
 const edu = () => db.schema("edu");
@@ -25,6 +26,20 @@ const bad = (res, m) => res.status(400).json({ success: false, error: m });
 const missing = (res, m = "Not found") => res.status(404).json({ success: false, error: m });
 
 /** First meaningful line of the body, tags/markers left as written. */
+/* ── public-blog mirror (best-effort by contract) ─────────────────────────
+   The learner's save never fails because a public mirror hiccuped; the next
+   publish re-syncs anyway (upsert by slug). */
+const mirrorBlog = async (userId, blog) => {
+  try {
+    const { data: u } = await db.from("users").select("full_name, username").eq("id", userId).maybeSingle();
+    await syncPublishedBlogMirror(blog, u?.full_name || u?.username);
+  } catch (e) { console.warn("[blogs] public mirror sync failed:", e.message); }
+};
+const unmirrorBlog = async (blog) => {
+  try { await removeBlogMirror(blog.public_slug); }
+  catch (e) { console.warn("[blogs] public mirror removal failed:", e.message); }
+};
+
 const excerptOf = (body) => {
   const line = String(body || "").split("\n").map((l) => l.trim()).find(Boolean) || "";
   return line.slice(0, EXCERPT_LEN) || null;
@@ -70,9 +85,10 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
     status: v.status,
     published_at: v.status === "published" ? now : null,
     updated_at: now,
-  }).select("id, title, status, created_at, updated_at, published_at").single();
+  }).select("*").single();
   if (error) return res.status(503).json({ success: false, error: "Could not save the blog" });
-  ok(res, data);
+  if (data.status === "published") await mirrorBlog(req.user.id, data);
+  ok(res, { id: data.id, title: data.title, status: data.status, created_at: data.created_at, updated_at: data.updated_at, published_at: data.published_at });
 }));
 
 /* GET /:id — the author reads any state; a published post reads by anyone. */
@@ -95,7 +111,7 @@ router.get("/:id", authenticateToken, asyncHandler(async (req, res) => {
    so publishing an empty-body post is impossible from any field shape. */
 router.patch("/:id", authenticateToken, asyncHandler(async (req, res) => {
   const { data: existing, error: findError } = await edu().from("blogs")
-    .select("id, user_id, title, body, status, published_at")
+    .select("id, user_id, title, body, status, published_at, public_slug")
     .eq("id", req.params.id)
     .maybeSingle();
   if (findError) return res.status(503).json({ success: false, error: "Could not load the blog" });
@@ -117,18 +133,29 @@ router.patch("/:id", authenticateToken, asyncHandler(async (req, res) => {
 
   const { data, error } = await edu().from("blogs").update(patch)
     .eq("id", existing.id).eq("user_id", req.user.id)
-    .select("id, title, status, created_at, updated_at, published_at").single();
+    .select("*").single();
   if (error) return res.status(503).json({ success: false, error: "Could not save the blog" });
-  ok(res, data);
+
+  if (v.status === "published") {
+    // newly published, or edited while published — the mirror follows the post
+    await mirrorBlog(req.user.id, { ...data, public_slug: existing.public_slug });
+  } else if (existing.status === "published" && v.status !== "published") {
+    await unmirrorBlog(existing);            // unpublished → off the public blog
+  }
+
+  ok(res, { id: data.id, title: data.title, status: data.status, created_at: data.created_at, updated_at: data.updated_at, published_at: data.published_at });
 }));
 
 /* DELETE /:id — the author only. */
 router.delete("/:id", authenticateToken, asyncHandler(async (req, res) => {
-  const { data, error } = await edu().from("blogs")
-    .delete().eq("id", req.params.id).eq("user_id", req.user.id)
-    .select("id").single();
+  const { data: doomed, error: findError } = await edu().from("blogs")
+    .select("id, public_slug").eq("id", req.params.id).eq("user_id", req.user.id)
+    .maybeSingle();
+  if (findError) return res.status(503).json({ success: false, error: "Could not load the blog" });
+  if (!doomed) return missing(res, "Blog not found");
+  const { error } = await edu().from("blogs").delete().eq("id", doomed.id).eq("user_id", req.user.id);
   if (error) return res.status(503).json({ success: false, error: "Could not delete the blog" });
-  if (!data) return missing(res, "Blog not found");
+  if (doomed.public_slug) await unmirrorBlog(doomed);
   ok(res, { deleted: true });
 }));
 

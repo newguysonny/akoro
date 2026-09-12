@@ -151,7 +151,8 @@
     "2026-learner-goals.sql",
     "2026-agent-proposals.sql",
     "2026-autonomy-planner.sql",
-    "2026-edu-blogs.sql"
+    "2026-edu-blogs.sql",
+    "2026-edu-blogs-public.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

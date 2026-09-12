@@ -42,6 +42,52 @@ export function flattenBlogBody(body, maxChars = BLOG_BODY_MAX_CHARS) {
 }
 
 /**
+ * The markdown-subset the blog editor writes → the ordered block array the
+ * public blog renders (h / quote / list / p — the same types the marketing
+ * posts use). Consecutive "- " lines group into one list block; ordered
+ * lines keep their numbers in the item text. Code markers are stripped —
+ * the public blog has no inline-code style, so backticks would read as noise.
+ */
+export function markdownToBlogBlocks(body) {
+  const lines = String(body ?? "").split("\n");
+  const blocks = [];
+  let listBuf = [];
+  const flushList = () => {
+    if (listBuf.length) {
+      blocks.push({ type: "list", items: listBuf });
+      listBuf = [];
+    }
+  };
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) { flushList(); continue; }
+    const bullet = line.match(/^-\s+(.*)$/);
+    const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+    if (bullet) { listBuf.push(stripInline(bullet[1])); continue; }
+    if (ordered) { listBuf.push(`${ordered[1] ? line.slice(0, line.indexOf(ordered[1])) : ""}${stripInline(ordered[1] ?? line)}`.trim()); continue; }
+    flushList();
+    if (/^###\s+/.test(line)) { const t = stripInline(line.replace(/^###\s+/, "")); if (t) blocks.push({ type: "h", text: t }); continue; }
+    if (/^##+\s+/.test(line)) { const t = stripInline(line.replace(/^##+\s+/, "")); if (t) blocks.push({ type: "h", text: t }); continue; }
+    if (/^>\s?/.test(line)) { const t = stripInline(line.replace(/^>\s?/, "")); if (t) blocks.push({ type: "quote", text: t }); continue; }
+    const t = stripInline(line);
+    if (t) blocks.push({ type: "p", text: t });
+  }
+  flushList();
+  return blocks;
+}
+
+/** Drop markdown emphasis/code markers the public renderer cannot style. */
+function stripInline(s) {
+  return String(s ?? "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/`([^`]*)`/g, "$1").trim();
+}
+
+/** Rough read time the same way the marketing posts are sized (~200 wpm). */
+export function blogReadMinutes(body) {
+  const words = String(body ?? "").split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+/**
  * Search terms become an ILIKE fragment — strip the characters that mean
  * things to PostgREST's .or() syntax (same escaping the public blog route
  * uses), then cap the length.

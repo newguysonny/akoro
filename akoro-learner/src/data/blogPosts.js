@@ -1,8 +1,8 @@
-import { Brain, Lightbulb, GraduationCap, TrendingUp, BookOpen } from 'lucide-react';
+import { Brain, Lightbulb, GraduationCap, TrendingUp, BookOpen, Users } from 'lucide-react';
 
 /* Shared blog content used by both the listing page and the article detail page. */
 
-export const CATS = ['All', 'Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies'];
+export const CATS = ['All', 'Learning Science', 'Product', 'Education', 'AI & Future', 'Case Studies', 'Community'];
 
 /* Visual meta per category — Icon + accent colour. Posts now come from the API
    (which returns category strings), so the icon/colour is resolved client-side. */
@@ -12,6 +12,7 @@ export const CAT_META = {
   'Education':        { Icon: GraduationCap,  color: '#E8F5E9' },
   'AI & Future':      { Icon: TrendingUp,     color: '#EDE9FF' },
   'Case Studies':     { Icon: BookOpen,       color: '#FFF3E0' },
+  'Community':        { Icon: Users,          color: '#E0F2FE' },
 };
 export const catMeta = (cat) => CAT_META[cat] || { Icon: BookOpen, color: '#EDE9FF' };
 
