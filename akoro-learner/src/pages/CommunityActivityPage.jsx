@@ -7,6 +7,8 @@ import {
 import CommunityShell, { IconChip, useCommunityToast } from '../components/communities/CommunityShell.jsx';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN } from '../constants.js';
+import Spinner from '../components/common/Spinner.jsx';
+import { useInFlight } from '../hooks/useInFlight.js';
 
 /* Community identity avatars (same identity-emoji pattern as agents/guides). */
 const EMOJIS = ['🌐', '📚', '🧪', '', '🎧', '💼', '🌱', '🔥', '', '🎯', '🤝', '🚀'];
@@ -47,7 +49,7 @@ function dueInfo(dueAt) {
   return { text, overdue: d.getTime() < Date.now() };
 }
 
-function CommunityActivityCard({ a, canSubmit, onSubmit }) {
+function CommunityActivityCard({ a, canSubmit, onSubmit, submitting = false }) {
   const due = dueInfo(a.dueAt);
   const tm = typeMeta(a.type);
   const meta = [`${tm.emoji} ${tm.name}`, a.subject, a.class_name].filter(Boolean).join(' · ');
@@ -101,9 +103,9 @@ function CommunityActivityCard({ a, canSubmit, onSubmit }) {
                   Submitted
                 </span>
               ) : (
-                <button onClick={() => onSubmit(a)}
-                  style={{ border: `1.5px solid ${BRAND}`, background: 'transparent', color: BRAND, borderRadius: 100, padding: '3px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
-                  Submit
+                <button onClick={() => onSubmit(a)} disabled={submitting}
+                  style={{ border: `1.5px solid ${BRAND}`, background: 'transparent', color: BRAND, borderRadius: 100, padding: '3px 12px', fontSize: 10.5, fontWeight: 800, cursor: submitting ? 'default' : 'pointer', opacity: submitting ? .7 : 1, fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  {submitting ? <Spinner size={11} color={BRAND}/> : 'Submit'}
                 </button>
               )}
             </span>
@@ -122,11 +124,13 @@ function NewActivitySheet({ community, onClose, onCreated }) {
   const [instructions, setInstructions] = useState('');
   const [type, setType]         = useState('assignment');
   const [stages, setStages]     = useState([]);
-  const [saving, setSaving]     = useState(false);
+  // One request at a time — repeated taps on a bad connection once fired
+  // repeated POSTs and created duplicate activities.
+  const { busy: saving, run: runSave } = useInFlight();
   const [err, setErr]           = useState('');
 
-  const create = async () => {
-    if (!name.trim() || saving) return;
+  const create = () => runSave(async () => {
+    if (!name.trim()) return;
     const cleanStages = stages
       .map((s) => ({ kind: STAGE_KINDS.some((k) => k.key === s.kind) ? s.kind : 'self_study', title: String(s.title || '').trim() }))
       .filter((s) => s.title);
@@ -148,8 +152,8 @@ function NewActivitySheet({ community, onClose, onCreated }) {
       onCreated(a);
     } catch (e) {
       setErr(e?.message || 'Something went wrong. Try again.');
-    } finally { setSaving(false); }
-  };
+    }
+  });
 
   const FIELD = {
     width: '100%', boxSizing: 'border-box', borderRadius: 12, padding: '11px 13px',
@@ -217,7 +221,7 @@ function NewActivitySheet({ community, onClose, onCreated }) {
 
           <button onClick={create} disabled={!name.trim() || saving}
             style={{ width: '100%', padding: '13px', borderRadius: 14, cursor: (!name.trim() || saving) ? 'default' : 'pointer', border: 'none', background: (!name.trim() || saving) ? '#C9BCF7' : BRAND, color: '#fff', fontSize: 14, fontWeight: 900, fontFamily: "'Nunito',sans-serif" }}>
-            {saving ? 'Posting…' : 'Post activity'}
+            {saving ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Spinner size={13}/> Posting…</span> : 'Post activity'}
           </button>
         </div>
       </div>
@@ -314,7 +318,10 @@ export default function CommunityActivityPage() {
   // Type filter — 'all' shows everything; others mirror the workbench tabs.
   const visible = typeFilter === 'all' ? activities : activities.filter((a) => (a.type || 'assignment') === typeFilter);
 
-  const submit = async (a) => {
+  // One submission in the air at a time — a double-tapped Submit on a slow
+  // connection used to fire the request twice.
+  const { busy: submitBusy, run: runSubmit } = useInFlight();
+  const submit = (a) => runSubmit(async () => {
     setSubmittingId(a.id);
     try {
       await submitCommunityActivity(a.id);
@@ -325,7 +332,7 @@ export default function CommunityActivityPage() {
     } catch (e) {
       showToast(e?.message || 'Could not submit. Try again.');
     } finally { setSubmittingId(null); }
-  };
+  });
 
   return (
     <CommunityShell
@@ -366,7 +373,7 @@ export default function CommunityActivityPage() {
             {isOwner && <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', marginTop: 4 }}>Post the first one with “New activity”.</p>}
           </div>
         ) : (
-          visible.map(a => <CommunityActivityCard key={a.id} a={a} canSubmit={canSubmit} onSubmit={submit} />)
+          visible.map(a => <CommunityActivityCard key={a.id} a={a} canSubmit={canSubmit} onSubmit={submit} submitting={submitBusy} />)
         )}
       </div>
 

@@ -12,6 +12,8 @@ import { confirmDialog } from '../common/ConfirmHost.jsx';
 import AgentStatsTab from './AgentStatsTab.jsx';
 import { agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEndpoint.js';
 import StreamCaret from '../common/StreamCaret.jsx';
+import Spinner from '../common/Spinner.jsx';
+import { useInFlight } from '../../hooks/useInFlight.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -395,7 +397,8 @@ function AgentChatTab({
     catch(e){ setListError(e?.message||"Couldn't delete that task."); }
   };
 
-  const addTask=async()=>{
+  const { busy: taskSaving, run: runTaskSave } = useInFlight();
+  const addTask=()=>runTaskSave(async()=>{
     if(!tTitle.trim()) return;
     setTError("");
     try { await saveTask(); }
@@ -404,7 +407,7 @@ function AgentChatTab({
       if(isNoAgentError(err)) setNeedsAgent(true);
       else setTError(err?.message||"Could not save the task. Please try again.");
     }
-  };
+  });
 
   const saveTask=async()=>{
     const ts=new Date().toLocaleTimeString('en-GB',{hour:"2-digit",minute:"2-digit"});
@@ -427,6 +430,10 @@ function AgentChatTab({
   };
 
   const filteredTasks=tasks.filter(tk=>taskFilter==="done"?tk.status==="done":tk.status!=="done");
+  // One toggle in the air at a time — racing toggles on a slow connection
+  // left tasks in To-do even though the learner had ticked them done.
+  const { busy: toggleBusy, run: runToggle } = useInFlight();
+  const toggleOne = (id) => runToggle(() => toggleTask(id).catch(e => setListError(e?.message || "Couldn't update that task.")));
   const pendingCount=tasks.filter(tk=>tk.status!=="done").length;
   const doneCount=tasks.filter(tk=>tk.status==="done").length;
   const highCount=tasks.filter(tk=>tk.priority==="high"&&tk.status!=="done").length;
@@ -637,7 +644,7 @@ function AgentChatTab({
             ):(taskFilter==="done"||taskFilter==="pending")&&(
             filteredTasks.length===0?<div style={{ textAlign:"center",padding:"32px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-clipboard" size={40} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:13,fontWeight:700,marginTop:8 }}>{taskFilter==="done"?t('agent.no_completed'):t('agent.all_done')}</p></div>:filteredTasks.map(tk=>(
               <div key={tk.id} style={{ display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:14,background:"var(--ak-surface)",border:"1px solid var(--ak-border)",opacity:tk.status==="done"?.6:1 }}>
-                <button onClick={()=>toggleTask(tk.id).catch(e=>setListError(e?.message||"Couldn't update that task."))} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
+                <button onClick={()=>toggleOne(tk.id)} disabled={toggleBusy} style={{ marginTop:2,width:22,height:22,borderRadius:6,border:`2px solid ${tk.status==="done"?GREEN:"var(--ak-border3)"}`,background:tk.status==="done"?GREEN:"var(--ak-surface)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0 }}>
                   {tk.status==="done"&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                 </button>
                 <div style={{ flex:1,minWidth:0 }}>
@@ -646,7 +653,7 @@ function AgentChatTab({
                   <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap" }}>
                     <span style={{ fontSize:10,fontWeight:800,padding:"2px 8px",borderRadius:20,background:PRI_BG[tk.priority],color:PRI_COLOR[tk.priority] }}>{PRI_LABEL[tk.priority]}</span>
                     {tk.due_at&&<span style={{ fontSize:10,fontWeight:700,color:new Date(tk.due_at)<new Date()&&tk.status!=="done"?RED:"var(--ak-text-muted)" }}>
-                      <Icon name="ti-calendar" size={10}/> {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                      <Icon name="ti-calendar" size={10}/> {new Date(tk.due_at).toLocaleDateString()} {new Date(tk.due_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}{new Date(tk.due_at)<new Date()&&tk.status!=="done"?" · Overdue":""}
                     </span>}
                     {tk.is_recurring&&<span style={{ fontSize:10,fontWeight:700,color:BRAND }}><Icon name="ti-refresh" size={10}/> repeats</span>}
                   </div>
@@ -687,8 +694,11 @@ function AgentChatTab({
           {tError&&<p style={{ fontSize:12,fontWeight:800,color:RED,margin:"0 0 12px" }}>{tError}</p>}
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={closeTaskSheet} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid var(--ak-border2)",background:"var(--ak-surface-hover)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.cancel')}</button>
-            <button onClick={addTask} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:tTitle.trim()?"pointer":"default",fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{tEditing?'Save changes':t('agent.assign_task')}
+            <button onClick={addTask} disabled={taskSaving || !tTitle.trim()} style={{ flex:1.6,padding:"13px",borderRadius:14,border:"none",background:tTitle.trim()?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:tTitle.trim()?"#fff":"var(--ak-text-muted)",cursor:(tTitle.trim()&&!taskSaving)?"pointer":"default",opacity:taskSaving?.8:1,fontFamily:"'Nunito',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:7 }}>
+              {taskSaving
+                ? <Spinner size={13} color={tTitle.trim() ? '#fff' : 'var(--ak-text-muted)'}/>
+                : <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={tTitle.trim()?"#fff":"var(--ak-text-muted)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
+              {tEditing?'Save changes':t('agent.assign_task')}
             </button>
           </div>
         </div></>
