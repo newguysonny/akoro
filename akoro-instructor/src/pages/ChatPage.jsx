@@ -172,7 +172,13 @@ export default function ChatPage() {
         if (id) { chatSessionRef.current = id; setChatSessions((prev) => [d.session, ...prev]); }
         return id;
       })
-      .catch(() => null)
+      .catch((e) => {
+        // A failed session create used to vanish — sends then went out with no
+        // conversationId and NOTHING was ever persisted, so history always
+        // looked like a brand-new chat. Surface it.
+        console.warn('[chat] session create failed:', e?.message);
+        return null;
+      })
       .finally(() => { creatingSessionRef.current = null; });
     return creatingSessionRef.current;
   };
@@ -194,7 +200,12 @@ export default function ChatPage() {
       }));
       chatSessionRef.current = id;
       setMessages(msgs.length ? msgs : CHAT_INIT);
-    } catch { /* keep the current view if the load fails */ }
+    } catch (e) {
+      // History failures were once silent — the instructor just saw a fresh
+      // chat and had no way to know the load failed. Say it out loud.
+      console.warn('[chat] open history failed:', e?.message);
+      setToast({ type: 'error', message: 'Could not load that conversation — try again in a moment.' });
+    }
   };
 
   const newChat = () => { setDrawerOpen(false); chatSessionRef.current = null; setMessages(CHAT_INIT); setInput(''); };
