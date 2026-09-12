@@ -68,6 +68,7 @@ import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
 import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
+import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import {
   agentToolsRouter as agentToolsModule,
   agentActionConfirmationsRouter as agentActionConfirmationsModule,
@@ -556,6 +557,7 @@ app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
 app.use("/api",            standardLimit, agentToolRequestsModule); // explicit learner Agent Chat feature/tool requests
+app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────

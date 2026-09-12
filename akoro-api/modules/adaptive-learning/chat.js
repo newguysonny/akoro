@@ -2134,6 +2134,26 @@ router.post("/agent", async (req, res) => {
     const sylLimit = isResearch ? 8 : 5;
     const pastLimit = isResearch ? 5 : 3;
     if (isResearch && wantsStream) status("grounding", "Searching the syllabus and practice sources…");
+
+    // The learner's active goals steer everything the agent says and (once
+    // Full Autonomy ships) everything it proposes. Cheap indexed read, best
+    // effort — a goals hiccup must never dim the chat.
+    let goalsCtx = "";
+    if (role === "student") {
+      try {
+        const { data: goalRows } = await db.schema("edu").from("learner_goals")
+          .select("title, category, exam, target_date, metric")
+          .eq("user_id", req.user.id).eq("status", "active")
+          .order("updated_at", { ascending: false }).limit(5);
+        if (goalRows?.length) {
+          goalsCtx = "\n\n## The learner's active goals (align advice and suggestions with these)\n" +
+            goalRows.map((g) => {
+              const bits = [g.category, g.exam, g.target_date ? `by ${g.target_date}` : g.metric].filter(Boolean).join(" · ");
+              return `- ${g.title}${bits ? ` (${bits})` : ""}`;
+            }).join("\n");
+        }
+      } catch { /* table not migrated yet — the chat works without goals */ }
+    }
     const [
       { context: syllabusCtx, refs: syllabusRefs },
       { context: pastCtx, refs: pastRefs },
@@ -2175,6 +2195,7 @@ router.post("/agent", async (req, res) => {
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
+      (goalsCtx || undefined) +
       (syllabusCtx ? `\n\n${syllabusCtx}` : "") +
       (pastCtx ? `\n\n${pastCtx}` : "") +
       (curriculumCtx ? `\n\n${curriculumCtx}` : "") +
