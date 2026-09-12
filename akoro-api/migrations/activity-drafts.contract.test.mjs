@@ -107,7 +107,13 @@ test("the chat hands the human a Preview button and a side-by-side panel", () =>
   // Side-by-side: the container widens and hosts the panel next to the chat.
   assert.match(chatPage, /previewDraft \? 'min\(1180px, 97vw\)' : 720/);
   assert.match(chatPage, /<ActivityPreviewPanel/);
-  assert.match(chatPage, /@media \(max-width: 1100px\)/);
+  // Fortizo split parity with the learner's reader + session view: the panel
+  // docks beside the chat from 768px up (a 125%-zoom laptop included) and
+  // only phones take over the full screen; maxWidth keeps the pane inside
+  // narrow desktops while the chat column shrinks.
+  assert.match(chatPage, /@media \(max-width: 767px\)/);
+  assert.doesNotMatch(chatPage, /max-width: 1100px/);
+  assert.match(chatPage, /width: 430, maxWidth: '46vw', flexShrink: 0/);
 });
 
 test("the preview reuses the workbench's own forms — no forked editors", () => {

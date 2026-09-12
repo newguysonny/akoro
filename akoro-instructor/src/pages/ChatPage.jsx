@@ -555,7 +555,12 @@ export default function ChatPage() {
         .ci-attach-item:hover{background:${LIGHT}}
         .ci-typing{display:inline-block;width:6px;height:6px;border-radius:50%;background:${MUTED2};margin:0 2px;animation:ciTyping 1.4s infinite ease-in-out}
         @keyframes ciTyping{0%,80%,100%{transform:scale(0);opacity:0}40%{transform:scale(1);opacity:1}}
-        @media (max-width: 1100px){
+        /* Fortizo split (matches the learner's reader + session view): the
+           preview docks BESIDE the chat from 768px up — a laptop at 125%
+           zoom is still a two-pane screen, never a modal. Only phones and
+           small tablets (the learner's useIsMobileView threshold) take
+           over the full screen. */
+        @media (max-width: 767px){
           .ci-preview-panel{position:fixed;inset:0;width:100%!important;z-index:400;background:#F7F5F1;padding:12px}
         }
       `}</style>
@@ -791,7 +796,7 @@ export default function ChatPage() {
         </div>
 
         {previewDraft && (
-          <div className="ci-preview-panel" style={{ width: 430, flexShrink: 0, minHeight: 0 }}>
+          <div className="ci-preview-panel" style={{ width: 430, maxWidth: '46vw', flexShrink: 0, minHeight: 0 }}>
             <ActivityPreviewPanel
               draftId={previewDraft}
               revision={draftRevisions[previewDraft] || 0}
