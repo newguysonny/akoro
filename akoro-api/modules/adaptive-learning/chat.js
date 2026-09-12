@@ -532,11 +532,14 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         const { draft, audienceLabel } = await createActivityDraft({
           instructor: { id: studentId, role }, input, sessionId: conversationId, channel,
         });
-        return {
+        const result = {
           prepared: true, draftId: draft.id, title: draft.title, type: draft.type,
           audience: audienceLabel, status: draft.status,
           previewHint: "Awaiting the instructor's preview — do not claim it was assigned.",
         };
+        if (draft.payload?.planFallback) result.planNote = "The study-plan generator was unavailable — the draft carries the topic only; the instructor can edit objectives in the preview.";
+        if (draft.payload?.due_notice) result.dueNote = draft.payload.due_notice;
+        return result;
       } catch (error) {
         if (error.status === "clarify") {
           // The message carries a SPECIFIC question (missing audience,
@@ -546,7 +549,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             { prepared: false, error: "details_required",
               message: "Ask the instructor the question in `question`, then call prepare_activity again with their answer." });
         }
-        return { prepared: false, error: error.message || "Could not prepare the draft" };
+        console.error("[prepare_activity] failed:", error.status || "", error.message);
+        return { prepared: false, error: error.message || "Could not prepare the draft",
+          guidance: "Tell the instructor exactly what the error says and ask for that missing detail. Never call it a technical problem and never retry unchanged." };
       }
     }
     case "list_activity_drafts": {
@@ -1937,7 +1942,9 @@ const INSTRUCTOR_HITL_GUIDE =
   `\n\n## Activity drafts (human-in-the-loop)\n` +
   `When prepare_activity succeeds, a DRAFT exists — say exactly that: "Draft ready — preview it to assign." ` +
   `Never say an activity was assigned, sent, or that learners were notified: only the instructor's Assign action in the preview does that. ` +
-  `If the tool result carries needsClarification (audience_required), ask who the work is for before preparing anything. ` +
+  `If a prepare fails, its error field says exactly why — repeat that reason to the instructor and fix that one thing together. NEVER call it a technical problem, NEVER retry with unchanged inputs. ` +
+  `If the instructor says "the whole class" and list_my_classrooms shows exactly ONE class, use it without asking. ` +
+  `If the tool result carries needsClarification, ask the question it carries before preparing anything. ` +
   `Do not guess an audience, a due date, or a schedule the instructor did not state. ` +
   `Pass due_at only when you can resolve their stated time to an exact ISO 8601 instant; otherwise keep it as a due_hint label or ask. ` +
   `Use list_my_classrooms to confirm a class name before preparing. ` +

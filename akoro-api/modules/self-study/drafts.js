@@ -211,11 +211,19 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
   // offset, supplied only when the instructor actually stated one. Unresolvable
   // hints stay hints — never silently invented deadlines.
   let dueAt = null;
+  let dueAtNotice = null;
   if (input?.due_at) {
     const parsed = new Date(input.due_at);
-    if (Number.isNaN(parsed.getTime())) throw invalid("due_at must be an ISO 8601 timestamp with a timezone offset");
-    if (parsed.getTime() < Date.now() - 60 * 1000) throw invalid("due_at is in the past — check the date and time");
-    dueAt = parsed.toISOString();
+    // An unparseable or past instant degrades to the human hint (shown at
+    // preview for the human to confirm) instead of failing the prepare —
+    // a broken machine date must not destroy a valid request.
+    if (Number.isNaN(parsed.getTime())) {
+      dueAtNotice = "The exact due time could not be parsed — the draft carries it as a label for you to confirm at preview.";
+    } else if (parsed.getTime() < Date.now() - 60 * 1000) {
+      dueAtNotice = "The stated due time is already past — no due date was set; confirm the real one at preview.";
+    } else {
+      dueAt = parsed.toISOString();
+    }
   }
   const payload = {
     type,
@@ -260,12 +268,23 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
     audienceLabel += ` · ${stages.length} stages`;
   } else {
     // self_study | assignment | project: fill the plan exactly like /plan.
-    const { subtopics, objectives } = await generatePlan(topic, subject || "General");
-    payload.subtopics = subtopics;
-    payload.objectives = objectives;
+    // The generator runs LIVE model calls — if it fails (quota, timeout),
+    // the draft still exists with a minimal plan and the tool result says
+    // so. A prepare must never die to content generation.
+    try {
+      const { subtopics, objectives } = await generatePlan(topic, subject || "General");
+      payload.subtopics = subtopics;
+      payload.objectives = objectives;
+    } catch (planError) {
+      console.error("[prepare_activity] plan generator failed:", planError.message);
+      payload.subtopics = [topic];
+      payload.objectives = { [topic]: [`Study and complete the activities on ${topic}`] };
+      payload.planFallback = true;
+    }
   }
 
   if (input?.due_hint) payload.due_hint = String(input.due_hint).trim();
+  if (dueAtNotice) payload.due_notice = dueAtNotice;
   await enforceDraftCap(instructor.id);
 
   const source = channel === "task_run" ? "task_run" : "ai_chat";

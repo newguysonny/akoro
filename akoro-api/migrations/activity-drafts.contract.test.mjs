@@ -218,8 +218,8 @@ test("production hardening: races, expiry, cost, deadlines, visibility", () => {
   assert.match(drafts, /Prepare limit reached/);
   // Precise due times follow the create_task convention: ISO or hint, never invented.
   assert.match(chat, /Resolve relative phrases \('tomorrow at 8pm'\) against the Current date and time/);
-  assert.match(drafts, /due_at must be an ISO 8601 timestamp with a timezone offset/);
-  assert.match(drafts, /due_at is in the past/);
+  assert.match(drafts, /The exact due time could not be parsed/);
+  assert.match(drafts, /The stated due time is already past/);
   // Task-run drafts nudge the instructor — a draft no one sees is a draft lost.
   assert.match(gateway, /channel: "task_run"/);
   assert.match(drafts, /activity_draft_prepared/);
@@ -367,5 +367,21 @@ test("the node agent knows what day it is (due-date resolution)", () => {
   assert.match(chat, /Current date and time: \$\{nowLagos\} \(Africa\/Lagos\)/);
   assert.match(chat, /timeZone: "Africa\/Lagos"/);
   assert.match(chat, /Never state a due date you could not compute from this/);
+});
+
+test("prepare failures are diagnosable and survivable — no more silent thrash", () => {
+  // The live model LLM-calls the plan generator; its failure must not kill
+  // the draft — it degrades to a topic-only plan and says so.
+  assert.match(drafts, /console\.error\("\[prepare_activity\] plan generator failed:/);
+  assert.match(drafts, /payload\.planFallback = true/);
+  // A broken machine due_at degrades to the human hint, never a dead end.
+  assert.match(drafts, /dueAtNotice = "The exact due time could not be parsed/);
+  assert.match(drafts, /payload\.due_notice = dueAtNotice/);
+  // Server-side log + verbatim relay: the REAL reason reaches Render logs
+  // and the instructor — "technical problem" is forbidden in the guide.
+  assert.match(chat, /console\.error\("\[prepare_activity\] failed:/);
+  assert.match(chat, /repeat that reason to the instructor and fix that one thing together\. NEVER call it a technical problem/);
+  // One class + "the whole class" → no name-confirmation round trip.
+  assert.match(chat, /list_my_classrooms shows exactly ONE class, use it without asking/);
 });
 
