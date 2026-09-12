@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchCommunity, fetchCommunityActivities,
+  fetchCommunityStrict, fetchCommunityActivities,
   createCommunityActivity, submitCommunityActivity,
 } from '../services/communityApi.js';
 import CommunityShell, { IconChip, useCommunityToast } from '../components/communities/CommunityShell.jsx';
@@ -160,18 +160,53 @@ export default function CommunityActivityPage() {
   const [sheetOpen, setSheetOpen]   = useState(false);
   const [submittingId, setSubmittingId] = useState(null);
   const [showToast, toastNode] = useCommunityToast();
+  // null = ok/loading - {kind:'network'} = the request never arrived -
+  // {kind:'missing'} = the API answered "no such community / not yours".
+  // A degraded connection must never read as "Community not found".
+  const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [c, list] = await Promise.all([fetchCommunity(communityId), fetchCommunityActivities(communityId)]);
+      const [c, list] = await Promise.all([fetchCommunityStrict(communityId), fetchCommunityActivities(communityId)]);
       setCommunity(c);
       setActivities(list);
+      setError(null);
+    } catch (e) {
+      setError(e?.status === 404 || e?.status === 403 ? { kind: 'missing' } : { kind: 'network' });
     } finally { setLoading(false); }
   }, [communityId]);
 
   useEffect(() => { load(); }, [load]);
+  const retry = () => { setLoading(true); setError(null); load(); };
 
-  if (loading) return <CommunityShell title="Community" sub="" backTo="/communities" loading/>;
+  if (loading) {
+    return (
+      <CommunityShell title="Community" sub="" backTo="/communities" loading headerLoading
+        right={<IconChip icon="ti-info-circle" label="Loading..." disabled />} />
+    );
+  }
+
+  if (error?.kind === 'network') {
+    return (
+      <CommunityShell title="Community" backTo="/communities"
+        empty={
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{ fontSize: 40, marginBottom: 10, color: BRAND }}>
+              <Icon name="ti-wifi-off" size={40}/>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--ak-text)', fontWeight: 800 }}>Couldn't reach this community</p>
+            <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', marginTop: 4 }}>
+              Your connection seems slow or offline - the request never arrived.
+            </p>
+            <button onClick={retry}
+              style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 100, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+              <Icon name="ti-refresh" size={14}/> Try again
+            </button>
+          </div>
+        }
+      />
+    );
+  }
 
   if (!community) {
     return (
