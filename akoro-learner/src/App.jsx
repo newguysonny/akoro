@@ -45,6 +45,7 @@ const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx')
 const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
 const BlogPage           = lazyWithRetry(() => import('./pages/BlogPage.jsx'));
 const BlogPostPage       = lazyWithRetry(() => import('./pages/BlogPostPage.jsx'));
+const BlogEditorPage     = lazyWithRetry(() => import('./pages/BlogEditorPage.jsx'));
 const PartnersPage       = lazyWithRetry(() => import('./pages/PartnersPage.jsx'));
 const AssessmentPage     = lazyWithRetry(() => import('./pages/AssessmentPage.jsx'));
 const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage.jsx'));
@@ -144,6 +145,9 @@ function AppRoutes() {
       <Route path="/careers"  element={<CareersPage />}/>
       <Route path="/blog"     element={<BlogPage />}/>
       <Route path="/blog/:slug" element={<BlogPostPage />}/>
+      {/* Learner-authored blogs (higherEd library) — /blog* is the public marketing blog */}
+      <Route path="/write/blog/new" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
+      <Route path="/write/blog/:id" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
       <Route path="/partners" element={<PartnersPage />}/>
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>
       <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>
