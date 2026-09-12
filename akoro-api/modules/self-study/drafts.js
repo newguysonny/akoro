@@ -199,8 +199,13 @@ export async function createActivityDraft({ instructor, input, sessionId = null,
 
   const topic   = String(input?.topic || "").trim();
   const subject = String(input?.subject || "").trim();
-  if (!topic)   throw invalid("topic is required");
-  if (!subject && type !== "battle") throw invalid("subject is required");
+  // These read as QUESTIONS (clarify status), not "X is required" — a terse
+  // validation string made the model report a "technical problem" and give
+  // up instead of simply asking the instructor.
+  if (!topic)   throw invalid("What exactly should the work cover — name the topic?", "clarify");
+  if (!subject && type !== "battle") {
+    throw invalid("Which subject is this for — e.g. Social Studies, Mathematics?", "clarify");
+  }
 
   // A precise due time follows the create_task convention: ISO 8601 with an
   // offset, supplied only when the instructor actually stated one. Unresolvable

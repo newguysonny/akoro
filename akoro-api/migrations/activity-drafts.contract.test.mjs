@@ -71,7 +71,7 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   // Clarification loop: an unresolved audience returns needsClarification.
   assert.match(chat, /needsClarification: true/);
   assert.match(chat, /audience_required/);
-  assert.match(chat, /Ask the instructor who this activity is for/);
+  assert.match(chat, /Ask the instructor the question in `question`/);
   // Role cross-gate: student sessions can never reach the draft tools.
   assert.match(chat, /if \(role !== "instructor"\) return \{ error: "Activity preparation is only available to instructor accounts" \}/);
   assert.match(chat, /role !== "instructor"\) return \{ error: "Activity drafts are only available to instructor accounts" \}/);
@@ -135,7 +135,7 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
   assert.match(chat, /return clarify\("message", "What should the future chat message say\?"/);
   assert.match(chat, /return clarify\("scheduledAt", "When exactly should it be sent\? Please give the date and time\."/);
   assert.match(chat, /return clarify\("followUpId", "Which scheduled message should be cancelled\?/);
-  assert.match(chat, /clarify\("audience", error\.message \|\| "Who is this activity for/);
+  assert.match(chat, /clarify\("details", error\.message,/);
   // The capability inventory admits the behaviour.
   assert.match(chat, /Asks a clarifying question when a tool needs a detail you did not give — it never guesses values/);
   // The python teaching agent carries the same rule.
@@ -217,7 +217,7 @@ test("production hardening: races, expiry, cost, deadlines, visibility", () => {
   assert.match(drafts, /PREPARE_HOURLY_CAP = 10/);
   assert.match(drafts, /Prepare limit reached/);
   // Precise due times follow the create_task convention: ISO or hint, never invented.
-  assert.match(chat, /Supply it only when you can resolve the instructor's stated time precisely/);
+  assert.match(chat, /Resolve relative phrases \('tomorrow at 8pm'\) against the Current date and time/);
   assert.match(drafts, /due_at must be an ISO 8601 timestamp with a timezone offset/);
   assert.match(drafts, /due_at is in the past/);
   // Task-run drafts nudge the instructor — a draft no one sees is a draft lost.
@@ -309,7 +309,7 @@ test("whole-class audiences resolve to a real class — never to zero learners",
   assert.match(drafts, /Which class\? You have: \$\{rooms\.map\(r => r\.name\)\.join\(", "\)\}/);
   assert.match(drafts, /You don't have a class yet — create one in Classes first/);
   // The prepare executor relays the SPECIFIC clarify question, not a generic re-ask.
-  assert.match(chat, /clarify\("audience", error\.message \|\| "Who is this activity for/);
+  assert.match(chat, /clarify\("details", error\.message,/);
   // Routines reject an unresolvable audience at schedule time — not silently
   // at every weekly run.
   assert.match(routines, /create one in Classes first/);
@@ -345,4 +345,27 @@ function teacherSetIncludes(source, tool) {
   const slice = source.slice(start, source.indexOf("]);", start));
   return slice.includes(`"${tool}"`);
 }
+
+test("prepare mirrors the assignments API: field gaps ask questions, never read as faults", () => {
+  // subject/topic are required by createAssignment — missing ones come back
+  // as clarify QUESTIONS so the model asks instead of reporting a
+  // "technical problem" (the live transcript failure).
+  assert.match(drafts, /What exactly should the work cover — name the topic\?/, "clarify");
+  assert.match(drafts, /Which subject is this for — e\.g\. Social Studies, Mathematics\?/, "clarify");
+  // The executor relays the server's question verbatim under a neutral key.
+  assert.match(chat, /clarify\("details", error\.message,/);
+  // The schema teaches the real contract: subject required; the plan is
+  // server-drafted; due_at resolves against the injected clock.
+  assert.match(chat, /REQUIRED for every type except battle — ask when the instructor did not name one/);
+  assert.match(chat, /The server drafts the study plan itself/);
+  assert.match(chat, /Resolve relative phrases \('tomorrow at 8pm'\) against the Current date and time/);
+});
+
+test("the node agent knows what day it is (due-date resolution)", () => {
+  // "due tomorrow 8pm" was unresolvable without a clock — the python agent
+  // injects current_utc; the node prompt now does the same at request time.
+  assert.match(chat, /Current date and time: \$\{nowLagos\} \(Africa\/Lagos\)/);
+  assert.match(chat, /timeZone: "Africa\/Lagos"/);
+  assert.match(chat, /Never state a due date you could not compute from this/);
+});
 

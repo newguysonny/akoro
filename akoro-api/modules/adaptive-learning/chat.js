@@ -398,18 +398,18 @@ export function getLearnerChatTools({ allowToolRequest = true } = {}) {
 export const INSTRUCTOR_TOOLS = [
   {
     name: "prepare_activity",
-    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. You may fill content gaps yourself (the server drafts the study plan with the same generator the workbench uses). For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button.",
+    description: "Prepare an activity draft for the instructor to review and assign (human-in-the-loop: you never assign — the instructor previews the draft and taps Assign). Use when the instructor asks you to create/set/prepare an activity, assignment, project, self study, live session, journey or battle. AUDIENCE IS REQUIRED: if the instructor did not say who the work is for, do not call this tool — ask them first, then call it with their answer. The server drafts the study plan itself (subtopics and objectives — the same generator the workbench uses), so you never supply those. But subject IS required for every type except battle: if the instructor did not name one, ask before calling. ` For a batch request (\"prep this week's activities\"), call this once per activity in the same reply - each gets its own Preview button.",
     input_schema: {
       type: "object",
       properties: {
         type: { type: "string", enum: ["self_study", "assignment", "project", "live_course", "multi_stage", "battle"], description: "The workbench activity type. multi_stage takes stages; battle drafts are completed by the instructor in the battle form at preview time." },
         title: { type: "string", description: "What learners will see (optional — derived from the topic when omitted)." },
-        subject: { type: "string", description: "School subject, e.g. 'Basic Science' or 'Mathematics'." },
+        subject: { type: "string", description: "School subject, e.g. 'Basic Science' or 'Mathematics'. REQUIRED for every type except battle — ask when the instructor did not name one." },
         topic: { type: "string", description: "The topic the activity is built from." },
         instructions: { type: "string", description: "Optional instructions to learners." },
         difficulty: { type: "string", enum: ["easy", "intermediate", "hard"], description: "Only when the instructor said, or the level is obvious." },
         due_hint: { type: "string", description: "The due date as a human-friendly label exactly as the instructor said it, e.g. 'Friday at 1 PM'. Never invent one." },
-        due_at: { type: "string", description: "Optional exact due instant in ISO 8601 with a timezone offset. Supply it only when you can resolve the instructor's stated time precisely; when you cannot, keep due_hint as the label or ask — never guess an exact time." },
+        due_at: { type: "string", description: "Optional exact due instant in ISO 8601 with a timezone offset. Resolve relative phrases ('tomorrow at 8pm') against the Current date and time in your context (+01:00 for Africa/Lagos). If you still cannot resolve it precisely, send due_hint as the label instead — never guess an exact time." },
         scheduled_hint: { type: "string", description: "For live_course: when the session holds, as the instructor said it." },
         stages: { type: "array", maxItems: 6, description: "For multi_stage: the ordered journey.", items: { type: "object", properties: {
           kind: { type: "string", enum: ["self_study", "assignment", "project"] },
@@ -539,11 +539,12 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         };
       } catch (error) {
         if (error.status === "clarify") {
-          // The message may carry a SPECIFIC question (e.g. "Which class?
-          // You have: JSS1, SS2") — surface it, not a generic re-ask.
-          return clarify("audience", error.message || "Who is this activity for — the whole class, or specific learners?",
-            { prepared: false, error: "audience_required",
-              message: "Ask the instructor who this activity is for, then call prepare_activity again with their answer." });
+          // The message carries a SPECIFIC question (missing audience,
+          // subject, topic, or an ambiguous class) — relay it verbatim and
+          // wait for the instructor's answer, never retry blind.
+          return clarify("details", error.message,
+            { prepared: false, error: "details_required",
+              message: "Ask the instructor the question in `question`, then call prepare_activity again with their answer." });
         }
         return { prepared: false, error: error.message || "Could not prepare the draft" };
       }
@@ -2137,7 +2138,17 @@ router.post("/agent", async (req, res) => {
       att = await processAttachments(rawAttachments);
     }
 
+    // The model cannot resolve "due tomorrow at 8pm" without knowing today.
+    // Compute at request time; Africa/Lagos is the platform timezone.
+    const nowLagos = new Date().toLocaleString("en-NG", {
+      weekday: "long", year: "numeric", month: "long", day: "numeric",
+      hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos",
+    });
+    const CURRENT_TIME_CONTEXT =
+      `\n\nCurrent date and time: ${nowLagos} (Africa/Lagos). ` +
+      `Use it to resolve relative dates — "tomorrow at 8pm" becomes an exact due_at ISO instant in +01:00. Never state a due date you could not compute from this.`;
     const systemContent = tutorSystemPrompt({ agentName: safeAgentName || "Akoro", role }) +
+      CURRENT_TIME_CONTEXT +
       (isThink ? THINK_ADDENDUM : "") +
       (isResearch ? RESEARCH_ADDENDUM : "") +
       `\n\nYou are the unified Akoro Agent Chat. Answer directly when a real Akoro tool is unnecessary. ` +
