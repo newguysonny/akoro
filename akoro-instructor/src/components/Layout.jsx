@@ -380,7 +380,10 @@ export function PageLayout({ children, title, subtitle, action }) {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar collapsed={collapsed} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* position:relative — the containing block for full-area takeovers
+          (the grading surface): they cover the WORKING AREA only, so the
+          side nav stays visible and clickable behind them. */}
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={() => setCollapsed((c) => !c)} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           {children}

@@ -158,7 +158,7 @@ export default function GradeSubmissionModal({
   const published = current.grade != null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 3600, background: '#F1EFF6', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 3600, background: '#F1EFF6', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       {/* ── Topbar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 22px', background: WHITE, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <button onClick={onClose} title="Back to the workbench"
