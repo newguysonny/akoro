@@ -41,6 +41,7 @@ import {
 import {
   listRoutines, createRoutine, updateRoutine, deleteRoutine,
 } from "./routines.js";
+import { emitAutonomyEvent } from "../autonomy/triggers.js";
 
 const router = Router();
 const now    = () => new Date().toISOString();
@@ -703,6 +704,8 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
   const { data, error } = await edu().from("self_study_targets")
     .update({ status: "complete", completed_at: now() }).eq("id", target.id).select().single();
   if (error) throw new Error(error.message);
+  // Event trigger: study work completed — fresh signal for the planner.
+  emitAutonomyEvent(req.user.id, "self_study").catch(() => {});
   ok(res, data);
 }));
 

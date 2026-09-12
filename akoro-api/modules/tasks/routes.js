@@ -16,6 +16,7 @@ import { extractTextFromUrl }             from "./lib/ocr.js";
 import { ALL_TOOLS }                      from "./tools/index.js";
 import { OPENAI_MODEL }                   from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { emitAutonomyEvent } from "../autonomy/triggers.js";
 
 const router = Router();
 
@@ -548,6 +549,8 @@ router.patch("/:taskId/toggle", async (req, res) => {
     if (newStatus === "done" && isLearnerTask(req)) {
       try { await cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id }); }
       catch (autonomyError) { console.warn("[tasks] autonomy cancellation skipped:", autonomyError.message); }
+      // Event trigger: a finished task is fresh signal for the planner.
+      emitAutonomyEvent(req.user.id, "task_done").catch(() => {});
     }
     res.json({ task: updated });
   } catch (err) {

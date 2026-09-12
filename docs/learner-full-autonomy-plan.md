@@ -190,3 +190,9 @@ the agent learns taste, not just facts.
 ## 10. Open questions (remaining, non-blocking)
 
 - Whether proposals and chat-sourced `agent_suggestions` unify into one table now or behind one inbox API later (default: later — the inbox UI already reads one endpoint; the cycle can write `agent_suggestions`-compatible rows for v1 if simpler).
+
+## 10. Increment log
+
+- **Step 1 — goals model (shipped `bcd1fe0`):** `edu.learner_goals`, `/api/goals` CRUD (cap 10 active), top-5 goals into the agent system prompt, Settings → Agent Goals UI.
+- **Steps 2+3 — inbox + cycle (shipped `e4a3ee6`):** `edu.agent_proposals` + `edu.autonomy_runs`; `/api/agent/proposals` approve (replays `executeChatTool` 1:1, claim-first idempotent) / dismiss (taste reason); nightly 21:00–22:00 Africa/Lagos stagger, DB-only signals, one metered `json_object` call, server-side validation (≤3/run, ≤5 pending, 30-day dedupe, quiet hours 20:00–07:30 Lagos); level-2 planner toggle in the sessions drawer; proposals in the Suggestions inbox.
+- **Steps 4+5 — event triggers, richer signals, agent↔agent consult:** event triggers on task-done / community submission / self-study complete / battle end (best-effort seam, ≥4h pace, ≤2 event runs/day); signals now include the honest completion streak, recent chat topics, battle/review scores, and class work due this week; `consult_peer_agents` tool — the learner's agent asks up to two peer agents' personas for ideas (only the sanitized question travels; contact details rejected; the asking learner's budget meters every call; `AKORO_AGENT_PEER_CONSULT_ENABLED` kill-switch). Peer agents never see learner data — they lend ideas, not facts.

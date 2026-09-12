@@ -81,7 +81,7 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
   assert.match(cycle, /__userId:\s*userId,\s*__feature:\s*"agent_autonomy"/);
   // budget guard + pacing + level gate
   assert.match(cycle, /AKORO_AUTONOMY_MAX_WEEKLY_RUNS \?\? 30/);
-  assert.match(cycle, /20 \* 3600 \* 1000/); // ≥20h between runs
+  assert.match(cycle, /\? MIN_HOURS_BETWEEN_EVENT_RUNS : 20\) \* 3600 \* 1000/); // nightly ≥20h
   assert.match(cycle, /\(auto\.level \?\? 1\) < 2/);
   // validation clamps and drops — the model never gets the final say
   assert.match(cycle, /shaped\.length >= MAX_PROPOSALS_PER_CYCLE/);

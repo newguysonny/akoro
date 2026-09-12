@@ -18,6 +18,7 @@ import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 const { Pool } = pkg;
 import db from "../../db.js";
+import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
 import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
@@ -269,6 +270,23 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "consult_peer_agents",
+    featureGate: "peer_consult",
+    description: "Ask up to two other learners' study agents for ideas and suggestions " +
+      "(study habits, exam prep, streaks, motivation, goals, subjects) to help this student. " +
+      "Use sparingly — at most once per conversation — when the student is stuck or explicitly " +
+      "wants fresh ideas. Keep the question general: contact details (emails, phone numbers, " +
+      "invite links) are rejected, and peer agents never see this student's data, only the question.",
+    input_schema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "One focused, general question to the peer agents (10-300 characters)." },
+        topic: { type: "string", enum: ["study_habits", "exam_prep", "streaks", "motivation", "goals", "subjects", "general"], description: "What the question is about." },
+      },
+      required: ["question"],
+    },
+  },
+  {
     name: "list_tasks",
     description: "Get the student's pending tasks sorted by priority.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -379,8 +397,13 @@ export const CHAT_TOOLS = [
 ];
 
 /** Hide feature-gated tools from the model catalogue until the matching Akoro slice is enabled. */
+// Agent ↔ agent consultation kill-switch (AKORO_AGENT_PEER_CONSULT_ENABLED=false
+// removes the tool everywhere at once, like the activity-drafts switch).
+const peerConsultEnabled = String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false";
+
 export function getLearnerChatTools({ allowToolRequest = true } = {}) {
   const enabled = {
+    peer_consult: peerConsultEnabled,
     concept_tracker: conceptTrackerEnabled,
     learning_insights: learnerInsightsEnabled,
     exam_prep_confidence: examPrepConfidenceEnabled,
@@ -765,6 +788,32 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         };
       } catch (error) {
         return { error: error.message || "Could not create the task" };
+      }
+    }
+    case "consult_peer_agents": {
+      const question = String(input?.question || "").trim();
+      if (question.length < PEER_QUESTION_MIN || question.length > PEER_QUESTION_MAX) {
+        return clarify("question", `Keep the peer question between ${PEER_QUESTION_MIN} and ${PEER_QUESTION_MAX} characters — one focused, general ask.`, { action: "consult_peer_agents" });
+      }
+      if (/[\w.+-]+@[\w-]+\.[\w.-]{2,}/.test(question) || /\+?\d[\d\s().-]{7,}\d/.test(question)) {
+        return clarify("question", "Keep peer questions general — no contact details (emails, phone numbers or invite links) travel to other agents.", { action: "consult_peer_agents" });
+      }
+      try {
+        const consult = await consultPeerAgents({
+          userId: studentId, question,
+          topic: input?.topic,
+        });
+        if (!consult.consulted) {
+          return {
+            consulted: 0, replies: [],
+            note: consult.note === "no_peers_yet"
+              ? "No other agents are active on the network yet — answer from your own knowledge instead."
+              : "The question was rejected by the privacy guard — rephrase it generally.",
+          };
+        }
+        return consult; // { consulted, replies: [{agent, emoji, reply}], topic }
+      } catch (error) {
+        return { error: error.message || "The agent network is unavailable right now" };
       }
     }
     case "suggest_help": {

@@ -37,6 +37,7 @@
 import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { authenticateToken }              from "../auth/routes.js";
+import { emitAutonomyEvent } from "../autonomy/triggers.js";
 
 const router = Router();
 const edu    = () => db.schema("edu");
@@ -161,6 +162,8 @@ router.post("/activities/:activityId/submit", asyncHandler(async (req, res) => {
 
   const { data: subs } = await edu().from("community_activity_submissions")
     .select("id").eq("activity_id", a.id);
+  // Event trigger: class work handed in — fresh signal for the planner.
+  emitAutonomyEvent(req.user.id, "submission").catch(() => {});
   ok(res, { submitted: true, submissions_count: subs?.length || 0 });
 }));
 

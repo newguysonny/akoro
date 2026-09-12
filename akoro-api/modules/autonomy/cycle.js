@@ -15,6 +15,8 @@ const edu = () => db.schema("edu");
 export const MAX_PROPOSALS_PER_CYCLE = 3;
 export const MAX_PENDING_PROPOSALS = 5;
 export const DEDUPE_WINDOW_DAYS = 30;
+export const MIN_HOURS_BETWEEN_EVENT_RUNS = 4;
+export const MAX_EVENT_RUNS_PER_DAY = 2;
 const ALLOWED_KINDS = ["task", "session", "goal", "practice"];
 
 const LAGOS = "Africa/Lagos";
@@ -50,10 +52,32 @@ export function outsideQuietHours(date) {
 
 const normalizeTitle = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
+/**
+ * Consecutive-day streak ending today (or yesterday, grace), computed from
+ * completion timestamps — the same honest algorithm as /api/self-study/streak
+ * (it can never show a number the learner did not earn).
+ */
+export function computeStreak(completedAtDays, today = new Date()) {
+  const days = new Set(completedAtDays);
+  const key = (d) => d.toISOString().slice(0, 10);
+  const cursor = new Date(today);
+  if (!days.has(key(cursor))) cursor.setUTCDate(cursor.getUTCDate() - 1); // grace
+  let streak = 0;
+  while (days.has(key(cursor))) {
+    streak += 1;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
+}
+
 /** ── 1. GATHER — pure reads, no model. Anything missing is simply absent. */
 export async function gatherSignals(userId) {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-  const [goals, pendingTasks, recentDone, pendingProposals, recentFeedback] = await Promise.all([
+  const weekAhead = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+  const [
+    goals, pendingTasks, recentDone, pendingProposals, recentFeedback,
+    completions, chatSessions, battleResults, memberships,
+  ] = await Promise.all([
     edu().from("learner_goals").select("title, category, exam, target_date, metric")
       .eq("user_id", userId).eq("status", "active").order("updated_at", { ascending: false }).limit(5)
       .then((r) => r.data ?? []).catch(() => []),
@@ -69,6 +93,29 @@ export async function gatherSignals(userId) {
       .eq("user_id", userId).eq("status", "dismissed")
       .gte("decided_at", new Date(Date.now() - DEDUPE_WINDOW_DAYS * 24 * 3600 * 1000).toISOString())
       .limit(20).then((r) => r.data ?? []).catch(() => []),
+    // streak source: the learner's real completion timestamps
+    edu().from("self_study_targets").select("completed_at").eq("student_id", userId)
+      .not("completed_at", "is", null).limit(400)
+      .then((r) => (r.data ?? []).map((t) => t.completed_at)).catch(() => []),
+    // what the learner has been thinking/talking about with their agent
+    db.from("chat_sessions").select("title").eq("user_id", userId)
+      .order("last_message_at", { ascending: false }).limit(5)
+      .then((r) => (r.data ?? []).map((s) => s.title)).catch(() => []),
+    // recent battle/review results (the platform's real scores today)
+    db.from("battle_participants").select("score, is_winner, final_rank, correct_answers, joined_at")
+      .eq("user_id", userId).order("joined_at", { ascending: false }).limit(3)
+      .then((r) => r.data ?? []).catch(() => []),
+    // class/community work due this week
+    edu().from("community_members").select("community_id").eq("user_id", userId).limit(20)
+      .then(async (r) => {
+        const ids = (r.data ?? []).map((m) => m.community_id);
+        if (!ids.length) return [];
+        const { data } = await edu().from("community_activities")
+          .select("title, subject, due_at").in("community_id", ids)
+          .gte("due_at", new Date().toISOString()).lte("due_at", weekAhead)
+          .order("due_at", { ascending: true }).limit(5);
+        return data ?? [];
+      }).catch(() => []),
   ]);
 
   const nowMs = Date.now();
@@ -81,6 +128,12 @@ export async function gatherSignals(userId) {
       doneLastWeek: recentDone,
       titles: pendingTasks.slice(0, 8).map((t) => t.title),
     },
+    streakDays: computeStreak(completions.map((c) => String(c).slice(0, 10))),
+    chatTopics: chatSessions.filter(Boolean).slice(0, 5),
+    recentBattles: battleResults.map((b) => ({
+      score: b.score, won: Boolean(b.is_winner), rank: b.final_rank,
+    })),
+    classWorkDue: memberships.map((a) => ({ title: a.title, due: a.due_at })),
     pendingProposalTitles: pendingProposals.map((p) => p.title),
     dismissalTaste: recentFeedback.map((d) => `${d.kind}:${d.decision_note ?? "unspecified"}`),
   };
@@ -93,7 +146,7 @@ export async function reasonAboutSignals(userId, signals) {
     `You receive their active goals and task signals and propose AT MOST ${MAX_PROPOSALS_PER_CYCLE} ` +
     `small, concrete, genuinely useful next steps. House rules:\n` +
     `- kinds: task (a study task), practice (a short focused drill), session (a scheduled agent check-in), goal (a new education-related goal)\n` +
-    `- every rationale must cite a real signal ("2 overdue tasks", "goal target in 9 days") — never generic\n` +
+    `- every rationale must cite a real signal ("2 overdue tasks", "goal target in 9 days", "streak at 5 days", "scored 6/10 last battle") — never generic\n` +
     `- never repeat a pending proposal or something in their task list already\n` +
     `- sessions: payload.scheduledAt is ISO 8601 with +01:00 offset, 06:00-21:00 Africa/Lagos never inside 20:00-07:30, at most 14 days ahead\n` +
     `- task/practice payload: { title, description?, priority (high|medium|low), dueAt? ISO, course? }\n` +
@@ -104,6 +157,10 @@ export async function reasonAboutSignals(userId, signals) {
   const user =
     `Active goals: ${JSON.stringify(signals.goals)}\n` +
     `Tasks: ${JSON.stringify(signals.tasks)}\n` +
+    `Study streak (days): ${signals.streakDays}\n` +
+    `Recent chat topics: ${JSON.stringify(signals.chatTopics)}\n` +
+    `Recent battle/review results: ${JSON.stringify(signals.recentBattles)}\n` +
+    `Class work due this week: ${JSON.stringify(signals.classWorkDue)}\n` +
     `Already proposed (pending): ${JSON.stringify(signals.pendingProposalTitles)}\n` +
     `Now (Africa/Lagos): ${new Date().toLocaleString("en-GB", { timeZone: LAGOS })}`;
 
@@ -184,13 +241,25 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     const { data: auto } = await edu().from("learner_agent_autonomy")
       .select("enabled, level, last_cycle_at").eq("user_id", userId).maybeSingle();
     if (!auto?.enabled || (auto.level ?? 1) < 2) return { skipped: "not_enabled" };
+    const isEvent = trigger !== "nightly";
     // Pace against the LEDGER (last actual run), not last_cycle_at — the
     // scheduler claims by writing last_cycle_at, so it can't be the signal.
+    // Nightly paces at ≥20h; an event (graded work, submission, battle end)
+    // may run sooner, but at most MIN_HOURS_BETWEEN_RUNS apart and at most
+    // MAX_EVENT_RUNS_PER_DAY per day — freshness without frenzy.
     const { data: lastRun } = await edu().from("autonomy_runs")
-      .select("started_at").eq("user_id", userId)
+      .select("started_at, trigger").eq("user_id", userId)
       .order("started_at", { ascending: false }).limit(1);
-    if (lastRun?.[0]?.started_at && Date.now() - new Date(lastRun[0].started_at).getTime() < 20 * 3600 * 1000) {
+    const minGapMs = (isEvent ? MIN_HOURS_BETWEEN_EVENT_RUNS : 20) * 3600 * 1000;
+    if (lastRun?.[0]?.started_at && Date.now() - new Date(lastRun[0].started_at).getTime() < minGapMs) {
       return { skipped: "recent_run" };
+    }
+    if (isEvent) {
+      const { count: todayEvents } = await edu().from("autonomy_runs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId).like("trigger", "event:%")
+        .gte("started_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+      if ((todayEvents ?? 0) >= MAX_EVENT_RUNS_PER_DAY) return { skipped: "event_cap" };
     }
     const weeklyCap = Number(process.env.AKORO_AUTONOMY_MAX_WEEKLY_RUNS ?? 30);
     const { count: weekRuns } = await edu().from("autonomy_runs")

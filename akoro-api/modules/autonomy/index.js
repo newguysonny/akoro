@@ -29,7 +29,8 @@ const queue = () => {
 /** Enqueue one learner's cycle (used by the scheduler and future events). */
 export async function enqueueAutonomyCycle(userId, trigger = "nightly") {
   await queue().add("run-cycle", { userId, trigger }, {
-    jobId: `cycle:${userId}:${new Date().toISOString().slice(0, 13)}`,  // ~hourly dedupe
+    // ~hourly dedupe per user+trigger: bursts of the same event collapse
+    jobId: `cycle:${userId}:${trigger}:${new Date().toISOString().slice(0, 13)}`,
     removeOnComplete: { age: 3600, count: 500 },
     removeOnFail: { age: 6 * 3600 },
   });
