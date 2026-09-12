@@ -432,6 +432,41 @@ app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
 
+// ─── Boot-time migrations (host-independent) ────────────────────────────────
+// Railway applied migrations as a release step; Render's equivalent
+// (preDeployCommand) needs a paid plan, so free-tier deploys silently skipped
+// them. The backend now self-migrates at boot: idempotent SQL + a session
+// advisory lock make it safe, and the run is skipped entirely when the last
+// edu.migration_log row already matches this deploy's SHA — so a plain
+// restart (free tier wake) costs one SELECT, not 150 DDL statements.
+// It deliberately runs BEFORE any background worker starts: workers query
+// tables at startup (learner-autonomy schedule recovery), and on the deploy
+// that introduces a new table the old boot order let the worker race the
+// migration and log a scary failure. Schema only, never demo data (mirrors
+// the old deploy command).
+// Disable with MIGRATIONS_ON_BOOT=false (e.g. one replica owns migrations).
+if (process.env.MIGRATIONS_ON_BOOT !== "false") {
+  const mUrl = migrationUrl();
+  const mSha = currentGitSha();
+  if (!mUrl) {
+    console.warn("[MIGRATIONS] no MIGRATION_DATABASE_URL/DATABASE_URL configured — boot migration SKIPPED. Set the Supabase Postgres connection string so deploys self-migrate.");
+  } else {
+    try {
+      if (await migrationsAlreadyApplied(mUrl, mSha)) {
+        console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
+      } else {
+        const { applied, failed } = await applyMigrations({ url: mUrl, groups: ["schema"], label: "boot" });
+        if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
+      }
+    } catch (e) {
+      // A failed migration must not crash-loop the whole service: start and
+      // let the loud log (and /health) tell the operator. The error is also
+      // recorded in edu.migration_log for the next boot to retry.
+      console.error("[MIGRATIONS] boot run failed — starting anyway:", e.message);
+    }
+  }
+}
+
 // ─── Background jobs kill switch ─────────────────────────────────────────────
 // Every recurring job (sweeps, crons, schedulers) burns DB "commands" while
 // the process runs — on a metered free tier that can outrun real usage with
@@ -552,36 +587,9 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-// ─── Boot-time migrations (host-independent) ────────────────────────────────
-// Railway applied migrations as a release step; Render's equivalent
-// (preDeployCommand) needs a paid plan, so free-tier deploys silently skipped
-// them. The backend now self-migrates at boot: idempotent SQL + a session
-// advisory lock make it safe, and the run is skipped entirely when the last
-// edu.migration_log row already matches this deploy's SHA — so a plain
-// restart (free tier wake) costs one SELECT, not 150 DDL statements.
-// Schema only, never demo data (mirrors the old deploy command).
-// Disable with MIGRATIONS_ON_BOOT=false (e.g. one replica owns migrations).
-if (process.env.MIGRATIONS_ON_BOOT !== "false") {
-  const mUrl = migrationUrl();
-  const mSha = currentGitSha();
-  if (!mUrl) {
-    console.warn("[MIGRATIONS] no MIGRATION_DATABASE_URL/DATABASE_URL configured — boot migration SKIPPED. Set the Supabase Postgres connection string so deploys self-migrate.");
-  } else {
-    try {
-      if (await migrationsAlreadyApplied(mUrl, mSha)) {
-        console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
-      } else {
-        const { applied, failed } = await applyMigrations({ url: mUrl, groups: ["schema"], label: "boot" });
-        if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
-      }
-    } catch (e) {
-      // A failed migration must not crash-loop the whole service: start and
-      // let the loud log (and /health) tell the operator. The error is also
-      // recorded in edu.migration_log for the next boot to retry.
-      console.error("[MIGRATIONS] boot run failed — starting anyway:", e.message);
-    }
-  }
-}
+// Boot-time migrations already ran — they sit ABOVE the background-worker
+// section so no worker can query a table before the deploy that creates it
+// has applied (the learner-autonomy recovery race of 2026-09-12).
 
 // Weekly routine preparation (drafts only — assignment stays human).
 if (!skipJob("routine scheduler")) startRoutineScheduler();

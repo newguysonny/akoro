@@ -372,7 +372,12 @@ export async function recoverLearnerAutonomySchedules() {
   const { data, error } = await db.schema("edu").from("learner_agent_autonomy")
     .select("user_id")
     .eq("enabled", true);
-  if (error) throw new Error("Could not recover learner autonomy schedules");
+  if (error) {
+    // The generic message alone once hid the real cause (missing table) for a
+    // whole boot cycle — surface the database's own reason verbatim.
+    const reason = [error.code, error.message, error.details].filter(Boolean).join(" ") || String(error);
+    throw new Error(`Could not recover learner autonomy schedules — ${reason}`);
+  }
   let scheduled = 0;
   for (const row of data || []) {
     const result = await schedulePendingAutonomyReviews(row.user_id);
