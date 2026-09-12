@@ -19,6 +19,7 @@ import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 const { Pool } = pkg;
 import db from "../../db.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
+import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
@@ -287,6 +288,36 @@ export const CHAT_TOOLS = [
     },
   },
   {
+    name: "search_blog_posts",
+    featureGate: "blog_research",
+    description: "Search Akoro's own blog — the platform's published articles on study methods, exam prep, and learning. " +
+      "This is your internal research channel (there is no web search): use it to ground study advice, cite a real article " +
+      "to the learner, or check what Akoro says about a topic before answering from general knowledge. Returns cards " +
+      "(slug, title, excerpt); follow up with read_blog_post for the full text.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "A word or two to look for, e.g. 'past questions' or 'spaced repetition'. Omit to list the latest posts." },
+        category: { type: "string", description: "Optional category filter as published on the blog." },
+        limit: { type: "number", description: `1-${BLOG_SEARCH_MAX_RESULTS}, default 5.` },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "read_blog_post",
+    featureGate: "blog_research",
+    description: "Read one Akoro blog post in full (plain text) by its slug from search_blog_posts. Use it for research " +
+      "and reasoning: quote real articles accurately instead of paraphrasing from memory.",
+    input_schema: {
+      type: "object",
+      properties: {
+        slug: { type: "string", description: "The post slug returned by search_blog_posts." },
+      },
+      required: ["slug"],
+    },
+  },
+  {
     name: "list_tasks",
     description: "Get the student's pending tasks sorted by priority.",
     input_schema: { type: "object", properties: {}, required: [] },
@@ -400,9 +431,13 @@ export const CHAT_TOOLS = [
 // Agent ↔ agent consultation kill-switch (AKORO_AGENT_PEER_CONSULT_ENABLED=false
 // removes the tool everywhere at once, like the activity-drafts switch).
 const peerConsultEnabled = String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false";
+// Blog research kill-switch (AKORO_BLOG_RESEARCH_ENABLED=false removes the
+// search/read tools everywhere at once).
+const blogResearchEnabled = String(process.env.AKORO_BLOG_RESEARCH_ENABLED ?? "true").toLowerCase() !== "false";
 
 export function getLearnerChatTools({ allowToolRequest = true } = {}) {
   const enabled = {
+    blog_research: blogResearchEnabled,
     peer_consult: peerConsultEnabled,
     concept_tracker: conceptTrackerEnabled,
     learning_insights: learnerInsightsEnabled,
@@ -740,7 +775,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
             ...(enabled("AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED") ? ["Show learner-clearable compact Agent Chat memory on request"] : []),
           ] },
-          { title: "Limits", items: ["Asks a clarifying question when a tool needs a detail you did not give — it never guesses values", "Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Do not browse the live web, access private account secrets, or take unrequested actions"] },
+          { title: "Limits", items: ["Asks a clarifying question when a tool needs a detail you did not give — it never guesses values", "Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Research from Akoro\u2019s own blog (search_blog_posts / read_blog_post) \u2014 do not browse the live web, access private account secrets, or take unrequested actions"] },
         ].filter((section) => section.items.length),
       };
     }
@@ -814,6 +849,27 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         return consult; // { consulted, replies: [{agent, emoji, reply}], topic }
       } catch (error) {
         return { error: error.message || "The agent network is unavailable right now" };
+      }
+    }
+    case "search_blog_posts": {
+      try {
+        return await searchBlogPosts({
+          query: input?.query,
+          category: input?.category,
+          limit: input?.limit,
+        });
+      } catch (error) {
+        return { error: error.message || "The blog search is unavailable right now" };
+      }
+    }
+    case "read_blog_post": {
+      if (!input?.slug || !String(input.slug).trim()) {
+        return clarify("slug", "Which post should I read? Pass the slug from a blog search.", { action: "read_blog_post" });
+      }
+      try {
+        return await readBlogPost({ slug: input.slug });
+      } catch (error) {
+        return { error: error.message || "The blog is unavailable right now" };
       }
     }
     case "suggest_help": {
