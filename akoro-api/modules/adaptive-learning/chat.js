@@ -54,7 +54,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
-import { requiresAgentCapabilitiesTool } from "./agent-chat-intent.js";
+import { requiresAgentCapabilitiesTool, requiresActivityPreparation } from "./agent-chat-intent.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
@@ -1944,7 +1944,9 @@ const INSTRUCTOR_HITL_GUIDE =
   `Never say an activity was assigned, sent, or that learners were notified: only the instructor's Assign action in the preview does that. ` +
   `If a prepare fails, its error field says exactly why — repeat that reason to the instructor and fix that one thing together. NEVER call it a technical problem, NEVER retry with unchanged inputs. ` +
   `If the instructor says "the whole class" or "everyone" or "use the class" and list_my_classrooms shows exactly ONE class, use it without asking. ` +
-  `When the instructor CONFIRMS ("yes", "go ahead", "do it", "use that class"), call prepare_activity immediately — every detail they gave is already in this conversation; never re-ask or restart the request. ` +
+  `When the instructor CONFIRMS ("yes", "proceed", "go ahead", "do it", "use that class"), call prepare_activity immediately — every detail they gave is already in this conversation; never re-ask or restart the request. ` +
+  `prepare_activity is the ONLY way an activity comes into existence - NEVER write assignment or quiz questions as chat text: questions and objectives are generated into the draft, and the instructor edits them in the preview. ` +
+  `The tool takes no question count or theme list - never ask for them; inventing extra requirements is exactly the guessing this workflow forbids. ` +
   `If the tool result carries needsClarification, ask the question it carries before preparing anything. ` +
   `Do not guess an audience, a due date, or a schedule the instructor did not state. ` +
   `Pass due_at only when you can resolve their stated time to an exact ISO 8601 instant; otherwise keep it as a due_hint label or ask. ` +
@@ -2178,6 +2180,10 @@ router.post("/agent", async (req, res) => {
     const userContent = att.visionParts.length
       ? [{ type: "text", text: userText }, ...att.visionParts]
       : userText;
+    // Draft tools can be kill-switched off entirely; a required tool that
+    // isn't in the catalogue would throw inside the loop — so the prepare
+    // force below only arms when the instructor catalogue is non-empty.
+    const instructorTools = role === "student" ? [] : openAiInstructorTools();
     const prepared = await runAgentToolLoop({
       systemContent,
       messages: [...dialogue, { role: "user", content: userContent }],
@@ -2186,9 +2192,17 @@ router.post("/agent", async (req, res) => {
       status: wantsStream ? status : null,
       tools: role === "student" ? openAiChatTools({
         allowToolRequest: hasExplicitToolRequestConsent(userMessage),
-      }) : openAiInstructorTools(),
-      requiredTool: role === "student" && requiresAgentCapabilitiesTool(userMessage)
-        ? "get_agent_capabilities" : null,
+      }) : instructorTools,
+      // Learners: capability questions are answered from the live catalogue.
+      // Instructors: an activity request (or a confirmation continuing one)
+      // MUST produce a prepare_activity call — left on "auto" the model
+      // detours into writing sample questions as prose or re-asking for
+      // details the conversation already has. The force covers iteration 0
+      // only; the tool's own clarify() handles anything genuinely missing.
+      requiredTool: role === "student"
+        ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities" : null)
+        : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
+          ? "prepare_activity" : null),
       role,
     });
     const finalMessages = [{ role: "system", content: systemContent }, ...prepared.messages];

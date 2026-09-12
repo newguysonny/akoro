@@ -78,7 +78,10 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   assert.match(chat, /if \(role !== "instructor"\) return \{ error: "Activity preparation is only available to instructor accounts" \}/);
   assert.match(chat, /role !== "instructor"\) return \{ error: "Activity drafts are only available to instructor accounts" \}/);
   // /agent arms the instructor loop (students keep the learner set untouched).
-  assert.match(chat, /\}\) : openAiInstructorTools\(\)/);
+  // The catalogue resolves once, through the kill-switch guard, so the
+  // prepare-force never requires a tool that isn't armed.
+  assert.match(chat, /const instructorTools = role === "student" \? \[\] : openAiInstructorTools\(\);/);
+  assert.match(chat, /\}\) : instructorTools,/);
   assert.match(chat, /"prepare_activity", "revise_activity_draft"\]\.includes\(tool\)/, "prepare + revise are side-effecting");
   // HITL honesty guide replaces the learner observation guide for instructors.
   assert.match(chat, /INSTRUCTOR_HITL_GUIDE/);
@@ -405,6 +408,14 @@ test("prepare failures are diagnosable and survivable — no more silent thrash"
   // A bare "Yes" once landed as "what do you mean?" — confirmation must
   // fire the tool, not restart the interview.
   assert.match(chat, /call prepare_activity immediately — every detail they gave is already in this conversation/);
+  // The model once wrote sample questions as chat prose and invented a
+  // "how many questions?" requirement — so the route FORCES prepare_activity
+  // on an activity request (or a confirmation continuing one), and the guide
+  // forbids the detours outright.
+  assert.match(chat, /requiresActivityPreparation\(userMessage, dialogue\)/);
+  assert.match(chat, /\? "prepare_activity" : null/);
+  assert.match(chat, /prepare_activity is the ONLY way an activity comes into existence/);
+  assert.match(chat, /never ask for them; inventing extra requirements/);
   // The tool result says the plan is on its way (it no longer awaits it).
   assert.match(chat, /plan_status === "pending"\) result\.planNote/);
 });
