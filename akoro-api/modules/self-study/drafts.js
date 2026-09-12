@@ -64,9 +64,16 @@ async function resolveClassroomByName(instructorId, name) {
   const q = String(name || "").trim();
   if (!q) return null;
   let data;
-  ({ data } = await db.from("classrooms")
-    .select("id, name").or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`).ilike("name", `%${q}%`).limit(1)
-    .catch(() => null));
+  try {
+    // Supabase builders are thenables WITHOUT .catch — errors must be
+    // handled by try/catch around the await (chaining .catch here threw
+    // 'catch is not a function' and killed every prepare that named a class).
+    ({ data } = await db.from("classrooms")
+      .select("id, name").or(`teacher_id.eq.${instructorId},created_by.eq.${instructorId}`).ilike("name", `%${q}%`).limit(1));
+  } catch {
+    ({ data } = await db.from("classrooms")
+      .select("id, name").eq("teacher_id", instructorId).ilike("name", `%${q}%`).limit(1));
+  }
   if (!data) {
     ({ data } = await db.from("classrooms")
       .select("id, name").eq("teacher_id", instructorId).ilike("name", `%${q}%`).limit(1));

@@ -385,3 +385,15 @@ test("prepare failures are diagnosable and survivable — no more silent thrash"
   assert.match(chat, /list_my_classrooms shows exactly ONE class, use it without asking/);
 });
 
+test("classroom name resolution never chains .catch on a Supabase builder", () => {
+  // LIVE transcript catch: db.from(...).or(...).ilike(...).limit(...).catch
+  // is not a function — Supabase builders are thenables WITHOUT .catch, and
+  // that TypeError killed every prepare that named a class. Errors are
+  // handled by try/catch around the await, then the teacher_id fallback.
+  const fnStart = drafts.indexOf("async function resolveClassroomByName");
+  const fnBody = drafts.slice(fnStart, drafts.indexOf("}", drafts.indexOf("return data[0]", fnStart)));
+  assert.ok(!/\.catch\(/.test(fnBody), "no .catch chained on the builder");
+  assert.match(fnBody, /Supabase builders are thenables WITHOUT \.catch/);
+  assert.match(fnBody, /\.eq\("teacher_id", instructorId\)/);
+});
+
