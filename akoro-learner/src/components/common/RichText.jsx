@@ -38,7 +38,27 @@ export default function RichText({ text }) {
             </div>
           );
         }
-        return <div key={i} style={{ margin: '2px 0' }}><SpanRun spans={b.spans} /></div>;
+        return (
+          <div key={i} style={{ margin: '2px 0' }}>
+            {/* Keep the author's single line breaks — the instructor chat's
+                RichText refinement; without it multi-line answers collapse
+                into one wall of text. */}
+            {(() => {
+              const paras = [];
+              let current = [];
+              b.spans.forEach((s) => {
+                if (s.text.includes('\n')) {
+                  const parts = s.text.split('\n');
+                  current.push({ ...s, text: parts.shift() });
+                  paras.push(current); current = [];
+                  parts.forEach((part) => { if (part) paras.push([{ ...s, text: part }]); });
+                } else current.push(s);
+              });
+              if (current.length) paras.push(current);
+              return paras.map((spans, j) => <div key={j}><SpanRun spans={spans} /></div>);
+            })()}
+          </div>
+        );
       })}
     </div>
   );
