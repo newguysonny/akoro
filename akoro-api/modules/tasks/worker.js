@@ -20,6 +20,7 @@ import { hasCoins } from "../../lib/coins.js";
 // against stub tools rather than a copy of it. What stays here is everything
 // an eval must not do: billing, DB writes, delivery.
 import { runAgentLoop } from "./lib/agentLoop.js";
+import { reportAgentActivity, agentToolActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 
 const MODEL = OPENAI_MODEL;
 
@@ -89,7 +90,9 @@ export const taskWorker = new Worker("task-runner", async (job) => {
     const toolMap      = new Map(tools.map((t) => [t.definition.name, t]));
     const toolCtx      = { taskId: task.id, runId: run.id, teacherId: task.creator_id, courseId: task.course_id ?? null };
 
-    const { steps: agentSteps, outputs } = await runAgentLoop({
+    // The header stream: the owner sees the agent start, switch tools, finish.
+  reportAgentActivity(task.creator_id, `Working on "${String(task.title || "your task").slice(0, 48)}"\u2026`);
+  const { steps: agentSteps, outputs } = await runAgentLoop({
       model: MODEL,
       messages: [
         { role: "system", content: ctx.systemPrompt },
@@ -104,7 +107,7 @@ export const taskWorker = new Worker("task-runner", async (job) => {
       // Persist after every model turn, so a run that dies mid-way still shows
       // how far it got.
       onStep: (_step, all) => TaskRunDB.update(run.id, { agentSteps: all }),
-      onToolStart: (name) => deliverProgress(task, `Using tool: ${name}...`),
+      onToolStart: (name) => { deliverProgress(task, `Using tool: ${name}...`); agentToolActivity(task.creator_id, name); },
       // Background job (no request context) — name the payer explicitly so the
       // metered client bills each iteration to the task owner's wallet.
       meta: { __userId: payer, __feature: "agent_task", __ref: task.id },

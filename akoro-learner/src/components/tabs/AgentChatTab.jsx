@@ -64,6 +64,7 @@ function AgentChatTab({
   onStartTeach, onStartExamPrep, onOpenConceptTracker, onOpenAdaptiveControls, agentNameProp, agentEmojiProp, onChatActive,
   agentOnline = false, agentAutonomyLoaded = false, agentAutonomySaving = false,
   onToggleAgentAutonomy,
+  agentActivity = null,
 }) {
   const { t } = useLang();
   const initName  = agentNameProp  || '';
@@ -720,7 +721,11 @@ function AgentChatTab({
                 title={agentOnline?"Agent online: it may open one chat when a precisely due task is due.":"Agent offline: tap to allow one due-task chat."}
                 style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,marginTop:2,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
                 <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
-                <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{`${autonomyStatus} · ${t('agent.learning_agent')}`}</span>
+                <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",display:"inline-flex",alignItems:"center",gap:4 }}>
+                  {agentActivity
+                    ? <><span style={{ width:5,height:5,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite"}}/>{agentActivity}</>
+                    : `${autonomyStatus} · ${t('agent.learning_agent')}`}
+                </span>
               </button>
             </div>
           </div>

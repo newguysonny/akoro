@@ -7,6 +7,7 @@
  * chat IDs stored on the schedule make a retry safe after a process crash.
  */
 import { randomUUID } from "node:crypto";
+import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 
@@ -190,6 +191,8 @@ export async function deliverChatFollowUp(followUpId) {
 
   // Atomically claim the row before writing a chat. Cancellation races this
   // same `scheduled` condition, so exactly one operation wins.
+  // The header stream: the learner sees what the agent is doing right now.
+  reportAgentActivity(followUp.user_id, "Preparing a check-in for you\u2026");
   const now = new Date().toISOString();
   const { data: claimed, error: claimError } = await db.schema("edu").from("scheduled_chat_follow_ups")
     .update({ status: "delivering", updated_at: now })
@@ -223,6 +226,7 @@ export async function deliverChatFollowUp(followUpId) {
   }, { onConflict: "id", ignoreDuplicates: true });
   if (messageError) throw new Error("Could not create the follow-up chat message");
 
+  clearAgentActivity(followUp.user_id);
   const { data: delivered, error: statusError } = await db.schema("edu").from("scheduled_chat_follow_ups")
     .update({ status: "delivered", delivered_at: now, updated_at: now, last_error: null })
     .eq("id", followUp.id)

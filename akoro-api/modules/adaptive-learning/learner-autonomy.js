@@ -8,6 +8,7 @@
  * boundary; queued jobs remain harmless and exit after their authority check.
  */
 import { randomUUID } from "node:crypto";
+import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 
@@ -270,6 +271,8 @@ export async function deliverAutonomyReview({ reviewId, revision }) {
     return { skipped: true };
   }
 
+  // The header stream: the learner sees what the agent is doing right now.
+  reportAgentActivity(review.user_id, "Checking your schedule\u2026");
   const now = new Date().toISOString();
   const { data: claimed, error: claimError } = await db.schema("edu").from("learner_autonomy_task_reviews")
     .update({ status: "delivering", updated_at: now })
@@ -305,6 +308,7 @@ export async function deliverAutonomyReview({ reviewId, revision }) {
   }, { onConflict: "id", ignoreDuplicates: true });
   if (messageError) throw new Error("Could not create autonomous task message");
 
+  clearAgentActivity(review.user_id);
   const { data: delivered, error: deliveryError } = await db.schema("edu").from("learner_autonomy_task_reviews")
     .update({ status: "delivered", delivered_at: now, last_error: null, updated_at: now })
     .eq("id", review.id)

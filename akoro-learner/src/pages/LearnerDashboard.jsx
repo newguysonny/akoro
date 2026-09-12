@@ -324,6 +324,16 @@ export default function LearnerDashboard() {
     return ()=>{ alive=false; clearInterval(t); };
   },[]);
 
+  // What the agent is doing RIGHT NOW (background work stream). The socket
+  // pushes labels; a quiet stretch of 90s falls back to the static subtitle.
+  const [agentActivity, setAgentActivity] = useState(null);
+  const agentActivityTimer = useRef(null);
+  const absorbAgentActivity = useCallback((label) => {
+    setAgentActivity(label || null);
+    if (agentActivityTimer.current) clearTimeout(agentActivityTimer.current);
+    if (label) agentActivityTimer.current = setTimeout(() => setAgentActivity(null), 90_000);
+  }, []);
+
   const toggleAgentAutonomy = useCallback(async () => {
     if (!agentAutonomyLoaded || agentAutonomySaving) return;
     const previous = agentOnline;
@@ -514,6 +524,10 @@ export default function LearnerDashboard() {
           setNotifUnread(u => (u || 0) + 1);
           if (n?.title) setToast(`${n.title}`);
         });
+
+        // Agent activity — what the background agent is doing at this moment
+        // ("Checking your schedule\u2026", "Preparing a check-in\u2026").
+        socket.on("agent:activity", ({ label } = {}) => absorbAgentActivity(label));
       }
     } catch { /* socket.io not loaded — REST polling fallback */ }
 
@@ -978,7 +992,8 @@ export default function LearnerDashboard() {
           {tab==="battles"  && <BattlesTab battles={battles} onViewChallenge={()=>goTab("challenges")} onBattleCreated={loadBattles}/>}
           {tab==="agent"    && <AgentChatTab onStartTeach={s=>{ setTeachSession(s); }} onStartExamPrep={()=>setExamPrepOpen(true)} onOpenConceptTracker={()=>setConceptTrackerOpen(true)} onOpenAdaptiveControls={()=>setAdaptiveControlsOpen(true)} agentNameProp={agentProfile.name} agentEmojiProp={agentProfile.emoji} onChatActive={setChatActive}
             agentOnline={agentOnline} agentAutonomyLoaded={agentAutonomyLoaded} agentAutonomySaving={agentAutonomySaving}
-            onToggleAgentAutonomy={toggleAgentAutonomy}/>}
+            onToggleAgentAutonomy={toggleAgentAutonomy}
+            agentActivity={agentActivity}/>}
         </div>
 
         {/* Now studying — Spotify-style mini-bar (higher-ed, all tabs but chat) */}

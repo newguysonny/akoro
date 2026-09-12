@@ -55,6 +55,7 @@ import {
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
 import { requiresAgentCapabilitiesTool, requiresActivityPreparation } from "./agent-chat-intent.js";
+import { agentToolActivity } from "../../lib/agentActivity.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
 import { validateLearnerTaskInput } from "./learner-task-validation.js";
@@ -1997,6 +1998,9 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       let input = {};
       try { input = JSON.parse(call?.function?.arguments || "{}"); } catch { input = {}; }
       status?.("tool", "Checking your Akoro study data…");
+      // The header stream too - the same labels the background workers send,
+      // so the agent's subtitle shows live work during active chats as well.
+      agentToolActivity(studentId, tool);
       let toolResult;
       try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
       catch (error) { toolResult = { success: false, error: "The requested Akoro action could not be completed." }; }
