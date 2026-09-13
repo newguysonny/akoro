@@ -20,6 +20,8 @@ const { Pool } = pkg;
 import db from "../../db.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
+import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
+import { listMyBlogs, createBlogPost, updateBlogPost } from "../blogs/service.js";
 import { newToolRequestId, toolObservation } from "../../utils/toolObservation.js";
 
 import { getOrchestrator, listAgentPairs, getAgentPairProfile } from "./agents/registry.js";
@@ -317,6 +319,76 @@ export const CHAT_TOOLS = [
         slug: { type: "string", description: "The post slug returned by search_blog_posts." },
       },
       required: ["slug"],
+    },
+  },
+  {
+    name: "list_my_goals",
+    description: "Show the learner's study goals (active, paused, achieved) with their target dates and progress notes. Use when they ask about their goals, or before creating a task or proposal that should align with one.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "create_goal",
+    description: "Save a new study goal for the learner. ONLY when they explicitly ask to add/save a goal — never on your own initiative (autonomous goal ideas go through the proposal inbox instead). One clear line, e.g. 'Score 80% in Further Maths'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "The goal in one clear line (max 120 characters)." },
+        category: { type: "string", description: "Optional short category, e.g. 'Exam', 'Mastery', 'Habit'." },
+        metric: { type: "string", description: "Optional how-we-measure line, e.g. 'WAEC further maths score'." },
+        exam: { type: "string", description: "Optional exam this targets, e.g. 'WAEC', 'JAMB'." },
+        targetDate: { type: "string", description: "Optional target date (YYYY-MM-DD)." },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "update_goal_progress",
+    description: "Update one of the learner's goals: mark it achieved/paused/active or add a progress note. ONLY when they explicitly ask. Get the goalId from list_my_goals.",
+    input_schema: {
+      type: "object",
+      properties: {
+        goalId: { type: "string", description: "The goalId from list_my_goals." },
+        status: { type: "string", enum: ["active", "paused", "achieved"], description: "Only when the learner wants a status change." },
+        progressNote: { type: "string", description: "A short progress note (max 500 characters)." },
+        targetDate: { type: "string", description: "New target date (YYYY-MM-DD), only if they asked." },
+      },
+      required: ["goalId"],
+    },
+  },
+  {
+    name: "list_my_proposals",
+    description: "Show the suggestions from your background reviews waiting in the learner's inbox (pending, plus recent decisions). Read-only: the learner approves or dismisses each one in the Suggestions tab — you can discuss them and point there, but you can never execute or approve a proposal yourself.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "list_my_blogs",
+    description: "Show the learner's own blog posts (drafts and published) with excerpts. Use when they ask about their blogs or before editing one.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "save_blog_draft",
+    description: "Save one of the learner's blog posts as a draft — a new draft (no blogId) or an update to an existing one (blogId from list_my_blogs). ONLY when they explicitly ask. If they want help writing, draft the text WITH them in the conversation first, then save what they approve.",
+    input_schema: {
+      type: "object",
+      properties: {
+        blogId: { type: "string", description: "An existing post to update; omit to create a new draft." },
+        title: { type: "string", description: "The blog title (max 120 characters)." },
+        body: { type: "string", description: "The full blog text in the chat markdown subset (## headings, - lists, > quotes)." },
+      },
+      required: ["title", "body"],
+    },
+  },
+  {
+    name: "publish_blog",
+    description: "Publish one of the learner's blog posts — new (no blogId) or an existing draft (blogId). ONLY on an explicit ask to publish; confirm the title with them first if it is not settled. Published posts also appear on the public blog under Community.",
+    input_schema: {
+      type: "object",
+      properties: {
+        blogId: { type: "string", description: "An existing draft to publish; omit to write and publish in one step." },
+        title: { type: "string", description: "The blog title (max 120 characters)." },
+        body: { type: "string", description: "The full blog text — publishing an empty post is rejected." },
+      },
+      required: ["title", "body"],
     },
   },
   {
@@ -773,7 +845,7 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             // same default-on semantics as the tool's featureGate
             ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
               ? ["Ask other learners\u2019 study agents for fresh ideas when you\u2019re stuck \u2014 only your question travels, never your data"] : [])] },
-          { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress"] },
+          { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress", "Save, update and track study goals when explicitly asked", "Show the suggestions from its background reviews waiting in the inbox", "Draft, save and publish the learner\u2019s blog posts when explicitly asked"] },
           { title: "Learning tools", items: [
             ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
             ...(enabled("AKORO_CONCEPT_TRACKER_ENABLED") ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
@@ -875,6 +947,126 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         return await readBlogPost({ slug: input.slug });
       } catch (error) {
         return { error: error.message || "The blog is unavailable right now" };
+      }
+    }
+    case "list_my_goals": {
+      try {
+        const { goals, error } = await listGoals(studentId);
+        if (error) return { error };
+        return {
+          count: (goals ?? []).length,
+          goals: (goals ?? []).map((g) => ({
+            goalId: g.id, title: g.title, status: g.status, category: g.category,
+            metric: g.metric, exam: g.exam, targetDate: g.target_date,
+            progressNote: g.progress_note, updatedAt: g.updated_at,
+          })),
+        };
+      } catch (error) {
+        return { error: error.message || "Could not load the goals" };
+      }
+    }
+    case "create_goal": {
+      if (!input?.title || !String(input.title).trim()) {
+        return clarify("title", "What goal should I save? One clear line, e.g. 'Score 80% in Further Maths'.", { action: "create_goal" });
+      }
+      try {
+        // The learner explicitly asked, so provenance is 'learner' — the agent
+        // never self-inserts goals (autonomous ideas go via proposals).
+        const { goal, error } = await createGoal(studentId, {
+          title: input.title, category: input.category, metric: input.metric,
+          exam: input.exam, target_date: input.targetDate,
+        });
+        if (error) return { error };
+        return { created: true, goalId: goal.id, title: goal.title, category: goal.category, targetDate: goal.target_date, status: goal.status };
+      } catch (error) {
+        return { error: error.message || "Could not save the goal" };
+      }
+    }
+    case "update_goal_progress": {
+      if (!input?.goalId) {
+        return clarify("goalId", "Which goal? Call list_my_goals first and match the one they mean.", { action: "update_goal_progress" });
+      }
+      try {
+        const { goal, error, notFound } = await updateGoal(studentId, input.goalId, {
+          status: input.status, progress_note: input.progressNote, target_date: input.targetDate,
+        });
+        if (notFound) return { error: "That goalId doesn't match one of the learner's goals — call list_my_goals." };
+        if (error) return { error };
+        return { updated: true, goalId: goal.id, title: goal.title, status: goal.status, progressNote: goal.progress_note };
+      } catch (error) {
+        return { error: error.message || "Could not update the goal" };
+      }
+    }
+    case "list_my_proposals": {
+      try {
+        const { data, error } = await db.schema("edu").from("agent_proposals")
+          .select("id, kind, title, rationale, status, created_at, decided_at")
+          .eq("user_id", studentId)
+          .order("created_at", { ascending: false })
+          .limit(12);
+        if (error) return { error: "Could not load the proposals" };
+        const rows = data ?? [];
+        const pending = rows.filter((r) => r.status === "proposed");
+        return {
+          pendingCount: pending.length,
+          proposals: [...pending, ...rows.filter((r) => r.status !== "proposed")].map((r) => ({
+            proposalId: r.id, kind: r.kind, title: r.title, rationale: r.rationale,
+            status: r.status, createdAt: r.created_at, decidedAt: r.decided_at,
+          })),
+          note: "The learner approves or dismisses each proposal in the Suggestions tab — you can discuss them, never execute them.",
+        };
+      } catch (error) {
+        return { error: error.message || "Could not load the proposals" };
+      }
+    }
+    case "list_my_blogs": {
+      try {
+        const { blogs, error } = await listMyBlogs(studentId);
+        if (error) return { error };
+        return {
+          count: (blogs ?? []).length,
+          blogs: (blogs ?? []).map((b) => ({
+            blogId: b.id, title: b.title, status: b.status, excerpt: b.excerpt, updatedAt: b.updatedAt,
+          })),
+        };
+      } catch (error) {
+        return { error: error.message || "Could not load the blogs" };
+      }
+    }
+    case "save_blog_draft": {
+      if (!input?.title || !String(input.title).trim()) {
+        return clarify("title", "What should the blog be titled?", { action: "save_blog_draft" });
+      }
+      if (input?.body === undefined || !String(input.body).trim()) {
+        return clarify("body", "Give me the blog text to save — draft the wording with me first if you like.", { action: "save_blog_draft" });
+      }
+      try {
+        const result = input?.blogId
+          ? await updateBlogPost(studentId, input.blogId, { title: input.title, body: input.body })
+          : await createBlogPost(studentId, { title: input.title, body: input.body, status: "draft" });
+        if (result.error) return { error: result.error };
+        if (result.notFound) return { error: "That blogId doesn't match one of the learner's posts — call list_my_blogs." };
+        return { saved: true, blogId: result.blog.id, title: result.blog.title, status: result.blog.status };
+      } catch (error) {
+        return { error: error.message || "Could not save the draft" };
+      }
+    }
+    case "publish_blog": {
+      if (!input?.title || !String(input.title).trim()) {
+        return clarify("title", "What should the blog be titled?", { action: "publish_blog" });
+      }
+      if (input?.body === undefined || !String(input.body).trim()) {
+        return clarify("body", "Give me the full blog text — an empty post can't be published.", { action: "publish_blog" });
+      }
+      try {
+        const result = input?.blogId
+          ? await updateBlogPost(studentId, input.blogId, { title: input.title, body: input.body, status: "published" })
+          : await createBlogPost(studentId, { title: input.title, body: input.body, status: "published" });
+        if (result.error) return { error: result.error };
+        if (result.notFound) return { error: "That blogId doesn't match one of the learner's posts — call list_my_blogs." };
+        return { published: true, blogId: result.blog.id, title: result.blog.title, publishedAt: result.blog.published_at };
+      } catch (error) {
+        return { error: error.message || "Could not publish the blog" };
       }
     }
     case "suggest_help": {

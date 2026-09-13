@@ -10,11 +10,12 @@ import test from "node:test";
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, routes, chat, settingsTab] = await Promise.all([
+const [migration, routes, chat, settingsTab, goalService] = await Promise.all([
   read("./2026-learner-goals.sql"),
   read("../../akoro-api/modules/learner-goals/routes.js"),
   read("../../akoro-api/modules/adaptive-learning/chat.js"),
   read("../../akoro-learner/src/pages/settings/agentTab.jsx"),
+  read("../../akoro-api/modules/learner-goals/service.js"),
 ]);
 
 test("goals are a real table with status and provenance discipline", () => {
@@ -28,15 +29,18 @@ test("goals are a real table with status and provenance discipline", () => {
 });
 
 test("the goals API is the learner's own — capped, validated, owned", () => {
-  // Every route authenticates; ownership rides user_id on patch/delete.
+  // Every route authenticates; the service is the ONE write path (routes and
+  // the agent's chat tools share it), ownership rides user_id inside it.
   assert.equal((routes.match(/authenticateToken/g) || []).length >= 4, true);
-  assert.match(routes, /\.eq\("user_id", req\.user\.id\)/);
+  assert.match(routes, /import \{ listGoals, createGoal, updateGoal \} from "\.\/service\.js";/);
+  assert.match(goalService, /\.eq\("user_id", userId\)/);
   // Active-goal cap with an actionable message.
-  assert.match(routes, /MAX_ACTIVE_GOALS = 10/);
-  assert.match(routes, /achieve, pause or remove one first/);
-  // Status transitions are whitelisted.
-  assert.match(routes, /GOAL_STATUSES = \["active", "paused", "achieved", "dismissed"\]/);
-  assert.match(routes, /Unknown goal status\./);
+  assert.match(goalService, /MAX_ACTIVE_GOALS = 10/);
+  assert.match(goalService, /achieve, pause or remove one first/);
+  // Status transitions are whitelisted; provenance defaults to learner.
+  assert.match(goalService, /GOAL_STATUSES = \["active", "paused", "achieved", "dismissed"\]/);
+  assert.match(goalService, /Unknown goal status\./);
+  assert.match(goalService, /\{ source = "learner" \}/);
 });
 
 test("the agent knows the learner's active goals in every chat", () => {

@@ -20,6 +20,7 @@ const read = (root, ...p) => readFileSync(path.join(root, ...p), "utf8");
 
 const sql = read(API, "migrations/2026-edu-blogs.sql");
 const routes = read(API, "modules/blogs/routes.js");
+const service = read(API, "modules/blogs/service.js");
 const appJs = read(API, "app.js");
 const editor = read(LEARNER, "src/pages/BlogEditorPage.jsx");
 const library = read(LEARNER, "src/pages/LibraryPage.jsx");
@@ -35,22 +36,23 @@ test("edu.blogs · draft/published with the learner owning their posts", () => {
 });
 
 test("blogs API · ownership, private drafts, publish needs a body", () => {
-  // every write is scoped to the author
-  assert.match(routes, /\.eq\("id", req\.params\.id\)\.eq\("user_id", req\.user\.id\)/);
-  // drafts are invisible to other learners — 404, never a 403 existence leak
-  assert.match(routes, /data\.status !== "published" && data\.user_id !== req\.user\.id/);
-  assert.match(routes, /missing\(res, "Blog not found"\); \/\/ drafts are private/);
-  // publish requires content — honest error, in create AND patch (merged validation)
-  // the rule lives once, in the shared validator — create AND patch merge-validate through it
-  assert.equal((routes.match(/Write something before publishing/g) || []).length, 1);
-  assert.match(routes, /const cleanStatus = BLOG_STATUSES\.includes\(status\) \? status : "draft";/);
-  assert.match(routes, /const v = validateBlogInput\(\{\s*\n\s*title: req\.body\?\.title !== undefined \? req\.body\.title : existing\.title,/);
+  // routes are thin over the service — the ONE write path the chat tools share
+  assert.match(routes, /import \{ listMyBlogs, getBlogFor, createBlogPost, updateBlogPost, deleteBlogPost \} from "\.\/service\.js";/);
+  // every write is scoped to the author (inside the service)
+  assert.match(service, /\.eq\("id", id\)\.eq\("user_id", userId\)/);
+  // drafts are invisible to other learners — 404-shaped, never a 403 existence leak
+  assert.match(service, /data\.status !== "published" && data\.user_id !== userId\) return \{ notFound: true \};/);
+  // publish requires content — the rule lives once, in the shared validator;
+  // create AND patch merge-validate through it
+  assert.equal((service.match(/Write something before publishing/g) || []).length, 1);
+  assert.match(service, /const cleanStatus = BLOG_STATUSES\.includes\(status\) \? status : "draft";/);
+  assert.match(service, /const v = validateBlogInput\(\{\s*\n\s*title: patch\.title !== undefined \? patch\.title : existing\.title,/);
   // first publish stamps; unpublish clears; re-publish keeps the first date
-  assert.match(routes, /existing\.published_at \?\? new Date\(\)\.toISOString\(\)/);
-  assert.match(routes, /: null;/);
+  assert.match(service, /existing\.published_at \?\? new Date\(\)\.toISOString\(\)/);
+  assert.match(service, /: null;/);
   // title/body caps
-  assert.match(routes, /TITLE_MAX = 120/);
-  assert.match(routes, /BODY_MAX = 50_000/);
+  assert.match(service, /TITLE_MAX = 120/);
+  assert.match(service, /BODY_MAX = 50_000/);
 });
 
 test("library + menu · a choice modal — Upload opens the sheet, Blog opens the editor", () => {

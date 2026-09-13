@@ -22,6 +22,7 @@ const read = (root, ...p) => readFileSync(path.join(root, ...p), "utf8");
 const sql = read(API, "migrations/2026-edu-blogs-public.sql");
 const mirror = read(API, "modules/blogs/mirror.js");
 const routes = read(API, "modules/blogs/routes.js");
+const service = read(API, "modules/blogs/service.js");
 const blogData = read(LEARNER, "src/data/blogPosts.js");
 
 test("public mirror · markdown-subset converts to the blog's block types", () => {
@@ -68,13 +69,13 @@ test("public mirror · syncs on publish, re-syncs edits, removes on unpublish/de
   // the mirror exists only while published
   assert.match(mirror, /export async function removeBlogMirror\(publicSlug\)/);
   assert.match(mirror, /\.from\("blog_posts"\)\.delete\(\)\.eq\("slug", publicSlug\)/);
-  // route wiring: every transition, best-effort (never fails the save)
-  assert.match(routes, /const mirrorBlog = async \(userId, blog\) => \{[\s\S]*?catch \(e\) \{ console\.warn\("\[blogs\] public mirror sync failed:"/);
-  assert.match(routes, /if \(data\.status === "published"\) await mirrorBlog\(req\.user\.id, data\);/);
-  assert.match(routes, /await mirrorBlog\(req\.user\.id, \{ \.\.\.data, public_slug: existing\.public_slug \}\);/);
-  assert.match(routes, /await unmirrorBlog\(existing\);            \/\/ unpublished → off the public blog/);
-  assert.match(routes, /if \(doomed\.public_slug\) await unmirrorBlog\(doomed\);/);
-  assert.match(routes, /\.select\("id, user_id, title, body, status, published_at, public_slug"\)/);
+  // service wiring (the one write path): every transition, best-effort
+  assert.match(service, /const mirrorBlog = async \(userId, blog\) => \{[\s\S]*?catch \(e\) \{ console\.warn\("\[blogs\] public mirror sync failed:"/);
+  assert.match(service, /if \(data\.status === "published"\) await mirrorBlog\(userId, data\);/);
+  assert.match(service, /await mirrorBlog\(userId, \{ \.\.\.data, public_slug: existing\.public_slug \}\);/);
+  assert.match(service, /await unmirrorBlog\(existing\);            \/\/ unpublished → off the public blog/);
+  assert.match(service, /if \(doomed\.public_slug\) await unmirrorBlog\(doomed\);/);
+  assert.match(service, /\.select\("id, user_id, title, body, status, published_at, public_slug"\)/);
 });
 
 test("public surfaces · Community is a first-class category chip", () => {
