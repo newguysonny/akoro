@@ -516,7 +516,7 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     if (!skipJob("learner-autonomy worker")) {
       startLearnerAutonomyWorker();
       recoverLearnerAutonomySchedules()
-        .then(({ scheduled }) => console.log(`[learner-autonomy] recovered ${scheduled} due-task review(s)`))
+        .then((scheduled) => console.log(`[learner-autonomy] recovered ${scheduled ?? 0} due-task review(s)`))
         .catch((e) => console.error("[learner-autonomy] schedule recovery failed:", e.message));
       console.log("[learner-autonomy] worker started at boot");
     }

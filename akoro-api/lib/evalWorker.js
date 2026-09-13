@@ -14,10 +14,10 @@
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import db from "../db.js";
-import { bullRedisOptions } from "./redisOptions.js";
+import { redisConnectionOptions } from "./redisOptions.js";
 import { SUITES, suiteByKey, runSuite } from "./evals/index.js";
 
-const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" }));
 connection.on("error", (e) => console.error("[evals/redis]", e.message));
 
 export const evalQueue = new Queue("evals", {

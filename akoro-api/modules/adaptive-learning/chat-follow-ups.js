@@ -13,7 +13,7 @@ import Redis from "ioredis";
 
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
-import { bullRedisOptions } from "../../lib/redisOptions.js";
+import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { validateFollowUpId, validateFollowUpInput } from "./chat-follow-up-validation.js";
 
 const QUEUE_NAME = "agent-chat-follow-ups";
@@ -25,14 +25,14 @@ let queue;
 
 function redisConnection() {
   if (redis) return redis;
-  redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+  redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "chat-follow-ups" }));
   redis.on("error", (error) => console.error("[chat-follow-ups queue Redis]", error.message));
   return redis;
 }
 
 function workerRedisConnection() {
   if (workerRedis) return workerRedis;
-  workerRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+  workerRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "chat-follow-ups" }));
   workerRedis.on("error", (error) => console.error("[chat-follow-ups worker Redis]", error.message));
   return workerRedis;
 }

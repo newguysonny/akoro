@@ -9,14 +9,14 @@
 import { Worker, Queue } from "bullmq";
 import Redis             from "ioredis";
 import db                from "../../db.js";
-import { bullRedisOptions } from "../../lib/redisOptions.js";
+import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { thinkingTimeMs, autoPlayers } from "./agentPlayer.js";
 import { embedQuestion, recall, recallStrength, answerFromRecall, guess } from "./agentRecall.js";
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
 import { emitAutonomyEvent } from "../autonomy/triggers.js";
 
-const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "battle-worker" }));
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
 traceRedis(redis, "battle-worker");   // local quota forensics — inert unless AKORO_REDIS_TRACE=true
 
