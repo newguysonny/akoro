@@ -19,7 +19,9 @@ from urllib.request import Request, urlopen
 from agent.llm.messages import ToolCall
 
 _TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
-_MAX_CATALOGUE_TOOLS = 24
+# The learner catalogue has outgrown the old cap of 24 — the client slices
+# items[:cap], so a stale cap silently drops real tools from teaching sessions.
+_MAX_CATALOGUE_TOOLS = 48
 _MAX_DESCRIPTION_CHARS = 800
 _MAX_SCHEMA_CHARS = 6_000
 _MAX_ARGUMENT_BYTES = 12_000

@@ -23,6 +23,8 @@ const goalService = read("modules/learner-goals/service.js");
 const goalRoutes = read("modules/learner-goals/routes.js");
 const blogService = read("modules/blogs/service.js");
 const proposalsRoutes = read("modules/agent-proposals/routes.js");
+const gateway = read("modules/agent-tools/routes.js");
+const pyClient = read("..", "akoro-python-agent", "src", "agent", "tools", "akoro_api.py");
 
 const TOOL_NAMES = ["list_my_goals", "create_goal", "update_goal_progress", "list_my_proposals",
   "list_my_blogs", "save_blog_draft", "publish_blog"];
@@ -74,4 +76,22 @@ test("coverage · HITL stays human-only — no approval or autonomy-toggle tools
   assert.match(chatJs, /Save, update and track study goals when explicitly asked/);
   assert.match(chatJs, /Show the suggestions from its background reviews waiting in the inbox/);
   assert.match(chatJs, /Draft, save and publish the learner\\u2019s blog posts when explicitly asked/);
+});
+
+test("python gateway · catalogue flows, writes keep the confirmation HITL, cap raised", () => {
+  // the student catalogue is DERIVED from getLearnerChatTools — new tools flow automatically
+  assert.match(gateway, /return getLearnerChatTools\(\)\.map\(\(tool\) => publicTool\(tool, STUDENT_WRITE_TOOLS\.has\(tool\.name\)\)\);/);
+  // the Python path's HITL: every new write rides the confirmation flow
+  for (const w of ["create_goal", "update_goal_progress", "save_blog_draft", "publish_blog"]) {
+    assert.match(gateway, new RegExp(`"${w}",`), `${w} missing from STUDENT_WRITE_TOOLS`);
+  }
+  // argument validation: without a case the gateway 404s the tool
+  for (const t of ["consult_peer_agents", "search_blog_posts", "read_blog_post", "list_my_goals",
+    "create_goal", "update_goal_progress", "list_my_proposals", "list_my_blogs", "save_blog_draft", "publish_blog"]) {
+    assert.match(gateway, new RegExp(`case "${t}":`), `${t} missing from validateStudentArguments`);
+  }
+  // the review card says WHAT is approved — never a bare {kind}
+  assert.match(gateway, /public blog under Community/);
+  // the Python client must not silently truncate the grown catalogue
+  assert.match(pyClient, /_MAX_CATALOGUE_TOOLS = 48/);
 });

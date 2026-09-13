@@ -37,6 +37,10 @@ const STUDENT_WRITE_TOOLS = new Set([
   "schedule_chat_follow_up",
   "cancel_scheduled_chat_follow_up",
   "submit_tool_request",
+  "create_goal",
+  "update_goal_progress",
+  "save_blog_draft",
+  "publish_blog",
 ]);
 // Instructor activity-creation tools (human-in-the-loop): they only PREPARE
 // private drafts — assigning is always the instructor's own action in the
@@ -283,6 +287,63 @@ function validateStudentArguments(name, arguments_) {
         throw new GatewayError(422, "followUpId is invalid");
       }
       return;
+    case "consult_peer_agents":
+      only(new Set(["question", "topic"]));
+      shortText(arguments_.question, "question", true, 300);
+      if (arguments_.question.trim().length < 10) throw new GatewayError(422, "question must be at least ten characters");
+      if (arguments_.topic !== undefined && !["study_habits", "exam_prep", "streaks", "motivation", "goals", "subjects", "general"].includes(arguments_.topic)) {
+        throw new GatewayError(422, "topic is invalid");
+      }
+      return;
+    case "search_blog_posts":
+      only(new Set(["query", "category", "limit"]));
+      shortText(arguments_.query, "query", false, 120);
+      shortText(arguments_.category, "category", false, 60);
+      if (arguments_.limit !== undefined && (typeof arguments_.limit !== "number" || arguments_.limit < 1 || arguments_.limit > 8)) {
+        throw new GatewayError(422, "limit is invalid");
+      }
+      return;
+    case "read_blog_post":
+      only(new Set(["slug"]));
+      shortText(arguments_.slug, "slug", true, 200);
+      return;
+    case "list_my_goals":
+    case "list_my_proposals":
+    case "list_my_blogs":
+      only(new Set());
+      return;
+    case "create_goal":
+      only(new Set(["title", "category", "metric", "exam", "targetDate"]));
+      shortText(arguments_.title, "title", true, 120);
+      shortText(arguments_.category, "category", false, 40);
+      shortText(arguments_.metric, "metric", false, 160);
+      shortText(arguments_.exam, "exam", false, 40);
+      if (arguments_.targetDate !== undefined && (typeof arguments_.targetDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(arguments_.targetDate.trim()))) {
+        throw new GatewayError(422, "targetDate must be YYYY-MM-DD");
+      }
+      return;
+    case "update_goal_progress":
+      only(new Set(["goalId", "status", "progressNote", "targetDate"]));
+      if (typeof arguments_.goalId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(arguments_.goalId)) {
+        throw new GatewayError(422, "goalId is invalid");
+      }
+      if (arguments_.status !== undefined && !["active", "paused", "achieved"].includes(arguments_.status)) {
+        throw new GatewayError(422, "status is invalid");
+      }
+      shortText(arguments_.progressNote, "progressNote", false, 500);
+      if (arguments_.targetDate !== undefined && (typeof arguments_.targetDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(arguments_.targetDate.trim()))) {
+        throw new GatewayError(422, "targetDate must be YYYY-MM-DD");
+      }
+      return;
+    case "save_blog_draft":
+    case "publish_blog":
+      only(new Set(["blogId", "title", "body"]));
+      if (arguments_.blogId !== undefined && (typeof arguments_.blogId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(arguments_.blogId))) {
+        throw new GatewayError(422, "blogId is invalid");
+      }
+      shortText(arguments_.title, "title", true, 120);
+      shortText(arguments_.body, "body", true, 50_000);
+      return;
     default:
       throw new GatewayError(404, "Student tool is not available");
   }
@@ -448,6 +509,38 @@ async function confirmationPreview(name, arguments_, principalId) {
         note: "This sends private product feedback to Akoro admins; it does not perform the requested feature now.",
       };
     }
+    case "create_goal":
+      return {
+        kind: "create_goal",
+        title: boundedText(arguments_.title, 120),
+        category: boundedText(arguments_.category ?? "", 40),
+        targetDate: arguments_.targetDate ?? null,
+        note: "This adds a goal to the learner's shelf.",
+      };
+    case "update_goal_progress":
+      return {
+        kind: "update_goal_progress",
+        goalId: arguments_.goalId,
+        status: arguments_.status ?? null,
+        progressNote: boundedText(arguments_.progressNote ?? "", 300),
+        note: "This updates one of the learner's goals.",
+      };
+    case "save_blog_draft":
+      return {
+        kind: "save_blog_draft",
+        title: boundedText(arguments_.title, 120),
+        blogId: arguments_.blogId ?? null,
+        excerpt: boundedText(String(arguments_.body ?? "").split("\n").find(Boolean) ?? "", 140),
+        note: "This saves a draft of the learner's blog.",
+      };
+    case "publish_blog":
+      return {
+        kind: "publish_blog",
+        title: boundedText(arguments_.title, 120),
+        blogId: arguments_.blogId ?? null,
+        excerpt: boundedText(String(arguments_.body ?? "").split("\n").find(Boolean) ?? "", 140),
+        note: "This publishes the learner's blog — it will also appear on the public blog under Community.",
+      };
     default:
       return { kind: name };
   }
