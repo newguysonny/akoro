@@ -94,4 +94,9 @@ test("agent ↔ agent · consult_peer_agents is privacy-by-design and budget-met
   assert.match(peerConsult, /Promise\.allSettled\(asks\)/);
   // not in the side-effecting echo list (it writes nothing to this learner)
   assert.doesNotMatch(chatJs, /sideEffecting: \[[^\]]*consult_peer_agents/);
+  // awareness: the tool description teaches the model to OFFER the network,
+  // and the capabilities card quotes it (same default-on gate semantics)
+  assert.match(chatJs, /the answer "\s*\+\s*"is YES: say you can consult other learners' study agents and offer to ask them \u2014 never "/);
+  assert.match(chatJs, /Ask other learners\\u2019 study agents for fresh ideas/);
+  assert.match(chatJs, /AKORO_AGENT_PEER_CONSULT_ENABLED \?\? "true"\).toLowerCase\(\) !== "false"\s*\n\s*\? \["Ask other learners/);
 });

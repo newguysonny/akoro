@@ -276,7 +276,9 @@ export const CHAT_TOOLS = [
     description: "Ask up to two other learners' study agents for ideas and suggestions " +
       "(study habits, exam prep, streaks, motivation, goals, subjects) to help this student. " +
       "Use sparingly — at most once per conversation — when the student is stuck or explicitly " +
-      "wants fresh ideas. Keep the question general: contact details (emails, phone numbers, " +
+      "wants fresh ideas. If the student asks whether you can talk to other agents, the answer " +
+      "is YES: say you can consult other learners' study agents and offer to ask them — never " +
+      "claim you cannot. Keep the question general: contact details (emails, phone numbers, " +
       "invite links) are rejected, and peer agents never see this student's data, only the question.",
     input_schema: {
       type: "object",
@@ -767,7 +769,10 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       const enabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
       return {
         sections: [
-          { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss answers", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked"] },
+          { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss answers", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
+            // same default-on semantics as the tool's featureGate
+            ...(String(process.env.AKORO_AGENT_PEER_CONSULT_ENABLED ?? "true").toLowerCase() !== "false"
+              ? ["Ask other learners\u2019 study agents for fresh ideas when you\u2019re stuck \u2014 only your question travels, never your data"] : [])] },
           { title: "Organisation", items: ["Create learner-owned study tasks when explicitly asked", "Schedule a future chat message when explicitly asked", "Show due tasks and recorded learning progress"] },
           { title: "Learning tools", items: [
             ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
