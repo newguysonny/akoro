@@ -95,3 +95,12 @@ test("python gateway · catalogue flows, writes keep the confirmation HITL, cap 
   // the Python client must not silently truncate the grown catalogue
   assert.match(pyClient, /_MAX_CATALOGUE_TOOLS = 48/);
 });
+
+test("capability awareness · the card and the prompt must match the runtime gates", () => {
+  // the memory card line consults the REAL default-on gate — never a strict
+  // env-equality check that turns "unset" into "the agent can't remember"
+  assert.match(chatJs, /\(durableAgentChatContextEnabled \? \["Remember across chats/);
+  assert.match(chatJs, /Never claim you cannot remember while this memory section is present/);
+  // the guide is injected only where memory actually loaded (durable && student)
+  assert.match(chatJs, /\(durable && role === "student" \? DURABLE_MEMORY_GUIDE : ""\)/);
+});

@@ -850,7 +850,9 @@ export async function executeChatTool(name, input, studentId, { conversationId =
             ...(enabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED") ? ["Show generated exam-style practice and workflow status; these are not historical past papers"] : []),
             ...(enabled("AKORO_CONCEPT_TRACKER_ENABLED") ? ["Show approved-concept progress, resume points, and clearable confusion notes"] : []),
             ...(enabled("AKORO_LEARNER_INSIGHTS_ENABLED") ? ["Explain a bounded, expiry-aware learning-insights summary"] : []),
-            ...(enabled("AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED") ? ["Show learner-clearable compact Agent Chat memory on request"] : []),
+            // Consult the REAL gate (default-on), not a strict env-equality
+            // check — the card must never deny an ability the runtime has.
+            ...(durableAgentChatContextEnabled ? ["Remember across chats — this conversation and the learner\u2019s saved study context are available to you (they can clear it any time)"] : []),
           ] },
           { title: "Limits", items: ["Asks a clarifying question when a tool needs a detail you did not give — it never guesses values", "Read supported files attached to this chat", "Generated questions are not historical past papers", "Can submit an admin feature request only after you explicitly ask", "Research from Akoro\u2019s own blog (search_blog_posts / read_blog_post) \u2014 do not browse the live web, access private account secrets, or take unrequested actions"] },
         ].filter((section) => section.items.length),
@@ -2158,6 +2160,15 @@ Next steps:\n${list(scratchpad.nextSteps)}
 Open questions:\n${list(scratchpad.openQuestions)}`;
 }
 
+// The agent receives its memory as context but historically DENIED having it
+// ("I can't remember past chats") because nothing in the prompt owned the
+// ability. This guide is appended whenever durable memory actually loaded.
+const DURABLE_MEMORY_GUIDE =
+  `\n\n## Durable memory (read before answering "do you remember")\n` +
+  `You have durable memory: this conversation\u2019s transcript, its compact summary, and the learner\u2019s saved study memories are already in your context. ` +
+  `When the learner asks whether you remember them or a past chat, the answer is YES for anything in your saved context or this conversation \u2014 answer from it specifically, and offer get_chat_memory for the full saved list. ` +
+  `Never claim you cannot remember while this memory section is present. If something specific is not in your context, say exactly what you don\u2019t have rather than a blanket "I can\u2019t remember".`;
+
 function renderRelevantMemory(memories) {
   if (!Array.isArray(memories) || !memories.length) return "";
   return `\n\n## Relevant learner memory
@@ -2497,6 +2508,7 @@ router.post("/agent", async (req, res) => {
       `If a learner asks for something Akoro cannot currently do, say so plainly. Offer to submit a concise product request only after they explicitly ask; never submit one automatically and never copy their raw prompt, attachments, or personal data into it. ` +
       `Generated exam-style questions must be labelled as generated practice, not historical papers.` +
       (role === "student" ? TOOL_OBSERVATION_GUIDE : INSTRUCTOR_HITL_GUIDE) +
+      (durable && role === "student" ? DURABLE_MEMORY_GUIDE : "") +
       (conversation?.summary ? `\n\n## Compact conversation summary\n${conversation.summary}` : "") +
       renderRelevantMemory(relevantMemories) +
       renderScratchpad(conversation?.scratchpad) +
