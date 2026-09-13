@@ -16,8 +16,9 @@ import Redis from "ioredis";
 import db from "../db.js";
 import { redisConnectionOptions } from "./redisOptions.js";
 import { SUITES, suiteByKey, runSuite } from "./evals/index.js";
+import { traceRedis } from "./redisTrace.js";
 
-const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" }));
+const connection = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" })), "eval-worker");
 connection.on("error", (e) => console.error("[evals/redis]", e.message));
 
 export const evalQueue = new Queue("evals", {

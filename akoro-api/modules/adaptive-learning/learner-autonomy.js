@@ -15,6 +15,7 @@ import Redis from "ioredis";
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
+import { traceRedis } from "../../lib/redisTrace.js";
 import { buildAutonomyTaskMessage } from "./learner-autonomy-policy.js";
 
 const QUEUE_NAME = "learner-agent-autonomy";
@@ -27,14 +28,14 @@ let worker;
 
 function queueConnection() {
   if (queueRedis) return queueRedis;
-  queueRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "learner-autonomy" }));
+  queueRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "learner-autonomy" })), "learner-autonomy");
   queueRedis.on("error", (error) => console.error("[learner-autonomy queue Redis]", error.message));
   return queueRedis;
 }
 
 function workerConnection() {
   if (workerRedis) return workerRedis;
-  workerRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "learner-autonomy" }));
+  workerRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "learner-autonomy" })), "learner-autonomy");
   workerRedis.on("error", (error) => console.error("[learner-autonomy worker Redis]", error.message));
   return workerRedis;
 }

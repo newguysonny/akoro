@@ -28,6 +28,7 @@ const state = {
   total: 0,
   byCommand: new Map(),     // "xadd" → n
   bySite: new Map(),        // "routes/battles.js:123" → n
+  byLabel: new Map(),       // "battle-worker" → Map("evalsha" → n) — the label IS the consumer
   immediateLogs: 0,
   reporter: null,
 };
@@ -54,6 +55,9 @@ export function traceRedis(client, label = "redis") {
         state.total += 1;
         state.byCommand.set(name, (state.byCommand.get(name) || 0) + 1);
         state.bySite.set(site, (state.bySite.get(site) || 0) + 1);
+        const perLabel = state.byLabel.get(label) || new Map();
+        perLabel.set(name, (perLabel.get(name) || 0) + 1);
+        state.byLabel.set(label, perLabel);
         if (state.immediateLogs < MAX_IMMEDIATE_LOGS) {
           state.immediateLogs += 1;
           console.log(`[redis-trace] ${label} ${name} ← ${site}`);
@@ -68,10 +72,19 @@ export function traceRedis(client, label = "redis") {
   return client;
 }
 
-/** Cumulative tally since boot: { total, byCommand: [[name, n]…], bySite: [[site, n]…] }. */
+/** Cumulative tally since boot: { total, byCommand, bySite, byLabel }. byLabel
+ *  is the attribution that matters for BullMQ — its internals all show as
+ *  "(native)" call-sites, but each client's label names the consumer. */
 export function redisTraceSnapshot({ top = 10 } = {}) {
   const topOf = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, top);
-  return { total: state.total, byCommand: topOf(state.byCommand), bySite: topOf(state.bySite) };
+  const byLabel = [...state.byLabel.entries()]
+    .map(([label, cmds]) => {
+      let n = 0;
+      for (const v of cmds.values()) n += v;
+      return [label, n, topOf(cmds, 4)];
+    })
+    .sort((a, b) => b[1] - a[1]);
+  return { total: state.total, byCommand: topOf(state.byCommand), bySite: topOf(state.bySite), byLabel };
 }
 
 /** One-minute console tally (self-gates on the flag; no-op if already running). */
@@ -80,10 +93,13 @@ export function startRedisTraceReporting(intervalMs = 60_000) {
   state.reporter = setInterval(() => {
     if (!state.total) return;
     const snap = redisTraceSnapshot();
-    console.log(`\n[redis-trace] ${snap.total} commands since boot — top call-sites:`);
+    console.log(`\n[redis-trace] ${snap.total} commands since boot — by consumer:`);
+    for (const [label, n, cmds] of snap.byLabel) {
+      const detail = cmds.map(([c, k]) => `${c}×${k}`).join(" ");
+      console.log(`   ${String(n).padStart(8)}  ${label}  (${detail})`);
+    }
+    console.log(`[redis-trace] top call-sites:`);
     for (const [site, n] of snap.bySite) console.log(`   ${String(n).padStart(8)}  ${site}`);
-    console.log(`[redis-trace] top commands:`);
-    for (const [cmd, n] of snap.byCommand) console.log(`   ${String(n).padStart(8)}  ${cmd}\n`.replace(/\n$/, ""));
   }, intervalMs);
   state.reporter.unref?.();
 }

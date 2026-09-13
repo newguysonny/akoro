@@ -14,6 +14,7 @@ import { deliver, deliverError, deliverProgress } from "./lib/deliver.js";
 import { getToolsForTask }                        from "./tools/index.js";
 import { recoverOverdueTasks }                    from "./scheduler.js";
 import { redisConnectionOptions }                        from "../../lib/redisOptions.js";
+import { traceRedis } from "../../lib/redisTrace.js";
 import { OPENAI_MODEL } from "../../lib/aiModel.js";
 import { hasCoins } from "../../lib/coins.js";
 // The loop lives in lib/agentLoop.js so the eval suite can run THIS loop
@@ -24,7 +25,7 @@ import { reportAgentActivity, agentToolActivity, clearAgentActivity } from "../.
 
 const MODEL = OPENAI_MODEL;
 
-const redis     = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "tasks-worker" }));
+const redis     = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "tasks-worker" })), "tasks-worker");
 redis.on("error", (err) => console.error("[tasks/worker Redis]", err.message));
 
 export const taskWorker = new Worker("task-runner", async (job) => {

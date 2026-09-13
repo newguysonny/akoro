@@ -10,6 +10,7 @@ import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import db from "../../db.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
+import { traceRedis } from "../../lib/redisTrace.js";
 import { runAutonomyCycleForUser } from "./cycle.js";
 
 const edu = () => db.schema("edu");
@@ -20,7 +21,7 @@ let autonomyCycleQueue = null;
 const queue = () => {
   if (!autonomyCycleQueue) {
     autonomyCycleQueue = new Queue(QUEUE_NAME, {
-      connection: new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-cycle" })),
+      connection: traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-cycle" })), "autonomy-cycle"),
     });
   }
   return autonomyCycleQueue;
