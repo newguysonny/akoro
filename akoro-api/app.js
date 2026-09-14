@@ -471,12 +471,32 @@ if (process.env.MIGRATIONS_ON_BOOT !== "false") {
 }
 
 // ─── Background jobs kill switch ─────────────────────────────────────────────
-// Every recurring job (sweeps, crons, schedulers) burns DB "commands" while
+// Every recurring job (sweeps, crons, schedulers) burns Redis commands while
 // the process runs — on a metered free tier that can outrun real usage with
-// ZERO users. Set AKORO_BACKGROUND_JOBS_ENABLED=false on such deployments;
-// the API stays fully functional, only the periodic jobs stand down.
+// ZERO users. Three dials, most specific wins:
+//   AKORO_JOBS_ENABLED="chat follow-ups worker,learner-autonomy worker"
+//     → ONLY the named jobs run (each BullMQ worker idles at ~1-2k cmds/month,
+//       so running only the learner-facing two fits the free tier comfortably)
+//   AKORO_JOBS_DISABLED="eval worker,battle worker"
+//     → all jobs EXCEPT the named ones run
+//   AKORO_BACKGROUND_JOBS_ENABLED=false
+//     → the everything switch, unchanged
+// Job names are exactly the strings passed to skipJob below (battle worker,
+// eval worker, chat follow-ups worker, learner-autonomy worker, autonomy
+// cycle worker, embedding sweeper, alert worker, routine scheduler, tenant
+// host refresh). The tasks worker has its own legacy gate (ENABLE_TASK_WORKER).
 const backgroundJobsEnabled = String(process.env.AKORO_BACKGROUND_JOBS_ENABLED ?? "true").trim().toLowerCase() === "true";
+const JOBS_ONLY = String(process.env.AKORO_JOBS_ENABLED ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const JOBS_DISABLED = String(process.env.AKORO_JOBS_DISABLED ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const skipJob = (name) => {
+  if (JOBS_ONLY.length && !JOBS_ONLY.includes(name)) {
+    console.log(`[jobs] ${name} skipped (not listed in AKORO_JOBS_ENABLED)`);
+    return true;
+  }
+  if (JOBS_DISABLED.includes(name)) {
+    console.log(`[jobs] ${name} skipped (AKORO_JOBS_DISABLED)`);
+    return true;
+  }
   if (backgroundJobsEnabled) return false;
   console.log(`[jobs] ${name} skipped (AKORO_BACKGROUND_JOBS_ENABLED=false)`);
   return true;
