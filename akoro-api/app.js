@@ -273,10 +273,10 @@ app.get("/health", async (req, res) => {
   const deep = req.query.deep === "1";
   const fresh = Date.now() - healthCache.at < HEALTH_PROBE_MS;
   if (deep || !fresh) {
-    const [dbOk, redisOk] = await Promise.all([
-      checkDb(),
-      redisPub.ping().then((r) => r === "PONG").catch(() => false),
-    ]);
+    // Zero-Redis health: ioredis keeps `status` current from connect/error
+    // events — no PING round-trip, so an uptime monitor costs 0 commands.
+    const redisOk = redisPub.status === "ready";
+    const dbOk = await checkDb();
     healthCache = { at: Date.now(), dbOk, redisOk };
   }
   const { dbOk, redisOk } = healthCache;
