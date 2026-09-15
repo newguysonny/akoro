@@ -138,7 +138,7 @@ function NewActivitySheet({ community, onClose, onCreated }) {
       setErr('Add at least one stage with a title.');
       return;
     }
-    setSaving(true); setErr('');
+    setErr('');
     try {
       const a = await createCommunityActivity(community.id, {
         name: name.trim(),

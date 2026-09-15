@@ -113,7 +113,7 @@ function NavButton({ active, icon, label, badge = 0, badgeColor = BRAND, dot = f
   );
 }
 
-export function Sidebar({ badges = {} }) {
+export function Sidebar({ badges = {}, nowStudying }) {
   const navigate  = useNavigate();
   const { t }     = useLang();
   const { user, logout } = useAuth();
@@ -217,10 +217,10 @@ export function Sidebar({ badges = {} }) {
   );
 }
 
-export function AppShell({ children, badges }) {
+export function AppShell({ children, badges, nowStudying }) {
   return (
     <div className="ak-shell">
-      <Sidebar badges={badges}/>
+      <Sidebar badges={badges} nowStudying={nowStudying}/>
       <div className="ak-shell-main">{children}</div>
     </div>
   );
