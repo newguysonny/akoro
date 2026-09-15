@@ -764,8 +764,13 @@ export default function LearnerDashboard() {
 
         {/* HEADER — app chrome on every tab (profile, wallet, cart,
             notifications, agent toggle), pinned above the scroll area.
-            The Learn/Challenges pills render inside it only on Learn. */}
-        <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:(tab==="sessions"||tab==="challenges")?"14px 18px 0":"14px 18px 14px",zIndex:100,flexShrink:0 }}>
+            The Learn/Challenges pills render inside it only on Learn.
+            Mobile (≤768px) is LEARN-ONLY: on the other tabs the header
+            gets .ak-mobile-hide and index.css drops it, giving the tab
+            the full viewport (the bottom nav carries the chrome there).
+            Tablet/desktop keep it on every tab. */}
+        <div className={`ak-dash-header${(tab!=="sessions"&&tab!=="challenges") ? " ak-mobile-hide" : ""}`}
+          style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:(tab==="sessions"||tab==="challenges")?"14px 18px 0":"14px 18px 14px",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
               <SidebarToggle/>

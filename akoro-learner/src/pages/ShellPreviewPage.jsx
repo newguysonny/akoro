@@ -85,7 +85,7 @@ export default function ShellPreviewPage() {
         {/* Fake scrollable content */}
         <div className="ak-dash-scroll" style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 72px' }}>
           <div style={{ padding: '10px 4px 14px', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>
-            /dev/shell — dev-only preview. The sidebar starts expanded; tap the hamburger to collapse it to the icon rail (remembered across loads). Emoji match the mobile bottom nav; Activities + Gradebook hide for higher-ed learners. Above 768px the now-studying player bar is pinned full-width at the bottom (3 columns: name & details · progress + prev/next · tool icons); below that the bottom nav + the dashboard's own bar take over.
+            /dev/shell — dev-only preview. The sidebar starts expanded; tap the hamburger to collapse it to the icon rail (remembered across loads). Emoji match the mobile bottom nav; Activities + Gradebook hide for higher-ed learners. Above 768px the now-studying player bar is pinned full-width at the bottom (3 columns: name & details · progress + prev/next · tool icons); below that the bottom nav + the dashboard's own bar take over. (This preview is the Learn tab, so its header shows on mobile too — off-Learn tabs drop the header there.)
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
             {['Maths — Fractions', 'English — Comprehension', 'Science — Photosynthesis', 'History — Independence', 'Battles — 2 live', 'Rankings — #4 this week'].map((label, i) => (

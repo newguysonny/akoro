@@ -169,10 +169,14 @@ select:focus-visible {
 }
 
 /* Mobile (≤768px): no sidebar at all — the page renders as it always has,
-   and the hamburger has nothing to toggle. */
+   and the hamburger has nothing to toggle. The dashboard header is also
+   LEARN-ONLY here (.ak-mobile-hide, set by LearnerDashboard when the tab
+   isn't Learn/Challenges): the other tabs get the full viewport and the
+   bottom nav carries the chrome. Tablet/desktop show it on every tab. */
 @media (max-width: 768px) {
   .ak-sidebar { display: none; }
   .ak-sb-toggle { display: none !important; }
+  .ak-mobile-hide { display: none !important; }
 }
 
 /* NowStudyingTabletBar base state — mobile only is it hidden (the
