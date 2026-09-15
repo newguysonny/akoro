@@ -223,7 +223,17 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           showToast('Saved on this device — it will sync when you are online');
           return;
         }
-        if (result?.success !== true || result?.data?.studyLevel !== val || result?.data?.schoolType !== nextType) {
+        // The PATCH response is a PARTIAL projection — it must include
+        // schoolType, but older deployments don't return studyLevel at all
+        // (the field was missing from the response until the API fix). So:
+        // confirm success strictly, and confirm each field only when the
+        // response actually carries it. A present-but-different value still
+        // fails the save; an absent one is tolerated, not mistaken for a
+        // mismatch the way `undefined !== val` was (that bug made every
+        // level change "fail" AFTER the database write had succeeded).
+        const confirmedLevel = result?.data?.studyLevel === undefined || result?.data?.studyLevel === val;
+        const confirmedType  = result?.data?.schoolType === undefined || result?.data?.schoolType === nextType;
+        if (result?.success !== true || !confirmedLevel || !confirmedType) {
           throw new Error('The change was not confirmed by Akoro. Please try again.');
         }
         showToast('Saved');

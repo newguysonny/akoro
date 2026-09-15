@@ -1062,6 +1062,11 @@ router.patch("/me", authenticateToken, [
     city: updated.city ?? null,
     country: updated.country ?? null,
     schoolType: updated.school_type ?? null,
+    // study_level is selected above but was never mapped into the response,
+    // so a client confirming a persisted study level (the merged Settings
+    // level control) read `undefined` and treated a SUCCESSFUL save as a
+    // failed one. Additive, backward-compatible field.
+    studyLevel: updated.study_level ?? null,
     accentColor: updated.accent_color,
     timeZone: timeZone !== undefined ? timeZone.trim() : undefined,
     onboardingCompleted: updated.onboarding_completed ?? false,
