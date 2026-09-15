@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS } from '../../constants.js';
 import { XIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
-import { apiPost, apiUpload } from '../../services/api.js';
+import { apiPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 // Default objective placeholders for a manually-added subtopic. These are just
@@ -13,20 +13,7 @@ const autoObjectives = (subtopic, topic) => [
   `Apply knowledge of ${subtopic} to real-world examples`,
 ];
 
-// The session-reference endpoint reads text from these formats and returns a
-// capped text context. Avoid presenting image/Word files as supported when the
-// session cannot yet use them truthfully.
-const REFERENCE_ACCEPT = 'application/pdf,text/plain,text/markdown,text/csv,.pdf,.txt,.md,.csv';
-const MAX_REFERENCE_BYTES = 5 * 1024 * 1024;
-const isReferenceFile = (file) => file && (
-  file.type === 'application/pdf' || ['text/plain', 'text/markdown', 'text/csv'].includes(file.type) || /\.(pdf|txt|md|csv)$/i.test(file.name)
-);
-const bytesLabel = (bytes) => bytes < 1024 * 1024
-  ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-  : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-const fileKey = (file) => `${file.name}:${file.size}:${file.lastModified}`;
-
-function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
+function ConfigModal({ initial, onStart, onCancel }) {
   const { t } = useLang();
   const [topic,      setTopic]      = useState(initial?.topic      || "");
   const [subject,    setSubject]    = useState(initial?.subject    || "Science");
@@ -34,11 +21,6 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
   const [draft,      setDraft]      = useState("");
   const [objs,       setObjs]       = useState(initial?.objectives || {});
   const [generating, setGenerating] = useState(false);
-  const [referenceFile, setReferenceFile] = useState(null);
-  const [reference, setReference]         = useState(null);
-  const [referenceLoading, setReferenceLoading] = useState(false);
-  const [referenceError, setReferenceError] = useState("");
-  const fileInputRef = useRef(null);
 
   const subjects = ["Science","Biology","Chemistry","Physics","Maths","English","History","Geography"];
 
@@ -57,64 +39,12 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
 
   const [genError, setGenError] = useState("");
 
-  const chooseReference = (event) => {
-    const file = event.target.files?.[0] || null;
-    event.target.value = ""; // allow choosing the same file again after removing it
-    if (!file) return;
-    if (!isReferenceFile(file)) {
-      setReferenceError("Use a PDF, TXT, Markdown, or CSV file.");
-      return;
-    }
-    if (file.size > MAX_REFERENCE_BYTES) {
-      setReferenceError("That file is too large. Choose one up to 5 MB.");
-      return;
-    }
-    setReferenceFile(file);
-    setReference(null);
-    setReferenceError("");
-  };
-
-  // Upload and extract once; both “Generate structure” and “Start session”
-  // reuse this capped text result rather than uploading the document twice.
-  const prepareReference = async () => {
-    if (!referenceFile) return null;
-    if (reference?.fileKey === fileKey(referenceFile)) return reference;
-
-    setReferenceLoading(true);
-    setReferenceError("");
-    try {
-      const form = new FormData();
-      form.append("file", referenceFile, referenceFile.name);
-      const result = await apiUpload("/api/adaptive/teaching/reference", form);
-      const parsed = result?.data;
-      if (!parsed?.text) throw new Error("We couldn't read text from that file.");
-      const next = { ...parsed, fileKey: fileKey(referenceFile) };
-      setReference(next);
-      return next;
-    } catch (err) {
-      const message = err?.message || "Couldn't read that reference file.";
-      setReferenceError(message);
-      throw err;
-    } finally {
-      setReferenceLoading(false);
-    }
-  };
-
   const generate = async () => {
-    if (!topic.trim() || generating || referenceLoading) return;
+    if (!topic.trim()) return;
     setGenerating(true);
     setGenError("");
     try {
-      const sessionReference = await prepareReference();
-      const data = await apiPost("/api/adaptive/teaching/configure", {
-        topic,
-        subject,
-        reference: sessionReference && {
-          name: sessionReference.name,
-          text: sessionReference.text,
-          truncated: sessionReference.truncated,
-        },
-      });
+      const data = await apiPost("/api/adaptive/teaching/configure", { topic, subject });
       if (data.subtopics?.length) {
         setSubtopics(data.subtopics);
         setObjs(data.objectives || {});
@@ -123,7 +53,7 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
       }
     } catch (err) {
       console.warn("[ConfigModal] generate failed:", err.message);
-      setGenError(err?.message || "Couldn't auto-generate subtopics. Add them manually below.");
+      setGenError("Couldn't auto-generate subtopics. Add them manually below.");
     } finally {
       setGenerating(false);
     }
@@ -133,26 +63,6 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
     setObjs(o => ({ ...o, [st]: o[st].map((v, i) => i === idx ? val : v) }));
 
   const canStart = topic.trim() && subtopics.length > 0;
-  const start = async () => {
-    if (!canStart || referenceLoading) return;
-    setGenError("");
-    try {
-      const sessionReference = await prepareReference();
-      onStart({
-        topic, subject, subtopics, objectives: objs,
-        reference: sessionReference && {
-          name: sessionReference.name,
-          text: sessionReference.text,
-          chars: sessionReference.chars,
-          truncated: sessionReference.truncated,
-        },
-      });
-    } catch (err) {
-      // The field itself carries the actionable file error. Keep a second,
-      // visible message near Start for someone who has scrolled past it.
-      setGenError(err?.message || "Couldn't prepare that reference file.");
-    }
-  };
 
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,fontFamily:"'Nunito',sans-serif" }}>
@@ -180,40 +90,6 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
             {subjects.map(s=><option key={s}>{s}</option>)}
           </select>
         </div>
-
-        {/* Higher-ed reference — extracted on demand and used only for this live session. */}
-        {higherEd && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 5 }}>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--ak-text-sec)", letterSpacing: .3 }}>Reference file <span style={{ color: "var(--ak-text-muted)", fontWeight: 600 }}>(optional)</span></label>
-              {reference?.truncated && <span style={{ fontSize: 10, fontWeight: 700, color: GOLD }}>First 12,000 characters used</span>}
-            </div>
-            <input ref={fileInputRef} type="file" accept={REFERENCE_ACCEPT} onChange={chooseReference} style={{ display: "none" }}/>
-            {referenceFile ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 11px", border: `1px solid ${reference ? `${GREEN}55` : `${BRAND}45`}`, borderRadius: 9, background: reference ? `${GREEN}08` : `${BRAND}08` }}>
-                <Icon name="ti-file-text" size={17} color={reference ? GREEN : BRAND}/>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 12.5, fontWeight: 800, color: "var(--ak-text)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{referenceFile.name}</p>
-                  <p style={{ fontSize: 10.5, fontWeight: 600, color: reference ? GREEN : "var(--ak-text-muted)", margin: "2px 0 0" }}>
-                    {referenceLoading ? "Reading reference…" : reference ? `Ready · ${reference.chars.toLocaleString()} characters` : `${bytesLabel(referenceFile.size)} · read when you generate or start`}
-                  </p>
-                </div>
-                <button type="button" onClick={() => { setReferenceFile(null); setReference(null); setReferenceError(""); }} aria-label="Remove reference file"
-                  style={{ width: 27, height: 27, borderRadius: "50%", border: "none", background: "transparent", color: "var(--ak-text-muted)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <Icon name="ti-x" size={14}/>
-                </button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                style={{ width: "100%", padding: "11px 12px", borderRadius: 9, border: `1px dashed ${BRAND}88`, background: `${BRAND}06`, cursor: "pointer", color: BRAND, display: "flex", alignItems: "center", gap: 8, textAlign: "left", fontFamily: "inherit" }}>
-                <Icon name="ti-paperclip" size={17}/>
-                <span style={{ fontSize: 12.5, fontWeight: 800 }}>Upload a PDF, TXT, Markdown, or CSV</span>
-              </button>
-            )}
-            <p style={{ fontSize: 10.5, color: "var(--ak-text-muted)", margin: "5px 1px 0", lineHeight: 1.4 }}>Its text guides this session’s lesson plan and tutor responses. It is not stored after the session.</p>
-            {referenceError && <p style={{ fontSize: 11.5, fontWeight: 700, color: RED, margin: "5px 1px 0" }}>{referenceError}</p>}
-          </div>
-        )}
 
         {/* Subtopics */}
         <div style={{ marginBottom:14 }}>
@@ -263,10 +139,10 @@ function ConfigModal({ initial, onStart, onCancel, higherEd = false }) {
 
         <div style={{ display:"flex",gap:10 }}>
           {onCancel&&<button onClick={onCancel} style={{ flex:1,padding:"12px",borderRadius:10,border:"0.5px solid var(--ak-border2)",background:"var(--ak-bg)",fontSize:13,fontWeight:700,color:"var(--ak-text-sub)",cursor:"pointer",fontFamily:"inherit" }}>{t('common.cancel')}</button>}
-          <button onClick={start}
-            disabled={!canStart || referenceLoading}
-            style={{ flex:2,padding:"12px",borderRadius:10,border:"none",background:canStart&&!referenceLoading?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:canStart&&!referenceLoading?"#fff":"#9CA3AF",cursor:canStart&&!referenceLoading?"pointer":"default",fontFamily:"inherit" }}>
-            <Icon name={referenceLoading ? "ti-hourglass" : "ti-player-play"} size={12}/> {referenceLoading ? "Preparing reference…" : t('config.start')}
+          <button onClick={()=>{ if(!canStart) return; onStart({ topic, subject, subtopics, objectives:objs }); }}
+            disabled={!canStart}
+            style={{ flex:2,padding:"12px",borderRadius:10,border:"none",background:canStart?`linear-gradient(135deg,${BRAND},#4C1DCC)`:"var(--ak-border2)",fontSize:13,fontWeight:800,color:canStart?"#fff":"#9CA3AF",cursor:canStart?"pointer":"default",fontFamily:"inherit" }}>
+            <Icon name="ti-player-play" size={12}/> {t('config.start')}
           </button>
         </div>
       </div>

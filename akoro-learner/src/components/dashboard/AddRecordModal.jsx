@@ -1,8 +1,7 @@
 /**
- * AddRecordModal — "Add a record" for every learner. Three ways in: upload a
- * file, add a link, or paste the text straight in. Lives on the Library page
- * header now (the + next to the title), reachable from any tier — the old
- * higher-ed-only Learn-tab FAB is gone.
+ * AddRecordModal — "Add a record" for higher-ed learners (sixth form,
+ * university, college, other). Three ways in: upload a file, add a link, or
+ * paste the text straight in.
  *
  * FRONTEND-ONLY for now: records persist to localStorage keyed by user id and
  * are listed (and removable) right inside the sheet. The sheet says so — no
@@ -158,7 +157,7 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
                   {done ? `${t('records.done_label')} · ` : ''}{r.size ? `${(r.size/1024).toFixed(0)} KB · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
                 </p>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); const p = (r.progress || 0) >= 100 ? 10 : 100; setRecords(records.map(x => x.id === r.id ? { ...x, progress: p, last_opened_at: new Date().toISOString() } : x)); onToggleDone?.(r); }} title={t('records.mark_done')} aria-label={t('records.mark_done')}
+              <button onClick={(e) => { e.stopPropagation(); onToggleDone?.(r); }} title={t('records.mark_done')} aria-label={t('records.mark_done')}
                 style={{ width:24, height:24, borderRadius:'50%', flexShrink:0, border:done?'none':'1.5px solid var(--ak-border2)', background:done?GREEN:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 {done && <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
               </button>

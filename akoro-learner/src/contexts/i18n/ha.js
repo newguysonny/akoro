@@ -319,15 +319,6 @@ export const HA = {
   'agent.save_agent':          'Adana wakili',
   'agent.task_title_ph':       'Taken aiki…',
   'agent.to_do':               'Ayyuka',
-  'agent.suggestions':      'Shawarwari',
-  'agent.suggestions_sub':  'Ra’oyi daga wakilinka — amince da daya don ta zama aiki.',
-  'agent.suggestions_empty':'Babu shawara a yanzu. Wakilinka zai kawo ra’ayi nan idan ya ga hanyar taimaka maka.',
-  'agent.suggestion_accept':'Zama aiki',
-  'agent.suggestion_dismiss':'Yi watsi da shawara',
-  'agent.suggestion_added': 'An ƙara a cikin ayyukanka: {title}',
-  'agent.sugg_task':        'Ra’ayin aiki',
-  'agent.sugg_goal':        'Burin',
-  'agent.sugg_chat':        'Tattaunawa',
   'agent.unnamed':             'Wakili Ba Tare da Suna Ba',
 
   /* ── Battles ── */

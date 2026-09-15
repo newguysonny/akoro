@@ -1,21 +1,33 @@
 /**
  * DiscoverSearchPage.jsx
  * ─────────────────────────────────────────────────────────────
- * Full-screen search for the higher-ed Discover hub. Its default state is a
- * useful study surface rather than an empty input: recent searches, enrolled
- * courses to continue, and real classmates eligible for a battle. Typing turns
- * it into a grouped search across the things this learner can actually access:
- * Discover destinations, device-local study records, published courses, and
- * classmates.
+ * Full-screen search page for the higher-ed Discover hub — opened
+ * from the hub's search box. Music-app search-screen energy, on our
+ * chrome (--ak tokens, Nunito, rounded rows):
  *
- * Data boundaries are intentional:
- *   • enrolled courses and classmates come from authenticated API endpoints;
- *   • saved records are the existing device-local Higher Ed records; and
- *   • folders are not shown until the Library has a real folders endpoint.
- * No sample classmates, course progress, or folder results are invented.
+ *   • Back button + autofocused input pinned to the top bar — Esc
+ *     closes, and body scroll is locked while the page is open
+ *   • Blank query → Recent searches, SCOPE-TAGGED: each row wears the
+ *     gradient tile + label of the section it jumped to ("Courses",
+ *     "Pharm D", …) or a 🔍 "Search" chip for generic catalogue
+ *     hand-offs. Tap a row to re-run it, ✕ removes one, "Clear all"
+ *     wipes the list. No recents → friendly "No recent searches yet.
+ *     Try:" with example chips (deliberately distinct from the
+ *     no-match empty state).
+ *   • Typed query → LIVE COURSE RESULTS first: real published courses
+ *     from /api/courses/published?type=live|video — the catalogue's
+ *     own endpoints, fetched once per page-open then filtered per
+ *     keystroke (identical data, fewer requests than a per-keystroke
+ *     debounce) — then the matching discovery-type cards below.
+ *     Tapping a course opens it (/course/:slug via onOpenCourse);
+ *     Enter takes whatever sits at the top of the screen.
+ *
+ * The page itself never navigates: section picks go up via onPick,
+ * course picks via onOpenCourse. SSR-safe (guarded storage, network
+ * and effects only), so scripts/check-dhub-search.mjs can render it.
  */
 import { useEffect, useState } from 'react';
-import { BRAND, GREEN, GOLD, SUBJECT_COLORS } from '../../constants.js';
+import { BRAND } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { apiGet } from '../../services/api.js';
@@ -23,23 +35,22 @@ import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
 export const RECENTS_KEY = 'akoro.dhubRecents';
 export const MAX_RECENTS = 8;
-const RECORDS_PREFIX = 'akoro_records_';
 
 /* Most-recent-first, de-duped case-insensitively by query text, capped.
    Entries are { q, scope } — scope is a discovery-type key for section
-   jumps, 'search' for a generic hand-off. Legacy recents were bare strings,
-   so loadRecents turns them into generic search entries. */
+   jumps, 'search' for generic catalogue hand-offs. Legacy recents were
+   bare strings: they load back in as scope 'search' (see loadRecents).
+   Pure — unit-checked directly by the check script. */
 export function pushRecent(list, query, scope = 'search') {
-  const value = (query || '').trim();
-  if (!value) return list;
-  const entry = { q: value, scope };
-  const rest = list.filter((row) => (typeof row === 'string' ? row : row.q).toLowerCase() !== value.toLowerCase());
-  return [entry, ...rest.map((row) => (typeof row === 'string' ? { q: row, scope: 'search' } : row))].slice(0, MAX_RECENTS);
+  const v = (query || '').trim();
+  if (!v) return list;
+  const entry = { q: v, scope };
+  const rest = list.filter((r) => (typeof r === 'string' ? r : r.q).toLowerCase() !== v.toLowerCase());
+  return [entry, ...rest.map((r) => (typeof r === 'string' ? { q: r, scope: 'search' } : r))].slice(0, MAX_RECENTS);
 }
 
-/* Client-side matchers intentionally stay pure and are checked by the small
-   SSR script. Keeping them local means searches respond instantly while each
-   page-open performs just one fetch for each data source. */
+/* Client-side matcher for live course results — same fields the
+   catalogue filters on (title + subject), plus teacher name. */
 export function matchCourse(course, query) {
   const q = (query || '').trim().toLowerCase();
   if (!q) return false;
@@ -47,26 +58,14 @@ export function matchCourse(course, query) {
     .toLowerCase().includes(q);
 }
 
-export function matchRecord(record, query) {
-  const q = (query || '').trim().toLowerCase();
-  return !!q && `${record.name || ''} ${record.kind || ''}`.toLowerCase().includes(q);
-}
-
-export function matchClassmate(person, query) {
-  const q = (query || '').trim().toLowerCase();
-  return !!q && `${person.full_name || ''} ${person.username || ''} ${person.className || ''}`.toLowerCase().includes(q);
-}
-
 function loadRecents() {
   try {
     const raw = globalThis.localStorage?.getItem(RECENTS_KEY);
-    const rows = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(rows)) return [];
-    return rows
-      .filter((row) => typeof row === 'string' || (row && typeof row.q === 'string'))
-      .map((row) => (typeof row === 'string'
-        ? { q: row, scope: 'search' }
-        : { q: row.q, scope: typeof row.scope === 'string' ? row.scope : 'search' }));
+    const arr = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x) => typeof x === 'string' || (x && typeof x.q === 'string'))
+      .map((x) => (typeof x === 'string' ? { q: x, scope: 'search' } : { q: x.q, scope: typeof x.scope === 'string' ? x.scope : 'search' }));
   } catch { return []; }
 }
 
@@ -75,167 +74,24 @@ function persistRecents(list) {
   catch { /* private mode / quota — recents degrade silently */ }
 }
 
-function loadRecords(userId) {
-  try {
-    const raw = globalThis.localStorage?.getItem(`${RECORDS_PREFIX}${userId || 'me'}`);
-    const rows = raw ? JSON.parse(raw) : [];
-    return Array.isArray(rows) ? rows.filter((row) => row && typeof row.name === 'string') : [];
-  } catch { return []; }
-}
-
-function normalizeEnrollment(enrollment) {
-  const course = enrollment?.courses || {};
-  const progress = Math.max(0, Math.min(100, Number(enrollment?.progress) || 0));
-  return {
-    id: enrollment?.id || course.id || course.slug || course.title,
-    title: course.title || 'Course',
-    subject: course.subject || '',
-    progress,
-    slug: course.slug || null,
-    cover: course.cover_image_url || null,
-    courseType: course.course_type || 'video',
-  };
-}
-
-const chevron = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
+const ChevronRight = () => (
+  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
 );
 
-const recordIcon = (kind) => ({ upload: 'ti-paperclip', link: 'ti-link', paste: 'ti-clipboard' }[kind] || 'ti-file-text');
-
-function Section({ title, action, children, className = '' }) {
-  return (
-    <section className={`dhub-search-section ${className}`}>
-      <div className="dhub-search-section-head">
-        <h2>{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function RecentRow({ row, meta, onRun, onRemove, removeLabel }) {
-  return (
-    <div className="dhub-recent-row">
-      <button className="dhub-recent-main" onClick={onRun}>
-        <span aria-hidden="true" className="dhub-recent-thumb" style={{ background: meta.chipBg }}>
-          {meta.icon?.startsWith('ti-') ? <Icon name={meta.icon} size={18} /> : meta.icon}
-        </span>
-        <span className="dhub-recent-copy">
-          <strong>{row.q}</strong>
-          <small>{meta.label}</small>
-        </span>
-      </button>
-      <button className="dhub-recent-dismiss" onClick={onRemove} aria-label={`${removeLabel} “${row.q}”`}>
-        <Icon name="ti-x" size={14} />
-      </button>
-    </div>
-  );
-}
-
-function ContinueCard({ course, onOpen, labels }) {
-  const accent = SUBJECT_COLORS[(course.subject || '').toLowerCase()] || BRAND;
-  const started = course.progress > 0;
-  const complete = course.progress >= 100;
-  const status = complete ? labels.complete : started ? labels.inProgress : labels.notStarted;
-  const statusColor = complete ? GREEN : started ? GOLD : accent;
-
-  return (
-    <button className="dhub-topic-card" onClick={onOpen}>
-      <span className="dhub-topic-card-top">
-        <span className="dhub-topic-glyph" style={{ background: `linear-gradient(135deg,${accent},${accent}BB)` }}>
-          {course.cover
-            ? <img src={course.cover} alt="" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-            : <Icon name={course.courseType === 'live' ? 'ti-broadcast' : 'ti-book'} size={24} color="#fff" />}
-        </span>
-        <span className="dhub-topic-info">
-          <strong>{course.title}</strong>
-          <small>{[course.subject, course.courseType === 'live' ? labels.live : labels.course].filter(Boolean).join(' · ')}</small>
-        </span>
-        <span className="dhub-topic-status" style={{ color: statusColor, background: `${statusColor}15` }}>{status}</span>
-      </span>
-      <span className="dhub-topic-card-bottom">
-        <span className="dhub-mini-bar"><span style={{ width: `${course.progress}%`, background: `linear-gradient(90deg,${accent},${accent}BB)` }} /></span>
-        <strong>{course.progress}%</strong>
-        <span className="dhub-continue-action" style={{ color: accent }}>{labels.continue}{chevron}</span>
-      </span>
-    </button>
-  );
-}
-
-function ClassmateCard({ person, onBattle, battleLabel }) {
-  const initial = (person.full_name || person.username || '?').trim().charAt(0).toUpperCase();
-  return (
-    <article className="dhub-classmate-card">
-      <div className="dhub-classmate-photo">
-        {person.avatar
-          ? <img src={person.avatar} alt="" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-          : <span className="dhub-classmate-fallback">{person.emoji || initial}</span>}
-        <span className="dhub-classmate-class">{person.className || 'Classmate'}</span>
-      </div>
-      <div className="dhub-classmate-footer">
-        <strong>{person.full_name || person.username || 'Classmate'}</strong>
-        <small>{person.username ? `@${person.username}` : person.className || ''}</small>
-        <button onClick={onBattle}><Icon name="ti-swords" size={12} /> {battleLabel}</button>
-      </div>
-    </article>
-  );
-}
-
-function SearchRow({ icon, iconBg, title, subtitle, onClick, actionLabel, image, disabled = false }) {
-  const inner = (
-    <>
-      <span className="dhub-result-glyph" style={{ background: image ? 'var(--ak-surface-hover)' : iconBg }}>
-        {image
-          ? <img src={image} alt="" onError={(event) => { event.currentTarget.style.display = 'none'; }} />
-          : (typeof icon === 'string' && icon.startsWith('ti-') ? <Icon name={icon} size={17} color="#fff" /> : icon)}
-      </span>
-      <span className="dhub-result-copy">
-        <strong>{title}</strong>
-        {subtitle && <small>{subtitle}</small>}
-      </span>
-      {onClick && <span aria-label={actionLabel} className="dhub-result-action">{chevron}</span>}
-    </>
-  );
-  return onClick
-    ? <button className="dhub-result-row" onClick={onClick}>{inner}</button>
-    : <div className="dhub-result-row dhub-result-row-static" aria-disabled={disabled}>{inner}</div>;
-}
-
-function Skeleton({ wide = false }) {
-  return <span className={`dhub-search-skeleton ${wide ? 'dhub-search-skeleton-wide' : ''}`} aria-hidden="true" />;
-}
-
-export default function DiscoverSearchPage({
-  initialQuery = '', onClose, onPick, onOpenCourse, onOpenRecord, onOpenBattles,
-  initialCourses = [], userId, initialLoading = true,
-}) {
+export default function DiscoverSearchPage({ initialQuery = '', onClose, onPick, onOpenCourse, initialCourses = [] }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
-  const [focused, setFocused] = useState(false);
   const [recents, setRecents] = useState(loadRecents);
-  const [catalogueCourses, setCatalogueCourses] = useState(initialCourses);
-  const [enrolledCourses, setEnrolledCourses] = useState([]);
-  const [classmates, setClassmates] = useState([]);
-  const [records, setRecords] = useState(() => loadRecords(userId));
-  const [learningLoading, setLearningLoading] = useState(initialLoading);
-  const [peopleLoading, setPeopleLoading] = useState(initialLoading);
+  const [courses, setCourses] = useState(initialCourses);
 
   const all = TYPES(t);
   const q = query.trim();
-  const typeRows = matchTypes(t, query);
-  const materialRows = q ? records.filter((record) => matchRecord(record, q)).slice(0, 5) : [];
-  const courseRows = q ? catalogueCourses.filter((course) => matchCourse(course, q)).slice(0, 5) : [];
-  const classmateRows = q ? classmates.filter((person) => matchClassmate(person, q)).slice(0, 5) : [];
-  const hasResults = typeRows.length || materialRows.length || courseRows.length || classmateRows.length;
-  const loadingSearch = learningLoading || peopleLoading;
+  const visible = matchTypes(t, query);
+  const courseRows = q ? courses.filter((c) => matchCourse(c, q)).slice(0, 5) : [];
 
-  /* Catalogue and enrolled courses are separate on purpose. Public results can
-     include any published course; the default Continue learning surface only
-     includes a course the signed-in learner enrolled in. */
+  /* Live course catalogue — the catalogue's own endpoints, fetched once
+     per page-open and then filtered per keystroke client-side (the same
+     shape the catalogue itself uses: prefetch + local filter). */
   useEffect(() => {
     let alive = true;
     Promise.all([
@@ -243,247 +99,258 @@ export default function DiscoverSearchPage({
       apiGet('/api/courses/published?type=video&limit=40').catch(() => null),
     ]).then(([live, video]) => {
       const rows = [
-        ...(live?.courses || []).map((course) => ({ ...course, _kind: 'live' })),
-        ...(video?.courses || []).map((course) => ({ ...course, _kind: 'video' })),
+        ...(live?.courses || []).map((c) => ({ ...c, _kind: 'live' })),
+        ...(video?.courses || []).map((c) => ({ ...c, _kind: 'video' })),
       ];
-      if (alive && rows.length) setCatalogueCourses(rows);
+      if (alive && rows.length) setCourses(rows);
     });
-    apiGet('/api/user/enrollments')
-      .then((data) => {
-        const rows = data?.data || data?.enrollments || [];
-        if (alive) setEnrolledCourses(rows.filter((row) => row?.courses).map(normalizeEnrollment).filter((row) => row.id));
-      })
-      .catch(() => { if (alive) setEnrolledCourses([]); })
-      .finally(() => { if (alive) setLearningLoading(false); });
     return () => { alive = false; };
   }, []);
 
-  /* Classmates are the people in the learner's actual classrooms who have an
-     agent — exactly the people the existing battle flow can challenge. */
+  /* Esc closes, like the back button; body scroll locked while open. */
   useEffect(() => {
-    let alive = true;
-    apiGet('/api/battle/my-classes')
-      .then(async (data) => {
-        const rooms = (data?.data || []).slice(0, 4);
-        const rosters = await Promise.all(rooms.map(async (room) => {
-          try {
-            const data = await apiGet(`/api/battle/classes/${encodeURIComponent(room.id)}/roster`);
-            return (data?.data || []).filter((person) => person?.has_agent).map((person) => ({ ...person, className: room.name }));
-          } catch { return []; }
-        }));
-        if (!alive) return;
-        const seen = new Set();
-        setClassmates(rosters.flat().filter((person) => {
-          if (!person?.id || seen.has(person.id)) return false;
-          seen.add(person.id);
-          return true;
-        }).slice(0, 12));
-      })
-      .catch(() => { if (alive) setClassmates([]); })
-      .finally(() => { if (alive) setPeopleLoading(false); });
-    return () => { alive = false; };
-  }, []);
-
-  /* Records are intentionally device-local today, matching AddRecordModal.
-     Refresh if the profile resolves after this overlay has mounted. */
-  useEffect(() => { setRecords(loadRecords(userId)); }, [userId]);
-
-  /* Esc closes; this overlay owns the viewport while open. */
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKeyDown = (event) => { if (event.key === 'Escape') onClose?.(); };
-    document.addEventListener('keydown', onKeyDown);
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey);
     };
   }, [onClose]);
 
-  const remember = (text, scope = 'search') => {
+  const record = (text, scope) => {
     const next = pushRecent(recents, text, scope);
-    setRecents(next);
-    persistRecents(next);
+    setRecents(next); persistRecents(next);
   };
 
-  const scopeMeta = (scope) => {
-    const type = all.find((row) => row.key === scope);
-    return type
-      ? { icon: type.icon, chipBg: type.grad, label: type.label }
-      : { icon: 'ti-search', chipBg: 'var(--ak-surface-hover)', label: t('dhub.scope_search') };
+  /* Tapping a section row: jump straight there, tagged to that section. */
+  const pickType = (ty) => {
+    record(q || ty.label, ty.key);
+    onPick?.(ty, q);
   };
 
-  const pickType = (type) => {
-    remember(q || type.label, type.key);
-    onPick?.(type, q);
+  /* Tapping a live course row: record + open the course itself. */
+  const pickCourse = (c) => {
+    record(q || c.title, 'courses');
+    if (onOpenCourse && c.slug) onOpenCourse(c);
+    else onPick?.(all[1], q || c.title);   // no deep-link handler → catalogue hand-off
   };
 
-  const pickCourse = (course) => {
-    remember(q || course.title, 'courses');
-    if (course.slug && onOpenCourse) onOpenCourse(course);
-    else onPick?.(all.find((type) => type.key === 'courses'), q || course.title);
-  };
-
-  const pickRecord = (record) => {
-    remember(q || record.name, 'notes');
-    onClose?.();
-    onOpenRecord?.(record);
-  };
-
-  const openBattles = () => {
-    onClose?.();
-    onOpenBattles?.();
-  };
-
-  /* Enter follows the strongest actionable result: a published course, then a
-     material, then a Discover destination. It never pretends a classmate row
-     is a profile page when the product only supports battling classmates. */
+  /* Enter = the first thing on screen: top live course when there is
+     one, else the first matching section, else a generic catalogue
+     hand-off (the 🔍 "Search" scope). */
   const onEnter = () => {
     if (!q) return;
     if (courseRows.length) return pickCourse(courseRows[0]);
-    if (materialRows.length) return pickRecord(materialRows[0]);
-    if (typeRows.length) return pickType(typeRows[0]);
-    remember(q, 'search');
-    onPick?.(all.find((type) => type.key === 'courses'), q);
+    if (visible.length) return pickType(visible[0]);
+    record(q, 'search');
+    onPick?.(all[1], q);
   };
 
-  const removeRecent = (text) => {
-    const next = recents.filter((row) => row.q !== text);
-    setRecents(next);
-    persistRecents(next);
+  const removeRecent = (rq) => {
+    const next = recents.filter((x) => x.q !== rq);
+    setRecents(next); persistRecents(next);
+  };
+  const clearRecents = () => { setRecents([]); persistRecents([]); };
+
+  /* The gradient tile + label a recent jumped to — 🔍 Search for
+     generic hand-offs. */
+  const scopeMeta = (scope) => {
+    const ty = all.find((x) => x.key === scope);
+    return ty
+      ? { icon: ty.icon, chipBg: ty.grad, label: ty.label }
+      : { icon: 'ti-search', chipBg: 'var(--ak-tag-bg, #F3F4F6)', label: t('dhub.scope_search') };
   };
 
-  const labels = {
-    course: t('dhub.course'),
-    live: t('dhub.live'),
-    notStarted: t('dhub.not_started'),
-    inProgress: t('dhub.in_progress'),
-    complete: t('dhub.complete'),
-    continue: t('dhub.continue'),
-  };
+  const sectionHeader = { fontSize: 12, fontWeight: 900, color: 'var(--ak-text-sub)',
+    margin: '10px 2px 6px', textTransform: 'uppercase', letterSpacing: .5 };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={t('dhub.search_aria')} className="dhub-search-page">
-      <style>{`
-        @keyframes dhub-search-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
-        .dhub-search-page{position:fixed;inset:0;z-index:1500;background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-family:${FONT};display:flex;flex-direction:column}
-        .dhub-search-top{display:flex;align-items:center;gap:10px;padding:14px 16px 12px;border-bottom:1px solid var(--ak-border,#F3F4F6);flex-shrink:0}
-        .dhub-search-close{width:30px;height:30px;flex-shrink:0;border:none;background:none;display:flex;align-items:center;justify-content:center;color:var(--ak-text,#111827);cursor:pointer;padding:0}
-        .dhub-search-shell{flex:1;display:flex;align-items:center;gap:8px;background:var(--ak-surface-hover,#F9FAFB);border:1.5px solid var(--ak-border2,#E5E7EB);border-radius:50px;padding:9px 14px;transition:border-color .15s ease,box-shadow .15s ease}
-        .dhub-search-shell.focused{border-color:${BRAND};box-shadow:0 0 0 3px ${BRAND}12}
-        .dhub-search-shell svg{color:var(--ak-text-muted,#9CA3AF);flex-shrink:0}
-        .dhub-search-shell input{flex:1;min-width:0;border:none;outline:none;background:transparent;font-family:${FONT};font-size:14px;font-weight:700;color:var(--ak-text,#111827)}
-        .dhub-search-shell input::placeholder{color:var(--ak-text-muted,#9CA3AF)}
-        .dhub-search-clear{border:none;background:none;cursor:pointer;color:var(--ak-text-muted,#9CA3AF);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:2px}
-        .dhub-search-body{flex:1;overflow-y:auto;padding:16px 16px 94px}
-        .dhub-search-section{margin:0 0 22px}.dhub-search-section-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 11px}.dhub-search-section-head h2{margin:0;font-size:12.5px;font-weight:900;color:var(--ak-text,#111827)}
-        .dhub-search-section-action{border:none;background:none;color:${BRAND};font-family:${FONT};font-size:11px;font-weight:800;cursor:pointer;padding:2px 0}
-        .dhub-recent-row{display:flex;align-items:center;gap:6px}.dhub-recent-main{min-width:0;flex:1;display:flex;align-items:center;gap:12px;padding:8px 2px;border:none;background:none;color:inherit;text-align:left;font-family:${FONT};cursor:pointer}.dhub-recent-main:active,.dhub-result-row:active,.dhub-topic-card:active{transform:scale(.985)}
-        .dhub-recent-thumb{width:44px;height:44px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff;overflow:hidden;background-size:cover;background-position:center}.dhub-recent-copy,.dhub-result-copy,.dhub-topic-info{display:block;min-width:0;flex:1}.dhub-recent-copy strong,.dhub-result-copy strong,.dhub-topic-info strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:800;color:var(--ak-text,#111827)}.dhub-recent-copy small,.dhub-result-copy small,.dhub-topic-info small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--ak-text-sub,#6B7280);margin-top:1px}
-        .dhub-recent-dismiss{width:26px;height:26px;border-radius:50%;flex-shrink:0;border:none;background:none;display:flex;align-items:center;justify-content:center;color:var(--ak-text-muted,#9CA3AF);cursor:pointer;padding:0}
-        .dhub-topic-card{position:relative;width:100%;border-radius:18px;overflow:hidden;margin:0 0 12px;cursor:pointer;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);font-family:${FONT};text-align:left;padding:0;color:inherit;transition:transform .12s ease,box-shadow .12s ease}.dhub-topic-card:hover{box-shadow:0 5px 16px rgba(15,23,42,.08)}.dhub-topic-card-top{display:flex;align-items:center;gap:13px;padding:14px}.dhub-topic-glyph{width:52px;height:52px;border-radius:14px;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center}.dhub-topic-glyph img{width:100%;height:100%;object-fit:cover}.dhub-topic-info strong{font-size:14.5px}.dhub-topic-info small{font-size:11px;font-weight:700;color:var(--ak-text-muted,#9CA3AF)}.dhub-topic-status{font-size:9.5px;font-weight:900;padding:3px 9px;border-radius:20px;flex-shrink:0;white-space:nowrap}.dhub-topic-card-bottom{display:flex;align-items:center;gap:10px;padding:0 14px 14px}.dhub-mini-bar{flex:1;height:7px;border-radius:4px;background:var(--ak-border2,#E5E7EB);overflow:hidden}.dhub-mini-bar span{display:block;height:100%;border-radius:4px}.dhub-topic-card-bottom>strong{font-size:12px;font-weight:900;color:var(--ak-text-sub,#6B7280);flex-shrink:0}.dhub-continue-action{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:900;flex-shrink:0}
-        .dhub-classmate-row{display:flex;gap:12px;overflow-x:auto;padding:1px 0 7px;scrollbar-width:none}.dhub-classmate-row::-webkit-scrollbar{display:none}.dhub-classmate-card{flex-shrink:0;width:132px;border-radius:16px;overflow:hidden;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff)}.dhub-classmate-photo{height:120px;width:100%;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;background:linear-gradient(135deg,#F0EBFF,#E5E7EB)}.dhub-classmate-photo img{width:100%;height:100%;object-fit:cover}.dhub-classmate-fallback{font-size:34px;font-weight:900;color:${BRAND}}.dhub-classmate-photo:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(0,0,0,.35) 100%)}.dhub-classmate-class{position:absolute;left:8px;bottom:8px;z-index:1;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(255,255,255,.92);color:${BRAND};font-size:9.5px;font-weight:900;padding:2px 7px;border-radius:20px}.dhub-classmate-footer{padding:9px 10px 11px}.dhub-classmate-footer>strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:900;color:var(--ak-text,#111827);line-height:1.25}.dhub-classmate-footer>small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--ak-text-muted,#9CA3AF);font-weight:700;margin-top:1px}.dhub-classmate-footer button{margin-top:8px;width:100%;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 0;border-radius:20px;border:1.5px solid ${BRAND};background:${BRAND}08;color:${BRAND};font-size:11px;font-weight:900;font-family:${FONT};cursor:pointer}.dhub-classmate-footer button:active{background:${BRAND};color:#fff}.dhub-classmate-footer button:active svg{color:#fff}
-        .dhub-result-row{width:100%;display:flex;align-items:center;gap:12px;padding:10px 4px;border:none;border-bottom:1px solid var(--ak-border,#F3F4F6);background:none;color:inherit;text-align:left;font-family:${FONT};cursor:pointer;transition:transform .12s ease}.dhub-result-row:last-child{border-bottom:none}.dhub-result-row-static{cursor:default}.dhub-result-glyph{width:36px;height:36px;border-radius:10px;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff}.dhub-result-glyph img{width:100%;height:100%;object-fit:cover}.dhub-result-copy strong{font-weight:800}.dhub-result-copy small{margin-top:2px}.dhub-result-action{width:30px;height:30px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--ak-border2,#E5E7EB);display:flex;align-items:center;justify-content:center;color:var(--ak-text-sub,#6B7280)}
-        .dhub-search-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 30px;text-align:center;color:var(--ak-text-muted,#9CA3AF)}.dhub-search-empty>span{margin-bottom:10px}.dhub-search-empty strong{font-size:13.5px;font-weight:800;color:var(--ak-text-sub,#6B7280);margin-bottom:4px}.dhub-search-empty small{font-size:12px;font-weight:600;line-height:1.45}.dhub-search-empty button{margin-top:15px;padding:8px 14px;border-radius:20px;border:1.5px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface-hover,#F9FAFB);font-family:${FONT};font-size:12px;font-weight:800;color:${BRAND};cursor:pointer}
-        .dhub-search-quiet{padding:3px 2px 0;font-size:12px;font-weight:700;color:var(--ak-text-muted,#9CA3AF);line-height:1.45}.dhub-search-skeleton{display:block;height:60px;border-radius:14px;background:linear-gradient(90deg,var(--ak-surface-hover,#F9FAFB) 25%,var(--ak-border,#F3F4F6) 50%,var(--ak-surface-hover,#F9FAFB) 75%);background-size:200% 100%;animation:dhub-search-shimmer 1.2s ease infinite;margin-bottom:9px}.dhub-search-skeleton-wide{width:132px;height:178px;flex-shrink:0;margin:0}.dhub-search-skeleton-row{display:flex;gap:12px;overflow:hidden}
-      `}</style>
+    <div role="dialog" aria-modal="true" aria-label={t('dhub.search_aria')}
+      style={{ position: 'fixed', inset: '0', zIndex: 1500, background: 'var(--ak-bg, #fff)',
+        fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
 
-      <div className="dhub-search-top">
-        <button onClick={onClose} className="dhub-search-close" aria-label={t('dhub.close_search')}>
-          <Icon name="ti-arrow-left" size={20} />
+      {/* Top bar — back + input */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 10px',
+        borderBottom: '1px solid var(--ak-border3)' }}>
+        <button onClick={onClose} aria-label={t('dhub.close_search')}
+          style={{ width: 34, height: 34, borderRadius: '50%', border: 'none', flexShrink: 0,
+            background: 'var(--ak-surface)', color: 'var(--ak-text)', fontSize: 17, fontWeight: 900,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+          ←
         </button>
-        <div className={`dhub-search-shell${focused ? ' focused' : ''}`}>
-          <Icon name="ti-search" size={16} />
+        <div style={{ position: 'relative', flex: 1 }}>
+          <span aria-hidden="true" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 14, opacity: .5, pointerEvents: 'none' }}><Icon name="ti-search" size={14}/></span>
           <input
             autoFocus
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') onEnter(); }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onEnter(); }}
             placeholder={t('dhub.search_ph')}
             aria-label={t('dhub.search_aria')}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 38px 12px 36px', borderRadius: 14,
+              border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)', fontSize: 13.5,
+              fontWeight: 600, color: 'var(--ak-text)', fontFamily: FONT, outline: 'none' }}
           />
           {query && (
-            <button onClick={() => setQuery('')} className="dhub-search-clear" aria-label={t('dhub.clear')}>
-              <Icon name="ti-x" size={15} />
-            </button>
+            <button onClick={() => setQuery('')} aria-label={t('dhub.clear')}
+              style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22,
+                borderRadius: '50%', border: 'none', background: 'var(--ak-tag-bg, #F3F4F6)',
+                color: 'var(--ak-text-sec, #6B7280)', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={11}/></button>
           )}
         </div>
       </div>
 
-      <div className="dhub-search-body">
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 90px' }}>
         {!q ? (
           <>
-            {recents.length > 0 && (
-              <Section title={t('dhub.recent')} action={<button className="dhub-search-section-action" onClick={() => { setRecents([]); persistRecents([]); }}>{t('dhub.clear_all')}</button>}>
-                {recents.map((row) => <RecentRow key={row.q} row={row} meta={scopeMeta(row.scope)} onRun={() => setQuery(row.q)} onRemove={() => removeRecent(row.q)} removeLabel={t('dhub.remove')} />)}
-              </Section>
-            )}
-
-            {learningLoading ? (
-              <Section title={t('dhub.continue_learning')}><Skeleton /><Skeleton /></Section>
-            ) : enrolledCourses.length > 0 ? (
-              <Section title={t('dhub.continue_learning')}>
-                {enrolledCourses.slice(0, 4).map((course) => <ContinueCard key={course.id} course={course} labels={labels} onOpen={() => pickCourse(course)} />)}
-              </Section>
-            ) : null}
-
-            {peopleLoading ? (
-              <Section title={t('dhub.classmates')}><div className="dhub-search-skeleton-row"><Skeleton wide /><Skeleton wide /><Skeleton wide /></div></Section>
-            ) : classmates.length > 0 ? (
-              <Section title={t('dhub.classmates')} action={onOpenBattles ? <button className="dhub-search-section-action" onClick={openBattles}>{t('dhub.see_all')}</button> : null}>
-                <div className="dhub-classmate-row">
-                  {classmates.map((person) => <ClassmateCard key={person.id} person={person} onBattle={openBattles} battleLabel={t('dhub.battle')} />)}
+            {/* Blank query → scope-tagged recent searches… */}
+            {recents.length > 0 ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 2px 6px' }}>
+                  <p style={{ ...sectionHeader, margin: 0, padding: 0 }}>{t('dhub.recent')}</p>
+                  <button onClick={clearRecents}
+                    style={{ border: 'none', background: 'none', color: BRAND, fontSize: 12, fontWeight: 800,
+                      cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
+                    {t('dhub.clear_all')}
+                  </button>
                 </div>
-              </Section>
-            ) : null}
-
-            {!learningLoading && !peopleLoading && !recents.length && !enrolledCourses.length && !classmates.length && (
-              <div className="dhub-search-empty">
-                <span><Icon name="ti-search" size={32} color="var(--ak-text-muted, #9CA3AF)" /></span>
-                <strong>{t('dhub.recent_none')}</strong>
-                <small>{t('dhub.search_empty_hint')}</small>
+                <style>{`.dhub-recent:active{transform:scale(.98)}`}</style>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {recents.map((r) => {
+                    const meta = scopeMeta(r.scope);
+                    return (
+                      <div key={r.q} className="dhub-recent" onClick={() => setQuery(r.q)} role="button"
+                        style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 14,
+                          background: 'var(--ak-surface)', border: '1px solid var(--ak-border3)', cursor: 'pointer',
+                          transition: 'transform .12s ease' }}>
+                        <span aria-hidden="true" style={{ width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+                          background: meta.chipBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 14, boxShadow: '0 3px 8px rgba(15,23,42,.16)' }}>{meta.icon?.startsWith('ti-') ? <Icon name={meta.icon} size={14}/> : meta.icon}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', margin: 0,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.q}</p>
+                          <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-sub)', margin: '1px 0 0',
+                            textTransform: 'uppercase', letterSpacing: .4 }}>{meta.label}</p>
+                        </span>
+                        <button onClick={(e) => { e.stopPropagation(); removeRecent(r.q); }}
+                          aria-label={`${t('dhub.remove')} "${r.q}"`}
+                          style={{ width: 24, height: 24, borderRadius: '50%', border: 'none', flexShrink: 0,
+                            background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)',
+                            fontSize: 10.5, fontWeight: 900, cursor: 'pointer' }}><Icon name="ti-x" size={10}/></button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              /* …or, with nothing searched yet, the friendly empty state
+                 (distinct from the no-match message) with example chips */
+              <div style={{ padding: '44px 18px', textAlign: 'center' }}>
+                <div style={{ marginBottom: 8 }}><Icon name="ti-search" size={30} color="var(--ak-text-sec, #6B7280)"/></div>
+                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', margin: 0 }}>
+                  {t('dhub.recent_none')}
+                </p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-sub)', margin: '10px 0 8px' }}>
+                  {t('dhub.try')}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+                  {[all[1], all[2], all[0]].map((ty) => (
+                    <button key={ty.key} onClick={() => setQuery(ty.label)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+                        borderRadius: 99, border: '1px solid var(--ak-border3)', background: 'var(--ak-surface)',
+                        fontSize: 12, fontWeight: 800, color: 'var(--ak-text)', cursor: 'pointer', fontFamily: FONT }}>
+                      <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: ty.grad }} />
+                      {ty.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </>
-        ) : hasResults ? (
+        ) : visible.length > 0 || courseRows.length > 0 ? (
           <>
-            {typeRows.length > 0 && (
-              <Section title={t('dhub.topics')}>
-                {typeRows.map((type) => <SearchRow key={type.key} icon={type.icon} iconBg={type.grad} title={type.label} subtitle={type.desc} onClick={() => pickType(type)} actionLabel={t('dhub.cta_open')} />)}
-              </Section>
-            )}
-
-            {materialRows.length > 0 && (
-              <Section title={t('dhub.materials')}>
-                {materialRows.map((record) => <SearchRow key={record.id} icon={recordIcon(record.kind)} iconBg="linear-gradient(135deg,#F59E0B,#B45309)" title={record.name} subtitle={t(`records.tab_${record.kind}`)} onClick={() => pickRecord(record)} actionLabel={t('dhub.cta_open')} />)}
-              </Section>
-            )}
-
+            {/* Typed query → LIVE course results first… */}
             {courseRows.length > 0 && (
-              <Section title={t('dhub.courses')}>
-                {courseRows.map((course) => <SearchRow key={`${course._kind || 'course'}-${course.id || course.slug || course.title}`} icon={course._kind === 'live' ? 'ti-broadcast' : 'ti-book'} iconBg={course._kind === 'live' ? 'linear-gradient(135deg,#EF4E78,#C92A54)' : 'linear-gradient(135deg,#F28C52,#DE5F26)'} title={course.title} subtitle={[course.subject, course._kind === 'live' ? labels.live : labels.course].filter(Boolean).join(' · ')} image={course.cover_image_url} onClick={() => pickCourse(course)} actionLabel={t('dhub.cta_open')} />)}
-              </Section>
+              <>
+                <p style={sectionHeader}>{t('dhub.course_results')}</p>
+                <style>{`.dhub-course:active{transform:scale(.98)}`}</style>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 6 }}>
+                  {courseRows.map((c) => (
+                    <div key={`${c._kind || 'course'}-${c.id || c.slug || c.title}`} className="dhub-course"
+                      onClick={() => pickCourse(c)} role="button" aria-label={c.title}
+                      style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px', borderRadius: 14,
+                        background: 'var(--ak-surface)', border: '1px solid var(--ak-border3)', cursor: 'pointer',
+                        transition: 'transform .12s ease' }}>
+                      <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                        overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 18, background: c._kind === 'live'
+                          ? 'linear-gradient(140deg,#EF4E78,#C92A54)'
+                          : 'linear-gradient(140deg,#F28C52,#DE5F26)',
+                        boxShadow: '0 3px 9px rgba(15,23,42,.18)' }}>
+                        {c.cover_image_url
+                          ? <img src={c.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <Icon name={c._kind === 'live' ? 'ti-broadcast' : 'ti-book'} size={18} color="#fff"/>}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', margin: 0, lineHeight: 1.2,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</p>
+                        <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '2px 0 0',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.subject || ''}{c.price ? ` · ${c.price}` : ''}
+                        </p>
+                      </span>
+                      <span aria-hidden="true" style={{ color: 'var(--ak-text-sec, #6B7280)', flexShrink: 0 }}><ChevronRight /></span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
 
-            {classmateRows.length > 0 && (
-              <Section title={t('dhub.classmates')}>
-                {classmateRows.map((person) => <SearchRow key={person.id} icon={person.emoji || '🧑‍🎓'} iconBg="linear-gradient(135deg,#10B981,#059669)" image={person.avatar} title={person.full_name || person.username} subtitle={[person.username ? `@${person.username}` : null, person.className].filter(Boolean).join(' · ')} onClick={onOpenBattles ? openBattles : undefined} actionLabel={t('dhub.battle')} />)}
-              </Section>
+            {/* …then the matching discovery-type cards */}
+            {visible.length > 0 && (
+              <>
+                <p style={sectionHeader}>{t('dhub.results')}</p>
+                <style>{`.dhub-result:active{transform:scale(.98)}`}</style>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {visible.map((ty) => (
+                    <div key={ty.key} className="dhub-result" onClick={() => pickType(ty)} role="button" aria-label={ty.label}
+                      style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 14,
+                        background: 'var(--ak-surface)', border: '1px solid var(--ak-border3)', cursor: 'pointer',
+                        transition: 'transform .12s ease' }}>
+                      <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                        background: ty.grad, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 16, boxShadow: '0 3px 9px rgba(15,23,42,.18)' }}>{ty.icon?.startsWith('ti-') ? <Icon name={ty.icon} size={16}/> : ty.icon}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13.5, fontWeight: 900, color: 'var(--ak-text)', margin: 0, lineHeight: 1.2 }}>{ty.label}</p>
+                        <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-sub)', margin: '2px 0 0',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ty.desc}</p>
+                      </span>
+                      {ty.soon && (
+                        <span style={{ fontSize: 8.5, fontWeight: 900, letterSpacing: .4, padding: '3px 8px',
+                          borderRadius: 99, background: 'var(--ak-tag-bg, #F3F4F6)', color: 'var(--ak-text-sec, #6B7280)',
+                          textTransform: 'uppercase', flexShrink: 0 }}>{t('dhub.soon')}</span>
+                      )}
+                      <span aria-hidden="true" style={{ color: 'var(--ak-text-sec, #6B7280)', flexShrink: 0 }}><ChevronRight /></span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
-          </>
-        ) : loadingSearch ? (
-          <>
-            <Section title={t('dhub.topics')}><Skeleton /><Skeleton /></Section>
-            <Section title={t('dhub.courses')}><Skeleton /></Section>
           </>
         ) : (
-          <div className="dhub-search-empty">
-            <span><Icon name="ti-search" size={32} color="var(--ak-text-muted, #9CA3AF)" /></span>
-            <strong>{t('dhub.no_match')}</strong>
-            <small>{t('dhub.search_empty_hint')}</small>
-            <button onClick={() => setQuery('')}>{t('dhub.clear')}</button>
+          /* Genuinely nothing — no courses, no sections */
+          <div style={{ margin: '10px 0 0', padding: '26px 18px', borderRadius: 16,
+            border: '1px dashed var(--ak-border2)', textAlign: 'center', background: 'var(--ak-surface)' }}>
+            <div style={{ marginBottom: 6 }}><Icon name="ti-search" size={26} color="var(--ak-text-sec, #6B7280)"/></div>
+            <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-sec, #6B7280)', margin: 0 }}>{t('dhub.no_match')}</p>
+            <button onClick={() => setQuery('')}
+              style={{ marginTop: 10, padding: '7px 16px', borderRadius: 99, border: 'none', background: BRAND,
+                color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+              {t('dhub.clear')}
+            </button>
           </div>
         )}
       </div>

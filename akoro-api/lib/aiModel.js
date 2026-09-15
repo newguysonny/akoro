@@ -39,18 +39,6 @@ async function meteredCreate(params = {}) {
   const billTo  = params.__billTo  ?? store.billTo  ?? null;   // e.g. school funds it
   const clean = { ...params };
   delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
-  delete clean.__timeoutMs; delete clean.__maxRetries;
-  // Per-call SDK bounds (`__timeoutMs` / `__maxRetries`). The SDK's defaults
-  // are a 10-MINUTE timeout with 2 retries — a single stalled provider call
-  // once hung a chat turn for minutes while the browser had long given up.
-  // Only calls that opt in are bounded; long streams elsewhere keep the
-  // SDK defaults.
-  const reqOpts = (clean.__timeoutMs != null || clean.__maxRetries != null)
-    ? {
-        ...(clean.__timeoutMs != null ? { timeout: clean.__timeoutMs } : {}),
-        ...(clean.__maxRetries != null ? { maxRetries: clean.__maxRetries } : {}),
-      }
-    : undefined;
   // Cost guardrail: bound output when a caller omits max_tokens (0 = off).
   if (AI_DEFAULT_MAX_TOKENS > 0 && clean.max_tokens == null && clean.max_completion_tokens == null) {
     clean.max_tokens = AI_DEFAULT_MAX_TOKENS;
@@ -91,7 +79,7 @@ async function meteredCreate(params = {}) {
       source = await rawClient.chat.completions.create({
         ...clean,
         ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
-      }, reqOpts);
+      });
     } catch (e) { report(null, { streamed: true, ok: false, errorKind: errorKindOf(e) }); throw e; }
 
     const fallback = { prompt_tokens: estimateTokens(clean.messages), completion_tokens: Math.min(clean.max_tokens || 700, 700) };
@@ -105,7 +93,7 @@ async function meteredCreate(params = {}) {
 
   let res;
   try {
-    res = await rawClient.chat.completions.create(clean, reqOpts);
+    res = await rawClient.chat.completions.create(clean);
   } catch (e) { report(null, { ok: false, errorKind: errorKindOf(e) }); throw e; }
 
   report(res?.usage ?? null);

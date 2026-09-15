@@ -91,13 +91,6 @@ const R2_ENABLED = !!(process.env.R2_ACCESS_KEY_ID && R2_BUCKET);
 
 const REDIS_CONN = { url: process.env.REDIS_URL ?? "redis://localhost:6379" };
 
-// Stand-down switch for per-command-billed Redis: set VIDEO_WORKER_ENABLED=false
-// and the worker exits before opening any Redis connection (zero commands).
-if (String(process.env.VIDEO_WORKER_ENABLED ?? "true").trim().toLowerCase() === "false") {
-  console.log("[worker] VIDEO_WORKER_ENABLED=false — standing down (no Redis connection)");
-  process.exit(0);
-}
-
 // Ensure local dirs exist
 await fs.mkdir(TEMP_DIR,    { recursive: true });
 await fs.mkdir(ENCODED_DIR, { recursive: true });
@@ -410,12 +403,6 @@ const worker = new Worker(
   {
     connection:  REDIS_CONN,
     concurrency: CONCURRENCY,
-    // Per-command-billed Redis (Upstash): an idle worker with stock defaults
-    // burns ~40-80k commands/day (5s poll timeouts, 30s stalled scans, 30s
-    // lock renewals). Same treatment as the battle worker: block longer,
-    // scan stalled jobs far less often.
-    drainDelay:  60,                            // seconds the idle poll blocks
-    settings:    { stalledInterval: 300_000 },  // 5 min between stalled scans
   }
 );
 

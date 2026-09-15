@@ -16,9 +16,6 @@ import JoinRequestsPage from './pages/JoinRequestsPage.jsx';
 import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import SelfStudyPage from './pages/SelfStudyPage.jsx';
-import ActivitiesPage from './pages/ActivitiesPage.jsx';
-import SubmissionsPage from './pages/SubmissionsPage.jsx';
-import SelfStudyAnalyticsPage from './pages/SelfStudyAnalyticsPage.jsx';
 import DocumentsPage, { DocumentEditorPage } from './pages/DocumentsPage.jsx';
 import ChatPage     from './pages/ChatPage.jsx';
 import AssessmentReviewPage from './pages/AssessmentReviewPage.jsx';
@@ -110,9 +107,6 @@ function AppRoutes() {
       <Route path="/battles" element={<ProtectedRoute><BattlesPage /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
       <Route path="/self-study" element={<ProtectedRoute><SelfStudyPage /></ProtectedRoute>} />
-      <Route path="/activities" element={<ProtectedRoute><ActivitiesPage /></ProtectedRoute>} />
-      <Route path="/submissions" element={<ProtectedRoute><SubmissionsPage /></ProtectedRoute>} />
-      <Route path="/self-study/:id/analytics" element={<ProtectedRoute><SelfStudyAnalyticsPage /></ProtectedRoute>} />
       <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       <Route path="/purchase" element={<ProtectedRoute><PurchaseCheckoutPage /></ProtectedRoute>} />
       <Route path="/lesson-review" element={<ProtectedRoute><LessonReviewPage /></ProtectedRoute>} />

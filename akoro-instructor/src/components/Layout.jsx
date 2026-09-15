@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import AkoroLogo from './common/AkoroLogo.jsx';
-import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ClipboardCheck, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck } from 'lucide-react';
+import { Home, BookOpen, Users, Swords, MessageSquare, CheckSquare, LogOut, Bell, Settings, UserCircle, ShieldCheck, Store, Library, LayoutGrid, FileText, ClipboardList, ListChecks, BookMarked, CalendarDays, CalendarClock, GraduationCap, Menu, Search, ChevronDown, Wallet, BookOpenCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { useInstructorSocket } from '../hooks/useWebSocket.js';
 import { apiGet } from '../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, FONT } from '../constants.js';
 
@@ -13,8 +12,6 @@ const NAV = [
   { to: '/sales',    icon: Wallet,        label: 'Sales & Earnings' },
   { to: '/battles',  icon: Swords,        label: 'Battles' },
   { to: '/tasks',    icon: CheckSquare,   label: 'Tasks' },
-  { to: '/submissions', icon: ClipboardCheck, label: 'Submissions' },
-  { to: '/activities', icon: ClipboardList, label: 'Activities' },
   { to: '/self-study', icon: BookOpenCheck, label: 'AI Self Study' },
   { to: '/documents', icon: FileText,     label: 'Documents' },
   { to: '/assessments', icon: ShieldCheck, label: 'Assessments' },
@@ -72,29 +69,18 @@ function NavItem({ to, icon: Icon, label, compact }) {
   );
 }
 
-/* Pending join-request count for the nav badge — event-driven over the
-   socket (join-requests-changed) instead of polling every minute: the
-   platform's command quota is spent on learners, not on idle badges. */
+/* Poll the pending join-request count for the nav badge. */
 function useJoinRequestCount() {
   const [count, setCount] = useState(0);
-  const { user } = useAuth();
-  const { on, off } = useInstructorSocket(user?.id);
   useEffect(() => {
     let alive = true;
     const poll = () => apiGet('/api/profiles/teacher/join-requests')
       .then((r) => { if (alive) setCount((r?.data || []).length); })
       .catch(() => {});
     poll();
-    const onEvent = () => poll();
-    const onFocus  = () => poll();
-    on('join-requests-changed', onEvent);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      alive = false;
-      off('join-requests-changed', onEvent);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [on, off]);
+    const t = setInterval(poll, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
   return count;
 }
 
@@ -264,8 +250,6 @@ export function Sidebar({ collapsed = false }) {
 
 function BellButton() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { on, off } = useInstructorSocket(user?.id);
   const [unread, setUnread] = useState(0);
 
   const poll = useCallback(async () => {
@@ -275,23 +259,19 @@ function BellButton() {
     } catch {}
   }, []);
 
-  // The server already pushes a 'notification' socket event for every in-app
-  // notification (notify.js), so the badge refetches on the event instead of
-  // polling the API every minute.
   useEffect(() => {
     poll();
+    const t = setInterval(poll, 60_000);
     const onFocus  = () => poll();
     const onChange = () => poll();
-    const onPush   = () => poll();
     window.addEventListener('focus', onFocus);
     window.addEventListener('akoro:notifications-changed', onChange);
-    on('notification', onPush);
     return () => {
+      clearInterval(t);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('akoro:notifications-changed', onChange);
-      off('notification', onPush);
     };
-  }, [poll, on, off]);
+  }, [poll]);
 
   return (
     <button
@@ -380,10 +360,7 @@ export function PageLayout({ children, title, subtitle, action }) {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar collapsed={collapsed} />
-      {/* position:relative — the containing block for full-area takeovers
-          (the grading surface): they cover the WORKING AREA only, so the
-          side nav stays visible and clickable behind them. */}
-      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar title={title} subtitle={subtitle} action={action} onToggleSidebar={() => setCollapsed((c) => !c)} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
           {children}

@@ -1,12 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
-import { Icon, XIcon } from '../components/common/Icons.jsx';
-import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
-import { useLang } from '../contexts/LanguageContext.jsx';
-import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
-import { apiGet } from '../services/api.js';
-import { isHigherEdUI } from '../utils/studyLevel.js';
+import { Icon } from '../components/common/Icons.jsx';
+import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
 const TYPE_META = {
@@ -14,14 +10,12 @@ const TYPE_META = {
   guide:      { icon: 'ti-book-2',      color: '#A855F7' },
   folder:     { icon: 'ti-folder',      color: GREEN    },
   collection: { icon: 'ti-stack',       color: GOLD     },
-  blog:       { icon: 'ti-news',        color: '#0EA5E9' },
 };
 
 const KINDS = [
   { key: 'all',        label: 'All'             },
   { key: 'course',     label: 'Courses'         },
   { key: 'guide',      label: 'Teaching guides' },
-  { key: 'blog',       label: 'Blogs'           },
   { key: 'folder',     label: 'Folders'         },
   { key: 'collection', label: 'Collections'     },
 ];
@@ -143,102 +137,17 @@ function ItemCard({ item }) {
   );
 }
 
-function BlogCard({ item, onOpen }) {
-  const published = item.blogStatus === 'published';
-  const color = published ? GREEN : GOLD;
-  return (
-    <button onClick={() => onOpen(item)} style={{ ...CARD_BASE, cursor: 'pointer' }}>
-      <div style={{
-        width: 46, height: 46, borderRadius: 11, flexShrink: 0,
-        background: '#0EA5E914', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Icon name="ti-news" size={22} color="#0EA5E9"/>
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {item.title}
-        </div>
-        {item.details && (
-          <div style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {item.details}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 800, color, background: `${color}14`, borderRadius: 100, padding: '2px 9px' }}>
-            {published ? 'Published' : 'Draft'}
-          </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
 function LibraryItem({ item, onOpen }) {
   if (item.kind === 'course') return <CourseCard item={item} onOpen={onOpen} />;
   if (item.kind === 'guide')  return <GuideCard item={item} />;
-  if (item.kind === 'blog')   return <BlogCard item={item} onOpen={onOpen} />;
   return <ItemCard item={item} />;
 }
 
 export default function LibraryPage() {
   const navigate = useNavigate();
-  const { t } = useLang();
-  const [searchParams] = useSearchParams();
   const [items, setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-
-  // ── Add a record — the + in the header ────────────────────────────────────
-  // Moved here from the Learn tab's FAB so every learner (school and
-  // higher-ed alike) can add material from the shelf that holds it. The
-  // Now-Studying bar's + deep-links here with ?add=1 to open the sheet.
-  // Records stay device-local and keyed by the signed-in learner's id — the
-  // same key the Learn tab used, so nothing saved before is lost.
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [higherEd, setHigherEd] = useState(false);
-  const [toast, setToast] = useState('');
-  useEffect(() => {
-    // The blog option belongs to the higher-ed tier (studyLevel.js gate).
-    apiGet('/api/profiles/me').then((d) => {
-      setHigherEd(isHigherEdUI(d?.data ?? d ?? {}));
-    }).catch(() => {});
-  }, []);
-  useEffect(() => {
-    if (searchParams.get('add')) setSheetOpen(true);
-  }, [searchParams]);
-  useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(() => setToast(''), 2600);
-    return () => clearTimeout(id);
-  }, [toast]);
-
-  const recordsKey = `akoro_records_${STUDENT_ID || 'me'}`;
-  const loadRecordsLocal = () => {
-    try { const raw = JSON.parse(localStorage.getItem(recordsKey) || '[]'); return Array.isArray(raw) ? raw : []; }
-    catch { return []; }
-  };
-  const setRecordProgress = (id, progress) => {
-    const list = loadRecordsLocal().map(r => r.id === id
-      ? { ...r, progress: Math.max(0, Math.min(100, progress)), last_opened_at: new Date().toISOString() }
-      : r);
-    try { localStorage.setItem(recordsKey, JSON.stringify(list)); } catch { /* private mode */ }
-  };
-
-  // Opening a record: links open in a new tab right away; uploads/pastes say
-  // the in-app viewer is on its way instead of pretending the file opened.
-  const openRecord = (r) => {
-    if (!r) return;
-    if (!r.progress) setRecordProgress(r.id, 10);
-    if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
-    else setToast(t('records.viewer_soon'));
-    setSheetOpen(false);
-  };
-
-  // Self-reported completion (there's no playback to measure).
-  const toggleRecordDone = (r) => {
-    setRecordProgress(r.id, (r.progress || 0) >= 100 ? 10 : 100);
-  };
 
   const load = useCallback(async () => {
     try {
@@ -275,11 +184,6 @@ export default function LibraryPage() {
               </p>
             </div>
           </div>
-          {/* Plus — choose: upload a record or (higher-ed) write a blog */}
-          <button onClick={() => setAddOpen(true)} aria-label={t('records.title')} title={t('records.title')}
-            style={{ background: BRAND, border: 'none', borderRadius: 100, width: 34, height: 34, cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name="ti-plus" size={18}/>
-          </button>
         </div>
 
         {/* Pills — scrollable area of library kinds */}
@@ -305,53 +209,10 @@ export default function LibraryPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <LibraryItem key={a.id} item={a} onOpen={(it) => it?.kind === 'blog' ? navigate(`/write/blog/${it.id}`) : navigate(`/course/${it?.slug || it?.id}`)} />)}
+            {displayed.map(a => <LibraryItem key={a.id} item={a} onOpen={(slug) => navigate(`/course/${slug}`)} />)}
           </div>
         )}
       </div>
-
-      {/* Bottom toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 3000, background: 'var(--ak-text)', color: '#fff', fontSize: 12.5, fontWeight: 800, padding: '9px 18px', borderRadius: 100, boxShadow: '0 6px 20px rgba(0,0,0,.25)' }}>
-          {toast}
-        </div>
-      )}
-
-      {/* + choice — upload or write a blog */}
-      {addOpen && (
-        <><div onClick={() => setAddOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 2400, background: 'rgba(6,6,18,.55)', backdropFilter: 'blur(5px)' }} />
-        <div role="dialog" aria-label="Add to library" style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 2500, width: 'min(92vw,360px)', background: 'var(--ak-surface)', borderRadius: 20, border: '1px solid var(--ak-border)', padding: '18px 16px 14px', fontFamily: "'Nunito',sans-serif", animation: 'drawer-in .22s cubic-bezier(.32,1,.64,1)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <p style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>Add to library</p>
-            <button onClick={() => setAddOpen(false)} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}><XIcon size={16} color="var(--ak-text-muted)" /></button>
-          </div>
-          <button onClick={() => { setAddOpen(false); setSheetOpen(true); }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 13px', borderRadius: 14, border: '1px solid var(--ak-border)', background: 'var(--ak-surface-hover)', cursor: 'pointer', textAlign: 'left', marginBottom: 8, fontFamily: "'Nunito',sans-serif" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: `${BRAND}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon name="ti-paperclip" size={19} color={BRAND} /></div>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', margin: 0 }}>Upload a record</p>
-              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', margin: 0 }}>Files, links or pasted text</p>
-            </div>
-          </button>
-          {higherEd && (
-            <button onClick={() => { setAddOpen(false); navigate('/write/blog/new'); }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 13px', borderRadius: 14, border: '1px solid var(--ak-border)', background: 'var(--ak-surface-hover)', cursor: 'pointer', textAlign: 'left', fontFamily: "'Nunito',sans-serif" }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: '#0EA5E914', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon name="ti-news" size={19} color="#0EA5E9" /></div>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', margin: 0 }}>Write a blog</p>
-                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', margin: 0 }}>Draft or publish an article on your shelf</p>
-              </div>
-            </button>
-          )}
-        </div></>
-      )}
-
-      {/* Add-record sheet — upload / link / paste, for every learner */}
-      <AddRecordModal
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        user={{ id: STUDENT_ID }}
-        onOpenRecord={openRecord}
-        onToggleDone={toggleRecordDone}
-      />
     </div>
   );
 }

@@ -111,18 +111,6 @@ export default defineConfig({
             },
           },
           {
-            // The signed-in learner's profile controls the active UI tier.
-            // It must never be served from the catalog cache immediately after
-            // a confirmed settings save: a reload needs the current server
-            // value, not a stale pre-change schoolType/studyLevel. apiGet still
-            // has its own last-known-good offline fallback for a real outage.
-            // This rule intentionally comes before the broad public-profiles
-            // catalog rule below; Workbox uses the first matching runtime rule.
-            urlPattern: ({ url, request }) => request.method === 'GET' &&
-              url.pathname.startsWith('/api/profiles/me'),
-            handler: 'NetworkOnly',
-          },
-          {
             // Stable CATALOG reads (course/agent listings, rankings, public
             // profiles) → StaleWhileRevalidate: instant render + offline browsing.
             // Staleness here is harmless and refreshes in the background.

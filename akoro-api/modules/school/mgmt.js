@@ -15,7 +15,6 @@
  */
 
 import { Router } from "express";
-import { invalidateCachedUser } from "../auth/routes.js";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import multerLib from "multer";
@@ -1302,7 +1301,6 @@ router.post("/staff/:id/logout", authenticateToken, requireRole(SCHOOL_ROLES), a
 
     const { error } = await db.from("users").update({ force_logout_at: new Date() }).eq("id", user.id);
     if (error) throw new Error(error.message);
-    invalidateCachedUser(user.id);   // security field — never serve it stale
     res.json({ success: true, loggedOut: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

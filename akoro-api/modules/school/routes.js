@@ -21,7 +21,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import db from "../../db.js";
 import { notifyUser } from "../notify.js";
-import { authenticateToken, requireRole, issueTokenPair, signHandoff, verifyHandoff, invalidateCachedUser } from "../auth/routes.js";
+import { authenticateToken, requireRole, issueTokenPair, signHandoff, verifyHandoff } from "../auth/routes.js";
 import {
   initializeTransaction,
   verifyTransaction,
@@ -256,7 +256,6 @@ router.post("/instructors/invite", authenticateToken, requireRole(SCHOOL_ROLES),
     let teacher;
     if (existing) {
       await db.from("users").update({ role: "instructor" }).eq("id", existing.id);
-      invalidateCachedUser(existing.id);   // security field — never serve it stale
       teacher = existing;
     } else {
       const tempPassword = crypto.randomBytes(8).toString("base64").slice(0, 10);

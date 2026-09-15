@@ -7,10 +7,9 @@
 import { Queue }    from "bullmq";
 import Redis        from "ioredis";
 import { TaskDB, TaskScheduleDB } from "./lib/db.js";
-import { redisConnectionOptions }       from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
+import { bullRedisOptions }       from "../../lib/redisOptions.js";
 
-const redis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "tasks-scheduler" })), "tasks-scheduler");
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[tasks/scheduler Redis]", err.message));
 
 export const taskQueue = new Queue("task-runner", {

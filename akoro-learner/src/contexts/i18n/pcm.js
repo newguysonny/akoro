@@ -337,15 +337,6 @@ export const PCM = {
   'agent.save_agent':        'Save agent',
   'agent.task_title_ph':     'Work title…',
   'agent.to_do':             'Things to do',
-  'agent.suggestions':      'Advice dem',
-  'agent.suggestions_sub':  'Ideas from your agent — accept one make e become task.',
-  'agent.suggestions_empty':'No suggestion dey now. Your agent go drop idea here when e see way to help you.',
-  'agent.suggestion_accept':'Make am task',
-  'agent.suggestion_dismiss':'Throway the suggestion',
-  'agent.suggestion_added': 'Don add am to your tasks: {title}',
-  'agent.sugg_task':        'Task idea',
-  'agent.sugg_goal':        'Goal',
-  'agent.sugg_chat':        'Yarn',
   'agent.unnamed':           'Agent wey no get name',
 
   /* ── Battles ── */

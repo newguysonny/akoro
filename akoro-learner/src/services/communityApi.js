@@ -27,14 +27,6 @@ export async function fetchCommunity(id) {
   } catch { return null; }
 }
 
-/* Same read, but THROWS: lets a page distinguish "no connection" from
-   "does not exist" and render a real error state instead of a false
-   not-found (a degraded network once showed up as "Community not found"). */
-export async function fetchCommunityStrict(id) {
-  const d = await apiGet(`/api/communities/${id}`, { cache: false });
-  return d?.data ?? null;
-}
-
 /* Create — the caller becomes owner. Throws with a user-facing message. */
 export async function createCommunity({ name, description, emoji }) {
   const d = await apiPost('/api/communities', { name, description, emoji });

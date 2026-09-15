@@ -32,33 +32,3 @@ export const bullRedisOptions = {
 };
 
 export default bullRedisOptions;
-
-/**
- * redisConnectionOptions({ label }) — per-client options with a boot guard.
- *
- * When REDIS_URL is genuinely unset, every BullMQ client previously fell
- * back to redis://localhost:6379 and retried FOREVER, printing an unhandled
- * ECONNREFUSED storm (~1/s at boot, ~20s apart after) with no hint which
- * knob was missing. With the guard: five quick attempts, ONE clear warning
- * per client, then the client goes quiet-and-idle — the deploy is only
- * fixed by setting REDIS_URL, and the banner already shows it as null.
- * A REAL REDIS_URL keeps the existing reconnect-forever behaviour — a
- * transient Upstash outage must never permanently stop a worker.
- */
-const warned = new Set();
-
-export function redisConnectionOptions({ label = "redis-client" } = {}) {
-  const url = String(process.env.REDIS_URL ?? "").trim();
-  if (!url) {
-    if (!warned.has(label)) {
-      warned.add(label);
-      console.warn(`[redis] ${label}: REDIS_URL is not set — background jobs for this client stay idle until the env var is added (Render → Environment).`);
-    }
-    return {
-      ...bullRedisOptions,
-      retryStrategy: (times) => (times > 5 ? null : Math.min(1000 * 2 ** Math.min(times, 4), 10_000)),
-    };
-  }
-  return { ...bullRedisOptions };
-}
-

@@ -319,15 +319,6 @@ export const FR = {
   'agent.save_agent': 'Enregistrer l\'agent',
   'agent.task_title_ph': 'Titre de la tâche…',
   'agent.to_do': 'À faire',
-  'agent.suggestions':      'Suggestions',
-  'agent.suggestions_sub':  'Des idées de votre agent — acceptez-en une pour en faire une tâche.',
-  'agent.suggestions_empty':'Aucune suggestion pour le moment. Votre agent ajoute des idées ici quand il voit une façon de vous aider.',
-  'agent.suggestion_accept':'Ajouter comme tâche',
-  'agent.suggestion_dismiss':'Ignorer la suggestion',
-  'agent.suggestion_added': 'Ajouté à vos tâches : {title}',
-  'agent.sugg_task':        'Idée de tâche',
-  'agent.sugg_goal':        'Objectif',
-  'agent.sugg_chat':        'Discussion',
   'agent.unnamed': 'Agent sans nom',
 
   /* ── Battles ── */

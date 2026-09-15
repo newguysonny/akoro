@@ -318,15 +318,6 @@ export const AR = {
   'agent.save_agent': 'حفظ الوكيل',
   'agent.task_title_ph': 'عنوان المهمة…',
   'agent.to_do': 'للقيام به',
-  'agent.suggestions':      'اقتراحات',
-  'agent.suggestions_sub':  'أفكار من وكيلك — اقبل واحدة لتصبح مهمة.',
-  'agent.suggestions_empty':'لا اقتراحات الآن. يضيف وكيلك الأفكار هنا عندما يجد طريقة لمساعدتك.',
-  'agent.suggestion_accept':'إضافة كمهمة',
-  'agent.suggestion_dismiss':'تجاهل الاقتراح',
-  'agent.suggestion_added': 'أضيف إلى مهامك: {title}',
-  'agent.sugg_task':        'فكرة مهمة',
-  'agent.sugg_goal':        'هدف',
-  'agent.sugg_chat':        'محادثة',
   'agent.unnamed': 'وكيل بلا اسم',
 
   /* ── Battles ── */

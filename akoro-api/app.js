@@ -30,12 +30,9 @@ import {
 
 import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
-import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
-import { applyMigrations, migrationsAlreadyApplied, migrationUrl, currentGitSha } from "./lib/migrations.js";
-import { traceRedis, startRedisTraceReporting } from "./lib/redisTrace.js";
 
 // ─── Module imports ───────────────────────────────────────────────────────────
 import authModule, { authenticateSocket } from "./modules/auth/routes.js";
@@ -46,12 +43,9 @@ import rankingModule              from "./modules/ranking/routes.js";
 import profilesModule             from "./modules/profiles/routes.js";
 import adaptiveModule, {
   setupAdaptiveWebSocket }        from "./modules/adaptive-learning/index.js";
-import { startChatFollowUpWorker } from "./modules/adaptive-learning/chat-follow-ups.js";
-import { startLearnerAutonomyWorker, recoverLearnerAutonomySchedules } from "./modules/adaptive-learning/learner-autonomy.js";
 import battleModule               from "./modules/battle/routes.js";
 import tasksModule                from "./modules/tasks/routes.js";
 import selfStudyModule            from "./modules/self-study/routes.js";
-import { startRoutineScheduler }  from "./modules/self-study/routines.js";
 import communitiesModule          from "./modules/communities/routes.js";
 import instructorModule           from "./modules/instructor/index.js";
 import instructorToolsModule      from "./modules/instructor/tools.js";
@@ -67,15 +61,6 @@ import contentModule             from "./modules/content/routes.js";
 import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
-import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
-import learnerGoalsModule       from "./modules/learner-goals/routes.js";
-import agentProposalsModule      from "./modules/agent-proposals/routes.js";
-import blogsModule               from "./modules/blogs/routes.js";
-import {
-  agentToolsRouter as agentToolsModule,
-  agentActionConfirmationsRouter as agentActionConfirmationsModule,
-  agentMemoryRouter as agentMemoryModule,
-} from "./modules/agent-tools/index.js";
 import passport                  from "passport";
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
@@ -178,10 +163,6 @@ const corsDelegate = (req, cb) => {
 // ─── Socket.io + Redis adapter ────────────────────────────────────────────────
 const redisPub = new Redis(config.redis.url);
 const redisSub = redisPub.duplicate();
-// Local quota forensics (AKORO_REDIS_TRACE=true) — inert when the flag is off.
-traceRedis(redisPub, "api/pub");
-traceRedis(redisSub, "api/sub");
-startRedisTraceReporting();
 redisPub.on("error", (err) => console.error("[redis/pub]", err.message));
 redisSub.on("error", (err) => console.error("[redis/sub]", err.message));
 
@@ -262,30 +243,16 @@ app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId)
 
 // ─── Health & readiness ───────────────────────────────────────────────────────
 let serverReady = false;
-// Render's healthCheckPath pings /health around the clock. Probing the DB and
-// Redis on every ping bills BOTH platforms for commands (the Postgres quota
-// AND the Upstash command quota) — so the deep verdict runs at most once per
-// AKORO_HEALTH_PROBE_SECONDS (default 120) and is cached. `?deep=1` always
-// probes now (humans, alerting).
-const HEALTH_PROBE_MS = 1000 * Math.max(Number(process.env.AKORO_HEALTH_PROBE_SECONDS) || 120, 15);
-let healthCache = { at: 0, dbOk: false, redisOk: false };
-app.get("/health", async (req, res) => {
-  const deep = req.query.deep === "1";
-  const fresh = Date.now() - healthCache.at < HEALTH_PROBE_MS;
-  if (deep || !fresh) {
-    // Zero-Redis health: ioredis keeps `status` current from connect/error
-    // events — no PING round-trip, so an uptime monitor costs 0 commands.
-    const redisOk = redisPub.status === "ready";
-    const dbOk = await checkDb();
-    healthCache = { at: Date.now(), dbOk, redisOk };
-  }
-  const { dbOk, redisOk } = healthCache;
+app.get("/health", async (_req, res) => {
+  const [dbOk, redisOk] = await Promise.all([
+    checkDb(),
+    redisPub.ping().then((r) => r === "PONG").catch(() => false),
+  ]);
   const healthy = dbOk && redisOk;
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded", instance: config.instanceId,
     uptime: Math.round(process.uptime()), env: config.nodeEnv,
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
-    cached: !deep && fresh,
   });
 });
 app.get("/ready", (_req, res) =>
@@ -398,12 +365,6 @@ function isNonRoutable(ip) {
 }
 
 app.use("/api", attachRateLimitIdentity);
-// Usage metering: attribute every DB command this request causes to its
-// route (ids normalised out so cardinality stays bounded).
-app.use("/api", (req, res, next) => {
-  const norm = req.path.replace(/\/[0-9a-f-]{16,}/gi, "/:id").replace(/\/\d+/g, "/:id");
-  runWithRouteUsage(`${req.method} ${norm}`, next);
-});
 // Background jobs call this same API over loopback as the user who scheduled
 // the work. They skip the per-user limiters and are counted here instead, so a
 // cron firing six assignments cannot trip a 10/min ceiling — while a runaway
@@ -415,16 +376,6 @@ app.use("/api", internalLimit);
 // stays in sync with what's configured in the Paystack dashboard; it defaults
 // to /api/webhooks/paystack when the env var is unset.
 app.use(PAYSTACK_WEBHOOK_PATH, paystackWebhookRouter);
-// Private Python-agent tool gateway. It has its own shared credential and
-// session-bound capability; standardLimit still protects the service caller.
-app.use("/api/internal/agent-tools/v1", standardLimit, agentToolsModule);
-// Browser-facing review/approve/decline endpoints for Python-agent write
-// proposals. They authenticate the learner and never expose the private tools
-// credential.
-app.use("/api/agent-actions/v1", standardLimit, agentActionConfirmationsModule);
-// Learner-visible controls to inspect and clear compact study memory created by
-// the additive Python agent. Raw chat history remains at /api/adaptive/chat.
-app.use("/api/agent-memory/v1", standardLimit, agentMemoryModule);
 app.use("/api/auth",     authModule);           // auth router applies strictLimit/refreshLimit internally
 app.use("/api",          standardLimit, coursesModule);
 app.use("/api/ranking",  standardLimit, rankingModule);
@@ -435,145 +386,33 @@ app.use("/api/adaptive", teachingLimit,  adaptiveModule);
 app.use("/api/battle",   standardLimit, battleModule);
 app.use("/api/battle",   standardLimit, battleFeedRouter);
 
-// ─── Boot-time migrations (host-independent) ────────────────────────────────
-// Railway applied migrations as a release step; Render's equivalent
-// (preDeployCommand) needs a paid plan, so free-tier deploys silently skipped
-// them. The backend now self-migrates at boot: idempotent SQL + a session
-// advisory lock make it safe, and the run is skipped entirely when the last
-// edu.migration_log row already matches this deploy's SHA — so a plain
-// restart (free tier wake) costs one SELECT, not 150 DDL statements.
-// It deliberately runs BEFORE any background worker starts: workers query
-// tables at startup (learner-autonomy schedule recovery), and on the deploy
-// that introduces a new table the old boot order let the worker race the
-// migration and log a scary failure. Schema only, never demo data (mirrors
-// the old deploy command).
-// Disable with MIGRATIONS_ON_BOOT=false (e.g. one replica owns migrations).
-if (process.env.MIGRATIONS_ON_BOOT !== "false") {
-  const mUrl = migrationUrl();
-  const mSha = currentGitSha();
-  if (!mUrl) {
-    console.warn("[MIGRATIONS] no MIGRATION_DATABASE_URL/DATABASE_URL configured — boot migration SKIPPED. Set the Supabase Postgres connection string so deploys self-migrate.");
-  } else {
-    try {
-      if (await migrationsAlreadyApplied(mUrl, mSha)) {
-        console.log(`[MIGRATIONS] already applied for ${String(mSha).slice(0, 7) || "this build"} — skipping boot run`);
-      } else {
-        const { applied, failed } = await applyMigrations({ url: mUrl, groups: ["schema"], label: "boot" });
-        if (failed) console.error(`[MIGRATIONS] ${failed} migration(s) FAILED at boot — check the logs above; the API is starting anyway.`);
-      }
-    } catch (e) {
-      // A failed migration must not crash-loop the whole service: start and
-      // let the loud log (and /health) tell the operator. The error is also
-      // recorded in edu.migration_log for the next boot to retry.
-      console.error("[MIGRATIONS] boot run failed — starting anyway:", e.message);
-    }
-  }
-}
-
-// ─── Background jobs kill switch ─────────────────────────────────────────────
-// Every recurring job (sweeps, crons, schedulers) burns Redis commands while
-// the process runs — on a metered free tier that can outrun real usage with
-// ZERO users. Three dials, most specific wins:
-//   AKORO_JOBS_ENABLED="chat follow-ups worker,learner-autonomy worker"
-//     → ONLY the named jobs run (each BullMQ worker idles at ~1-2k cmds/month,
-//       so running only the learner-facing two fits the free tier comfortably)
-//   AKORO_JOBS_DISABLED="eval worker,battle worker"
-//     → all jobs EXCEPT the named ones run
-//   AKORO_BACKGROUND_JOBS_ENABLED=false
-//     → the everything switch, unchanged
-// Job names are exactly the strings passed to skipJob below (battle worker,
-// eval worker, chat follow-ups worker, learner-autonomy worker, autonomy
-// cycle worker, embedding sweeper, alert worker, routine scheduler, tenant
-// host refresh). The tasks worker has its own legacy gate (ENABLE_TASK_WORKER).
-const backgroundJobsEnabled = String(process.env.AKORO_BACKGROUND_JOBS_ENABLED ?? "true").trim().toLowerCase() === "true";
-const JOBS_ONLY = String(process.env.AKORO_JOBS_ENABLED ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const JOBS_DISABLED = String(process.env.AKORO_JOBS_DISABLED ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const skipJob = (name) => {
-  if (JOBS_ONLY.length && !JOBS_ONLY.includes(name)) {
-    console.log(`[jobs] ${name} skipped (not listed in AKORO_JOBS_ENABLED)`);
-    return true;
-  }
-  if (JOBS_DISABLED.includes(name)) {
-    console.log(`[jobs] ${name} skipped (AKORO_JOBS_DISABLED)`);
-    return true;
-  }
-  if (backgroundJobsEnabled) return false;
-  console.log(`[jobs] ${name} skipped (AKORO_BACKGROUND_JOBS_ENABLED=false)`);
-  return true;
-};
-
 // Eagerly start the BullMQ battle worker at boot (it was previously imported
 // lazily on the first enqueue, so battles could stall until some action kicked
 // it). Guarded by REDIS_URL so environments without Redis stay quiet.
-if (process.env.REDIS_URL && !skipJob("battle worker")) {
+if (process.env.REDIS_URL) {
   import("./modules/battle/worker.js")
     .then(() => console.log("[battle] worker started at boot"))
     .catch((e) => console.error("[battle] worker failed to start:", e.message));
 
   // Eval runs. Same guard: a suite is minutes of model calls, so it runs on a
   // queue and the admin page polls.
-  if (!skipJob("eval worker")) {
-    import("./lib/evalWorker.js")
-      .then((m) => m.startEvalWorker())
-      .catch((e) => console.error("[evals] worker failed to start:", e.message));
-  }
-
-  // Learner-requested agent check-ins are durable delayed jobs. Their worker
-  // creates the persistent chat and notification at the requested time.
-  try {
-    if (!skipJob("chat follow-ups worker")) {
-      startChatFollowUpWorker();
-      console.log("[chat-follow-ups] worker started at boot");
-    }
-  } catch (e) {
-    console.error("[chat-follow-ups] worker failed to start:", e.message);
-  }
-
-  // The learner's persisted opt-in, not a browser state, authorizes every
-  // autonomous due-task nudge. Recovery only restores delayed due-time jobs;
-  // it never enables autonomy for a learner.
-  try {
-    if (!skipJob("learner-autonomy worker")) {
-      startLearnerAutonomyWorker();
-      recoverLearnerAutonomySchedules()
-        .then((scheduled) => console.log(`[learner-autonomy] recovered ${scheduled ?? 0} due-task review(s)`))
-        .catch((e) => console.error("[learner-autonomy] schedule recovery failed:", e.message));
-      console.log("[learner-autonomy] worker started at boot");
-    }
-  } catch (e) {
-    console.error("[learner-autonomy] worker failed to start:", e.message);
-  }
-
-  // Full Autonomy level 2 (Planner): the nightly background cycle. The
-  // scheduler ticks once a minute and enqueues at most one small batch
-  // inside the 21:00-22:00 Africa/Lagos window — O(learners) jobs per day.
-  try {
-    if (!skipJob("autonomy cycle worker")) {
-      const autonomy = await import("./modules/autonomy/index.js");
-      autonomy.startAutonomyCycleWorker();
-      console.log("[autonomy] planner worker started at boot");
-    }
-  } catch (e) {
-    console.error("[autonomy] planner worker failed to start:", e.message);
-  }
+  import("./lib/evalWorker.js")
+    .then((m) => m.startEvalWorker())
+    .catch((e) => console.error("[evals] worker failed to start:", e.message));
 }
 
 // Keeps the vector stores current. Rows arrive without embeddings (SQL seeds,
 // a failed inline call) and rows get edited after being embedded; both leave
 // search quietly wrong, and nothing used to report either.
-if (!skipJob("embedding sweeper")) {
-  import("./lib/embeddingSweeper.js")
-    .then((m) => m.startEmbeddingSweeper())
-    .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
-}
+import("./lib/embeddingSweeper.js")
+  .then((m) => m.startEmbeddingSweeper())
+  .catch((e) => console.error("[embeddings] sweeper failed to start:", e.message));
 
 // Alert rules — spend, latency, failures, and work that has silently stopped.
 // Needs no Redis: it reads the telemetry tables on a cron.
-if (!skipJob("alert worker")) {
-  import("./lib/alertWorker.js")
-    .then((m) => m.startAlertWorker())
-    .catch((e) => console.error("[alerts] worker failed to start:", e.message));
-}
+import("./lib/alertWorker.js")
+  .then((m) => m.startAlertWorker())
+  .catch((e) => console.error("[alerts] worker failed to start:", e.message));
 app.use("/api/student",  standardLimit, studentFeedRouter);
 app.use("/api/tasks",      aiLimit,       tasksModule);
 // Only /plan calls a model; the rest is ordinary CRUD. Putting the whole module
@@ -591,10 +430,6 @@ app.use("/api/school",     standardLimit, schoolModule);        // school partne
 app.use("/api/voice",      aiLimit,       voiceModule);
 app.use("/api/content",    standardLimit, contentModule);   // public blog + careers, admin CRUD
 app.use("/api/admin",      standardLimit, adminModule);     // admin-only: users, instructors, courses, stats
-app.use("/api",            standardLimit, agentToolRequestsModule); // explicit learner Agent Chat feature/tool requests
-app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
-app.use("/api/agent/proposals", standardLimit, agentProposalsModule); // Full Autonomy proposal inbox (approve executes via chat tools)
-app.use("/api/blogs",      standardLimit, blogsModule); // learner-authored blogs (higherEd library: draft / publish)
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
@@ -626,13 +461,6 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-// Boot-time migrations already ran — they sit ABOVE the background-worker
-// section so no worker can query a table before the deploy that creates it
-// has applied (the learner-autonomy recovery race of 2026-09-12).
-
-// Weekly routine preparation (drafts only — assignment stays human).
-if (!skipJob("routine scheduler")) startRoutineScheduler();
-
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
 
@@ -642,9 +470,7 @@ httpServer.listen(config.server.port, config.server.host, () => {
   refreshTenantHosts()
     .then((r) => console.log(`[tenant] host cache: ${r.slugs} school slugs, ${r.domains} custom domains${r.loaded ? "" : " (NOT LOADED — credentials denied to unlisted subdomains)"}`))
     .catch(() => {});
-  if (!skipJob("tenant host refresh")) {
-    setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
-  }
+  setInterval(() => { refreshTenantHosts().catch(() => {}); }, 5 * 60 * 1000).unref?.();
   console.log(`
 [API]  Akoro API  [${config.instanceId.slice(0, 8)}]  --  http://localhost:${config.server.port}
 

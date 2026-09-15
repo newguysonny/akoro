@@ -9,15 +9,13 @@
 
 import Redis  from "ioredis";
 import db     from "../../db.js";
-import { traceRedis } from "../../lib/redisTrace.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
 
 // ── ioredis singleton (reuses the same Redis URL as the rest of akoro) ────────
 let _redis = null;
 
 export function getRedis() {
   if (!_redis) {
-    _redis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "student-state" })), "student-state");
+    _redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
     _redis.on("error", (err) => console.error("[adaptive/Redis]", err.message));
     console.log("✅ [adaptive] Redis connected");
   }

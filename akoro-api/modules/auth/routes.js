@@ -336,30 +336,6 @@ export async function endSession(req, res) {
 // In production swap the in-memory map for Redis: SET jti:${jti} 1 EX ${ttl}
 
 const _denyList = new Map(); // jti → expiresAt (ms)
-const _jtiClear = new Map(); // jti → "verified not revoked until" (ms)
-
-// ─── § REQUEST-PATH USER CACHE ────────────────────────────────────────────────
-// Every authenticated request used to cost two DB commands before any app
-// logic ran: a revoked_tokens check and a full users reload. On a metered
-// free tier that alone outran real product usage. Both are now cached:
-//   • users row — 45s TTL keyed by user id. Non-security fields (avatar,
-//     full_name, onboarding) may lag up to 45s behind an edit.
-//   • revoked-token "clear" — 30s TTL keyed by jti (see DenyList.has).
-// Anything that changes a SECURITY field (is_active, role, force_logout_at)
-// must call invalidateCachedUser(userId) so the change applies immediately.
-const USER_CACHE_TTL_MS = 45_000;
-const JTI_CLEAR_TTL_MS = 30_000;
-const _userCache = new Map(); // userId → { user, expires }
-const USER_CACHE_MAX = 5_000;
-
-function cacheUser(user) {
-  if (_userCache.size >= USER_CACHE_MAX) _userCache.delete(_userCache.keys().next().value);
-  _userCache.set(user.id, { user, expires: Date.now() + USER_CACHE_TTL_MS });
-}
-
-export function invalidateCachedUser(userId) {
-  if (userId) _userCache.delete(userId);
-}
 
 const DenyList = {
   add: async (jti, expiresAt) => {
@@ -370,28 +346,16 @@ const DenyList = {
     } catch { /* table may not exist yet — in-memory fallback suffices */ }
   },
   has: async (jti) => {
-    if (!jti) return false;
     if (_denyList.has(jti)) return true;
-    // A cleared jti is trusted for a short window: the alternative is one DB
-    // command on EVERY authenticated request, which dominated the platform's
-    // command quota. Same-instance revocations stay instant via _denyList;
-    // a multi-instance deployment could observe up to this window of delay.
-    const clearUntil = _jtiClear.get(jti);
-    if (clearUntil) {
-      if (clearUntil > Date.now()) return false;
-      _jtiClear.delete(jti);
-    }
+    // Check DB
     try {
       const { data } = await db.from("revoked_tokens").select("jti").eq("jti", jti).maybeSingle();
-      if (data) { _denyList.set(jti, Date.now() + 24 * 60 * 60 * 1000); return true; } // revocation never expires back to valid
-      _jtiClear.set(jti, Date.now() + JTI_CLEAR_TTL_MS);
-      return false;
+      return !!data;
     } catch { return false; }
   },
   sweep: () => {
     const now = Date.now();
     for (const [k, v] of _denyList) if (v < now) _denyList.delete(k);
-    for (const [k, v] of _jtiClear) if (v < now) _jtiClear.delete(k);
   },
 };
 setInterval(DenyList.sweep, 60_000); // clean expired entries every minute
@@ -488,27 +452,19 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
     return res401(res, "Token has been revoked");
   }
 
-  // 5. Load user — cache first (saves a DB command on virtually every
-  // request), then the query, with a fallback without onboarding_completed
-  // if that column is missing.
+  // 5. Load user — try with onboarding_completed, fall back without if column is missing
   try {
     let user, dbErr;
-    const cached = _userCache.get(decoded.sub);
-    if (cached && cached.expires > Date.now()) {
-      user = cached.user;
-    } else {
-      ({ data: user, error: dbErr } = await db.from("users")
-        .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed,force_logout_at")
-        .eq("id", decoded.sub).maybeSingle());
+    ({ data: user, error: dbErr } = await db.from("users")
+      .select("id,email,username,full_name,avatar_url,role,is_active,onboarding_completed,force_logout_at")
+      .eq("id", decoded.sub).maybeSingle());
 
-      if (dbErr) {
-        // Column may not exist yet (pending migration) — retry without it
-        ({ data: user, error: dbErr } = await db.from("users")
-          .select("id,email,username,full_name,avatar_url,role,is_active")
-          .eq("id", decoded.sub).maybeSingle());
-        if (dbErr) return res401(res, "Could not load user");
-      }
-      if (user) cacheUser(user);
+    if (dbErr) {
+      // Column may not exist yet (pending migration) — retry without it
+      ({ data: user, error: dbErr } = await db.from("users")
+        .select("id,email,username,full_name,avatar_url,role,is_active")
+        .eq("id", decoded.sub).maybeSingle());
+      if (dbErr) return res401(res, "Could not load user");
     }
 
     if (!user) return res401(res, "User not found");

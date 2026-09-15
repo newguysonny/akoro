@@ -9,16 +9,13 @@
 import { Worker, Queue } from "bullmq";
 import Redis             from "ioredis";
 import db                from "../../db.js";
-import { redisConnectionOptions } from "../../lib/redisOptions.js";
-import { traceRedis } from "../../lib/redisTrace.js";
+import { bullRedisOptions } from "../../lib/redisOptions.js";
 import { thinkingTimeMs, autoPlayers } from "./agentPlayer.js";
 import { embedQuestion, recall, recallStrength, answerFromRecall, guess } from "./agentRecall.js";
 import { updateKnowledgeConfidence, flagBattleReviewTopics } from "./knowledge.js";
-import { emitAutonomyEvent } from "../autonomy/triggers.js";
 
-const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "battle-worker" }));
+const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
 redis.on("error", (err) => console.error("[battle-worker/redis]", err.message));
-traceRedis(redis, "battle-worker");   // local quota forensics — inert unless AKORO_REDIS_TRACE=true
 
 export const battleQueue = new Queue("battles", {
   connection: redis,
@@ -580,12 +577,6 @@ async function endBattle(battleId) {
     if (xpEarned > 0) {
       await creditXP(p.user_id, p.agent_id, xpEarned, isReview ? "study_review" : "battle_win", battleId);
     }
-  }
-
-  // Event trigger: a battle/review just finished — every participant gets
-  // a fresh signal (their score is real, recent feedback worth planning on).
-  for (const p of participants ?? []) {
-    emitAutonomyEvent(p.user_id, "battle").catch(() => {});
   }
 
   const winner   = participants?.[0];

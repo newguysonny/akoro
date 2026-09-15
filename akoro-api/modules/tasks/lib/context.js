@@ -28,7 +28,7 @@ export async function buildContext(task) {
     text:     f.ocr_text ?? "",
   })).filter((f) => f.text);
 
-  const systemPrompt = buildSystemPrompt(agent, course, task.task_type ?? "general");
+  const systemPrompt = buildSystemPrompt(agent, course);
   const prompt       = buildTaskPrompt(task, files, fileTexts, course);
 
   return {
@@ -49,7 +49,7 @@ export async function buildContext(task) {
 
 // Exported so the agent eval builds the SAME system prompt production does.
 // A suite that invents its own prompt measures the prompt it invented.
-export function buildSystemPrompt(agent, course, workflowType = "general") {
+export function buildSystemPrompt(agent, course) {
   const base = agent.systemPrompt ?? agent.system_prompt ??
     `You are ${agent.name ?? agent.agent_name}, a helpful AI teaching assistant on Akoro Learning Platform.`;
 
@@ -60,10 +60,7 @@ export function buildSystemPrompt(agent, course, workflowType = "general") {
     ? `\n\nYou are currently working on: "${course.title}" (${course.subject}). Its courseId is ${course.id} — use that when a tool asks for one.`
     : "";
 
-  const environment = `\n\nWorkflow scope: ${String(workflowType).slice(0, 80)}. ` +
-    `Current date: ${new Date().toISOString().slice(0, 10)}. ` +
-    "Stay within the router-selected workflow and its supplied tools; do not invent a tool or authority.";
-  return base + courseContext + environment + UNTRUSTED_SYSTEM_RULE +
+  return base + courseContext + UNTRUSTED_SYSTEM_RULE +
     `\n\nAlways be helpful, accurate, and professional. When you need more information, ask. When you have everything, act.`;
 }
 
