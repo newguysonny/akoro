@@ -34,14 +34,14 @@ import { Icon } from "../common/Icons.jsx";
 /* ── Tool + form definitions (Fortizo's, icons swapped to tabler) ─────────── */
 
 const TOOL_DEFS = [
-  { id: "podcast",    label: "Podcast",    icon: "ti-headphones",    bg: "rgba(139,92,246,.16)", fg: "#C4B5FD" },
-  { id: "video",      label: "Video",      icon: "ti-video",         bg: "rgba(99,102,241,.16)", fg: "#A5B4FC" },
-  { id: "summary",    label: "Summary",    icon: "ti-align-left",    bg: "rgba(108,59,255,.16)", fg: "#C4B5FD" },
-  { id: "quiz",       label: "Quiz",       icon: "ti-circle-check",  bg: "rgba(239,68,68,.14)",  fg: "#FCA5A5" },
-  { id: "flashcards", label: "Flashcards", icon: "ti-stack",         bg: "rgba(245,158,11,.14)", fg: "#FCD34D" },
-  { id: "notes",      label: "Notes",      icon: "ti-pencil",        bg: "rgba(16,185,129,.14)", fg: "#6EE7B7" },
-  { id: "qa",         label: "Q&A",        icon: "ti-help",          bg: "rgba(14,165,233,.14)", fg: "#7DD3FC", community: true },
-  { id: "discussion", label: "Discussion", icon: "ti-messages",      bg: "rgba(217,70,239,.14)", fg: "#F0ABFC", community: true },
+  { id: "podcast",    label: "Podcast",    icon: "ti-headphones",    bg: "rgba(139,92,246,.16)", fg: "var(--ak-accent)" },
+  { id: "video",      label: "Video",      icon: "ti-video",         bg: "rgba(99,102,241,.16)", fg: "var(--ak-accent)" },
+  { id: "summary",    label: "Summary",    icon: "ti-align-left",    bg: "rgba(108,59,255,.16)", fg: "var(--ak-accent)" },
+  { id: "quiz",       label: "Quiz",       icon: "ti-circle-check",  bg: "rgba(239,68,68,.14)",  fg: "var(--ak-danger-text)" },
+  { id: "flashcards", label: "Flashcards", icon: "ti-stack",         bg: "rgba(245,158,11,.14)", fg: "var(--ak-warn-text)" },
+  { id: "notes",      label: "Notes",      icon: "ti-pencil",        bg: "rgba(16,185,129,.14)", fg: "var(--ak-success-text)" },
+  { id: "qa",         label: "Q&A",        icon: "ti-help",          bg: "rgba(14,165,233,.14)", fg: "var(--ak-accent)", community: true },
+  { id: "discussion", label: "Discussion", icon: "ti-messages",      bg: "rgba(217,70,239,.14)", fg: "var(--ak-accent)", community: true },
 ];
 const toolById = (id) => TOOL_DEFS.find((t) => t.id === id);
 
@@ -359,29 +359,29 @@ const READER_CSS = `
 .doc-page .plan-topic{font-weight:600;color:#1c1917;}
 
 /* Chrome — dark session surface, Akoro purple accents. */
-.sreader-bg{background:#0B0B16;}
-.folio-tab-pill{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10);color:#8A94AB;}
-.folio-tab-pill:hover{color:#E2E8F0;}
-.folio-tab-pill.active{background:rgba(108,59,255,.18);border-color:#6C3BFF;color:#C4B5FD;font-weight:700;}
-.folio-chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:#C4B5FD;}
+.sreader-bg{background:var(--ak-bg);}
+.folio-tab-pill{background:var(--ak-tag-bg);border-color:var(--ak-border2);color:var(--ak-text-muted);}
+.folio-tab-pill:hover{color:var(--ak-text);}
+.folio-tab-pill.active{background:rgba(108,59,255,.18);border-color:var(--ak-accent);color:var(--ak-accent);font-weight:700;}
+.folio-chip{background:var(--ak-tag-bg);border-color:var(--ak-border2);color:var(--ak-accent);}
 .folio-chip:hover{background:rgba(108,59,255,.18);border-color:rgba(108,59,255,.4);}
-.folio-gen-card{background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.09);}
-.folio-gen-card:hover{border-color:#6C3BFF;background:rgba(108,59,255,.08);}
-.folio-btn-outline{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.14);color:#CBD5E1;}
-.folio-btn-outline:hover{border-color:#6C3BFF;color:#C4B5FD;}
-.folio-primary-btn{background:#6C3BFF;color:#fff;}
+.folio-gen-card{background:var(--ak-tag-bg);border-color:var(--ak-border2);}
+.folio-gen-card:hover{border-color:var(--ak-accent);background:rgba(108,59,255,.08);}
+.folio-btn-outline{background:var(--ak-tag-bg);border-color:var(--ak-border2);color:var(--ak-text-sec);}
+.folio-btn-outline:hover{border-color:var(--ak-accent);color:var(--ak-accent);}
+.folio-primary-btn{background:var(--ak-accent);color:#fff;}
 .folio-primary-btn:hover{background:#5A2BEB;}
-.folio-thumb{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);color:#8A94AB;}
+.folio-thumb{background:var(--ak-tag-bg);border-color:var(--ak-border2);color:var(--ak-text-muted);}
 .folio-thumb:hover{border-color:rgba(108,59,255,.5);}
-.folio-thumb.active{border-color:#6C3BFF;color:#C4B5FD;box-shadow:0 0 0 2px rgba(108,59,255,.22);}
-.folio-form-field{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:#E2E8F0;}
-.folio-form-field::placeholder{color:#64748B;}
-.folio-form-field:focus{border-color:#6C3BFF;}
-.folio-icon-btn{color:#8A94AB;}
-.folio-icon-btn:hover{background:rgba(108,59,255,.16);color:#C4B5FD;}
-.sreader-menu{background:#151527;border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 44px rgba(0,0,0,.5);}
-.folio-citation{display:inline-flex;align-items:center;gap:3px;font-size:0.65rem;font-family:ui-monospace,Menlo,monospace;color:#C4B5FD;background:rgba(108,59,255,.16);border-radius:999px;padding:1px 7px;margin-left:6px;cursor:pointer;vertical-align:middle;border:none;white-space:nowrap;}
-.folio-citation:hover{background:#6C3BFF;color:#fff;}
+.folio-thumb.active{border-color:var(--ak-accent);color:var(--ak-accent);box-shadow:0 0 0 2px rgba(108,59,255,.22);}
+.folio-form-field{background:var(--ak-tag-bg);border-color:var(--ak-border2);color:var(--ak-text);}
+.folio-form-field::placeholder{color:var(--ak-text-muted);}
+.folio-form-field:focus{border-color:var(--ak-accent);}
+.folio-icon-btn{color:var(--ak-text-muted);}
+.folio-icon-btn:hover{background:rgba(108,59,255,.16);color:var(--ak-accent);}
+.sreader-menu{background:var(--ak-surface);border:1px solid var(--ak-border2);box-shadow:0 18px 44px rgba(0,0,0,.5);}
+.folio-citation{display:inline-flex;align-items:center;gap:3px;font-size:0.65rem;font-family:ui-monospace,Menlo,monospace;color:var(--ak-accent);background:rgba(108,59,255,.16);border-radius:999px;padding:1px 7px;margin-left:6px;cursor:pointer;vertical-align:middle;border:none;white-space:nowrap;}
+.folio-citation:hover{background:var(--ak-accent);color:#fff;}
 .cite-flash{animation:sreaderCiteFlash 2.2s ease-out;border-radius:4px;}
 @keyframes sreaderCiteFlash{
   0%{background:rgba(108,59,255,.22);box-shadow:0 0 0 4px rgba(108,59,255,.22);}
@@ -390,7 +390,7 @@ const READER_CSS = `
 }
 .folio-redaction{background:#1c1917;color:transparent;border-radius:3px;cursor:pointer;padding:0 2px;-webkit-user-select:none;user-select:none;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
 .folio-redaction.revealed{background:transparent;color:inherit;outline:1.5px dashed #a8a29e;outline-offset:1px;-webkit-user-select:text;user-select:text;}
-.folio-annotation{background:rgba(108,59,255,.22);border-bottom:2px solid #6C3BFF;cursor:pointer;border-radius:2px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
+.folio-annotation{background:rgba(108,59,255,.22);border-bottom:2px solid var(--ak-accent);cursor:pointer;border-radius:2px;padding:0 1px;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
 `;
 
 /* ── Hooks ─────────────────────────────────────────────────────────────────── */
@@ -434,7 +434,7 @@ function TabPill({ tab, active, onSelect, onClose }) {
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onClose(); }}
-          className="w-4 h-4 rounded-full flex items-center justify-center opacity-60 hover:opacity-100 hover:bg-white/10 flex-shrink-0"
+          className="w-4 h-4 rounded-full flex items-center justify-center opacity-60 hover:opacity-100 hover:bg-black/10 flex-shrink-0"
         >
           <Icon name="ti-x" size={10}/>
         </button>
@@ -458,17 +458,17 @@ function GenerateGrid({ onPick }) {
       <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: t.bg }}>
         <Icon name={t.icon} size={15} color={t.fg}/>
       </span>
-      <span className="flex-1 flex items-center gap-1.5 min-w-0 text-sm" style={{ color: "#E2E8F0" }}>
+      <span className="flex-1 flex items-center gap-1.5 min-w-0 text-sm" style={{ color: "var(--ak-text)" }}>
         <span className="truncate">{t.label}</span>
       </span>
-      <Icon name="ti-chevron-right" size={13} color="#64748B"/>
+      <Icon name="ti-chevron-right" size={13} color="var(--ak-text-muted)"/>
     </button>
   );
   return (
     <div className="px-4 pt-3.5 pb-2 flex-shrink-0">
-      <div className="font-display text-base font-semibold mb-2" style={{ color: "#F1F5F9" }}>Generate</div>
+      <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Generate</div>
       <div className="grid grid-cols-2 gap-2 mb-4">{generated.map(Card)}</div>
-      <div className="font-display text-base font-semibold mb-2" style={{ color: "#F1F5F9" }}>Community</div>
+      <div className="font-display text-base font-semibold mb-2" style={{ color: "var(--ak-text)" }}>Community</div>
       <div className="grid grid-cols-2 gap-2">{community.map(Card)}</div>
     </div>
   );
@@ -481,8 +481,8 @@ function ToolHeader({ label, sub, onBack }) {
         <Icon name="ti-chevron-left" size={15}/>
       </button>
       <div>
-        <div className="font-display text-base font-semibold mb-0.5" style={{ color: "#F1F5F9" }}>{label}</div>
-        {sub && <div className="text-xs" style={{ color: "#64748B" }}>{sub}</div>}
+        <div className="font-display text-base font-semibold mb-0.5" style={{ color: "var(--ak-text)" }}>{label}</div>
+        {sub && <div className="text-xs" style={{ color: "var(--ak-text-muted)" }}>{sub}</div>}
       </div>
     </div>
   );
@@ -508,7 +508,7 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit }) {
       <div className="flex flex-col gap-3.5">
         {def.fields.map((f) => (
           <label key={f.id} className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium" style={{ color: "#94A3B8" }}>{f.label}</span>
+            <span className="text-xs font-medium" style={{ color: "var(--ak-text-sub)" }}>{f.label}</span>
             {f.type === "text" ? (
               <input
                 type="text"
@@ -516,14 +516,14 @@ function CreationForm({ toolId, initialFocus, onBack, onSubmit }) {
                 placeholder={f.placeholder}
                 onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
                 className="folio-form-field border rounded-lg px-2.5 py-2 text-sm focus:outline-none"
-                style={{ color: "#E2E8F0" }}
+                style={{ color: "var(--ak-text)" }}
               />
             ) : (
               <select
                 value={values[f.id]}
                 onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
                 className="folio-form-field border rounded-lg px-2.5 py-2 text-sm focus:outline-none"
-                style={{ color: "#E2E8F0" }}
+                style={{ color: "var(--ak-text)" }}
               >
                 {f.options.map((o) => <option key={o}>{o}</option>)}
               </select>
@@ -576,7 +576,7 @@ function Citation({ cite, onCite }) {
 
 function EmptyResult({ reason }) {
   return (
-    <div className="rounded-lg border p-3.5 text-xs leading-relaxed" style={{ borderColor: "rgba(255,255,255,.10)", background: "rgba(255,255,255,.04)", color: "#94A3B8" }}>
+    <div className="rounded-lg border p-3.5 text-xs leading-relaxed" style={{ borderColor: "var(--ak-border2)", background: "var(--ak-tag-bg)", color: "var(--ak-text-sub)" }}>
       <Icon name="ti-info-circle" size={14} color={GOLD}/> {reason}
     </div>
   );
@@ -585,8 +585,8 @@ function EmptyResult({ reason }) {
 function ResultView({ tab, onUpdate, onCite }) {
   const header = (
     <div className="mb-3.5">
-      <div className="font-display text-base font-semibold mb-0.5" style={{ color: "#F1F5F9" }}>{tab.title}</div>
-      <div className="text-xs" style={{ color: "#64748B" }}>{resultSub(tab)}</div>
+      <div className="font-display text-base font-semibold mb-0.5" style={{ color: "var(--ak-text)" }}>{tab.title}</div>
+      <div className="text-xs" style={{ color: "var(--ak-text-muted)" }}>{resultSub(tab)}</div>
     </div>
   );
 
@@ -599,7 +599,7 @@ function ResultView({ tab, onUpdate, onCite }) {
           {tab.summaryPoints.map((p, i) => (
             <div key={i} className="flex gap-2.5 mb-3.5">
               <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: BRAND }}/>
-              <p className="text-sm leading-relaxed m-0" style={{ color: "#CBD5E1" }}>{p.text} <Citation cite={p.cite} onCite={onCite}/></p>
+              <p className="text-sm leading-relaxed m-0" style={{ color: "var(--ak-text-sec)" }}>{p.text} <Citation cite={p.cite} onCite={onCite}/></p>
             </div>
           ))}
         </div>
@@ -610,20 +610,20 @@ function ResultView({ tab, onUpdate, onCite }) {
       return (
         <div>
           {header}
-          <div className="rounded-lg p-4 mb-3.5" style={{ background: "#151527", border: "1px solid rgba(255,255,255,.10)" }}>
-            <div className="font-display text-sm mb-0.5" style={{ color: "#F1F5F9" }}>Episode — {tab.values.focus || tab.topic || "This page"}</div>
-            <div className="text-xs mb-3.5" style={{ color: "#64748B" }}>{tab.values.length || "Medium · 8–10 min"} · outline preview</div>
+          <div className="rounded-lg p-4 mb-3.5" style={{ background: "var(--ak-surface)", border: "1px solid var(--ak-border2)" }}>
+            <div className="font-display text-sm mb-0.5" style={{ color: "var(--ak-text)" }}>Episode — {tab.values.focus || tab.topic || "This page"}</div>
+            <div className="text-xs mb-3.5" style={{ color: "var(--ak-text-muted)" }}>{tab.values.length || "Medium · 8–10 min"} · outline preview</div>
             <div className="flex items-center gap-2.5">
               <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: BRAND }} title="Playable episodes are coming soon">
                 <Icon name="ti-player-play" size={15} color="#fff"/>
               </span>
-              <div className="flex-1 h-1 rounded-full relative" style={{ background: "rgba(255,255,255,.14)" }}>
+              <div className="flex-1 h-1 rounded-full relative" style={{ background: "var(--ak-tag-bg)" }}>
                 <div className="absolute left-0 top-0 bottom-0 rounded-full" style={{ width: "33%", background: BRAND }}/>
               </div>
-              <span className="font-ui-mono text-xs" style={{ color: "#64748B" }}>0:00</span>
+              <span className="font-ui-mono text-xs" style={{ color: "var(--ak-text-muted)" }}>0:00</span>
             </div>
           </div>
-          <p className="text-sm leading-relaxed" style={{ color: "#CBD5E1" }}>{tab.podcastBlurb} <Citation cite={tab.cite} onCite={onCite}/></p>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--ak-text-sec)" }}>{tab.podcastBlurb} <Citation cite={tab.cite} onCite={onCite}/></p>
         </div>
       );
     }
@@ -632,13 +632,13 @@ function ResultView({ tab, onUpdate, onCite }) {
       return (
         <div>
           {header}
-          <div className="w-full rounded-lg flex items-center justify-center relative mb-3" style={{ aspectRatio: "16 / 9", background: "linear-gradient(135deg,#151527,#0B0B16)", border: "1px solid rgba(255,255,255,.10)" }}>
+          <div className="w-full rounded-lg flex items-center justify-center relative mb-3" style={{ aspectRatio: "16 / 9", background: "linear-gradient(135deg,var(--ak-surface),var(--ak-bg))", border: "1px solid var(--ak-border2)" }}>
             <span className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: BRAND }} title="Rendered episodes are coming soon">
               <Icon name="ti-player-play" size={17} color="#fff"/>
             </span>
             <span className="absolute bottom-2.5 right-2.5 font-ui-mono text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(0,0,0,.55)", color: "#fff" }}>preview</span>
           </div>
-          <p className="text-sm leading-relaxed" style={{ color: "#CBD5E1" }}>{tab.videoBlurb} <Citation cite={tab.cite} onCite={onCite}/></p>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--ak-text-sec)" }}>{tab.videoBlurb} <Citation cite={tab.cite} onCite={onCite}/></p>
         </div>
       );
     }
@@ -665,24 +665,24 @@ function ResultView({ tab, onUpdate, onCite }) {
         <div>
           {header}
           <div className="flex items-center justify-between mb-3">
-            <span className="font-ui-mono text-xs" style={{ color: "#64748B" }}>Question {idx + 1} of {total}</span>
+            <span className="font-ui-mono text-xs" style={{ color: "var(--ak-text-muted)" }}>Question {idx + 1} of {total}</span>
             <Citation cite={q.cite} onCite={onCite}/>
           </div>
-          <div className="font-display text-sm font-medium mb-3.5" style={{ color: "#F1F5F9" }}>{q.prompt}</div>
+          <div className="font-display text-sm font-medium mb-3.5" style={{ color: "var(--ak-text)" }}>{q.prompt}</div>
           <div className="mb-1.5">
             {q.options.map((opt) => {
-              let cls = { border: "rgba(255,255,255,.12)", background: "transparent" };
+              let cls = { border: "var(--ak-border2)", background: "transparent" };
               if (revealed && opt.correct) cls = { border: GREEN, background: "rgba(16,185,129,.12)" };
-              else if (revealed && opt.key === ans.selected) cls = { border: "#F87171", background: "rgba(239,68,68,.12)" };
+              else if (revealed && opt.key === ans.selected) cls = { border: "var(--ak-danger-text)", background: "rgba(239,68,68,.12)" };
               else if (!revealed && opt.key === ans.selected) cls = { border: BRAND, background: "rgba(108,59,255,.12)" };
               return (
                 <div
                   key={opt.key}
                   onClick={() => !revealed && patchAnswer({ selected: opt.key })}
                   className="flex items-center gap-2.5 px-3 py-2.5 border rounded-lg mb-2 text-sm cursor-pointer"
-                  style={{ borderColor: cls.border, background: cls.background, color: "#E2E8F0" }}
+                  style={{ borderColor: cls.border, background: cls.background, color: "var(--ak-text)" }}
                 >
-                  <span className="w-5 h-5 rounded-full border flex items-center justify-center font-ui-mono text-xs flex-shrink-0" style={{ borderColor: "rgba(255,255,255,.20)" }}>{opt.key}</span>
+                  <span className="w-5 h-5 rounded-full border flex items-center justify-center font-ui-mono text-xs flex-shrink-0" style={{ borderColor: "var(--ak-border2)" }}>{opt.key}</span>
                   {opt.text}
                 </div>
               );
@@ -690,7 +690,7 @@ function ResultView({ tab, onUpdate, onCite }) {
           </div>
 
           {tab.quizHint && (
-            <div className="text-xs leading-relaxed rounded-lg p-2.5 mb-3" style={{ color: "#94A3B8", background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.10)" }}>{tab.quizHint}</div>
+            <div className="text-xs leading-relaxed rounded-lg p-2.5 mb-3" style={{ color: "var(--ak-text-sub)", background: "var(--ak-tag-bg)", border: "1px solid var(--ak-border2)" }}>{tab.quizHint}</div>
           )}
 
           {!revealed && (
@@ -722,7 +722,7 @@ function ResultView({ tab, onUpdate, onCite }) {
           )}
 
           {revealed && (
-            <div className="mt-2.5 text-xs" style={{ color: "#94A3B8" }}>
+            <div className="mt-2.5 text-xs" style={{ color: "var(--ak-text-sub)" }}>
               {ans.dontKnow
                 ? `No worries — the answer is: ${correctOpt?.text}`
                 : selectedOpt?.correct
@@ -743,7 +743,7 @@ function ResultView({ tab, onUpdate, onCite }) {
       return (
         <div>
           {header}
-          <div className="flex items-center justify-center gap-2 text-center text-xs mb-3" style={{ color: "#64748B" }}>
+          <div className="flex items-center justify-center gap-2 text-center text-xs mb-3" style={{ color: "var(--ak-text-muted)" }}>
             <span>Tap the card to flip</span>
             <Citation cite={cardCite} onCite={onCite}/>
           </div>
@@ -754,11 +754,11 @@ function ResultView({ tab, onUpdate, onCite }) {
               style={{ transformStyle: "preserve-3d", transform: tab.flipped ? "rotateY(180deg)" : "none" }}
             >
               <div className="absolute inset-0 rounded-lg flex items-center justify-center text-center p-4 border" style={{ backfaceVisibility: "hidden", background: "rgba(108,59,255,.12)", borderColor: "rgba(108,59,255,.35)" }}>
-                <span className="font-display text-lg font-semibold" style={{ color: "#C4B5FD" }}>{card.front}</span>
+                <span className="font-display text-lg font-semibold" style={{ color: "var(--ak-accent)" }}>{card.front}</span>
               </div>
               <div
                 className="absolute inset-0 rounded-lg flex items-center justify-center text-center p-4 text-sm leading-relaxed"
-                style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", background: "#1B1B33", border: "1px solid rgba(255,255,255,.10)", color: "#E2E8F0" }}
+                style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)", background: "var(--ak-surface)", border: "1px solid var(--ak-border2)", color: "var(--ak-text)" }}
               >
                 {card.back}
               </div>
@@ -772,7 +772,7 @@ function ResultView({ tab, onUpdate, onCite }) {
             >
               <Icon name="ti-chevron-left" size={14}/>
             </button>
-            <span className="font-ui-mono text-xs" style={{ color: "#94A3B8" }}>{cardIdx + 1} / {cards.length}</span>
+            <span className="font-ui-mono text-xs" style={{ color: "var(--ak-text-sub)" }}>{cardIdx + 1} / {cards.length}</span>
             <button
               type="button"
               onClick={() => onUpdate({ cardIndex: (cardIdx + 1) % cards.length, flipped: false })}
@@ -796,7 +796,7 @@ function ResultView({ tab, onUpdate, onCite }) {
             style={{ minHeight: "16rem" }}
             className="folio-form-field w-full border rounded-lg p-3 font-display text-sm leading-relaxed resize-y focus:outline-none"
           />
-          <div className="flex justify-between font-ui-mono text-xs mt-2" style={{ color: "#64748B" }}>
+          <div className="flex justify-between font-ui-mono text-xs mt-2" style={{ color: "var(--ak-text-muted)" }}>
             <span>Page {tab.createdPage + 1}</span>
             <span>saved on this device</span>
           </div>
@@ -833,21 +833,21 @@ function ThreadNode({ node, onReply, onLike, depth = 0 }) {
       <div className="flex items-start gap-2.5">
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-          style={{ background: node.color || "#64748B" }}
+          style={{ background: node.color || "var(--ak-text-muted)" }}
         >
           {node.author[0]}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold" style={{ color: "#F1F5F9" }}>{node.author}</span>
-            <span className="text-xs" style={{ color: "#64748B" }}>{node.ts}</span>
+            <span className="text-sm font-bold" style={{ color: "var(--ak-text)" }}>{node.author}</span>
+            <span className="text-xs" style={{ color: "var(--ak-text-muted)" }}>{node.ts}</span>
           </div>
-          <p className="text-sm mt-0.5 mb-1.5" style={{ color: "#CBD5E1" }}>{node.text}</p>
+          <p className="text-sm mt-0.5 mb-1.5" style={{ color: "var(--ak-text-sec)" }}>{node.text}</p>
           <div className="flex items-center gap-3.5 text-xs">
-            <button type="button" onClick={() => onLike(node.id)} className="flex items-center gap-1 hover:opacity-80" style={{ color: "#8A94AB" }}>
+            <button type="button" onClick={() => onLike(node.id)} className="flex items-center gap-1 hover:opacity-80" style={{ color: "var(--ak-text-muted)" }}>
               <Icon name="ti-thumb-up" size={13}/> {node.likes || 0}
             </button>
-            <button type="button" onClick={() => setReplying((r) => !r)} className="font-bold hover:opacity-80" style={{ color: "#A78BFA" }}>
+            <button type="button" onClick={() => setReplying((r) => !r)} className="font-bold hover:opacity-80" style={{ color: "var(--ak-accent)" }}>
               Reply
             </button>
           </div>
@@ -906,8 +906,8 @@ function CommunityBoard({ title, subtitle, placeholder, actionLabel, emptyText, 
   return (
     <div>
       <div className="mb-4">
-        <div className="font-display text-base font-semibold mb-0.5" style={{ color: "#F1F5F9" }}>{title}</div>
-        <div className="text-xs" style={{ color: "#64748B" }}>{subtitle}</div>
+        <div className="font-display text-base font-semibold mb-0.5" style={{ color: "var(--ak-text)" }}>{title}</div>
+        <div className="text-xs" style={{ color: "var(--ak-text-muted)" }}>{subtitle}</div>
       </div>
       <div className="flex items-center gap-2 mb-5">
         <input
@@ -922,7 +922,7 @@ function CommunityBoard({ title, subtitle, placeholder, actionLabel, emptyText, 
         </button>
       </div>
       {threads.length === 0 ? (
-        <p className="text-xs" style={{ color: "#64748B" }}>{emptyText}</p>
+        <p className="text-xs" style={{ color: "var(--ak-text-muted)" }}>{emptyText}</p>
       ) : (
         threads.map((t) => (
           <ThreadNode
@@ -1287,7 +1287,7 @@ export default function SessionReaderModal({
   return (
     <div
       className="sreader fixed inset-0 flex overflow-hidden"
-      style={{ zIndex: 3100, background: "#0B0B16", animation: "sheet-up .32s cubic-bezier(.32,1.1,.64,1)" }}
+      style={{ zIndex: 3100, background: "var(--ak-bg)", animation: "sheet-up .32s cubic-bezier(.32,1.1,.64,1)" }}
     >
       <style>{READER_CSS}</style>
 
@@ -1297,16 +1297,16 @@ export default function SessionReaderModal({
 
         {/* Slim reader header — the modal's counterpart of Fortizo's app shell. */}
         <div className="flex items-center justify-between gap-3 flex-shrink-0 border-b"
-          style={{ borderColor: "rgba(255,255,255,.07)", padding: `calc(${safeTop} + 10px) 14px 10px` }}>
+          style={{ borderColor: "var(--ak-border)", padding: `calc(${safeTop} + 10px) 14px 10px` }}>
           <div className="flex items-center gap-2.5 min-w-0">
             <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "rgba(108,59,255,.18)", border: "1px solid rgba(108,59,255,.35)" }}>
-              <Icon name="ti-book-2" size={16} color="#C4B5FD"/>
+              <Icon name="ti-book-2" size={16} color="var(--ak-accent)"/>
             </span>
             <div className="min-w-0">
-              <div className="text-sm font-extrabold truncate" style={{ color: "#F1F5F9" }}>{docTitle}</div>
+              <div className="text-sm font-extrabold truncate" style={{ color: "var(--ak-text)" }}>{docTitle}</div>
               <div className="flex items-center gap-1.5 min-w-0">
-                <Icon name="ti-file-text" size={10} color="#64748B"/>
-                <span className="text-[10.5px] font-semibold truncate" style={{ color: "#64748B" }}>{sourceName}</span>
+                <Icon name="ti-file-text" size={10} color="var(--ak-text-muted)"/>
+                <span className="text-[10.5px] font-semibold truncate" style={{ color: "var(--ak-text-muted)" }}>{sourceName}</span>
               </div>
             </div>
           </div>
@@ -1316,26 +1316,26 @@ export default function SessionReaderModal({
             title={split ? "Close the reader" : "Back to the session chat"}
             aria-label={split ? "Close the reader" : "Back to the session chat"}
             className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: "rgba(255,255,255,.07)" }}
+            style={{ background: "var(--ak-tag-bg)" }}
           >
-            <Icon name="ti-x" size={15} color="#94A3B8"/>
+            <Icon name="ti-x" size={15} color="var(--ak-text-sub)"/>
           </button>
         </div>
 
         {/* Tab strip. First tab is the document itself. */}
-        <div className="flex-shrink-0 border-b" style={{ borderColor: "rgba(255,255,255,.07)", background: "rgba(255,255,255,.02)" }}>
+        <div className="flex-shrink-0 border-b" style={{ borderColor: "var(--ak-border)", background: "var(--ak-tag-bg)" }}>
           <PillsBar tabs={allTabs} showChatButton={isMobile}/>
         </div>
 
         {/* Reader pane — kept mounted (just hidden) when a tool tab is active,
             so scroll position and zoom survive switching back. */}
         <div className="flex-col min-h-0 flex-1" style={{ display: activeTabId === "reader" ? "flex" : "none" }}>
-          <div className="sreader-bg flex-shrink-0 flex items-center gap-2 md:gap-3.5 px-2.5 md:px-4 border-b" style={{ height: "3.25rem", borderColor: "rgba(255,255,255,.07)" }}>
+          <div className="sreader-bg flex-shrink-0 flex items-center gap-2 md:gap-3.5 px-2.5 md:px-4 border-b" style={{ height: "3.25rem", borderColor: "var(--ak-border)" }}>
             <div className="flex items-center gap-1.5 mr-auto">
               <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0} className="folio-btn-outline w-7 h-7 rounded border flex items-center justify-center disabled:opacity-35">
                 <Icon name="ti-chevron-up" size={15}/>
               </button>
-              <span className="font-ui-mono text-xs md:text-sm flex items-center gap-0.5 whitespace-nowrap" style={{ color: "#94A3B8" }}>
+              <span className="font-ui-mono text-xs md:text-sm flex items-center gap-0.5 whitespace-nowrap" style={{ color: "var(--ak-text-sub)" }}>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -1345,7 +1345,7 @@ export default function SessionReaderModal({
                   onKeyDown={(e) => e.key === "Enter" && (commitPageNumDraft(), e.target.blur())}
                   onBlur={commitPageNumDraft}
                   className="w-6 bg-transparent text-right outline-none rounded"
-                  style={{ color: "#E2E8F0" }}
+                  style={{ color: "var(--ak-text)" }}
                 />
                 <span> / {pages.length}</span>
               </span>
@@ -1358,7 +1358,7 @@ export default function SessionReaderModal({
               <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                 <Icon name="ti-minus" size={13}/>
               </button>
-              <span className="font-ui-mono text-xs w-9 text-center" style={{ color: "#94A3B8" }}>{Math.round(zoom * 100)}%</span>
+              <span className="font-ui-mono text-xs w-9 text-center" style={{ color: "var(--ak-text-sub)" }}>{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                 <Icon name="ti-plus" size={13}/>
               </button>
@@ -1368,7 +1368,7 @@ export default function SessionReaderModal({
                 <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                   <Icon name="ti-minus" size={12}/>
                 </button>
-                <span className="font-ui-mono text-xs w-7 text-center" style={{ color: "#94A3B8" }}>{Math.round(zoom * 100)}%</span>
+                <span className="font-ui-mono text-xs w-7 text-center" style={{ color: "var(--ak-text-sub)" }}>{Math.round(zoom * 100)}%</span>
                 <button onClick={() => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                   <Icon name="ti-plus" size={12}/>
                 </button>
@@ -1387,7 +1387,7 @@ export default function SessionReaderModal({
             <div className="relative" ref={genMenuRef}>
               <button
                 onClick={() => setGenMenuOpen((o) => !o)}
-                className={`folio-icon-btn w-7 h-7 rounded flex items-center justify-center ${genMenuOpen ? "bg-white/10" : ""}`}
+                className={`folio-icon-btn w-7 h-7 rounded flex items-center justify-center ${genMenuOpen ? "bg-black/10" : ""}`}
                 title="Generate a study tool"
               >
                 <Icon name="ti-layout-grid" size={15}/>
@@ -1407,7 +1407,7 @@ export default function SessionReaderModal({
           </div>
 
           <div className="flex-1 min-h-0 relative overflow-hidden">
-            <div ref={viewerRef} onClick={handleViewerClick} className="h-full overflow-auto flex flex-col items-center px-3 md:px-6 pt-9 pb-16" style={{ background: "#050509" }}>
+            <div ref={viewerRef} onClick={handleViewerClick} className="h-full overflow-auto flex flex-col items-center px-3 md:px-6 pt-9 pb-16" style={{ background: "var(--ak-bg)" }}>
               {pages.map((p, i) => (
                 <div
                   key={i}
@@ -1420,7 +1420,7 @@ export default function SessionReaderModal({
             </div>
           </div>
 
-          <div className="sreader-bg hidden md:flex flex-shrink-0 items-center gap-2.5 px-4 py-2.5 border-t overflow-x-auto" style={{ borderColor: "rgba(255,255,255,.07)" }}>
+          <div className="sreader-bg hidden md:flex flex-shrink-0 items-center gap-2.5 px-4 py-2.5 border-t overflow-x-auto" style={{ borderColor: "var(--ak-border)" }}>
             {pages.map((_, i) => (
               <button
                 key={i}
@@ -1435,7 +1435,7 @@ export default function SessionReaderModal({
 
         {/* Community panes — persistent boards, not generated. */}
         {activeTabId === "qa" && (
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "#0B0B16" }}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
             <CommunityBoard
               title="Q&A"
               subtitle="Ask a question about this material — it stays with this session."
@@ -1448,7 +1448,7 @@ export default function SessionReaderModal({
           </div>
         )}
         {activeTabId === "discussion" && (
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "#0B0B16" }}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
             <CommunityBoard
               title="Discussion"
               subtitle="Talk through this material — points, questions, connections."
@@ -1463,7 +1463,7 @@ export default function SessionReaderModal({
 
         {/* Result pane — shown when a generated tab (not "Original Content") is active. */}
         {activeTabId !== "reader" && activeTabId !== "qa" && activeTabId !== "discussion" && activeResultTab && (
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "#0B0B16" }}>
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ background: "var(--ak-bg)" }}>
             <ResultView tab={activeResultTab} onUpdate={(patch) => updateResultTab(activeResultTab.id, patch)} onCite={citeJump}/>
           </div>
         )}
@@ -1473,7 +1473,7 @@ export default function SessionReaderModal({
            learning session is the right column. On mobile the reader is a
            full-screen modal and the session keeps running underneath. ============ */}
       {split && (
-        <section className="flex flex-col flex-shrink-0 min-h-0 border-l" style={{ width: 400, maxWidth: "44vw", borderColor: "rgba(255,255,255,.08)" }}>
+        <section className="flex flex-col flex-shrink-0 min-h-0 border-l" style={{ width: 400, maxWidth: "44vw", borderColor: "var(--ak-border)" }}>
           {chatNode}
         </section>
       )}
@@ -1488,29 +1488,29 @@ export default function SessionReaderModal({
             left: selPos ? selPos.left : -9999,
             top: selPos ? selPos.top : -9999,
             maxWidth: "calc(100vw - 16px)",
-            background: "#0F0F1C",
-            border: "1px solid rgba(255,255,255,.12)",
+            background: "var(--ak-surface)",
+            border: "1px solid var(--ak-border2)",
           }}
         >
-          <button onClick={() => handleSelectionAction("explain")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-white/10 whitespace-nowrap flex-shrink-0" style={{ color: "#E2E8F0" }}>
-            <Icon name="ti-bulb" size={13} color="#C4B5FD"/> Ask the tutor
+          <button onClick={() => handleSelectionAction("explain")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
+            <Icon name="ti-bulb" size={13} color="var(--ak-accent)"/> Ask the tutor
           </button>
-          <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: "rgba(255,255,255,.15)" }}/>
-          <button onClick={() => handleSelectionAction("quiz")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-white/10 whitespace-nowrap flex-shrink-0" style={{ color: "#E2E8F0" }}>
-            <Icon name="ti-circle-check" size={13} color="#C4B5FD"/> Quiz me
+          <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: "var(--ak-tag-bg)" }}/>
+          <button onClick={() => handleSelectionAction("quiz")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
+            <Icon name="ti-circle-check" size={13} color="var(--ak-accent)"/> Quiz me
           </button>
-          <button onClick={() => handleSelectionAction("flashcards")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-white/10 whitespace-nowrap flex-shrink-0" style={{ color: "#E2E8F0" }}>
-            <Icon name="ti-stack" size={13} color="#C4B5FD"/> Cards
+          <button onClick={() => handleSelectionAction("flashcards")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
+            <Icon name="ti-stack" size={13} color="var(--ak-accent)"/> Cards
           </button>
-          <button onClick={() => handleSelectionAction("notes")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-white/10 whitespace-nowrap flex-shrink-0" style={{ color: "#E2E8F0" }}>
-            <Icon name="ti-pencil" size={13} color="#C4B5FD"/> Note
+          <button onClick={() => handleSelectionAction("notes")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
+            <Icon name="ti-pencil" size={13} color="var(--ak-accent)"/> Note
           </button>
-          <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: "rgba(255,255,255,.15)" }}/>
-          <button onClick={() => handleSelectionAction("annotate")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-white/10 whitespace-nowrap flex-shrink-0" style={{ color: "#E2E8F0" }}>
+          <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: "var(--ak-tag-bg)" }}/>
+          <button onClick={() => handleSelectionAction("annotate")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-highlighter" size={13} color={GOLD}/> Annotate
           </button>
-          <button onClick={() => handleSelectionAction("redact")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-white/10 whitespace-nowrap flex-shrink-0" style={{ color: "#E2E8F0" }}>
-            <Icon name="ti-eye-off" size={13} color="#FCA5A5"/> Hide
+          <button onClick={() => handleSelectionAction("redact")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
+            <Icon name="ti-eye-off" size={13} color="var(--ak-danger-text)"/> Hide
           </button>
         </div>
       )}
@@ -1525,11 +1525,11 @@ export default function SessionReaderModal({
             left: Math.max(8, Math.min(annotateDraft.rect.left, window.innerWidth - 296)),
             top: Math.min(annotateDraft.rect.bottom + 10, window.innerHeight - 180),
             width: 288,
-            background: "#17172B",
-            border: "1px solid rgba(255,255,255,.14)",
+            background: "var(--ak-surface)",
+            border: "1px solid var(--ak-border2)",
           }}
         >
-          <div className="text-xs mb-1.5 truncate" style={{ color: "#64748B" }}>
+          <div className="text-xs mb-1.5 truncate" style={{ color: "var(--ak-text-muted)" }}>
             Annotate: "{annotateDraft.text.length > 40 ? annotateDraft.text.slice(0, 40) + "…" : annotateDraft.text}"
           </div>
           <textarea
@@ -1564,12 +1564,12 @@ export default function SessionReaderModal({
             left: Math.max(8, Math.min(openAnnotation.left, window.innerWidth - 248)),
             top: Math.min(openAnnotation.top, window.innerHeight - 120),
             width: 240,
-            background: "#0F0F1C",
-            border: "1px solid rgba(255,255,255,.14)",
+            background: "var(--ak-surface)",
+            border: "1px solid var(--ak-border2)",
           }}
           className="rounded-lg shadow-xl p-3 z-50"
         >
-          <div className="text-xs leading-relaxed mb-2.5" style={{ color: "#E2E8F0" }}>{openAnnotation.note}</div>
+          <div className="text-xs leading-relaxed mb-2.5" style={{ color: "var(--ak-text)" }}>{openAnnotation.note}</div>
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
@@ -1579,7 +1579,7 @@ export default function SessionReaderModal({
             >
               <Icon name="ti-trash" size={12}/> Remove
             </button>
-            <button type="button" onClick={() => setOpenAnnotation(null)} className="text-xs hover:opacity-80" style={{ color: "#8A94AB" }}>
+            <button type="button" onClick={() => setOpenAnnotation(null)} className="text-xs hover:opacity-80" style={{ color: "var(--ak-text-muted)" }}>
               Close
             </button>
           </div>

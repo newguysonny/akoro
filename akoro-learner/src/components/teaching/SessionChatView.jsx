@@ -25,8 +25,8 @@ function MicMeter({ level = 0 }) {
           height: 3 + (i / SEGMENTS) * 5,
           background: i < lit
             /* Amber at the top of the range: worth knowing, not an error. */
-            ? (i > SEGMENTS - 3 ? "#FBBF24" : "#34D399")
-            : "rgba(255,255,255,.13)",
+            ? (i > SEGMENTS - 3 ? "var(--ak-warn-text)" : "var(--ak-success-text)")
+            : "var(--ak-tag-bg)",
           transition: "background 60ms linear",
         }}/>
       ))}
@@ -80,7 +80,7 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
       display:"flex", flexDirection:"column", gap:8 }}>
       {messages.map((m, i) => m.role === "system" ? (
         <div key={i} style={{ textAlign:"center", fontSize:10.5, fontWeight:700,
-          color:"#64748B", padding:"4px 14px", lineHeight:1.5 }}>{m.text}</div>
+          color:"var(--ak-text-muted)", padding:"4px 14px", lineHeight:1.5 }}>{m.text}</div>
       ) : m.role === "guide" ? (
         <div key={i} style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
           <div style={{ width:28, height:28, borderRadius:"50%", background:AGENT_STYLES.nana.bg,
@@ -101,8 +101,8 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
       ) : (
         <div key={i} style={{ alignSelf:"flex-end", maxWidth:"84%", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:1 }}>
           <div style={{ padding:"9px 13px",
-            borderRadius:"18px 4px 18px 18px", background:"rgba(255,255,255,.08)",
-            border:"1px solid rgba(255,255,255,.12)", color:"#E2E8F0",
+            borderRadius:"18px 4px 18px 18px", background:"var(--ak-tag-bg)",
+            border:"1px solid var(--ak-border2)", color:"var(--ak-text)",
             fontSize:13.5, lineHeight:1.6, whiteSpace:"pre-wrap", fontWeight:600 }}>
             {m.text}
           </div>
@@ -119,10 +119,10 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
               justifyContent:"center", fontSize:20, marginBottom:10 }}>
               {guideEmoji || AGENT_STYLES.nana.emoji}
             </div>
-            <p style={{ fontSize:15, fontWeight:900, color:"#F1F5F9", margin:"0 0 3px" }}>
+            <p style={{ fontSize:15, fontWeight:900, color:"var(--ak-text)", margin:"0 0 3px" }}>
               {t('teaching.guide_title')}
             </p>
-            <p style={{ fontSize:11.5, fontWeight:600, color:"#64748B", margin:0 }}>
+            <p style={{ fontSize:11.5, fontWeight:600, color:"var(--ak-text-muted)", margin:0 }}>
               {guideName ? t('teaching.guide_sub').replace('{name}', guideName) : t('teaching.guide_sub')}
             </p>
           </div>
@@ -130,11 +130,11 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
           <button type="button" onClick={() => setSuggestionsOpen(o => !o)}
             style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none",
               cursor:"pointer", padding:0, marginBottom:10, fontSize:10, fontWeight:800,
-              color:"#94A3B8", letterSpacing:.8, textTransform:"uppercase",
+              color:"var(--ak-text-sub)", letterSpacing:.8, textTransform:"uppercase",
               fontFamily:"'Nunito',sans-serif" }}>
             {t('teaching.learn_suggestions')}
             <span style={{ display:"inline-flex", transform:suggestionsOpen ? "none" : "rotate(-90deg)", transition:"transform .18s" }}>
-              <ChevDownIcon size={12} color="#94A3B8"/>
+              <ChevDownIcon size={12} color="var(--ak-text-sub)"/>
             </span>
           </button>
           {suggestionsOpen && (
@@ -142,12 +142,12 @@ function GuideChat({ messages, guideName, guideEmoji, onSuggestion }) {
               {GUIDE_SUGGESTIONS.map((s, i) => (
                 <button key={s.key} type="button" onClick={() => onSuggestion?.(t(s.key))}
                   style={{ display:"flex", alignItems:"center", gap:10, textAlign:"left",
-                    padding:"10px 12px", borderRadius:12, background:"rgba(255,255,255,.045)",
-                    border:"1px solid rgba(255,255,255,.09)", cursor:"pointer",
+                    padding:"10px 12px", borderRadius:12, background:"var(--ak-tag-bg)",
+                    border:"1px solid var(--ak-border2)", cursor:"pointer",
                     fontFamily:"'Nunito',sans-serif" }}>
                   <span style={{ fontSize:14, flexShrink:0 }}>{s.icon}</span>
-                  <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:"#E2E8F0" }}>{t(s.key)}</span>
-                  {kbdHints && <span style={{ fontSize:10, fontWeight:800, color:"#475569", flexShrink:0 }}>⌥{i + 1}</span>}
+                  <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:"var(--ak-text)" }}>{t(s.key)}</span>
+                  {kbdHints && <span style={{ fontSize:10, fontWeight:800, color:"var(--ak-text-muted)", flexShrink:0 }}>⌥{i + 1}</span>}
                 </button>
               ))}
             </div>
@@ -212,19 +212,19 @@ function SessionChatView({
   return (
     <div style={{ position: embedded ? "relative" : "fixed", inset: embedded ? "auto" : 0,
       width: "100%", height: embedded ? "100%" : undefined,
-      zIndex: embedded ? "auto" : 3000, background:"#080812",
+      zIndex: embedded ? "auto" : 3000, background:"var(--ak-bg)",
       display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif",
       animation:"sheet-up .36s cubic-bezier(.32,1.1,.64,1)" }}>
 
       {/* Header */}
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
-        padding: embedded ? "12px 16px 12px" : "calc(env(safe-area-inset-top, 0px) + 14px) 20px 12px",borderBottom:"1px solid rgba(255,255,255,.06)" }}>
+        padding: embedded ? "12px 16px 12px" : "calc(env(safe-area-inset-top, 0px) + 14px) 20px 12px",borderBottom:"1px solid var(--ak-border)" }}>
         <div style={{ minWidth:0 }}>
           <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:3,flexWrap:"wrap" }}>
             {onToggleChatMode && mode !== "decay" ? (
               /* Mode toggle — LEARN BY TEACHING ↔ LEARNING WITH GUIDE */
               <div style={{ display:"inline-flex",alignItems:"center",gap:2,borderRadius:20,
-                border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.05)",padding:2 }}>
+                border:"1px solid var(--ak-border2)",background:"var(--ak-tag-bg)",padding:2 }}>
                 {[["teach", t('teaching.seg_teach')], ["guide", t('teaching.seg_guide')]].map(([key, label]) => {
                   const on = chatMode === key;
                   return (
@@ -234,7 +234,7 @@ function SessionChatView({
                       style={{ display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:16,
                         cursor:on?"default":"pointer",background:on?`${sc}26`:"transparent",
                         border:`1px solid ${on ? `${sc}66` : "transparent"}`,
-                        fontSize:9,fontWeight:900,letterSpacing:.5,color:on?sc:"#64748B",
+                        fontSize:9,fontWeight:900,letterSpacing:.5,color:on?sc:"var(--ak-text-muted)",
                         whiteSpace:"nowrap",transition:"background .16s, color .16s" }}>
                       {on && <span style={{ width:5,height:5,borderRadius:"50%",background:sc,animation:"pulse-dot 1.4s ease-in-out infinite" }}/>}
                       {label}
@@ -253,12 +253,12 @@ function SessionChatView({
             {connState !== "connected" && (
               <span style={{ display:"inline-flex",alignItems:"center",gap:5,
                 fontSize:9.5,fontWeight:800,letterSpacing:.4,
-                color: connState === "connecting" ? "#FBBF24" : "#F87171",
+                color: connState === "connecting" ? "var(--ak-warn-text)" : "var(--ak-danger-text)",
                 background: connState === "connecting" ? "rgba(251,191,36,.12)" : "rgba(248,113,113,.12)",
                 border:`1px solid ${connState === "connecting" ? "rgba(251,191,36,.3)" : "rgba(248,113,113,.3)"}`,
                 borderRadius:20,padding:"2px 8px" }}>
                 <span style={{ width:5,height:5,borderRadius:"50%",
-                  background: connState === "connecting" ? "#FBBF24" : "#F87171",
+                  background: connState === "connecting" ? "var(--ak-warn-text)" : "var(--ak-danger-text)",
                   animation:"pulse-dot 1s ease-in-out infinite" }}/>
                 {connState === "connecting"
                   ? (t('teaching.connecting') || 'Connecting…')
@@ -266,14 +266,14 @@ function SessionChatView({
               </span>
             )}
           </div>
-          <p style={{ fontSize:15,fontWeight:900,color:"#F1F5F9",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
-          <p style={{ fontSize:11,fontWeight:600,color:"#475569",margin:0 }}>
+          <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
+          <p style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
             {chatMode === "guide"
               ? `${subject} · ${guideLabel || "🧠 NaNa Esumai"}`
               : `${subject} · ${agentEmoji} ${agentName} · ${guideLabel || "NaNa Esumai 🧠 · Sargeant ⚡"}`}
           </p>
           {reference && (
-            <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"#6EE7B7" }}>
+            <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"var(--ak-success-text)" }}>
               <Icon name="ti-paperclip" size={10}/>
               <span style={{ fontSize:9.5,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{reference.name}</span>
             </div>
@@ -282,11 +282,11 @@ function SessionChatView({
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
           {onSwitchAgent && chatMode !== "guide" && (
             <div onClick={switching ? undefined : onSwitchAgent}
-              style={{ display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.07)",
-                border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"7px 11px",
+              style={{ display:"flex",alignItems:"center",gap:5,background:"var(--ak-tag-bg)",
+                border:"1px solid var(--ak-border2)",borderRadius:12,padding:"7px 11px",
                 cursor:switching?"default":"pointer",opacity:switching?.6:1 }}>
               <span style={{ fontSize:12 }}>⇄</span>
-              <span style={{ fontSize:11,fontWeight:800,color:"#CBD5E1" }}>{switching ? t('teaching.switching') : t('teaching.switch')}</span>
+              <span style={{ fontSize:11,fontWeight:800,color:"var(--ak-text-sec)" }}>{switching ? t('teaching.switching') : t('teaching.switch')}</span>
             </div>
           )}
           {showSummarize && chatMode !== "guide" && (
@@ -301,15 +301,15 @@ function SessionChatView({
               bar. Non-destructive, so no confirm like close. */}
           {onMinimize && (
             <div onClick={onMinimize} role="button" aria-label={t('now.minimize')} title={t('now.minimize')}
-              style={{ width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.07)",
+              style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
                 display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </div>
           )}
           <div onClick={handleCloseRequest}
-            style={{ width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.07)",
+            style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
               display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-            <XIcon size={15} color="#64748B"/>
+            <XIcon size={15} color="var(--ak-text-muted)"/>
           </div>
         </div>
       </div>
@@ -318,17 +318,17 @@ function SessionChatView({
           Guide mode has no protégé agent, so there is nothing to measure. */}
       {chatMode !== "guide" && cognitive && (cognitive.understanding != null || cognitive.confusion != null) && (
         <div style={{ display:"flex",alignItems:"center",gap:14,padding:"9px 20px",
-          borderBottom:"1px solid rgba(255,255,255,.06)",background:"rgba(255,255,255,.02)" }}>
+          borderBottom:"1px solid var(--ak-border)",background:"var(--ak-tag-bg)" }}>
           {[
             { label:t('teaching.understanding'), val:Math.round(cognitive.understanding ?? 0), color:GREEN },
             { label:t('teaching.confusion'),     val:Math.round(cognitive.confusion ?? 0),     color:GOLD  },
           ].map(({label,val,color}) => (
             <div key={label} style={{ flex:1,minWidth:0 }}>
               <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                <span style={{ fontSize:9.5,fontWeight:800,color:"#64748B",letterSpacing:.4,textTransform:"uppercase" }}>{label}</span>
+                <span style={{ fontSize:9.5,fontWeight:800,color:"var(--ak-text-muted)",letterSpacing:.4,textTransform:"uppercase" }}>{label}</span>
                 <span style={{ fontSize:10,fontWeight:900,color }}>{val}%</span>
               </div>
-              <div style={{ height:5,borderRadius:4,background:"rgba(255,255,255,.07)",overflow:"hidden" }}>
+              <div style={{ height:5,borderRadius:4,background:"var(--ak-tag-bg)",overflow:"hidden" }}>
                 <div style={{ height:"100%",width:`${Math.max(0,Math.min(100,val))}%`,background:color,
                   borderRadius:4,transition:"width .5s cubic-bezier(.4,0,.2,1)" }}/>
               </div>
@@ -392,7 +392,7 @@ function SessionChatView({
               border:`1.5px solid ${AGENT_STYLES.nana.ring}`,flexShrink:0,
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>🧠</div>
             <div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",
-              background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.08)",
+              background:"var(--ak-tag-bg)",border:"1px solid var(--ak-border)",
               display:"flex",gap:8,alignItems:"center" }}>
               {loadingNote && <span style={{ fontSize:12.5,fontWeight:600,color:"var(--ak-text-muted)" }}>{loadingNote}</span>}
               {[0,.25,.5].map((d,i)=>(
@@ -406,8 +406,8 @@ function SessionChatView({
       )}
 
       {/* Input bar */}
-      <div style={{ padding: embedded ? "10px 14px 12px" : "10px 14px 28px",background:"rgba(255,255,255,.03)",
-        borderTop:"1px solid rgba(255,255,255,.06)" }}>
+      <div style={{ padding: embedded ? "10px 14px 12px" : "10px 14px 28px",background:"var(--ak-tag-bg)",
+        borderTop:"1px solid var(--ak-border)" }}>
 
         {/* ── Voice Streaming mode — live transcript (teaching mode only —
             the guide session is UI-only, so it has no voice backend) ── */}
@@ -427,15 +427,15 @@ function SessionChatView({
                 working — "is it hearing me?" is the first thing anyone wants to
                 know, and before this the only answer was to keep talking and
                 hope words appeared. */}
-            <div style={{ flex:1,background:"rgba(255,255,255,.07)",
-              border:"1.5px solid rgba(255,255,255,.15)",borderRadius:12,
+            <div style={{ flex:1,background:"var(--ak-tag-bg)",
+              border:"1.5px solid var(--ak-border2)",borderRadius:12,
               padding:"7px 12px",minHeight:40,display:"flex",flexDirection:"column",
               justifyContent:"center",gap:6 }}>
               <MicMeter level={voiceLevel}/>
               {interimText
-                ? <span style={{ fontSize:13,fontWeight:600,color:"#94A3B8",
+                ? <span style={{ fontSize:13,fontWeight:600,color:"var(--ak-text-sub)",
                     fontStyle:"italic",lineHeight:1.5 }}>{interimText}</span>
-                : <span style={{ fontSize:12,fontWeight:600,color:"#475569" }}>
+                : <span style={{ fontSize:12,fontWeight:600,color:"var(--ak-text-muted)" }}>
                     {voiceLevel > 0.06 ? t('teaching.listening') : "Speak now\u2026"}
                   </span>
               }
@@ -510,13 +510,13 @@ function SessionChatView({
         {/* Turn counter — teaching modes only; a guide session has no turn budget */}
         {chatMode !== "guide" && (
         <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-          <span style={{ fontSize:10.5,fontWeight:600,color:"#334155" }}>
+          <span style={{ fontSize:10.5,fontWeight:600,color:"var(--ak-text-muted)" }}>
             {mode === "decay" ? t('teaching.reteach_turns') : mode === "continuation" ? t('teaching.continuation_turns') : t('teaching.teaching_turns')}: {userTurns} / 4
           </span>
           <div style={{ display:"flex",gap:3 }}>
             {[0,1,2,3].map(i=>(
               <div key={i} style={{ width:18,height:4,borderRadius:2,
-                background:i<userTurns?sc:"rgba(255,255,255,.10)",transition:"background .3s" }}/>
+                background:i<userTurns?sc:"var(--ak-tag-bg)",transition:"background .3s" }}/>
             ))}
           </div>
         </div>
@@ -528,17 +528,17 @@ function SessionChatView({
         <><div onClick={()=>setConfirmClose(false)}
           style={{ position:"absolute",inset:0,zIndex:100,background:"rgba(0,0,0,.65)",backdropFilter:"blur(4px)" }}/>
         <div style={{ position:"absolute",bottom:0,left:0,right:0,zIndex:101,
-          background:"#111827",borderRadius:"20px 20px 0 0",padding:"28px 22px 36px",
+          background:"var(--ak-surface)",borderRadius:"20px 20px 0 0",padding:"28px 22px 36px",
           fontFamily:"'Nunito',sans-serif",animation:"sheet-up .25s ease" }}>
-          <div style={{ width:36,height:4,borderRadius:2,background:"rgba(255,255,255,.15)",margin:"0 auto 22px" }}/>
-          <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"0 0 8px",textAlign:"center" }}>{t('teaching.end_session_q')}</p>
-          <p style={{ fontSize:13,color:"#64748B",margin:"0 0 24px",textAlign:"center",lineHeight:1.6 }}>
+          <div style={{ width:36,height:4,borderRadius:2,background:"var(--ak-tag-bg)",margin:"0 auto 22px" }}/>
+          <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"0 0 8px",textAlign:"center" }}>{t('teaching.end_session_q')}</p>
+          <p style={{ fontSize:13,color:"var(--ak-text-muted)",margin:"0 0 24px",textAlign:"center",lineHeight:1.6 }}>
             {t('teaching.not_complete')}{"\n"}{t('teaching.progress_saved')}
           </p>
           <div style={{ display:"flex",gap:10 }}>
             <button onClick={()=>setConfirmClose(false)}
-              style={{ flex:1,padding:"13px",borderRadius:14,border:"1px solid rgba(255,255,255,.12)",
-                background:"rgba(255,255,255,.06)",fontSize:13,fontWeight:800,color:"#94A3B8",
+              style={{ flex:1,padding:"13px",borderRadius:14,border:"1px solid var(--ak-border2)",
+                background:"var(--ak-tag-bg)",fontSize:13,fontWeight:800,color:"var(--ak-text-sub)",
                 cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>
               {t('teaching.keep_teaching')}
             </button>
