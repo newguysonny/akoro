@@ -142,10 +142,8 @@ select:focus-visible {
   .ak-sidebar { width: 76px; }
   .ak-sb-label,
   .ak-sb-brand-text,
-  .ak-sb-section,
-  .ak-sb-user-meta { display: none; }
+  .ak-sb-section { display: none; }
   .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
-  .ak-sb-user { flex-direction: column; }
   .ak-sb-item {
     justify-content: center;
     gap: 0;

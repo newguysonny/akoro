@@ -18,8 +18,6 @@ export const EN = {
   'nav.wallet':      'Wallet',
   'nav.settings':    'Settings',
   'nav.more':        'More',
-  'nav.signout':     'Sign out',
-  'nav.signed_in_as':'Signed in',
 
   /* ── Common ── */
   'common.save':    'Save',

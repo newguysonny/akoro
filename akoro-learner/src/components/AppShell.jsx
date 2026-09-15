@@ -19,12 +19,11 @@
  * render without them. `nowStudying` is likewise optional — the dashboard
  * passes `{ item, onOpen, onAdd, onDismiss }` when its now-studying bar is
  * showing, and the sidebar renders the desktop twin (NowStudyingSidebarCard)
- * above the user footer.
+ * at the bottom of the nav.
  *
  * Exports: AppShell, Sidebar
  */
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext.jsx';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
@@ -116,15 +115,11 @@ function NavButton({ active, icon, label, badge = 0, badgeColor = BRAND, dot = f
 export function Sidebar({ badges = {}, nowStudying }) {
   const navigate  = useNavigate();
   const { t }     = useLang();
-  const { user, logout } = useAuth();
   const { isTab, isPage } = useActiveRoutes();
 
   // Same navigation the dashboard's bottom nav performs (goTab), so the
   // sidebar and the bottom nav can never disagree about where they go.
   const goTab  = (key) => navigate(key === 'sessions' ? '/app' : `/app?tab=${key}`);
-
-  const name = user?.fullName || user?.username || user?.email || 'Learner';
-  const initial = (name || 'L').trim().charAt(0).toUpperCase();
 
   return (
     <aside className="ak-sidebar" style={{ fontFamily: "'Nunito',sans-serif" }}>
@@ -177,42 +172,6 @@ export function Sidebar({ badges = {}, nowStudying }) {
           user footer (desktop/tablet only; mobile keeps the fixed bar). */}
       {nowStudying?.item && <NowStudyingSidebarCard {...nowStudying} />}
 
-      {/* User + sign out */}
-      <div className="ak-sb-user" style={{
-        padding: '14px', borderTop: '1px solid var(--ak-border)',
-        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-      }}>
-        {user?.avatarUrl
-          ? <img src={user.avatarUrl} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}/>
-          : (
-            <div style={{
-              width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-              background: `linear-gradient(135deg,${BRAND},#4C1DCC)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', fontSize: 14, fontWeight: 900,
-            }}>{initial}</div>
-          )}
-        <div className="ak-sb-user-meta" style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {t('nav.signed_in_as')}
-          </div>
-        </div>
-        <button
-          onClick={logout}
-          title={t('nav.signout')}
-          aria-label={t('nav.signout')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--ak-text-muted)', padding: 6, borderRadius: 8, flexShrink: 0,
-            display: 'flex', alignItems: 'center',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ak-text)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ak-text-muted)'; }}
-        >
-          <Icon name="ti-logout" size={17}/>
-        </button>
-      </div>
     </aside>
   );
 }

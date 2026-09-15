@@ -720,11 +720,10 @@ export default function LearnerDashboard() {
         } : null}>
       <div style={{ width:"100%",height:"100%",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 
-        {(tab==="sessions"||tab==="challenges")&&(
-          /* HEADER — Learn tab only ("sessions"). Challenges is Learn's
-             second pill, so it shares the header that holds the pills;
-             every other tab renders headerless. */
-          <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:"14px 18px 0",zIndex:100,flexShrink:0 }}>
+        {/* HEADER — app chrome on every tab (profile, wallet, cart,
+            notifications, agent toggle), pinned above the scroll area.
+            The Learn/Challenges pills render inside it only on Learn. */}
+        <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:(tab==="sessions"||tab==="challenges")?"14px 18px 0":"14px 18px 14px",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
               <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
@@ -789,10 +788,10 @@ export default function LearnerDashboard() {
           </div>
           )}
         </div>
-        )}
 
-        {/* SCROLLABLE CONTENT */}
-        <div style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
+        {/* SCROLLABLE CONTENT — .ak-dash-scroll trims the bottom-nav
+            clearance on desktop, where the nav is hidden (index.css). */}
+        <div className="ak-dash-scroll" style={{ flex:1,overflowY:"auto",paddingBottom:showNowBar?136:72 }}>
           <div style={{ padding:"10px 12px 0" }}><InstallBanner/></div>
           <TeacherNudge/>
           {tab==="sessions"&&(
@@ -1019,8 +1018,9 @@ export default function LearnerDashboard() {
             onDismiss={nowActs.dismiss}/>
         )}
 
-        {/* BOTTOM NAV */}
-        <div style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
+        {/* BOTTOM NAV — mobile only; hidden by CSS above 768px where the
+            AppShell sidebar takes over. */}
+        <div className="ak-bottom-nav" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
           {NAV_ITEMS.map(({key,icon,label})=>{
             // "Learn" (key "sessions") stays active on the Challenges sub-tab too.
             const navActive = tab===key || (key==="sessions" && tab==="challenges");
@@ -1041,7 +1041,7 @@ export default function LearnerDashboard() {
         {/* FAB — now opens ConfigModal first. Sits above the now-studying bar
             when the bar is up (bar is ~56px over the nav). */}
         {!selectedSession&&!selectedChallenge&&!teachSession&&!configOpen&&tab!=="agent"&&tab!=="battles"&&tab!=="discovery"&&(
-          <div onClick={()=>setConfigOpen(true)} style={{ position:"fixed",bottom:showNowBar?150:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
+          <div onClick={()=>setConfigOpen(true)} className="ak-fab" style={{ position:"fixed",bottom:showNowBar?150:78,right:18,zIndex:900,background:`linear-gradient(135deg,${BRAND},#4C1DCC)`,borderRadius:16,padding:"9px 16px",display:"flex",alignItems:"center",gap:7,boxShadow:`0 4px 18px ${BRAND}50`,cursor:"pointer" }}>
             <MicIcon size={15} color="#fff"/>
             <span style={{ fontSize:12,fontWeight:800,color:"#fff" }}>{t('dash.start_session')}</span>
           </div>

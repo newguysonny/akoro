@@ -2,9 +2,8 @@
  * NowStudyingSidebarCard — the sidebar's "now studying" widget.
  *
  * Desktop twin of NowStudyingBar: instead of a fixed bar above the bottom
- * nav (mobile), the parked session / record / battle lives in the sidebar,
- * pinned between the nav and the user footer — the way a music app pins the
- * mini-player above its account row. Same data (utils/nowStudying.js), same
+ * nav (mobile), the parked session / record / battle lives at the bottom of
+ * the sidebar nav — the way a music app pins the mini-player. Same data (utils/nowStudying.js), same
  * controls (open / quick-add a record / dismiss), same colour story:
  *
  *   · a study item's line is its PROGRESS FILL — colour reads the stage
