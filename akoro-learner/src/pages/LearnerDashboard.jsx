@@ -32,7 +32,7 @@ import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
-import { AppShell } from '../components/AppShell.jsx';
+import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { isHigherEdUI } from '../utils/studyLevel.js';
 import React from 'react';
@@ -726,6 +726,7 @@ export default function LearnerDashboard() {
         <div style={{ background:"var(--ak-surface)",backdropFilter:"blur(14px)",borderBottom:"1px solid var(--ak-border)",padding:(tab==="sessions"||tab==="challenges")?"14px 18px 0":"14px 18px 14px",zIndex:100,flexShrink:0 }}>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
             <div style={{ display:"flex",alignItems:"center",gap:11 }}>
+              <SidebarToggle/>
               <div style={{ position:"relative",cursor:"pointer" }} onClick={()=>navigate("/settings")}>
                 {userProfile?.avatarUrl
                   ? <img src={userProfile.avatarUrl} alt="" style={{ width:38,height:38,borderRadius:"50%",objectFit:"cover",border:"2px solid #EDE9FE" }}/>

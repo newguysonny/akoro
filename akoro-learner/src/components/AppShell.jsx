@@ -2,12 +2,24 @@
  * AppShell.jsx — admin-style responsive app frame for the learner app.
  *
  * Tablet + desktop (>768px): persistent left sidebar nav, like the admin
- * portal's layout. Full labels above 1024px; an icon-only rail between
- * 769–1024px (the same band the admin sidebar collapses for).
+ * portal's layout — collapsible to an icon rail via the hamburger
+ * (SidebarToggle) in the page header, exactly like the admin portal's
+ * TopBar toggle. Collapsed is the DEFAULT; the choice is remembered in
+ * localStorage and is purely user-driven (no viewport media query
+ * overriding it).
  *
  * Mobile (≤768px): the sidebar is hidden entirely and nothing else changes —
  * the dashboard keeps its bottom nav and the secondary pages keep their
  * back-button headers, exactly as before.
+ *
+ * Nav icons are the SAME emoji the mobile bottom nav uses (📚🧭🏆⚔️🤖), so a
+ * destination reads identically on every surface.
+ *
+ * Tier-aware: Activities and Gradebook are school-UI only — higher-ed
+ * learners don't get them in the sidebar. The tier is resolved the same way
+ * LibraryPage does it (/api/profiles/me → isHigherEdUI), defaulting to the
+ * school UI while it loads (studyLevel.js: unknown → school, never the
+ * other way round).
  *
  * Usage — wrap a page's root:
  *   <AppShell badges={{ learn: n, battles: n, agentOnline }}>
@@ -21,36 +33,75 @@
  * showing, and the sidebar renders the desktop twin (NowStudyingSidebarCard)
  * at the bottom of the nav.
  *
- * Exports: AppShell, Sidebar
+ * Exports: AppShell, Sidebar, SidebarToggle, useAppShell
  */
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
 import NowStudyingSidebarCard from './dashboard/NowStudyingSidebarCard.jsx';
+import { isHigherEdUI } from '../utils/studyLevel.js';
+import { apiGet } from '../services/api.js';
 import { BRAND, RED, GREEN } from '../constants.js';
 
-/* The five dashboard tabs — the same destinations, in the same order, as the
-   mobile bottom nav (mirrors goTab() on the dashboard): "Learn" is /app with
-   no ?tab, the rest are /app?tab=<key>. "challenges" is Learn's second pill,
-   so it keeps Learn lit here just like it does in the bottom nav. */
+/* ── Sidebar collapse — user-driven, remembered, collapsed by default ── */
+const COLLAPSE_KEY = 'akoro_learner_sidebar_collapsed';
+
+const ShellContext = createContext(null);
+
+/* Access the wrapping AppShell's collapse state (for SidebarToggle). */
+export function useAppShell() {
+  return useContext(ShellContext);
+}
+
+/* The hamburger. Drop it in a page header (the dashboard's, like the admin
+   portal's TopBar) — hidden on mobile where the sidebar doesn't exist. */
+export function SidebarToggle() {
+  const shell = useAppShell();
+  if (!shell) return null;                    // outside an AppShell — nothing to toggle
+  const { collapsed, toggleSidebar } = shell;
+  return (
+    <button
+      onClick={toggleSidebar}
+      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      className="ak-sb-toggle"
+      style={{
+        width: 34, height: 34, borderRadius: 100, flexShrink: 0, cursor: 'pointer',
+        background: `${BRAND}12`, border: `1px solid ${BRAND}3D`, color: BRAND,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <Icon name="ti-menu-2" size={17}/>
+    </button>
+  );
+}
+
+/* The five dashboard tabs — the same destinations, in the same order, with
+   the same emoji as the mobile bottom nav (mirrors goTab() on the
+   dashboard): "Learn" is /app with no ?tab, the rest are /app?tab=<key>.
+   "challenges" is Learn's second pill, so it keeps Learn lit here just like
+   it does in the bottom nav. */
 const TAB_NAV = [
-  { tab: 'sessions',  icon: 'ti-book',    key: 'nav.learn'    },
-  { tab: 'discovery', icon: 'ti-compass', key: 'nav.discover' },
-  { tab: 'rankings',  icon: 'ti-trophy',  key: 'nav.rankings' },
-  { tab: 'battles',   icon: 'ti-swords',  key: 'nav.battles'  },
-  { tab: 'agent',     icon: 'ti-robot',   key: 'nav.agent'    },
+  { tab: 'sessions',  emoji: '📚', key: 'nav.learn'    },
+  { tab: 'discovery', emoji: '🧭', key: 'nav.discover' },
+  { tab: 'rankings',  emoji: '🏆', key: 'nav.rankings' },
+  { tab: 'battles',   emoji: '⚔️', key: 'nav.battles'  },
+  { tab: 'agent',     emoji: '🤖', key: 'nav.agent'    },
 ];
 
 /* Standalone pages — on mobile these live behind header buttons and
-   back-button flows; on the sidebar they are one click away, always. */
+   back-button flows; on the sidebar they are one click away, always.
+   `schoolOnly` entries (Activities, Gradebook) are hidden for higher-ed
+   learners — that content is school-UI territory. */
 const PAGE_NAV = [
-  { to: '/library',     icon: 'ti-books',     key: 'nav.library'     },
-  { to: '/activities',  icon: 'ti-activity',  key: 'nav.activities'  },
-  { to: '/gradebook',   icon: 'ti-chart-bar', key: 'nav.gradebook'   },
-  { to: '/communities', icon: 'ti-users',     key: 'nav.communities' },
-  { to: '/wallet',      icon: 'ti-wallet',    key: 'nav.wallet'      },
-  { to: '/settings',    icon: 'ti-settings',  key: 'nav.settings'    },
+  { to: '/library',     emoji: '🗂️', key: 'nav.library'     },
+  { to: '/activities',  emoji: '📝', key: 'nav.activities',  schoolOnly: true },
+  { to: '/gradebook',   emoji: '📊', key: 'nav.gradebook',   schoolOnly: true },
+  { to: '/communities', emoji: '👥', key: 'nav.communities' },
+  { to: '/wallet',      emoji: '🪙', key: 'nav.wallet'      },
+  { to: '/settings',    emoji: '⚙️', key: 'nav.settings'    },
 ];
 
 /* Current-route matching: tab links match /app + ?tab= (default sessions);
@@ -64,11 +115,26 @@ function useActiveRoutes() {
   return { isTab, isPage };
 }
 
+/* Which UI tier is this learner on? Same resolution LibraryPage uses:
+   /api/profiles/me → isHigherEdUI. School UI while unknown (the documented
+   default — never the other way round), best-effort fetch. */
+function useHigherEd() {
+  const [higherEd, setHigherEd] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    apiGet('/api/profiles/me')
+      .then((d) => { if (alive) setHigherEd(isHigherEdUI(d?.data ?? d ?? {})); })
+      .catch(() => { /* offline/unknown → school UI stays */ });
+    return () => { alive = false; };
+  }, []);
+  return higherEd;
+}
+
 /* One sidebar row. `badge`/`badgeColor` mirror the bottom-nav badges (Learn =
    unread sessions on brand, Battles = live battles on red); `dot` is the
-   agent-online pulse-free dot. In rail mode (tablet) the badge re-anchors to
-   the icon's corner via the .ak-sb-badge CSS in index.css. */
-function NavButton({ active, icon, label, badge = 0, badgeColor = BRAND, dot = false, onClick }) {
+   agent-online dot. In collapsed-rail mode the badge re-anchors to the
+   emoji's corner via the .ak-sb-badge CSS in index.css. */
+function NavButton({ active, emoji, label, badge = 0, badgeColor = BRAND, dot = false, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -87,8 +153,8 @@ function NavButton({ active, icon, label, badge = 0, badgeColor = BRAND, dot = f
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--ak-surface-hover)'; }}
       onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
-      <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
-        <Icon name={icon} size={19} color={active ? BRAND : undefined}/>
+      <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, fontSize: 19, lineHeight: 1 }}>
+        {emoji}
         {dot && (
           <span style={{
             position: 'absolute', top: -2, right: -3, width: 8, height: 8,
@@ -112,17 +178,21 @@ function NavButton({ active, icon, label, badge = 0, badgeColor = BRAND, dot = f
   );
 }
 
-export function Sidebar({ badges = {}, nowStudying }) {
+export function Sidebar({ badges = {}, nowStudying, collapsed = false }) {
   const navigate  = useNavigate();
   const { t }     = useLang();
   const { isTab, isPage } = useActiveRoutes();
+  const higherEd  = useHigherEd();
 
   // Same navigation the dashboard's bottom nav performs (goTab), so the
   // sidebar and the bottom nav can never disagree about where they go.
   const goTab  = (key) => navigate(key === 'sessions' ? '/app' : `/app?tab=${key}`);
 
+  // Activities + Gradebook are school-UI only.
+  const pageNav = PAGE_NAV.filter((p) => !higherEd || !p.schoolOnly);
+
   return (
-    <aside className="ak-sidebar" style={{ fontFamily: "'Nunito',sans-serif" }}>
+    <aside className={`ak-sidebar${collapsed ? ' ak-collapsed' : ''}`} style={{ fontFamily: "'Nunito',sans-serif" }}>
 
       {/* Brand */}
       <div className="ak-sb-brand" style={{
@@ -138,11 +208,11 @@ export function Sidebar({ badges = {}, nowStudying }) {
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }} aria-label="App navigation">
-        {TAB_NAV.map(({ tab, icon, key }) => (
+        {TAB_NAV.map(({ tab, emoji, key }) => (
           <NavButton
             key={tab}
             active={isTab(tab)}
-            icon={icon}
+            emoji={emoji}
             label={t(key)}
             badge={tab === 'sessions' ? (badges.learn || 0) : tab === 'battles' ? (badges.battles || 0) : 0}
             badgeColor={tab === 'battles' ? RED : BRAND}
@@ -157,19 +227,19 @@ export function Sidebar({ badges = {}, nowStudying }) {
           color: 'var(--ak-text-muted)',
         }}>{t('nav.more')}</div>
 
-        {PAGE_NAV.map(({ to, icon, key }) => (
+        {pageNav.map(({ to, emoji, key }) => (
           <NavButton
             key={to}
             active={isPage(to)}
-            icon={icon}
+            emoji={emoji}
             label={t(key)}
             onClick={() => navigate(to)}
           />
         ))}
       </nav>
 
-      {/* Now studying — the parked session/record/battle, pinned above the
-          user footer (desktop/tablet only; mobile keeps the fixed bar). */}
+      {/* Now studying — the parked session/record/battle, pinned at the
+          bottom of the nav (desktop/tablet only; mobile keeps the fixed bar). */}
       {nowStudying?.item && <NowStudyingSidebarCard {...nowStudying} />}
 
     </aside>
@@ -177,10 +247,23 @@ export function Sidebar({ badges = {}, nowStudying }) {
 }
 
 export function AppShell({ children, badges, nowStudying }) {
+  // Collapsed by default; purely user-driven afterwards and remembered
+  // across page loads (same contract as the admin portal's sidebar).
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(COLLAPSE_KEY) !== '0'; } catch { return true; }
+  });
+  const toggleSidebar = () => setCollapsed((c) => {
+    const next = !c;
+    try { localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
+
   return (
-    <div className="ak-shell">
-      <Sidebar badges={badges} nowStudying={nowStudying}/>
-      <div className="ak-shell-main">{children}</div>
-    </div>
+    <ShellContext.Provider value={{ collapsed, toggleSidebar }}>
+      <div className="ak-shell">
+        <Sidebar badges={badges} nowStudying={nowStudying} collapsed={collapsed}/>
+        <div className="ak-shell-main">{children}</div>
+      </div>
+    </ShellContext.Provider>
   );
 }

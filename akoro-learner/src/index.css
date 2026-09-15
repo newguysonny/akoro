@@ -100,11 +100,13 @@ select:focus-visible {
 /* ══════════════════════════════════════════════════════════════════════════
    App shell (components/AppShell.jsx) — admin-style responsive frame.
 
-   Tablet + desktop (>768px) get the left sidebar: full labels above 1024px,
-   an icon-only rail between 769–1024px (the same band the admin portal's
-   sidebar collapses for). Mobile (≤768px) hides the sidebar completely and
-   every page renders exactly as it did before — the dashboard keeps its
-   bottom nav, secondary pages keep their back-button headers.
+   Tablet + desktop (>768px) get the left sidebar, collapsible to an icon
+   rail via the header hamburger (.ak-collapsed) exactly like the admin
+   portal — collapsed by default, remembered in localStorage, purely
+   user-driven (no viewport media query overriding it). Mobile (≤768px)
+   hides the sidebar completely and every page renders exactly as it did
+   before — the dashboard keeps its bottom nav, secondary pages keep their
+   back-button headers.
 
    The .ak-bottom-nav / .ak-fab / .ak-now-bar / .ak-dash-scroll rules re-anchor
    the dashboard's fixed mobile chrome for the desktop frame: the bottom nav
@@ -127,6 +129,7 @@ select:focus-visible {
 }
 .ak-sidebar {
   width: 240px;
+  transition: width .15s;
   flex-shrink: 0;
   height: 100vh;
   overflow: hidden;
@@ -136,35 +139,36 @@ select:focus-visible {
   flex-direction: column;
 }
 
-/* Tablet (769–1024px): icon rail — labels, captions and user text collapse,
-   badges re-anchor to the icon's corner, brand and user stack centred. */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .ak-sidebar { width: 76px; }
-  .ak-sb-label,
-  .ak-sb-brand-text,
-  .ak-sb-section { display: none; }
-  .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
-  .ak-sb-item {
-    justify-content: center;
-    gap: 0;
-    padding: 12px 0;
-    margin: 3px auto;
-    width: 48px;
-  }
-  .ak-sb-badge {
-    position: absolute;
-    top: 3px;
-    left: calc(50% + 7px);
-    min-width: 15px;
-    height: 15px;
-    padding: 0 4px;
-    font-size: 9px;
-  }
+/* Collapsed rail (user-driven via the header hamburger, default state):
+   labels, captions and text collapse, badges re-anchor to the emoji's
+   corner, brand centres, items become square tiles. */
+.ak-sidebar.ak-collapsed { width: 76px; }
+.ak-collapsed .ak-sb-label,
+.ak-collapsed .ak-sb-brand-text,
+.ak-collapsed .ak-sb-section { display: none; }
+.ak-collapsed .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
+.ak-collapsed .ak-sb-item {
+  justify-content: center;
+  gap: 0;
+  padding: 12px 0;
+  margin: 3px auto;
+  width: 48px;
+}
+.ak-collapsed .ak-sb-badge {
+  position: absolute;
+  top: 3px;
+  left: calc(50% + 7px);
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
 }
 
-/* Mobile (≤768px): no sidebar at all — the page renders as it always has. */
+/* Mobile (≤768px): no sidebar at all — the page renders as it always has,
+   and the hamburger has nothing to toggle. */
 @media (max-width: 768px) {
   .ak-sidebar { display: none; }
+  .ak-sb-toggle { display: none !important; }
 }
 
 /* Desktop frame adjustments for the dashboard's fixed mobile chrome. The
@@ -177,26 +181,25 @@ select:focus-visible {
   .ak-dash-scroll { padding-bottom: 64px !important; }  /* FAB clearance */
 }
 
-/* Sidebar now-studying card — rail mode (769–1024px) collapses it to the
+/* Sidebar now-studying card — in the collapsed rail it reduces to the
    art tile + progress line, with the dismiss ✕ floating at the card's
-   corner; tapping the tile opens. Full mode shows caption, title, progress
-   and the action row. Mobile never sees it — the sidebar is hidden there. */
-@media (min-width: 769px) and (max-width: 1024px) {
-  .ak-sb-now { padding: 7px 6px !important; margin: 8px 10px !important; }
-  .ak-sb-now-caption { margin-bottom: 0 !important; padding: 0 0 6px; }
-  .ak-sb-now-label,
-  .ak-sb-now-text,
-  .ak-sb-now-actions { display: none; }
-  .ak-sb-now-main { justify-content: center; }
-  .ak-sb-now-x {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    width: 16px !important;
-    height: 16px !important;
-    margin-left: 0 !important;
-    background: var(--ak-surface) !important;
-    border: 1px solid var(--ak-border2) !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,.15);
-  }
+   corner; tapping the tile opens. Expanded mode shows caption, title,
+   progress and the action row. Mobile never sees it — the sidebar is
+   hidden there. */
+.ak-collapsed .ak-sb-now { padding: 7px 6px !important; margin: 8px 10px !important; }
+.ak-collapsed .ak-sb-now-caption { margin-bottom: 0 !important; padding: 0 0 6px; }
+.ak-collapsed .ak-sb-now-label,
+.ak-collapsed .ak-sb-now-text,
+.ak-collapsed .ak-sb-now-actions { display: none; }
+.ak-collapsed .ak-sb-now-main { justify-content: center; }
+.ak-collapsed .ak-sb-now-x {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px !important;
+  height: 16px !important;
+  margin-left: 0 !important;
+  background: var(--ak-surface) !important;
+  border: 1px solid var(--ak-border2) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }

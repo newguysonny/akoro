@@ -15,7 +15,7 @@
  *   • Desktop  — FAB sits in the content column clear of the sidebar, and
  *                the bottom nav + fixed now-bar are hidden
  */
-import { AppShell } from '../components/AppShell.jsx';
+import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
@@ -52,6 +52,7 @@ export default function ShellPreviewPage() {
         <div style={{ background: 'var(--ak-surface)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px 0', zIndex: 100, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <SidebarToggle/>
               <div style={{ width: 38, height: 38, borderRadius: '50%', background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 15, fontWeight: 900 }}>A</div>
               <div>
                 <p style={{ fontSize: 15, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>Ada Learner</p>
@@ -77,7 +78,7 @@ export default function ShellPreviewPage() {
         {/* Fake scrollable content */}
         <div className="ak-dash-scroll" style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 72px' }}>
           <div style={{ padding: '10px 4px 14px', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>
-            /dev/shell — dev-only preview. Resize the window: full sidebar above 1024px, icon rail 769–1024px, bottom nav below 769px.
+            /dev/shell — dev-only preview. The sidebar starts collapsed; tap the hamburger to expand (remembered across loads). Emoji match the mobile bottom nav; Activities + Gradebook hide for higher-ed learners. Bottom nav appears below 769px only.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
             {['Maths — Fractions', 'English — Comprehension', 'Science — Photosynthesis', 'History — Independence', 'Battles — 2 live', 'Rankings — #4 this week'].map((label, i) => (
