@@ -32,7 +32,7 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss }) {
   const livePulse = { animation: 'now-live-pulse 1.6s ease-in-out infinite' };
 
   return (
-    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', zIndex: 'var(--z-bar)',
+    <div className="ak-now-bar" style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', zIndex: 'var(--z-bar)',
       background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
       boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
       animation: `sheet-up .28s var(--ease-spring)` }}>

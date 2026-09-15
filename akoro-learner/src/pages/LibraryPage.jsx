@@ -7,6 +7,7 @@ import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import { apiGet } from '../services/api.js';
 import { isHigherEdUI } from '../utils/studyLevel.js';
+import { AppShell } from '../components/AppShell.jsx';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
 const TYPE_META = {
@@ -259,7 +260,8 @@ export default function LibraryPage() {
   });
 
   return (
-    <div style={{ width: '100vw', height: '100vh', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <AppShell>
+    <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* HEADER */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -353,5 +355,6 @@ export default function LibraryPage() {
         onToggleDone={toggleRecordDone}
       />
     </div>
+    </AppShell>
   );
 }

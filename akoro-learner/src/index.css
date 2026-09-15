@@ -96,3 +96,89 @@ select:focus-visible {
 /* Alias: settings subject-map uses "ti-clock-history", which Tabler renamed
    to "history" — point it at the same glyph so the row isn't blank. */
 .ti-clock-history:before { content: "\ebea"; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   App shell (components/AppShell.jsx) — admin-style responsive frame.
+
+   Tablet + desktop (>768px) get the left sidebar: full labels above 1024px,
+   an icon-only rail between 769–1024px (the same band the admin portal's
+   sidebar collapses for). Mobile (≤768px) hides the sidebar completely and
+   every page renders exactly as it did before — the dashboard keeps its
+   bottom nav, secondary pages keep their back-button headers.
+
+   The .ak-bottom-nav / .ak-fab / .ak-now-bar / .ak-dash-scroll rules re-anchor
+   the dashboard's fixed mobile chrome for the desktop frame: the bottom nav
+   goes away, and the FAB + now-studying bar sit in the content column to the
+   right of the sidebar instead of spanning the whole viewport.
+   ══════════════════════════════════════════════════════════════════════════ */
+.ak-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-bg);
+}
+.ak-shell-main {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;        /* scroll container for pages that scroll themselves */
+  display: flex;
+  flex-direction: column;
+}
+.ak-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ak-surface);
+  border-right: 1px solid var(--ak-border);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tablet (769–1024px): icon rail — labels, captions and user text collapse,
+   badges re-anchor to the icon's corner, brand and user stack centred. */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .ak-sidebar { width: 76px; }
+  .ak-sb-label,
+  .ak-sb-brand-text,
+  .ak-sb-section,
+  .ak-sb-user-meta { display: none; }
+  .ak-sb-brand { padding: 20px 0 14px; justify-content: center; }
+  .ak-sb-user { flex-direction: column; }
+  .ak-sb-item {
+    justify-content: center;
+    gap: 0;
+    padding: 12px 0;
+    margin: 3px auto;
+    width: 48px;
+  }
+  .ak-sb-badge {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 7px);
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+}
+
+/* Mobile (≤768px): no sidebar at all — the page renders as it always has. */
+@media (max-width: 768px) {
+  .ak-sidebar { display: none; }
+}
+
+/* Desktop frame adjustments for the dashboard's fixed mobile chrome. */
+@media (min-width: 769px) {
+  .ak-bottom-nav { display: none !important; }
+  .ak-fab { bottom: 80px !important; }        /* clears the now-studying bar */
+  .ak-now-bar {
+    left: 240px !important;                   /* start right of the sidebar */
+    bottom: 12px !important;                  /* no bottom nav to clear */
+  }
+  .ak-dash-scroll { padding-bottom: 88px !important; }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+  .ak-now-bar { left: 76px !important; }      /* rail width */
+}

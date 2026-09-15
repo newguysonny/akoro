@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchMyActivities, fetchMyStreak } from '../services/activityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
+import { AppShell } from '../components/AppShell.jsx';
 
 /* Emoji + accent per activity kind (matches the learner app's emoji style) */
 const TYPE_META = {
@@ -189,7 +190,8 @@ export default function ActivityPage() {
   });
 
   return (
-    <div style={{ width: '100vw', height: '100vh', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <AppShell>
+    <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* HEADER */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -257,5 +259,6 @@ export default function ActivityPage() {
         )}
       </div>
     </div>
+    </AppShell>
   );
 }

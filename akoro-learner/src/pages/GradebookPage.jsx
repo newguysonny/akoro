@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ArrowUpDown, X } from 'lucide-react';
 import { fetchMyGradebook, TYPE_LABEL, TYPE_DOT } from '../services/gradebookApi.js';
 import { BRAND, GREEN, RED } from '../constants.js';
+import { AppShell } from '../components/AppShell.jsx';
 
 /* Work types — the reference's type filter, with Akoro's activity kinds. */
 const TYPES = [
@@ -105,7 +106,8 @@ export default function GradebookPage() {
   const activeName = activeSubjectId === 'all' ? 'All subjects' : (activeSubject?.name ?? 'Subjects');
 
   return (
-    <div style={{ width: '100vw', height: '100vh', fontFamily: N, background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <AppShell>
+    <div style={{ width: '100%', height: '100%', fontFamily: N, background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* ── HEADER — the Notifications/Activities page style ── */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -249,5 +251,6 @@ export default function GradebookPage() {
         </div>
       </div>
     </div>
+    </AppShell>
   );
 }

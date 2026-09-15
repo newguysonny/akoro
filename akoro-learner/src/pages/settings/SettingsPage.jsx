@@ -23,6 +23,7 @@ import {
 import { LogoutModal } from './sheets.jsx';
 import { UserTab } from './userTab.jsx';
 import { AgentTab } from './agentTab.jsx';
+import { AppShell } from '../../components/AppShell.jsx';
 
 /* ─── Loading skeleton ────────────────────────────────────────── */
 /* ─── Loading skeleton ────────────────────────────────────────── */
@@ -208,7 +209,8 @@ export default function SettingsPage() {
   const color = accentColor;
 
   return (
-    <div style={{ minHeight:'100vh',background:'var(--ak-bg)',
+    <AppShell>
+    <div style={{ minHeight:'100%',background:'var(--ak-bg)',
       fontFamily:"'Nunito',sans-serif",maxWidth:480,margin:'0 auto' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
@@ -302,5 +304,6 @@ export default function SettingsPage() {
         <LogoutModal onClose={()=>setShowLogout(false)} onConfirm={handleLogoutConfirm}/>
       )}
     </div>
+    </AppShell>
   );
 }

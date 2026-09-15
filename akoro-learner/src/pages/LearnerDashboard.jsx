@@ -704,7 +704,11 @@ export default function LearnerDashboard() {
         @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
       `}</style>
 
-      <div style={{ width:"100vw",height:"100vh",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
+      {/* AppShell — admin-style frame: sidebar nav on tablet/desktop, nothing
+          (bottom nav stays) on mobile. Live badge counts mirror the bottom
+          nav's badges so the two never disagree. */}
+      <AppShell badges={{ learn: totalUnread, battles: activeBattleCount, agentOnline }}>
+      <div style={{ width:"100%",height:"100%",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 
         {(tab==="sessions"||tab==="challenges")&&(
           /* HEADER — Learn tab only ("sessions"). Challenges is Learn's
@@ -1133,6 +1137,7 @@ export default function LearnerDashboard() {
         {liveBattleModal   && <BattleModal    battle={liveBattleModal}    onMinimize={minimizeBattle} onClose={()=>setLiveBattleModal(null)}/>}
         {toast && <Toast msg={typeof toast==='string'?toast:toast.msg} color={typeof toast==='string'?RED:(toast.color||RED)} onDone={()=>setToast(null)}/>}
       </div>
+      </AppShell>
     </>
   );
 }

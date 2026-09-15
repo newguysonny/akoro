@@ -154,6 +154,7 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>}/>
       <Route path="/reset-password"  element={<ResetPasswordPage />}/>
       <Route path="/auth/callback"   element={<AuthCallback />}/>
+      {import.meta.env.DEV && <Route path="/dev/shell" element={<ShellPreviewPage />}/>}
       <Route path="*" element={<NotFoundPage />}/>
     </Routes>
       </Suspense>

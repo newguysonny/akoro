@@ -9,6 +9,17 @@ export const EN = {
   'nav.rankings':   'Rankings',
   'nav.battles':    'Battles',
   'nav.agent':      'Agent',
+  /* Sidebar-only entries (AppShell) — secondary destinations the mobile app
+     reaches through header buttons / back-button flows. */
+  'nav.library':     'Library',
+  'nav.activities':  'Activities',
+  'nav.gradebook':   'Gradebook',
+  'nav.communities': 'Communities',
+  'nav.wallet':      'Wallet',
+  'nav.settings':    'Settings',
+  'nav.more':        'More',
+  'nav.signout':     'Sign out',
+  'nav.signed_in_as':'Signed in',
 
   /* ── Common ── */
   'common.save':    'Save',

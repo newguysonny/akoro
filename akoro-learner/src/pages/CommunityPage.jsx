@@ -5,6 +5,7 @@ import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, GREEN } from '../constants.js';
 import Spinner from '../components/common/Spinner.jsx';
 import { useInFlight } from '../hooks/useInFlight.js';
+import { AppShell } from '../components/AppShell.jsx';
 
 /* Community identity avatars (same identity-emoji pattern as agents/guides). */
 const EMOJIS = ['🌐', '📚', '🧪', '', '🎧', '💼', '🌱', '🔥', '', '🎯', '🤝', '🚀'];
@@ -177,7 +178,8 @@ export default function CommunityPage() {
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <AppShell>
+    <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* HEADER */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -241,5 +243,6 @@ export default function CommunityPage() {
         />
       )}
     </div>
+    </AppShell>
   );
 }
