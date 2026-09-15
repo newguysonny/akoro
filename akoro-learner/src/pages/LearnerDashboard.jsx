@@ -34,7 +34,7 @@ import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
-import { isHigherEdUI } from '../utils/studyLevel.js';
+import { useHigherEd } from '../hooks/useStudyTier.js';
 import React from 'react';
 
 // Hooks
@@ -162,9 +162,10 @@ export default function LearnerDashboard() {
   // ── Level-aware UI tier ──────────────────────────────────────────────────
   // Sixth form / university / college / other get the discovery hub feed and
   // the Now-Studying bar; school learners get the plain discovery feed.
-  // The profile fetch below decides which tier renders. The add-record +
-  // moved to the Library page header so every learner has it.
-  const higherEd = isHigherEdUI(userProfile || {});
+  // Tier comes from the shared cached hook (useStudyTier.js) — correct on
+  // the FIRST render, no school-UI flash; the profile fetch below still
+  // feeds the header (name, avatar, XP).
+  const higherEd = useHigherEd();
 
   // ── Now studying — Spotify-style mini-bar ────────────────────────────────
   // Tracks the material or session the learner last opened, across all tabs

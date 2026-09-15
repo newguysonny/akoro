@@ -16,10 +16,11 @@
  * destination reads identically on every surface.
  *
  * Tier-aware: Activities and Gradebook are school-UI only — higher-ed
- * learners don't get them in the sidebar. The tier is resolved the same way
- * LibraryPage does it (/api/profiles/me → isHigherEdUI), defaulting to the
- * school UI while it loads (studyLevel.js: unknown → school, never the
- * other way round).
+ * learners don't get them in the sidebar. The tier comes from the shared
+ * useHigherEd() hook (hooks/useStudyTier.js): the last resolved tier is
+ * cached synchronously (studyLevel.js), so pages don't flash the school
+ * layout while /api/profiles/me revalidates in the background. Unknown →
+ * school UI, never the other way round.
  *
  * Usage — wrap a page's root:
  *   <AppShell badges={{ learn: n, battles: n, agentOnline }}>
@@ -39,14 +40,13 @@
  *
  * Exports: AppShell, Sidebar, SidebarToggle, useAppShell
  */
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
 import NowStudyingTabletBar from './dashboard/NowStudyingTabletBar.jsx';
-import { isHigherEdUI } from '../utils/studyLevel.js';
-import { apiGet } from '../services/api.js';
+import { useHigherEd } from '../hooks/useStudyTier.js';
 import { BRAND, RED, GREEN } from '../constants.js';
 
 /* ── Sidebar collapse — user-driven, remembered, EXPANDED by default ──
@@ -120,21 +120,6 @@ function useActiveRoutes() {
   const isTab  = (key) => pathname === '/app' && (tab === key || (key === 'sessions' && tab === 'challenges'));
   const isPage = (to)   => pathname === to || pathname.startsWith(to + '/');
   return { isTab, isPage };
-}
-
-/* Which UI tier is this learner on? Same resolution LibraryPage uses:
-   /api/profiles/me → isHigherEdUI. School UI while unknown (the documented
-   default — never the other way round), best-effort fetch. */
-function useHigherEd() {
-  const [higherEd, setHigherEd] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    apiGet('/api/profiles/me')
-      .then((d) => { if (alive) setHigherEd(isHigherEdUI(d?.data ?? d ?? {})); })
-      .catch(() => { /* offline/unknown → school UI stays */ });
-    return () => { alive = false; };
-  }, []);
-  return higherEd;
 }
 
 /* One sidebar row. `badge`/`badgeColor` mirror the bottom-nav badges (Learn =

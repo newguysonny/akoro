@@ -5,6 +5,7 @@ import { Icon } from '../components/common/Icons.jsx';
 import { useTheme } from '../contexts/ThemeContext.jsx';
 import { useLang, SUPPORTED_LANGUAGES } from '../contexts/LanguageContext.jsx';
 import { API } from '../services/api.js';
+import { isHigherEdUI, setCachedTier } from '../utils/studyLevel.js';
 import AkoroLogo from '../components/common/AkoroLogo.jsx';
 
 const BRAND  = '#6C3BFF';
@@ -268,6 +269,11 @@ export default function OnboardingPage() {
           body: JSON.stringify({ teacher_id: teacherId }),
         }).catch(() => {});
       }
+
+      // Seed the UI-tier cache with the level the learner just chose, so
+      // even the very first dashboard load renders the right tier with no
+      // school-UI flash (studyLevel.js cache + useStudyTier.js revalidate).
+      setCachedTier(isHigherEdUI({ studyLevel }) ? 'higher' : 'school');
 
       markOnboarded();
       navigate('/app', { replace: true });

@@ -14,7 +14,7 @@ import {
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
-import { isHigherEdUI } from '../../utils/studyLevel.js';
+import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
 
 // A concise, recognisable list keeps the mobile selector usable. The API still
 // validates IANA identifiers, so the agent never treats a display label as a
@@ -137,6 +137,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
   const [avatarSheet,  setAvatarSheet]  = useState(false);
   const [twoFaSheet,   setTwoFaSheet]   = useState(null); // 'enable' | 'disable' | null
   const [toast,        setToast]        = useState('');
+
+  // Keep the tier cache in step with the profile this tab is showing (and
+  // just saved): publishing means every mounted surface — sidebar, library,
+  // dashboard — flips in the same tick instead of on the next visit.
+  useEffect(() => {
+    if (profile) setCachedTier(isHigherEdUI(profile) ? 'higher' : 'school');
+  }, [profile]);
 
   const color   = accentColor || profile.accentColor || BRAND;
   const xpPct   = profile.sessionsLimit

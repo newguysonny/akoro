@@ -5,8 +5,7 @@ import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
-import { apiGet } from '../services/api.js';
-import { isHigherEdUI } from '../utils/studyLevel.js';
+import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
@@ -197,14 +196,11 @@ export default function LibraryPage() {
   // same key the Learn tab used, so nothing saved before is lost.
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [higherEd, setHigherEd] = useState(false);
+  // The blog option belongs to the higher-ed tier (studyLevel.js gate) —
+  // resolved via the shared cached hook, so the page never flashes the
+  // school layout at a higher-ed learner while the tier revalidates.
+  const higherEd = useHigherEd();
   const [toast, setToast] = useState('');
-  useEffect(() => {
-    // The blog option belongs to the higher-ed tier (studyLevel.js gate).
-    apiGet('/api/profiles/me').then((d) => {
-      setHigherEd(isHigherEdUI(d?.data ?? d ?? {}));
-    }).catch(() => {});
-  }, []);
   useEffect(() => {
     if (searchParams.get('add')) setSheetOpen(true);
   }, [searchParams]);
