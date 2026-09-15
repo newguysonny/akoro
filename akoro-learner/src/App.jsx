@@ -55,6 +55,13 @@ const WalletPage         = lazyWithRetry(() => import('./pages/WalletPage.jsx'))
 const CheckoutPage       = lazyWithRetry(() => import('./pages/CheckoutPage.jsx'));
 const OrderHistoryPage   = lazyWithRetry(() => import('./pages/OrderHistoryPage.jsx'));
 const NotFoundPage       = lazyWithRetry(() => import('./pages/NotFoundPage.jsx'));
+// DEV-ONLY layout preview (/dev/shell) — gated on import.meta.env.DEV so the
+// route, this reference and the chunk are all dead-code-eliminated from
+// production builds. Lets the AppShell sidebar / rail / bottom-nav behaviour
+// be checked without a signed-in session or a running API.
+const ShellPreviewPage   = import.meta.env.DEV
+  ? lazyWithRetry(() => import('./pages/ShellPreviewPage.jsx'))
+  : () => null;
 
 /* ── ProtectedRoute: requires auth, then gates on onboarding ── */
 function ProtectedRoute({ children }) {

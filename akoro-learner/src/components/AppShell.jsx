@@ -28,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
+import NowStudyingSidebarCard from './dashboard/NowStudyingSidebarCard.jsx';
 import { BRAND, RED, GREEN } from '../constants.js';
 
 /* The five dashboard tabs — the same destinations, in the same order, as the

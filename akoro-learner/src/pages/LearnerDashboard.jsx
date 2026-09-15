@@ -32,6 +32,7 @@ import Toast         from '../components/common/Toast.jsx';
 import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
+import { AppShell } from '../components/AppShell.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { isHigherEdUI } from '../utils/studyLevel.js';
 import React from 'react';
