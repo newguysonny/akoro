@@ -655,6 +655,8 @@ export const AR = {
   'now.resume':              'متابعة الدراسة',
   'now.resume_battle':   'استئناف المعركة',
   'now.dismiss':             'إخفاء',
+  'now.prev':                'السابق',
+  'now.next':                'التالي',
   'now.minimize':            'تصغير ومتابعة لاحقًا',
   'now.minimized_toast':     'متابعة في الخلفية — استأنف من الشريط أعلى تبويباتك.',
   'now.teaching':            'جلسة تعليمية',

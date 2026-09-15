@@ -662,6 +662,8 @@ export const ES = {
   'now.resume':              'Retomar el estudio',
   'now.resume_battle':   'Reanudar la batalla',
   'now.dismiss':             'Descartar',
+  'now.prev':                'Anterior',
+  'now.next':                'Siguiente',
   'now.minimize':            'Minimizar y continuar luego',
   'now.minimized_toast':     'Continúa en segundo plano: reanuda desde la barra sobre tus pestañas.',
   'now.teaching':            'Sesión de enseñanza',

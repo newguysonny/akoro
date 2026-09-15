@@ -29,9 +29,13 @@
  * `badges` is optional; the dashboard passes its live counts so the sidebar
  * mirrors the bottom-nav badges. Pages that don't know the counts simply
  * render without them. `nowStudying` is likewise optional — the dashboard
- * passes `{ item, onOpen, onAdd, onDismiss }` when its now-studying bar is
- * showing, and the sidebar renders the desktop twin (NowStudyingSidebarCard)
- * at the bottom of the nav.
+ * passes `{ item, onOpen, onAdd, onDismiss, onPrev, onNext, canSkip }` when
+ * its now-studying bar is showing. Two surfaces share that one payload:
+ * the fixed full-width player bar (NowStudyingTabletBar, rendered here at
+ * the bottom of the frame) on EVERYTHING above mobile — tablet and desktop
+ * alike — and the mobile bar (≤768px, rendered by the dashboard itself
+ * above the bottom nav). The sidebar no longer carries a now-studying
+ * card; NowStudyingSidebarCard.jsx stays on disk, retired.
  *
  * Exports: AppShell, Sidebar, SidebarToggle, useAppShell
  */
@@ -40,7 +44,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
-import NowStudyingSidebarCard from './dashboard/NowStudyingSidebarCard.jsx';
+import NowStudyingTabletBar from './dashboard/NowStudyingTabletBar.jsx';
 import { isHigherEdUI } from '../utils/studyLevel.js';
 import { apiGet } from '../services/api.js';
 import { BRAND, RED, GREEN } from '../constants.js';
@@ -178,7 +182,7 @@ function NavButton({ active, emoji, label, badge = 0, badgeColor = BRAND, dot = 
   );
 }
 
-export function Sidebar({ badges = {}, nowStudying, collapsed = false }) {
+export function Sidebar({ badges = {}, collapsed = false }) {
   const navigate  = useNavigate();
   const { t }     = useLang();
   const { isTab, isPage } = useActiveRoutes();
@@ -238,10 +242,6 @@ export function Sidebar({ badges = {}, nowStudying, collapsed = false }) {
         ))}
       </nav>
 
-      {/* Now studying — the parked session/record/battle, pinned at the
-          bottom of the nav (desktop/tablet only; mobile keeps the fixed bar). */}
-      {nowStudying?.item && <NowStudyingSidebarCard {...nowStudying} />}
-
     </aside>
   );
 }
@@ -260,9 +260,16 @@ export function AppShell({ children, badges, nowStudying }) {
 
   return (
     <ShellContext.Provider value={{ collapsed, toggleSidebar }}>
-      <div className="ak-shell">
-        <Sidebar badges={badges} nowStudying={nowStudying} collapsed={collapsed}/>
+      {/* ak-has-nowbar — a parked now-studying item exists, so the frame
+          makes room for the fixed bottom player bar (index.css). */}
+      <div className={`ak-shell${nowStudying?.item ? ' ak-has-nowbar' : ''}`}>
+        <Sidebar badges={badges} collapsed={collapsed}/>
         <div className="ak-shell-main">{children}</div>
+        {/* Now-studying surface for everything above mobile — fixed,
+            full-width, 3-column player bar. CSS shows it only >768px (the
+            dashboard's own mobile bar covers ≤768px). Renders null without
+            an item. */}
+        <NowStudyingTabletBar {...(nowStudying || {})} />
       </div>
     </ShellContext.Provider>
   );

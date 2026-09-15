@@ -1,6 +1,10 @@
 /**
  * NowStudyingSidebarCard — the sidebar's "now studying" widget.
  *
+ * RETIRED (not mounted anywhere): every surface above mobile now uses the
+ * fixed full-width NowStudyingTabletBar instead, and mobile keeps its own
+ * NowStudyingBar. Kept on disk in case the sidebar card returns.
+ *
  * Desktop twin of NowStudyingBar: instead of a fixed bar above the bottom
  * nav (mobile), the parked session / record / battle lives at the bottom of
  * the sidebar nav — the way a music app pins the mini-player. Same data (utils/nowStudying.js), same

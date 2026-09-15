@@ -656,6 +656,8 @@ export const HA = {
   'now.resume':              'Ci gaba da karatu',
   'now.resume_battle':   'Sake yaƙin',
   'now.dismiss':             'Boyewa',
+  'now.prev':                'Na baya',
+  'now.next':                'Na gaba',
   'now.minimize':            'Ƙanana ku ci gaba daga baya',
   'now.minimized_toast':     'Ana ci gaba a baya — sake daga沙 sigar da ke sama da shafukanka.',
   'now.teaching':            'Zaman koyarwa',

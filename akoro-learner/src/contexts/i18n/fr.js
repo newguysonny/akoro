@@ -602,6 +602,8 @@ export const FR = {
   'now.resume':              'Reprendre l’étude',
   'now.resume_battle':   'Reprendre la bataille',
   'now.dismiss':             'Masquer',
+  'now.prev':                'Précédent',
+  'now.next':                'Suivant',
   'now.minimize':            'Réduire et continuer plus tard',
   'now.minimized_toast':     'Suite en arrière-plan — reprenez depuis la barre au-dessus des onglets.',
   'now.teaching':            'Séance d’enseignement',

@@ -674,6 +674,8 @@ export const IG = {
   'now.resume':              'Gaa n’ihu ọmụmụ',
   'now.resume_battle':   'Malite agha ọzọ',
   'now.dismiss':             'ZoO',
+  'now.prev':                'Ihe gara aga',
+  'now.next':                'Ihe na-esote',
   'now.minimize':            'Obelata ma emechaa meso',
   'now.minimized_toast':     'Na-aga n’ihu na azụ — malite ọzọ site na ogwe dị n’elu taabụ gị.',
   'now.teaching':            'Oge mmụta',

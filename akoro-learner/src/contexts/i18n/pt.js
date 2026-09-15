@@ -662,6 +662,8 @@ export const PT = {
   'now.resume':              'Retomar o estudo',
   'now.resume_battle':   'Retomar a batalha',
   'now.dismiss':             'Dispensar',
+  'now.prev':                'Anterior',
+  'now.next':                'Próximo',
   'now.minimize':            'Minimizar e continuar depois',
   'now.minimized_toast':     'Continuando em segundo plano — retome pela barra acima das abas.',
   'now.teaching':            'Sessão de ensino',

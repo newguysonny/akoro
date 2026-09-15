@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { useWallet } from '../hooks/useWallet.js';
@@ -236,6 +236,45 @@ export default function LearnerDashboard() {
   const showNowBar = higherEd && !!now.item && !now.dismissed
     && !(tab === "agent" && chatActive) && !selectedSession && !selectedChallenge
     && !teachSession && !liveBattleModal && !configOpen;
+
+  // Skip queue for the tablet bar's previous / next (Spotify-style track
+  // skip): sessions skip through sessions, records through records, and
+  // skipping RE-PARKS the neighbour on the bar (nothing opens) the way a
+  // player swaps tracks without opening the full screen. Battles never
+  // queue. Minimized teach/decay sessions use synthetic ids that no queue
+  // contains, so their skips disable until something trackable is parked.
+  const nowStudyQueue = useMemo(() => {
+    if (!now.item) return [];
+    if (now.item.type === 'record') return loadRecordsLocal();
+    if (now.item.type === 'session') return [...agentSessions, ...sessions];
+    return [];
+  }, [now.item, agentSessions, sessions, loadRecordsLocal]);
+  const canSkipNow = now.item?.type !== 'battle' && nowStudyQueue.length > 1
+    && nowStudyQueue.some(x => x && x.id === now.item.id);
+  const skipNowStudy = (dir) => {
+    if (!canSkipNow || !now.item) return;
+    const q = nowStudyQueue;
+    const i = q.findIndex(x => x && x.id === now.item.id);
+    if (i < 0) return;
+    const nx = q[(i + dir + q.length) % q.length];
+    if (!nx || nx.id === now.item.id) return;
+    if (now.item.type === 'record') {
+      nowActs.setCurrent({
+        type: 'record', id: nx.id, title: nx.name,
+        sub: nx.kind === 'link' ? t('records.tab_link') : nx.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload'),
+        emoji: nx.kind === 'link' ? 'ti-link' : nx.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
+        progress: nx.progress || 0,
+      });
+    } else {
+      nowActs.setCurrent({
+        type: 'session', id: nx.id,
+        title: nx.title || 'Study session',
+        sub: (SUBJECTS[nx.subject]?.label) || nx.topic || 'Session',
+        emoji: (SUBJECTS[nx.subject]?.icon) || 'ti-book',
+        progress: nx.progress || 0, snapshot: nx,
+      });
+    }
+  };
 
   // ── Minimize — park a live session on the Now-Studying bar ──────────────
   const minimizeSessionSheet = () => {
@@ -717,6 +756,9 @@ export default function LearnerDashboard() {
           onOpen: openNowItem,
           onAdd: () => navigate('/library?add=1'),
           onDismiss: nowActs.dismiss,
+          onPrev: now.item?.type !== 'battle' ? () => skipNowStudy(-1) : null,
+          onNext: now.item?.type !== 'battle' ? () => skipNowStudy(1) : null,
+          canSkip: canSkipNow,
         } : null}>
       <div style={{ width:"100%",height:"100%",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 

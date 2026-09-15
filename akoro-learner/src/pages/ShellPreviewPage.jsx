@@ -7,13 +7,14 @@
  * can be checked without a signed-in session or a running API.
  *
  * What to verify here:
- *   • >1024px  — full sidebar with labels + badges + user footer, and the
- *                now-studying card pinned above the user footer
- *   • 769–1024 — icon rail (labels collapse, badges move to the icon corner,
- *                now-studying collapses to its art tile + progress line)
- *   • ≤768px   — sidebar gone, bottom nav + fixed now-studying bar visible
- *   • Desktop  — FAB sits in the content column clear of the sidebar, and
- *                the bottom nav + fixed now-bar are hidden
+ *   • >768px   — sidebar (collapsible rail) + the fixed, full-width
+ *                now-studying player bar (3 columns: name & details,
+ *                progress + prev/next, tool icons) at the bottom; the
+ *                sidebar and content stop above it
+ *   • ≤768px   — sidebar + player bar gone; bottom nav + the dashboard's
+ *                own fixed now-studying bar visible
+ *   • Desktop  — FAB sits in the content column clear of the sidebar and
+ *                above the player bar, and the bottom nav is hidden
  */
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { Icon } from '../components/common/Icons.jsx';
@@ -28,9 +29,9 @@ const CARD = {
 export default function ShellPreviewPage() {
   const { t } = useLang();
 
-  // Fake parked item — exercises the sidebar's now-studying card, the same
+  // Fake parked item — exercises the now-studying player bar, the same
   // payload shape utils/nowStudying.js stores ({ type, id, title, sub,
-  // emoji, progress }).
+  // emoji, progress }) plus the skip controls the dashboard passes.
   const nowItem = {
     type: 'session', id: 'demo-1', title: 'Maths — Fractions & decimals',
     sub: 'Agent session', emoji: '➗', progress: 42,
@@ -45,7 +46,13 @@ export default function ShellPreviewPage() {
   ];
 
   return (
-    <AppShell badges={{ learn: 3, battles: 1, agentOnline: true }}>
+    <AppShell
+      badges={{ learn: 3, battles: 1, agentOnline: true }}
+      nowStudying={{
+        item: nowItem,
+        onOpen: () => {}, onAdd: () => {}, onDismiss: () => {},
+        onPrev: () => {}, onNext: () => {}, canSkip: true,
+      }}>
       <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
         {/* Fake dashboard header — the real one renders on Learn/Challenges */}
@@ -78,7 +85,7 @@ export default function ShellPreviewPage() {
         {/* Fake scrollable content */}
         <div className="ak-dash-scroll" style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 72px' }}>
           <div style={{ padding: '10px 4px 14px', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>
-            /dev/shell — dev-only preview. The sidebar starts collapsed; tap the hamburger to expand (remembered across loads). Emoji match the mobile bottom nav; Activities + Gradebook hide for higher-ed learners. Bottom nav appears below 769px only.
+            /dev/shell — dev-only preview. The sidebar starts collapsed; tap the hamburger to expand (remembered across loads). Emoji match the mobile bottom nav; Activities + Gradebook hide for higher-ed learners. Above 768px the now-studying player bar is pinned full-width at the bottom (3 columns: name & details · progress + prev/next · tool icons); below that the bottom nav + the dashboard's own bar take over.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
             {['Maths — Fractions', 'English — Comprehension', 'Science — Photosynthesis', 'History — Independence', 'Battles — 2 live', 'Rankings — #4 this week'].map((label, i) => (

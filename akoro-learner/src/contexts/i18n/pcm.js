@@ -674,6 +674,8 @@ export const PCM = {
   'now.resume':              'Continue studying',
   'now.resume_battle':   'Resume the battle',
   'now.dismiss':             'Hide am',
+  'now.prev':                'Di one before',
+  'now.next':                'Di next one',
   'now.minimize':            'Minimize make you continue later',
   'now.minimized_toast':     'E dey continue for background — resume am from the bar wey dey ontop your tabs.',
   'now.teaching':            'Teaching session',
