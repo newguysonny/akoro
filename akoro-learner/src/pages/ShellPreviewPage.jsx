@@ -7,11 +7,13 @@
  * can be checked without a signed-in session or a running API.
  *
  * What to verify here:
- *   • >1024px  — full sidebar with labels + badges + user footer
- *   • 769–1024 — icon rail (labels collapse, badges move to the icon corner)
- *   • ≤768px   — sidebar gone, bottom nav visible, page unchanged
- *   • Desktop  — FAB + now-studying bar sit in the content column, clear of
- *                the sidebar, and the bottom nav is hidden
+ *   • >1024px  — full sidebar with labels + badges + user footer, and the
+ *                now-studying card pinned above the user footer
+ *   • 769–1024 — icon rail (labels collapse, badges move to the icon corner,
+ *                now-studying collapses to its art tile + progress line)
+ *   • ≤768px   — sidebar gone, bottom nav + fixed now-studying bar visible
+ *   • Desktop  — FAB sits in the content column clear of the sidebar, and
+ *                the bottom nav + fixed now-bar are hidden
  */
 import { AppShell } from '../components/AppShell.jsx';
 import { Icon } from '../components/common/Icons.jsx';
@@ -25,6 +27,14 @@ const CARD = {
 
 export default function ShellPreviewPage() {
   const { t } = useLang();
+
+  // Fake parked item — exercises the sidebar's now-studying card, the same
+  // payload shape utils/nowStudying.js stores ({ type, id, title, sub,
+  // emoji, progress }).
+  const nowItem = {
+    type: 'session', id: 'demo-1', title: 'Maths — Fractions & decimals',
+    sub: 'Agent session', emoji: '➗', progress: 42,
+  };
 
   const tabs = [
     { key: 'sessions',  label: t('nav.learn')    },

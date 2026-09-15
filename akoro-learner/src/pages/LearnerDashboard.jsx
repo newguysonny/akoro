@@ -706,8 +706,17 @@ export default function LearnerDashboard() {
 
       {/* AppShell — admin-style frame: sidebar nav on tablet/desktop, nothing
           (bottom nav stays) on mobile. Live badge counts mirror the bottom
-          nav's badges so the two never disagree. */}
-      <AppShell badges={{ learn: totalUnread, battles: activeBattleCount, agentOnline }}>
+          nav's badges, and the parked now-studying item renders in the
+          sidebar on desktop while the fixed bar covers mobile — both driven
+          by the same showNowBar flag so they can never disagree. */}
+      <AppShell
+        badges={{ learn: totalUnread, battles: activeBattleCount, agentOnline }}
+        nowStudying={showNowBar ? {
+          item: now.item,
+          onOpen: openNowItem,
+          onAdd: () => navigate('/library?add=1'),
+          onDismiss: nowActs.dismiss,
+        } : null}>
       <div style={{ width:"100%",height:"100%",fontFamily:"'Nunito',sans-serif",background:"var(--ak-bg)",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative" }}>
 
         {(tab==="sessions"||tab==="challenges")&&(

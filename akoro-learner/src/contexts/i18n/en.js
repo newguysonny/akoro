@@ -758,6 +758,7 @@ export const EN = {
   'dhub.course_results':     'Course results',
   'now.resume':              'Resume studying',
   'now.resume_battle':   'Resume battle',
+  'now.studying':        'Now studying',
   'now.dismiss':             'Dismiss',
   'now.minimize':            'Minimize & continue later',
   'now.minimized_toast':     'Continuing in the background — resume from the bar above your tabs.',

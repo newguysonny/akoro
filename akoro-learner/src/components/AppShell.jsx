@@ -16,7 +16,10 @@
  *
  * `badges` is optional; the dashboard passes its live counts so the sidebar
  * mirrors the bottom-nav badges. Pages that don't know the counts simply
- * render without them.
+ * render without them. `nowStudying` is likewise optional — the dashboard
+ * passes `{ item, onOpen, onAdd, onDismiss }` when its now-studying bar is
+ * showing, and the sidebar renders the desktop twin (NowStudyingSidebarCard)
+ * above the user footer.
  *
  * Exports: AppShell, Sidebar
  */
@@ -168,6 +171,10 @@ export function Sidebar({ badges = {} }) {
           />
         ))}
       </nav>
+
+      {/* Now studying — the parked session/record/battle, pinned above the
+          user footer (desktop/tablet only; mobile keeps the fixed bar). */}
+      {nowStudying?.item && <NowStudyingSidebarCard {...nowStudying} />}
 
       {/* User + sign out */}
       <div className="ak-sb-user" style={{
