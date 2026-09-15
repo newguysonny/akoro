@@ -27,6 +27,7 @@ const ResetPasswordPage  = lazyWithRetry(() => import('./pages/auth/ResetPasswor
 const FDEAdminPage       = lazyWithRetry(() => import('./pages/FDEAdminPage.jsx'));
 const NotificationsPage  = lazyWithRetry(() => import('./pages/NotificationsPage.jsx'));
 const ActivityPage       = lazyWithRetry(() => import('./pages/ActivityPage.jsx'));
+const GradebookPage      = lazyWithRetry(() => import('./pages/GradebookPage.jsx'));
 const CommunityPage      = lazyWithRetry(() => import('./pages/CommunityPage.jsx'));
 const CommunityActivityPage  = lazyWithRetry(() => import('./pages/CommunityActivityPage.jsx'));
 const CommunitySettingsPage  = lazyWithRetry(() => import('./pages/CommunitySettingsPage.jsx'));
@@ -44,6 +45,7 @@ const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx')
 const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
 const BlogPage           = lazyWithRetry(() => import('./pages/BlogPage.jsx'));
 const BlogPostPage       = lazyWithRetry(() => import('./pages/BlogPostPage.jsx'));
+const BlogEditorPage     = lazyWithRetry(() => import('./pages/BlogEditorPage.jsx'));
 const PartnersPage       = lazyWithRetry(() => import('./pages/PartnersPage.jsx'));
 const AssessmentPage     = lazyWithRetry(() => import('./pages/AssessmentPage.jsx'));
 const CourseDetailsPage  = lazyWithRetry(() => import('./pages/CourseDetailsPage.jsx'));
@@ -113,6 +115,7 @@ function AppRoutes() {
       <Route path="/fde-admin" element={<ProtectedRoute><FDEAdminPage /></ProtectedRoute>}/>
       <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>}/>
       <Route path="/activities" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>}/>
+      <Route path="/gradebook" element={<ProtectedRoute><GradebookPage /></ProtectedRoute>}/>
       <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>}/>
       <Route path="/communities" element={<ProtectedRoute><CommunityPage /></ProtectedRoute>}/>
       <Route path="/communities/:communityId" element={<ProtectedRoute><CommunityActivityPage /></ProtectedRoute>}/>
@@ -142,6 +145,9 @@ function AppRoutes() {
       <Route path="/careers"  element={<CareersPage />}/>
       <Route path="/blog"     element={<BlogPage />}/>
       <Route path="/blog/:slug" element={<BlogPostPage />}/>
+      {/* Learner-authored blogs (higherEd library) — /blog* is the public marketing blog */}
+      <Route path="/write/blog/new" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
+      <Route path="/write/blog/:id" element={<ProtectedRoute><BlogEditorPage /></ProtectedRoute>}/>
       <Route path="/partners" element={<PartnersPage />}/>
       <Route path="/signin"          element={<GuestRoute><SigninPage /></GuestRoute>}/>
       <Route path="/signup"          element={<GuestRoute><SignupPage /></GuestRoute>}/>

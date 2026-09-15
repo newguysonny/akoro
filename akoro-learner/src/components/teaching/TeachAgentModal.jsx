@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { startMicCapture } from '../../utils/micCapture.js';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
@@ -7,6 +7,8 @@ import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
+import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
+import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted }) {
@@ -125,6 +127,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [interimText,    setInterimText]   = useState("");     // audio chunks
   const [voiceLevel,     setVoiceLevel]    = useState(0);      // 0..1 mic loudness, for the meter
   const [cogState,       setCogState]      = useState(null);   // live cognitive state
+  // Streaming tokens for the turn in flight — Protégé and Guide replies
+  // appear token-by-token with a blinking cursor until turn_complete lands.
+  const [liveStudent, setLiveStudent] = useState(null);
+  const [liveGuide,   setLiveGuide]   = useState(null);
+  const clearLiveStream = () => { setLiveStudent(null); setLiveGuide(null); };
 
   // Mid-session teacher switching
   const [guide,        setGuide]        = useState({ name: guideNm, emoji: guideEm });
@@ -132,6 +139,66 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [switchOpen,   setSwitchOpen]   = useState(false);
   const [switching,    setSwitching]    = useState(false);
   const [agentChoices, setAgentChoices] = useState(null);   // null = not yet loaded
+
+  // ── Session reader (Fortizo split: reader left, this chat right) ─────────
+  // Opened from the book control in the chat composer. Mobile gets a
+  // full-screen reader modal over the session; desktop/tablet get the
+  // Fortizo split with this chat embedded as the right column. The session
+  // itself (WebSocket, blocks, voice) never restarts — only the shell moves.
+  const [readerOpen, setReaderOpen]   = useState(false);
+  const [boardOpen, setBoardOpen]     = useState(false);
+  const isMobileView                  = useIsMobileView();
+  const readerReference = config?.reference || session?.reference || null;
+  const readerPages = useMemo(
+    () => buildSessionReaderPages({
+      topic, subject,
+      reference: readerReference,
+      subtopics: config?.subtopics || session?.subtopics || [],
+      objectives: config?.objectives || session?.objectives || {},
+    }),
+    // The material is fixed at session start; topic/subject don't change mid-session.
+    [readerReference, config?.subtopics, session?.subtopics],
+  );
+  const openReader      = () => setReaderOpen(true);
+  const closeReader     = () => setReaderOpen(false);
+  // "Ask the tutor" in the reader's selection popover: prefill the live
+  // session's input with the selection. On mobile the reader closes so the
+  // chat (and the prefill) is actually visible.
+  const explainSelection = (text) => {
+    setInput(`Please explain: "${text}"`);
+    if (isMobileView) setReaderOpen(false);
+  };
+
+  // ── Session mode toggle (LEARN BY TEACHING ↔ LEARNING WITH GUIDE) ────────
+  // "guide" is UI-only for now: just the teaching guide and the human, no
+  // protégé, no WebSocket. The live teaching session (if running) is kept
+  // intact underneath — toggling back restores it untouched.
+  const [chatMode,      setChatMode]      = useState("teach");
+  const [guideMessages, setGuideMessages] = useState([]);
+  const guideNotedRef   = useRef(false);
+  const toggleChatMode  = () => {
+    setChatMode(m => (m === "teach" ? "guide" : "teach"));
+    // Seed the guide's opening line once (local, no backend).
+    setGuideMessages(prev => prev.length ? prev : [{
+      role: "guide",
+      text: t('teaching.guide_open').replace('{name}', guide.name),
+    }]);
+  };
+  const sendGuideMessage = (text) => {
+    const clean = String(text || "").trim();
+    if (!clean) return;
+    setInput("");
+    setGuideMessages(prev => {
+      const next = [...prev, { role: "user", text: clean }];
+      // One honest note that live guide replies are not wired yet — never
+      // fabricate a guide answer.
+      if (!guideNotedRef.current) {
+        guideNotedRef.current = true;
+        next.push({ role: "system", text: t('teaching.guide_note') });
+      }
+      return next;
+    });
+  };
 
   const userTurns = blocks.filter(b => b.type === "user" && !b.faded).length;
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -145,13 +212,16 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
       wsRef.current = ws;
 
+      // The server derives the learner from the authenticated socket. Do not
+      // send a browser-controlled user or student identifier with a lesson.
       const startSession = () => ws.emit("start_adaptive_session", {
-        studentId:      STUDENT_ID,
         topic,          subject,
         mode,
         sessionId:      prevSessId,
         teacherAgentId: config?.teacherAgentId || session?.teacherAgentId || AGENT_CONFIG.teacherAgentId,
-        userId:         STUDENT_ID,
+        // Higher-ed reference text is capped by the upload endpoint; only this
+        // short-lived session receives it, never a local record or later session.
+        reference:      config?.reference || null,
       });
 
       ws.on("connect", () => {
@@ -160,11 +230,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         // instead of starting a fresh one. The backend keeps the orchestrator
         // alive through a short grace window after a drop.
         if (sessionIdRef.current) {
-          ws.emit("resume_session", {
-            sessionId: sessionIdRef.current,
-            studentId: STUDENT_ID,
-            userId:    STUDENT_ID,
-          });
+          ws.emit("resume_session", { sessionId: sessionIdRef.current });
         } else {
           startSession();
         }
@@ -182,6 +248,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       // — fall back to a fresh session, marking the break in the transcript.
       ws.on("resume_failed", () => {
         sessionIdRef.current = null;
+        clearLiveStream();
         setBlocks(prev => prev.length
           ? [...prev, { type:"system-divider", label:"Reconnected — starting a new session" }]
           : prev);
@@ -207,13 +274,13 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         if (d.guideProfile?.name) setGuide({ name: d.guideProfile.name, emoji: gEmoji });
         if (d.agentPairId) setCurrentPair(d.agentPairId);
 
-        // Prefer the structured opening (subtopic header + phase plan +
-        // objectives checklist + guide card) the backend now sends; fall back
-        // to a single guide block from the opening message if absent.
+        // Prefer the server-owned typed opening blocks. The objective tracker
+        // remains the session's visible progress UI; the guide block carries a
+        // safe learning state and next move instead of an internal phase.
         const opening = d.openingBlocks?.length
           ? d.openingBlocks
           : d.message
-          ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Teach · ready", text:d.message }]
+          ? [{ type:"guide", agent:gName, emoji:gEmoji, text:d.message }]
           : [];
 
         if (d.historyBlocks?.length) {
@@ -251,8 +318,18 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       });
 
       ws.on("typing_start", () => setLoading(true));
+      // ── Streaming token feedback ───────────────────────────────
+      // The orchestrator streams Protégé and Guide tokens as they are
+      // generated (student_token / guide_token). We accumulate them into
+      // live bubbles with a blinking cursor; turn_complete then replaces
+      // them with the authoritative blocks. Both payload shapes are
+      // accepted ({token} from the node socket path, {text} from the
+      // python SSE bridge contract).
+      ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+      ws.on("guide_token",   (d) => setLiveGuide(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
       ws.on("turn_complete", ({ blocks: newBlocks, currentPhase }) => {
         setLoading(false);
+        clearLiveStream();
         if (newBlocks?.length) {
           setBlocks(prev => [...prev, ...newBlocks]);
           // TTS only when the human used voice — modality mirrors input.
@@ -293,8 +370,9 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         setBlocks(prev => [
           ...prev,
           { type:"system-divider", label:`Switched to ${newGuideName}` },
-          ...(d.message ? [{ type:"guide", agent:newGuideName, emoji:d.guideProfile?.emoji || "🧠",
-              phase:"New teacher · ready", text:d.message }] : []),
+          ...(d.guideOpeningBlock ? [d.guideOpeningBlock] : d.message
+            ? [{ type:"guide", agent:newGuideName, emoji:d.guideProfile?.emoji || "🧠", text:d.message }]
+            : []),
         ]);
       });
       ws.on("student_done", ()=>{});
@@ -302,6 +380,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       ws.on("error", err => {
         console.warn("[TeachModal WS]", err.message);
         setLoading(false); setSwitching(false);
+        clearLiveStream();   // a failed turn leaves no half-drawn bubbles
         // If the session never came up, surface the failure instead of leaving
         // the user on a silent spinner.
         if (!sessionIdRef.current) {
@@ -588,7 +667,8 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     if (pairId === currentPair || switching) { setSwitchOpen(false); return; }
     if (!wsRef.current?.connected) return;
     setSwitching(true);
-    wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic, userId: STUDENT_ID });
+    // Ownership is evaluated against the authenticated socket identity server-side.
+    wsRef.current.emit("switch_agent_pair", { newAgentPairId: pairId, topic });
   };
 
   const generateSummary = () => {
@@ -609,57 +689,57 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   if (activeTab === "summary") {
     const sc = SUBJECT_COLORS[subject?.toLowerCase()] || BRAND;
     return (
-      <div style={{ position:"fixed",inset:0,zIndex:3000,background:"#080812",
+      <div style={{ position:"fixed",inset:0,zIndex:3000,background:"var(--ak-bg)",
         display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif" }}>
-        <div style={{ display:"flex",alignItems:"center",background:"rgba(255,255,255,.04)",
-          borderBottom:"1px solid rgba(255,255,255,.06)",paddingTop:52 }}>
+        <div style={{ display:"flex",alignItems:"center",background:"var(--ak-tag-bg)",
+          borderBottom:"1px solid var(--ak-border)",paddingTop:"calc(env(safe-area-inset-top, 0px) + 14px)" }}>
           {["chat","summary"].map(tab=>(
             <button key={tab} onClick={()=>setActiveTab(tab)}
               style={{ flex:1,padding:"10px 0",background:"none",border:"none",cursor:"pointer",
                 fontSize:12,fontWeight:activeTab===tab?800:600,
-                color:activeTab===tab?sc:"#475569",
+                color:activeTab===tab?sc:"var(--ak-text-muted)",
                 borderBottom:`2px solid ${activeTab===tab?sc:"transparent"}`,
                 fontFamily:"'Nunito',sans-serif",transition:"all .2s" }}>
               {tab==="chat" ? t('teaching.tab_chat') : t('teaching.tab_summary')}
             </button>
           ))}
-          <div onClick={onClose} style={{ width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.07)",
+          <div onClick={onClose} style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
             display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",marginRight:12,flexShrink:0 }}>
-            <XIcon size={15} color="#64748B"/>
+            <XIcon size={15} color="var(--ak-text-muted)"/>
           </div>
         </div>
         <div style={{ flex:1,overflowY:"auto",padding:"16px" }}>
           {loading&&!summary?(
             <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:16 }}>
               <div style={{ width:56,height:56,borderRadius:"50%",background:`${sc}22`,border:`2px solid ${sc}`,display:"flex",alignItems:"center",justifyContent:"center",animation:"pulse-dot 1.2s ease-in-out infinite" }}><SparkleIcon size={22} color={sc}/></div>
-              <p style={{ fontSize:14,fontWeight:700,color:"#475569",margin:0 }}>{t('teaching.generating_summary')}</p>
+              <p style={{ fontSize:14,fontWeight:700,color:"var(--ak-text-muted)",margin:0 }}>{t('teaching.generating_summary')}</p>
             </div>
           ):summaryErr?(
             <div style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60%",gap:14,padding:"0 24px",textAlign:"center" }}>
-              <p style={{ fontSize:14,fontWeight:700,color:"#94A3B8",margin:0,lineHeight:1.6 }}>{summaryErr}</p>
+              <p style={{ fontSize:14,fontWeight:700,color:"var(--ak-text-sub)",margin:0,lineHeight:1.6 }}>{summaryErr}</p>
               <button onClick={generateSummary} style={{ padding:"11px 22px",borderRadius:12,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif" }}>{t('common.retry') || 'Try again'}</button>
             </div>
           ):summary&&(
             <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
               <div style={{ background:`linear-gradient(135deg,${sc}22,${sc}10)`,border:`1.5px solid ${sc}30`,borderRadius:18,padding:"18px 16px" }}>
                 <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12 }}>
-                  <div><p style={{ fontSize:11,fontWeight:800,color:sc,margin:"0 0 3px",letterSpacing:.4 }}>{t('teaching.teaching_score')}</p><p style={{ fontSize:38,fontWeight:900,color:"#F1F5F9",margin:0,fontFamily:"monospace" }}>{summary.teachingScore}<span style={{ fontSize:16,color:"#475569" }}>/100</span></p></div>
-                  <div style={{ textAlign:"right" }}><p style={{ fontSize:10,fontWeight:700,color:"#475569",margin:"0 0 4px" }}>{t('teaching.xp_earned')}</p><div style={{ display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end" }}><ZapIcon size={14} color={GOLD}/><span style={{ fontSize:20,fontWeight:900,color:GOLD }}>{summary.xpEarned}</span></div></div>
+                  <div><p style={{ fontSize:11,fontWeight:800,color:sc,margin:"0 0 3px",letterSpacing:.4 }}>{t('teaching.teaching_score')}</p><p style={{ fontSize:38,fontWeight:900,color:"var(--ak-text)",margin:0,fontFamily:"monospace" }}>{summary.teachingScore}<span style={{ fontSize:16,color:"var(--ak-text-muted)" }}>/100</span></p></div>
+                  <div style={{ textAlign:"right" }}><p style={{ fontSize:10,fontWeight:700,color:"var(--ak-text-muted)",margin:"0 0 4px" }}>{t('teaching.xp_earned')}</p><div style={{ display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end" }}><ZapIcon size={14} color={GOLD}/><span style={{ fontSize:20,fontWeight:900,color:GOLD }}>{summary.xpEarned}</span></div></div>
                 </div>
               </div>
-              <div style={{ background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:"14px" }}>
+              <div style={{ background:"var(--ak-tag-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"14px" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:8 }}><BrainIcon size={13} color={sc}/><span style={{ fontSize:10.5,fontWeight:800,color:sc,letterSpacing:.3 }}>{t('teaching.agent_feedback')}</span></div>
-                <p style={{ fontSize:13,fontWeight:600,color:"#CBD5E1",margin:0,lineHeight:1.6 }}>{summary.agentFeedback}</p>
+                <p style={{ fontSize:13,fontWeight:600,color:"var(--ak-text-sec)",margin:0,lineHeight:1.6 }}>{summary.agentFeedback}</p>
               </div>
               {summary.keyConcepts?.length>0&&(
-                <div style={{ background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",borderRadius:14,padding:"14px" }}>
-                  <p style={{ fontSize:10.5,fontWeight:800,color:"#94A3B8",margin:"0 0 10px",letterSpacing:.3 }}>{t('teaching.key_concepts')}</p>
+                <div style={{ background:"var(--ak-tag-bg)",border:"1px solid var(--ak-border)",borderRadius:14,padding:"14px" }}>
+                  <p style={{ fontSize:10.5,fontWeight:800,color:"var(--ak-text-sub)",margin:"0 0 10px",letterSpacing:.3 }}>{t('teaching.key_concepts')}</p>
                   <div style={{ display:"flex",flexWrap:"wrap",gap:7 }}>{summary.keyConcepts.map((c,i)=><div key={i} style={{ background:`${sc}18`,border:`1px solid ${sc}30`,borderRadius:8,padding:"4px 11px" }}><span style={{ fontSize:11.5,fontWeight:700,color:sc }}>{c}</span></div>)}</div>
                 </div>
               )}
               <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-                <div style={{ background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GREEN,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.strengths')}</p>{summary.strengthAreas?.map((s,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"#A7F3D0",margin:"0 0 4px",lineHeight:1.4 }}>· {s}</p>)}</div>
-                <div style={{ background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GOLD,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.gaps')}</p>{summary.gapsIdentified?.map((g,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"#FDE68A",margin:"0 0 4px",lineHeight:1.4 }}>· {g}</p>)}</div>
+                <div style={{ background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GREEN,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.strengths')}</p>{summary.strengthAreas?.map((s,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-success-text)",margin:"0 0 4px",lineHeight:1.4 }}>· {s}</p>)}</div>
+                <div style={{ background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.20)",borderRadius:14,padding:"12px" }}><p style={{ fontSize:10,fontWeight:800,color:GOLD,margin:"0 0 8px",letterSpacing:.3 }}>{t('teaching.gaps')}</p>{summary.gapsIdentified?.map((g,i)=><p key={i} style={{ fontSize:11.5,fontWeight:600,color:"var(--ak-warn-text)",margin:"0 0 4px",lineHeight:1.4 }}>· {g}</p>)}</div>
               </div>
               <button onClick={onClose} style={{ padding:"13px",borderRadius:14,border:"none",background:`linear-gradient(135deg,${sc},${sc}CC)`,fontSize:13,fontWeight:800,color:"#fff",cursor:"pointer",fontFamily:"'Nunito',sans-serif",marginBottom:8 }}>{t('teaching.save_close')}</button>
             </div>
@@ -669,58 +749,105 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     );
   }
 
-  // Chat view — SessionChatView is the root, no wrapper needed
+  // Chat view — SessionChatView is the root, no wrapper needed. When the
+  // reader is open, the same live session is reused: embedded as the right
+  // column on desktop/tablet (the Fortizo split — reader left, chat right),
+  // or sitting underneath the full-screen reader modal on mobile. All session
+  // state lives here, so opening/closing the reader never restarts anything.
+  const sessionChat = (embedded) => (
+    <SessionChatView
+      blocks={blocks}
+      loading={loading || (initLoading && blocks.length === 0)}
+      loadingNote={initLoading && blocks.length === 0 ? prepNote : ''}
+      input={input}
+      onInputChange={setInput}
+      onSend={handleSend}
+      topic={topic}
+      subject={subject}
+      reference={config?.reference || null}
+      agentName={agentNm}
+      agentEmoji={agentEm}
+      mode={mode}
+      userTurns={userTurns}
+      showSummarize={userTurns >= 2 && !summary}
+      onSummarize={generateSummary}
+      onMinimize={onMinimize}
+      recording={recording}
+      onToggleRecording={toggleRecording}
+      seconds={seconds}
+      voiceStreaming={voiceStreaming}
+      interimText={interimText}
+      voiceLevel={voiceLevel}
+      onToggleVoice={toggleVoiceStream}
+      cognitive={cogState}
+      guideLabel={`${guide.emoji} ${guide.name}`}
+      onSwitchAgent={wsReady ? openSwitch : null}
+      switching={switching}
+      connState={connState}
+      onClose={onClose}
+      embedded={embedded}
+      onOpenReader={readerOpen ? closeReader : openReader}
+      onOpenBoard={() => setBoardOpen(true)}
+      chatMode={chatMode}
+      onToggleChatMode={toggleChatMode}
+      guide={{
+        messages: guideMessages,
+        onSend: sendGuideMessage,
+        onSuggestion: setInput,
+        guideName: guide.name,
+        guideEmoji: guide.emoji,
+      }}
+      liveStudent={liveStudent}
+      liveGuide={liveGuide}
+    />
+  );
+
+  const readerProps = {
+    docTitle: `${subject} — ${topic}`,
+    sourceName: readerReference?.name || "Session guide",
+    pages: readerPages,
+    onClose: closeReader,
+    onExplainSelection: explainSelection,
+  };
+
   return (
     <>
-      <SessionChatView
-        blocks={blocks}
-        loading={loading || (initLoading && blocks.length === 0)}
-        loadingNote={initLoading && blocks.length === 0 ? prepNote : ''}
-        input={input}
-        onInputChange={setInput}
-        onSend={handleSend}
-        topic={topic}
-        subject={subject}
-        agentName={agentNm}
-        agentEmoji={agentEm}
-        mode={mode}
-        userTurns={userTurns}
-        showSummarize={userTurns >= 2 && !summary}
-        onSummarize={generateSummary}
-        onMinimize={onMinimize}
-        recording={recording}
-        onToggleRecording={toggleRecording}
-        seconds={seconds}
-        voiceStreaming={voiceStreaming}
-        interimText={interimText}
-        voiceLevel={voiceLevel}
-        onToggleVoice={toggleVoiceStream}
-        cognitive={cogState}
-        guideLabel={`${guide.emoji} ${guide.name}`}
-        onSwitchAgent={wsReady ? openSwitch : null}
-        switching={switching}
-        connState={connState}
-        onClose={onClose}
-      />
+      {isMobileView ? (
+        // Mobile: full-screen reader modal over the session chat (the chat
+        // button inside the reader returns here).
+        <>
+          {sessionChat(false)}
+          {readerOpen && <SessionReaderModal {...readerProps} onOpenChat={closeReader}/>}
+        </>
+      ) : readerOpen ? (
+        // Desktop/tablet: the Fortizo split — reader left, live session right.
+        <SessionReaderModal {...readerProps} chatNode={sessionChat(true)}/>
+      ) : (
+        sessionChat(false)
+      )}
+
+      {boardOpen && (
+        <WhiteboardModal topic={topic} subject={subject} onClose={() => setBoardOpen(false)} />
+      )}
 
       {switchOpen && (
         <div onClick={() => !switching && setSwitchOpen(false)}
           style={{ position:"fixed",inset:0,zIndex:3200,background:"rgba(6,6,18,.6)",
             backdropFilter:"blur(5px)",display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:"#0F0F1C",width:"100%",maxWidth:540,maxHeight:"78vh",overflowY:"auto",
+            style={{ background:"var(--ak-surface)",width:"100%",maxWidth:540,maxHeight:"78vh",overflowY:"auto",
               borderRadius:"22px 22px 0 0",fontFamily:"'Nunito',sans-serif",
-              animation:"sheet-up .28s cubic-bezier(.34,1.4,.6,1)",border:"1px solid rgba(255,255,255,.08)" }}>
+              animation:"sheet-up .28s cubic-bezier(.34,1.4,.6,1)",border:"1px solid var(--ak-border)" }}>
             <div style={{ padding:"12px 0 4px",display:"flex",justifyContent:"center" }}>
-              <div style={{ width:38,height:4,borderRadius:4,background:"rgba(255,255,255,.18)" }}/>
+              <div style={{ width:38,height:4,borderRadius:4,background:"var(--ak-border3)" }}/>
             </div>
             <div style={{ padding:"6px 18px 26px" }}>
-              <p style={{ fontSize:16,fontWeight:900,color:"#F1F5F9",margin:"4px 0 3px" }}>{t('teaching.switch_teacher')}</p>
-              <p style={{ fontSize:12,fontWeight:600,color:"#64748B",margin:"0 0 16px",lineHeight:1.5 }}>
+              <p style={{ fontSize:16,fontWeight:900,color:"var(--ak-text)",margin:"4px 0 3px" }}>{t('teaching.switch_teacher')}</p>
+              <p style={{ fontSize:12,fontWeight:600,color:"var(--ak-text-muted)",margin:"0 0 16px",lineHeight:1.5 }}>
                 {t('teaching.switch_sub')}
               </p>
               {!agentChoices ? (
-                [0,1].map(i => <div key={i} style={{ height:64,borderRadius:14,background:"rgba(255,255,255,.04)",marginBottom:9 }}/>)
+                [0,1].map(i => <div key={i} style={{ height:64,borderRadius:14,background:"var(--ak-tag-bg)",marginBottom:9 }}/>)
               ) : (
                 <div style={{ display:"flex",flexDirection:"column",gap:9 }}>
                   {agentChoices.map(a => {
@@ -728,14 +855,14 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
                     return (
                       <button key={a.id} onClick={() => performSwitch(a.id)} disabled={switching || active}
                         style={{ display:"flex",alignItems:"center",gap:12,textAlign:"left",
-                          background:active?"rgba(108,59,255,.16)":"rgba(255,255,255,.04)",
-                          border:`1.5px solid ${active?BRAND:"rgba(255,255,255,.08)"}`,borderRadius:14,
+                          background:active?"rgba(108,59,255,.16)":"var(--ak-tag-bg)",
+                          border:`1.5px solid ${active?BRAND:"var(--ak-border)"}`,borderRadius:14,
                           padding:"12px 14px",cursor:(switching||active)?"default":"pointer",width:"100%" }}>
                         <div style={{ width:42,height:42,borderRadius:12,flexShrink:0,display:"flex",
-                          alignItems:"center",justifyContent:"center",fontSize:22,background:"rgba(255,255,255,.06)" }}>{a.avatar}</div>
+                          alignItems:"center",justifyContent:"center",fontSize:22,background:"var(--ak-tag-bg)" }}>{a.avatar}</div>
                         <div style={{ flex:1,minWidth:0 }}>
-                          <div style={{ fontSize:13.5,fontWeight:800,color:"#F1F5F9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{a.name}</div>
-                          <div style={{ fontSize:11,fontWeight:600,color:"#64748B",marginTop:2 }}>
+                          <div style={{ fontSize:13.5,fontWeight:800,color:"var(--ak-text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{a.name}</div>
+                          <div style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",marginTop:2 }}>
                             {a.kind === "platform" ? t('teaching.platform_default') : (a.teacher ? `by ${a.teacher}` : t('teaching.trained_agent'))}{a.subject ? ` · ${a.subject}` : ""}
                           </div>
                         </div>

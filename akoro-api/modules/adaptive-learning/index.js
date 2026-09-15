@@ -29,6 +29,7 @@ import chatRouter                from "./chat.js";
 import drawRouter                from "./draw.js";
 import { syllabusRouter }        from "./syllabus.js";
 import teachingSessionRouter     from "./teachingSession.js";
+import examPrepConfidenceRouter  from "./exam-prep-confidence.js";
 // Side-effect import: schedules the off-peak lesson-ladder pre-warm so the
 // first learner on a scheme-of-work topic never waits for generation.
 import "./ladderPrewarm.js";
@@ -64,11 +65,14 @@ router.post("/training/stream/end",   authenticateToken, endLiveStream);
 router.use("/marketplace",  marketplaceRouter);
 
 // HTTP chat fallback (for non-WebSocket clients)
-// POST /api/adaptive/chat
+// POST /api/adaptive/chat/agent — unified streamed/non-streamed Agent Chat
 // GET  /api/adaptive/chat/history/:agentId
 // Teaching session — phase engine (configure + start + message + state + assess)
 // Mounted BEFORE chatRouter so /teaching/* is handled here, not by chat.js
 router.use("/teaching",      authenticateToken, teachingSessionRouter);
+// Additive learner-owned diagnostic/retest workflow. It does not change the
+// legacy phase-oriented teaching route or the teacher task exam-prep tool.
+router.use("/exam-prep",     authenticateToken, examPrepConfidenceRouter);
 
 router.use("/chat",          authenticateToken, chatRouter);
 router.use("/draw",          authenticateToken, drawRouter);
@@ -109,6 +113,7 @@ router.use(authenticateToken, assessmentRouter);
  *     student_done             student agent finished streaming
  *     guide_done               guide agent finished streaming
  *     typing_start             agent is generating a response
+ *     teaching_workflow_step   public server-run teaching workflow step
  *     turn_complete            full turn result with XP + adaptive engine
  *     state_update             real-time cognitive state update
  *     session_ended            session complete with evaluation

@@ -8,6 +8,7 @@ import agentsRouter from "./agents.js";
 import appCenterRouter from "./appCenter.js";
 import aiSpendRouter from "./aiSpend.js";
 import evalsRouter from "./evals.js";
+import agentToolRequestsRouter from "./agent-tool-requests.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -19,5 +20,6 @@ router.use("/", agentsRouter);
 router.use("/", appCenterRouter);
 router.use("/", aiSpendRouter);
 router.use("/", evalsRouter);
+router.use("/", agentToolRequestsRouter);
 
 export default router;

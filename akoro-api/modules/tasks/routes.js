@@ -9,12 +9,14 @@ import { Router }                         from "express";
 import db                                 from "../../db.js";
 import { TaskDB, TaskFileDB, TaskRunDB, TaskOutputDB, TaskScheduleDB, DynamicToolDB } from "./lib/db.js";
 import { scheduleTask, cancelTask, triggerNow, getQueueHealth, taskQueue } from "./scheduler.js";
+import { cancelAutonomyReviewForTask, scheduleAutonomyReviewForTask } from "../adaptive-learning/learner-autonomy.js";
 import { extractIntent }                  from "./lib/context.js";
 import { createPresignedUpload }          from "./lib/storage.js";
 import { extractTextFromUrl }             from "./lib/ocr.js";
 import { ALL_TOOLS }                      from "./tools/index.js";
 import { OPENAI_MODEL }                   from "../../lib/aiModel.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { emitAutonomyEvent } from "../autonomy/triggers.js";
 
 const router = Router();
 
@@ -174,12 +176,30 @@ router.get("/admin/tools/:id", requireRole(["admin"]), async (req, res) => {
   }
 });
 
+// Learner tasks are plans owned and completed by the learner. They must never
+// enter the generic task-runner, which can call arbitrary task executors. Their
+// only automatic behaviour is the separate, opt-in, due-time Agent Chat.
+const LEARNER_ROLES = new Set(["student", "learner"]);
+const isLearnerTask = (req) => LEARNER_ROLES.has(String(req.user?.role || "").toLowerCase());
+const isPreciseDueAt = (value) => typeof value === "string"
+  && /^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())
+  && Number.isFinite(new Date(value).getTime());
+
 // ─── POST /api/tasks ──────────────────────────────────────────────────────────
 router.post("/", async (req, res) => {
   try {
     const { title, description, priority = "medium", agentId: providedAgentId, courseId, dueAt, isRecurring = false, cronExpr, timezone = "Africa/Lagos", fileIds = [] } = req.body;
 
     if (!title) return res.status(400).json({ error: "title is required" });
+    if (dueAt !== undefined && dueAt !== null) {
+      const validDue = isLearnerTask(req) ? isPreciseDueAt(dueAt) : Number.isFinite(new Date(dueAt).getTime());
+      if (!validDue) return res.status(422).json({ error: isLearnerTask(req)
+        ? "dueAt must be an ISO 8601 timestamp with a timezone offset"
+        : "dueAt must be a valid timestamp" });
+    }
+    if (isLearnerTask(req) && isRecurring) {
+      return res.status(422).json({ error: "Learner task autonomy supports one precise due time, not recurring runs" });
+    }
 
     // Auto-resolve agentId from user's active agent if not provided
     let agentId = providedAgentId;
@@ -212,6 +232,15 @@ router.post("/", async (req, res) => {
       await TaskScheduleDB.create({ taskId: task.id, cronExpr, timezone });
     }
 
+    if (isLearnerTask(req)) {
+      // Deliberately do not call scheduleTask(): that queue executes a task and
+      // may spend coins. The autonomy service only queues a chat after checking
+      // the learner's server-side opt-in at delivery time.
+      try { await scheduleAutonomyReviewForTask(task); }
+      catch (autonomyError) { console.warn("[tasks] autonomy schedule skipped:", autonomyError.message); }
+      return res.status(201).json({ task: { ...task, bullJobId: null } });
+    }
+
     const jobId = await scheduleTask(task);
     res.status(201).json({ task: { ...task, bullJobId: jobId } });
   } catch (err) {
@@ -231,6 +260,69 @@ router.get("/", async (req, res) => {
   }
 });
 
+// ═══ Agent suggestions ════════════════════════════════════════════════════════
+// Proactive ideas the agent files for the learner (the chat tool
+// `suggest_help`). They are advice only: nothing executes and no task exists
+// until the learner accepts one — accept creates the real task, dismiss
+// closes the idea. Declared before /:taskId so "suggestions" is never read
+// as a task id.
+
+/** GET /api/tasks/suggestions — the learner's open suggestions, newest first. */
+router.get("/suggestions", async (req, res) => {
+  try {
+    const { data, error } = await db.from("agent_suggestions")
+      .select("*").eq("user_id", req.user.id).eq("status", "open")
+      .order("created_at", { ascending: false }).limit(50);
+    if (error) throw new Error(error.message);
+    res.json({ suggestions: data ?? [], count: (data ?? []).length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/tasks/suggestions/:id/accept — turn one suggestion into a real task. */
+router.post("/suggestions/:id/accept", async (req, res) => {
+  try {
+    const { data: suggestion } = await db.from("agent_suggestions")
+      .select("*").eq("id", req.params.id).eq("user_id", req.user.id).single();
+    if (!suggestion || suggestion.status !== "open")
+      return res.status(404).json({ error: "Suggestion not found" });
+
+    const { data: task, error } = await db.from("tasks").insert({
+      creator_id: req.user.id, agent_id: suggestion.agent_id,
+      title: suggestion.title, description: suggestion.rationale || null,
+      priority: "medium", status: "pending", task_type: "general",
+    }).select().single();
+    if (error) throw new Error(error.message);
+
+    const { data: updated, error: upErr } = await db.from("agent_suggestions")
+      .update({ status: "accepted", task_id: task.id, resolved_at: new Date().toISOString() })
+      .eq("id", suggestion.id).select().single();
+    if (upErr) throw new Error(upErr.message);
+
+    // Same signal the agent's own create_task emits, so any open UI refreshes.
+    global.io?.to(`user:${req.user.id}`).emit("task:created", task);
+    res.json({ task, suggestion: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /api/tasks/suggestions/:id/dismiss — close one suggestion for good. */
+router.patch("/suggestions/:id/dismiss", async (req, res) => {
+  try {
+    const { data: updated, error } = await db.from("agent_suggestions")
+      .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+      .eq("id", req.params.id).eq("user_id", req.user.id).eq("status", "open")
+      .select();
+    if (error) throw new Error(error.message);
+    if (!updated?.length) return res.status(404).json({ error: "Suggestion not found" });
+    res.json({ suggestion: updated[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/tasks/:taskId ───────────────────────────────────────────────────
 router.get("/:taskId", async (req, res) => {
   try {
@@ -243,10 +335,8 @@ router.get("/:taskId", async (req, res) => {
 });
 
 // ─── PATCH /api/tasks/:taskId ─────────────────────────────────────────────────
-// Edits a task that has not started yet — including WHEN it runs. Because the
-// run time lives in BullMQ (a delayed job), not just in the row, changing
-// due_at/recurrence has to cancel the old job and queue a new one; otherwise
-// the task would still fire at the original time.
+// Edits a task that has not started yet. Instructor tasks maintain their
+// generic execution queue; learner tasks maintain only their opt-in chat review.
 router.patch("/:taskId", async (req, res) => {
   try {
     const task = await TaskDB.findById(req.params.taskId);
@@ -261,8 +351,17 @@ router.patch("/:taskId", async (req, res) => {
     if (priority !== undefined)    updates.priority    = priority;
     if (courseId !== undefined)    updates.course_id   = courseId || null;
     if (timezone !== undefined)    updates.timezone    = timezone;
-    // `dueAt: null` is a real instruction ("run it now / unschedule"), so the
-    // presence of the key matters, not its truthiness.
+    if (dueAt !== undefined && dueAt !== null) {
+      const validDue = isLearnerTask(req) ? isPreciseDueAt(dueAt) : Number.isFinite(new Date(dueAt).getTime());
+      if (!validDue) return res.status(422).json({ error: isLearnerTask(req)
+        ? "dueAt must be an ISO 8601 timestamp with a timezone offset"
+        : "dueAt must be a valid timestamp" });
+    }
+    if (isLearnerTask(req) && isRecurring) {
+      return res.status(422).json({ error: "Learner task autonomy supports one precise due time, not recurring runs" });
+    }
+    // `dueAt: null` is a real instruction ("unschedule"), so the presence of
+    // the key matters, not its truthiness.
     const timingChanged = dueAt !== undefined || isRecurring !== undefined || cronExpr !== undefined;
     if (dueAt !== undefined)       updates.due_at      = dueAt || null;
     if (isRecurring !== undefined) updates.is_recurring = !!isRecurring;
@@ -282,8 +381,20 @@ router.patch("/:taskId", async (req, res) => {
         else          await TaskScheduleDB.create({ taskId: task.id, cronExpr, timezone: updated.timezone ?? "Africa/Lagos" });
       }
       await cancelTask(updated.bull_job_id, updated.id);
-      const jobId = await scheduleTask(updated);
-      updated = { ...updated, bull_job_id: jobId, status: "queued" };
+      if (isLearnerTask(req)) {
+        // Learners edit study plans, not autonomous execution jobs. Keep the
+        // task pending and re-point (or cancel) the chat-only due review.
+        updated = await TaskDB.updateStatus(updated.id, "pending", { bullJobId: null });
+        try {
+          if (updated.due_at) await scheduleAutonomyReviewForTask(updated);
+          else await cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id });
+        } catch (autonomyError) {
+          console.warn("[tasks] autonomy update skipped:", autonomyError.message);
+        }
+      } else {
+        const jobId = await scheduleTask(updated);
+        updated = { ...updated, bull_job_id: jobId, status: "queued" };
+      }
     }
 
     res.json({ task: updated });
@@ -435,6 +546,12 @@ router.patch("/:taskId/toggle", async (req, res) => {
       : { completedAt: null, startedAt: null };
 
     const updated = await TaskDB.updateStatus(req.params.taskId, newStatus, extra);
+    if (newStatus === "done" && isLearnerTask(req)) {
+      try { await cancelAutonomyReviewForTask({ taskId: updated.id, userId: req.user.id }); }
+      catch (autonomyError) { console.warn("[tasks] autonomy cancellation skipped:", autonomyError.message); }
+      // Event trigger: a finished task is fresh signal for the planner.
+      emitAutonomyEvent(req.user.id, "task_done").catch(() => {});
+    }
     res.json({ task: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });

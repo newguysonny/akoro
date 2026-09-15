@@ -78,6 +78,44 @@ router.get("/", authenticateToken, async (req, res) => {
   } catch (e) { serverError(res, e, req); }
 });
 
+// ── Curriculum Guardian review operations ───────────────────────────────
+// A queue record is intentionally a metadata-only operational signal. The
+// underlying learner reply/evidence stays in its protected evidence ledger and
+// is never exposed by this curriculum-management API.
+const reviewText = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
+router.get("/guardian-reviews", adminOnly, async (req, res) => {
+  const requested = String(req.query.status || "open").toLowerCase();
+  if (!["open", "resolved", "dismissed", "all"].includes(requested)) return res.status(422).json({ error: "status must be open, resolved, dismissed, or all" });
+  try {
+    let query = db.schema("edu").from("curriculum_guardian_reviews")
+      .select("id, learner_id, concept_id, source_session_id, source_turn_id, review_reason, status, reviewer_id, resolution, created_at, reviewed_at, concept_catalog(title, code, subject, topic_key)")
+      .order("created_at", { ascending: requested !== "open" }).limit(100);
+    if (requested !== "all") query = query.eq("status", requested);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json({ success: true, data: (data || []).map((item) => ({
+      id: item.id, learnerId: item.learner_id, conceptId: item.concept_id,
+      reason: item.review_reason, status: item.status, resolution: item.resolution,
+      createdAt: item.created_at, reviewedAt: item.reviewed_at,
+      concept: item.concept_catalog ? { title: item.concept_catalog.title, code: item.concept_catalog.code, subject: item.concept_catalog.subject, topicKey: item.concept_catalog.topic_key } : null,
+    })) });
+  } catch (e) { serverError(res, e, req); }
+});
+
+router.patch("/guardian-reviews/:id", adminOnly, async (req, res) => {
+  const status = String(req.body?.status || "").toLowerCase();
+  const resolution = reviewText(req.body?.resolution, 600);
+  if (!["resolved", "dismissed"].includes(status) || !resolution) return res.status(422).json({ error: "A resolved or dismissed status and a brief resolution are required" });
+  try {
+    const { data, error } = await db.schema("edu").from("curriculum_guardian_reviews")
+      .update({ status, resolution, reviewer_id: req.user.id, reviewed_at: new Date().toISOString() })
+      .eq("id", req.params.id).eq("status", "open").select("id, status, resolution, reviewed_at").maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(409).json({ error: "Review is no longer open or was not found" });
+    res.json({ success: true, data: { id: data.id, status: data.status, resolution: data.resolution, reviewedAt: data.reviewed_at } });
+  } catch (e) { serverError(res, e, req); }
+});
+
 // GET /api/curriculum/:id?class= — the whole document, assembled as a tree.
 router.get("/:id", authenticateToken, async (req, res) => {
   try {

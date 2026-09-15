@@ -16,6 +16,17 @@ import {
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
 import { isHigherEdUI } from '../../utils/studyLevel.js';
 
+// A concise, recognisable list keeps the mobile selector usable. The API still
+// validates IANA identifiers, so the agent never treats a display label as a
+// timezone authority.
+const TIME_ZONES = [
+  'Africa/Lagos', 'Africa/Accra', 'Africa/Johannesburg', 'Africa/Nairobi',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Toronto', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo',
+  'Australia/Sydney', 'Pacific/Auckland',
+];
+
 /* ─── Notification section ────────────────────────────────────── */
 /* ─── Notification section ────────────────────────────────────── */
 function NotifSection({ notif, setNotif, onSaveNotif }) {
@@ -181,30 +192,51 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
 
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
-      country:'country', school:'schoolName', schoolType:'schoolType',
+      city:'city', country:'country', school:'schoolName', schoolType:'schoolType',
       year:'yearGroup', teachingGuide:'teachingGuide',
-      language:'language', displayMode:'displayMode',
+      language:'language', timeZone:'timeZone', displayMode:'displayMode',
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
     };
     const apiKey = fieldMap[field] || field;
+    const previousValue = profile[field];
+    const reloadsApp = ['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
+      && val && val !== previousValue;
+
+    // Optimistic feedback keeps the sheet responsive, but the API response is
+    // still the source of truth. A profile field must never be described as
+    // "saved locally" unless it has actually entered the offline write queue.
     setProfile(p => ({ ...p, [field]: val }));
     try {
-      await onSaveProfile({ [apiKey]: val });
-      showToast('Saved');
-    } catch {
-      showToast('Saved locally');
-    }
+      const result = await onSaveProfile({ [apiKey]: val });
+      if (result?.queued || result?._offline) {
+        showToast('Saved on this device — it will sync when you are online');
+        return;
+      }
+      if (result?.success !== true) {
+        throw new Error('The change was not confirmed by Akoro. Please try again.');
+      }
 
-    /* Level, language and theme switches all re-derive the whole app (the
-       school ↔ higher-ed tier reads studyLevel/schoolType; language and
-       theme come from storage at boot), so a plain state update isn't
-       enough — stage the branded boot splash and hard-reload so every
-       screen re-renders from the new setting. Runs on the saved-locally
-       path too: the queued write replays after the reload. */
-    if (['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
-        && val && val !== profile[field]) {
-      try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
-      setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      // School Type controls the school / higher-ed experience, so confirm the
+      // value the database actually saved before reloading into that experience.
+      if (field === 'schoolType' && result?.data?.schoolType !== val) {
+        throw new Error('School Type was not confirmed. Please try again.');
+      }
+
+      showToast('Saved');
+
+      // Level, language and theme switches re-derive the app at boot. Reload
+      // only after the server has confirmed the update—not after a rejected or
+      // queued request, which previously restored the old database value.
+      if (reloadsApp) {
+        try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+        setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      }
+    } catch (error) {
+      // Do not leave a rejected optimistic value on screen. Guard the rollback
+      // so a later save to the same field cannot be overwritten by this one.
+      setProfile(p => p?.[field] === val ? { ...p, [field]: previousValue } : p);
+      console.warn('[settings] profile save failed', error);
+      showToast(error?.message || 'Could not save this change. Please try again.');
     }
   }, [onSaveProfile, setProfile, onLogout, profile, onSetMode, onSetAccent, onSetLanguage, guideMap]);
 
@@ -219,9 +251,14 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         { icon:'ti-receipt',  title:'settings.order_history', sub:'settings.order_history_sub', go:()=>navigate('/orders') },
         isHigherEdUI(profile)
           ? { icon:'ti-users', title:'settings.communities',  sub:'settings.communities_sub',  go:()=>navigate('/communities') }
-          : { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
+          // lowerEd gets BOTH its cards — flattened, or the nested array
+          // renders as one blank card (which is exactly what happened).
+          : [
+              { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
+              { icon:'ti-books-2',  title:'settings.gradebook',  sub:'settings.gradebook_sub',   go:()=>navigate('/gradebook') },
+            ],
         { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
-      ].map(card => (
+      ].flat().map(card => (
         <button key={card.title} onClick={card.go}
           style={{ display:'flex',alignItems:'center',gap:12,width:'calc(100% - 32px)',
             margin:'0 16px 14px',borderRadius:16,padding:'14px 16px',cursor:'pointer',
@@ -269,8 +306,14 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           sub={profile.googleLinked?t('settings.linked_via_google'):undefined}/>
         <Row icon="ti-phone" label={t('settings.phone')} value={profile.phone||t('settings.not_set')}
           onClick={()=>openSheet('phone',t('settings.phone'),'text')}/>
+        <Row icon="ti-building-community" label="City" value={profile.city||t('settings.not_set')}
+          sub="Optional — self-reported location"
+          onClick={()=>openSheet('city','City','text')}/>
         <Row icon="ti-map-pin" label={t('settings.country')}    value={profile.country||t('settings.not_set')}
           onClick={()=>openSheet('country',t('settings.country'),'select',COUNTRIES)}/>
+        <Row icon="ti-clock" label="Time zone" value={profile.timeZone||'Africa/Lagos (Akoro default)'}
+          sub="Used for your agent chats, tasks and reminders"
+          onClick={()=>openSheet('timeZone','Time zone','select',TIME_ZONES)}/>
       </Section>
 
       <Section title={t('settings.learn_study')}>

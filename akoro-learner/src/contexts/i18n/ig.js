@@ -337,6 +337,15 @@ export const IG = {
   'agent.save_agent':         'Chekwaa onye nnọchi anya',
   'agent.task_title_ph':      'Aha ọrụ…',
   'agent.to_do':              'Ime',
+  'agent.suggestions':      'Ndụmọddụ',
+  'agent.suggestions_sub':  'Echiche site na onye nnọchite anya gị — nabata otu ka ọ bụrụ ọrụ.',
+  'agent.suggestions_empty':'Ọ nweghị ndụmọddụ ugbu a. Onye nnọchite anya gị ga-etinye echiche ebe a mgbe ọ hụrụ ụzọ isi nyere gị aka.',
+  'agent.suggestion_accept':'Tinye dị ka ọrụ',
+  'agent.suggestion_dismiss':'Wepu ndụmọddụ',
+  'agent.suggestion_added': 'Etinyela ya na ọrụ gị: {title}',
+  'agent.sugg_task':        'Echiche ọrụ',
+  'agent.sugg_goal':        'Ebumnuche',
+  'agent.sugg_chat':        'Okwu',
   'agent.unnamed':            'Onye Nnọchi Anya Na-enweghị Aha',
 
   /* ── Battles ── */

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
+import { BRAND, RED, GREEN, GOLD } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖' };
 import SessionChatView from './SessionChatView.jsx';
+import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
@@ -27,8 +28,13 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
   const [seconds,   setSeconds]   = useState(0);
   const [loading,   setLoading]   = useState(false);
   const [wsReady,   setWsReady]   = useState(false);
+  // Streaming tokens for the turn in flight (same contract as TeachAgentModal).
+  const [liveStudent, setLiveStudent] = useState(null);
+  const [liveGuide,   setLiveGuide]   = useState(null);
+  const clearLiveStream = () => { setLiveStudent(null); setLiveGuide(null); };
   // Socket lifecycle for the connection chip: "connecting" | "connected" | "reconnecting"
   const [connState, setConnState] = useState("connecting");
+  const [boardOpen, setBoardOpen] = useState(false);   // sketchpad over the session
   const timerRef    = useRef(null);
   const wsRef       = useRef(null);
   const sessionIdRef = useRef(null);   // live session id — drives seamless resume on reconnect
@@ -45,12 +51,12 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       const ws = connect(API, { transports:["websocket","polling"], withCredentials:true });
       wsRef.current = ws;
 
+      // The server derives the learner from the authenticated socket. Do not
+      // send a browser-controlled user or student identifier with a lesson.
       const startSession = () => ws.emit("start_adaptive_session", {
-        studentId:      STUDENT_ID,
         subject,        topic,
         mode:           "decay",
         notificationId: alert.id,
-        userId:         STUDENT_ID,
       });
 
       ws.on("connect", () => {
@@ -58,11 +64,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
         // Seamless resume on reconnect — re-bind to the surviving orchestrator
         // rather than restarting the re-teach.
         if (sessionIdRef.current) {
-          ws.emit("resume_session", {
-            sessionId: sessionIdRef.current,
-            studentId: STUDENT_ID,
-            userId:    STUDENT_ID,
-          });
+          ws.emit("resume_session", { sessionId: sessionIdRef.current });
         } else {
           startSession();
         }
@@ -101,7 +103,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
         const opening = d.openingBlocks?.length
           ? d.openingBlocks
           : d.message
-          ? [{ type:"guide", agent:gName, emoji:gEmoji, phase:"Revision · ready", text:d.message }]
+          ? [{ type:"guide", agent:gName, emoji:gEmoji, text:d.message }]
           : [];
         if (d.historyBlocks?.length) setBlocks(prev => [...prev.filter(b => !b.faded), ...d.historyBlocks, ...opening]);
         else if (opening.length) setBlocks(prev => prev.length ? [...prev, ...opening] : opening);
@@ -115,8 +117,14 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
 
       ws.on("typing_start", () => setLoading(true));
 
+      // Streaming token feedback — protégé/guide replies draw as they are
+      // generated; turn_complete replaces the live bubbles with real blocks.
+      ws.on("student_token", (d) => setLiveStudent(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+      ws.on("guide_token",   (d) => setLiveGuide(prev => (prev || "") + (d?.token ?? d?.text ?? "")));
+
       ws.on("turn_complete", ({ blocks: newBlocks }) => {
         setLoading(false);
+        clearLiveStream();
         if (newBlocks?.length) setBlocks(prev => [...prev, ...newBlocks]);
       });
 
@@ -125,6 +133,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       ws.on("error", err => {
         console.warn("[DecayModal WS]", err.message);
         setLoading(false);
+        clearLiveStream();
         if (!sessionIdRef.current) {
           setInitLoading(false);
           setBlocks(prev => prev.some(b => b.type === "system-divider") ? prev : [...prev, {
@@ -185,6 +194,7 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
   };
 
   return (
+    <>
     <SessionChatView
       blocks={blocks}
       loading={loading || (initLoading && blocks.length === 0)}
@@ -203,8 +213,13 @@ function DecaySessionModal({ alert, onClose, onMinimize, agentProfile }) {
       onToggleRecording={toggleRecording}
       seconds={seconds}
       connState={connState}
+      onOpenBoard={() => setBoardOpen(true)}
+      liveStudent={liveStudent}
+      liveGuide={liveGuide}
       onClose={onClose}
     />
+    {boardOpen && <WhiteboardModal topic={topic} subject={subject} onClose={() => setBoardOpen(false)} />}
+    </>
   );
 }
 

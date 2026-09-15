@@ -24,8 +24,18 @@ node scripts/apply-migrations.mjs --group=schema
 node scripts/apply-migrations.mjs --continue-on-error   # log & skip failures
 ```
 
-Requires `DATABASE_URL` (the **direct** Postgres URI, not the REST URL —
-Supabase: Settings → Database → Connection string). The runner forces IPv4 and
+Requires a PostgreSQL URI, never the Supabase REST URL. The runner uses
+`MIGRATION_DATABASE_URL` when it is set; otherwise it falls back to
+`DATABASE_URL` (then legacy `DB_URL`).
+
+- **`DATABASE_URL`** is the normal application PostgreSQL connection and the
+  migration fallback. Runtime adaptive chat opens a direct `pg` pool with it.
+- **`MIGRATION_DATABASE_URL`** is optional and affects only this migration
+  runner. Set it when migration DDL should use a separate direct/session
+  connection (often Supabase port `5432`) while runtime `DATABASE_URL` uses a
+  transaction pooler (often port `6543`).
+
+Supabase: Settings → Database → Connection string. The runner forces IPv4 and
 enables SSL for non-localhost hosts.
 
 ## Auto-deploy on the hosting platform
@@ -39,8 +49,10 @@ before the new server starts:
   `npm run db:deploy`
 - **Render** → **Pre-Deploy Command**: `npm run db:deploy`
 
-Set `DATABASE_URL` in that service's variables. Demo data is opt-in — run
-`npm run db:seed:demo` by hand against staging when you want it.
+Set `DATABASE_URL` in that service's variables, plus an optional
+`MIGRATION_DATABASE_URL` when deploy-time DDL needs a different connection.
+Demo data is opt-in — run `npm run db:seed:demo` by hand against staging when
+you want it.
 
 ## Adding a migration
 

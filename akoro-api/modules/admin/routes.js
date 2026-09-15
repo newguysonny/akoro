@@ -26,8 +26,9 @@
 import { Router }                         from "express";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
-import { authenticateToken, requireRole } from "../auth/routes.js";
+import { authenticateToken, requireRole, invalidateCachedUser } from "../auth/routes.js";
 import { notify }                         from "../notifications/events.js";
+import { usageSnapshot }                  from "../../lib/usageMeter.js";
 
 const router = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -47,6 +48,11 @@ const validate = (req, res) => {
 };
 
 // ── Stats ────────────────────────────────────────────────────────────────────
+
+// GET /api/admin/usage — where the DB "command" quota is going, per route.
+router.get("/usage", adminOnly, asyncHandler(async (req, res) => {
+  ok(res, usageSnapshot({ topN: Math.min(Number(req.query.top) || 12, 50) }));
+}));
 
 router.get("/stats", adminOnly, asyncHandler(async (req, res) => {
   const [
@@ -141,6 +147,7 @@ router.post("/users/:id/force-logout", adminOnly, asyncHandler(async (req, res) 
   await db.from("users")
     .update({ force_logout_at: now, updated_at: now })
     .eq("id", req.params.id);
+  invalidateCachedUser(req.params.id);   // security field — never serve it stale
 
   // 2. Delete all refresh tokens so the user cannot obtain new access tokens
   await db.from("refresh_tokens").delete().eq("user_id", req.params.id);
@@ -180,6 +187,7 @@ router.patch("/instructors/:id/verify", adminOnly, asyncHandler(async (req, res)
     .maybeSingle();
   if (error) throw error;
   if (!data) return err404(res, "Instructor not found");
+  invalidateCachedUser(req.params.id);   // security field — never serve it stale
   ok(res, data);
 }));
 
@@ -193,6 +201,7 @@ router.patch("/instructors/:id/suspend", adminOnly, asyncHandler(async (req, res
     .maybeSingle();
   if (error) throw error;
   if (!data) return err404(res, "Instructor not found");
+  invalidateCachedUser(req.params.id);   // security field — never serve it stale
   ok(res, data);
 }));
 

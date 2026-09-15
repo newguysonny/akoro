@@ -51,8 +51,8 @@ export function runConfigChecks(env = process.env) {
 
   // 5. Database URL for migrations
   (set(env.DATABASE_URL) || set(env.MIGRATION_DATABASE_URL))
-    ? pass("DATABASE_URL set (migrations)")
-    : warn("DATABASE_URL not set", "needed to run `npm run db:migrate` on deploy");
+    ? pass("Migration database URL set")
+    : warn("Migration database URL not set", "set DATABASE_URL or MIGRATION_DATABASE_URL to run `npm run db:migrate` on deploy");
 
   // 6. Redis (required; must not be localhost in prod)
   const redis = env.REDIS_URL;

@@ -48,6 +48,8 @@ import Redis                         from "ioredis";
 import cron                          from "node-cron";
 import jwt                           from "jsonwebtoken";
 import db                            from "../../db.js";
+import { traceRedis } from "../../lib/redisTrace.js";
+import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { authenticateToken,
          requireRole }               from "../auth/routes.js";
 
@@ -66,7 +68,7 @@ const verifyState = (token) => jwt.verify(token, STATE_SECRET);
 
 // ─── § CONFIG ─────────────────────────────────────────────────────────────────
 
-const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+const redis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "meetings" })), "meetings");
 redis.on("error", (err) => console.error("[Redis] Connection error:", err.message));
 
 const CACHE_TTL   = 60 * 60;           // 1 hour in seconds

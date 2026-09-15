@@ -53,17 +53,43 @@ const STORES = [
     text: (r) => r.content ?? "",
     stamp: null,
   },
+  {
+    // Compact learner-owned notes only. Raw chat_messages are deliberately not
+    // a vector store: ordered transcript hydration remains relational.
+    table: "learner_agent_memories", schema: "edu",
+    select: "id, content, topic, subject, updated_at, embedded_at",
+    text: (r) => `${r.content ?? ""} ${r.topic ?? ""} ${r.subject ?? ""}`.trim(),
+    stamp: "updated_at",
+    filter: (query) => query.eq("status", "active"),
+  },
+  {
+    // One compact summary per chat session, also learner-owned and clearable.
+    table: "learner_agent_conversation_summaries", schema: "edu",
+    key: "chat_session_id",
+    select: "chat_session_id, summary, updated_at, embedded_at",
+    text: (r) => r.summary ?? "",
+    stamp: "updated_at",
+  },
 ];
+
+function applyStoreFilter(query, store) {
+  return store.filter ? store.filter(query) : query;
+}
+
+function storeKey(store) {
+  return store.key || "id";
+}
 
 /** Batch size per store per pass. Bounded so a big backlog costs a little each
  *  tick rather than one enormous bill and a rate-limit wall. */
 const BATCH = 25;
 
-export async function embedText(text) {
+export async function embedText(text, feature = "embedding_sweep", userId = null) {
   const res = await openai.embeddings.create({
     model: "text-embedding-3-small",
     input: String(text).slice(0, 8000),
-    __feature: "embedding_sweep",
+    __feature: feature,
+    ...(userId ? { __userId: userId } : {}),
   });
   return res.data?.[0]?.embedding ?? null;
 }
@@ -76,18 +102,21 @@ export async function embeddingHealth() {
   const out = [];
   for (const s of STORES) {
     try {
-      const { count: missing } = await db.schema(s.schema).from(s.table)
-        .select("id", { count: "exact", head: true }).is("embedding", null);
-      const { count: total } = await db.schema(s.schema).from(s.table)
-        .select("id", { count: "exact", head: true });
+      const key = storeKey(s);
+      const { count: missing } = await applyStoreFilter(
+        db.schema(s.schema).from(s.table).select(key, { count: "exact", head: true }), s,
+      ).is("embedding", null).is("embedded_at", null);
+      const { count: total } = await applyStoreFilter(
+        db.schema(s.schema).from(s.table).select(key, { count: "exact", head: true }), s,
+      );
       let stale = 0;
       if (s.stamp) {
-        // Stale = the content moved after the vector was built. Counted
-        // separately from missing because they mean different things: missing
-        // is invisible, stale is visible and WRONG, which is worse.
-        const { count } = await db.schema(s.schema).from(s.table)
-          .select("id", { count: "exact", head: true })
-          .not("embedding", "is", null).is("embedded_at", null);
+        // An embedded_at null is a freshness signal left by a writer after it
+        // changes its source text. It is separate from a genuinely absent
+        // vector so the health response makes the repair state visible.
+        const { count } = await applyStoreFilter(
+          db.schema(s.schema).from(s.table).select(key, { count: "exact", head: true }), s,
+        ).not("embedding", "is", null).is("embedded_at", null);
         stale = count ?? 0;
       }
       out.push({ store: `${s.schema}.${s.table}`, total: total ?? 0, missing: missing ?? 0, unstamped: stale });
@@ -108,24 +137,30 @@ export async function sweepOnce({ batch = BATCH } = {}) {
   for (const s of STORES) {
     let filled = 0, failed = 0;
     try {
-      const { data: rows } = await db.schema(s.schema).from(s.table)
-        .select(s.select).is("embedding", null).limit(batch);
+      let selection = db.schema(s.schema).from(s.table).select(s.select);
+      selection = applyStoreFilter(selection, s);
+      const { data: rows } = await selection.is("embedding", null).is("embedded_at", null).limit(batch);
 
       for (const r of (rows ?? [])) {
         const text = s.text(r);
+        const key = storeKey(s);
         // A row with no text cannot be embedded and must not be retried
         // forever. Stamping it takes it out of the queue without pretending it
         // was indexed.
         if (!text || text.length < 3) {
-          await db.schema(s.schema).from(s.table)
-            .update({ embedded_at: new Date().toISOString() }).eq("id", r.id);
+          let update = db.schema(s.schema).from(s.table)
+            .update({ embedded_at: new Date().toISOString() }).eq(key, r[key]);
+          update = applyStoreFilter(update, s);
+          await update;
           continue;
         }
         try {
           const embedding = await embedText(text);
           if (!embedding) { failed++; continue; }
-          await db.schema(s.schema).from(s.table)
-            .update({ embedding, embedded_at: new Date().toISOString() }).eq("id", r.id);
+          let update = db.schema(s.schema).from(s.table)
+            .update({ embedding, embedded_at: new Date().toISOString() }).eq(key, r[key]);
+          update = applyStoreFilter(update, s);
+          await update;
           filled++;
         } catch (e) {
           failed++;

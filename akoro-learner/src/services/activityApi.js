@@ -20,24 +20,46 @@ import { apiGet } from './api.js';
 async function fetchSelfStudy() {
   try {
     const d = await apiGet('/api/self-study/mine');
-    return (d?.data ?? []).map(a => ({
+    return (d?.data ?? [])
+      // Sequential unlocking: a stage whose turn has not come stays with the
+      // journey — it never appears as standalone work.
+      .filter(a => !a.journey?.locked)
+      .map(a => {
+      // A multi-stage row IS the roadmap: the server derived each stage's
+      // state (complete / active / locked / open) from this learner's own
+      // progress; the subtitle names the step to do now.
+      const stageList = a.type === 'multi_stage' ? (a.stages ?? a.details?.stages ?? []) : null;
+      const active = stageList?.find(st => st.status === 'active');
+      const doneCount = stageList?.filter(st => st.status === 'complete').length ?? 0;
+      return {
       id:         a.targetId || `ss-${a.id}`,
-      kind:       'self_study',
+      kind:       a.type || 'self_study',   // assignment | project | live_course | self_study | multi_stage | battle-ref
       title:      a.title || a.topic || 'Self study',
-      subtitle:   [a.subject, a.topic].filter(Boolean).join(' · '),
+      subtitle:   stageList
+        ? (active
+          ? `Step ${(a.journeyProgress?.done ?? doneCount) + 1} of ${stageList.length} — now: ${active.title}`
+          : `All ${stageList.length} stages complete 🎉`)
+        : [a.subject, a.topic].filter(Boolean).join(' · '),
       details:    a.instructions || null,
       status:     a.status || 'assigned',
-      dueAt:      a.dueAt || null,
+      dueAt:      a.dueAt || a.details?.scheduled_at || null,
       assignedBy: a.assignedBy || null,
       source:     'self-study',
-    }));
+      stages:     stageList,   // [{title, emoji, kind, status}] — the card renders the roadmap
+      graded:     !!a.graded,  // teacher published a grade
+      grade:      a.grade ?? null,
+      feedbackText: a.feedbackText || null,
+      };
+    });
   } catch { return []; }
 }
 
-/* The other kinds have no learner endpoint yet — seams for when they land. */
-const fetchAssignments = () => Promise.resolve([]); // TODO: /api/activities?kind=assignment
-const fetchProjects    = () => Promise.resolve([]); // TODO: /api/activities?kind=project
-const fetchMultiStage  = () => Promise.resolve([]); // TODO: /api/activities?kind=multistage
+/* Assignments, projects and live courses are created as self-study briefs
+   with a `type` (modules/self-study), so fetchSelfStudy already carries them;
+   these stay open for kinds that ever grow their own endpoints. */
+const fetchAssignments = () => Promise.resolve([]);
+const fetchProjects    = () => Promise.resolve([]);
+const fetchMultiStage  = () => Promise.resolve([]);
 
 /**
  * All of the learner's activities, merged and ordered: open work first,
@@ -53,4 +75,13 @@ export function fetchMyActivities() {
         return due(a) - due(b);
       });
     });
+}
+
+/* My activity streak — consecutive days with at least one completed
+   activity, computed server-side from real completions. */
+export async function fetchMyStreak() {
+  try {
+    const d = await apiGet('/api/self-study/streak');
+    return d?.data?.streak ?? 0;
+  } catch { return 0; }
 }

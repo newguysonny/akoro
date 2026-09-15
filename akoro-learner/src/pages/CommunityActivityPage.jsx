@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchCommunity, fetchCommunityActivities,
+  fetchCommunityStrict, fetchCommunityActivities,
   createCommunityActivity, submitCommunityActivity,
 } from '../services/communityApi.js';
 import CommunityShell, { IconChip, useCommunityToast } from '../components/communities/CommunityShell.jsx';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN } from '../constants.js';
+import Spinner from '../components/common/Spinner.jsx';
+import { useInFlight } from '../hooks/useInFlight.js';
 
 /* Community identity avatars (same identity-emoji pattern as agents/guides). */
 const EMOJIS = ['🌐', '📚', '🧪', '', '🎧', '💼', '🌱', '🔥', '', '🎯', '🤝', '🚀'];
@@ -21,6 +23,24 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/* Activity types — the SAME five the instructor workbench drafts
+   (ActivitiesPage). Community activities carry their type and, for
+   multi_stage journeys, their ordered stages. */
+const ACTIVITY_TYPES = [
+  { key: 'assignment',  emoji: '\ud83d\udccb', name: 'Assignment' },
+  { key: 'project',     emoji: '\ud83d\uddc2\ufe0f', name: 'Project' },
+  { key: 'multi_stage', emoji: '\ud83e\udde9', name: 'Multi stage' },
+  { key: 'self_study',  emoji: '\ud83d\udcd6', name: 'Self study' },
+  { key: 'live_course', emoji: '\ud83d\udcfa', name: 'Live course' },
+];
+const typeMeta = (t) => ACTIVITY_TYPES.find((x) => x.key === t) || ACTIVITY_TYPES[0];
+const STAGE_KINDS = [
+  { key: 'self_study', emoji: '\ud83d\udcd6', name: 'Self study' },
+  { key: 'assignment', emoji: '\ud83d\udccb', name: 'Assignment' },
+  { key: 'project',    emoji: '\ud83d\uddc2\ufe0f', name: 'Project' },
+];
+const stageKindName = (k) => (STAGE_KINDS.find((x) => x.key === k) || STAGE_KINDS[0]).name;
+
 function dueInfo(dueAt) {
   if (!dueAt) return null;
   const d = new Date(dueAt);
@@ -29,9 +49,10 @@ function dueInfo(dueAt) {
   return { text, overdue: d.getTime() < Date.now() };
 }
 
-function CommunityActivityCard({ a, canSubmit, onSubmit }) {
+function CommunityActivityCard({ a, canSubmit, onSubmit, submitting = false }) {
   const due = dueInfo(a.dueAt);
-  const meta = [a.subject, a.class_name].filter(Boolean).join(' · ');
+  const tm = typeMeta(a.type);
+  const meta = [`${tm.emoji} ${tm.name}`, a.subject, a.class_name].filter(Boolean).join(' · ');
   return (
     <div style={{ padding: '13px 15px', background: 'var(--ak-surface)', borderRadius: 14, border: '1px solid var(--ak-border)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
       <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: `${BRAND}14`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -53,6 +74,17 @@ function CommunityActivityCard({ a, canSubmit, onSubmit }) {
         {a.instructions && (
           <div style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', marginTop: 3, lineHeight: 1.5 }}>{a.instructions}</div>
         )}
+        {Array.isArray(a.stages) && a.stages.length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {a.stages.map((s, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                <span style={{ width: 18, height: 18, borderRadius: '50%', background: `${BRAND}14`, color: BRAND, fontSize: 9.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
+                <span style={{ fontSize: 9, fontWeight: 900, color: 'var(--ak-text-muted)', background: 'var(--ak-border)', padding: '1px 6px', borderRadius: 5, flexShrink: 0 }}>{stageKindName(s.kind)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 800, color: BRAND, background: `${BRAND}12`, borderRadius: 100, padding: '2px 9px' }}>
             <Icon name="ti-inbox" size={11}/>
@@ -71,9 +103,9 @@ function CommunityActivityCard({ a, canSubmit, onSubmit }) {
                   Submitted
                 </span>
               ) : (
-                <button onClick={() => onSubmit(a)}
-                  style={{ border: `1.5px solid ${BRAND}`, background: 'transparent', color: BRAND, borderRadius: 100, padding: '3px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
-                  Submit
+                <button onClick={() => onSubmit(a)} disabled={submitting}
+                  style={{ border: `1.5px solid ${BRAND}`, background: 'transparent', color: BRAND, borderRadius: 100, padding: '3px 12px', fontSize: 10.5, fontWeight: 800, cursor: submitting ? 'default' : 'pointer', opacity: submitting ? .7 : 1, fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  {submitting ? <Spinner size={11} color={BRAND}/> : 'Submit'}
                 </button>
               )}
             </span>
@@ -90,15 +122,28 @@ function NewActivitySheet({ community, onClose, onCreated }) {
   const [klass, setKlass]       = useState('');
   const [due, setDue]           = useState('');
   const [instructions, setInstructions] = useState('');
-  const [saving, setSaving]     = useState(false);
+  const [type, setType]         = useState('assignment');
+  const [stages, setStages]     = useState([]);
+  // One request at a time — repeated taps on a bad connection once fired
+  // repeated POSTs and created duplicate activities.
+  const { busy: saving, run: runSave } = useInFlight();
   const [err, setErr]           = useState('');
 
-  const create = async () => {
-    if (!name.trim() || saving) return;
+  const create = () => runSave(async () => {
+    if (!name.trim()) return;
+    const cleanStages = stages
+      .map((s) => ({ kind: STAGE_KINDS.some((k) => k.key === s.kind) ? s.kind : 'self_study', title: String(s.title || '').trim() }))
+      .filter((s) => s.title);
+    if (type === 'multi_stage' && !cleanStages.length) {
+      setErr('Add at least one stage with a title.');
+      return;
+    }
     setSaving(true); setErr('');
     try {
       const a = await createCommunityActivity(community.id, {
         name: name.trim(),
+        type,
+        stages: type === 'multi_stage' ? cleanStages : undefined,
         subject: subject.trim() || undefined,
         class: klass.trim() || undefined,
         dueAt: due ? new Date(due).toISOString() : undefined,
@@ -107,8 +152,8 @@ function NewActivitySheet({ community, onClose, onCreated }) {
       onCreated(a);
     } catch (e) {
       setErr(e?.message || 'Something went wrong. Try again.');
-    } finally { setSaving(false); }
-  };
+    }
+  });
 
   const FIELD = {
     width: '100%', boxSizing: 'border-box', borderRadius: 12, padding: '11px 13px',
@@ -131,6 +176,17 @@ function NewActivitySheet({ community, onClose, onCreated }) {
             </button>
           </div>
 
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {ACTIVITY_TYPES.map((t) => {
+              const active = type === t.key;
+              return (
+                <button key={t.key} type="button" onClick={() => { setType(t.key); setErr(''); }}
+                  style={{ padding: '7px 11px', borderRadius: 12, border: `1.5px solid ${active ? BRAND : 'var(--ak-border)'}`, background: active ? `${BRAND}10` : 'transparent', color: active ? BRAND : 'var(--ak-text-muted)', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif", display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span>{t.emoji}</span>{t.name}
+                </button>
+              );
+            })}
+          </div>
           <input value={name} onChange={e => { setName(e.target.value); setErr(''); }} placeholder="Activity name" maxLength={120} autoFocus style={{ ...FIELD, marginBottom: 10 }}/>
           <div style={{ display: 'flex', gap: 10 }}>
             <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject" maxLength={80} style={{ ...FIELD, flex: 1.2 }}/>
@@ -139,11 +195,33 @@ function NewActivitySheet({ community, onClose, onCreated }) {
           <div style={{ height: 10 }}/>
           <input value={due} onChange={e => setDue(e.target.value)} type="datetime-local" style={{ ...FIELD, marginBottom: 10 }}/>
           <textarea value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Instructions (optional)" maxLength={2000} rows={3} style={{ ...FIELD, resize: 'none', marginBottom: 10 }}/>
+          {type === 'multi_stage' && (
+            <div style={{ marginBottom: 10 }}>
+              {stages.map((s, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <select value={s.kind} onChange={e => setStages(stages.map((x, xi) => xi === i ? { ...x, kind: e.target.value } : x))} style={{ ...FIELD, flex: '0 0 128px' }}>
+                    {STAGE_KINDS.map((k) => <option key={k.key} value={k.key}>{k.emoji} {k.name}</option>)}
+                  </select>
+                  <input value={s.title} onChange={e => setStages(stages.map((x, xi) => xi === i ? { ...x, title: e.target.value } : x))} placeholder={`Stage ${i + 1} title`} maxLength={120} style={{ ...FIELD, flex: 1 }}/>
+                  <button type="button" onClick={() => setStages(stages.filter((_, xi) => xi !== i))} title="Remove stage"
+                    style={{ width: 34, borderRadius: 12, border: '1px solid var(--ak-border)', background: 'transparent', color: 'var(--ak-text-muted)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="ti-x" size={14}/>
+                  </button>
+                </div>
+              ))}
+              {stages.length < 6 && (
+                <button type="button" onClick={() => setStages([...stages, { kind: 'self_study', title: '' }])}
+                  style={{ width: '100%', padding: '10px', borderRadius: 12, border: `1.5px dashed ${BRAND}`, background: `${BRAND}08`, color: BRAND, fontSize: 12, fontWeight: 900, cursor: 'pointer', fontFamily: "'Nunito',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Icon name="ti-plus" size={14}/> Add stage {stages.length + 1} of 6
+                </button>
+              )}
+            </div>
+          )}
           {err && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginBottom: 10 }}>{err}</div>}
 
           <button onClick={create} disabled={!name.trim() || saving}
             style={{ width: '100%', padding: '13px', borderRadius: 14, cursor: (!name.trim() || saving) ? 'default' : 'pointer', border: 'none', background: (!name.trim() || saving) ? '#C9BCF7' : BRAND, color: '#fff', fontSize: 14, fontWeight: 900, fontFamily: "'Nunito',sans-serif" }}>
-            {saving ? 'Posting…' : 'Post activity'}
+            {saving ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Spinner size={13}/> Posting…</span> : 'Post activity'}
           </button>
         </div>
       </div>
@@ -158,20 +236,56 @@ export default function CommunityActivityPage() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [sheetOpen, setSheetOpen]   = useState(false);
+  const [typeFilter, setTypeFilter] = useState('all');   // workbench-type filter chip
   const [submittingId, setSubmittingId] = useState(null);
   const [showToast, toastNode] = useCommunityToast();
+  // null = ok/loading - {kind:'network'} = the request never arrived -
+  // {kind:'missing'} = the API answered "no such community / not yours".
+  // A degraded connection must never read as "Community not found".
+  const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [c, list] = await Promise.all([fetchCommunity(communityId), fetchCommunityActivities(communityId)]);
+      const [c, list] = await Promise.all([fetchCommunityStrict(communityId), fetchCommunityActivities(communityId)]);
       setCommunity(c);
       setActivities(list);
+      setError(null);
+    } catch (e) {
+      setError(e?.status === 404 || e?.status === 403 ? { kind: 'missing' } : { kind: 'network' });
     } finally { setLoading(false); }
   }, [communityId]);
 
   useEffect(() => { load(); }, [load]);
+  const retry = () => { setLoading(true); setError(null); load(); };
 
-  if (loading) return <CommunityShell title="Community" sub="" backTo="/communities" loading/>;
+  if (loading) {
+    return (
+      <CommunityShell title="Community" sub="" backTo="/communities" loading headerLoading
+        right={<IconChip icon="ti-info-circle" label="Loading..." disabled />} />
+    );
+  }
+
+  if (error?.kind === 'network') {
+    return (
+      <CommunityShell title="Community" backTo="/communities"
+        empty={
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <div style={{ fontSize: 40, marginBottom: 10, color: BRAND }}>
+              <Icon name="ti-wifi-off" size={40}/>
+            </div>
+            <p style={{ fontSize: 14, color: 'var(--ak-text)', fontWeight: 800 }}>Couldn't reach this community</p>
+            <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', marginTop: 4 }}>
+              Your connection seems slow or offline - the request never arrived.
+            </p>
+            <button onClick={retry}
+              style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 100, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+              <Icon name="ti-refresh" size={14}/> Try again
+            </button>
+          </div>
+        }
+      />
+    );
+  }
 
   if (!community) {
     return (
@@ -201,7 +315,13 @@ export default function CommunityActivityPage() {
     <IconChip icon="ti-info-circle" label="Community profile" onClick={() => navigate(`/communities/${communityId}/profile`)} />
   );
 
-  const submit = async (a) => {
+  // Type filter — 'all' shows everything; others mirror the workbench tabs.
+  const visible = typeFilter === 'all' ? activities : activities.filter((a) => (a.type || 'assignment') === typeFilter);
+
+  // One submission in the air at a time — a double-tapped Submit on a slow
+  // connection used to fire the request twice.
+  const { busy: submitBusy, run: runSubmit } = useInFlight();
+  const submit = (a) => runSubmit(async () => {
     setSubmittingId(a.id);
     try {
       await submitCommunityActivity(a.id);
@@ -212,7 +332,7 @@ export default function CommunityActivityPage() {
     } catch (e) {
       showToast(e?.message || 'Could not submit. Try again.');
     } finally { setSubmittingId(null); }
-  };
+  });
 
   return (
     <CommunityShell
@@ -221,6 +341,21 @@ export default function CommunityActivityPage() {
       backTo="/communities"
       right={headerRight}
     >
+      {/* Workbench-type filter chips — same five types, counts included. */}
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', padding: '10px 18px', borderBottom: '1px solid var(--ak-border)', background: 'var(--ak-surface)', flexShrink: 0 }}>
+        {[{ key: 'all', emoji: '', name: 'All' }, ...ACTIVITY_TYPES].map((t) => {
+          const active = typeFilter === t.key;
+          const n = t.key === 'all'
+            ? activities.length
+            : activities.filter((a) => (a.type || 'assignment') === t.key).length;
+          return (
+            <button key={t.key} onClick={() => setTypeFilter(t.key)}
+              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1px solid ${active ? BRAND : 'var(--ak-border)'}`, background: active ? `${BRAND}12` : 'var(--ak-surface)', color: active ? BRAND : 'var(--ak-text-muted)', fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: "'Nunito',sans-serif", whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {t.emoji && <span>{t.emoji}</span>}{t.name}{n > 0 && <span style={{ opacity: .65 }}>{n}</span>}
+            </button>
+          );
+        })}
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {isOwner && (
           <button onClick={() => setSheetOpen(true)}
@@ -229,7 +364,7 @@ export default function CommunityActivityPage() {
             New activity
           </button>
         )}
-        {activities.length === 0 ? (
+        {visible.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
             <div style={{ fontSize: 40, marginBottom: 10, color: BRAND }}>
               <Icon name="ti-clipboard" size={40}/>
@@ -238,7 +373,7 @@ export default function CommunityActivityPage() {
             {isOwner && <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', marginTop: 4 }}>Post the first one with “New activity”.</p>}
           </div>
         ) : (
-          activities.map(a => <CommunityActivityCard key={a.id} a={a} canSubmit={canSubmit} onSubmit={submit} />)
+          visible.map(a => <CommunityActivityCard key={a.id} a={a} canSubmit={canSubmit} onSubmit={submit} submitting={submitBusy} />)
         )}
       </div>
 

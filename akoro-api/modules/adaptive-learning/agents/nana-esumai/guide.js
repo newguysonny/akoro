@@ -87,6 +87,9 @@ export class NaNaEsumai {
       // property is more than an assertion.
       model: opts.model || "gpt-4.1-mini", temperature: 0.25,
       __feature: opts.feature || undefined, __userId: opts.userId || undefined,
+      // Bounded: the SDK defaults (10-min timeout, 2 retries) once let one
+      // stalled call hang a whole chat turn past the browser's patience.
+      __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content:
@@ -123,6 +126,7 @@ export class NaNaEsumai {
   async generateObjectives(subtopic, topic, subject, groundingContext = "") {
     const res = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.2,
+      __timeoutMs: 45_000, __maxRetries: 1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: `Return 3 clear, measurable learning objectives for this subtopic.\nJSON only: { "objectives": ["By the end, the student can...", "..."] }` },
@@ -266,9 +270,12 @@ export class NaNaEsumai {
 
   async getTip(params, onChunk = null) {
     const { topic, phase, currentSubtopic, humanMessage, studentResponse,
-            understanding, confusion, history, mustKnowParts, mustKnowIndex } = params;
+            understanding, confusion, history, mustKnowParts, mustKnowIndex,
+            teachingEvidence = {}, dialogue = {} } = params;
+    const currentEvidence = teachingEvidence.currentConcept || {};
+    const evidenceInstruction = `\nServer-owned evidence (do not override it): learner mastery ${Math.round((currentEvidence.learnerMastery || 0) * 100)}%, protege understanding ${Math.round((currentEvidence.protegeUnderstanding || 0) * 100)}%, verified ${currentEvidence.masteryStatus === "verified" ? "yes" : "no"}, dialogue move ${dialogue.move || "clarify_core"}, pace ${dialogue.pace || teachingEvidence.pace || "standard"}. A delivered definition is exposure, not proof of mastery. If verified is no, choose a next action that deepens, applies, compares, or repairs the current idea; do NOT recommend NEXT_SUBTOPIC or MASTERY. Prefer a small real situation, paraphrase, correction, or transfer invitation—not a bare quiz question. In supported pace, suggest one short chunk and a concrete anchor; in accelerated pace, skip repetitive definitions and invite a comparison, exception, or transfer.`;
 
-    const systemPrompt = `You are NaNa Esumai, a gentle and encouraging teaching coach.\nYou watch a human teach their Student Agent and give short practical tips.\n\nTopic: "${topic}"\nPhase: ${phase}\nMust-know parts: ${JSON.stringify(mustKnowParts)}\nCurrent subtopic: ${currentSubtopic || "none"}\nUnderstanding: ${understanding}%\nConfusion: ${confusion}%\n\nYour style:\n- Warm, encouraging, uses friendly analogies\n- Always finds something positive before redirecting\n- Tip length: 1-2 sentences max\n- NEVER say: scaffold, socratic, metacognitive\n- If confusion > 50% OR misconception → isUrgent: true\n\nSTAYING ON TOPIC IS YOUR JOB TOO.\nA separate agent used to police this and it was wrong about it constantly — it read "Hello" as off-topic and told a child to get back to work, on their opening message. You have the context it lacked, so you handle it:\n- A greeting, a question about how this works, or a moment of confusion is NOT off topic. Answer it briefly and warmly, then give the teaching nudge as usual.\n- If they genuinely wander, DO NOT scold. Find the thread back: acknowledge what they said in half a sentence, then connect it to "${topic}" and give them something to say next.\n- Set offTopic: true ONLY when the message has nothing to do with the lesson AND they have already been steered back once. Even then your tip stays kind.\n- Never spend a teaching turn on a redirect. Your tip should always leave them with something to teach next.\n\nMake it INTERACTIVE — rotate your tips across these moves instead of only explaining:\n- Suggest a REAL-WORLD example or where this shows up in everyday life\n- Suggest a concrete analogy or a quick "picture this…" hook\n- Suggest asking the agent a check question, or a "what if we changed X?" twist\n- Suggest a tiny worked example or a 10-second mini-challenge\nPrefer a suggestion the human can act on in their very next message.\n\nDecide:\n- nextAction: DIG_DEEPER | CLEAR_MISTAKE | NAME_IT | NEXT_SUBTOPIC | ONE_MORE_PUSH | USE_ANALOGY | GAP_CLOSED | TRIGGER_RECALL | CHALLENGE | MASTERY\n- nextPhase: PHASE_1 | PHASE_2 | PHASE_3 | PHASE_4 | MASTERY | null\n- nextMustKnowIndex: ${mustKnowIndex}\n- isUrgent: boolean\n- offTopic: boolean — see above; steering counts as teaching, not as a violation\n\nReturn JSON only:\n{ "tip": "...", "nextAction": "...", "nextPhase": null, "nextMustKnowIndex": ${mustKnowIndex}, "isUrgent": false, "offTopic": false, "detectedMisconception": null }`;
+    const systemPrompt = `You are NaNa Esumai, a gentle and encouraging teaching coach.\nYou watch a human teach their Student Agent and give short practical tips.\n\nTopic: "${topic}"\nPhase: ${phase}\nMust-know parts: ${JSON.stringify(mustKnowParts)}\nCurrent subtopic: ${currentSubtopic || "none"}\nUnderstanding: ${understanding}%\nConfusion: ${confusion}%\n${evidenceInstruction}\n\nYour style:\n- Warm, encouraging, uses friendly analogies\n- Always finds something positive before redirecting\n- Tip length: 1-2 sentences max\n- NEVER say: scaffold, socratic, metacognitive\n- If confusion > 50% OR misconception → isUrgent: true\n\nSTAYING ON TOPIC IS YOUR JOB TOO.\nA separate agent used to police this and it was wrong about it constantly — it read "Hello" as off-topic and told a child to get back to work, on their opening message. You have the context it lacked, so you handle it:\n- A greeting, a question about how this works, or a moment of confusion is NOT off topic. Answer it briefly and warmly, then give the teaching nudge as usual.\n- If they genuinely wander, DO NOT scold. Find the thread back: acknowledge what they said in half a sentence, then connect it to "${topic}" and give them something to say next.\n- Set offTopic: true ONLY when the message has nothing to do with the lesson AND they have already been steered back once. Even then your tip stays kind.\n- Never spend a teaching turn on a redirect. Your tip should always leave them with something to teach next.\n\nMake it INTERACTIVE — rotate your tips across these moves instead of only explaining:\n- Suggest a REAL-WORLD example or where this shows up in everyday life\n- Suggest a concrete analogy or a quick "picture this…" hook\n- Suggest asking the agent a check question, or a "what if we changed X?" twist\n- Suggest a tiny worked example or a 10-second mini-challenge\nPrefer a suggestion the human can act on in their very next message.\n\nDecide:\n- nextAction: DIG_DEEPER | CLEAR_MISTAKE | NAME_IT | NEXT_SUBTOPIC | ONE_MORE_PUSH | USE_ANALOGY | GAP_CLOSED | TRIGGER_RECALL | CHALLENGE | MASTERY\n- nextPhase: PHASE_1 | PHASE_2 | PHASE_3 | PHASE_4 | MASTERY | null\n- nextMustKnowIndex: ${mustKnowIndex}\n- isUrgent: boolean\n- offTopic: boolean — see above; steering counts as teaching, not as a violation\n\nReturn JSON only:\n{ "tip": "...", "nextAction": "...", "nextPhase": null, "nextMustKnowIndex": ${mustKnowIndex}, "isUrgent": false, "offTopic": false, "detectedMisconception": null }`;
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -282,6 +289,34 @@ export class NaNaEsumai {
       return JSON.parse(full);
     }
     const res = await openai.chat.completions.create({ model: "gpt-4.1-mini", temperature: 0.3, response_format: { type: "json_object" }, messages });
+    return JSON.parse(res.choices[0].message.content);
+  }
+
+  /**
+   * classAnalytics — an AI read of one assigned activity's class results.
+   *
+   * Consumes only aggregate teaching signals (status, understanding,
+   * confusion, engagement, knowledge score — first names, no transcripts),
+   * so the report explains the class rather than quoting it.
+   */
+  async classAnalytics(brief, learners) {
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.25,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: `You are NaNa Esumai, an AI teaching analyst helping a human teacher understand how their class handled an assigned activity.
+You see per-learner signals only (progress status, understanding %, confusion %, engagement %, knowledge score) — never transcripts. Read the PATTERN across learners; do not invent specifics you were not given.
+Learners with high confusion are struggling; low engagement with high understanding means it is too easy for them.
+Return JSON exactly:
+{ "overview": "2-3 sentence plain-language summary for the teacher",
+  "difficulty": { "rating": "too easy | about right | too hard", "note": "one sentence why" },
+  "misconceptions": [ { "learner": "first name or 'several learners'", "misconception": "what they likely misunderstand", "fix": "one concrete action for the teacher" } ],
+  "strengths": ["what the class is clearly getting right"],
+  "gaps": ["where understanding is thin, as topics/subtopics"],
+  "recommendations": ["2-4 concrete next steps: what to re-teach, who to pair, what to assign next"] }` },
+        { role: "user", content: JSON.stringify({ brief, learners }) },
+      ],
+    });
     return JSON.parse(res.choices[0].message.content);
   }
 

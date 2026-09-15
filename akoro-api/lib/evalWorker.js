@@ -14,10 +14,11 @@
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import db from "../db.js";
-import { bullRedisOptions } from "./redisOptions.js";
+import { redisConnectionOptions } from "./redisOptions.js";
 import { SUITES, suiteByKey, runSuite } from "./evals/index.js";
+import { traceRedis } from "./redisTrace.js";
 
-const connection = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", bullRedisOptions);
+const connection = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "eval-worker" })), "eval-worker");
 connection.on("error", (e) => console.error("[evals/redis]", e.message));
 
 export const evalQueue = new Queue("evals", {
@@ -80,7 +81,10 @@ export function startEvalWorker() {
     // One at a time. Two runs would double the spend and race the same tables,
     // and there is never a reason to want the second one sooner.
     concurrency: 1,
-    drainDelay: 30,
+    // House Upstash tuning (per-command-billed Redis): block longer between
+    // idle polls and scan for stalled jobs far less often than the defaults.
+    drainDelay: 60,
+    settings: { stalledInterval: 300_000 },
   });
 
   worker.on("error", (e) => console.error("[evals/worker]", e.message));

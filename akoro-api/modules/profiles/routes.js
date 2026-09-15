@@ -39,7 +39,7 @@ import bcrypt                             from "bcrypt";
 import crypto                             from "crypto";
 import db                                 from "../../db.js";
 import { notifyUser }                      from "../notify.js";
-import { authenticateToken, requireRole, endSession } from "../auth/routes.js";
+import { authenticateToken, requireRole, endSession, invalidateCachedUser } from "../auth/routes.js";
 import multerLib                           from "multer";
 
 const asyncHandler = (fn) => (req, res, next) =>
@@ -71,6 +71,14 @@ const runValidation = (req, res, next) => {
 };
 
 const now = () => new Date().toISOString();
+
+// Keep generic JSON settings from turning an arbitrary display string into a
+// timezone used by notifications, tasks, or the learner agent.
+const isIanaTimeZone = (value) => {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 80) return false;
+  try { Intl.DateTimeFormat("en-US", { timeZone: value.trim() }); return true; }
+  catch { return false; }
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -521,6 +529,7 @@ const schoolHandlers = {
 
     // Update user role to school_admin
     await db.from("users").update({ role: "school_admin" }).eq("id", req.user.id);
+    invalidateCachedUser(req.user.id);   // security field — never serve it stale
 
     res201(res, data);
   }),
@@ -612,6 +621,7 @@ const schoolHandlers = {
     if (existingUser) {
       // Upgrade existing user to instructor role
       await db.from("users").update({ role: "instructor" }).eq("id", existingUser.id);
+      invalidateCachedUser(existingUser.id);   // security field — never serve it stale
       const { data: u } = await db.from("users").select("id, full_name, email").eq("id", existingUser.id).single();
       teacherUser = u;
     } else {
@@ -815,7 +825,7 @@ router.get("/admin/teachers",                                          authentic
 
 const PROFILE_SELECT = [
   "id","email","username","full_name","avatar_url","avatar_emoji","phone","role",
-  "country","school_name","school_type","year_group","study_level",
+  "country","city","school_name","school_type","year_group","study_level",
   "language","display_mode","accent_color","teaching_guide","guide_emoji",
   "subjects","two_factor_enabled","onboarding_completed","created_at",
 ].join(",");
@@ -832,10 +842,11 @@ const PROFILE_SELECT_BASE = [
 router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  let [{ data: user, error: userErr }, { data: agent }, { data: notif }] = await Promise.all([
+  let [{ data: user, error: userErr }, { data: agent }, { data: notif }, { data: accountSettings }] = await Promise.all([
     db.from("users").select(PROFILE_SELECT).eq("id", userId).maybeSingle(),
     db.from("user_agents").select("*").eq("user_id", userId).eq("is_active", true).maybeSingle(),
     db.from("user_notification_preferences").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("user_settings").select("settings").eq("user_id", userId).maybeSingle(),
   ]);
 
   // If the full select fails (e.g. pending migration columns), retry with base columns
@@ -855,11 +866,15 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
     phone:           user.phone,
     role:            user.role,
     country:         user.country,
+    city:            user.city ?? null,
     schoolName:      user.school_name,
     schoolType:      user.school_type,
     yearGroup:       user.year_group,
     studyLevel:      user.study_level,
     language:        user.language        || "English",
+    // Stored in generic account settings so the users table needs no new
+    // column. It is consumed by learner time-aware task/chat tools.
+    timeZone:        isIanaTimeZone(accountSettings?.settings?.timezone) ? accountSettings.settings.timezone.trim() : null,
     displayMode:     user.display_mode    || "system",
     accentColor:     user.accent_color    || "#6C3BFF",
     teachingGuide:   user.teaching_guide,
@@ -902,6 +917,40 @@ router.get("/me", authenticateToken, asyncHandler(async (req, res) => {
   });
 }));
 
+/**
+ * GET /api/profiles/me/location — the caller's self-reported location only.
+ * This intentionally does not return contact details or infer a timezone.
+ */
+router.get("/me/location", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: location, error } = await db.from("users")
+    .select("city, country").eq("id", req.user.id).maybeSingle();
+  if (error) return res.status(500).json({ success: false, message: "Failed to load location" });
+  if (!location) return res.status(404).json({ success: false, message: "User not found" });
+  res200(res, { city: location.city ?? null, country: location.country ?? null });
+}));
+
+/**
+ * PATCH /api/profiles/me/location — update city and/or country for this user.
+ * An IANA timezone remains a separate explicit setting because a place name is
+ * not a reliable timezone authority.
+ */
+router.patch("/me/location", authenticateToken, [
+  body("city").optional().isString().trim().isLength({ max: 120 }),
+  body("country").optional().isString().trim().isLength({ max: 80 }),
+], runValidation, asyncHandler(async (req, res) => {
+  const { city, country } = req.body;
+  if (city === undefined && country === undefined) return res400(res, "city or country is required");
+
+  const patch = { updated_at: now() };
+  if (city !== undefined) patch.city = city.trim() || null;
+  if (country !== undefined) patch.country = country.trim() || null;
+  const { data: updated, error } = await db.from("users")
+    .update(patch).eq("id", req.user.id).select("city, country").maybeSingle();
+  if (error) return res.status(500).json({ success: false, message: "Failed to save location" });
+  if (!updated) return res.status(404).json({ success: false, message: "User not found" });
+  res200(res, { city: updated.city ?? null, country: updated.country ?? null });
+}));
+
 /** PATCH /api/profiles/me — update user profile fields */
 router.patch("/me", authenticateToken, [
   body("fullName").optional().trim().isLength({ min: 1, max: 120 }),
@@ -909,11 +958,13 @@ router.patch("/me", authenticateToken, [
   body("phone").optional().trim(),
   body("avatarEmoji").optional().trim(),
   body("country").optional().trim(),
+  body("city").optional().trim().isLength({ max: 120 }),
   body("schoolName").optional().trim(),
   body("schoolType").optional().trim(),
   body("yearGroup").optional().trim(),
   body("studyLevel").optional().trim(),
   body("language").optional().trim(),
+  body("timeZone").optional().trim().isLength({ min: 1, max: 80 }),
   body("displayMode").optional().isIn(["light","dark","system"]),
   body("accentColor").optional().trim(),
   body("teachingGuide").optional().trim(),
@@ -924,8 +975,8 @@ router.patch("/me", authenticateToken, [
 ], runValidation, asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const {
-    fullName, username, phone, avatarEmoji, country, schoolName, schoolType,
-    yearGroup, studyLevel, language, displayMode, accentColor,
+    fullName, username, phone, avatarEmoji, country, city, schoolName, schoolType,
+    yearGroup, studyLevel, language, timeZone, displayMode, accentColor,
     teachingGuide, guideEmoji, subjects, twoFactorEnabled, onboardingCompleted,
   } = req.body;
 
@@ -942,6 +993,7 @@ router.patch("/me", authenticateToken, [
   if (phone          !== undefined) patch.phone            = phone;
   if (avatarEmoji    !== undefined) patch.avatar_emoji     = avatarEmoji;
   if (country        !== undefined) patch.country          = country;
+  if (city           !== undefined) patch.city             = city || null;
   if (schoolName     !== undefined) patch.school_name      = schoolName;
   if (schoolType     !== undefined) patch.school_type      = schoolType;
   if (yearGroup      !== undefined) patch.year_group       = yearGroup;
@@ -952,24 +1004,66 @@ router.patch("/me", authenticateToken, [
   if (teachingGuide  !== undefined) patch.teaching_guide   = teachingGuide;
   if (guideEmoji     !== undefined) patch.guide_emoji      = guideEmoji;
   if (subjects       !== undefined) patch.subjects         = subjects;
+  if (timeZone !== undefined && !isIanaTimeZone(timeZone)) {
+    return res.status(422).json({ success: false, message: "timeZone must be a valid IANA timezone" });
+  }
   // two_factor_enabled is intentionally NOT settable here — it can only be
   // toggled via the code-verified /2fa/enable and /2fa/disable routes, so a
   // session holder can't silently disable 2FA without a TOTP code.
   if (onboardingCompleted !== undefined) patch.onboarding_completed = onboardingCompleted;
   patch.updated_at = new Date().toISOString();
 
-  const { data: updated, error } = await db.from("users")
-    .update(patch).eq("id", userId).select(PROFILE_SELECT).maybeSingle();
+  // Keep the write independent from the read projection. PROFILE_SELECT has
+  // additive fields (for example city); a pending read-schema migration must
+  // not turn an otherwise valid update to an unrelated profile field into a
+  // failed save.
+  const { error: updateError } = await db.from("users")
+    .update(patch).eq("id", userId);
 
-  if (error) {
-    console.error("[profiles/me PATCH]", error.message);
+  if (updateError) {
+    console.error("[profiles/me PATCH]", updateError.message);
     return res.status(500).json({ success: false, message: "Failed to update profile" });
+  }
+
+  // Match GET /me's compatibility behaviour while additive columns are
+  // rolling out. The base projection includes the values returned below,
+  // including school_type, so clients can still confirm a persisted setting.
+  let { data: updated, error: profileReadError } = await db.from("users")
+    .select(PROFILE_SELECT).eq("id", userId).maybeSingle();
+  if (profileReadError) {
+    ({ data: updated, error: profileReadError } = await db.from("users")
+      .select(PROFILE_SELECT_BASE).eq("id", userId).maybeSingle());
+  }
+  if (profileReadError) {
+    console.error("[profiles/me PATCH confirmation]", profileReadError.message);
+    return res.status(500).json({ success: false, message: "Profile was updated but could not be confirmed. Please refresh and try again." });
+  }
+  if (!updated) return res.status(404).json({ success: false, message: "User not found" });
+
+  if (timeZone !== undefined) {
+    const canonicalTimeZone = timeZone.trim();
+    // Merge rather than replace generic settings: this account setting shares
+    // the JSONB row with unrelated integrations/preferences.
+    const { data: prior, error: settingsReadError } = await db.from("user_settings")
+      .select("settings").eq("user_id", userId).maybeSingle();
+    if (settingsReadError) return res.status(500).json({ success: false, message: "Failed to save account time zone" });
+    const current = prior?.settings && typeof prior.settings === "object" ? prior.settings : {};
+    const { error: settingsError } = await db.from("user_settings").upsert({
+      user_id: userId,
+      settings: { ...current, timezone: canonicalTimeZone },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (settingsError) return res.status(500).json({ success: false, message: "Failed to save account time zone" });
   }
 
   res200(res, {
     fullName: updated.full_name,
     username: updated.username,
+    city: updated.city ?? null,
+    country: updated.country ?? null,
+    schoolType: updated.school_type ?? null,
     accentColor: updated.accent_color,
+    timeZone: timeZone !== undefined ? timeZone.trim() : undefined,
     onboardingCompleted: updated.onboarding_completed ?? false,
   });
 }));
@@ -1767,11 +1861,16 @@ router.post("/me/teacher-request", authenticateToken, [body("teacher_id").notEmp
   const classroomId = await ensureDefaultClassroom(teacher_id);
   const { data: existing } = await db.from("classroom_students").select("id, status").eq("classroom_id", classroomId).eq("user_id", req.user.id).maybeSingle();
   if (existing) {
-    if (existing.status === "removed") await db.from("classroom_students").update({ status: "pending", requested_at: new Date() }).eq("id", existing.id);
+    if (existing.status === "removed") {
+      await db.from("classroom_students").update({ status: "pending", requested_at: new Date() }).eq("id", existing.id);
+      // Live badge: the teacher's nav count updates without polling.
+      global.io?.to(`user:${teacher_id}`).emit("join-requests-changed", { classroomId });
+    }
     return res200(res, { status: existing.status === "removed" ? "pending" : existing.status, message: "Request updated." });
   }
   const { error } = await db.from("classroom_students").insert({ classroom_id: classroomId, user_id: req.user.id, status: "pending", requested_at: new Date() });
   if (error) throw new Error(error.message);
+  global.io?.to(`user:${teacher_id}`).emit("join-requests-changed", { classroomId });
   res201(res, { status: "pending", message: "Request sent — awaiting teacher approval." });
 }));
 
@@ -1801,6 +1900,7 @@ router.post("/teacher/join-requests/:id", authenticateToken, requireRole(["instr
   const { data: student } = await db.from("users").select("id, full_name, email").eq("id", reqRow.user_id).maybeSingle();
   const teacherName = me?.full_name || "Your teacher";
 
+  global.io?.to(`user:${req.user.id}`).emit("join-requests-changed", { classroomId: reqRow.classroom_id });
   if (req.body.decision === "reject") {
     await db.from("classroom_students").update({ status: "removed" }).eq("id", reqRow.id);
     notifyUser({

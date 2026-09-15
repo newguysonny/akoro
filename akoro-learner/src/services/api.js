@@ -229,8 +229,22 @@ async function apiSend(method, path, body, { queueOffline = false } = {}) {
 }
 
 export const apiPost   = (path, body, opts) => apiSend('POST', path, body, opts);
+export const apiPut    = (path, body, opts) => apiSend('PUT', path, body, opts);
 export const apiPatch  = (path, body, opts) => apiSend('PATCH', path, body, opts);
 export const apiDelete = (path, opts)       => apiSend('DELETE', path, undefined, opts);
+
+// Multipart companion to apiPost. Do not use BASE_OPTS here: the browser must
+// set the FormData boundary itself, so only the portal hint is supplied.
+export async function apiUpload(path, formData, { method = 'POST' } = {}) {
+  const r = await authedFetch(`${API}${path}`, {
+    method,
+    credentials: 'include',
+    headers: { 'X-Akoro-Portal': PORTAL_ID },
+    body: formData,
+  });
+  if (!r.ok) throw await apiError(r, method, path);
+  return r.json();
+}
 
 let _flushing = false;
 /**
