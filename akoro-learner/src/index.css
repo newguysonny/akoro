@@ -102,7 +102,7 @@ select:focus-visible {
 
    Tablet + desktop (>768px) get the left sidebar, collapsible to an icon
    rail via the header hamburger (.ak-collapsed) exactly like the admin
-   portal — collapsed by default, remembered in localStorage, purely
+   portal — EXPANDED by default, remembered in localStorage, purely
    user-driven (no viewport media query overriding it). Mobile (≤768px)
    hides the sidebar completely and every page renders exactly as it did
    before — the dashboard keeps its bottom nav, secondary pages keep their

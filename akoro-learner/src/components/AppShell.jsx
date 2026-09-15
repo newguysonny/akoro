@@ -4,9 +4,9 @@
  * Tablet + desktop (>768px): persistent left sidebar nav, like the admin
  * portal's layout — collapsible to an icon rail via the hamburger
  * (SidebarToggle) in the page header, exactly like the admin portal's
- * TopBar toggle. Collapsed is the DEFAULT; the choice is remembered in
- * localStorage and is purely user-driven (no viewport media query
- * overriding it).
+ * TopBar toggle. EXPANDED is the DEFAULT (better with the player bar
+ * owning the bottom edge); the choice is remembered in localStorage and
+ * is purely user-driven (no viewport media query overriding it).
  *
  * Mobile (≤768px): the sidebar is hidden entirely and nothing else changes —
  * the dashboard keeps its bottom nav and the secondary pages keep their
@@ -49,8 +49,11 @@ import { isHigherEdUI } from '../utils/studyLevel.js';
 import { apiGet } from '../services/api.js';
 import { BRAND, RED, GREEN } from '../constants.js';
 
-/* ── Sidebar collapse — user-driven, remembered, collapsed by default ── */
-const COLLAPSE_KEY = 'akoro_learner_sidebar_collapsed';
+/* ── Sidebar collapse — user-driven, remembered, EXPANDED by default ──
+   v2 key: the default flipped from collapsed to expanded, and v1 values
+   ('1' = collapsed from experimentation under the old default) must not
+   pin anyone to the old default — so the key was renamed to start clean. */
+const COLLAPSE_KEY = 'akoro_learner_sidebar_collapsed_v2';
 
 const ShellContext = createContext(null);
 
@@ -247,10 +250,11 @@ export function Sidebar({ badges = {}, collapsed = false }) {
 }
 
 export function AppShell({ children, badges, nowStudying }) {
-  // Collapsed by default; purely user-driven afterwards and remembered
-  // across page loads (same contract as the admin portal's sidebar).
+  // Expanded by default; purely user-driven afterwards and remembered
+  // across page loads. Only an EXPLICIT saved '1' collapses — absent key
+  // or '0' means expanded.
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(COLLAPSE_KEY) !== '0'; } catch { return true; }
+    try { return localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { return false; }
   });
   const toggleSidebar = () => setCollapsed((c) => {
     const next = !c;
