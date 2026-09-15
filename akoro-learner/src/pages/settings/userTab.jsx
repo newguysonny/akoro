@@ -10,7 +10,7 @@ import { LS_DISPLAY } from '../../contexts/ThemeContext.jsx';
 import { changePassword, deactivateAccount, deleteAccount, setDefaultAgent, uploadAvatar } from '../../services/settingsApi.js';
 import {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, rowBase,
-  COUNTRIES, GUIDES, SCHOOL_TYPES, STUDY_LEVELS, YEARS, LANGUAGES,
+  COUNTRIES, GUIDES, STUDY_LEVELS, YEARS, LANGUAGES,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
@@ -197,16 +197,62 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       return;
     }
 
+    /* Study level — the MERGED level/school-type control. One pick writes
+       studyLevel AND a matching schoolType, so the columns can never
+       conflict (the old two-field UI let "University" fight "Senior
+       Secondary School", and the school-match-wins rule settled it the
+       wrong way). studyLevel.js makes the level authoritative regardless,
+       but keeping the pair consistent means every other reader of
+       school_type sees the same story. */
+    if (field === 'studyLevel') {
+      const TYPE_BY_LEVEL = {
+        'Primary School':       'Primary School',
+        'Junior Secondary':     'Junior Secondary School',
+        'Senior Secondary':     'Senior Secondary School',
+        'Sixth Form / A-Level': 'Sixth Form',
+        'University':           'University',
+        'Professional':         'Other',
+      };
+      const prevLevel = profile.studyLevel, prevType = profile.schoolType;
+      const nextType  = TYPE_BY_LEVEL[val] || 'Other';
+      const levelChanged = val !== prevLevel;
+      setProfile(p => ({ ...p, studyLevel: val, schoolType: nextType }));
+      try {
+        const result = await onSaveProfile({ studyLevel: val, schoolType: nextType });
+        if (result?.queued || result?._offline) {
+          showToast('Saved on this device — it will sync when you are online');
+          return;
+        }
+        if (result?.success !== true || result?.data?.studyLevel !== val || result?.data?.schoolType !== nextType) {
+          throw new Error('The change was not confirmed by Akoro. Please try again.');
+        }
+        showToast('Saved');
+        // A level switch re-derives the app (tier, nav, discovery). Reload
+        // only after the server confirmed — not after a rejected or queued
+        // request, which previously restored the old database value.
+        if (levelChanged) {
+          try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+          setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+        }
+      } catch (error) {
+        // Roll the pair back together — never a half-applied level change.
+        setProfile(p => (p?.studyLevel === val ? { ...p, studyLevel: prevLevel, schoolType: prevType } : p));
+        console.warn('[settings] level save failed', error);
+        showToast(error?.message || 'Could not save this change. Please try again.');
+      }
+      return;
+    }
+
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
-      city:'city', country:'country', school:'schoolName', schoolType:'schoolType',
+      city:'city', country:'country', school:'schoolName',
       year:'yearGroup', teachingGuide:'teachingGuide',
       language:'language', timeZone:'timeZone', displayMode:'displayMode',
       accentColor:'accentColor', twoFactor:'twoFactorEnabled',
     };
     const apiKey = fieldMap[field] || field;
     const previousValue = profile[field];
-    const reloadsApp = ['studyLevel', 'schoolType', 'language', 'displayMode', 'accentColor'].includes(field)
+    const reloadsApp = ['language', 'displayMode', 'accentColor'].includes(field)
       && val && val !== previousValue;
 
     // Optimistic feedback keeps the sheet responsive, but the API response is
@@ -221,12 +267,6 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       }
       if (result?.success !== true) {
         throw new Error('The change was not confirmed by Akoro. Please try again.');
-      }
-
-      // School Type controls the school / higher-ed experience, so confirm the
-      // value the database actually saved before reloading into that experience.
-      if (field === 'schoolType' && result?.data?.schoolType !== val) {
-        throw new Error('School Type was not confirmed. Please try again.');
       }
 
       showToast('Saved');
@@ -324,6 +364,10 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
 
       <Section title={t('settings.learn_study')}>
+        {/* Level + school type are ONE control. Every option is
+            tier-unambiguous, and picking one writes BOTH profile columns as
+            a consistent pair (saveField intercepts 'studyLevel'), so the
+            two fields can never disagree about school vs higher-ed. */}
         <Row icon="ti-school" label={t('settings.study_level')} value={profile.studyLevel||t('settings.not_set')}
           onClick={()=>openSheet('studyLevel',t('settings.study_level'),'select',STUDY_LEVELS)}/>
         <Row icon="ti-chalkboard" label={t('settings.teaching_guide')}
@@ -331,8 +375,6 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           onClick={()=>openSheet('teachingGuide',t('settings.teaching_guide'),'select',guides.length ? guides : GUIDES)}/>
         <Row icon="ti-building" label={t('settings.school_name')} value={profile.school||t('settings.not_set')}
           onClick={()=>openSheet('school',t('settings.school_name'),'text')}/>
-        <Row icon="ti-school" label={t('settings.school_type')} value={profile.schoolType||t('settings.not_set')}
-          onClick={()=>openSheet('schoolType',t('settings.school_type'),'select',SCHOOL_TYPES)}/>
         <Row icon="ti-calendar" label={t('settings.year_class')} value={profile.year||t('settings.not_set')}
           onClick={()=>openSheet('year',t('settings.year_class'),'select',YEARS)}/>
         <SubjectsRow subjects={profile.subjects||[]}

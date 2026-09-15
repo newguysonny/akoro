@@ -10,8 +10,11 @@
  * Matching is deliberately fuzzy: the levels were typed by hand across
  * onboarding ('University', 'Adult learner') and settings ('Sixth Form /
  * A-Level', 'Professional'), and schoolType has its own list ('Sixth Form',
- * 'College', 'University', 'Other'). Unknown → school UI (the default
- * audience), never the other way round.
+ * 'College', 'University', 'Other'). Precedence: a recognized studyLevel
+ * decides alone (schoolType only breaks ties when the level is empty or
+ * unrecognized) — the Settings UI now merges the two into one control, so
+ * the columns are written as a consistent pair and can never fight.
+ * Unknown → school UI (the default audience), never the other way round.
  */
 
 const HIGHER_ED_RE  = /sixth|a[\s-]?level|university|college|polytechnic|professional|adult|other/i;
@@ -68,6 +71,15 @@ export function isHigherEdUI(profile = {}) {
   const level = String(profile.studyLevel || '').trim();
   const type  = String(profile.schoolType || '').trim();
   if (!level && !type) return false;   // nothing on file → school UI
-  if (SCHOOL_LEVEL_RE.test(level) || SCHOOL_LEVEL_RE.test(type)) return false;
-  return HIGHER_ED_RE.test(level) || HIGHER_ED_RE.test(type);
+  // Study level is the SINGLE SOURCE OF TRUTH when it names a recognized
+  // level: the merged Settings control writes it (with a matching school
+  // type), onboarding writes it — so a stale or conflicting schoolType can
+  // never override it. (That was the two-field conflict: a learner at
+  // "University" whose schoolType still read "Senior Secondary School".)
+  if (SCHOOL_LEVEL_RE.test(level)) return false;
+  if (HIGHER_ED_RE.test(level))    return true;
+  // Level empty or unrecognized → schoolType decides (historical profiles
+  // that only ever set a school type).
+  if (SCHOOL_LEVEL_RE.test(type)) return false;
+  return HIGHER_ED_RE.test(type);
 }

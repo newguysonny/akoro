@@ -15,8 +15,8 @@
  * Nav icons are the SAME emoji the mobile bottom nav uses (📚🧭🏆⚔️🤖), so a
  * destination reads identically on every surface.
  *
- * Tier-aware: Activities and Gradebook are school-UI only — higher-ed
- * learners don't get them in the sidebar. The tier comes from the shared
+ * Tier-aware: Activities and Gradebook are school-UI only, Communities is
+ * higher-ed only — each tier sees exactly its own set in the sidebar. The tier comes from the shared
  * useHigherEd() hook (hooks/useStudyTier.js): the last resolved tier is
  * cached synchronously (studyLevel.js), so pages don't flash the school
  * layout while /api/profiles/me revalidates in the background. Unknown →
@@ -101,12 +101,14 @@ const TAB_NAV = [
 /* Standalone pages — on mobile these live behind header buttons and
    back-button flows; on the sidebar they are one click away, always.
    `schoolOnly` entries (Activities, Gradebook) are hidden for higher-ed
-   learners — that content is school-UI territory. */
+   learners — that content is school-UI territory. `higherEdOnly` is the
+   mirror: Communities (study groups) is higher-ed only, matching the
+   settings quick links that swap it for Activities + Gradebook. */
 const PAGE_NAV = [
   { to: '/library',     emoji: '🗂️', key: 'nav.library'     },
   { to: '/activities',  emoji: '📝', key: 'nav.activities',  schoolOnly: true },
   { to: '/gradebook',   emoji: '📊', key: 'nav.gradebook',   schoolOnly: true },
-  { to: '/communities', emoji: '👥', key: 'nav.communities' },
+  { to: '/communities', emoji: '👥', key: 'nav.communities', higherEdOnly: true },
   { to: '/wallet',      emoji: '🪙', key: 'nav.wallet'      },
   { to: '/settings',    emoji: '⚙️', key: 'nav.settings'    },
 ];
@@ -180,8 +182,9 @@ export function Sidebar({ badges = {}, collapsed = false }) {
   // sidebar and the bottom nav can never disagree about where they go.
   const goTab  = (key) => navigate(key === 'sessions' ? '/app' : `/app?tab=${key}`);
 
-  // Activities + Gradebook are school-UI only.
-  const pageNav = PAGE_NAV.filter((p) => !higherEd || !p.schoolOnly);
+  // Activities + Gradebook are school-UI only; Communities is the
+  // mirror — higher-ed only (unknown tier defaults to school UI).
+  const pageNav = PAGE_NAV.filter((p) => (!higherEd || !p.schoolOnly) && (higherEd || !p.higherEdOnly));
 
   return (
     <aside className={`ak-sidebar${collapsed ? ' ak-collapsed' : ''}`} style={{ fontFamily: "'Nunito',sans-serif" }}>
