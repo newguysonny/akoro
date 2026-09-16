@@ -35,6 +35,7 @@ import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { useHigherEd } from '../hooks/useStudyTier.js';
+import { getAlarmChoice, startAlarm, stopAlarm } from '../services/alarmSound.js';
 import React from 'react';
 
 // Hooks
@@ -174,6 +175,25 @@ export default function LearnerDashboard() {
   // Is the AI chat SURFACE showing? (Agent tab also hosts tasks/stats/self-study,
   // where the Now-Studying bar should still appear — only chat hides it.)
   const [chatActive, setChatActive] = useState(false);
+
+  // ── Schedule alarm — the chosen ringtone (settings › Schedule alarm)
+  //    rings when a scheduled live class hits its moment, with a
+  //    stoppable banner. Choice + uploaded sound live in the
+  //    alarmSound service (device-local, like records).
+  const [alarmBanner, setAlarmBanner] = useState(null);
+  const ringAlarm = (title) => {
+    if (getAlarmChoice() === 'none') return;   // silenced
+    setAlarmBanner({ title });
+    startAlarm();
+  };
+  // An ignored ring must not ring forever — cap it, and always stop on
+  // unmount so navigating away can't leave a dangling interval.
+  useEffect(() => {
+    if (!alarmBanner) return undefined;
+    const id = setTimeout(() => { stopAlarm(); setAlarmBanner(null); }, 25000);
+    return () => clearTimeout(id);
+  }, [alarmBanner]);
+  useEffect(() => () => stopAlarm(), []);
 
   // Records live in localStorage; these helpers read/update one record's
   // progress without a full state mirror (the modal re-reads on open).
@@ -480,6 +500,7 @@ export default function LearnerDashboard() {
         // Live class starting soon
         socket.on("live_class_starting", alert => {
           setToast(`${alert.title} starts in ${alert.minutesUntil} min!`);
+          ringAlarm(`${alert.title} — ${alert.minutesUntil} min!`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:"starting-soon", scheduleBucket:"starting-soon",
@@ -493,6 +514,7 @@ export default function LearnerDashboard() {
         // Live class now live
         socket.on("live_class_live", alert => {
           setToast(`${alert.title} is now LIVE! Join now.`);
+          ringAlarm(`${alert.title} is LIVE now!`);
           setSessions(prev => prev.map(s =>
             s.id === alert.sessionId
               ? { ...s, status:"live", scheduleBucket:"live",
@@ -1057,6 +1079,31 @@ export default function LearnerDashboard() {
             onToggleAgentAutonomy={toggleAgentAutonomy}
             agentActivity={agentActivity}/>}
         </div>
+
+        {/* Schedule alarm banner — the ringtone's visible half: what's
+            ringing + Stop. Auto-stops after 25s if ignored. */}
+        {alarmBanner && (
+          <div className="ak-alarm-banner" style={{
+            position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 2600, maxWidth: 'min(420px, calc(100vw - 32px))', width: 'max-content',
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'var(--ak-surface)', border: `1.5px solid ${BRAND}66`,
+            borderRadius: 16, padding: '10px 12px 10px 14px',
+            boxShadow: '0 10px 34px rgba(0,0,0,.22)',
+            fontFamily: "'Nunito',sans-serif",
+            animation: 'sheet-up .3s ease',
+          }}>
+            <span style={{ fontSize: 20, display: 'inline-block', animation: 'pulse-dot 1.2s ease-in-out infinite' }}>🔔</span>
+            <p style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 12.5, fontWeight: 900, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{alarmBanner.title}</p>
+            <button onClick={()=>{ stopAlarm(); setAlarmBanner(null); }}
+              style={{ flexShrink: 0, height: 32, padding: '0 14px', borderRadius: 100, border: 'none', cursor: 'pointer',
+                background: `linear-gradient(135deg,${BRAND},#4C1DCC)`, color: '#fff',
+                fontSize: 11.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif",
+                boxShadow: `0 2px 10px ${BRAND}44` }}>
+              {t('alarm.stop')}
+            </button>
+          </div>
+        )}
 
         {/* Now studying — Spotify-style mini-bar (higher-ed, all tabs but chat) */}
         {showNowBar && (

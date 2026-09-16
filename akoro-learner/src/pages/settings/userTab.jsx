@@ -13,7 +13,8 @@ import {
   COUNTRIES, GUIDES, STUDY_LEVELS, YEARS, LANGUAGES,
   Icon, Toggle, ProgressBar, SubjectChip, Section, Row, AvatarCircle, SubjectsRow,
 } from './shared.jsx';
-import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet } from './sheets.jsx';
+import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet, AlarmSoundSheet } from './sheets.jsx';
+import { getAlarmChoice, storeAlarmChoice, alarmChoiceLabel, getCustomAlarmMeta, saveCustomAlarm, clearCustomAlarm } from '../../services/alarmSound.js';
 import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
 
 // A concise, recognisable list keeps the mobile selector usable. The API still
@@ -135,6 +136,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
   const [sheet,        setSheet]        = useState(null);
   const [subjectSheet, setSubjectSheet] = useState(false);
   const [avatarSheet,  setAvatarSheet]  = useState(false);
+  const [alarmSheet,   setAlarmSheet]   = useState(false);
+  // Schedule alarm sound — device-local choice (localStorage) + optional
+  // uploaded file (IndexedDB), like records. Loaded once; the sheet
+  // previews via the alarmSound service directly.
+  const [alarmChoice,  setAlarmChoice]  = useState(() => getAlarmChoice());
+  const [alarmCustom,  setAlarmCustom]  = useState(null);   // { name } | null
+  useEffect(() => { getCustomAlarmMeta().then(setAlarmCustom); }, []);
   const [twoFaSheet,   setTwoFaSheet]   = useState(null); // 'enable' | 'disable' | null
   const [toast,        setToast]        = useState('');
 
@@ -441,6 +449,13 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
         setNotif={n=>setProfile(p=>({...p,notif:n}))}
         onSaveNotif={onSaveNotif}/>
 
+      <Section title={t('settings.schedule_alarm')}>
+        <Row icon="ti-alarm" label={t('alarm.sound')}
+          sub={t('alarm.sound_sub')}
+          value={alarmChoiceLabel(alarmChoice, alarmCustom?.name)}
+          onClick={()=>setAlarmSheet(true)}/>
+      </Section>
+
       <Section title={t('settings.help_support')}>
         <Row icon="ti-message-circle" label={t('settings.contact_support')}  onClick={()=>showToast(t('settings.opening_support'))}/>
         <Row icon="ti-help-circle"    label={t('settings.help_centre')}      onClick={()=>showToast(t('settings.opening_help'))}/>
@@ -488,6 +503,28 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       </Section>
       <div style={{ height:40 }}/>
 
+      {alarmSheet&&(
+        <AlarmSoundSheet
+          current={alarmChoice}
+          customName={alarmCustom?.name}
+          color={color}
+          onClose={()=>setAlarmSheet(false)}
+          onSave={(id)=>{ setAlarmChoice(id); storeAlarmChoice(id); }}
+          onUpload={async (file)=>{
+            const meta = await saveCustomAlarm(file);   // throws on bad type/size
+            setAlarmCustom(meta);
+            setAlarmChoice('custom');
+            storeAlarmChoice('custom');
+          }}
+          onClearCustom={async ()=>{
+            await clearCustomAlarm();
+            setAlarmCustom(null);
+            setAlarmChoice((c)=>{
+              if (c === 'custom') { storeAlarmChoice('default:chime'); return 'default:chime'; }
+              return c;
+            });
+          }}/>
+      )}
       {avatarSheet&&(
         <AvatarPickerSheet type="user"
           current={{ emoji:profile.avatarEmoji, photoUrl:profile.avatarUrl }}

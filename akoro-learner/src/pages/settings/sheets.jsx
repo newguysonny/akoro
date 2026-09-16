@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { setup2FA, enable2FA, disable2FA } from '../../services/settingsApi.js';
+import { ALARM_DEFAULTS, previewAlarm, stopPreview } from '../../services/alarmSound.js';
 import {
   BRAND, RED, ORANGE, ALL_SUBJECTS, SUBJ_ICON, subjIcon,
   EMOJI_LIST, AVATAR_LIST, ACCENTS,
@@ -543,4 +544,137 @@ function TwoFactorSheet({ mode, onClose, onDone }) {
 }
 
 
-export { AvatarPickerSheet, SubjectsSheet, GenericSheet, LogoutModal, TwoFactorSheet };
+/* ─── Schedule alarm sound sheet ────────────────────────────────
+   Same split as the avatar picker (emoji vs upload): platform-default
+   synthesized ringtones vs one audio file from the device. Tap a row to
+   select it, tap ▶ to hear it, Save commits. */
+function AlarmSoundSheet({ current, customName, onClose, onSave, onUpload, onClearCustom, color = BRAND }) {
+  const { t } = useLang();
+  const fileRef = useRef(null);
+  const [sel, setSel] = useState(current);
+  const [playing, setPlaying] = useState(null);   // choice id currently previewing
+  const [err, setErr] = useState('');
+
+  const rowStyle = (active) => ({
+    display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+    padding: '12px 14px', marginBottom: 8, borderRadius: 14, cursor: 'pointer',
+    background: active ? `${color}12` : 'var(--ak-surface)',
+    border: `1.5px solid ${active ? `${color}55` : 'var(--ak-border)'}`,
+    fontFamily: "'Nunito',sans-serif", textAlign: 'left',
+  });
+
+  const togglePreview = async (choice) => {
+    if (playing === choice) { stopPreview(); setPlaying(null); return; }
+    setPlaying(choice);
+    await previewAlarm(choice);
+    /* previews are short (one/two rings, ≤8s for uploads) — reflect it */
+    const ms = choice === 'custom' ? 8200 : 4200;
+    setTimeout(() => { try { setPlaying((p) => (p === choice ? null : p)); } catch { /* ignore */ } }, ms);
+  };
+
+  const handleFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';                    // allow re-picking the same file
+    if (!f) return;
+    try {
+      setErr('');
+      await onUpload(f);                    // parent stores it + selects 'custom'
+      setSel('custom');
+      setPlaying('custom');
+      await previewAlarm('custom');
+    } catch (ex) {
+      setErr(ex?.message || 'Could not use that file');
+    }
+  };
+
+  const PlayIcon = ({ choice }) => playing === choice
+    ? <span style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill={color}><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>
+      </span>
+    : <span style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'var(--ak-tag-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--ak-text-sub)"><path d="M7 4.5v15a1 1 0 001.54.84l11.2-7.5a1 1 0 000-1.68L8.54 3.66A1 1 0 007 4.5z"/></svg>
+      </span>;
+
+  return (
+    <>
+      <div onClick={() => { stopPreview(); onClose(); }}
+        style={{ position: 'fixed', inset: 0, zIndex: 3000,
+          background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}/>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3100,
+        background: 'var(--ak-surface)', borderRadius: '22px 22px 0 0',
+        padding: '0 18px 40px', boxShadow: '0 -8px 40px rgba(0,0,0,.2)',
+        animation: 'sheet-up .3s ease', fontFamily: "'Nunito',sans-serif",
+        maxHeight: '88vh', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--ak-border3)', margin: '14px auto 18px' }}/>
+        <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: '0 0 4px' }}>
+          {t('settings.schedule_alarm')}
+        </p>
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 0 16px' }}>
+          {t('alarm.subtitle')}
+        </p>
+
+        {/* Platform defaults */}
+        {ALARM_DEFAULTS.map((d) => {
+          const choice = `default:${d.id}`;
+          return (
+            <div key={d.id} style={rowStyle(sel === choice)}
+              onClick={() => setSel(choice)}>
+              <PlayIcon choice={choice}/>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: sel === choice ? 900 : 700, color: 'var(--ak-text)' }}>{d.label}</span>
+              {sel === choice && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Uploaded sound */}
+        {customName && (
+          <div style={rowStyle(sel === 'custom')} onClick={() => setSel('custom')}>
+            <PlayIcon choice="custom"/>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: sel === 'custom' ? 900 : 700, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              🎵 {customName}
+            </span>
+            <button title={t('alarm.remove')} onClick={(e) => { e.stopPropagation(); onClearCustom(); }}
+              style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: .55 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.6" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        )}
+
+        {/* Upload from device */}
+        <input ref={fileRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={handleFile}/>
+        <button onClick={() => fileRef.current && fileRef.current.click()}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%',
+            padding: '13px 0', marginBottom: 8, borderRadius: 14, cursor: 'pointer',
+            background: 'transparent', border: `1.5px dashed ${color}66`,
+            color: color, fontSize: 12.5, fontWeight: 800, fontFamily: "'Nunito',sans-serif" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          {t('alarm.upload')}
+        </button>
+
+        {/* Silent */}
+        <div style={rowStyle(sel === 'none')} onClick={() => setSel('none')}>
+          <span style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: 'var(--ak-tag-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>🔇</span>
+          <span style={{ flex: 1, fontSize: 13.5, fontWeight: sel === 'none' ? 900 : 700, color: 'var(--ak-text)' }}>{t('alarm.none')}</span>
+          {sel === 'none' && (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          )}
+        </div>
+
+        {err && <p style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ak-danger-text)', margin: '2px 2px 10px' }}>{err}</p>}
+
+        <button onClick={() => { stopPreview(); onSave(sel); onClose(); }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%',
+            padding: '14px 0', marginTop: 10, borderRadius: 100, border: 'none', cursor: 'pointer',
+            background: `linear-gradient(135deg,${color},#4C1DCC)`, color: '#fff',
+            fontSize: 13.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif",
+            boxShadow: `0 4px 14px ${color}44` }}>
+          {t('alarm.save')}
+        </button>
+      </div>
+    </>
+  );
+}
+
+export { AvatarPickerSheet, SubjectsSheet, GenericSheet, LogoutModal, TwoFactorSheet, AlarmSoundSheet };
