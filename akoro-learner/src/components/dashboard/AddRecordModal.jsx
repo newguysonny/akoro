@@ -19,12 +19,67 @@ const GOLD  = '#F59E0B';
 const GREEN = '#10B981';
 
 const MAX_FILES      = 4;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;   // 10 MB per file
+// Audio/video are big, and an upload record keeps only the file's DETAILS
+// on this device (name, size, length — never the bytes), so this is just a
+// sanity guard, not a storage budget. 500 MB comfortably covers phone
+// recordings of a full lesson.
+const MAX_FILE_BYTES = 500 * 1024 * 1024;  // 500 MB per file
 const MAX_TEXT_CHARS = 20_000;
 
-const ACCEPT = 'image/*,application/pdf,.txt,.md,.csv';
+// Any image, PDF, text file or — as of this round — audio/video: voice
+// notes, recorded lessons, downloaded tutorials. MIME wildcards first;
+// explicit extensions so every OS picker also matches by name.
+const ACCEPT = 'image/*,application/pdf,audio/*,video/*,.txt,.md,.csv,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,.m4v,.mov,.webm,.mkv';
 const isSupported = (f) =>
-  /^image\//.test(f.type) || f.type === 'application/pdf' || /\.(txt|md|csv)$/i.test(f.name);
+  /^(image|audio|video)\//.test(f.type) || f.type === 'application/pdf' ||
+  /\.(txt|md|csv|mp3|m4a|aac|wav|ogg|flac|mp4|m4v|mov|webm|mkv)$/i.test(f.name);
+
+/* ── Media records (audio/video) ── */
+const AUDIO_EXT = /\.(mp3|m4a|aac|wav|ogg|flac)$/i;
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv)$/i;
+const mediaKindOf = (f) =>
+  (/^audio\//.test(f?.type || '') || AUDIO_EXT.test(f?.name || '')) ? 'audio'
+  : (/^video\//.test(f?.type || '') || VIDEO_EXT.test(f?.name || '')) ? 'video'
+  : null;
+
+/* 42 → "0:42", 3675 → "1:01:15" — record lengths worth reading at a glance. */
+const fmtDur = (sec) => {
+  if (!sec || !Number.isFinite(sec) || sec <= 0) return null;
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), ss = Math.round(sec % 60);
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
+};
+
+/* KB under a meg, MB under a gig, GB beyond — "314572 KB" helps nobody. */
+const fmtSize = (b) => {
+  if (!b || b <= 0) return '';
+  if (b < 1024 * 1024) return `${Math.max(1, Math.round(b / 1024))} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+};
+
+/* Best-effort duration probe: load a detached <audio>/<video> element's
+   metadata via an object URL, take its duration, always clean the URL up.
+   Unreadable formats just resolve null — never blocks saving. */
+const probeDuration = (file) => new Promise((resolve) => {
+  const kind = mediaKindOf(file);
+  if (!kind || typeof document === 'undefined') { resolve(null); return; }
+  let url = null, done = false;
+  const finish = (v) => {
+    if (done) return; done = true;
+    try { if (url) URL.revokeObjectURL(url); } catch { /* ignore */ }
+    resolve(v);
+  };
+  try {
+    url = URL.createObjectURL(file);
+    const el = document.createElement(kind);
+    el.preload = 'metadata';
+    el.onloadedmetadata = () => finish(Number.isFinite(el.duration) ? el.duration : null);
+    el.onerror = () => finish(null);
+    setTimeout(() => finish(Number.isFinite(el.duration) ? el.duration : null), 4000);
+    el.src = url;
+  } catch { finish(null); }
+});
 
 const storageKey = (uid) => `akoro_records_${uid || 'me'}`;
 const loadRecords = (uid) => {
@@ -36,12 +91,19 @@ const saveRecords = (uid, list) => {
 };
 
 const KIND_ICON = { upload: 'ti-paperclip', link: 'ti-link', paste: 'ti-clipboard' };
+const MEDIA_ICON = { audio: 'ti-music', video: 'ti-video' };
+/* Upload rows show what they are: 🎵 audio, 🎬 video, paperclip for the rest
+   (old records without a stored type simply keep the paperclip). */
+const recordIcon = (r) => (r.kind === 'upload'
+  ? MEDIA_ICON[mediaKindOf(r)] || 'ti-paperclip'
+  : KIND_ICON[r.kind] || 'ti-file-text');
 
 export default function AddRecordModal({ open, onClose, user, onOpenRecord, onToggleDone }) {
   const { t } = useLang();
   const [tab, setTab]           = useState('upload');
   const [records, setRecords]   = useState([]);
   const [file, setFile]         = useState(null);   // chosen, not yet saved
+  const [dur,  setDur]          = useState(null);   // its length, if audio/video
   const [link, setLink]         = useState('');
   const [text, setText]         = useState('');
   const [err, setErr]           = useState('');
@@ -49,7 +111,7 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
   const uid = user?.id;
 
   useEffect(() => {
-    if (open) { setRecords(loadRecords(uid)); setTab('upload'); setFile(null); setLink(''); setText(''); setErr(''); }
+    if (open) { setRecords(loadRecords(uid)); setTab('upload'); setFile(null); setDur(null); setLink(''); setText(''); setErr(''); }
   }, [open, uid]);
 
   if (!open) return null;
@@ -59,8 +121,9 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
   const saveUpload = () => {
     if (!file) { setErr(t('records.no_file')); return; }
     if (!isSupported(file) || file.size > MAX_FILE_BYTES) { setErr(t('records.too_big')); return; }
-    persist([{ id: `${Date.now()}`, kind: 'upload', name: file.name, size: file.size, created_at: new Date().toISOString() }, ...records].slice(0, 50));
-    setFile(null); setErr('');
+    persist([{ id: `${Date.now()}`, kind: 'upload', name: file.name, size: file.size,
+      type: file.type || '', duration: dur || undefined, created_at: new Date().toISOString() }, ...records].slice(0, 50));
+    setFile(null); setDur(null); setErr('');
   };
 
   const saveLink = () => {
@@ -109,11 +172,11 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
         {tab==='upload' && (
           <div>
             <button onClick={() => fileInputRef.current?.click()} style={{ width:'100%', padding:'22px 16px', borderRadius:14, border:`1.5px dashed ${BRAND}55`, background:`${BRAND}08`, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:7, fontFamily:"'Nunito',sans-serif" }}>
-              <Icon name="ti-paperclip" size={26} color={BRAND}/>
+              <Icon name={file ? (MEDIA_ICON[mediaKindOf(file)] || 'ti-paperclip') : 'ti-paperclip'} size={26} color={BRAND}/>
               <span style={{ fontSize:13, fontWeight:800, color:BRAND }}>{file ? file.name : t('records.choose_file')}</span>
-              <span style={{ fontSize:10.5, fontWeight:600, color:'var(--ak-text-muted)' }}>{file ? `${(file.size/1024/1024).toFixed(1)} MB` : t('records.upload_hint')}</span>
+              <span style={{ fontSize:10.5, fontWeight:600, color:'var(--ak-text-muted)' }}>{file ? `${fmtSize(file.size)}${fmtDur(dur) ? ` · ${fmtDur(dur)}` : ''}` : t('records.upload_hint')}</span>
             </button>
-            <input ref={fileInputRef} type="file" accept={ACCEPT} style={{ display:'none' }} onChange={e => { setErr(''); setFile(e.target.files?.[0] || null); e.target.value=''; }}/>
+            <input ref={fileInputRef} type="file" accept={ACCEPT} style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0] || null; setErr(''); setFile(f); setDur(null); if (f) probeDuration(f).then(setDur); e.target.value=''; }}/>
           </div>
         )}
 
@@ -151,11 +214,11 @@ export default function AddRecordModal({ open, onClose, user, onOpenRecord, onTo
             return (
             <div key={r.id} onClick={() => onOpenRecord?.(r)}
               style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 10px', borderRadius:11, background:'var(--ak-surface-hover)', border:'1px solid var(--ak-border)', marginBottom:6, cursor:onOpenRecord?'pointer':'default' }}>
-              <span style={{ flexShrink:0 }}><Icon name={KIND_ICON[r.kind] || 'ti-file-text'} size={15}/></span>
+              <span style={{ flexShrink:0 }}><Icon name={recordIcon(r)} size={15}/></span>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12.5, fontWeight:800, color:done?'var(--ak-text-muted)':'var(--ak-text)', margin:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', textDecoration:done?'line-through':'none' }}>{r.name}</p>
                 <p style={{ fontSize:10, color:'var(--ak-text-muted)', margin:'1px 0 0' }}>
-                  {done ? `${t('records.done_label')} · ` : ''}{r.size ? `${(r.size/1024).toFixed(0)} KB · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
+                  {done ? `${t('records.done_label')} · ` : ''}{r.duration ? `${fmtDur(r.duration)} · ` : ''}{r.size ? `${fmtSize(r.size)} · ` : ''}{new Date(r.created_at).toLocaleDateString([], { month:'short', day:'numeric' })}
                 </p>
               </div>
               <button onClick={(e) => { e.stopPropagation(); const p = (r.progress || 0) >= 100 ? 10 : 100; setRecords(records.map(x => x.id === r.id ? { ...x, progress: p, last_opened_at: new Date().toISOString() } : x)); onToggleDone?.(r); }} title={t('records.mark_done')} aria-label={t('records.mark_done')}
