@@ -22,6 +22,7 @@ const read = (...p) => readFileSync(path.join(ROOT, ...p), "utf8");
 const triggers = read("modules/autonomy/triggers.js");
 const cycle = read("modules/autonomy/cycle.js");
 const autonomyIndex = read("modules/autonomy/index.js");
+const cadence = read("modules/autonomy/cadence.js");
 const tasks = read("modules/tasks/routes.js");
 const communities = read("modules/communities/routes.js");
 const selfStudy = read("modules/self-study/routes.js");
@@ -40,6 +41,12 @@ test("event triggers · four real write sites emit, never block, never guess", (
   assert.match(communities, /emitAutonomyEvent\(req\.user\.id, "submission"\)\.catch\(\(\) => \{\}\)/);
   assert.match(selfStudy, /emitAutonomyEvent\(req\.user\.id, "self_study"\)\.catch\(\(\) => \{\}\)/);
   assert.match(battleWorker, /for \(const p of participants \?\? \[\]\) \{\s*emitAutonomyEvent\(p\.user_id, "battle"\)\.catch\(\(\) => \{\}\);\s*\}/);
+  // THE LOOP: one variable (AKORO_AUTONOMY_CYCLE_EVERY) — implies
+  // continuous, minute floor, derives the tick, wins the pace resolution
+  assert.match(cadence, /AKORO_AUTONOMY_CYCLE_EVERY/);
+  assert.match(cadence, /Math\.max\(60_000, loopRaw\)/);
+  assert.match(cadence, /loopEveryMs > 0 \? "continuous" : autonomyMode\(\)/);
+  assert.match(cadence, /if \(cadence\.loopEveryMs > 0\) return cadence\.loopEveryMs;/);
   // per-trigger jobId so event bursts collapse — minute granularity so
   // continuous-mode test cycles still get unique jobs
   assert.match(autonomyIndex, /jobId: `cycle:\$\{userId\}:\$\{trigger\}:\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 16\)\}`/);

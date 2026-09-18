@@ -9,7 +9,7 @@
 import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
-import { autonomyCadence, minCycleMs } from "./cadence.js";
+import { autonomyCadence, minCycleMs, weeklyRunsCap } from "./cadence.js";
 
 const edu = () => db.schema("edu");
 
@@ -269,7 +269,7 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
         .gte("started_at", new Date(Date.now() - 24 * 3600 * 1000).toISOString());
       if ((todayEvents ?? 0) >= MAX_EVENT_RUNS_PER_DAY) return { skipped: "event_cap" };
     }
-    const weeklyCap = Number(process.env.AKORO_AUTONOMY_MAX_WEEKLY_RUNS ?? 30);
+    const weeklyCap = weeklyRunsCap();
     const { count: weekRuns } = await edu().from("autonomy_runs")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId).gte("started_at", new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString());

@@ -82,7 +82,9 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
   assert.match(cycle, /response_format:\s*\{\s*type:\s*"json_object"\s*\}/);
   assert.match(cycle, /__userId:\s*userId,\s*__feature:\s*"agent_autonomy"/);
   // budget guard + pacing + level gate
-  assert.match(cycle, /AKORO_AUTONOMY_MAX_WEEKLY_RUNS \?\? 30/);
+  // weekly budget lives in cadence.js now (one source of truth)
+  assert.match(cadence, /AKORO_AUTONOMY_MAX_WEEKLY_RUNS", 30/);
+  assert.match(cycle, /const weeklyCap = weeklyRunsCap\(\);/);
   assert.match(cycle, /\? MIN_HOURS_BETWEEN_EVENT_RUNS : cadence\.minCycleHours\) \* 3600 \* 1000/); // nightly ≥20h
   assert.match(cycle, /\(auto\.level \?\? 1\) < 2/);
   // validation clamps and drops — the model never gets the final say
@@ -104,7 +106,7 @@ test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () 
   assert.match(autonomyIndex, /duePlanners\(limit = autonomyCadence\(\)\.batchLimit\)/);
   // the cadence knobs live in cadence.js — pure module, same defaults as
   // before the env-awareness, unusable values fall back
-  assert.match(cadence, /AKORO_AUTONOMY_TICK_MS", 60_000/);
+  assert.match(cadence, /AKORO_AUTONOMY_TICK_MS", derivedTick/);
   assert.match(cadence, /AKORO_AUTONOMY_BATCH_LIMIT", 40/);
   assert.match(cadence, /AKORO_AUTONOMY_MIN_CYCLE_HOURS", 20/);
   assert.match(cadence, /AKORO_AUTONOMY_WINDOW_START_HOUR", 21/);

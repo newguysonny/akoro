@@ -544,11 +544,11 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
     console.error("[learner-autonomy] worker failed to start:", e.message);
   }
 
-  // Full Autonomy level 2 (Planner): the nightly background cycle. The
-  // scheduler's tick, nightly window, batch size and per-learner cadence
-  // are env-tunable (AKORO_AUTONOMY_* — modules/autonomy/cadence.js);
-  // defaults: one tick per minute, one small batch inside the 21:00-22:00
-  // Africa/Lagos window — O(learners) jobs per day.
+  // Full Autonomy level 2 (Planner): the background study loop. One env
+  // var picks the rhythm — AKORO_AUTONOMY_CYCLE_EVERY=5m / 1h loops the
+  // planner at that pace around the clock; unset, it's the nightly cycle
+  // (one batch inside the 21:00-22:00 Africa/Lagos window). All knobs:
+  // AKORO_AUTONOMY_* in modules/autonomy/cadence.js.
   try {
     if (!skipJob("autonomy cycle worker")) {
       const autonomy = await import("./modules/autonomy/index.js");

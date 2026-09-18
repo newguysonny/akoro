@@ -15,7 +15,7 @@ import db from "../../db.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { runAutonomyCycleForUser } from "./cycle.js";
-import { autonomyCadence, inNightlyWindow, minCycleCutoff } from "./cadence.js";
+import { autonomyCadence, fmtMs, inNightlyWindow, minCycleCutoff, minCycleMs, weeklyRunsCap } from "./cadence.js";
 
 // Re-exported so the module's public surface (and the contract tests) keep
 // finding inNightlyWindow here; the logic itself lives in cadence.js.
@@ -104,10 +104,21 @@ export function startAutonomyCycleWorker() {
   schedulerTimer.unref?.();
 
   const cadence = autonomyCadence();
-  console.log(
-    `[autonomy] planner worker started (nightly cycle, level ≥ 2 — tick ${Math.round(cadence.tickMs / 1000)}s, ` +
-    `window ${String(cadence.windowStart).padStart(2, "0")}:00–${String(cadence.windowEnd).padStart(2, "0")}:00 Africa/Lagos, ` +
-    `≤${cadence.batchLimit}/tick, ≥${cadence.minCycleHours}h/learner)`);
+  const cap = weeklyRunsCap();
+  const shape = cadence.loopEveryMs > 0
+    ? `LOOP every ${fmtMs(cadence.loopEveryMs)}`
+    : cadence.mode === "continuous"
+      ? "continuous, window open"
+      : `window ${String(cadence.windowStart).padStart(2, "0")}:00–${String(cadence.windowEnd).padStart(2, "0")}:00 Africa/Lagos`;
+  let bootLine = `[autonomy] planner worker started (level ≥ 2 — ${shape}, tick ${Math.round(cadence.tickMs / 1000)}s, ` +
+    `≤${cadence.batchLimit}/tick, pace ${fmtMs(minCycleMs(cadence))}/learner, budget ${cap} runs/week)`;
+  // A loop the weekly budget can't sustain stops mid-week — say so at boot,
+  // not in a ticket three days later.
+  if (cadence.loopEveryMs > 0 && cap * cadence.loopEveryMs < 7 * 86_400_000) {
+    bootLine += ` — NOTE: budget ${cap} ≈ ${(cap * cadence.loopEveryMs / 3_600_000).toFixed(1)}h of looping; ` +
+      `raise AKORO_AUTONOMY_MAX_WEEKLY_RUNS to sustain the loop all week`;
+  }
+  console.log(bootLine);
   return worker;
 }
 
