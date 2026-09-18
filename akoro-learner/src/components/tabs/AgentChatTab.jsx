@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
-import { apiGet, apiPost, apiPatch, apiDelete, streamPost } from '../../services/api.js';
+import { apiGet, apiPost, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
@@ -236,16 +236,10 @@ function AgentChatTab({
   // replays the proposal through the exact tool the chat itself uses.
   const [proposals,setProposals]=useState([]);
   const [proposalBusyId,setProposalBusyId]=useState(null);
-  const [plannerOn,setPlannerOn]=useState(false);
-  const [plannerBusy,setPlannerBusy]=useState(false);
   const pendingProposals=proposals.filter(p=>p.status==="proposed");
   const suggestionCount=suggestions.length+pendingProposals.length;
   const refetchProposals=async()=>{ try{ const d=await apiGet('/api/agent/proposals'); setProposals(Array.isArray(d?.data)?d.data:[]); }catch{} };
   useEffect(()=>{ refetchProposals(); },[]);
-  useEffect(()=>{ let live=true;
-    apiGet('/api/adaptive/chat/autonomy').then(d=>{ if(live) setPlannerOn(Number(d?.level??1)>=2); }).catch(()=>{});
-    return ()=>{ live=false; };
-  },[]);
   const approveProposal=async(p)=>{
     if(proposalBusyId) return;
     setProposalBusyId(p.id); setListError("");
@@ -264,14 +258,6 @@ function AgentChatTab({
     try { await apiPost(`/api/agent/proposals/${p.id}/dismiss`,{}); setProposals(prev=>prev.filter(x=>x.id!==p.id)); }
     catch(e){ setListError(e?.message||t('agent.proposal_failed')); }
     finally{ setProposalBusyId(null); }
-  };
-  const togglePlanner=async()=>{
-    if(plannerBusy) return;
-    const prev=plannerOn, next=!prev;
-    setPlannerBusy(true); setPlannerOn(next);
-    try { await apiPatch('/api/adaptive/chat/autonomy',{ enabled:true, level:next?2:1 }); }
-    catch(e){ setPlannerOn(prev); setListError(e?.message||t('agent.planner_error')); }
-    finally{ setPlannerBusy(false); }
   };
 
   // Agent suggestions: accept turns the idea into a real task (the agent
@@ -784,7 +770,7 @@ function AgentChatTab({
               <p style={{ fontSize:14.5,fontWeight:900,color:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{shownName}</p>
               <button type="button" onClick={onToggleAgentAutonomy} disabled={!agentAutonomyLoaded||agentAutonomySaving||!onToggleAgentAutonomy}
                 aria-pressed={agentOnline} aria-label={agentOnline?"Turn autonomous Agent offline":"Turn autonomous Agent online"}
-                title={agentOnline?"Agent online: it may open one chat when a precisely due task is due.":"Agent offline: tap to allow one due-task chat."}
+                title={agentOnline?"Agent online: due-task check-ins and the background planner run while you're away.":"Agent offline: tap to bring it online."}
                 style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,marginTop:2,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
                 <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
                 <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",display:"inline-flex",alignItems:"center",gap:4 }}>
@@ -794,20 +780,6 @@ function AgentChatTab({
                 </span>
               </button>
             </div>
-          </div>
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"11px 16px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
-            <div style={{ minWidth:0 }}>
-              <p style={{ fontSize:12,fontWeight:800,color:"var(--ak-text)",margin:0 }}>{t('agent.planner')}</p>
-              <p style={{ fontSize:10,color:"var(--ak-text-muted)",margin:0,marginTop:1,lineHeight:1.4 }}>{t('agent.planner_sub')}</p>
-            </div>
-            <button type="button" role="switch" aria-checked={plannerOn} aria-label={t('agent.planner')}
-              onClick={togglePlanner} disabled={plannerBusy}
-              title={plannerOn?"The background planner proposes next steps overnight — you approve each one.":"Let the background planner review your goals nightly and propose next steps."}
-              style={{ flexShrink:0,width:38,height:22,borderRadius:20,border:`1.5px solid ${plannerOn?BRAND:"var(--ak-border2)"}`,background:plannerOn?BRAND:"transparent",cursor:plannerBusy?"wait":"pointer",position:"relative",transition:"background .18s ease",padding:0 }}>
-              <span style={{ position:"absolute",top:2,left:plannerOn?18:3,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.25)",transition:"left .18s ease",display:"flex",alignItems:"center",justifyContent:"center" }}>
-                {plannerBusy&&<Spinner size={9}/>}
-              </span>
-            </button>
           </div>
           <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 12px",flexShrink:0 }}>
             <p style={{ fontSize:13,fontWeight:900,letterSpacing:.4,textTransform:"uppercase",color:"var(--ak-text-muted)",margin:0 }}>{t('agent.chats')}</p>

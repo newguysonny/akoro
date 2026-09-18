@@ -402,12 +402,16 @@ export default function LearnerDashboard() {
     setAgentOnline(next); // responsive UI; API remains the source of authority.
     setAgentAutonomySaving(true);
     try {
-      const response = await apiPatch("/api/adaptive/chat/autonomy", { enabled: next });
+      // One switch, both consents: online = due-task check-ins AND the
+      // background planner (level 2). Offline pauses everything and keeps
+      // the learner's planner level for when they come back online.
+      const response = await apiPatch("/api/adaptive/chat/autonomy",
+        next ? { enabled: true, level: 2 } : { enabled: false });
       const saved = typeof response?.enabled === "boolean" ? response.enabled : next;
       setAgentOnline(saved);
       setToast(saved
-        ? "Agent online — it may only start a chat when one of your precisely due tasks is due."
-        : "Agent offline — future autonomous task chats are paused.");
+        ? "Agent online — it may open a chat when a task is due, and the background planner proposes next steps for you to approve."
+        : "Agent offline — due-task chats and the background planner are paused.");
     } catch (error) {
       setAgentOnline(previous);
       setToast(error?.message || "Could not update your agent setting. Please retry.");
@@ -839,8 +843,8 @@ export default function LearnerDashboard() {
                 aria-label={agentOnline ? "Turn autonomous Agent offline" : "Turn autonomous Agent online"}
                 disabled={!agentAutonomyLoaded || agentAutonomySaving}
                 title={agentOnline
-                  ? "Agent online: it may only open a chat when one of your precisely due tasks is due."
-                  : "Agent offline: it cannot start autonomous task chats."}
+                  ? "Agent online: due-task check-ins and the background planner (proposals you approve) run while you're away."
+                  : "Agent offline: no due-task chats, no background planning."}
                 style={{ display:"flex",alignItems:"center",background:`${BRAND}12`,borderRadius:100,padding:4,cursor:agentAutonomyLoaded&&!agentAutonomySaving?"pointer":"wait",border:`1px solid ${BRAND}3D`,opacity:agentAutonomyLoaded?1:.7 }}>
                 <span style={{ padding:"4px 12px",borderRadius:100,background:agentOnline?BRAND:"transparent",color:agentOnline?"#fff":"var(--ak-text-muted)",fontSize:11,fontWeight:700,transition:"all .22s ease",display:"flex",alignItems:"center",gap:5 }}>
                   {agentOnline&&<span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block"}}/>}

@@ -9,6 +9,7 @@
 import db from "../../db.js";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 import { reportAgentActivity, clearAgentActivity } from "../../lib/agentActivity.js";
+import { autonomyCadence, minCycleMs } from "./cadence.js";
 
 const edu = () => db.schema("edu");
 
@@ -250,7 +251,14 @@ export async function runAutonomyCycleForUser(userId, trigger = "nightly") {
     const { data: lastRun } = await edu().from("autonomy_runs")
       .select("started_at, trigger").eq("user_id", userId)
       .order("started_at", { ascending: false }).limit(1);
-    const minGapMs = (isEvent ? MIN_HOURS_BETWEEN_EVENT_RUNS : 20) * 3600 * 1000;
+    // Cadence (modules/autonomy/cadence.js): nightly mode keeps the two-lane
+    // pace — nightly ≥ min-cycle hours (default 20), events ≥ 4h. Continuous
+    // mode (the AKORO_AUTONOMY_MODE=test rig) paces EVERY trigger by the
+    // resolved min-cycle ms, so 5-minute test cycles aren't skipped.
+    const cadence = autonomyCadence();
+    const minGapMs = cadence.mode === "continuous"
+      ? minCycleMs(cadence)
+      : (isEvent ? MIN_HOURS_BETWEEN_EVENT_RUNS : cadence.minCycleHours) * 3600 * 1000;
     if (lastRun?.[0]?.started_at && Date.now() - new Date(lastRun[0].started_at).getTime() < minGapMs) {
       return { skipped: "recent_run" };
     }

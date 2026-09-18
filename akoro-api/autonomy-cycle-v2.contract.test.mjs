@@ -40,15 +40,19 @@ test("event triggers · four real write sites emit, never block, never guess", (
   assert.match(communities, /emitAutonomyEvent\(req\.user\.id, "submission"\)\.catch\(\(\) => \{\}\)/);
   assert.match(selfStudy, /emitAutonomyEvent\(req\.user\.id, "self_study"\)\.catch\(\(\) => \{\}\)/);
   assert.match(battleWorker, /for \(const p of participants \?\? \[\]\) \{\s*emitAutonomyEvent\(p\.user_id, "battle"\)\.catch\(\(\) => \{\}\);\s*\}/);
-  // per-trigger jobId so event bursts collapse
-  assert.match(autonomyIndex, /jobId: `cycle:\$\{userId\}:\$\{trigger\}:\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 13\)\}`/);
+  // per-trigger jobId so event bursts collapse — minute granularity so
+  // continuous-mode test cycles still get unique jobs
+  assert.match(autonomyIndex, /jobId: `cycle:\$\{userId\}:\$\{trigger\}:\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 16\)\}`/);
 });
 
 test("event pacing · events run sooner than nightly but never frenzied", () => {
   assert.match(cycle, /MIN_HOURS_BETWEEN_EVENT_RUNS = 4/);
   assert.match(cycle, /MAX_EVENT_RUNS_PER_DAY = 2/);
   assert.match(cycle, /const isEvent = trigger !== "nightly";/);
-  assert.match(cycle, /\(isEvent \? MIN_HOURS_BETWEEN_EVENT_RUNS : 20\) \* 3600 \* 1000/);
+  // pace resolves through cadence.js: nightly two-lane (events 4h, nightly
+  // min-cycle hours), continuous test rig paces everything by min-cycle ms
+  assert.match(cycle, /\(isEvent \? MIN_HOURS_BETWEEN_EVENT_RUNS : cadence\.minCycleHours\) \* 3600 \* 1000/);
+  assert.match(cycle, /\? minCycleMs\(cadence\)/);
   assert.match(cycle, /\.like\("trigger", "event:%"\)/);
   assert.match(cycle, /skipped: "event_cap"/);
 });

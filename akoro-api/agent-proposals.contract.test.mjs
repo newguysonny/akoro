@@ -29,6 +29,7 @@ const appJs = read("app.js");
 const learnerAutonomy = read("modules/adaptive-learning/learner-autonomy.js");
 const chatJs = read("modules/adaptive-learning/chat.js");
 const tab = read("../akoro-learner/src/components/tabs/AgentChatTab.jsx");
+const dash = read("../akoro-learner/src/pages/LearnerDashboard.jsx");
 const en = read("../akoro-learner/src/contexts/i18n/en.js");
 
 test("step 2 · agent_proposals + autonomy_runs migrations with HITL provenance", () => {
@@ -82,7 +83,7 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
   assert.match(cycle, /__userId:\s*userId,\s*__feature:\s*"agent_autonomy"/);
   // budget guard + pacing + level gate
   assert.match(cycle, /AKORO_AUTONOMY_MAX_WEEKLY_RUNS \?\? 30/);
-  assert.match(cycle, /\? MIN_HOURS_BETWEEN_EVENT_RUNS : 20\) \* 3600 \* 1000/); // nightly ≥20h
+  assert.match(cycle, /\? MIN_HOURS_BETWEEN_EVENT_RUNS : cadence\.minCycleHours\) \* 3600 \* 1000/); // nightly ≥20h
   assert.match(cycle, /\(auto\.level \?\? 1\) < 2/);
   // validation clamps and drops — the model never gets the final say
   assert.match(cycle, /shaped\.length >= MAX_PROPOSALS_PER_CYCLE/);
@@ -141,11 +142,13 @@ test("step 2 · the Suggestions inbox renders proposals; planner toggle in the d
   // approval reflects back into the transcript (agent observes, never assumes)
   assert.match(tab, /pushAgent\(t\('agent\.proposal_done_task'\)\.replace\('\{title\}',d\?\.data\?\.title\|\|p\.title\)\)/);
   assert.match(tab, /refetchTasks\(\)/);
-  // level-2 planner toggle → PATCH autonomy {enabled, level}
-  assert.match(tab, /apiPatch\('\/api\/adaptive\/chat\/autonomy',\{\s*enabled:true,\s*level:next\?2:1\s*\}\)/);
-  assert.match(tab, /setPlannerOn\(Number\(d\?\.level\?\?1\)>=2\)/);
-  assert.match(tab, /role="switch"/);
-  // i18n coverage (en)
+  // combined switch: the dashboard online/offline control is the ONE
+  // consent — online enables due-task check-ins AND the background planner
+  // (level 2) together; offline pauses both and keeps the level
+  assert.match(dash, /next \? \{ enabled: true, level: 2 \} : \{ enabled: false \}/);
+  // the drawer no longer carries a second planner switch
+  assert.doesNotMatch(tab, /plannerOn|togglePlanner/);
+  assert.doesNotMatch(tab, /apiPatch\('\/api\/adaptive\/chat\/autonomy'/);  // i18n coverage (en)
   for (const key of ["agent.proposals_from_review", "agent.proposal_approve", "agent.proposal_kind_session",
     "agent.proposal_done_session", "agent.planner", "agent.planner_sub", "agent.planner_error"]) {
     assert.ok(en.includes(`'${key}'`), `missing i18n key ${key}`);

@@ -38,8 +38,9 @@ const queue = () => {
 /** Enqueue one learner's cycle (used by the scheduler and future events). */
 export async function enqueueAutonomyCycle(userId, trigger = "nightly") {
   await queue().add("run-cycle", { userId, trigger }, {
-    // ~hourly dedupe per user+trigger: bursts of the same event collapse
-    jobId: `cycle:${userId}:${trigger}:${new Date().toISOString().slice(0, 13)}`,
+    // minute-granular dedupe per user+trigger: bursts collapse, while
+    // continuous-mode test cycles (5-minute pace) still get unique jobs
+    jobId: `cycle:${userId}:${trigger}:${new Date().toISOString().slice(0, 16)}`,
     removeOnComplete: { age: 3600, count: 500 },
     removeOnFail: { age: 6 * 3600 },
   });

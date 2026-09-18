@@ -9,13 +9,27 @@
  * AKORO_AUTONOMY_* convention (cycle.js's AKORO_AUTONOMY_MAX_WEEKLY_RUNS
  * is the precedent).
  *
+ *   AKORO_AUTONOMY_MODE                  "nightly" (default) | "continuous".
+ *                                       continuous is the test rig: the
+ *                                       window is always open and every
+ *                                       trigger paces by MIN_CYCLE below.
  *   AKORO_AUTONOMY_TICK_MS               scheduler wake-up (default 60s, min 5s)
  *   AKORO_AUTONOMY_BATCH_LIMIT           learners claimed per tick (default 40)
- *   AKORO_AUTONOMY_MIN_CYCLE_HOURS       per-learner dedupe (default 20h)
+ *   AKORO_AUTONOMY_MIN_CYCLE_MS          per-learner pace in ms — the sub-hour
+ *                                       knob for 5-minute test cycles (unset:
+ *                                       pace derives from MIN_CYCLE_HOURS)
+ *   AKORO_AUTONOMY_MIN_CYCLE_HOURS       per-learner pace in whole hours (default 20)
  *   AKORO_AUTONOMY_WINDOW_START_HOUR     nightly window start, Africa/Lagos (default 21)
  *   AKORO_AUTONOMY_WINDOW_END_HOUR       nightly window end (default 22)
  *   AKORO_AUTONOMY_TRIGGER_COOLDOWN_MS   event-trigger cooldown per user+kind
  *                                        (default 15min — triggers.js owns the literal)
+ *
+ * Test rig recipe — planner every 5 minutes:
+ *   AKORO_AUTONOMY_MODE=continuous
+ *   AKORO_AUTONOMY_TICK_MS=5000            (or 60000 — tick just paces claiming)
+ *   AKORO_AUTONOMY_MIN_CYCLE_MS=300000
+ *   AKORO_AUTONOMY_MAX_WEEKLY_RUNS=<raise> (cycle.js; 30/week ≈ 4 runs/hour max)
+ * and the inbox cap (MAX_PENDING_PROPOSALS=5) still applies per learner.
  *
  * Pure module on purpose: no db, no redis, no imports — index.js, triggers.js
  * and tests all resolve the same knobs through it.
@@ -31,21 +45,35 @@ export function envInt(name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER 
   return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
 }
 
-/* The scheduler's five knobs, read fresh per call (boot and every tick) so a
-   seeded env is honoured without reload gymnastics. */
+/** "nightly" (default) or "continuous" — anything else falls back to nightly. */
+export function autonomyMode() {
+  return String(process.env.AKORO_AUTONOMY_MODE ?? "").trim().toLowerCase() === "continuous"
+    ? "continuous" : "nightly";
+}
+
+/* The cadence knobs, read fresh per call (boot and every tick) so a seeded
+   env is honoured without reload gymnastics. */
 export function autonomyCadence() {
   return {
+    mode:          autonomyMode(),
     tickMs:        envInt("AKORO_AUTONOMY_TICK_MS", 60_000, { min: 5_000 }),
     batchLimit:    envInt("AKORO_AUTONOMY_BATCH_LIMIT", 40, { min: 1, max: 500 }),
     minCycleHours: envInt("AKORO_AUTONOMY_MIN_CYCLE_HOURS", 20, { min: 1, max: 168 }),
+    minCycleMs:    envInt("AKORO_AUTONOMY_MIN_CYCLE_MS", 0, { min: 0 }),   // 0 = derive from hours
     windowStart:   envInt("AKORO_AUTONOMY_WINDOW_START_HOUR", 21, { min: 0, max: 23 }),
     windowEnd:     envInt("AKORO_AUTONOMY_WINDOW_END_HOUR", 22, { min: 0, max: 23 }),
   };
 }
 
-/** Per-learner dedupe cutoff: a cycle closer than minCycleHours is skipped. */
+/** The resolved per-learner pace: an explicit ms knob (test rigs) wins,
+ *  else the whole-hours default. */
+export function minCycleMs(cadence = autonomyCadence()) {
+  return cadence.minCycleMs > 0 ? cadence.minCycleMs : cadence.minCycleHours * 3600 * 1000;
+}
+
+/** Per-learner dedupe cutoff: a cycle closer than the pace is skipped. */
 export function minCycleCutoff(cadence = autonomyCadence(), now = new Date()) {
-  return new Date(now.getTime() - cadence.minCycleHours * 3600 * 1000).toISOString();
+  return new Date(now.getTime() - minCycleMs(cadence)).toISOString();
 }
 
 /**
@@ -55,6 +83,9 @@ export function minCycleCutoff(cadence = autonomyCadence(), now = new Date()) {
  *   start == end → no window at all — an explicit "planner stands down" switch
  */
 export function inNightlyWindow(now = new Date(), cadence = autonomyCadence()) {
+  // Test rig: continuous mode keeps the window permanently open — the
+  // planner may run any time the per-learner pace allows.
+  if (cadence.mode === "continuous") return true;
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: LAGOS, hour: "2-digit", minute: "2-digit", hour12: false,
   }).formatToParts(now);
