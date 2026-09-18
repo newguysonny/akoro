@@ -25,12 +25,32 @@ const edu = () => db.schema("edu");
 const QUEUE_NAME = "autonomy-cycle";
 
 let autonomyCycleQueue = null;
+let queueRedis = null;
+let workerRedis = null;
+
+/* Both connections are traced and REDIS_URL-backed, with error listeners
+ * (an un-listened ioredis error throws). NEVER let BullMQ default them:
+ * its fallback is 127.0.0.1:6379, which is exactly how the planner went
+ * silently dead on remote-Redis deploys (Render et al.) — the scheduler
+ * enqueued into the real Redis while the worker listened on localhost,
+ * so jobs were added but never processed. */
+function queueConnection() {
+  if (queueRedis) return queueRedis;
+  queueRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-cycle" })), "autonomy-cycle");
+  queueRedis.on("error", (error) => console.error("[autonomy/cycle queue Redis]", error.message));
+  return queueRedis;
+}
+
+function workerConnection() {
+  if (workerRedis) return workerRedis;
+  workerRedis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-worker" })), "autonomy-worker");
+  workerRedis.on("error", (error) => console.error("[autonomy/cycle worker Redis]", error.message));
+  return workerRedis;
+}
 
 const queue = () => {
   if (!autonomyCycleQueue) {
-    autonomyCycleQueue = new Queue(QUEUE_NAME, {
-      connection: traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "autonomy-cycle" })), "autonomy-cycle"),
-    });
+    autonomyCycleQueue = new Queue(QUEUE_NAME, { connection: queueConnection() });
   }
   return autonomyCycleQueue;
 };
@@ -75,6 +95,7 @@ export function startAutonomyCycleWorker() {
     if (result?.skipped) console.log(`[autonomy/cycle] skipped user ${userId} (${trigger || "nightly"}): ${result.skipped}`);
     return result;
   }, {
+    connection: workerConnection(),
     concurrency: 2,
     drainDelay: 60_000,
     settings: { stalledInterval: 300_000 },
@@ -132,4 +153,6 @@ export async function stopAutonomyCycleWorker() {
   if (schedulerTimer) clearInterval(schedulerTimer);
   if (worker) await worker.close();
   if (autonomyCycleQueue) await autonomyCycleQueue.close();
+  if (workerRedis) await workerRedis.quit().catch(() => {});
+  if (queueRedis) await queueRedis.quit().catch(() => {});
 }

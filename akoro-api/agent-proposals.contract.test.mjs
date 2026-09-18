@@ -115,6 +115,11 @@ test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () 
   // drainDelay/stalledInterval tuned like the other workers (Redis-quota lesson)
   assert.match(autonomyIndex, /drainDelay:\s*60_000/);
   assert.match(autonomyIndex, /stalledInterval:\s*300_000/);
+  // the worker MUST carry the traced REDIS_URL connection — BullMQ's
+  // 127.0.0.1:6379 default silently killed the planner on remote-Redis
+  // deploys (jobs enqueued, never processed)
+  assert.match(autonomyIndex, /connection: workerConnection\(\),/);
+  assert.match(autonomyIndex, /connection: queueConnection\(\)/);
   // claims rows atomically so multi-replica deploys cannot double-enqueue
   assert.match(autonomyIndex, /\.update\(\{\s*last_cycle_at: new Date\(\)\.toISOString\(\)\s*\}\)/);
   // boot order: migrations self-run before workers; planner after the L1 worker
