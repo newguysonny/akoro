@@ -48,8 +48,12 @@ test("event triggers · four real write sites emit, never block, never guess", (
   assert.match(cadence, /loopEveryMs > 0 \? "continuous" : autonomyMode\(\)/);
   assert.match(cadence, /if \(cadence\.loopEveryMs > 0\) return cadence\.loopEveryMs;/);
   // per-trigger jobId so event bursts collapse — minute granularity so
-  // continuous-mode test cycles still get unique jobs
-  assert.match(autonomyIndex, /jobId: `cycle:\$\{userId\}:\$\{trigger\}:\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 16\)\}`/);
+  // continuous-mode test cycles still get unique jobs. Dashes only:
+  // BullMQ rejects ":" in custom ids, which silently failed every
+  // enqueue in production until the Render logs caught it.
+  assert.match(autonomyIndex, /jobId: `cycle-\$\{userId\}-\$\{trigger\}-/);
+  assert.match(autonomyIndex, /replace\(\/\\D\/g, ""\)\}`,/);
+  assert.doesNotMatch(autonomyIndex, /jobId: `cycle:/);
 });
 
 test("event pacing · events run sooner than nightly but never frenzied", () => {

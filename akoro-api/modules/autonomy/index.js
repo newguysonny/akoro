@@ -59,8 +59,11 @@ const queue = () => {
 export async function enqueueAutonomyCycle(userId, trigger = "nightly") {
   await queue().add("run-cycle", { userId, trigger }, {
     // minute-granular dedupe per user+trigger: bursts collapse, while
-    // continuous-mode test cycles (5-minute pace) still get unique jobs
-    jobId: `cycle:${userId}:${trigger}:${new Date().toISOString().slice(0, 16)}`,
+    // continuous-mode test cycles (5-minute pace) still get unique jobs.
+    // Dashes + digits-only minute stamp — BullMQ REJECTS ":" in custom
+    // ids (its Redis-key separator); the old colon-joined ids failed
+    // every enqueue with "Custom Id cannot contain :".
+    jobId: `cycle-${userId}-${trigger}-${new Date().toISOString().slice(0, 16).replace(/\D/g, "")}`,
     removeOnComplete: { age: 3600, count: 500 },
     removeOnFail: { age: 6 * 3600 },
   });
@@ -118,11 +121,22 @@ export function startAutonomyCycleWorker() {
         .in("user_id", due.map((d) => d.user_id))
         .or(`last_cycle_at.is.null,last_cycle_at.lt.${cutoff}`)
         .select("user_id");
+      let enqueued = 0;
       for (const row of claimed?.data ?? []) {
-        await enqueueAutonomyCycle(row.user_id).catch((e) =>
-          console.warn("[autonomy/cycle] enqueue failed:", e.message));
+        await enqueueAutonomyCycle(row.user_id)
+          .then(() => { enqueued += 1; })
+          .catch(async (e) => {
+            console.warn("[autonomy/cycle] enqueue failed:", e.message);
+            // Give the claim back so the next tick retries instead of
+            // locking the learner out for a whole pace window on a
+            // transient failure.
+            edu().from("learner_agent_autonomy")
+              .update({ last_cycle_at: null })
+              .eq("user_id", row.user_id)
+              .then(() => {}, () => {});
+          });
       }
-      if (claimed?.data?.length) console.log(`[autonomy/cycle] enqueued ${claimed.data.length} nightly planner run(s)`);
+      if (enqueued) console.log(`[autonomy/cycle] enqueued ${enqueued} nightly planner run(s)`);
     } catch (e) {
       console.error("[autonomy/cycle] scheduler tick failed:", e.message);
     }
