@@ -68,7 +68,12 @@ export function startAutonomyCycleWorker() {
   worker = new Worker(QUEUE_NAME, async (job) => {
     const { userId, trigger } = job.data || {};
     if (!userId) return;
-    return runAutonomyCycleForUser(userId, trigger || "nightly");
+    const result = await runAutonomyCycleForUser(userId, trigger || "nightly");
+    // Skips are the planner's normal vocabulary (pace, inbox full,
+    // budget) — and THE answer to "why no suggestions?": say which
+    // gate held the run, per user, instead of failing silently.
+    if (result?.skipped) console.log(`[autonomy/cycle] skipped user ${userId} (${trigger || "nightly"}): ${result.skipped}`);
+    return result;
   }, {
     concurrency: 2,
     drainDelay: 60_000,

@@ -84,9 +84,13 @@ function AgentChatTab({
   const [agentEmoji, setAgentEmoji] = useState(initEmoji);
   const [innerTab,   setInnerTab]   = useState("chat");
   const shownName = agentName || t('agent.learning_agent');
+  // The status line: Idle is the resting state — it swaps to the live
+  // background label ("Reviewing your goals…") while the agent works,
+  // and says offline when the consent is off. Transient states first.
   const autonomyStatus = !agentAutonomyLoaded ? "Checking agent…"
     : agentAutonomySaving ? "Saving…"
-    : agentOnline ? "Agent online" : "Agent offline";
+    : !agentOnline ? "Agent offline"
+    : agentActivity || "Idle";
   const [taskOpen,   setTaskOpen]   = useState(false);
   const [taskFilter, setTaskFilter] = useState("pending");
   const [tTitle,     setTTitle]     = useState("");
@@ -509,6 +513,15 @@ function AgentChatTab({
           </button>
         ))}
       </div>
+      {/* Background status — visible right in the chat, not only in the
+          drawer: Idle by default, swapping live to the background label
+          ("Reviewing your goals…") while the agent works. */}
+      <div style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 16px",background:"var(--ak-surface)",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
+        <span style={{ width:6,height:6,borderRadius:"50%",flexShrink:0,background:agentActivity?BRAND:"var(--ak-text-muted)",animation:agentActivity?"pulse-dot 1.4s ease-in-out infinite":"none" }}/>
+        <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>
+          {autonomyStatus}
+        </span>
+      </div>
       {innerTab==="chat"&&(
         <>
           <div style={{ display:"flex",alignItems:"center",gap:7,padding:"10px 18px 8px",overflowX:"auto",scrollbarWidth:"none",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
@@ -774,9 +787,8 @@ function AgentChatTab({
                 style={{ display:"flex",alignItems:"center",gap:4,background:"none",border:0,padding:0,marginTop:2,cursor:agentAutonomyLoaded&&!agentAutonomySaving&&onToggleAgentAutonomy?"pointer":"wait",fontFamily:"'Nunito',sans-serif" }}>
                 <span style={{ width:5,height:5,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",display:"inline-block" }}/>
                 <span style={{ fontSize:10.5,fontWeight:agentActivity?800:600,color:agentActivity?BRAND:"var(--ak-text-muted)",display:"inline-flex",alignItems:"center",gap:4 }}>
-                  {agentActivity
-                    ? <><span style={{ width:5,height:5,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite"}}/>{agentActivity}</>
-                    : `${autonomyStatus} · ${t('agent.learning_agent')}`}
+                  {agentActivity&&<span style={{ width:5,height:5,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite"}}/>}
+                  {autonomyStatus}
                 </span>
               </button>
             </div>
