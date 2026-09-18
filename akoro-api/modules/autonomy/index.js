@@ -1,10 +1,13 @@
 /**
  * modules/autonomy/index.js — queue + nightly scheduler for the planner.
  *
- * Redis-quota hygiene (the 500k-commands lesson): the scheduler is ONE 60s
- * tick that enqueues at most a small batch of due learners per night window
- * — O(users) jobs per DAY, not per minute; the worker idles cheaply with
- * the tuned drainDelay/stalledInterval the other workers use.
+ * Redis-quota hygiene (the 500k-commands lesson): the scheduler is ONE tick
+ * that enqueues at most a small batch of due learners per night window —
+ * O(users) jobs per DAY, not per minute; the worker idles cheaply with the
+ * tuned drainDelay/stalledInterval the other workers use.
+ *
+ * Every cadence knob (tick interval, batch size, per-learner dedupe, nightly
+ * window) is env-tunable via AKORO_AUTONOMY_* — see ./cadence.js.
  */
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
@@ -12,6 +15,11 @@ import db from "../../db.js";
 import { redisConnectionOptions } from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
 import { runAutonomyCycleForUser } from "./cycle.js";
+import { autonomyCadence, inNightlyWindow, minCycleCutoff } from "./cadence.js";
+
+// Re-exported so the module's public surface (and the contract tests) keep
+// finding inNightlyWindow here; the logic itself lives in cadence.js.
+export { inNightlyWindow, autonomyCadence };
 
 const edu = () => db.schema("edu");
 const QUEUE_NAME = "autonomy-cycle";
@@ -37,9 +45,10 @@ export async function enqueueAutonomyCycle(userId, trigger = "nightly") {
   });
 }
 
-/** Learners due for a nightly run: autonomy on, level ≥ 2, last run ≥ 20h. */
-async function duePlanners(limit = 40) {
-  const cutoff = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
+/** Learners due for a nightly run: autonomy on, level ≥ 2, last cycle older
+ *  than the env-tunable min-cycle window (default 20h). */
+async function duePlanners(limit = autonomyCadence().batchLimit) {
+  const cutoff = minCycleCutoff();
   const { data, error } = await edu().from("learner_agent_autonomy")
     .select("user_id")
     .eq("enabled", true)
@@ -48,16 +57,6 @@ async function duePlanners(limit = 40) {
     .limit(limit);
   if (error) throw new Error(error.message);
   return data ?? [];
-}
-
-/** The nightly window check — 21:00–23:00 Africa/Lagos. */
-export function inNightlyWindow(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit", hour12: false,
-  }).formatToParts(now);
-  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
-  const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
-  return h === 21 || (h === 22 && m === 0); // 21:00–22:00, one pacing tick
 }
 
 let schedulerTimer = null;
@@ -76,15 +75,17 @@ export function startAutonomyCycleWorker() {
   });
   worker.on("failed", (job, err) => console.error(`[autonomy/cycle] job ${job?.id} failed:`, err?.message));
 
-  // The nightly stagger: one tick per minute paces at most one batch into
-  // the queue during the 21:00 window (and claims rows atomically so a
-  // multi-replica deploy cannot double-enqueue the same learner).
+  // The nightly stagger: one tick paces at most one batch into the queue
+  // during the window (and claims rows atomically so a multi-replica deploy
+  // cannot double-enqueue the same learner). Tick, window, batch size and
+  // per-learner cadence all come from AKORO_AUTONOMY_* (cadence.js).
   schedulerTimer = setInterval(async () => {
     try {
-      if (!inNightlyWindow()) return;
-      const due = await duePlanners();
+      const cadence = autonomyCadence();
+      if (!inNightlyWindow(new Date(), cadence)) return;
+      const due = await duePlanners(cadence.batchLimit);
       if (!due.length) return;
-      const cutoff = new Date(Date.now() - 20 * 3600 * 1000).toISOString();
+      const cutoff = minCycleCutoff(cadence);
       const claimed = await edu().from("learner_agent_autonomy")
         .update({ last_cycle_at: new Date().toISOString() })
         .in("user_id", due.map((d) => d.user_id))
@@ -98,10 +99,14 @@ export function startAutonomyCycleWorker() {
     } catch (e) {
       console.error("[autonomy/cycle] scheduler tick failed:", e.message);
     }
-  }, 60_000);
+  }, autonomyCadence().tickMs);
   schedulerTimer.unref?.();
 
-  console.log("[autonomy] planner worker started (nightly cycle, level ≥ 2)");
+  const cadence = autonomyCadence();
+  console.log(
+    `[autonomy] planner worker started (nightly cycle, level ≥ 2 — tick ${Math.round(cadence.tickMs / 1000)}s, ` +
+    `window ${String(cadence.windowStart).padStart(2, "0")}:00–${String(cadence.windowEnd).padStart(2, "0")}:00 Africa/Lagos, ` +
+    `≤${cadence.batchLimit}/tick, ≥${cadence.minCycleHours}h/learner)`);
   return worker;
 }
 

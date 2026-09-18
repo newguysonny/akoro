@@ -9,8 +9,15 @@
 import { enqueueAutonomyCycle } from "./index.js";
 
 // Per-process cooldown so a rapid-fire path (bulk completes, replays) does
-// not chatter Redis: one enqueue per user+kind per 15 minutes, in-memory.
+// not chatter Redis: one enqueue per user+kind per cooldown window, in-memory.
 const EMIT_COOLDOWN_MS = 15 * 60 * 1000;
+// Env override (AKORO_AUTONOMY_TRIGGER_COOLDOWN_MS, milliseconds) — same
+// convention as the scheduler's cadence knobs (./cadence.js). Read per emit;
+// an absent or unusable value keeps the default above.
+const emitCooldownMs = () => {
+  const n = Math.floor(Number(process.env.AKORO_AUTONOMY_TRIGGER_COOLDOWN_MS ?? ""));
+  return Number.isFinite(n) && n >= 1000 ? n : EMIT_COOLDOWN_MS;
+};
 const lastEmit = new Map();
 
 export async function emitAutonomyEvent(userId, kind) {
@@ -18,7 +25,7 @@ export async function emitAutonomyEvent(userId, kind) {
   const key = `${userId}:${kind}`;
   const nowMs = Date.now();
   const last = lastEmit.get(key) ?? 0;
-  if (nowMs - last < EMIT_COOLDOWN_MS) return false;
+  if (nowMs - last < emitCooldownMs()) return false;
   lastEmit.set(key, nowMs);
   try {
     await enqueueAutonomyCycle(userId, `event:${kind}`);

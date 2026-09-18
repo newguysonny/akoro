@@ -61,9 +61,10 @@ test("library + menu · a choice modal — Upload opens the sheet, Blog opens th
   assert.match(library, /aria-label="Add to library"/);
   // Upload chains into the existing AddRecordModal sheet
   assert.match(library, /\{\s*setAddOpen\(false\);\s*setSheetOpen\(true\);\s*\}/);
-  // Blog row is higher-ed gated through the one studyLevel gate
-  assert.match(library, /import \{ isHigherEdUI \} from '\.\.\/utils\/studyLevel\.js';/);
-  assert.match(library, /setHigherEd\(isHigherEdUI\(d\?\.data \?\? d \?\? \{\}\)\)/);
+  // Blog row is higher-ed gated through the one studyLevel gate (the
+  // useHigherEd hook since the tier-cache round — same gate, cached tier)
+  assert.match(library, /import \{ useHigherEd \} from '\.\.\/hooks\/useStudyTier\.js';/);
+  assert.match(library, /const higherEd = useHigherEd\(\);/);
   assert.match(library, /\{higherEd && \(/);
   assert.match(library, /navigate\('\/write\/blog\/new'\)/);
   // the sheet itself is untouched

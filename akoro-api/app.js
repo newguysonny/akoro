@@ -545,8 +545,10 @@ if (process.env.REDIS_URL && !skipJob("battle worker")) {
   }
 
   // Full Autonomy level 2 (Planner): the nightly background cycle. The
-  // scheduler ticks once a minute and enqueues at most one small batch
-  // inside the 21:00-22:00 Africa/Lagos window — O(learners) jobs per day.
+  // scheduler's tick, nightly window, batch size and per-learner cadence
+  // are env-tunable (AKORO_AUTONOMY_* — modules/autonomy/cadence.js);
+  // defaults: one tick per minute, one small batch inside the 21:00-22:00
+  // Africa/Lagos window — O(learners) jobs per day.
   try {
     if (!skipJob("autonomy cycle worker")) {
       const autonomy = await import("./modules/autonomy/index.js");

@@ -24,6 +24,7 @@ const plannerSql = read("migrations/2026-autonomy-planner.sql");
 const proposalsRoutes = read("modules/agent-proposals/routes.js");
 const cycle = read("modules/autonomy/cycle.js");
 const autonomyIndex = read("modules/autonomy/index.js");
+const cadence = read("modules/autonomy/cadence.js");
 const appJs = read("app.js");
 const learnerAutonomy = read("modules/adaptive-learning/learner-autonomy.js");
 const chatJs = read("modules/adaptive-learning/chat.js");
@@ -93,12 +94,21 @@ test("step 3 · the cycle: bounded, metered, validated server-side", () => {
 });
 
 test("step 3 · nightly scheduler is quota-cheap and worker starts at boot", () => {
-  // one minute tick, small batch, one 21:00–22:00 Africa/Lagos window
+  // one tick, small batch, one nightly window — every cadence knob is
+  // env-tunable (AKORO_AUTONOMY_*); defaults: 60s tick, 40/tick, 21:00–22:00
+  // Africa/Lagos, 20h per learner
   assert.match(autonomyIndex, /QUEUE_NAME = "autonomy-cycle"/);
   assert.match(autonomyIndex, /inNightlyWindow/);
   assert.match(autonomyIndex, /setInterval\(async \(\) =>/);
-  assert.match(autonomyIndex, /duePlanners\(limit = 40\)/);
-  assert.match(autonomyIndex, /h === 21 \|\| \(h === 22 && m === 0\)/);
+  assert.match(autonomyIndex, /duePlanners\(limit = autonomyCadence\(\)\.batchLimit\)/);
+  // the cadence knobs live in cadence.js — pure module, same defaults as
+  // before the env-awareness, unusable values fall back
+  assert.match(cadence, /AKORO_AUTONOMY_TICK_MS", 60_000/);
+  assert.match(cadence, /AKORO_AUTONOMY_BATCH_LIMIT", 40/);
+  assert.match(cadence, /AKORO_AUTONOMY_MIN_CYCLE_HOURS", 20/);
+  assert.match(cadence, /AKORO_AUTONOMY_WINDOW_START_HOUR", 21/);
+  assert.match(cadence, /AKORO_AUTONOMY_WINDOW_END_HOUR", 22/);
+  assert.match(cadence, /export function inNightlyWindow/);
   // drainDelay/stalledInterval tuned like the other workers (Redis-quota lesson)
   assert.match(autonomyIndex, /drainDelay:\s*60_000/);
   assert.match(autonomyIndex, /stalledInterval:\s*300_000/);
