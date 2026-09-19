@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Btn, Inp, Txa, Sel } from '../Primitives.jsx';
 import AudiencePicker, { parseHandles, BLANK_AUDIENCE } from '../AudiencePicker.jsx';
+import { apiGet } from '../../services/api.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, WHITE, RED, FONT } from '../../constants.js';
+
+/* datetime-local wants local wall-clock, not the ISO Z string. */
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const BLANK = {
   courseId: '', title: '', topic: '', description: '',
@@ -30,21 +39,21 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
 
   // Classes carry their own subjects, which is what a class battle draws
   // questions from — so one fetch answers both "which class?" and "which
-  // subject?".
+  // subject?". Both hosts mount this form only when it's visible, so
+  // mount == shown: fetch once, no `open` prop needed.
   useEffect(() => {
-    if (!open) return;
     setClassesLoading(true);
     apiGet('/api/battle/my-classes')
       .then(d => setClasses(d?.data ?? []))
       .catch(() => setClasses([]))
       .finally(() => setClassesLoading(false));
-  }, [open]);
+  }, []);
 
   const chosenClass = classes.find(c => c.id === form.classId);
 
-  // Reset each time the modal opens, seeded from the battle being edited.
+  // Reset on mount, seeded from the battle being edited (and again if the
+  // host swaps in a different battle or the course list arrives late).
   useEffect(() => {
-    if (!open) return;
     setError('');
     if (editing) {
       setForm({
@@ -62,7 +71,7 @@ export default function BattleForm({ onSubmit, onCancel, courses = [], editing =
     } else {
       setForm({ ...BLANK, courseId: courses[0]?.id || '' });
     }
-  }, [open, editing, courses]);
+  }, [editing, courses]);
 
   useEffect(() => {
     if (!classes.length) return;
