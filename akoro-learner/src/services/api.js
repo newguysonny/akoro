@@ -79,11 +79,11 @@ function forgetExpiry() {
  */
 export function refreshSession() {
   if (!refreshing) {
-    refreshing = fetch(`${API}/api/auth/refresh`, {
+    refreshing = fetchWithTimeout(`${API}/api/auth/refresh`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
       body: '{}',
-    }).then(async (r) => {
+    }, REFRESH_TIMEOUT_MS).then(async (r) => {
       const json = r.ok ? await r.json().catch(() => null) : null;
       if (json) rememberExpiry(json);
       // The STATUS, not just ok/not-ok: a 429 or a 502 means we never got an
@@ -104,12 +104,54 @@ function endSession() {
   }
 }
 
+/* ── Request timeout ───────────────────────────────────────────────────────
+   A stalled connection never rejects a fetch — the browser sits on a dead
+   socket for minutes (mobile networks do this constantly: the signal drops
+   mid-request and nothing ever comes back, not even an error). Without a
+   deadline, every page that fires such a request shows its loading skeleton
+   forever — no error state, no empty state, no way out. The community pages
+   were where this bit first: they are the app's only reads with the offline
+   cache disabled, so they had no last-known-good copy to fall back to either.
+
+   The deadline turns a stall into an ordinary network error, which the
+   existing machinery already knows how to handle: reads fall back to the
+   offline cache (when enabled), pages show their "couldn't reach" state with
+   a retry button, and offline-queued writes queue.
+
+   30s default: generous enough for a cold API start to finish answering,
+   short enough that a learner on a dead connection isn't staring at a
+   skeleton. VITE_API_TIMEOUT_MS overrides it (a slow deploy can raise it);
+   per-call `timeout: 0` opts out entirely for genuinely long operations.
+   Uploads get their own, longer budget. */
+const DEFAULT_TIMEOUT_MS = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000;
+const REFRESH_TIMEOUT_MS = 15000;   // a hung refresh must not hang every request behind it
+const UPLOAD_TIMEOUT_MS  = 120000;  // bodies can be big; slow is expected, dead is not
+
+function fetchWithTimeout(url, opts = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!timeoutMs || timeoutMs <= 0) return fetch(url, opts);   // explicit opt-out
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .finally(() => clearTimeout(timer))
+    .catch((e) => {
+      if (e?.name === 'AbortError') {
+        // Look exactly like every other network failure so the cache
+        // fallback, offline queue and page error states all engage.
+        const err = new Error('The request timed out — check your connection and try again.');
+        err.isNetwork = true;
+        err.timedOut  = true;
+        throw err;
+      }
+      throw e;
+    });
+}
+
 /** fetch + one transparent refresh-and-retry on 401. */
-async function authedFetch(url, opts) {
+async function authedFetch(url, opts, timeoutMs = DEFAULT_TIMEOUT_MS) {
   // Known-expired token: refresh once up front instead of letting every
   // request in this batch discover it independently.
   if (accessExpired()) await refreshSession();
-  const res = await fetch(url, opts);
+  const res = await fetchWithTimeout(url, opts, timeoutMs);
   if (res.status !== 401) return res;
   // Never recurse on the auth endpoints themselves.
   if (String(url).includes('/api/auth/')) return res;
@@ -121,7 +163,7 @@ async function authedFetch(url, opts) {
     if (r2.status === 401 || r2.status === 403) endSession();
     return res;
   }
-  return fetch(url, opts);
+  return fetchWithTimeout(url, opts, timeoutMs);
 }
 
 
@@ -184,9 +226,9 @@ function markOffline(data) {
   return data;
 }
 
-export async function apiGet(path, { cache = true } = {}) {
+export async function apiGet(path, { cache = true, timeout } = {}) {
   try {
-    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' });
+    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' }, timeout);
     if (!r.ok) throw await apiError(r, 'GET', path);
     const json = await r.json();
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
@@ -204,13 +246,13 @@ export async function apiGet(path, { cache = true } = {}) {
 // Shared write path. Pass { queueOffline: true } for replay-safe, fire-and-forget
 // mutations: if the request fails because we're offline, it's stored and replayed
 // on reconnect, and an optimistic { queued: true } is returned instead of throwing.
-async function apiSend(method, path, body, { queueOffline = false } = {}) {
+async function apiSend(method, path, body, { queueOffline = false, timeout } = {}) {
   try {
     const r = await authedFetch(`${API}${path}`, {
       ...BASE_OPTS,
       method,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
+    }, timeout);
     if (!r.ok) throw await apiError(r, method, path);
     return r.json();
   } catch (err) {
@@ -241,7 +283,7 @@ export async function apiUpload(path, formData, { method = 'POST' } = {}) {
     credentials: 'include',
     headers: { 'X-Akoro-Portal': PORTAL_ID },
     body: formData,
-  });
+  }, UPLOAD_TIMEOUT_MS);
   if (!r.ok) throw await apiError(r, method, path);
   return r.json();
 }

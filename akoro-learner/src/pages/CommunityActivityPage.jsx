@@ -258,6 +258,26 @@ export default function CommunityActivityPage() {
   useEffect(() => { load(); }, [load]);
   const retry = () => { setLoading(true); setError(null); load(); };
 
+  // ALL hooks must run before the early returns below — this one used to sit
+  // after them, so the moment loading flipped to false the component rendered
+  // MORE hooks than its previous pass and React threw ("Rendered more hooks
+  // than during the previous render"), killing the page right as data landed.
+  // One submission in the air at a time — a double-tapped Submit on a slow
+  // connection used to fire the request twice.
+  const { busy: submitBusy, run: runSubmit } = useInFlight();
+  const submit = (a) => runSubmit(async () => {
+    setSubmittingId(a.id);
+    try {
+      await submitCommunityActivity(a.id);
+      setActivities(prev => prev.map(x => x.id === a.id
+        ? { ...x, my_submitted: true, submissions_count: (x.submissions_count || 0) + 1 }
+        : x));
+      showToast('Submission recorded');
+    } catch (e) {
+      showToast(e?.message || 'Could not submit. Try again.');
+    } finally { setSubmittingId(null); }
+  });
+
   if (loading) {
     return (
       <CommunityShell title="Community" sub="" backTo="/communities" loading headerLoading
@@ -317,22 +337,6 @@ export default function CommunityActivityPage() {
 
   // Type filter — 'all' shows everything; others mirror the workbench tabs.
   const visible = typeFilter === 'all' ? activities : activities.filter((a) => (a.type || 'assignment') === typeFilter);
-
-  // One submission in the air at a time — a double-tapped Submit on a slow
-  // connection used to fire the request twice.
-  const { busy: submitBusy, run: runSubmit } = useInFlight();
-  const submit = (a) => runSubmit(async () => {
-    setSubmittingId(a.id);
-    try {
-      await submitCommunityActivity(a.id);
-      setActivities(prev => prev.map(x => x.id === a.id
-        ? { ...x, my_submitted: true, submissions_count: (x.submissions_count || 0) + 1 }
-        : x));
-      showToast('Submission recorded');
-    } catch (e) {
-      showToast(e?.message || 'Could not submit. Try again.');
-    } finally { setSubmittingId(null); }
-  });
 
   return (
     <CommunityShell
