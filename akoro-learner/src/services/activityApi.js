@@ -14,7 +14,7 @@
  * renders either way, and the cards appear the day the data exists without
  * any page changes.
  */
-import { apiGet } from './api.js';
+import { apiGet, apiPost } from './api.js';
 
 /* Self study — what I, a learner, have been assigned. */
 async function fetchSelfStudy() {
@@ -33,6 +33,7 @@ async function fetchSelfStudy() {
       const doneCount = stageList?.filter(st => st.status === 'complete').length ?? 0;
       return {
       id:         a.targetId || `ss-${a.id}`,
+      assignmentId: a.id,
       kind:       a.type || 'self_study',   // assignment | project | live_course | self_study | multi_stage | battle-ref
       title:      a.title || a.topic || 'Self study',
       subtitle:   stageList
@@ -49,6 +50,12 @@ async function fetchSelfStudy() {
       graded:     !!a.graded,  // teacher published a grade
       grade:      a.grade ?? null,
       feedbackText: a.feedbackText || null,
+      // extra context the details page needs (the feed card ignores these)
+      instructions: a.instructions || null,
+      subject:    a.subject || null,
+      topic:      a.topic || null,
+      completedAt: a.completedAt || null,
+      briefDetails: a.details ?? null,   // brief details object (questions, etc.)
       };
     });
   } catch { return []; }
@@ -84,4 +91,12 @@ export async function fetchMyStreak() {
     const d = await apiGet('/api/self-study/streak');
     return d?.data?.streak ?? 0;
   } catch { return 0; }
+}
+
+/* Submit — mark this activity's target complete. The teacher's class view
+   and the learner's feed both derive from that status. Throws with a
+   user-facing message. */
+export async function completeActivity(assignmentId) {
+  const d = await apiPost(`/api/self-study/${assignmentId}/complete`);
+  return d?.data ?? null;
 }

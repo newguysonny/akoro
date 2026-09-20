@@ -73,17 +73,18 @@ function dueLabel(iso) {
   return { text: `Due in ${days} days`, overdue: false };
 }
 
-function ActivityCard({ a }) {
+function ActivityCard({ a, onOpen }) {
   const { emoji, color } = getMeta(a.kind);
   const st = getStatus(a.status);
   const open = a.status !== 'complete';
   const due = dueLabel(a.dueAt);
   return (
-    <div style={{
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen?.(); }}
+    style={{
       display: 'flex', gap: 12, padding: '13px 15px',
       background: open ? '#F5F1FF' : 'var(--ak-surface)',
       borderRadius: 14, border: `1px solid ${open ? '#DDD3FF' : 'var(--ak-border)'}`,
-      alignItems: 'flex-start',
+      alignItems: 'flex-start', cursor: 'pointer',
     }}>
       <div style={{
         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
@@ -254,7 +255,7 @@ export default function ActivityPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <ActivityCard key={a.id} a={a} />)}
+            {displayed.map(a => <ActivityCard key={a.id} a={a} onOpen={() => navigate(`/activities/${a.id}`)} />)}
           </div>
         )}
       </div>
