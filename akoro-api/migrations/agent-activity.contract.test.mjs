@@ -52,8 +52,12 @@ test("the learner header streams the activity and falls back when quiet", () => 
   assert.match(dashboard, /absorbAgentActivity\(label\)/);
   assert.match(dashboard, /setTimeout\(\(\) => setAgentActivity\(null\), 90_000\)/);
   assert.match(dashboard, /agentActivity=\{agentActivity\}/);
-  // The header shows the live label with a pulse; idle shows the old static line.
+  // The header shows the live label with a pulse. Quiet falls back to the
+  // resting "Idle" line — the old "status · agent name" composite was
+  // replaced by a dedicated status strip with honest transient states
+  // ("Checking agent…", "Agent offline") in the consent + Idle redesigns.
   assert.match(tab, /agentActivity = null/);
   assert.match(tab, /animation:"pulse-dot 1\.4s ease-in-out infinite"/);
-  assert.match(tab, /`\$\{autonomyStatus\} · \$\{t\('agent\.learning_agent'\)\}`/);
+  assert.match(tab, /agentActivity \|\| "Idle"/);
+  assert.match(tab, /!agentOnline \? "Agent offline"/);
 });
