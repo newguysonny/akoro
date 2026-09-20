@@ -1,77 +1,44 @@
-import { useMemo, useState } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Scale, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Scale, SlidersHorizontal } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Toast } from '../components/Primitives.jsx';
 import {
   AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, RED, PURPLE, BLUE, FONT,
 } from '../constants.js';
+import { apiGet, apiPatch } from '../services/api.js';
 
 /**
- * GradebookPage — the score matrix, ported from the reference design
- * (reference/gradebook.md) onto the instructor app's chrome and palette.
+ * GradebookPage — the score matrix from the reference design
+ * (reference/gradebook.md), wired to REAL data:
  *
- * The reference is a self-contained demo: seeded classes, assignments and
- * scores (hash-stable, so every learner row looks the same on every visit),
- * with edits kept in local overrides until Cancel clears them. The grading
- * MATH is the real thing and is ported verbatim:
+ *   classes      GET /api/battle/my-classes        (the teacher's classes)
+ *   assignments  GET /api/self-study               (briefs; filtered to the
+ *                selected class by classroom_id)
+ *   students +   GET /api/self-study/:id           (targets with each
+   grades                                           learner's status + grade)
+ *   publishing   PATCH /api/self-study/:id/targets/:studentId/grade
  *
- *   · Each assignment (assessment) resolves to earned/possible points,
- *     independent of how many questions it has or what it's out of.
- *   · Per-class grading settings — every class carries its own category
- *     weights and its own aggregation method ("per-subject weighting").
- *   · Equal-weight: every assignment in a category counts the same, no
- *     matter how many points it's out of. Points-based: points are pooled
- *     within a category — a 20-point test naturally counts more than a
- *     5-point quiz.
- *   · Weights don't have to add to 100 — they scale automatically on save.
- *   · Grading scale (percentage → letter) is school-wide, not per-class.
+ * A cell is a published grade, 0–100. The Final column combines cells by
+ * assignment TYPE with per-class weights (the Grading System modal; weights
+ * scale to 100 on save and only count when that type has graded work), then
+ * maps to a letter with the school-wide scale (Grading Scale modal).
  *
- * Everything the reference left inert stays inert here (the tab row's other
- * views, Add Assignment, Add Class) so the next round can wire them to real
- * data; the type filter and term select are live because they read cleanly
- * from local state.
+ * Edits are local until Save publishes them (Cancel discards); Save patches
+ * each edited cell and reports failures honestly.
  */
 
-/* ── Seeded data (the reference's demo academy) ─────────────────────────── */
-const CLASSES = [
-  { id: 'algebra',  name: 'Algebra I (H)',         color: AMBER },
-  { id: 'english',  name: 'English Language',      color: '#3B82F6' },
-  { id: 'biology',  name: 'Biology',               color: '#10B981' },
-  { id: 'geography', name: 'Geography',            color: '#0D9488' },
-  { id: 'pe',       name: 'Physical & Health Ed.', color: '#F59E0B' },
-  { id: 'reading',  name: 'Reading',               color: '#8B5CF6' },
-  { id: 'social',   name: 'Social Studies',        color: '#EF4444' },
+/* ── Activity types = gradebook categories ──────────────────────────────── */
+const TYPES = [
+  { type: 'assignment',  label: 'Assignment',  color: PURPLE },
+  { type: 'project',     label: 'Project',     color: '#10B981' },
+  { type: 'self_study',  label: 'Self study',  color: '#F59E0B' },
+  { type: 'live_course', label: 'Live course', color: '#E11D48' },
+  { type: 'multi_stage', label: 'Multi stage', color: '#3B82F6' },
 ];
-
-const ASSIGNMENT_TEMPLATE = [
-  { key: 'prequiz',   name: 'Pre-Quiz',   type: 'Quiz',      due: 'Sep 10', points: 10,  letter: false },
-  { key: 'classwork', name: 'Class Work', type: 'Classwork', due: 'Sep 12', points: null, letter: true },
-  { key: 'homework',  name: 'Homework',   type: 'Homework',  due: 'Sep 15', points: 10,  letter: false },
-  { key: 'popquiz',   name: 'Pop Quiz',   type: 'Quiz',      due: 'Sep 22', points: 20,  letter: false },
-  { key: 'worksheet', name: 'Worksheet',  type: 'Homework',  due: 'Sep 29', points: 15,  letter: false },
-];
-const NAME_OVERRIDES = {
-  biology:   { worksheet: 'Lab Report' },
-  pe:        { worksheet: 'Fitness Test', popquiz: 'Skills Check' },
-  geography: { worksheet: 'Map Assignment' },
-  reading:   { worksheet: 'Book Report' },
-};
-
-const STUDENTS = [
-  'Amara JSS1-2', 'Chidi Okafor', 'Ngozi Eze', 'Tunde Bello',
-  'Fatima Ibrahim', 'Emeka Nwosu', 'Blessing Adeyemi', 'Ibrahim Musa', 'Grace Okonkwo',
-];
-const LETTERS = ['A', 'A', 'B', 'B', 'C', 'D'];
-const LETTER_PCT = { A: 95, B: 85, C: 75, D: 65, F: 50 };
-
-const INITIAL_CATEGORY_TYPES = [
-  { type: 'Quiz',      color: BLUE },
-  { type: 'Classwork', color: PURPLE },
-  { type: 'Homework',  color: '#F59E0B' },
-  { type: 'Test',      color: RED },
-];
-/* Distinct hues for teacher-added categories, cycled. */
-const CATEGORY_PALETTE = ['#0D9488', '#8B5CF6', '#EC4899', '#059669', '#0891B2', '#D97706', '#DC2626', '#4F46E5'];
+const typeMeta = (t) => TYPES.find((x) => x.type === t) || { type: t, label: t || 'Activity', color: MUTED2 };
+const RAIL_COLORS = [AMBER, '#3B82F6', '#10B981', '#0D9488', '#F59E0B', '#8B5CF6', '#EF4444', '#059669'];
+const TABS = ['Overall', 'By Assignment', 'By Student', 'Assignments', 'Final Grades by Student', 'Final Grades by Class'];
 
 const INITIAL_SCALE = [
   { grade: 'A', min: 90, color: GREEN },
@@ -80,220 +47,90 @@ const INITIAL_SCALE = [
   { grade: 'D', min: 60, color: '#F97316' },
   { grade: 'F', min: 0,  color: RED },
 ];
-
-const TERMS = ['1st Term', '2nd Term', '3rd Term'];
-const TYPE_FILTERS = ['All Types', 'Quiz', 'Classwork', 'Homework', 'Test'];
-const RANGES = ['Sep 8 – Oct 3', 'Oct 6 – Oct 31', 'Nov 3 – Nov 28', 'Dec 1 – Dec 12'];
-const TABS = ['Overall', 'By Assignment', 'By Student', 'Assignments', 'Final Grades by Student', 'Final Grades by Class'];
-
-/* ── Grading math (ported verbatim from the reference) ──────────────────── */
-
-/* Stable pseudo-scores so the seeded matrix looks identical every visit. */
-function hash(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) { h = ((h * 31) + str.charCodeAt(i)) >>> 0; }
-  return h;
-}
-function assignmentsFor(classId) {
-  const over = NAME_OVERRIDES[classId] || {};
-  return ASSIGNMENT_TEMPLATE.map((a) => (over[a.key] ? { ...a, name: over[a.key] } : a));
-}
-function baseValue(classId, student, a) {
-  const h = hash(classId + student + a.key);
-  if (a.letter) return LETTERS[h % LETTERS.length];
-  const pct = 0.6 + (h % 40) / 100; // 60%–99%
-  return Math.round(a.points * pct * 10) / 10;
-}
-function getValue(overrides, classId, student, a) {
-  const o = overrides[classId] && overrides[classId][student] && overrides[classId][student][a.key];
-  return o !== undefined ? o : baseValue(classId, student, a);
-}
-
-/* Each assessment resolves to earned/possible points, independent of how
-   many questions it has or what it's out of. */
-function pointsFor(a, value) {
-  if (a.letter) return { earned: LETTER_PCT[value] ?? 75, possible: 100 };
-  return { earned: Number(value) || 0, possible: a.points };
-}
-function pctFor(a, value) {
-  const p = pointsFor(a, value);
-  return p.possible ? (p.earned / p.possible) * 100 : 0;
-}
-
 function sortedScale(scale) { return [...scale].sort((a, b) => b.min - a.min); }
 function bandForPct(scale, pct) {
   const s = sortedScale(scale);
   return s.find((b) => pct >= b.min) || s[s.length - 1];
 }
 
-/* Weighted final for one student: category percentages (equal-weight or
-   points-pooled) combined with the class's category weights. Weights that
-   don't total 100 are scaled by the total of the categories PRESENT for
-   that student, so an untested category doesn't drag the grade down. */
-function finalFor({ classId, student, assignments, settings, scale, overrides }) {
-  const byType = {};
-  assignments.forEach((a) => {
-    (byType[a.type] = byType[a.type] || []).push({ a, value: getValue(overrides, classId, student, a) });
-  });
-
-  const presentTypes = Object.keys(byType);
-  const totalWeight = presentTypes.reduce((sum, t) => sum + (settings.weights[t] || 0), 0) || 1;
-
-  const avg = presentTypes.reduce((sum, t) => {
-    const items = byType[t];
-    let typePct;
-    if (settings.aggregation === 'points') {
-      const earned = items.reduce((s, it) => s + pointsFor(it.a, it.value).earned, 0);
-      const possible = items.reduce((s, it) => s + pointsFor(it.a, it.value).possible, 0);
-      typePct = possible ? (earned / possible) * 100 : 0;
-    } else {
-      typePct = items.reduce((s, it) => s + pctFor(it.a, it.value), 0) / items.length;
-    }
-    return sum + typePct * ((settings.weights[t] || 0) / totalWeight);
-  }, 0);
-
-  const rounded = Math.round(avg * 10) / 10;
-  return { pct: rounded, band: bandForPct(scale, rounded) };
-}
-
-/* Default per-class settings: split 100 evenly across the current categories. */
-function defaultSettings(categories) {
+/* Default weights: split 100 evenly over the types present in this class. */
+function defaultSettings(types) {
   const weights = {};
-  const even = Math.round(100 / categories.length);
-  categories.forEach((c) => { weights[c.type] = even; });
-  return { weights, aggregation: 'equal' };
+  const even = types.length ? Math.round(100 / types.length) : 0;
+  types.forEach((t) => { weights[t] = even; });
+  return { weights };
 }
 
-/* ── Grading System modal ───────────────────────────────────────────────── */
+function fmtDue(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
-function GradingSystemModal({ open, onClose, className, categories, settings, onSave }) {
-  /* Local drafts — Cancel discards added/removed categories too (the
-     reference mutated the global list live; a Cancel that keeps your
-     deletions isn't a Cancel). */
-  const [draftCats, setDraftCats] = useState(categories);
-  const [draftWeights, setDraftWeights] = useState(settings.weights);
-  const [aggregation, setAggregation] = useState(settings.aggregation);
-  const [newCategoryName, setNewCategoryName] = useState('');
+/* ── Grading System modal (weights per type) ────────────────────────────── */
+function GradingSystemModal({ open, onClose, className, types, settings, onSave }) {
+  const [draft, setDraft] = useState(settings.weights);
   const [applyAll, setApplyAll] = useState(false);
-
-  // Re-seed the drafts each time the modal opens for a (possibly different)
-  // class. useEffect would flash one render of stale values; keying the modal
-  // by open-ness in the parent would remount it — simplest is to track the
-  // seed identity ourselves.
   const [seededFor, setSeededFor] = useState(null);
   if (open && seededFor !== className) {
     setSeededFor(className);
-    setDraftCats(categories);
-    setDraftWeights(settings.weights);
-    setAggregation(settings.aggregation);
-    setNewCategoryName('');
+    setDraft(settings.weights);
     setApplyAll(false);
   }
+  if (!open && seededFor !== null) setSeededFor(null);
 
-  const nextCategoryColor = (list) => CATEGORY_PALETTE[list.length % CATEGORY_PALETTE.length];
-
-  const addCategory = () => {
-    const name = newCategoryName.trim();
-    if (!name) return;
-    if (draftCats.some((c) => c.type.toLowerCase() === name.toLowerCase())) return;
-    // New category starts at 0% until the teacher gives it weight.
-    setDraftCats([...draftCats, { type: name, color: nextCategoryColor(draftCats) }]);
-    setDraftWeights((w) => ({ ...w, [name]: 0 }));
-    setNewCategoryName('');
-  };
-  const removeCategory = (type) => {
-    if (draftCats.length <= 1) return;
-    setDraftCats(draftCats.filter((c) => c.type !== type));
-    setDraftWeights(({ [type]: _drop, ...rest }) => rest);
-  };
-
-  const total = draftCats.reduce((s, c) => s + (Number(draftWeights[c.type]) || 0), 0);
+  const total = types.reduce((s, t) => s + (Number(draft[t.type]) || 0), 0);
 
   const save = () => {
     const raw = {};
-    draftCats.forEach((c) => { raw[c.type] = Math.max(0, Number(draftWeights[c.type]) || 0); });
+    types.forEach((t) => { raw[t.type] = Math.max(0, Number(draft[t.type]) || 0); });
     let sum = Object.values(raw).reduce((s, v) => s + v, 0);
     if (sum <= 0) {
-      const even = Math.round(100 / draftCats.length);
-      draftCats.forEach((c) => { raw[c.type] = even; });
-      sum = even * draftCats.length;
+      const even = Math.round(100 / types.length);
+      types.forEach((t) => { raw[t.type] = even; });
+      sum = even * types.length || 1;
     }
-    // Scales whatever was entered to total 100.
     const normalized = {};
-    draftCats.forEach((c) => {
-      normalized[c.type] = Math.round((raw[c.type] / sum) * 1000) / 10;
-    });
-    onSave({ categories: draftCats, weights: normalized, aggregation, applyAll });
+    types.forEach((t) => { normalized[t.type] = Math.round((raw[t.type] / sum) * 1000) / 10; });
+    onSave({ weights: normalized, applyAll });
     onClose();
   };
 
   return (
     <Modal open={open} onClose={onClose} title="Grading System" width={460}>
       <p style={{ fontSize: 12.5, fontWeight: 500, color: MUTED, margin: '0 0 16px' }}>
-        Settings apply to <strong style={{ color: INK }}>{className}</strong> unless you choose to apply them everywhere below.
+        How much each activity type counts toward the Final, for{' '}
+        <strong style={{ color: INK }}>{className}</strong>.
       </p>
 
-      <p style={SECTION_LABEL}>Assessment system</p>
-      {[
-        { key: 'equal', title: 'Equal-weight', desc: "Every assignment in a category counts the same, no matter how many points it's out of." },
-        { key: 'points', title: 'Points-based', desc: 'Points are pooled within a category — a 20-point test naturally counts more than a 5-point quiz.' },
-      ].map((o) => (
-        <label key={o.key} style={{
-          display: 'flex', alignItems: 'flex-start', gap: 9, padding: '9px 10px',
-          borderRadius: 12, marginBottom: 6, background: aggregation === o.key ? `${AMBER}10` : LIGHT, cursor: 'pointer',
-        }}>
-          <input type="radio" name="gb-aggregation" checked={aggregation === o.key}
-            onChange={() => setAggregation(o.key)} style={{ marginTop: 3, accentColor: AMBER, flexShrink: 0, cursor: 'pointer' }} />
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>{o.title}</span>
-            <span style={{ fontSize: 11, fontWeight: 500, color: MUTED2, lineHeight: 1.4 }}>{o.desc}</span>
-          </span>
-        </label>
-      ))}
-
-      <p style={{ ...SECTION_LABEL, marginTop: 16 }}>Category weights</p>
-      {draftCats.map((c) => (
-        <div key={c.type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
+      <p style={SECTION_LABEL}>Type weights</p>
+      {types.map((t) => (
+        <div key={t.type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: `1px solid ${BORDER}` }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: INK }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-            {c.type}
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+            {t.label}
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <input type="number" min="0" max="100" step="1" value={draftWeights[c.type] ?? 0}
-              onChange={(e) => setDraftWeights((w) => ({ ...w, [c.type]: e.target.value }))}
+            <input type="number" min="0" max="100" step="1" value={draft[t.type] ?? 0}
+              onChange={(e) => setDraft((w) => ({ ...w, [t.type]: e.target.value }))}
               style={WEIGHT_INPUT} />
             <span style={{ fontSize: 12, fontWeight: 700, color: MUTED2 }}>%</span>
-            <button onClick={() => removeCategory(c.type)} disabled={draftCats.length <= 1}
-              aria-label={`Remove ${c.type}`} style={ICON_BTN(draftCats.length <= 1)}>
-              ×
-            </button>
           </span>
         </div>
       ))}
-
-      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-        <input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }}
-          placeholder="New category — e.g. Exam, Monthly Test" maxLength={24} style={NEW_CATEGORY_INPUT} />
-        <Btn variant="outline" size="sm" onClick={addCategory} style={{ flexShrink: 0 }}>
-          <Plus size={12} /> Add
-        </Btn>
-      </div>
-      <p style={{ fontSize: 10.5, fontWeight: 500, color: MUTED2, margin: '6px 0 0' }}>
-        A new category only affects the grade once assignments are tagged with that type.
-      </p>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: MUTED }}>Total</span>
         <span style={{ fontSize: 14, fontWeight: 800, color: total === 100 ? '#047857' : '#B45309' }}>{total}%</span>
       </div>
       <p style={{ fontSize: 10.5, fontWeight: 500, color: MUTED2, margin: '5px 0 0' }}>
-        Doesn't need to add up to 100 — it'll scale automatically when you save.
+        Doesn't need to add up to 100 — it'll scale automatically when you save. A type only counts when it has graded work.
       </p>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BORDER}`, fontSize: 12, fontWeight: 600, color: MUTED, cursor: 'pointer' }}>
         <input type="checkbox" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} style={{ accentColor: AMBER, cursor: 'pointer' }} />
-        <span>Apply to all subjects, not just this one</span>
+        <span>Apply to all classes, not just this one</span>
       </label>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
@@ -305,7 +142,6 @@ function GradingSystemModal({ open, onClose, className, categories, settings, on
 }
 
 /* ── Grading Scale modal ────────────────────────────────────────────────── */
-
 function GradingScaleModal({ open, onClose, scale, onSave }) {
   const [draft, setDraft] = useState(() => Object.fromEntries(scale.map((b) => [b.grade, b.min])));
   const [seeded, setSeeded] = useState(false);
@@ -374,78 +210,174 @@ const WEIGHT_INPUT = {
   border: `1px solid ${BORDER}`, fontFamily: FONT, fontSize: 12.5,
   fontWeight: 700, color: INK, outline: 'none',
 };
-const NEW_CATEGORY_INPUT = {
-  flex: 1, padding: '7px 10px', borderRadius: 9, border: `1.5px dashed ${BORDER}`,
-  fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK, outline: 'none',
+const FILTER_SELECT = {
+  width: '100%', padding: '7px 10px', borderRadius: 9, border: `1px solid ${BORDER}`,
+  background: WHITE, fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK,
+  marginBottom: 7, cursor: 'pointer', outline: 'none',
 };
-const ICON_BTN = (disabled) => ({
-  border: 'none', background: 'none', cursor: disabled ? 'default' : 'pointer', color: MUTED2,
-  width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  borderRadius: 6, flexShrink: 0, fontSize: 14, lineHeight: 1,
-  opacity: disabled ? 0.3 : 1,
-});
 
 export default function GradebookPage() {
-  const [currentClass, setCurrentClass] = useState('algebra');
-  const [categoryTypes, setCategoryTypes] = useState(INITIAL_CATEGORY_TYPES);
+  const navigate = useNavigate();
+  const [classes, setClasses] = useState(null);          // null = loading
+  const [currentClass, setCurrentClass] = useState(null);
+  const [assignments, setAssignments] = useState(null);  // null = loading
+  const [students, setStudents] = useState([]);          // [{id, name}]
+  const [grades, setGrades] = useState({});              // {aid: {sid: 0-100}}
+  const [overrides, setOverrides] = useState({});        // {aid: {sid: raw}}
+  const [typeFilter, setTypeFilter] = useState('all');
   const [classSettings, setClassSettings] = useState({});
   const [gradeScale, setGradeScale] = useState(INITIAL_SCALE);
-  const [overrides, setOverrides] = useState({});
-  const [term, setTerm] = useState(TERMS[0]);
-  const [typeFilter, setTypeFilter] = useState('All Types');
-  const [rangeIdx, setRangeIdx] = useState(0);
   const [weightsOpen, setWeightsOpen] = useState(false);
   const [scaleOpen, setScaleOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const showToast = (message) => {
-    setToast({ message });
-    setTimeout(() => setToast((t) => (t?.message === message ? null : t)), 2600);
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3200);
   };
 
-  const classObj = CLASSES.find((c) => c.id === currentClass);
-  const settings = classSettings[currentClass] || defaultSettings(categoryTypes);
-  const assignments = useMemo(() => assignmentsFor(currentClass), [currentClass]);
-  const visibleAssignments = typeFilter === 'All Types'
-    ? assignments
-    : assignments.filter((a) => a.type === typeFilter);
+  /* ── data ── */
+  useEffect(() => {
+    let dead = false;
+    apiGet('/api/battle/my-classes')
+      .then((d) => { if (!dead) setClasses(d?.data ?? []); })
+      .catch(() => { if (!dead) setClasses([]); });
+    return () => { dead = true; };
+  }, []);
 
-  const finals = useMemo(() => Object.fromEntries(STUDENTS.map((student) => [
-    student,
-    finalFor({ classId: currentClass, student, assignments, settings, scale: gradeScale, overrides }),
-  ])), [currentClass, assignments, settings, gradeScale, overrides]);
+  const loadClass = useCallback(async (classId) => {
+    if (!classId) return;
+    setAssignments(null);
+    setOverrides({});
+    try {
+      const d = await apiGet('/api/self-study');
+      const briefs = (d?.data ?? []).filter((b) => b.classroom_id === classId && b.status !== 'archived');
+      const details = await Promise.all(
+        briefs.map((b) => apiGet(`/api/self-study/${b.id}`).then((r) => r?.data).catch(() => null)),
+      );
+      const studentMap = new Map();
+      const gradeMap = {};
+      briefs.forEach((b, i) => {
+        const targets = details[i]?.targets ?? [];
+        gradeMap[b.id] = {};
+        targets.forEach((t) => {
+          if (!studentMap.has(t.student_id)) {
+            studentMap.set(t.student_id, { id: t.student_id, name: t.full_name || t.username || 'Unknown' });
+          }
+          gradeMap[b.id][t.student_id] = t.grade ?? null;
+        });
+      });
+      setAssignments(briefs);
+      setStudents([...studentMap.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      setGrades(gradeMap);
+    } catch {
+      setAssignments([]);
+      setStudents([]);
+      setGrades({});
+    }
+  }, []);
 
-  const setScore = (student, key, value) => {
-    setOverrides((o) => ({
-      ...o,
-      [currentClass]: { ...o[currentClass], [student]: { ...o[currentClass]?.[student], [key]: value } },
-    }));
+  useEffect(() => { if (currentClass) loadClass(currentClass); }, [currentClass, loadClass]);
+
+  /* ── derived ── */
+  const classTypes = useMemo(() => {
+    const present = [...new Set((assignments ?? []).map((a) => a.type ?? 'self_study'))];
+    return present.map(typeMeta);
+  }, [assignments]);
+
+  const settings = classSettings[currentClass] || defaultSettings(classTypes.map((t) => t.type));
+
+  const visibleAssignments = useMemo(
+    () => (typeFilter === 'all' ? (assignments ?? []) : (assignments ?? []).filter((a) => (a.type ?? 'self_study') === typeFilter)),
+    [assignments, typeFilter],
+  );
+
+  /* The effective grade for a cell: local edit first, published grade second. */
+  const cellValue = (aid, sid) => {
+    const o = overrides[aid]?.[sid];
+    if (o !== undefined && o !== '') return Math.max(0, Math.min(100, Number(o) || 0));
+    return grades[aid]?.[sid] ?? null;
   };
-  const commitScore = (student, a) => {
-    // Normalize what was typed once the cell blurs: numbers clamp at ≥ 0,
-    // letters fall back to 'A' — the same rules the reference applied on change.
-    const raw = getValue(overrides, currentClass, student, a);
-    const value = a.letter ? (String(raw).toUpperCase().slice(0, 1) || 'A')
-                            : String(Math.max(0, Number(raw) || 0));
-    setScore(student, a.key, value);
+  const dirtyCount = useMemo(
+    () => Object.values(overrides).reduce((n, row) => n + Object.keys(row ?? {}).length, 0),
+    [overrides],
+  );
+
+  /* Final: weighted mean of graded cells grouped by type; only types with
+     graded work count, their weights rescaled to the ones present. */
+  const finalOf = (sid) => {
+    const byType = {};
+    (assignments ?? []).forEach((a) => {
+      const g = cellValue(a.id, sid);
+      if (g != null) (byType[a.type ?? 'self_study'] = byType[a.type ?? 'self_study'] || []).push(g);
+    });
+    const present = Object.keys(byType);
+    if (!present.length) return null;
+    // Types with weight 0 don't count; if EVERY graded type was zeroed the
+    // final falls back to an equal-weight average so it never reads as 0.
+    const totalWeight = present.reduce((s, t) => s + (settings.weights[t] || 0), 0);
+    const wOf = (t) => (totalWeight > 0 ? (settings.weights[t] || 0) / totalWeight : 1 / present.length);
+    const avg = present.reduce((sum, t) => {
+      const mean = byType[t].reduce((s, g) => s + g, 0) / byType[t].length;
+      return sum + mean * wOf(t);
+    }, 0);
+    const pct = Math.round(avg * 10) / 10;
+    return { pct, band: bandForPct(gradeScale, pct) };
   };
 
-  const saveGradingSystem = ({ categories, weights, aggregation, applyAll }) => {
-    setCategoryTypes(categories);
+  /* ── actions ── */
+  const setCell = (aid, sid, value) => {
+    setOverrides((o) => ({ ...o, [aid]: { ...o[aid], [sid]: value } }));
+  };
+
+  const save = async () => {
+    const edits = [];
+    Object.entries(overrides).forEach(([aid, row]) => {
+      Object.entries(row ?? {}).forEach(([sid, raw]) => {
+        const n = Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+        edits.push({ aid, sid, grade: n });
+      });
+    });
+    if (!edits.length) return;
+    setSaving(true);
+    const results = await Promise.allSettled(edits.map((e) =>
+      apiPatch(`/api/self-study/${e.aid}/targets/${e.sid}/grade`, { grade: e.grade })));
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    // Apply what the server accepted from the local draft.
+    setGrades((g) => {
+      const next = { ...g };
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') {
+          const { aid, sid, grade } = edits[i];
+          next[aid] = { ...(next[aid] ?? {}), [sid]: grade };
+        }
+      });
+      return next;
+    });
+    setOverrides({});
+    setSaving(false);
+    if (failed) showToast(`Published ${edits.length - failed} of ${edits.length} grades — ${failed} failed. Try saving again.`, 'error');
+    else showToast(`Grades saved — ${edits.length} published`);
+  };
+
+  const saveGradingSystem = ({ weights, applyAll }) => {
     setClassSettings((cs) => {
-      if (!applyAll) return { ...cs, [currentClass]: { weights, aggregation } };
+      if (!applyAll) return { ...cs, [currentClass]: { weights } };
       const all = {};
-      CLASSES.forEach((c) => { all[c.id] = { weights: { ...weights }, aggregation }; });
+      (classes ?? []).forEach((c) => { all[c.id] = { weights: { ...weights } }; });
       return { ...cs, ...all };
     });
     showToast('Grading system updated');
   };
 
+  const classObj = (classes ?? []).find((c) => c.id === currentClass);
+
   return (
-    <PageLayout title="Gradebook" subtitle={`${term} · September 8 – December 12, 2026`}>
+    <PageLayout title="Gradebook" subtitle={classObj ? classObj.name : 'Scores, weights and final grades'}>
       <style>{`
         .gb-shell{ display:flex; gap:18px; align-items:flex-start; }
-        .gb-table{ width:100%; border-collapse:collapse; min-width:760px; }
+        .gb-table{ width:100%; border-collapse:collapse; min-width:640px; }
         .gb-table th, .gb-table td{ padding:9px 14px; text-align:center; font-size:12.5px; white-space:nowrap; border-bottom:1px solid ${BORDER}; font-family:${FONT}; }
         .gb-table thead th{ vertical-align:top; padding-top:12px; padding-bottom:12px; border-bottom:1px solid ${BORDER}; background:${LIGHT}; }
         .gb-table thead th:first-child, .gb-table tbody td:first-child{ text-align:left; position:sticky; left:0; background:${LIGHT}; z-index:2; }
@@ -458,31 +390,24 @@ export default function GradebookPage() {
       `}</style>
 
       <div className="gb-shell">
-        {/* ── Sidebar: add, filters, class rail ── */}
+        {/* ── Sidebar: filters + class rail ── */}
         <aside style={{ width: 240, flexShrink: 0, position: 'sticky', top: 0 }}>
-          <Btn style={{ width: '100%', marginBottom: 16 }}><Plus size={13} /> Add Assignment</Btn>
+          <Btn style={{ width: '100%', marginBottom: 16 }} onClick={() => navigate('/activities')}>
+            <Plus size={13} /> Add Assignment
+          </Btn>
 
           <div style={{ background: LIGHT, borderRadius: 14, padding: 12, marginBottom: 16, border: `1px solid ${BORDER}` }}>
             <p style={SECTION_LABEL}>Filters</p>
-            <select value={term} onChange={(e) => setTerm(e.target.value)} style={FILTER_SELECT}>
-              {TERMS.map((t) => <option key={t}>{t}</option>)}
-            </select>
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ ...FILTER_SELECT, marginBottom: 0 }}>
-              {TYPE_FILTERS.map((t) => <option key={t}>{t}</option>)}
+              <option value="all">All Types</option>
+              {classTypes.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
             </select>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <button aria-label="Previous" onClick={() => setRangeIdx((i) => Math.max(0, i - 1))} style={RANGE_BTN}>
-                <ChevronLeft size={11} />
-              </button>
-              <span style={{ flex: 1, fontSize: 11, fontWeight: 600, color: MUTED }}>{RANGES[rangeIdx]}</span>
-              <button aria-label="Next" onClick={() => setRangeIdx((i) => Math.min(RANGES.length - 1, i + 1))} style={RANGE_BTN}>
-                <ChevronRight size={11} />
-              </button>
-            </div>
           </div>
 
           <p style={SECTION_LABEL}>Classes</p>
-          {CLASSES.map((c) => {
+          {classes === null ? (
+            [1, 2, 3].map((i) => <div key={i} style={{ height: 34, borderRadius: 10, background: LIGHT, marginBottom: 4 }} />)
+          ) : classes.map((c, i) => {
             const active = c.id === currentClass;
             return (
               <button key={c.id} onClick={() => setCurrentClass(c.id)} style={{
@@ -491,19 +416,15 @@ export default function GradebookPage() {
                 fontFamily: FONT, fontSize: 12.5, fontWeight: active ? 700 : 600,
                 color: active ? AMBER : MUTED, cursor: 'pointer', textAlign: 'left', marginBottom: 2,
               }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
-                {c.name}
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: RAIL_COLORS[i % RAIL_COLORS.length], flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: MUTED2, flexShrink: 0 }}>{c.student_count ?? ''}</span>
               </button>
             );
           })}
-          <button style={{
-            display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', fontSize: 12,
-            fontWeight: 700, color: AMBER, background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: FONT, marginTop: 4,
-          }}><Plus size={12} /> Add Class</button>
         </aside>
 
-        {/* ── Main: tabs, class header, matrix ── */}
+        {/* ── Main: tabs, header, matrix ── */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 22, borderBottom: `1px solid ${BORDER}`, marginBottom: 18, overflowX: 'auto' }}>
             {TABS.map((t, i) => (
@@ -519,15 +440,20 @@ export default function GradebookPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
             <div>
               <h1 style={{ fontSize: 19, fontWeight: 800, margin: '0 0 3px', color: INK, fontFamily: FONT, letterSpacing: '-0.01em' }}>
-                {classObj.name}
+                {classObj ? classObj.name : 'Pick a class'}
               </h1>
               <p style={{ fontSize: 12, fontWeight: 600, color: MUTED, margin: 0, fontFamily: FONT }}>
-                {term} · September 8 – December 12, 2026
+                {classObj
+                  ? `${students.length} learner${students.length === 1 ? '' : 's'} with assigned work · ${assignments?.length ?? 0} activit${(assignments?.length ?? 0) === 1 ? 'y' : 'ies'}`
+                  : 'Choose a class from the rail to see its gradebook'}
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <Btn variant="secondary" onClick={() => setOverrides((o) => ({ ...o, [currentClass]: {} }))}>Cancel</Btn>
-              <Btn onClick={() => showToast('Grades saved')}>Save</Btn>
+              <Btn variant="secondary" disabled={!dirtyCount || saving}
+                onClick={() => setOverrides({})}>Cancel{dirtyCount ? ` (${dirtyCount})` : ''}</Btn>
+              <Btn disabled={!dirtyCount || saving} onClick={save}>
+                {saving ? 'Saving…' : dirtyCount ? `Save ${dirtyCount} grade${dirtyCount === 1 ? '' : 's'}` : 'Save'}
+              </Btn>
             </div>
           </div>
 
@@ -535,74 +461,103 @@ export default function GradebookPage() {
             <Btn variant="secondary" size="sm" onClick={() => setScaleOpen(true)}>
               <Scale size={14} /> Grading Scale
             </Btn>
-            <Btn variant="secondary" size="sm" onClick={() => setWeightsOpen(true)}>
+            <Btn variant="secondary" size="sm" disabled={!classTypes.length} onClick={() => setWeightsOpen(true)}>
               <SlidersHorizontal size={14} /> Grading System
             </Btn>
           </div>
 
-          <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, boxShadow: '0 2px 10px rgba(26,26,46,0.05)', overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="gb-table">
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left' }}>Student</th>
-                    <th style={{ fontSize: 10.5, fontWeight: 800, color: MUTED2, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Final</th>
-                    {visibleAssignments.map((a) => (
-                      <th key={a.key}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: INK }}>{a.name}</div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: MUTED2, marginTop: 2 }}>{a.type} · {a.due}</div>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: MUTED2, marginTop: 1 }}>
-                          {a.letter ? 'Letter grade' : `${a.points} pts`}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {STUDENTS.map((student) => (
-                    <tr key={student}>
-                      <td>{student}</td>
-                      <td>
-                        {(() => {
-                          const f = finals[student];
-                          return (
-                            <span style={{
-                              display: 'inline-flex', fontSize: 12.5, fontWeight: 800, padding: '4px 12px',
-                              borderRadius: 20, background: `${f.band.color}14`, color: f.band.color, fontFamily: FONT,
-                            }}>
-                              {f.pct} <small style={{ opacity: 0.75 }}>· {f.band.grade}</small>
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      {visibleAssignments.map((a) => (
-                        <td key={a.key}>
-                          <input
-                            className="gb-score"
-                            type="text"
-                            value={getValue(overrides, currentClass, student, a)}
-                            inputMode={a.letter ? undefined : 'decimal'}
-                            onChange={(e) => setScore(student, a.key, a.letter
-                              ? e.target.value.toUpperCase().slice(0, 1)
-                              : e.target.value)}
-                            onBlur={() => commitScore(student, a)}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* ── matrix ── */}
+          {classes === null || assignments === null ? (
+            <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, padding: 20 }}>
+              {[1, 2, 3, 4].map((i) => <div key={i} style={{ height: 38, borderRadius: 10, background: LIGHT, marginBottom: 8, opacity: 0.6 }} />)}
             </div>
-          </div>
+          ) : !classObj ? (
+            <EmptyState icon="📚" title="Pick a class" sub="Your classes appear in the rail on the left." />
+          ) : !assignments.length ? (
+            <EmptyState icon="📭" title="No activities in this class yet"
+              sub="Assign work from the activities workbench and it lands here."
+              action={<Btn size="sm" onClick={() => navigate('/activities')}><Plus size={13} /> Add Assignment</Btn>} />
+          ) : !students.length ? (
+            <EmptyState icon="🧑‍🎓" title="No learners assigned yet"
+              sub="This class's activities have no learners on them — assign them from the workbench." />
+          ) : (
+            <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, boxShadow: '0 2px 10px rgba(26,26,46,0.05)', overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="gb-table">
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left' }}>Student</th>
+                      <th style={{ fontSize: 10.5, fontWeight: 800, color: MUTED2, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Final</th>
+                      {visibleAssignments.map((a) => {
+                        const tm = typeMeta(a.type ?? 'self_study');
+                        return (
+                          <th key={a.id}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: INK, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: tm.color, marginTop: 2 }}>{tm.label} · {fmtDue(a.due_at) || 'no due date'}</div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: MUTED2, marginTop: 1 }}>0–100</div>
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((s) => {
+                      const f = finalOf(s.id);
+                      return (
+                        <tr key={s.id}>
+                          <td>{s.name}</td>
+                          <td>
+                            {f ? (
+                              <span style={{
+                                display: 'inline-flex', fontSize: 12.5, fontWeight: 800, padding: '4px 12px',
+                                borderRadius: 20, background: `${f.band.color}14`, color: f.band.color, fontFamily: FONT,
+                              }}>
+                                {f.pct} <small style={{ opacity: 0.75 }}>· {f.band.grade}</small>
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 11, fontWeight: 600, color: MUTED2, fontFamily: FONT }}>—</span>
+                            )}
+                          </td>
+                          {visibleAssignments.map((a) => {
+                            const o = overrides[a.id]?.[s.id];
+                            const server = grades[a.id]?.[s.id] ?? null;
+                            const edited = o !== undefined;
+                            const shown = edited ? o : (server ?? '');
+                            return (
+                              <td key={a.id}>
+                                <input
+                                  className="gb-score"
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={shown}
+                                  placeholder="—"
+                                  onChange={(e) => setCell(a.id, s.id, e.target.value)}
+                                  onBlur={(e) => {
+                                    const v = e.target.value;
+                                    if (v === '') { setOverrides((ov) => { const row = { ...(ov[a.id] ?? {}) }; delete row[s.id]; return { ...ov, [a.id]: row }; }); return; }
+                                    setCell(a.id, s.id, String(Math.max(0, Math.min(100, Math.round(Number(v) || 0)))));
+                                  }}
+                                  style={edited ? { borderColor: `${AMBER}88`, background: `${AMBER}08` } : undefined}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       <GradingSystemModal
         open={weightsOpen}
         onClose={() => setWeightsOpen(false)}
-        className={classObj.name}
-        categories={categoryTypes}
+        className={classObj?.name ?? ''}
+        types={classTypes}
         settings={settings}
         onSave={saveGradingSystem}
       />
@@ -613,18 +568,18 @@ export default function GradebookPage() {
         onSave={(next) => { setGradeScale(next); showToast('Grading scale updated'); }}
       />
 
-      {toast && <Toast message={toast.message} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </PageLayout>
   );
 }
 
-const FILTER_SELECT = {
-  width: '100%', padding: '7px 10px', borderRadius: 9, border: `1px solid ${BORDER}`,
-  background: WHITE, fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK,
-  marginBottom: 7, cursor: 'pointer', outline: 'none',
-};
-const RANGE_BTN = {
-  width: 22, height: 22, borderRadius: 6, border: `1px solid ${BORDER}`, background: WHITE,
-  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-  color: MUTED, flexShrink: 0, padding: 0,
-};
+function EmptyState({ icon, title, sub, action }) {
+  return (
+    <div style={{ background: WHITE, borderRadius: 16, border: `1px solid ${BORDER}`, padding: '48px 20px', textAlign: 'center' }}>
+      <div style={{ fontSize: 36, marginBottom: 10 }}>{icon}</div>
+      <p style={{ fontSize: 14, fontWeight: 800, color: INK, margin: '0 0 4px', fontFamily: FONT }}>{title}</p>
+      <p style={{ fontSize: 12.5, fontWeight: 500, color: MUTED, margin: 0, fontFamily: FONT }}>{sub}</p>
+      {action && <div style={{ marginTop: 16 }}>{action}</div>}
+    </div>
+  );
+}
