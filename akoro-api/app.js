@@ -253,6 +253,10 @@ app.use(cookieParser());
 // rejected with "Invalid signature" (payments then never auto-grant agents).
 app.use("/api/adaptive/marketplace/webhook", express.raw({ type: "application/json" }));
 app.use(PAYSTACK_WEBHOOK_PATH,               express.raw({ type: "application/json" }));
+// Submission file uploads are the one payload family that outgrows the 2mb
+// global cap (a 5MB file arrives as ~6.8MB of base64). Parse them here, first
+// — body-parser marks the body consumed so the global parser skips it.
+app.use("/api/self-study/:id/files",          express.json({ limit: "9mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);

@@ -8,7 +8,7 @@
  * a closed tab or a dead network left behind.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Users, CheckCircle2, Loader2, Info } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Badge } from '../components/Primitives.jsx';
@@ -28,6 +28,9 @@ const fmtWhen = (iso) => {
 
 export default function SubmissionsPage() {
   const navigate = useNavigate();
+  // Deep links: the gradebook (and anything else) can send ?activity=<id>.
+  const [params] = useSearchParams();
+  const deepLinked = params.get('activity');
   const [activities, setActivities] = useState(null);
   const [key, setKey] = useState(null);              // selected activity id
   const [detail, setDetail] = useState(null);        // { assignment, targets }
@@ -44,10 +47,11 @@ export default function SubmissionsPage() {
           assigned:  a.progress?.assigned ?? 0,
         })).sort((x, y) => y.submitted - x.submitted || String(y.created_at || '').localeCompare(String(x.created_at || '')));
         setActivities(rows);
-        setKey(k => k ?? rows.find(a => a.submitted > 0)?.id ?? rows[0]?.id ?? null);
+        setKey(k => k ?? (deepLinked && rows.find(a => a.id === deepLinked)?.id)
+          ?? rows.find(a => a.submitted > 0)?.id ?? rows[0]?.id ?? null);
       })
       .catch(e => setErr(e?.message || 'Could not load the submissions.'));
-  }, []);
+  }, [deepLinked]);
   useEffect(() => { load(); }, [load]);
 
   /* Roster for the picked activity — targets carry grade + feedback. */
@@ -71,6 +75,8 @@ export default function SubmissionsPage() {
       completedAt: t.completed_at,
       grade:      t.grade ?? null,
       feedbackText: t.feedback?.text || '',
+      submission: t.submission ?? null,   // text + answers as handed in
+      files:      t.files ?? [],          // attachments (metadata only)
     }))
     .sort((x, y) => (x.grade != null) - (y.grade != null) || String(x.completedAt || '').localeCompare(String(y.completedAt || '')));
 

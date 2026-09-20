@@ -16,7 +16,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, X, Check, Loader2, FileText, PenLine,
 } from 'lucide-react';
-import { apiPatch } from '../../services/api.js';
+import { apiPatch, downloadActivityFile } from '../../services/api.js';
 import { saveDraft, loadDraft, clearDraft } from './gradingDrafts.js';
 import { AMBER, INK, MUTED, MUTED2, BORDER, LIGHT, WHITE, GREEN, PURPLE, BLUE, RED, FONT } from '../../constants.js';
 
@@ -37,6 +37,79 @@ const fmtWhen = (iso) => {
   try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
   catch { return null; }
 };
+
+const fmtSize = (bytes) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+/* The submitted work, question by question — the real artifacts the learner
+   handed in (text, per-question answers, files), or an honest line when this
+   activity predates submission capture. */
+function SubmittedPaper({ current, brief }) {
+  const sub = current.submission ?? {};
+  const questions = Array.isArray(brief?.details?.questions) ? brief.details.questions : [];
+  const mcq = questions.length && typeof questions[0] === 'object' && Array.isArray(questions[0].options);
+  const answerKeys = Object.keys(sub.answers ?? {});
+  const files = sub.files?.length ? sub.files : (current.files ?? []);
+  const hasWork = (sub.text || '').trim() || answerKeys.length || files.length;
+  if (!hasWork) {
+    return (
+      <div style={{ background: LIGHT, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>
+        <b style={{ color: INK, fontWeight: 800 }}>
+          {current.status === 'complete' ? `${current.student.name.split(' ')[0]} finished this activity` : `${current.student.name.split(' ')[0]} is still working on it`}
+        </b>
+        {current.completedAt && <> — completed {fmtWhen(current.completedAt)}</>}. No written submission was captured — grade against the brief with the panel on the right.
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: .6, color: MUTED2 }}>WHAT THEY SUBMITTED {current.completedAt && <span style={{ fontWeight: 600 }}>· {fmtWhen(current.completedAt)}</span>}</div>
+      {(sub.text || '').trim() && (
+        <div style={{ background: '#FBFAF8', border: `1px solid ${BORDER}`, borderLeft: `3px solid ${PURPLE}`, borderRadius: 10, padding: '12px 14px' }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: INK, lineHeight: 1.65, whiteSpace: 'pre-wrap', fontFamily: FONT }}>{sub.text}</p>
+        </div>
+      )}
+      {answerKeys.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {answerKeys.filter(k => sub.answers[k] !== '' && sub.answers[k] != null).sort((a, b) => Number(a) - Number(b)).map((k) => {
+            const q = questions[Number(k)];
+            const raw = sub.answers[k];
+            const chosen = (mcq && q?.options) ? q.options[raw] ?? raw : null;
+            const correct = mcq && q && q.correct === raw;
+            return (
+              <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && q?.options ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
+                {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {mcq ? q.q : q}</div>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>
+                  {mcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? '✓' : ''}</span>}
+                  {chosen ?? String(raw)}
+                  {mcq && q && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {files.map((f) => (
+            <button key={f.id} onClick={() => downloadActivityFile(f.id, f.name)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, border: `1px solid ${BORDER}`, background: WHITE, cursor: 'pointer', fontFamily: FONT }}>
+              <span style={{ width: 26, height: 26, borderRadius: 8, background: `${PURPLE}14`, color: PURPLE, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={13} /></span>
+              <span style={{ textAlign: 'left' }}>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: INK, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: MUTED2 }}>{fmtSize(f.size)} · download</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function GradeSubmissionModal({
   assignment, students, initialIndex, onClose, onPublished,
@@ -233,12 +306,7 @@ export default function GradeSubmissionModal({
                   ))}
                 </div>
               )}
-              <div style={{ background: LIGHT, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: MUTED, lineHeight: 1.6 }}>
-                <b style={{ color: INK, fontWeight: 800 }}>
-                  {current.status === 'complete' ? `${current.student.name.split(' ')[0]} finished this activity` : `${current.student.name.split(' ')[0]} is still working on it`}
-                </b>
-                {current.completedAt && <> — completed {fmtWhen(current.completedAt)}</>}. Their submitted work renders here the day submission capture ships; until then, grade against the brief with the panel on the right.
-              </div>
+              <SubmittedPaper current={current} brief={brief} />
             </div>
           </div>
 

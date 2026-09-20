@@ -102,6 +102,7 @@
     "2026-self-study.sql",
     "2026-activity-types.sql",
     "2026-submission-grading.sql",
+    "2026-activity-submissions.sql",
     "2026-agent-suggestions.sql",
     "2026-activity-drafts.sql",
     "2026-draft-routines.sql",

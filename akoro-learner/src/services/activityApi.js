@@ -14,7 +14,7 @@
  * renders either way, and the cards appear the day the data exists without
  * any page changes.
  */
-import { apiGet, apiPost } from './api.js';
+import { apiGet, apiPost, apiDelete, API } from './api.js';
 
 /* Self study — what I, a learner, have been assigned. */
 async function fetchSelfStudy() {
@@ -56,6 +56,7 @@ async function fetchSelfStudy() {
       topic:      a.topic || null,
       completedAt: a.completedAt || null,
       briefDetails: a.details ?? null,   // brief details object (questions, etc.)
+      submission: a.submission ?? null,  // the work the learner turned in
       };
     });
   } catch { return []; }
@@ -93,10 +94,56 @@ export async function fetchMyStreak() {
   } catch { return 0; }
 }
 
-/* Submit — mark this activity's target complete. The teacher's class view
-   and the learner's feed both derive from that status. Throws with a
-   user-facing message. */
-export async function completeActivity(assignmentId) {
-  const d = await apiPost(`/api/self-study/${assignmentId}/complete`);
+/* Submit — mark this activity's target complete AND hand in the work:
+   free text, per-question answers, and the ids of files uploaded for it.
+   The teacher's class view, the grading workspace and this feed all derive
+   from that target row. Throws with a user-facing message. */
+export async function completeActivity(assignmentId, work = {}) {
+  const d = await apiPost(`/api/self-study/${assignmentId}/complete`, {
+    text: work.text ?? '',
+    answers: work.answers ?? {},
+    fileIds: work.fileIds ?? [],
+  });
   return d?.data ?? null;
+}
+
+/* Upload one attachment for an activity (before submitting). Base64 over
+   JSON — the API stores it beside the learner's target. Returns the file
+   metadata ({id, name, size, mime}) for the chip. */
+export async function uploadActivityFile(assignmentId, file) {
+  const data = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(new Error('Could not read that file.'));
+    fr.readAsDataURL(file);
+  });
+  const d = await apiPost(`/api/self-study/${assignmentId}/files`, {
+    name: file.name,
+    mime: file.type || 'application/octet-stream',
+    size: file.size,
+    data,
+  });
+  return d?.data ?? null;
+}
+
+/* Remove one of my uploaded files (before submitting). */
+export async function removeActivityFile(fileId) {
+  await apiDelete(`/api/self-study/files/${fileId}`);
+}
+
+/* Download a submission file. Auth rides the session cookie, so a plain
+   <a href> cannot carry it cross-origin — fetch the blob, then hand it to
+   the browser as an object URL. */
+export async function downloadActivityFile(fileId, name) {
+  const r = await fetch(`${API}/api/self-study/files/${fileId}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Could not fetch that file.');
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name || 'file';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }

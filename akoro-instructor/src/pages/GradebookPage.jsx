@@ -492,9 +492,13 @@ export default function GradebookPage() {
                         const tm = typeMeta(a.type ?? 'self_study');
                         return (
                           <th key={a.id}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: INK, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: tm.color, marginTop: 2 }}>{tm.label} · {fmtDue(a.due_at) || 'no due date'}</div>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: MUTED2, marginTop: 1 }}>0–100</div>
+                            <button onClick={() => navigate(`/submissions?activity=${a.id}`)}
+                              title="Open this activity's submissions"
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT, textAlign: 'center' }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: INK, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: tm.color, marginTop: 2 }}>{tm.label} · {fmtDue(a.due_at) || 'no due date'}</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: MUTED2, marginTop: 1 }}>0–100</div>
+                            </button>
                           </th>
                         );
                       })}

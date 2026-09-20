@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BookOpen, Pencil, FolderKanban, MonitorPlay, Swords, ListChecks, Plus, Users,
-  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3,
+  Clock, Trash2, ChevronRight, Sparkles, Loader2, CheckCircle2, Info, ArrowUp, ArrowDown, BarChart3, Check,
 } from 'lucide-react';
 import { PageLayout } from '../components/Layout.jsx';
 import { Btn, Modal, Inp, Txa, Sel, Badge, Toast } from '../components/Primitives.jsx';
@@ -103,13 +103,38 @@ function toLocalInput(iso) {
 }
 
 /* ── Creation form — the AI Self Study form, adapted per type ────────────── */
+const Q_INP = {
+  padding: '7px 10px', borderRadius: 8, border: `1px solid ${BORDER}`,
+  fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK, outline: 'none', background: WHITE,
+};
 const BLANK = {
   title: '', subject: 'Basic Science', topic: '', instructions: '',
   difficulty: 'intermediate', dueAt: '', classId: '',
   audience: BLANK_AUDIENCE,
   scheduledAt: '', durationMins: '60',
   subtopics: [], objectives: {},
+  questions: [],   // optional: [{q, options?, correct?}] — learners answer on submit
 };
+const BLANK_QUESTION = { q: '', kind: 'mcq', options: ['', ''], correct: 0 };
+
+/* Clean the builder's rows into what rides in details.questions — only
+   complete questions travel, so a half-filled row is simply ignored. */
+function cleanQuestions(raw) {
+  return (raw ?? [])
+    .map((row) => {
+      const q = (row.q || '').trim();
+      if (!q) return null;
+      if (row.kind === 'mcq') {
+        const options = (row.options ?? []).map(o => (o || '').trim()).filter(Boolean);
+        if (options.length < 2) return null;
+        const correct = Math.min(Math.max(Number(row.correct) || 0, 0), options.length - 1);
+        return { q, options, correct };
+      }
+      return { q };
+    })
+    .filter(Boolean)
+    .slice(0, 20);
+}
 
 export function ActivityForm({ type, onAssigned, initial = null, savePayload = null }) {
   const meta = byKey(type);
@@ -179,7 +204,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
         due_at: dueIso,
         details: isLive
           ? { scheduled_at: new Date(form.scheduledAt).toISOString(), duration_mins: Number(form.durationMins) || 60 }
-          : {},
+          : (cleanQuestions(form.questions).length ? { questions: cleanQuestions(form.questions) } : {}),
       };
       if (!isLive) { body.subtopics = clean; body.objectives = objectives; body.difficulty = form.difficulty; }
 
@@ -267,6 +292,69 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
 
       {isLive && (
         <Inp label="Holds on *" type="datetime-local" value={form.scheduledAt} onChange={e => setField('scheduledAt', e.target.value)} />
+      )}
+
+      {/* Questions (optional) — when set, learners answer these on the
+          activity's details page before they can submit. */}
+      {!isLive && (
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px 12px', background: form.questions.length ? WHITE : 'transparent' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>Questions <span style={{ color: MUTED2, fontWeight: 600 }}>(optional)</span></div>
+              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>
+                {form.questions.length
+                  ? `${cleanQuestions(form.questions).length} question${cleanQuestions(form.questions).length === 1 ? '' : 's'} will ride with this activity — learners answer them on submit.`
+                  : 'Add questions and learners answer them in the app instead of a free-text answer.'}
+              </div>
+            </div>
+            <Btn size="sm" variant="secondary" type="button"
+              onClick={() => setForm(f => ({ ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''] }] }))}>
+              <Plus size={13} /> Add question
+            </Btn>
+          </div>
+          {form.questions.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+              {form.questions.map((row, qi) => (
+                <div key={qi} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '10px 11px', background: WHITE }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+                    <span style={{ fontSize: 11, fontWeight: 900, color: MUTED2, flexShrink: 0 }}>Q{qi + 1}</span>
+                    <input value={row.q} onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, q: e.target.value } : r) }))}
+                      placeholder="The question learners will answer" style={{ flex: 1, ...Q_INP }} />
+                    <select value={row.kind} onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, kind: e.target.value } : r) }))}
+                      style={{ ...Q_INP, width: 130, cursor: 'pointer' }}>
+                      <option value="mcq">Multiple choice</option>
+                      <option value="open">Open answer</option>
+                    </select>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.filter((_, i) => i !== qi) }))}
+                      style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 15, padding: '2px 5px' }} title="Remove question">×</button>
+                  </div>
+                  {row.kind === 'mcq' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingLeft: 26 }}>
+                      {(row.options ?? []).map((opt, oi) => (
+                        <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <input type="radio" name={`q-correct-${qi}`} checked={(row.correct ?? 0) === oi}
+                            onChange={() => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, correct: oi } : r) }))}
+                            title="Mark as the correct option" style={{ accentColor: GREEN, cursor: 'pointer', flexShrink: 0 }} />
+                          <input value={opt} onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, options: r.options.map((o, j) => j === oi ? e.target.value : o) } : r) }))}
+                            placeholder={`Option ${oi + 1}`} style={{ flex: 1, ...Q_INP }} />
+                          {(row.options ?? []).length > 2 && (
+                            <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, options: r.options.filter((_, j) => j !== oi), correct: Math.min(r.correct ?? 0, (r.options.length - 2)) } : r) }))}
+                              style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 13 }} title="Remove option">×</button>
+                          )}
+                        </div>
+                      ))}
+                      {(row.options ?? []).length < 4 && (
+                        <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, options: [...(r.options ?? []), ''] } : r) }))}
+                          style={{ border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: FONT, padding: '2px 0 2px 26px', textAlign: 'left' }}>+ option</button>
+                      )}
+                      <div style={{ fontSize: 10, color: MUTED2, fontFamily: FONT, paddingLeft: 26 }}>The ticked option is marked correct when grading.</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Who — the class, then who within it. */}
@@ -443,6 +531,34 @@ function DetailModal({ open, onClose, activity, onDeleted }) {
 
           {data.instructions && (
             <div style={{ fontSize: 12, color: MUTED, background: LIGHT, borderRadius: 10, padding: '9px 12px', marginBottom: 12, lineHeight: 1.55 }}>{data.instructions}</div>
+          )}
+
+          {/* Questions riding with the brief — learners answer these on submit. */}
+          {(data.details?.questions ?? []).length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .5, color: MUTED2, marginBottom: 7 }}>
+                QUESTIONS · {(data.details.questions ?? []).length}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {(data.details.questions ?? []).map((q, i) => (
+                  <div key={i} style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '8px 11px', background: WHITE }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>
+                      {i + 1}. {q.q}
+                      {Array.isArray(q.options) && <span style={{ fontSize: 10, fontWeight: 800, color: MUTED2, marginLeft: 7, background: LIGHT, borderRadius: 999, padding: '2px 8px' }}>multiple choice</span>}
+                    </div>
+                    {Array.isArray(q.options) && (
+                      <div style={{ paddingLeft: 26, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {q.options.map((o, j) => (
+                          <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: q.correct === j ? GREEN : MUTED, fontWeight: q.correct === j ? 800 : 500 }}>
+                            {q.correct === j ? <Check size={11} /> : <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: MUTED2, flexShrink: 0 }} />}{o}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* The plan — the subtopics and objectives the teacher approved,

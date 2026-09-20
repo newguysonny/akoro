@@ -41,9 +41,11 @@ test("grading is the reference workspace, honest about the paper", () => {
   assert.ok(modal.includes("Grade submission —"), "topbar crumb");
   assert.ok(modal.includes("{index + 1} of {students.length}"), "student stepper");
   assert.ok(modal.includes("Graded ·"), "status pill");
-  // Paper = the brief, question by question; no invented submissions.
+  // Paper = the brief, question by question, plus what the learner handed in.
   assert.ok(modal.includes("WHAT THEY WERE ASKED"), "objectives render as the brief");
-  assert.ok(modal.includes("submission capture"), "honest about artifacts to come");
+  assert.ok(modal.includes("WHAT THEY SUBMITTED"), "the real submission renders in the paper");
+  assert.ok(modal.includes("downloadActivityFile"), "attachments download through the authed seam");
+  assert.ok(modal.includes("No written submission was captured"), "honest when there is nothing to show");
   // Rubric with worded levels + a total, and a manual override.
   assert.ok(modal.includes("Understanding of concept"), "rubric criteria");
   assert.ok(modal.includes("Enter score manually instead"), "manual toggle");
@@ -67,6 +69,29 @@ test("drafts autosave locally and resume through NowGrading", () => {
   // Routed.
   assert.ok(appRoutes.includes('path="/submissions"'), "workbench route");
   assert.ok(layout.includes("label: 'Submissions'"), "nav entry");
+});
+
+test("the work itself is captured end to end — upload, submit, grade against it", async () => {
+  const [captureMigration, learnerPage] = await Promise.all([
+    read("2026-activity-submissions.sql"),
+    read("../../akoro-learner/src/pages/ActivityDetailPage.jsx"),
+  ]);
+  // Migration: the submission lives on the target row; files cascade with it.
+  assert.ok(captureMigration.includes("ADD COLUMN IF NOT EXISTS submission"), "submission column");
+  assert.ok(captureMigration.includes("CREATE TABLE IF NOT EXISTS edu.self_study_files"), "files table");
+  assert.ok(manifest.includes('"2026-activity-submissions.sql"'), "migration registered");
+  // API: upload, download (learner-or-owning-teacher), immutable after submit.
+  assert.ok(routes.includes('router.post("/:id/files"'), "upload endpoint");
+  assert.ok(routes.includes('router.get("/files/:fileId"'), "download endpoint");
+  assert.ok(routes.includes("ownedAssignment(req, t.assignment_id)"), "teachers reach files through the activity");
+  assert.ok(routes.includes("the teacher needs to see this file"), "submitted files are immutable");
+  // Complete captures the work: text + answers + fileIds on the target.
+  assert.ok(routes.includes("const submission = { text, answers, files, submittedAt: now() }"), "complete stores the work");
+  assert.ok(routes.includes("submission:   t.submission ?? null"), "/mine carries the submission");
+  // The grading workspace shows it; the learner sees what they handed in.
+  assert.ok(modal.includes("current.submission"), "the paper reads the submitted work");
+  assert.ok(learnerPage.includes("Your submission"), "the learner's details page shows their submitted work");
+  assert.ok(learnerPage.includes("uploadActivityFile"), "files upload for real, not just locally");
 });
 
 test("a published grade reaches the learner end to end", () => {

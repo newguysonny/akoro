@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { fetchMyActivities, completeActivity } from '../services/activityApi.js';
+import {
+  fetchMyActivities, completeActivity, uploadActivityFile, removeActivityFile, downloadActivityFile,
+} from '../services/activityApi.js';
 import { Icon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import Spinner from '../components/common/Spinner.jsx';
@@ -52,8 +54,8 @@ function fmtDue(iso) {
 /* Local autosave — answers and the attached file name, per activity. */
 const storeKey = (id) => `ak_activity_work_${id}`;
 function loadWork(id) {
-  try { return JSON.parse(localStorage.getItem(storeKey(id)) || 'null') || { answers: {}, text: '', file: null }; }
-  catch { return { answers: {}, text: '', file: null }; }
+  try { return JSON.parse(localStorage.getItem(storeKey(id)) || 'null') || { answers: {}, text: '', fileId: null, fileName: '', fileSize: 0 }; }
+  catch { return { answers: {}, text: '', fileId: null, fileName: '', fileSize: 0 }; }
 }
 function saveWork(id, w) {
   try { localStorage.setItem(storeKey(id), JSON.stringify(w)); } catch { /* private mode */ }
@@ -220,6 +222,60 @@ function StaticQuestions({ questions }) {
   );
 }
 
+/* The submitted work, read-only — what the learner actually handed in.
+   Shown after submit and after grading; the server copy is the source. */
+function SubmittedWork({ submission, questions }) {
+  if (!submission) return null;
+  const mcq = Array.isArray(questions) && questions.length && typeof questions[0] === 'object' && Array.isArray(questions[0].options);
+  const text = (submission.text || '').trim();
+  const answerKeys = Object.keys(submission.answers ?? {});
+  const files = submission.files ?? [];
+  if (!text && !answerKeys.length && !files.length) return null;
+  return (
+    <>
+      <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>Your submission</p>
+      {text && (
+        <div style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: '13px 15px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginBottom: 10, borderLeft: '3px solid rgba(107,59,255,.4)' }}>
+          <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', whiteSpace: 'pre-wrap', margin: 0, lineHeight: 1.6, fontFamily: "'Nunito',sans-serif" }}>{text}</p>
+        </div>
+      )}
+      {mcq && answerKeys.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+          {questions.map((q, i) => {
+            const ans = submission.answers?.[String(i)];
+            if (ans === undefined || ans === null || ans === '') return null;
+            const chosen = Array.isArray(q.options) ? q.options[ans] : null;
+            return (
+              <div key={i} style={{ background: 'var(--ak-surface)', borderRadius: 14, padding: '11px 13px', boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', marginBottom: 3, fontFamily: "'Nunito',sans-serif" }}>Q{i + 1}. {q.q}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>
+                  {chosen != null ? chosen : String(ans)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {files.map((f) => (
+            <button key={f.id} onClick={() => downloadActivityFile(f.id, f.name)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 12, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+              <span style={{ width: 26, height: 26, borderRadius: 8, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="ti-file" size={13}/>
+              </span>
+              <span style={{ textAlign: 'left' }}>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--ak-text)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--ak-text-muted)' }}>{fmtSize(f.size || 0)} · tap to download</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ── Page ───────────────────────────────────────────────────────────────── */
 export default function ActivityDetailPage() {
   const navigate = useNavigate();
@@ -230,6 +286,7 @@ export default function ActivityDetailPage() {
   const [submitErr, setSubmitErr] = useState('');
   const [work, setWork] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -254,14 +311,27 @@ export default function ActivityDetailPage() {
   }, [row]);
   const useStepper = !!questions && !row?.graded;
 
-  useEffect(() => { if (row && work) saveWork(row.assignmentId, work); }, [row, work]);
+  // Autosave only while there is outstanding work — once submitted, the
+  // server copy owns the record and the local draft stays cleared.
+  useEffect(() => {
+    if (row && work && row.status !== 'complete') saveWork(row.assignmentId, work);
+  }, [row, work]);
 
   const submit = async () => {
     setSubmitting(true);
     setSubmitErr('');
     try {
-      await completeActivity(row.assignmentId);
-      setRow((r) => ({ ...r, status: 'complete' }));
+      const payload = {
+        text: work?.text ?? '',
+        answers: questions ? (work?.answers ?? {}) : {},
+        fileIds: work?.fileId ? [work.fileId] : [],
+      };
+      const target = await completeActivity(row.assignmentId, payload);
+      const files = target?.submission?.files
+        ?? [{ id: work?.fileId, name: work?.fileName, size: work?.fileSize, mime: null }].filter((f) => f.id);
+      setRow((r) => ({ ...r, status: 'complete', submission: { text: payload.text, answers: payload.answers, files } }));
+      // The server now owns the work — the local draft is spent.
+      try { localStorage.removeItem(storeKey(row.assignmentId)); } catch { /* private mode */ }
     } catch (e) {
       setSubmitErr(e?.message || 'Could not submit. Try again.');
     } finally {
@@ -269,12 +339,27 @@ export default function ActivityDetailPage() {
     }
   };
 
-  const pickFile = (file) => {
-    if (!file) return;
+  const dropFile = async (fileId) => {
+    try { await removeActivityFile(fileId); } catch { /* server copy dies with the target */ }
+    setWork((w) => ({ ...w, fileId: null, fileName: '', fileSize: 0 }));
+  };
+
+  const pickFile = async (file) => {
+    if (!file || uploading) return;
     if (!FILE_OK.test(file.name)) { setSubmitErr('Only PDF, JPG, PNG or DOCX files.'); return; }
-    if (file.size > 10 * 1024 * 1024) { setSubmitErr('That file is larger than 10MB.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setSubmitErr('That file is larger than 5MB.'); return; }
     setSubmitErr('');
-    setWork((w) => ({ ...w, file: { name: file.name, size: file.size } }));
+    setUploading(true);
+    try {
+      const meta = await uploadActivityFile(row.assignmentId, file);
+      if (!meta?.id) throw new Error('Upload failed.');
+      setWork((w) => ({ ...w, fileId: meta.id, fileName: meta.name || file.name, fileSize: meta.size || file.size }));
+    } catch (e) {
+      setSubmitErr(e?.message || 'Could not upload that file. Try again.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
   };
 
   /* ── loading / not found ── */
@@ -428,6 +513,9 @@ export default function ActivityDetailPage() {
           {/* graded activities show their questions read-only, correct option marked */}
           {row.graded && questions?.length > 0 && <StaticQuestions questions={questions} />}
 
+          {/* the work the learner handed in — server copy */}
+          {(isDone || row.graded) && <div style={{ marginBottom: 20 }}><SubmittedWork submission={row.submission} questions={questions}/></div>}
+
           {/* submitted confirmation */}
           {isDone && !row.graded && (
             <div style={{ textAlign: 'center', padding: '10px 6px' }}>
@@ -436,7 +524,7 @@ export default function ActivityDetailPage() {
               </div>
               <h3 style={{ fontSize: 15.5, fontWeight: 900, margin: '0 0 4px', color: 'var(--ak-text)' }}>Work submitted</h3>
               <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0 }}>
-                Your teacher will review it{work?.file ? ` and your attached file (${work.file.name})` : ''}.
+                Your teacher will review it{row.submission?.files?.length ? ` and your attached file (${row.submission.files[0].name})` : ''}.
               </p>
             </div>
           )}
@@ -457,19 +545,24 @@ export default function ActivityDetailPage() {
                     maxLength={4000}
                     style={{ width: '100%', minHeight: 110, borderRadius: 12, border: '1.5px solid var(--ak-border)', padding: '11px 13px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', resize: 'vertical', outline: 'none', boxSizing: 'border-box', background: 'var(--ak-surface)' }}/>
                   {/* file dropzone — validated locally; uploads land with the API update */}
-                  {work?.file ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginTop: 8 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {work?.fileId ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginTop: 8, border: '1px solid rgba(16,185,129,.3)' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(16,185,129,.12)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <Icon name="ti-file" size={15}/>
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{work.file.name}</div>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)', marginTop: 1 }}>{fmtSize(work.file.size)}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{work.fileName || 'Attachment'}</div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#047857', marginTop: 1 }}>{fmtSize(work.fileSize || 0)} · uploaded</div>
                       </div>
-                      <button onClick={() => setWork((w) => ({ ...w, file: null }))} aria-label="Remove file"
+                      <button onClick={() => dropFile(work.fileId)} aria-label="Remove file"
                         style={{ border: 'none', background: 'none', color: 'var(--ak-text-muted)', cursor: 'pointer', width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <Icon name="ti-x" size={13}/>
                       </button>
+                    </div>
+                  ) : uploading ? (
+                    <div style={{ marginTop: 8, border: '1.5px dashed var(--ak-border)', borderRadius: 14, padding: '22px 14px', textAlign: 'center', background: 'var(--ak-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
+                      <Spinner size={15} color={BRAND}/>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Uploading…</div>
                     </div>
                   ) : (
                     <div
@@ -489,7 +582,7 @@ export default function ActivityDetailPage() {
                         <Icon name="ti-cloud-upload" size={16}/>
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Click to upload or drag and drop</div>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX up to 10MB</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX up to 5MB</div>
                     </div>
                   )}
                 </>

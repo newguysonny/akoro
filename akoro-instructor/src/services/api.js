@@ -260,3 +260,20 @@ export async function apiDelete(path) {
   if (!r.ok) throw await apiError(r, 'DELETE', path);
   return r.json();
 }
+
+/** Download a submission file from the self-study API. Auth rides the session
+ *  cookie, so a plain <a href> cannot carry it cross-origin — fetch the blob,
+ *  then hand it to the browser as an object URL. */
+export async function downloadActivityFile(fileId, name) {
+  const r = await fetch(`${API}/api/self-study/files/${fileId}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('Could not fetch that file.');
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name || 'file';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}

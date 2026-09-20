@@ -24,6 +24,12 @@
  * Learner:
  *   GET    /mine               → what I've been assigned
  *   POST   /:id/start          → mark started + get the brief (session is made by the WS)\n *   POST   /:id/link           → record which adaptive session it became
+ *   POST   /:id/files          → upload one submission attachment (base64, ≤5MB)
+ *   POST   /:id/complete       → submit: status complete + the work itself
+ *                                ({ text, answers, fileIds } — stored on the target)
+ *   DELETE /files/:fileId      → remove one of my files (owner only)
+ *   GET    /files/:fileId      → download a file (owning learner, or the
+ *                                teacher/school that owns the activity)
  */
 
 import { Router }                         from "express";
@@ -329,6 +335,9 @@ router.get("/mine", asyncHandler(async (req, res) => {
         grade:        t.grade ?? null,                       // published 0–100, null until graded
         graded:       t.grade != null,
         feedbackText: t.feedback?.text || null,
+        // The work the learner turned in — text, per-question answers and
+        // file metadata. Server copy wins once submitted.
+        submission:   t.submission ?? null,
         sessionId:    t.session_id,
         startedAt:    t.started_at,
         completedAt:  t.completed_at,
@@ -494,6 +503,17 @@ router.get("/:id", asyncHandler(async (req, res) => {
     : { data: [] };
   const byId = new Map((users ?? []).map((u) => [u.id, u]));
 
+  // Submission attachments (metadata only — never the base64 payload).
+  const targetIds = (targets ?? []).map((t) => t.id);
+  const { data: fileRows } = targetIds.length
+    ? await edu().from("self_study_files")
+        .select("id, target_id, name, size, mime, created_at").in("target_id", targetIds)
+    : { data: [] };
+  const filesByTarget = new Map();
+  for (const f of (fileRows ?? [])) {
+    (filesByTarget.get(f.target_id) ?? filesByTarget.set(f.target_id, []).get(f.target_id)).push(f);
+  }
+
   ok(res, {
     ...assignment,
     targets: (targets ?? []).map((t) => ({
@@ -501,6 +521,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
       full_name: byId.get(t.student_id)?.full_name ?? "Unknown",
       username:  byId.get(t.student_id)?.username ?? null,
       emoji:     byId.get(t.student_id)?.avatar_emoji ?? null,
+      files:     filesByTarget.get(t.id) ?? [],
     })),
   });
 }));
@@ -632,6 +653,84 @@ router.delete("/:id", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) 
   ok(res, { id: assignment.id, deleted: true });
 }));
 
+/* ═════════════════════════ SUBMISSION FILES ═════════════════════════
+   Attachments a learner uploads BEFORE completing — the work behind the
+   submission. Stored as base64 beside their target row; capped at 5MB and
+   5 files per target so rows stay small. Teachers reach them through the
+   activity they own; the learner through their own target. */
+
+/** The caller's target row for one assignment (learners). */
+async function myTargetOf(assignmentId, userId) {
+  const { data } = await edu().from("self_study_targets")
+    .select("id, status").eq("assignment_id", assignmentId).eq("student_id", userId).maybeSingle();
+  return data ?? null;
+}
+
+/** POST /api/self-study/:id/files — learner uploads one attachment. */
+router.post("/:id/files", asyncHandler(async (req, res) => {
+  const target = await myTargetOf(req.params.id, req.user.id);
+  if (!target) return missing(res, "This assignment was not given to you");
+
+  const { name, mime, size, data } = req.body ?? {};
+  const clean = typeof name === "string" ? name.trim().slice(0, 200) : "";
+  if (!clean) return bad(res, "A file needs a name");
+  const n = Number(size);
+  if (!Number.isFinite(n) || n < 0) return bad(res, "File size is required");
+  if (n > 5 * 1024 * 1024) return bad(res, "Files can be at most 5MB");
+  if (typeof data !== "string" || !data) return bad(res, "File data is required (base64)");
+  // base64 inflates by ~4/3 — reject early so an oversized row never lands
+  if (data.length > Math.ceil(5 * 1024 * 1024 * 1.4)) return bad(res, "Files can be at most 5MB");
+  const cleanMime = typeof mime === "string" ? mime.slice(0, 120) : null;
+
+  const { count } = await edu().from("self_study_files")
+    .select("id", { count: "exact", head: true }).eq("target_id", target.id);
+  if ((count ?? 0) >= 5) return bad(res, "At most 5 files per submission");
+
+  const { data: file, error } = await edu().from("self_study_files")
+    .insert({ target_id: target.id, name: clean, mime: cleanMime, size: Math.round(n), data })
+    .select("id, name, size, mime").single();
+  if (error) throw new Error(error.message);
+  ok(res, file);
+}));
+
+/** DELETE /api/self-study/files/:fileId — the owning learner removes a file.
+ *  Only before submitting: once the target is complete the submission is the
+ *  record the teacher grades, so it stays exactly as handed in. */
+router.delete("/files/:fileId", asyncHandler(async (req, res) => {
+  const { data: file } = await edu().from("self_study_files")
+    .select("id, target_id").eq("id", req.params.fileId).maybeSingle();
+  if (!file) return missing(res, "File not found");
+  const { data: t } = await edu().from("self_study_targets")
+    .select("student_id, status").eq("id", file.target_id).maybeSingle();
+  if (!t || t.student_id !== req.user.id) return denied(res, "Not your file");
+  if (t.status === "complete") return bad(res, "Already submitted — the teacher needs to see this file");
+  await edu().from("self_study_files").delete().eq("id", file.id);
+  ok(res, { removed: true });
+}));
+
+/** GET /api/self-study/files/:fileId — download: owning learner, or the
+ *  teacher/school that owns the activity (the grading workspace). */
+router.get("/files/:fileId", asyncHandler(async (req, res) => {
+  const { data: file } = await edu().from("self_study_files")
+    .select("*").eq("id", req.params.fileId).maybeSingle();
+  if (!file) return missing(res, "File not found");
+  const { data: t } = await edu().from("self_study_targets")
+    .select("assignment_id, student_id").eq("id", file.target_id).maybeSingle();
+  if (!t) return missing(res, "File not found");
+
+  let allowed = t.student_id === req.user.id;
+  if (!allowed && TEACHER_ROLES.includes(req.user.role)) {
+    const { error } = await ownedAssignment(req, t.assignment_id);
+    allowed = !error;
+  }
+  if (!allowed) return denied(res, "Not your file");
+
+  res.setHeader("Content-Type", file.mime || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.name)}"`);
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.send(Buffer.from(file.data, "base64"));
+}));
+
 /* ═══════════════════════════════ LEARNER ═══════════════════════════════ */
 
 /**
@@ -701,8 +800,30 @@ router.post("/:id/complete", asyncHandler(async (req, res) => {
     .select("id").eq("assignment_id", req.params.id).eq("student_id", req.user.id).maybeSingle();
   if (!target) return missing(res, "This assignment was not given to you");
 
+  // ── The work itself: optional free text, per-question answers (keyed by
+  //    question index), and the files uploaded for this target. Everything
+  //    is capped so the row stays small. Backward compatible — completing
+  //    with no body still works and stores an empty submission.
+  const body = req.body ?? {};
+  const text = typeof body.text === "string" ? body.text.slice(0, 8000) : "";
+  const answers = {};
+  if (body.answers && typeof body.answers === "object" && !Array.isArray(body.answers)) {
+    for (const [k, v] of Object.entries(body.answers).slice(0, 60)) {
+      answers[String(k).slice(0, 8)] = typeof v === "number" ? v : String(v ?? "").slice(0, 4000);
+    }
+  }
+  let files = [];
+  if (Array.isArray(body.fileIds) && body.fileIds.length) {
+    const ids = [...new Set(body.fileIds.map(String))].slice(0, 5);
+    const { data: rows } = await edu().from("self_study_files")
+      .select("id, name, size, mime").eq("target_id", target.id).in("id", ids);
+    files = rows ?? [];
+  }
+  const submission = { text, answers, files, submittedAt: now() };
+
   const { data, error } = await edu().from("self_study_targets")
-    .update({ status: "complete", completed_at: now() }).eq("id", target.id).select().single();
+    .update({ status: "complete", completed_at: now(), submission })
+    .eq("id", target.id).select().single();
   if (error) throw new Error(error.message);
   // Event trigger: study work completed — fresh signal for the planner.
   emitAutonomyEvent(req.user.id, "self_study").catch(() => {});
