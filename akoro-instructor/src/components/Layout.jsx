@@ -41,6 +41,7 @@ const MGMT_NAV = [
     { label: 'Curriculum',      to: '/mgmt/curriculum' },
     { label: 'Syllabus',        to: '/mgmt/syllabus' },
     { label: 'Subjects',        to: '/mgmt/subjects' },
+    { label: 'Gradebook',       to: '/mgmt/gradebook' },
     { label: 'Class Timetable', to: '/mgmt/timetable' },
     { label: 'Weekly Forecast', to: '/mgmt/weekly-forecast' },
     { label: 'Review AI Lessons', to: '/lesson-review' },

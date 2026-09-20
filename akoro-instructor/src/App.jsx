@@ -17,6 +17,7 @@ import BattlesPage  from './pages/BattlesPage.jsx';
 import TasksPage    from './pages/TasksPage.jsx';
 import SelfStudyPage from './pages/SelfStudyPage.jsx';
 import ActivitiesPage from './pages/ActivitiesPage.jsx';
+import GradebookPage from './pages/GradebookPage.jsx';
 import SubmissionsPage from './pages/SubmissionsPage.jsx';
 import SelfStudyAnalyticsPage from './pages/SelfStudyAnalyticsPage.jsx';
 import DocumentsPage, { DocumentEditorPage } from './pages/DocumentsPage.jsx';
@@ -130,6 +131,7 @@ function AppRoutes() {
       <Route path="/mgmt/curriculum"      element={<ProtectedRoute><CurriculumPage /></ProtectedRoute>} />
       <Route path="/mgmt/syllabus"        element={<ProtectedRoute><SyllabusPage /></ProtectedRoute>} />
       <Route path="/mgmt/subjects"        element={<ProtectedRoute><SubjectsPage /></ProtectedRoute>} />
+      <Route path="/mgmt/gradebook"      element={<ProtectedRoute><GradebookPage /></ProtectedRoute>} />
       <Route path="/mgmt/my-timetable"    element={<ProtectedRoute><MyTimetablePage /></ProtectedRoute>} />
       <Route path="/mgmt/timetable"       element={<ProtectedRoute><ClassTimetablePage /></ProtectedRoute>} />
       <Route path="/mgmt/weekly-forecast" element={<ProtectedRoute><WeeklyForecastPage /></ProtectedRoute>} />
