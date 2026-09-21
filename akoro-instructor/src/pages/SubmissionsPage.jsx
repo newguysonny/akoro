@@ -59,7 +59,12 @@ export default function SubmissionsPage() {
     if (!key) { setDetail(null); return; }
     setDetailLoading(true);
     apiGet(`/api/self-study/${key}`)
-      .then(d => setDetail({ assignment: d?.data?.assignment ?? null, targets: d?.data?.targets ?? [] }))
+      .then(d => {
+        // GET /:id spreads the assignment at the TOP of data (targets ride
+        // beside it) — data IS the brief. There is no data.assignment key.
+        const data = d?.data ?? null;
+        setDetail({ assignment: data, targets: data?.targets ?? [] });
+      })
       .catch(() => setDetail(null))
       .finally(() => setDetailLoading(false));
   }, [key]);
@@ -215,7 +220,7 @@ export default function SubmissionsPage() {
                     <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px',
                       border: `1px solid ${graded ? '#BBF7D0' : BORDER}`, borderRadius: 12,
                       background: graded ? '#F0FDF4' : WHITE, opacity: gradeable ? 1 : .75 }}>
-                      <span style={{ fontSize: 18 }}>{t.avatar_emoji || '🧑‍🎓'}</span>
+                      <span style={{ fontSize: 18 }}>{t.avatar_emoji || t.emoji || '🧑‍🎓'}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12.5, fontWeight: 800, color: INK }}>{t.full_name}</div>
                         <div style={{ fontSize: 11, color: MUTED2 }}>

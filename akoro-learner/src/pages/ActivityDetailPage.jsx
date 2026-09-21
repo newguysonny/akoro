@@ -388,6 +388,10 @@ export default function ActivityDetailPage() {
   const due = fmtDue(row.dueAt);
   const stageList = row.kind === 'multi_stage' ? (row.stages ?? []) : null;
   const doneCount = stageList?.filter((s) => s.status === 'complete').length ?? 0;
+  const sub = row.submission ?? {};
+  const hasSubmittedContent = !!(sub.text || '').trim()
+    || Object.keys(sub.answers ?? {}).length > 0
+    || (sub.files ?? []).length > 0;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', fontFamily: "'Nunito',sans-serif" }}>
@@ -515,6 +519,17 @@ export default function ActivityDetailPage() {
 
           {/* the work the learner handed in — server copy */}
           {(isDone || row.graded) && <div style={{ marginBottom: 20 }}><SubmittedWork submission={row.submission} questions={questions}/></div>}
+
+          {/* submitted before capture, or with nothing written: say so
+              instead of showing a silent page */}
+          {(isDone || row.graded) && !hasSubmittedContent && !questions?.length
+            && row.kind !== 'multi_stage' && row.kind !== 'live_course' && (
+            <div style={{ background: 'var(--ak-surface)', borderRadius: 14, padding: '12px 14px', marginBottom: 20, border: '1px dashed var(--ak-border)' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0, fontFamily: "'Nunito',sans-serif" }}>
+                No written answer was captured for this submission — only the completion was recorded.
+              </p>
+            </div>
+          )}
 
           {/* submitted confirmation */}
           {isDone && !row.graded && (
