@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { BRAND, GREEN, GOLD, RED } from "../../constants.js";
 import { Icon } from "../common/Icons.jsx";
+import MediaPlayer from "../library/MediaPlayer.jsx";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SessionReaderModal — the Fortizo reader, adopted into the higher-ed
@@ -120,8 +121,15 @@ function paginateBlocks(blocks, perPage = CHARS_PER_PAGE) {
   return pages;
 }
 
-const sectionEyebrow = (n, label) =>
-  `<div class="doc-eyebrow">SECTION ${String(n).padStart(2, "0")}${label ? ` · ${escapeHtml(label)}` : ""}</div>`;
+const sectionEyebrow = (n, label) =>  `<div class="doc-eyebrow">SECTION ${String(n).padStart(2, "0")}${label ? ` · ${escapeHtml(label)}` : ""}</div>`;
+
+/* 42 → "0:42", 3675 → "1:01:15" — the media toolbar's clock. */
+const mediaTime = (sec) => {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+};
 
 /**
  * Build the reader's pages for a learning session.
@@ -953,6 +961,20 @@ export default function SessionReaderModal({
   chatNode = null,
   onOpenChat,
   onExplainSelection,
+  /* ── Library record seams (all optional — the teaching session passes
+     none of them and gets exactly the old behavior) ──
+     renderPageContent: (pageIndex) => ReactNode — when set, each page div
+       renders this instead of the page's HTML (pdf.js canvases, images,
+       honest download cards). Zoom, page nav, thumbnails and the
+       IntersectionObserver page tracking all keep working.
+     media: { kind:'audio'|'video', src, title, onPosition } — when set, the
+       reader pane becomes a media player: the ORIGINAL file plays, and the
+       toolbar swaps page nav/zoom for transport (±10s, play/pause, speed).
+     allowTextMarking: false hides Annotate/Hide in the selection popover
+       (they operate on HTML pages — canvases/images can't carry them). */
+  renderPageContent = null,
+  media = null,
+  allowTextMarking = true,
 }) {
   const isMobile = useIsMobileView();
   const split = !isMobile && !!chatNode;
@@ -977,6 +999,12 @@ export default function SessionReaderModal({
   const [communityTabsOpen, setCommunityTabsOpen] = useState([]);
 
   const [isPlaying, setIsPlaying] = useState(false);
+
+  /* media mode — the record player's handle + live state, so the shared
+     toolbar drives the same <audio>/<video> the pane shows. */
+  const [playerApi, setPlayerApi]     = useState(null);
+  const [playerState, setPlayerState] = useState({ playing: false, rate: 1, time: 0, duration: 0 });
+  const isMedia = !!media;
 
   /* selection popover, annotations, redactions */
   const [selection, setSelection] = useState(null);
@@ -1328,9 +1356,32 @@ export default function SessionReaderModal({
         </div>
 
         {/* Reader pane — kept mounted (just hidden) when a tool tab is active,
-            so scroll position and zoom survive switching back. */}
+            so scroll position and zoom survive switching back. Media records
+            swap the pages for the player (audio keeps playing while a tool
+            tab is open — notes over a recorded lesson). */}
         <div className="flex-col min-h-0 flex-1" style={{ display: activeTabId === "reader" ? "flex" : "none" }}>
           <div className="sreader-bg flex-shrink-0 flex items-center gap-2 md:gap-3.5 px-2.5 md:px-4 border-b" style={{ height: "3.25rem", borderColor: "var(--ak-border)" }}>
+            {isMedia ? (
+              /* ── Record transport — same toolbar, playback controls ── */
+              <div className="flex items-center gap-1.5 mr-auto min-w-0">
+                <button onClick={() => playerApi?.skip(-10)} title="Back 10 seconds" aria-label="Back 10 seconds"
+                  className="folio-btn-outline w-7 h-7 rounded border flex items-center justify-center">
+                  <Icon name="ti-player-track-back" size={14}/>
+                </button>
+                <button onClick={() => playerApi?.toggle()} title={playerState.playing ? "Pause" : "Play"} aria-label={playerState.playing ? "Pause" : "Play"}
+                  className="folio-icon-btn w-8 h-8 rounded flex items-center justify-center"
+                  style={{ background: BRAND, color: "#fff" }}>
+                  <Icon name={playerState.playing ? "ti-player-pause" : "ti-player-play"} size={16}/>
+                </button>
+                <button onClick={() => playerApi?.skip(10)} title="Forward 10 seconds" aria-label="Forward 10 seconds"
+                  className="folio-btn-outline w-7 h-7 rounded border flex items-center justify-center">
+                  <Icon name="ti-player-track-forward" size={14}/>
+                </button>
+                <span className="font-ui-mono text-xs whitespace-nowrap" style={{ color: "var(--ak-text-sub)" }}>
+                  {mediaTime(playerState.time)} / {mediaTime(playerState.duration)}
+                </span>
+              </div>
+            ) : (
             <div className="flex items-center gap-1.5 mr-auto">
               <button onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0} className="folio-btn-outline w-7 h-7 rounded border flex items-center justify-center disabled:opacity-35">
                 <Icon name="ti-chevron-up" size={15}/>
@@ -1353,7 +1404,22 @@ export default function SessionReaderModal({
                 <Icon name="ti-chevron-down" size={15}/>
               </button>
             </div>
+            )}
 
+            {/* Speed — the record viewer's reason for a shared toolbar:
+                slow a lesson down to take notes, speed it up to revise. */}
+            {isMedia && (
+              <button onClick={() => playerApi?.cycleRate(1)}
+                title="Playback speed" aria-label={`Playback speed ${playerState.rate} times`}
+                className="folio-btn-outline h-7 rounded border flex items-center justify-center px-2.5 gap-1 whitespace-nowrap">
+                <Icon name="ti-clock-bolt" size={13}/>
+                <span className="font-ui-mono text-xs font-bold" style={{ color: "var(--ak-text)" }}>
+                  {playerState.rate}×
+                </span>
+              </button>
+            )}
+
+            {!isMedia && (
             <div className="hidden md:flex items-center gap-1">
               <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                 <Icon name="ti-minus" size={13}/>
@@ -1363,7 +1429,8 @@ export default function SessionReaderModal({
                 <Icon name="ti-plus" size={13}/>
               </button>
             </div>
-            {isMobile && (
+            )}
+            {!isMedia && isMobile && (
               <div className="flex items-center gap-0.5">
                 <button onClick={() => setZoom((z) => Math.max(0.7, +(z - 0.1).toFixed(2)))} className="folio-btn-outline w-6 h-6 rounded border flex items-center justify-center">
                   <Icon name="ti-minus" size={12}/>
@@ -1376,11 +1443,11 @@ export default function SessionReaderModal({
             )}
 
             <button
-              onClick={() => setIsPlaying((p) => !p)}
+              onClick={() => (isMedia ? playerApi?.toggle() : setIsPlaying((p) => !p))}
               className="folio-icon-btn w-7 h-7 rounded flex items-center justify-center"
-              title="Listen to this page (audio coming soon)"
+              title={isMedia ? (playerState.playing ? "Pause" : "Play") : "Listen to this page (audio coming soon)"}
             >
-              <Icon name={isPlaying ? "ti-player-pause" : "ti-player-play"} size={15}/>
+              <Icon name={(isMedia ? playerState.playing : isPlaying) ? "ti-player-pause" : "ti-player-play"} size={15}/>
             </button>
 
             {/* Generate — the way to spawn a new tool tab, same on every breakpoint. */}
@@ -1407,20 +1474,37 @@ export default function SessionReaderModal({
           </div>
 
           <div className="flex-1 min-h-0 relative overflow-hidden">
-            <div ref={viewerRef} onClick={handleViewerClick} className="h-full overflow-auto flex flex-col items-center px-3 md:px-6 pt-9 pb-16" style={{ background: "var(--ak-bg)" }}>
+            {isMedia ? (
+              /* The record itself — original bytes, presigned URL, range seeks. */
+              <MediaPlayer
+                kind={media.kind}
+                src={media.src}
+                title={media.title || docTitle}
+                onReady={setPlayerApi}
+                onState={setPlayerState}
+                onPosition={media.onPosition}
+                downloadUrl={media.downloadUrl}
+                downloadName={media.downloadName}
+              />
+            ) : (
+            <div ref={viewerRef} onClick={handleViewerClick} className="pdf-scroll h-full overflow-auto flex flex-col items-center px-3 md:px-6 pt-9 pb-16" style={{ background: "var(--ak-bg)" }}>
               {pages.map((p, i) => (
                 <div
                   key={i}
                   data-page-index={i}
                   style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
                   className="doc-page relative w-full md:max-w-2xl mb-5 shadow-lg px-5 py-9 md:px-14 md:py-14"
-                  dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}
-                />
+                >
+                  {renderPageContent
+                    ? renderPageContent(i)
+                    : <div dangerouslySetInnerHTML={{ __html: buildPageHtml(p.html, i) }}/>}
+                </div>
               ))}
             </div>
+            )}
           </div>
 
-          <div className="sreader-bg hidden md:flex flex-shrink-0 items-center gap-2.5 px-4 py-2.5 border-t overflow-x-auto" style={{ borderColor: "var(--ak-border)" }}>
+          <div className="sreader-bg hidden md:flex flex-shrink-0 items-center gap-2.5 px-4 py-2.5 border-t overflow-x-auto" style={{ borderColor: "var(--ak-border)", display: isMedia ? "none" : undefined }}>
             {pages.map((_, i) => (
               <button
                 key={i}
@@ -1505,6 +1589,7 @@ export default function SessionReaderModal({
           <button onClick={() => handleSelectionAction("notes")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-pencil" size={13} color="var(--ak-accent)"/> Note
           </button>
+          {allowTextMarking && (<>
           <div className="w-px h-6 mx-0.5 flex-shrink-0" style={{ background: "var(--ak-tag-bg)" }}/>
           <button onClick={() => handleSelectionAction("annotate")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-highlighter" size={13} color={GOLD}/> Annotate
@@ -1512,6 +1597,7 @@ export default function SessionReaderModal({
           <button onClick={() => handleSelectionAction("redact")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs hover:bg-black/10 whitespace-nowrap flex-shrink-0" style={{ color: "var(--ak-text)" }}>
             <Icon name="ti-eye-off" size={13} color="var(--ak-danger-text)"/> Hide
           </button>
+          </>)}
         </div>
       )}
 

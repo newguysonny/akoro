@@ -71,6 +71,7 @@ import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
 import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import agentProposalsModule      from "./modules/agent-proposals/routes.js";
 import blogsModule               from "./modules/blogs/routes.js";
+import recordsModule             from "./modules/records/routes.js";
 import {
   agentToolsRouter as agentToolsModule,
   agentActionConfirmationsRouter as agentActionConfirmationsModule,
@@ -601,6 +602,7 @@ app.use("/api",            standardLimit, agentToolRequestsModule); // explicit 
 app.use("/api/goals",      standardLimit, learnerGoalsModule); // the learner's educational goals (Full Autonomy spine)
 app.use("/api/agent/proposals", standardLimit, agentProposalsModule); // Full Autonomy proposal inbox (approve executes via chat tools)
 app.use("/api/blogs",      standardLimit, blogsModule); // learner-authored blogs (higherEd library: draft / publish)
+app.use("/api/records",    standardLimit, recordsModule); // learner library shelf: uploads (R2), links, pastes
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────

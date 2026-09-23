@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
+import { listRecords, setRecordProgress, touchRecordOpened } from '../services/recordsApi.js';
 import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
+import RecordSessionViewer, { recordFileType } from '../components/library/RecordSessionViewer.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
 
@@ -22,6 +24,7 @@ const KINDS = [
   { key: 'course',     label: 'Courses'         },
   { key: 'guide',      label: 'Teaching guides' },
   { key: 'blog',       label: 'Blogs'           },
+  { key: 'records',    label: 'My records'      },
   { key: 'folder',     label: 'Folders'         },
   { key: 'collection', label: 'Collections'     },
 ];
@@ -36,6 +39,41 @@ const STATUS = {
 
 const getMeta = (kind) => TYPE_META[kind] || { icon: 'ti-books', color: '#9CA3AF' };
 const getStatus = (stat) => STATUS[stat] || STATUS.assigned;
+
+/* What each record IS — the icon says it before the name does. */
+const FILE_TYPE_META = {
+  pdf:   { icon: 'ti-file-type-pdf', color: '#EF4444' },
+  audio: { icon: 'ti-music',         color: '#10B981' },
+  video: { icon: 'ti-video',         color: '#6366F1' },
+  image: { icon: 'ti-photo',         color: '#0EA5E9' },
+  text:  { icon: 'ti-file-text',     color: '#F59E0B' },
+  other: { icon: 'ti-paperclip',     color: '#9CA3AF' },
+};
+const RECORD_KIND_META = {
+  link:  { icon: 'ti-link',     color: '#0EA5E9' },
+  paste: { icon: 'ti-clipboard', color: '#A855F7' },
+};
+const recordMeta = (r) => {
+  if (r.kind === 'upload') {
+    if (r.fileMissing) return { icon: 'ti-cloud-off', color: '#F59E0B' };
+    return FILE_TYPE_META[recordFileType(r)] || FILE_TYPE_META.other;
+  }
+  return RECORD_KIND_META[r.kind] || FILE_TYPE_META.other;
+};
+
+/* 42 → "0:42" */
+const fmtDur = (sec) => {
+  if (!sec || !Number.isFinite(sec) || sec <= 0) return null;
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+};
+const fmtSize = (b) => {
+  if (!b || b <= 0) return '';
+  if (b < 1024 * 1024) return `${Math.max(1, Math.round(b / 1024))} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+};
 
 const CARD_BASE = {
   display: 'flex', gap: 12, padding: '13px 15px',
@@ -173,7 +211,52 @@ function BlogCard({ item, onOpen }) {
   );
 }
 
+/* A record on the shelf — its icon says what it is (PDF/audio/video/doc…),
+   its progress says where the learner left off, and tapping it opens the
+   record as a full study session. */
+function RecordCard({ item, onOpen }) {
+  const meta = recordMeta(item);
+  const done = (item.progress || 0) >= 100;
+  const bits = [
+    fmtDur(item.duration),
+    fmtSize(item.size),
+    item.createdAt ? new Date(item.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
+  ].filter(Boolean).join(' · ');
+  return (
+    <button onClick={() => onOpen(item)} style={{ ...CARD_BASE, cursor: 'pointer' }}>
+      <div style={{
+        width: 46, height: 46, borderRadius: 11, flexShrink: 0,
+        background: `${meta.color}14`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon name={meta.icon} size={22} color={meta.color}/>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: done ? 'var(--ak-text-muted)' : 'var(--ak-text)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: done ? 'line-through' : 'none' }}>
+          {item.name}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--ak-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {bits || 'Record'}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 800, color: done ? GREEN : BRAND, background: done ? 'rgba(16,185,129,.10)' : `${BRAND}12`, borderRadius: 100, padding: '2px 9px' }}>
+            {done ? 'Done' : (item.progress > 0 ? 'In progress' : 'New')}
+          </span>
+          <div style={{ flex: 1, height: 4, background: 'var(--ak-border)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${item.progress || 0}%`, background: GREEN, borderRadius: 3 }} />
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', flexShrink: 0 }}>{item.progress || 0}%</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/* Record rows keep their real kind ('upload'/'link'/'paste') — the viewer
+   and the icons branch on it — and carry isRecordItem so the list routes
+   them to the record card. */
 function LibraryItem({ item, onOpen }) {
+  if (item.isRecordItem)     return <RecordCard item={item} onOpen={onOpen} />;
   if (item.kind === 'course') return <CourseCard item={item} onOpen={onOpen} />;
   if (item.kind === 'guide')  return <GuideCard item={item} />;
   if (item.kind === 'blog')   return <BlogCard item={item} onOpen={onOpen} />;
@@ -184,16 +267,15 @@ export default function LibraryPage() {
   const navigate = useNavigate();
   const { t } = useLang();
   const [searchParams] = useSearchParams();
-  const [items, setItems]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [items, setItems]       = useState([]);
+  const [records, setRecords]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [filter, setFilter]     = useState('all');
+  const [viewer, setViewer]     = useState(null);   // the record open as a session
 
   // ── Add a record — the + in the header ────────────────────────────────────
-  // Moved here from the Learn tab's FAB so every learner (school and
-  // higher-ed alike) can add material from the shelf that holds it. The
-  // Now-Studying bar's + deep-links here with ?add=1 to open the sheet.
-  // Records stay device-local and keyed by the signed-in learner's id — the
-  // same key the Learn tab used, so nothing saved before is lost.
+  // Every learner (school and higher-ed alike) adds material from the shelf
+  // that holds it. The Now-Studying bar's + deep-links here with ?add=1.
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   // The blog option belongs to the higher-ed tier (studyLevel.js gate) —
@@ -210,42 +292,54 @@ export default function LibraryPage() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const recordsKey = `akoro_records_${STUDENT_ID || 'me'}`;
-  const loadRecordsLocal = () => {
-    try { const raw = JSON.parse(localStorage.getItem(recordsKey) || '[]'); return Array.isArray(raw) ? raw : []; }
-    catch { return []; }
-  };
-  const setRecordProgress = (id, progress) => {
-    const list = loadRecordsLocal().map(r => r.id === id
-      ? { ...r, progress: Math.max(0, Math.min(100, progress)), last_opened_at: new Date().toISOString() }
-      : r);
-    try { localStorage.setItem(recordsKey, JSON.stringify(list)); } catch { /* private mode */ }
-  };
-
-  // Opening a record: links open in a new tab right away; uploads/pastes say
-  // the in-app viewer is on its way instead of pretending the file opened.
-  const openRecord = (r) => {
-    if (!r) return;
-    if (!r.progress) setRecordProgress(r.id, 10);
-    if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
-    else setToast(t('records.viewer_soon'));
-    setSheetOpen(false);
-  };
-
-  // Self-reported completion (there's no playback to measure).
-  const toggleRecordDone = (r) => {
-    setRecordProgress(r.id, (r.progress || 0) >= 100 ? 10 : 100);
-  };
-
   const load = useCallback(async () => {
     try {
-      setItems(await fetchMyLibrary());
+      // The shelf is two feeds: the school/higher-ed library and the
+      // learner's own records. One failing shouldn't blank the other.
+      const [lib, recs] = await Promise.all([
+        fetchMyLibrary().catch(() => []),
+        listRecords().catch(() => []),
+      ]);
+      setItems(lib);
+      setRecords(recs);
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const displayed = filter === 'all' ? items : items.filter(a => a.kind === filter);
+  /* Opening a record opens a SESSION — the same reader the teaching
+     session uses, with the file itself as the content. Links stay links. */
+  const openRecord = (r) => {
+    if (!r) return;
+    if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
+    else if (r.kind === 'upload' && !r.fileMissing) setViewer(r);
+    else if (r.kind === 'paste') setViewer(r);
+    else if (r.kind === 'upload') setViewer(r);     // missing file → the viewer explains itself
+    setSheetOpen(false);
+  };
+
+  /* First open of a fresh record: 10% progress + a last-opened stamp. */
+  const handleRecordOpened = useCallback((r) => {
+    if (!r?.id) return;
+    if (!r.progress) {
+      setRecords((rs) => rs.map(x => x.id === r.id ? { ...x, progress: 10 } : x));
+      setRecordProgress(r.id, 10).catch(() => {});
+    }
+    touchRecordOpened(r.id).catch(() => {});
+  }, []);
+
+  /* Watched-through milestones from the player update the shelf. */
+  const handleRecordProgress = useCallback((r, pct) => {
+    setRecords((rs) => rs.map(x => x.id === r.id ? { ...x, progress: pct } : x));
+    setRecordProgress(r.id, pct).catch(() => {});
+  }, []);
+
+  const toRecordItem = (r) => ({ ...r, isRecordItem: true });
+  const displayed = filter === 'all'
+    ? [...items, ...records.map(toRecordItem)]
+    : filter === 'records'
+      ? records.map(toRecordItem)
+      : items.filter(a => a.kind === filter);
   const activeLabel = KINDS.find(k => k.key === filter)?.label || 'Library';
 
   const TAB = (active) => ({
@@ -269,7 +363,7 @@ export default function LibraryPage() {
             <div>
               <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--ak-text)', margin: 0 }}>Library</p>
               <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0 }}>
-                {items.length > 0 ? `${items.length} saved` : 'Your shelf is empty'}
+                {items.length + records.length > 0 ? `${items.length + records.length} saved` : 'Your shelf is empty'}
               </p>
             </div>
           </div>
@@ -294,8 +388,8 @@ export default function LibraryPage() {
           </div>
         ) : displayed.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <div style={{ fontSize: 40, marginBottom: 10, color: getMeta(filter).color }}>
-              <Icon name={getMeta(filter).icon} size={40}/>
+            <div style={{ fontSize: 40, marginBottom: 10, color: filter === 'records' ? BRAND : getMeta(filter).color }}>
+              <Icon name={filter === 'records' ? 'ti-file-text' : getMeta(filter).icon} size={40}/>
             </div>
             <p style={{ fontSize: 14, color: 'var(--ak-text-muted)', fontWeight: 700 }}>
               {filter === 'all' ? 'Nothing saved yet' : `No ${activeLabel.toLowerCase()} yet`}
@@ -303,7 +397,9 @@ export default function LibraryPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <LibraryItem key={a.id} item={a} onOpen={(it) => it?.kind === 'blog' ? navigate(`/write/blog/${it.id}`) : navigate(`/course/${it?.slug || it?.id}`)} />)}
+            {displayed.map(a => <LibraryItem key={a.id} item={a} onOpen={(it) => it?.isRecordItem
+              ? openRecord(it)
+              : it?.kind === 'blog' ? navigate(`/write/blog/${it.id}`) : navigate(`/course/${it?.slug || it?.id}`)} />)}
           </div>
         )}
       </div>
@@ -348,8 +444,18 @@ export default function LibraryPage() {
         onClose={() => setSheetOpen(false)}
         user={{ id: STUDENT_ID }}
         onOpenRecord={openRecord}
-        onToggleDone={toggleRecordDone}
+        onRecordsChanged={setRecords}
       />
+
+      {/* The record as a study session — same reader, same tools, real file */}
+      {viewer && (
+        <RecordSessionViewer
+          record={viewer}
+          onClose={() => setViewer(null)}
+          onOpened={handleRecordOpened}
+          onProgress={handleRecordProgress}
+        />
+      )}
     </div>
     </AppShell>
   );

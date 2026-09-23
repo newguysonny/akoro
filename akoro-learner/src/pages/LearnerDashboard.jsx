@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STUDENT_ID } from '../constants.js';
 import { useWallet } from '../hooks/useWallet.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
+import { listRecords, setRecordProgress as setRecordProgressApi } from '../services/recordsApi.js';
+import RecordSessionViewer from '../components/library/RecordSessionViewer.jsx';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import { useCart } from '../contexts/CartContext.jsx';
 
@@ -121,6 +123,8 @@ export default function LearnerDashboard() {
   const [agentSubjectFilter,setAgentSubjectFilter]= useState("all");
   const [subjectFilter,     setSubjectFilter]     = useState("all");
   const [selectedSession,   setSelectedSession]   = useState(null);
+  const [recordViewer,      setRecordViewer]      = useState(null); // a record open as a study session
+  const [shelfRecords,      setShelfRecords]      = useState([]);   // the server shelf (skip-queue + resume)
   const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [teachSession,      setTeachSession]      = useState(null); // now holds config OR null
   const [configOpen,        setConfigOpen]        = useState(false); // FAB → ConfigModal
@@ -195,20 +199,18 @@ export default function LearnerDashboard() {
   }, [alarmBanner]);
   useEffect(() => () => stopAlarm(), []);
 
-  // Records live in localStorage; these helpers read/update one record's
-  // progress without a full state mirror (the modal re-reads on open).
-  const loadRecordsLocal = useCallback(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(`akoro_records_${userProfile?.id || 'me'}`) || '[]');
-      return Array.isArray(raw) ? raw : [];
-    } catch { return []; }
-  }, [userProfile?.id]);
+  // Records live on the server now (the Library shelf) — progress goes
+  // straight there, and the Now-Studying bar mirrors it optimistically.
   const setRecordProgress = useCallback((id, progress) => {
-    const list = loadRecordsLocal().map(r => r.id === id
-      ? { ...r, progress: Math.max(0, Math.min(100, progress)), last_opened_at: new Date().toISOString() }
-      : r);
-    try { localStorage.setItem(`akoro_records_${userProfile?.id || 'me'}`, JSON.stringify(list)); } catch { /* private mode */ }
-  }, [loadRecordsLocal, userProfile?.id]);
+    setRecordProgressApi(id, Math.max(0, Math.min(100, progress))).catch(() => { /* offline — next open re-syncs */ });
+  }, []);
+
+  // The shelf feeds the skip-queue and the bar's ▶ resume. A viewer close
+  // re-syncs it so progress on the cards is current.
+  const loadShelfRecords = useCallback(() => {
+    listRecords().then(setShelfRecords).catch(() => { /* offline — keep what we have */ });
+  }, []);
+  useEffect(() => { loadShelfRecords(); }, [loadShelfRecords]);
 
   // Opening a session tracks it as "now studying" — the bar then follows the
   // learner across tabs until they dismiss it or open something else.
@@ -226,9 +228,9 @@ export default function LearnerDashboard() {
     });
   }, [nowActs]);
 
-  // Opening a record tracks it too; links open in a new tab right away — the
-  // in-app viewer for uploads/pastes is future work, so say so instead of
-  // pretending the file opened.
+  // Opening a record tracks it in the Now-Studying bar AND opens the record
+  // as a study session — the same reader the Library uses, with the file
+  // itself as the content. Links stay links (new tab).
   const openRecordTracked = useCallback((r) => {
     if (!r) return;
     const kindLabel = r.kind === 'link' ? t('records.tab_link') : r.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload');
@@ -242,21 +244,14 @@ export default function LearnerDashboard() {
     });
     if (!r.progress) { setRecordProgress(r.id, 10); nowActs.setProgress(r.id, 10); }
     if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
-    else setToast({ msg: t('records.viewer_soon'), color: GOLD });
+    else setRecordViewer(r);
   }, [nowActs, setRecordProgress, t]);
-
-  // Self-reported completion for records (there's no playback to measure).
-  const toggleRecordDone = useCallback((r) => {
-    const p = (r.progress || 0) >= 100 ? 10 : 100;
-    setRecordProgress(r.id, p);
-    if (now.item?.id === r.id) nowActs.setProgress(r.id, p);
-  }, [now.item, nowActs, setRecordProgress]);
 
   // Bar visibility: every tab except the AI chat surface, and never under a
   // full-screen sheet that has its own layout.
   const showNowBar = higherEd && !!now.item && !now.dismissed
     && !(tab === "agent" && chatActive) && !selectedSession && !selectedChallenge
-    && !teachSession && !liveBattleModal && !configOpen;
+    && !teachSession && !liveBattleModal && !configOpen && !recordViewer;
 
   // Skip queue for the tablet bar's previous / next (Spotify-style track
   // skip): sessions skip through sessions, records through records, and
@@ -266,10 +261,10 @@ export default function LearnerDashboard() {
   // contains, so their skips disable until something trackable is parked.
   const nowStudyQueue = useMemo(() => {
     if (!now.item) return [];
-    if (now.item.type === 'record') return loadRecordsLocal();
+    if (now.item.type === 'record') return shelfRecords;
     if (now.item.type === 'session') return [...agentSessions, ...sessions];
     return [];
-  }, [now.item, agentSessions, sessions, loadRecordsLocal]);
+  }, [now.item, agentSessions, sessions, shelfRecords]);
   const canSkipNow = now.item?.type !== 'battle' && nowStudyQueue.length > 1
     && nowStudyQueue.some(x => x && x.id === now.item.id);
   const skipNowStudy = (dir) => {
@@ -358,7 +353,7 @@ export default function LearnerDashboard() {
 
   // Bar ▶ — resume. Sessions reopen (live copy preferred, snapshot fallback);
   // records re-run the record open flow.
-  const openNowItem = () => {
+  const openNowItem = async () => {
     if (!now.item) return;
     if (now.item.type === 'battle') {
       // Prefer the freshest card (status may have flipped while parked);
@@ -370,7 +365,12 @@ export default function LearnerDashboard() {
       const live = [...agentSessions, ...sessions].find(x => x.id === now.item.id);
       openSessionTracked(live || now.item.snapshot || { id: now.item.id, title: now.item.title, progress: now.item.progress || 0 });
     } else {
-      const r = loadRecordsLocal().find(x => x.id === now.item.id);
+      let r = shelfRecords.find(x => x.id === now.item.id);
+      if (!r) {
+        // Shelf state may be stale (added on another device) — try fresh.
+        try { r = (await listRecords()).find(x => x.id === now.item.id) || null; }
+        catch { r = null; }
+      }
       if (r) openRecordTracked(r);
     }
   };
@@ -1213,6 +1213,17 @@ export default function LearnerDashboard() {
         />}
         {conceptTrackerOpen && <ConceptTrackerModal onClose={()=>setConceptTrackerOpen(false)} />}
         {adaptiveControlsOpen && <AdaptiveControlsModal onClose={()=>setAdaptiveControlsOpen(false)} />}
+
+        {/* A record opened as a study session — same reader, same tools.
+            Close hands the earned progress back to the Now-Studying bar. */}
+        {recordViewer && (
+          <RecordSessionViewer
+            record={recordViewer}
+            onClose={() => { setRecordViewer(null); loadShelfRecords(); }}
+            onOpened={(r) => { if (now.item?.id === r.id) nowActs.setProgress(r.id, Math.max(10, r.progress || 10)); }}
+            onProgress={(r, pct) => { if (now.item?.id === r.id) nowActs.setProgress(r.id, pct); setRecordProgress(r.id, pct); }}
+          />
+        )}
 
         {selectedSession && <SessionSheet
           onMinimize={minimizeSessionSheet}

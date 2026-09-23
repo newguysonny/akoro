@@ -19,11 +19,11 @@ import { BRAND, GREEN, GOLD, SUBJECT_COLORS } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import { apiGet } from '../../services/api.js';
+import { listRecords } from '../../services/recordsApi.js';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
 export const RECENTS_KEY = 'akoro.dhubRecents';
 export const MAX_RECENTS = 8;
-const RECORDS_PREFIX = 'akoro_records_';
 
 /* Most-recent-first, de-duped case-insensitively by query text, capped.
    Entries are { q, scope } — scope is a discovery-type key for section
@@ -75,12 +75,13 @@ function persistRecents(list) {
   catch { /* private mode / quota — recents degrade silently */ }
 }
 
-function loadRecords(userId) {
-  try {
-    const raw = globalThis.localStorage?.getItem(`${RECORDS_PREFIX}${userId || 'me'}`);
-    const rows = raw ? JSON.parse(raw) : [];
-    return Array.isArray(rows) ? rows.filter((row) => row && typeof row.name === 'string') : [];
-  } catch { return []; }
+// Records live on the server now (the library shelf) — search loads them
+// from the same feed the Library page uses, so a learner finds their
+// material on any device, not just the one it was added on.
+function loadRecordsRemote(setRecords) {
+  listRecords()
+    .then((rows) => setRecords(Array.isArray(rows) ? rows.filter((row) => row && typeof row.name === 'string') : []))
+    .catch(() => { /* offline — records just don't surface in search */ });
 }
 
 function normalizeEnrollment(enrollment) {
@@ -220,7 +221,7 @@ export default function DiscoverSearchPage({
   const [catalogueCourses, setCatalogueCourses] = useState(initialCourses);
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [classmates, setClassmates] = useState([]);
-  const [records, setRecords] = useState(() => loadRecords(userId));
+  const [records, setRecords] = useState([]);
   const [learningLoading, setLearningLoading] = useState(initialLoading);
   const [peopleLoading, setPeopleLoading] = useState(initialLoading);
 
@@ -286,7 +287,7 @@ export default function DiscoverSearchPage({
 
   /* Records are intentionally device-local today, matching AddRecordModal.
      Refresh if the profile resolves after this overlay has mounted. */
-  useEffect(() => { setRecords(loadRecords(userId)); }, [userId]);
+  useEffect(() => { loadRecordsRemote(setRecords); }, []);
 
   /* Esc closes; this overlay owns the viewport while open. */
   useEffect(() => {
