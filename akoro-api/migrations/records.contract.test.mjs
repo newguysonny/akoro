@@ -25,7 +25,7 @@ const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryP
   read("../../akoro-learner/src/services/recordsApi.js"),
   read("../../akoro-learner/src/components/dashboard/AddRecordModal.jsx"),
   read("../../akoro-learner/src/pages/LibraryPage.jsx"),
-  read("../../akoro-learner/src/components/library/RecordSessionViewer.jsx"),
+  read("../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
   read("../../akoro-learner/src/components/library/MediaPlayer.jsx"),
   read("../../akoro-learner/src/components/library/PdfPages.jsx"),
   read("../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
@@ -99,7 +99,7 @@ test("the sheet saves to the server, with real upload progress", () => {
 test("records are first-class on the Library shelf", () => {
   assert.ok(libraryPage.includes("key: 'records'"), "a 'My records' pill");
   assert.ok(libraryPage.includes("RecordCard"), "records render as cards");
-  assert.ok(libraryPage.includes("RecordSessionViewer"), "tapping a record opens the session viewer");
+  assert.ok(libraryPage.includes("RecordTeachSession"), "tapping a record opens the teaching session");
   assert.ok(libraryPage.includes("recordFileType"), "cards carry what the file IS (pdf/audio/video/…)");
   assert.ok(libraryPage.includes("setRecordProgress"), "progress is the server's now");
 });
@@ -110,7 +110,8 @@ test("the session viewer shares the reader's toolbar, tools and tabs", () => {
   assert.ok(reader.includes("media = null"), "media pane seam");
   assert.ok(reader.includes("allowTextMarking = true"), "annotate/redact can step aside for canvases");
   assert.ok(viewer.includes("buildSessionReaderPages"), "text records paginate like a session guide");
-  assert.ok(viewer.includes("<SessionReaderModal"), "records open in the real reader");
+  assert.ok(viewer.includes("<TeachAgentModal"), "records open as real TEACHING sessions");
+  assert.ok(viewer.includes("content={content}"), "the record is the session's material");
   assert.ok(reader.includes("GenerateGrid"), "the Generate menu still spawns tool tabs");
   assert.ok(reader.includes("CommunityBoard"), "Q&A and Discussion boards still open as tabs");
   assert.ok(viewer.includes("recordDownloadUrl"), "download-to-view for what can't render");
@@ -134,12 +135,12 @@ test("PDFs render as the actual document, and tools still work", () => {
   assert.ok(pdfPages.includes("IntersectionObserver"), "pages render lazily");
   assert.ok(pdfPages.includes("getTextContent"), "page text is extracted");
   assert.ok(viewer.includes("texts.map"), "tool derivation uses the real page text");
-  assert.ok(viewer.includes('allowTextMarking={type !== \'pdf\' && type !== \'image\'}'), "canvas/image pages don't offer HTML-only annotate/redact");
+  assert.ok(viewer.includes("type !== 'pdf' && type !== 'image'"), "canvas/image pages don't offer HTML-only annotate/redact");
 });
 
 test("the rest of the app reads the server shelf too", () => {
   assert.ok(searchPage.includes("listRecords"), "discover search finds records from the server");
   assert.ok(!searchPage.includes("akoro_records_"), "no localStorage reads remain in search");
-  assert.ok(dashboard.includes("RecordSessionViewer"), "records opened from the dashboard open as sessions");
+  assert.ok(dashboard.includes("RecordTeachSession"), "records opened from the dashboard open as teaching sessions");
   assert.ok(dashboard.includes("setRecordProgressApi"), "dashboard progress goes to the server");
 });

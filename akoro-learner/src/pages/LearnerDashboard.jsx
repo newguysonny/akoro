@@ -4,7 +4,7 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, PRIORITY_CONFIG, STU
 import { useWallet } from '../hooks/useWallet.js';
 import { API, apiGet, apiPost, apiPatch } from '../services/api.js';
 import { listRecords, setRecordProgress as setRecordProgressApi } from '../services/recordsApi.js';
-import RecordSessionViewer from '../components/library/RecordSessionViewer.jsx';
+import RecordTeachSession from '../components/library/RecordTeachSession.jsx';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import { useCart } from '../contexts/CartContext.jsx';
 
@@ -123,7 +123,7 @@ export default function LearnerDashboard() {
   const [agentSubjectFilter,setAgentSubjectFilter]= useState("all");
   const [subjectFilter,     setSubjectFilter]     = useState("all");
   const [selectedSession,   setSelectedSession]   = useState(null);
-  const [recordViewer,      setRecordViewer]      = useState(null); // a record open as a study session
+  const [recordViewer,      setRecordViewer]      = useState(null); // a record open as a TEACHING session
   const [shelfRecords,      setShelfRecords]      = useState([]);   // the server shelf (skip-queue + resume)
   const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [teachSession,      setTeachSession]      = useState(null); // now holds config OR null
@@ -228,9 +228,9 @@ export default function LearnerDashboard() {
     });
   }, [nowActs]);
 
-  // Opening a record tracks it in the Now-Studying bar AND opens the record
-  // as a study session — the same reader the Library uses, with the file
-  // itself as the content. Links stay links (new tab).
+  // Opening a record tracks it in the Now-Studying bar AND opens it as a
+  // TEACHING session — the learner teaches their agent over the record's
+  // material. Links stay links (new tab).
   const openRecordTracked = useCallback((r) => {
     if (!r) return;
     const kindLabel = r.kind === 'link' ? t('records.tab_link') : r.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload');
@@ -1244,12 +1244,15 @@ export default function LearnerDashboard() {
         {conceptTrackerOpen && <ConceptTrackerModal onClose={()=>setConceptTrackerOpen(false)} />}
         {adaptiveControlsOpen && <AdaptiveControlsModal onClose={()=>setAdaptiveControlsOpen(false)} />}
 
-        {/* A record opened as a study session — same reader, same tools.
-            Close hands the earned progress back to the Now-Studying bar. */}
+        {/* A record opened as a TEACHING session — the learner teaches
+            their agent over the record's material (chat + content box,
+            reader on demand). Close hands the earned progress back to the
+            Now-Studying bar. */}
         {recordViewer && (
-          <RecordSessionViewer
+          <RecordTeachSession
             record={recordViewer}
-            onClose={() => { setRecordViewer(null); loadShelfRecords(); }}
+            onClose={() => { setRecordViewer(null); loadShelfRecords(); loadAgentSessions(); }}
+            onMinimize={() => { setRecordViewer(null); setToast(t('now.minimized_toast')); }}
             onOpened={(r) => { if (now.item?.id === r.id) nowActs.setProgress(r.id, Math.max(10, r.progress || 10)); }}
             onProgress={(r, pct) => { if (now.item?.id === r.id) nowActs.setProgress(r.id, pct); setRecordProgress(r.id, pct); }}
           />

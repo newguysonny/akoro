@@ -6,7 +6,7 @@ import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
-import RecordSessionViewer, { recordFileType } from '../components/library/RecordSessionViewer.jsx';
+import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
@@ -311,8 +311,8 @@ export default function LibraryPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* Opening a record opens a SESSION — the same reader the teaching
-     session uses, with the file itself as the content. Links stay links. */
+  /* Opening a record starts a TEACHING session over it — same flow as
+     "Start teaching", with the file itself as the material. Links stay links. */
   const openRecord = (r) => {
     if (!r) return;
     // Park on the Now-Studying bar first (same shape as the dashboard).
@@ -460,11 +460,13 @@ export default function LibraryPage() {
         onRecordsChanged={setRecords}
       />
 
-      {/* The record as a study session — same reader, same tools, real file */}
+      {/* The record as a TEACHING session — the learner teaches their agent
+          over the real file; the content box opens it in the reader. */}
       {viewer && (
-        <RecordSessionViewer
+        <RecordTeachSession
           record={viewer}
           onClose={() => setViewer(null)}
+          onMinimize={() => setViewer(null)}
           onOpened={handleRecordOpened}
           onProgress={handleRecordProgress}
         />

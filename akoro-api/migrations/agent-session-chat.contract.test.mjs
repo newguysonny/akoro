@@ -3,87 +3,74 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 /**
- * Agent-session chat + reader polish contract.
+ * Teaching over material — records and course lessons open as REAL
+ * teaching sessions (the "Start teaching" flow: WebSocket teach-back,
+ * confidence, turn budget, continuation, revision history), with the
+ * record's file / the lesson video as the session's material.
  *
- * The agent session is now a CHAT first (the teaching session's shape):
- * the learner and their agent talk over the lesson, the video opens from
- * the content box on top of the composer, mobile stacks (reader over
- * chat, chat button returns) and desktop/tablet splits side by side.
- *
- * Plus the visual repairs: the ±10s and Annotate glyphs were MISSING
- * from the tabler webfont (blank buttons), the reader tab lost its
- * textbook glyph, and light-theme muted greys (#9CA3AF on #F3F4F6 ≈ 2:1)
- * made the modal's icons nearly invisible.
+ * The chat is the teaching chat; a compact content box above the composer
+ * opens the material in the reader — mobile full-screen over the chat,
+ * desktop/tablet the Fortizo split beside it.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [viewer, chat, reader] = await Promise.all([
+const [teach, chatView, viewer, recordTeach, dash, lib] = await Promise.all([
+  read("../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
+  read("../../akoro-learner/src/components/teaching/SessionChatView.jsx"),
   read("../../akoro-learner/src/components/courses/AgentSessionViewer.jsx"),
-  read("../../akoro-learner/src/components/courses/SessionChatPane.jsx"),
-  read("../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
+  read("../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
+  read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
+  read("../../akoro-learner/src/pages/LibraryPage.jsx"),
 ]);
 
-test("the agent session is a chat with the video one tap away", () => {
-  assert.ok(viewer.includes("<SessionChatPane"), "the session renders the chat pane");
-  assert.ok(viewer.includes("contentBox={contentBox}"), "the content box rides above the composer");
-  assert.ok(viewer.includes("setReaderOpen(true)"), "tapping the box opens the material");
-  assert.ok(viewer.includes("tap to watch"), "the box says what it does");
-  assert.ok(viewer.includes("videoPct"), "the box carries the video's progress");
+test("TeachAgentModal carries real material beside the teaching pump", () => {
+  assert.ok(teach.includes("content = null"), "an optional content prop");
+  assert.ok(teach.includes("materialBox={materialBox}"), "the chat gets the content box");
+  assert.ok(teach.includes("content.pages || []"), "the reader shows the material's pages, not the guide");
+  assert.ok(teach.includes("content.media || null"), "or its media");
+  assert.ok(teach.includes("content.renderPageContent || null"), "or its custom page renderer");
+  assert.ok(teach.includes("content.allowTextMarking ?? true"), "canvases can opt out of annotate/redact");
+  assert.ok(teach.includes("content.state === 'ready' && !isMobileView"), "desktop opens the split when the material lands");
+  assert.ok(teach.includes("if (!content || content.state === 'ready')"), "the reader never opens on unloaded material");
 });
 
-test("mobile stacks, desktop splits — and the chat icon works again", () => {
-  assert.ok(viewer.includes("onOpenChat={() => setReaderOpen(false)}"), "the reader's chat button returns to the chat (the dead icon is fixed)");
-  assert.ok(viewer.includes("chatNode={split ? chatPane : null}"), "desktop/tablet is the side-by-side split");
-  assert.ok(viewer.includes("const split = !isMobile && showReader"), "the split is exactly desktop + reader open");
-  assert.ok(viewer.includes("!split && ("), "mobile/reader-closed shows the chat surface");
-  assert.ok(viewer.includes("showReader = readerOpen && !!stream"), "never an empty reader pane");
-  assert.ok(viewer.includes("state === 'ready' && !isMobile"), "desktop auto-opens the reader when the stream lands");
+test("the content box sits above the composer", () => {
+  assert.ok(chatView.includes("materialBox = null"), "an optional materialBox prop");
+  assert.ok(/\{materialBox && \(/.test(chatView), "rendered when present");
+  assert.ok(chatView.indexOf("materialBox &&") < chatView.indexOf("<FortizoChatComposer"), "above the composer");
 });
 
-test("the chat is the learner's real agent — same seam, honest failures", () => {
-  // The pump lives in the viewer so the conversation survives the pane
-  // moving between the desktop split and the standalone surface.
-  assert.ok(viewer.includes("apiPost('/api/adaptive/chat/sessions'"), "owns the conversation through the real session seam");
-  assert.ok(viewer.includes("agentChatEndpoint({ stream: true })"), "replies stream from the unified agent endpoint");
-  assert.ok(viewer.includes("createAgentChatTurnId()"), "turns are idempotent");
-  assert.ok(viewer.includes("apiPost(agentChatEndpoint(), payload)"), "with the plain JSON fallback");
-  assert.ok(viewer.includes("couldn\\u2019t reach the chat service"), "connection failures say so honestly");
-  assert.ok(chat.includes("contentBox = null"), "the content box is a slot — the pane stays reusable");
-  assert.ok(viewer.includes("messages={messages}"), "the pane is presentational — state is lifted");
+test("course lessons: a teaching session over the video", () => {
+  assert.ok(viewer.includes("<TeachAgentModal"), "the agent session IS a teaching session");
+  assert.ok(viewer.includes("content={content}"), "with the lesson video as the material");
+  assert.ok(viewer.includes("kind: 'video'"), "the video is the content");
+  assert.ok(viewer.includes("startAt: stream.lastPosition"), "resumes the course player's timeline");
+  assert.ok(viewer.includes("/api/lessons/${lesson.id}/progress"), "persists position to the same seam");
+  assert.ok(viewer.includes("readStoredSid(lesson?.id)"), "reopening continues the teaching thread");
+  assert.ok(viewer.includes("setNowStudying(uid, {"), "parks on the now-studying bar");
+  assert.ok(viewer.includes("Sign in to teach your agent"), "guests get an honest sign-in prompt");
 });
 
-test("the content box is honest about the video", () => {
-  assert.ok(viewer.includes("'Video coming soon — this lesson has no video yet'"), "no video says so");
-  assert.ok(viewer.includes("You may need to enrol"), "access failures say what to do");
-  assert.ok(viewer.includes("setRetry((r) => r + 1)"), "errors offer a retry");
-  assert.ok(viewer.includes("Opening the lesson…"), "loading says so");
-  assert.ok(viewer.includes("disabled={state !== 'ready'}"), "the box only opens a real stream");
+test("records: a teaching session over the real file, grounded", () => {
+  assert.ok(recordTeach.includes("<TeachAgentModal"), "records open as teaching sessions");
+  assert.ok(recordTeach.includes("content={content}"), "the file is the material");
+  assert.ok(recordTeach.includes("text.slice(0, MAX_REFERENCE_CHARS)"), "paste/text records ground the agent in their real text");
+  assert.ok(recordTeach.includes("joined.slice(0, MAX_REFERENCE_CHARS)"), "PDFs ground it too — from the loader's own extraction");
+  assert.ok(recordTeach.includes("MAX_REFERENCE_CHARS = 12_000"), "respecting the server's reference cap");
+  assert.ok(recordTeach.includes("readStoredSid(record.id)"), "reopening continues the teaching thread");
+  assert.ok(recordTeach.includes("onPosition: handlePosition"), "watched-through milestones still report");
+  assert.ok(recordTeach.includes("fileMissing"), "legacy missing-file records stay honest");
+  assert.ok(recordTeach.includes("not_viewable"), "unrenderable files stay download-to-view");
 });
 
-test("one timeline with the course player — unchanged", () => {
-  assert.ok(viewer.includes("/api/lessons/${lesson.id}`"), "same stream seam");
-  assert.ok(viewer.includes("last_position_seconds"), "resumes from last position");
-  assert.ok(viewer.includes("/api/lessons/${lesson.id}/progress"), "persists position");
-  assert.ok(viewer.includes("/api/lessons/${lesson.id}/complete"), "completes near the end");
-  assert.ok(viewer.includes("setNowStudying(uid, {"), "still parks on the now-studying bar");
-  assert.ok(viewer.includes("updateNowProgress(uid, barId,"), "progress still follows the video");
+test("both call sites open the teaching session", () => {
+  assert.ok(dash.includes("RecordTeachSession"), "the dashboard shelf does");
+  assert.ok(lib.includes("RecordTeachSession"), "the library does");
 });
 
-test("missing glyphs restored — no blank buttons", () => {
-  assert.ok(reader.includes('name="ti-player-track-prev"'), "±10s back uses a glyph that exists in the webfont");
-  assert.ok(reader.includes('name="ti-player-track-next"'), "±10s forward too");
-  assert.ok(reader.includes('name="ti-highlight"'), "the Annotate action too");
-  for (const bad of ['ti-player-track-back"', 'ti-player-track-forward"', 'ti-highlighter"']) {
-    assert.ok(!reader.includes(bad), `${bad} is gone (not in the tabler webfont)`);
-  }
-});
-
-test("the textbook glyph is back on the reader tab", () => {
-  assert.ok(reader.includes('tab.id === "reader") return <Icon name="ti-book-2"'), "the Original Content tab wears the book");
-});
-
-test("light theme reads clearly — muted greys stepped up", () => {
-  assert.ok(!reader.includes("var(--ak-text-muted)"), "no near-invisible muted grey left in the modal");
-  assert.ok(reader.includes(".folio-tab-pill{background:var(--ak-tag-bg);border-color:var(--ak-border2);color:var(--ak-text-sub);}"), "tab pills use the readable tier");
-  assert.ok(reader.includes(".folio-icon-btn{color:var(--ak-text-sub);}"), "icon buttons too");
-  assert.ok(reader.includes(".folio-form-field::placeholder{color:var(--ak-text-sub);}"), "placeholders too");
+test("the superseded viewers are gone", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const libFiles = await readdir(new URL("../../akoro-learner/src/components/library", import.meta.url));
+  assert.ok(!libFiles.includes("RecordSessionViewer.jsx"), "RecordSessionViewer retired");
+  const courseFiles = await readdir(new URL("../../akoro-learner/src/components/courses", import.meta.url));
+  assert.ok(!courseFiles.includes("SessionChatPane.jsx"), "SessionChatPane retired");
 });

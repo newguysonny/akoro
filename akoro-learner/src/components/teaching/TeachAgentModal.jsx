@@ -5,13 +5,13 @@ import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '.
 import { acquireActivityLock } from '../../utils/activityLock.js';
 import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
-import { XIcon, SparkleIcon, ZapIcon, BrainIcon } from '../common/Icons.jsx';
+import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
 import SessionChatView from './SessionChatView.jsx';
 import SessionReaderModal, { buildSessionReaderPages, useIsMobileView } from './SessionReaderModal.jsx';
 import WhiteboardModal from './WhiteboardModal.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
-function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted }) {
+function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted, content = null }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
   const { t } = useLang();
@@ -140,12 +140,24 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [switching,    setSwitching]    = useState(false);
   const [agentChoices, setAgentChoices] = useState(null);   // null = not yet loaded
 
+  // ── Session material (records, course lessons) ───────────────────────────
+  // `content` swaps the reader's session guide for REAL material — the
+  // record's file, the course video — and puts a compact content box above
+  // the composer: one tap from the chat to the material and back. The
+  // teaching pump (WebSocket, teach-back, confidence, continuation) is
+  // exactly the same; only what the reader shows changes.
+  //   content = { state:'loading'|'ready'|'error',
+  //               box:{ icon, title, sub }, pct, err,
+  //               docTitle, sourceName, media, pages,
+  //               renderPageContent, allowTextMarking }
   // ── Session reader (Fortizo split: reader left, this chat right) ─────────
-  // Opened from the book control in the chat composer. Mobile gets a
-  // full-screen reader modal over the session; desktop/tablet get the
-  // Fortizo split with this chat embedded as the right column. The session
-  // itself (WebSocket, blocks, voice) never restarts — only the shell moves.
+  // Opened from the book control in the chat composer — or the content box.
+  // Mobile gets a full-screen reader modal over the session; desktop/tablet
+  // get the Fortizo split with this chat embedded as the right column. The
+  // session itself (WebSocket, blocks, voice) never restarts — only the
+  // shell moves.
   const [readerOpen, setReaderOpen]   = useState(false);
+  const contentAutoRef = useRef(false);
   const [boardOpen, setBoardOpen]     = useState(false);
   const isMobileView                  = useIsMobileView();
   const readerReference = config?.reference || session?.reference || null;
@@ -159,8 +171,19 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     // The material is fixed at session start; topic/subject don't change mid-session.
     [readerReference, config?.subtopics, session?.subtopics],
   );
-  const openReader      = () => setReaderOpen(true);
+  const openReader      = () => { if (!content || content.state === 'ready') setReaderOpen(true); };
   const closeReader     = () => setReaderOpen(false);
+  // With real material, desktop/tablet open the split the moment it lands
+  // (once); mobile keeps the chat-first flow with the content box.
+  useEffect(() => {
+    if (content && content.state === 'ready' && !isMobileView && !contentAutoRef.current) {
+      contentAutoRef.current = true;
+      setReaderOpen(true);
+    }
+    // Fires on the ready FLIP only (guarded by the once-ref) — re-running on
+    // every content object identity would fight the learner's own toggling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content?.state, isMobileView]);
   // "Ask the tutor" in the reader's selection popover: prefill the live
   // session's input with the selection. On mobile the reader closes so the
   // chat (and the prefill) is actually visible.
@@ -788,6 +811,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       embedded={embedded}
       onOpenReader={readerOpen ? closeReader : openReader}
       onOpenBoard={() => setBoardOpen(true)}
+      materialBox={materialBox}
       chatMode={chatMode}
       onToggleChatMode={toggleChatMode}
       guide={{
@@ -802,7 +826,50 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
     />
   );
 
-  const readerProps = {
+  /* The content box — the session's material, one tap away. */
+  const materialBox = content ? (
+    <button
+      type="button"
+      onClick={openReader}
+      disabled={content.state !== 'ready'}
+      title={content.state === 'ready' ? 'Open the material' : content.state === 'loading' ? 'Opening…' : (content.err || 'Material unavailable')}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px',
+        borderRadius: 14, cursor: content.state === 'ready' ? 'pointer' : 'default',
+        background: 'var(--ak-surface)', border: `1.5px solid ${content.state === 'ready' ? `${BRAND}45` : 'var(--ak-border2)'}`,
+        opacity: content.state === 'ready' ? 1 : 0.75, textAlign: 'left',
+        fontFamily: "'Nunito',sans-serif",
+      }}>
+      <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: content.state === 'error' ? 'rgba(239,68,68,.12)' : `${BRAND}16` }}>
+        {content.state === 'loading' ? <span className="ti ti-loader-2" style={{ fontSize: 16, color: BRAND, animation: 'tam-spin 1s linear infinite' }}/>
+          : <Icon name={content.state === 'error' ? 'ti-cloud-off' : (content.box?.icon || 'ti-file-text')} size={16} color={content.state === 'error' ? RED : BRAND}/>}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{content.box?.title || topic}</span>
+        <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-sub)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {content.state === 'loading' ? 'Opening the material…' : content.state === 'error' ? (content.err || 'Couldn’t open this material.') : (content.box?.sub || 'Tap to open')}
+        </span>
+        {content.state === 'ready' && content.pct != null && (
+          <span style={{ display: 'block', height: 3.5, borderRadius: 99, background: 'var(--ak-tag-bg)', marginTop: 5, overflow: 'hidden' }}>
+            <span style={{ display: 'block', height: '100%', width: `${Math.max(0, Math.min(100, content.pct))}%`, borderRadius: 99, background: `linear-gradient(90deg,${BRAND}AA,${BRAND})`, transition: 'width .4s' }}/>
+          </span>
+        )}
+      </span>
+      {content.state === 'ready' && <span className="ti ti-chevron-right" style={{ fontSize: 15, color: 'var(--ak-text-sub)', flexShrink: 0 }}/>}
+    </button>
+  ) : null;
+
+  /* The reader — the session guide, or the real material when present. */
+  const readerProps = content ? {
+    docTitle: content.docTitle || `${subject} — ${topic}`,
+    sourceName: content.sourceName || 'Session material',
+    pages: content.pages || [],
+    media: content.media || null,
+    renderPageContent: content.renderPageContent || null,
+    allowTextMarking: content.allowTextMarking ?? true,
+    onClose: closeReader,
+    onExplainSelection: explainSelection,
+  } : {
     docTitle: `${subject} — ${topic}`,
     sourceName: readerReference?.name || "Session guide",
     pages: readerPages,
@@ -812,6 +879,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
 
   return (
     <>
+      <style>{'@keyframes tam-spin{to{transform:rotate(360deg)}}'}</style>
       {isMobileView ? (
         // Mobile: full-screen reader modal over the session chat (the chat
         // button inside the reader returns here).

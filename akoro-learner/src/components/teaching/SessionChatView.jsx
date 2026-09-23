@@ -177,6 +177,10 @@ function SessionChatView({
   // no book control is rendered.
   onOpenReader,
   onOpenBoard,
+  // The session's MATERIAL — a compact box above the composer showing what
+  // the content is (record, lesson video…), one tap from the chat to the
+  // reader and back. Absent → not rendered (plain teaching session).
+  materialBox = null,
   // Session mode toggle: "teach" (LEARN BY TEACHING — guide + protégé over
   // the WebSocket) or "guide" (LEARNING WITH GUIDE — just the guide and the
   // human, local UI only). `guide` carries the local messages + handlers.
@@ -467,6 +471,9 @@ function SessionChatView({
             control opens the session reader (Fortizo split: reader left, this
             chat right on desktop/tablet; full-screen modal on mobile).
             Guide mode: text only — voice/audio have no backend there yet. */}
+        {materialBox && (
+          <div style={{ marginBottom:8 }}>{materialBox}</div>
+        )}
         {chatMode === "guide" ? (
           <div style={{ marginBottom:8 }}>
             <FortizoChatComposer

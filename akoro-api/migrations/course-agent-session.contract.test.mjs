@@ -33,9 +33,9 @@ test("the chip is an Agent session opener, not a dead toggle", () => {
 test("the session is the shared reader with the video as content", () => {
   assert.ok(page.includes("<AgentSessionViewer"), "the page renders the session viewer");
   assert.ok(page.includes("onAgentSession={openAgentSession}"), "both views forward the opener");
-  assert.ok(viewer.includes("<SessionReaderModal"), "it opens in the real session reader");
+  assert.ok(viewer.includes("<TeachAgentModal"), "it opens a real teaching session");
   assert.ok(viewer.includes("kind: 'video'"), "the content is the video");
-  assert.ok(viewer.includes("media={stream ? {"), "through the reader's media seam (only with a real stream)");
+  assert.ok(viewer.includes("media: stream ? {"), "through the reader's media seam (only with a real stream)");
   assert.ok(reader.includes("startAt={media.startAt}"), "resume position flows through the reader");
   assert.ok(reader.includes("onTimeUpdate={media.onTimeUpdate}"), "position ticks flow through the reader");
 });
