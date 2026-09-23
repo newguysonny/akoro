@@ -16,11 +16,17 @@
  * Word on tools: a video carries no extractable text, so generated tools
  * say so honestly (the Q&A and Discussion boards work regardless — the
  * learner can ask their agent over what they're watching).
+ *
+ * The session PARKS on the Now-Studying bar the way records and teach
+ * sessions do: title + course, progress following the video, and a
+ * snapshot ({slug, lessonId}) so the bar can bring the learner straight
+ * back here. Guests don't park (no user to park for).
  */
 
 import { useEffect, useRef, useState } from 'react';
 import SessionReaderModal from '../teaching/SessionReaderModal.jsx';
 import { API } from '../../services/api.js';
+import { setNowStudying, updateNowProgress } from '../../utils/nowStudying.js';
 import { Icon } from '../common/Icons.jsx';
 import { BRAND, RED } from '../../constants.js';
 
@@ -29,6 +35,10 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
   const [err, setErr]     = useState('');
   const [stream, setStream] = useState(null);                            // { url, lastPosition }
   const completedRef = useRef(false);
+
+  // Now-Studying parking (signed-in learners only — guests have no bar).
+  const uid  = (() => { try { return (JSON.parse(localStorage.getItem('akoro_user')) || {}).id || null; } catch { return null; } })();
+  const barId = course?.id && lesson?.id ? `course-${course.id}-${lesson.id}` : null;
 
   /* The same stream fetch the course player performs — one timeline. */
   useEffect(() => {
@@ -50,9 +60,24 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
         if (!d.video_url) { setState('empty'); return; }   // lesson exists, video not published yet
         setStream({ url: d.video_url, lastPosition: d.progress?.last_position_seconds || 0 });
         setState('ready');
+        // The session is really happening — park it on the Now-Studying bar.
+        if (uid && barId) {
+          setNowStudying(uid, {
+            type: 'course', id: barId,
+            title: lesson?.title || course?.title || 'Lesson',
+            sub: course?.title || 'Course',
+            emoji: 'ti-video',
+            progress: lesson?.done ? 100 : (lesson?.progress || 0),
+            snapshot: { slug: course?.slug, lessonId: lesson?.id },
+          });
+        }
       })
       .catch((e) => { if (alive) { setErr(e?.message || 'Couldn\u2019t load this lesson.'); setState('error'); } });
     return () => { alive = false; };
+    // Keyed on the lesson identity alone: the parent holds course/lesson in
+    // state, so their field reads here change together with the id — re-running
+    // on every field would refetch (and re-park) mid-session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson?.id]);
 
   /* Persist position/completion — the same endpoints and rules the
@@ -65,9 +90,11 @@ export default function AgentSessionViewer({ course, lesson, onClose }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ position }),
     }).catch(() => {});
+    if (uid && barId) updateNowProgress(uid, barId, Math.max(0, Math.min(100, Math.round((position / duration) * 100))));
     if (!completedRef.current && position >= duration - 5) {
       completedRef.current = true;
       fetch(`${API}/api/lessons/${lesson.id}/complete`, { method: 'POST', credentials: 'include' }).catch(() => {});
+      if (uid && barId) updateNowProgress(uid, barId, 100);
     }
   };
 

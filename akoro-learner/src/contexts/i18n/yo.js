@@ -683,6 +683,7 @@ export const YO = {
   'dhub.course_results':     'Àwọn èsì kẹ́kọ̀ọ́',
   'now.resume':              'Tún bẹ̀rẹ̀ ẹ̀kọ́',
   'now.resume_battle':   'Tún ìjà bẹ̀rẹ̀',
+  'now.session_ended':   'Àwọn ìdíwòyè yìí kò sí mọ́',
   'now.dismiss':             'Fi pamọ́',
   'now.prev':                'Iṣaaju',
   'now.next':                'Atẹle',

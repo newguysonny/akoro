@@ -663,6 +663,7 @@ export const AR = {
   'dhub.course_results':     'نتائج الدورات',
   'now.resume':              'متابعة الدراسة',
   'now.resume_battle':   'استئناف المعركة',
+  'now.session_ended':   'هذه الجلسة لم تعد متاحة',
   'now.dismiss':             'إخفاء',
   'now.prev':                'السابق',
   'now.next':                'التالي',

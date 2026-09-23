@@ -682,6 +682,7 @@ export const IG = {
   'dhub.course_results':     'Nsonaazụ kọsị',
   'now.resume':              'Gaa n’ihu ọmụmụ',
   'now.resume_battle':   'Malite agha ọzọ',
+  'now.session_ended':   'Oge mmụta a adịghịzị adị',
   'now.dismiss':             'ZoO',
   'now.prev':                'Ihe gara aga',
   'now.next':                'Ihe na-esote',

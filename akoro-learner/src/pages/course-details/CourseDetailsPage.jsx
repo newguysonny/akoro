@@ -72,6 +72,17 @@ export default function CourseDetailsPage() {
       setData(mapped);
       setCourseType(mapped.type);
       setIsEnrolled(enrolled);
+      // Reopening from the Now-Studying bar: ?agent=<lessonId> jumps straight
+      // back into the agent session on that lesson (consumed once — a refresh
+      // shows the plain course page, not a loop of reopenings).
+      try {
+        const agentParam = new URLSearchParams(window.location.search).get('agent');
+        if (agentParam) {
+          window.history.replaceState({}, '', window.location.pathname);
+          const target = mapped.modules.flatMap((m) => m.lessons || []).find((l) => l?.id === agentParam);
+          if (target) { setAgentLesson(target); setAgentOpen(true); }
+        }
+      } catch { /* no search params — nothing to reopen */ }
     })().finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [slug]);

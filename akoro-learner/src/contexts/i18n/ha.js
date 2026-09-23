@@ -664,6 +664,7 @@ export const HA = {
   'dhub.course_results':     'Sakamakon darussa',
   'now.resume':              'Ci gaba da karatu',
   'now.resume_battle':   'Sake yaƙin',
+  'now.session_ended':   'Wannan zaman ɗin ba ya samuwa yanzu',
   'now.dismiss':             'Boyewa',
   'now.prev':                'Na baya',
   'now.next':                'Na gaba',

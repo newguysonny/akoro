@@ -682,6 +682,7 @@ export const PCM = {
   'dhub.course_results':     'Course results',
   'now.resume':              'Continue studying',
   'now.resume_battle':   'Resume the battle',
+  'now.session_ended':   'Dis session no dey available again',
   'now.dismiss':             'Hide am',
   'now.prev':                'Di one before',
   'now.next':                'Di next one',

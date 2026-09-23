@@ -765,6 +765,7 @@ export const EN = {
   'dhub.course_results':     'Course results',
   'now.resume':              'Resume studying',
   'now.resume_battle':   'Resume battle',
+  'now.session_ended':   'This session is no longer available',
   'now.studying':        'Now studying',
   'now.dismiss':             'Dismiss',
   'now.prev':                'Previous',

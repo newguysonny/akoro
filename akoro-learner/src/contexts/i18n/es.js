@@ -670,6 +670,7 @@ export const ES = {
   'dhub.course_results':     'Resultados de cursos',
   'now.resume':              'Retomar el estudio',
   'now.resume_battle':   'Reanudar la batalla',
+  'now.session_ended':   'Esta sesión ya no está disponible',
   'now.dismiss':             'Descartar',
   'now.prev':                'Anterior',
   'now.next':                'Siguiente',

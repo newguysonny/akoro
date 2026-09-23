@@ -9,6 +9,7 @@ import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import RecordSessionViewer, { recordFileType } from '../components/library/RecordSessionViewer.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
+import { useNowStudying } from '../utils/nowStudying.js';
 
 /* Icon + accent per library kind (tabler icons, matches the app's icon style) */
 const TYPE_META = {
@@ -266,6 +267,9 @@ function LibraryItem({ item, onOpen }) {
 export default function LibraryPage() {
   const navigate = useNavigate();
   const { t } = useLang();
+  // Now-Studying parking — the same tracking the dashboard shelf gives
+  // records, so a record opened HERE parks on the bar too.
+  const [, nowActs] = useNowStudying(STUDENT_ID);
   const [searchParams] = useSearchParams();
   const [items, setItems]       = useState([]);
   const [records, setRecords]   = useState([]);
@@ -311,6 +315,13 @@ export default function LibraryPage() {
      session uses, with the file itself as the content. Links stay links. */
   const openRecord = (r) => {
     if (!r) return;
+    // Park on the Now-Studying bar first (same shape as the dashboard).
+    const kindLabel = r.kind === 'link' ? t('records.tab_link') : r.kind === 'paste' ? t('records.tab_paste') : t('records.tab_upload');
+    nowActs.setCurrent({
+      type: 'record', id: r.id, title: r.name, sub: kindLabel,
+      emoji: r.kind === 'link' ? 'ti-link' : r.kind === 'paste' ? 'ti-clipboard' : 'ti-paperclip',
+      progress: r.progress || 0,
+    });
     if (r.kind === 'link' && r.url) { try { window.open(r.url, '_blank', 'noopener'); } catch { /* popup blocked */ } }
     else if (r.kind === 'upload' && !r.fileMissing) setViewer(r);
     else if (r.kind === 'paste') setViewer(r);
@@ -324,15 +335,17 @@ export default function LibraryPage() {
     if (!r.progress) {
       setRecords((rs) => rs.map(x => x.id === r.id ? { ...x, progress: 10 } : x));
       setRecordProgress(r.id, 10).catch(() => {});
+      nowActs.setProgress(r.id, 10);   // the parked bar item follows along
     }
     touchRecordOpened(r.id).catch(() => {});
-  }, []);
+  }, [nowActs]);
 
   /* Watched-through milestones from the player update the shelf. */
   const handleRecordProgress = useCallback((r, pct) => {
     setRecords((rs) => rs.map(x => x.id === r.id ? { ...x, progress: pct } : x));
     setRecordProgress(r.id, pct).catch(() => {});
-  }, []);
+    nowActs.setProgress(r.id, pct);    // keep the bar's scrubber honest
+  }, [nowActs]);
 
   const toRecordItem = (r) => ({ ...r, isRecordItem: true });
   const displayed = filter === 'all'

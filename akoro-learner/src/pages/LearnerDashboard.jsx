@@ -309,6 +309,9 @@ export default function LearnerDashboard() {
         sub: (SUBJECTS[ts.subject]?.label) || ts.subject || t('now.teaching'),
         emoji: ts.agentEmoji || agentProfile.emoji || '🤖',
         progress: ts.progress || 0,
+        // The session itself rides along — the bar reopens it DIRECTLY,
+        // no details sheet in between.
+        snapshot: { __restore: 'teach', teach: ts },
       });
     }
     setTeachSession(null);
@@ -324,6 +327,8 @@ export default function LearnerDashboard() {
         sub: d.subject || '',
         emoji: 'ti-refresh',
         progress: 0,
+        // The decay alert rides along so the bar reopens revision DIRECTLY.
+        snapshot: { __restore: 'decay', decay: d },
       });
     }
     setDecaySession(null);
@@ -361,10 +366,35 @@ export default function LearnerDashboard() {
       const fresh = battles.find(x => x.id === now.item.refId) || now.item.snapshot;
       if (fresh) setLiveBattleModal(fresh);
       else setToast(t('now.battle_ended'));
+    } else if (now.item.type === 'course') {
+      // A parked agent session (course video) — straight back to the course,
+      // reopening the session on the exact lesson.
+      const snap = now.item.snapshot;
+      if (snap?.slug) navigate(`/course/${snap.slug}${snap.lessonId ? `?agent=${snap.lessonId}` : ''}`);
+      else setToast(t('now.session_ended'));
     } else if (now.item.type === 'session') {
+      // Continue STRAIGHT into the session — no intermediate details sheet.
+      // A parked snapshot (minimized teach/decay) restores its own modal;
+      // a shelf session routes exactly the way the sheet's CTA used to:
+      // live class → join, decay → revise, agent w/ history → continuation,
+      // fresh → teaching config.
       const live = [...agentSessions, ...sessions].find(x => x.id === now.item.id);
-      openSessionTracked(live || now.item.snapshot || { id: now.item.id, title: now.item.title, progress: now.item.progress || 0 });
-    } else {
+      const snap = now.item.snapshot;
+      if (snap?.__restore === 'teach' && snap.teach) {
+        const ts = snap.teach;
+        setTeachSession(ts.id || ts.sessionId ? { ...ts, mode: 'continuation' } : ts);
+      } else if (snap?.__restore === 'decay' && snap.decay) {
+        setDecaySession(snap.decay);
+      } else if (live) {
+        if (live.type === 'live') { joinLive(live); return; }
+        const decay = decayBySession[live.id] || (live.decayAlertId && decayAlerts.find(a=>a.id===live.decayAlertId)) || null;
+        if (decay) setDecaySession(decay);
+        else if (live.hasHistory && live.type === 'agent') setTeachSession({ ...live, mode: 'continuation', agentName: agentProfile.name, agentEmoji: agentProfile.emoji });
+        else { setConfigInitial({ topic: live.topic, subject: live.subject ? live.subject.charAt(0).toUpperCase()+live.subject.slice(1) : 'Science' }); setConfigOpen(true); }
+      } else {
+        setToast(t('now.session_ended'));
+      }
+    } else if (now.item.type === 'record') {
       let r = shelfRecords.find(x => x.id === now.item.id);
       if (!r) {
         // Shelf state may be stale (added on another device) — try fresh.
