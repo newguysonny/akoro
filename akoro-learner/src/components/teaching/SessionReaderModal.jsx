@@ -1480,9 +1480,11 @@ export default function SessionReaderModal({
                 kind={media.kind}
                 src={media.src}
                 title={media.title || docTitle}
+                startAt={media.startAt}
                 onReady={setPlayerApi}
                 onState={setPlayerState}
                 onPosition={media.onPosition}
+                onTimeUpdate={media.onTimeUpdate}
                 downloadUrl={media.downloadUrl}
                 downloadName={media.downloadName}
               />

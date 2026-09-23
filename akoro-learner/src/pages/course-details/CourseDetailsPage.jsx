@@ -13,6 +13,7 @@ import { API } from '../../services/api.js';
 import { BRAND, GREEN, RED } from '../../constants.js';
 import Toast from '../../components/common/Toast.jsx';
 import AkoroLogo from '../../components/common/AkoroLogo.jsx';
+import AgentSessionViewer from '../../components/courses/AgentSessionViewer.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
 import { INK, MUTED, BORDER, LIGHT, BG, FONT, GlobalCss, card, Btn, Avatar, LiveBadge, StarRow, PLATFORMS, PlatformBadge, ActionChips, SectionTitle, DEFAULT_MODULES, DEFAULT_COURSE, VideoPlayer, Curriculum, RV_EMOJI, RV_BG, Reviews, AGENTS, BATTLES, BattleCard, BattlesSection, REVISIONS, RV_HOST_EMOJI, RV_HOST_BG, RevisionsSection, mapCourse, CourseOverview, EnrolledVideoView } from './parts.jsx';
@@ -43,6 +44,11 @@ export default function CourseDetailsPage() {
   };
   const [data, setData] = useState(null);
   const [courseType, setCourseType] = useState('live');
+  // "Agent session" — the course video opened as a learning session in the
+  // shared reader (tools, Q&A, transport). Opened with the current lesson.
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentLesson, setAgentLesson] = useState(null);
+  const openAgentSession = (lesson) => { setAgentLesson(lesson); setAgentOpen(true); };
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
@@ -175,15 +181,24 @@ export default function CourseDetailsPage() {
         {loading ? (
           <div style={{ height: 200, borderRadius: 22, background: '#EDE8E1', animation: 'cp-pulse 1.5s ease infinite' }} />
         ) : isEnrolled && courseType === 'video' ? (
-          <EnrolledVideoView course={view.course} modules={view.modules} />
+          <EnrolledVideoView course={view.course} modules={view.modules} onAgentSession={openAgentSession} />
         ) : (
           <CourseOverview
             type={courseType} isEnrolled={isEnrolled} course={view.course} modules={view.modules}
             onPlay={() => {}} onEnrol={enroll} enrolling={enrolling}
             onAddToCart={addToCart} addingCart={addingCart} inCart={inCart(view.course.id)}
-            onJoinLive={() => navigate('/app')} />
+            onJoinLive={() => navigate('/app')} onAgentSession={openAgentSession} />
         )}
       </div>
+
+      {/* The agent session — the course video in the shared session reader */}
+      {agentOpen && (
+        <AgentSessionViewer
+          course={view.course}
+          lesson={agentLesson}
+          onClose={() => setAgentOpen(false)}
+        />
+      )}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>

@@ -73,9 +73,8 @@ const PlatformBadge = ({ platform }) => {
   return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px', borderRadius: 100, background: cfg[0], color: '#fff', fontSize: 10, fontWeight: 800 }}><Video size={10} />{cfg[1]}</span>;
 };
 
-function ActionChips({ course }) {
+function ActionChips({ course, onAgentSession }) {
   const [calAdded, setCalAdded] = useState(false);
-  const [agentLinked, setAgentLinked] = useState(false);
   const [copied, setCopied] = useState(false);
   const share = async () => {
     const url = typeof window !== 'undefined' ? window.location.href : '';
@@ -87,7 +86,7 @@ function ActionChips({ course }) {
   };
   const chips = [
     { key: 'cal', label: calAdded ? 'Added' : 'Add to calendar', icon: <CalendarPlus size={13} />, active: calAdded, onClick: () => setCalAdded((v) => !v) },
-    { key: 'agent', label: agentLinked ? 'Agent linked' : 'Link my agent', icon: <Brain size={13} />, active: agentLinked, onClick: () => setAgentLinked((v) => !v) },
+    { key: 'agent', label: 'Agent session', icon: <Brain size={13} />, onClick: () => onAgentSession?.() },
     { key: 'share', label: copied ? 'Link copied' : 'Share class', icon: copied ? <Check size={13} /> : <Share2 size={13} />, active: copied, onClick: share },
     { key: 'host', label: 'Host revision session', icon: <Plus size={13} />, onClick: () => {} },
     { key: 'report', label: 'Report', icon: <Flag size={13} />, onClick: () => {} },
@@ -579,7 +578,7 @@ function mapCourse(api) {
 }
 
 /* ── guest / overview view ────────────────────────────────── */
-function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart }) {
+function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart, onAgentSession }) {
   const isVideo = type === 'video';
   const isFree = course.priceLabel === 'Free';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
@@ -634,7 +633,12 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       </div>
 
       {/* Action chips */}
-      <ActionChips course={course} />
+      <ActionChips course={course} onAgentSession={() => {
+        // Open on the first lesson that really exists — the viewer is honest
+        // when the stream is not accessible to this learner yet.
+        const firstLesson = (modules || []).flatMap((m) => m.lessons || []).find((l) => l?.id) || null;
+        onAgentSession?.(firstLesson);
+      }} />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
@@ -730,7 +734,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
 }
 
 /* ── enrolled video player view ───────────────────────────── */
-function EnrolledVideoView({ course, modules }) {
+function EnrolledVideoView({ course, modules, onAgentSession }) {
   const first = (() => {
     for (const m of modules) { const l = (m.lessons || []).find((x) => x.type === 'video'); if (l) return { ...l, module: m.title }; }
     return { title: 'Lesson', type: 'video', module: modules[0]?.title };
@@ -778,7 +782,7 @@ function EnrolledVideoView({ course, modules }) {
       </div>
 
       {/* Action chips */}
-      <ActionChips course={course} />
+      <ActionChips course={course} onAgentSession={() => onAgentSession?.(lesson)} />
 
       <div style={{ display: 'flex', gap: 4, padding: 4, background: '#F0ECE6', borderRadius: 14, width: 'fit-content', flexWrap: 'wrap' }}>
         {[['content', 'Course content'], ['about', 'About'], ['reviews', 'Reviews'], ['battles', 'Battles'], ['revisions', 'Live revisions']].map(([id, label]) => (

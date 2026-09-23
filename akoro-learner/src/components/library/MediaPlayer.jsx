@@ -16,7 +16,10 @@
  * cycleRate / state) so the reader's own toolbar buttons drive the same
  * element; `onState` keeps its icons honest. `onPosition` reports
  * watched-through ratio at 10% milestones so the shelf's progress bar
- * reflects reality.
+ * reflects reality. `startAt` resumes where the learner left off,
+ * `onTimeUpdate` (throttled to 10s) lets a parent persist position, and
+ * HLS (.m3u8) sources attach via hls.js — the same seam the course
+ * player uses — so streamed course videos play here too.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -33,7 +36,7 @@ const fmt = (sec) => {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 };
 
-export default function MediaPlayer({ kind, src, title, onReady, onState, onPosition, downloadName, downloadUrl }) {
+export default function MediaPlayer({ kind, src, title, startAt = 0, onReady, onState, onPosition, onTimeUpdate, downloadName, downloadUrl }) {
   const elRef    = useRef(null);
   const [playing, setPlaying]   = useState(false);
   const [time, setTime]         = useState(0);
@@ -41,6 +44,9 @@ export default function MediaPlayer({ kind, src, title, onReady, onState, onPosi
   const [rate, setRate]         = useState(1);
   const [error, setError]       = useState(false);
   const milestone = useRef(0);
+  const tickRef   = useRef(0);
+  const timeUpdateRef = useRef(onTimeUpdate);
+  timeUpdateRef.current = onTimeUpdate;
 
   /* Element events → React state (and the toolbar's). */
   useEffect(() => {
@@ -58,8 +64,20 @@ export default function MediaPlayer({ kind, src, title, onReady, onState, onPosi
         const step = Math.floor(ratio * 10);
         if (step > milestone.current) { milestone.current = step; onPosition?.(step * 10); }
       }
+      // Position persistence hook — throttled like the course player (10s).
+      const now = Date.now();
+      if (timeUpdateRef.current && now - tickRef.current >= 10000 && Number.isFinite(el.duration) && el.currentTime > 0) {
+        tickRef.current = now;
+        timeUpdateRef.current({ time: el.currentTime, duration: el.duration });
+      }
     };
-    const onMeta  = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+    const onMeta  = () => {
+      setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+      // Resume where the learner left off (course videos carry last position).
+      if (startAt > 0 && Number.isFinite(el.duration) && startAt < el.duration) {
+        try { el.currentTime = startAt; } catch { /* ignore */ }
+      }
+    };
     const onEnd   = () => { milestone.current = 10; onPosition?.(100); sync(); };
     const onErr   = () => setError(true);
     el.addEventListener('play', sync);
@@ -78,7 +96,34 @@ export default function MediaPlayer({ kind, src, title, onReady, onState, onPosi
       el.removeEventListener('ended', onEnd);
       el.removeEventListener('error', onErr);
     };
-  }, [onState, onPosition, src]);
+  }, [onState, onPosition, src, startAt]);
+
+  /* Attach the source. Plain files go straight to the element; HLS (.m3u8)
+     attaches through hls.js — the same seam the course player uses —
+     falling back to the element when neither is supported. */
+  useEffect(() => {
+    if (kind !== 'video' || !src) return;
+    const video = elRef.current;
+    if (!video) return;
+    let cancelled = false;
+    let detach = () => {};
+    (async () => {
+      if (/\.m3u8($|\?)/i.test(src)) {
+        const Hls = (await import('hls.js')).default;
+        if (cancelled) return;
+        if (Hls.isSupported()) {
+          const hls = new Hls({ enableWorker: true });
+          hls.loadSource(src);
+          hls.attachMedia(video);
+          detach = () => { try { hls.destroy(); } catch { /* ignore */ } };
+          return;
+        }
+      }
+      video.src = src;
+      detach = () => { try { video.removeAttribute('src'); video.load?.(); } catch { /* ignore */ } };
+    })();
+    return () => { cancelled = true; detach(); };
+  }, [kind, src]);
 
   /* The imperative handle the shared toolbar drives. */
   const toggle = useCallback(() => {
