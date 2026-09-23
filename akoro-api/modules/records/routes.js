@@ -8,10 +8,10 @@
  * opened). Records now live on the server and follow the learner across
  * devices:
  *
- *   POST   /api/records/upload-url   → presign an R2 PUT (client uploads
- *                                       the raw bytes itself — 500 MB
- *                                       lesson recordings never touch
- *                                       this API)
+ *   POST   /api/records/upload-url   → presign an upload PUT — R2, or the
+ *                                       Supabase Storage fallback for files
+ *                                       ≤ 5 MB when R2 isn't configured
+ *                                       (bytes still bypass this API)
  *   POST   /api/records              → register the record (upload after
  *                                       its PUT, or a link, or a paste)
  *   GET    /api/records              → my shelf, newest first; uploads
@@ -34,6 +34,7 @@ import db                   from "../../db.js";
 import { authenticateToken } from "../auth/routes.js";
 import {
   recordsStorageEnabled, createPresignedUpload, createPresignedDownload, removeRecordFile,
+  ownsRecordFileKey, isFallbackFileKey, MAX_FALLBACK_FILE_BYTES,
 } from "./lib/storage.js";
 
 const router = Router();
@@ -48,7 +49,7 @@ const res201 = (res, data) => res.status(201).json({ success: true, data });
 const res400 = (res, msg)  => res.status(400).json({ success: false, message: msg });
 const res403 = (res, msg)  => res.status(403).json({ success: false, message: msg });
 const res404 = (res, msg)  => res.status(404).json({ success: false, message: msg });
-const res503 = (res)       => res.status(503).json({ success: false, message: "File storage is not configured on this deployment — set the R2_* variables." });
+const res503 = (res, msg)  => res.status(503).json({ success: false, message: msg || "File storage is not configured on this deployment — set the R2_* variables." });
 
 const MAX_FILE_BYTES   = 500 * 1024 * 1024;  // 500 MB — matches the sheet's guard
 const MAX_TEXT_CHARS   = 20_000;             // matches the sheet's counter
@@ -72,7 +73,9 @@ const detectType = (mime = "", name = "") => {
 };
 
 /* Row → API shape. Uploads with bytes get a fresh presigned URL; legacy
-   detail-only rows get fileMissing so the viewer explains itself. */
+   detail-only rows get fileMissing so the viewer explains itself. If the
+   store can't sign one row's URL, that record degrades to "no saved
+   file" — the shelf itself must never 500 on a storage hiccup. */
 const toApi = async (r) => ({
   id: r.id,
   kind: r.kind,
@@ -85,7 +88,12 @@ const toApi = async (r) => ({
   fileMissing: r.kind === "upload" && !r.file_key,
   url: r.url || null,
   content: r.kind === "paste" ? (r.content || "") : undefined,
-  fileUrl: r.kind === "upload" && r.file_key ? await createPresignedDownload(r.file_key) : null,
+  fileUrl: r.kind === "upload" && r.file_key
+    ? await createPresignedDownload(r.file_key).catch((err) => {
+        console.error("[records] could not sign fileUrl:", err?.message || err);
+        return null;
+      })
+    : null,
   createdAt: r.created_at,
   lastOpenedAt: r.last_opened_at || null,
 });
@@ -98,7 +106,12 @@ router.post("/upload-url", authenticateToken, asyncHandler(async (req, res) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return res400(res, "A file size is required.");
   if (bytes > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
   if (!detectType(mime, name)) return res400(res, "Only PDFs, text files, images, audio or video can be uploaded.");
-  if (!recordsStorageEnabled()) return res503(res);
+  // No R2 on this deployment? Files up to 5 MB ride the Supabase Storage
+  // fallback (same signed-PUT protocol — the API still never proxies the
+  // bytes); larger ones honestly need R2.
+  if (!recordsStorageEnabled() && bytes > MAX_FALLBACK_FILE_BYTES) {
+    return res503(res, "This deployment has no R2 file storage yet — files up to 5 MB upload to the built-in Supabase storage; larger ones need the R2_* variables.");
+  }
 
   const { uploadUrl, fileKey } = await createPresignedUpload(String(name).trim(), mime, req.user.id);
   res200(res, { uploadUrl, fileKey });
@@ -117,16 +130,21 @@ router.post("/", authenticateToken, asyncHandler(async (req, res) => {
   if (body.kind === "upload") {
     const fileKey = String(body.fileKey || "");
     const legacy  = body.legacy === true;   // device record from before uploads kept bytes — details only
+    const bytes   = Number(body.size) || 0;
     if (fileKey) {
       // The key must live under this learner's own prefix — anything else is
-      // someone else's object (or no one's).
-      if (!fileKey.startsWith(`records/${userId}/`) || fileKey.includes("..")) {
+      // someone else's object (or no one's), in either store.
+      if (!ownsRecordFileKey(fileKey, userId)) {
         return res403(res, "That file key does not belong to you.");
+      }
+      // The fallback bucket is hard-capped at 5 MB; a row must not claim a
+      // file bigger than its store will actually hold.
+      if (isFallbackFileKey(fileKey) && bytes > MAX_FALLBACK_FILE_BYTES) {
+        return res400(res, "Files on the built-in Supabase storage are capped at 5 MB.");
       }
     } else if (!legacy) {
       return res400(res, "The upload did not finish — no file key to register.");
     }
-    const bytes = Number(body.size) || 0;
     if (!name || (!legacy && bytes <= 0)) return res400(res, "File details are missing.");
     if (bytes > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
     if (!legacy && !detectType(body.mime, name)) return res400(res, "Only PDFs, text files, images, audio or video can be uploaded.");
@@ -205,7 +223,7 @@ router.delete("/:id", authenticateToken, asyncHandler(async (req, res) => {
 
 // ─── GET /api/records/:id/file — stable download seam (302 → presigned) ─────
 // The viewer streams from the list's presigned fileUrl; this endpoint is the
-// friendly "save a copy" link (cookies auth it, R2 serves the bytes).
+// friendly "save a copy" link (cookies auth it, the store serves the bytes).
 router.get("/:id/file", authenticateToken, asyncHandler(async (req, res) => {
   const { data: existing } = await edu().from("records")
     .select("id, user_id, file_key, name").eq("id", req.params.id).maybeSingle();

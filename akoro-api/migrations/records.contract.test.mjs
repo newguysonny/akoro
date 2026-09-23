@@ -9,14 +9,16 @@ import test from "node:test";
  * pieces must agree for that to be true:
  *
  *   storage  — the bytes live in R2 (presigned PUT up, presigned GET down;
- *              the API never proxies a byte, so 500 MB recordings work)
+ *              the API never proxies a byte, so 500 MB recordings work);
+ *              without R2, files ≤ 5 MB ride a private Supabase Storage
+ *              bucket under the same signed-URL protocol
  *   shelf    — the rows live in edu.records and follow the learner across
  *              devices; legacy device rows migrate as details-only
  *   viewer   — PDF renders as real pages, text paginates, audio/video play
  *              with transport (±10s, seek, 0.75×–2×) in the SHARED toolbar
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard] = await Promise.all([
+const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample] = await Promise.all([
   read("2026-records.sql"),
   read("manifest.json"),
   read("../modules/records/routes.js"),
@@ -31,6 +33,8 @@ const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryP
   read("../../akoro-learner/src/components/teaching/SessionReaderModal.jsx"),
   read("../../akoro-learner/src/components/tabs/DiscoverSearchPage.jsx"),
   read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
+  read("../config/index.js"),
+  read("../.env.example"),
 ]);
 
 test("the shelf is a table that follows the learner, not a device", () => {
@@ -46,7 +50,7 @@ test("the shelf is a table that follows the learner, not a device", () => {
 
 test("the bytes never touch the API — presigned up, presigned down", () => {
   assert.ok(routes.includes('"/upload-url"'), "presign endpoint exists");
-  assert.ok(routes.includes("recordsStorageEnabled()"), "honest 503 when R2 is not configured");
+  assert.ok(routes.includes("recordsStorageEnabled()"), "honest 503 when R2 is missing and the file is over the fallback cap");
   assert.ok(storage.includes("records/${userId}/"), "object keys are scoped to the owner");
   assert.ok(storage.includes("createPresignedDownload"), "reads are presigned GETs");
   assert.ok(storage.includes("ResponseContentDisposition"), "downloads carry a friendly filename");
@@ -59,9 +63,38 @@ test("the bytes never touch the API — presigned up, presigned down", () => {
 });
 
 test("one learner can never register another's object", () => {
-  assert.ok(routes.includes("fileKey.startsWith(`records/${userId}/`)"), "key must live under the owner's prefix");
-  assert.ok(routes.includes('fileKey.includes("..")'), "path traversal rejected");
+  assert.ok(routes.includes("ownsRecordFileKey(fileKey, userId)"), "key must live under the owner's prefix — in either store");
+  assert.ok(storage.includes('if (key.includes("..")) return false;'), "path traversal rejected in both stores");
+  assert.ok(storage.includes("key.startsWith(`records/${userId}/`) || key.startsWith(`${FALLBACK_PREFIX}${userId}/`)"),
+    "both stores scope keys to the owner");
   assert.ok(routes.includes("existing.user_id !== userId"), "PATCH/DELETE/file check ownership");
+});
+
+test("no R2 yet? small files still work — the Supabase Storage fallback", () => {
+  // The fallback is the same protocol as R2 (signed PUT up, signed GET down,
+  // bytes never through the API), so the learner client stays store-agnostic —
+  // the Library can be used for real before R2 is wired up.
+  assert.ok(storage.includes("MAX_FALLBACK_FILE_BYTES = 5 * 1024 * 1024"), "the fallback is capped at 5 MB");
+  assert.ok(routes.includes("if (!recordsStorageEnabled() && bytes > MAX_FALLBACK_FILE_BYTES)"),
+    "over the cap without R2 → honest 503, not a mystery failure");
+  assert.ok(routes.includes("This deployment has no R2 file storage yet"), "the 503 says what to do about it");
+  assert.ok(storage.includes("createSignedUploadUrl(key)"), "fallback uploads are signed Supabase PUTs — bytes still bypass the API");
+  assert.ok(storage.includes("createSignedUrl(fileKey, DOWNLOAD_TTL_SECONDS, name ? { download: name } : {})"),
+    "fallback reads are signed GETs with the same 6h life");
+  assert.ok(storage.includes("createBucket(FALLBACK_BUCKET, { public: false, fileSizeLimit: MAX_FALLBACK_FILE_BYTES })"),
+    "the fallback bucket is private and hard-capped by Supabase itself");
+  assert.ok(storage.includes('const FALLBACK_PREFIX = "records-supabase/";'), "the store travels in the file_key prefix");
+  // Reads AND deletes dispatch on the key, so wiring R2 up later never
+  // orphans the records uploaded before it existed.
+  assert.equal((storage.match(/isFallbackFileKey\(fileKey\)/g) || []).length, 2,
+    "both the read and delete paths dispatch on the key's store");
+  assert.ok(routes.includes("if (isFallbackFileKey(fileKey) && bytes > MAX_FALLBACK_FILE_BYTES)"),
+    "registration refuses to claim a bigger fallback file than the bucket holds");
+  assert.ok(routes.includes("createPresignedDownload(r.file_key).catch("),
+    "one bad signature degrades that record to 'no saved file' — the shelf never 500s");
+  assert.ok(configJs.includes('recordsBucket: env.SUPABASE_RECORDS_BUCKET ?? "akoro-records"'), "the bucket is named in config");
+  assert.ok(envExample.includes("SUPABASE_RECORDS_BUCKET"), ".env.example documents the fallback");
+  assert.ok(!recordsApi.includes("supabase"), "the learner client stays store-agnostic — zero client changes");
 });
 
 test("every records route is the learner's own and authed", () => {

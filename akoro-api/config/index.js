@@ -40,6 +40,9 @@ const config = {
   supabase: {
     url:        env.SUPABASE_URL,
     serviceKey: env.SUPABASE_SERVICE_KEY,
+    // Private Storage bucket holding Library record files when R2 isn't
+    // configured (created on first use; ≤ 5 MB per file).
+    recordsBucket: env.SUPABASE_RECORDS_BUCKET ?? "akoro-records",
   },
 
   // ── Database connection pool ─────────────────────────────────────────────
