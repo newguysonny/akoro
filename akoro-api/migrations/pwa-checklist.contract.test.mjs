@@ -129,3 +129,33 @@ test("offline: the Workbox SW precaches the shell and serves reads offline", () 
   assert.ok(updatePrompt.includes("registerSW") && updatePrompt.includes("onNeedRefresh"),
     "the app registers the SW and prompts on new versions");
 });
+
+test("screenshots: the richer install dialog gets rule-abiding captures", async () => {
+  // Checklist screenshot rules: PNG/JPEG only, 320–3840px, max dimension
+  // ≤ 2.3× min, same form_factor shares an aspect ratio, narrow = mobile /
+  // wide = desktop. (Current captures are branded placeholders — swap the
+  // two files in public/screenshots/ for real ones; the rules stay.)
+  const shots = manifest.screenshots || [];
+  assert.ok(shots.length >= 2 && shots.length <= 8, "at least one capture per form factor, never over the browser cap");
+  const byFactor = {};
+  for (const s of shots) {
+    assert.ok(s.form_factor === "narrow" || s.form_factor === "wide", "form_factor is narrow or wide");
+    assert.equal(s.type, "image/png", "PNG format");
+    assert.ok(s.label, "each capture is labelled");
+    const png = new URL(dir + "public" + s.src, import.meta.url);
+    const bytes = await readFile(png);
+    assert.equal(bytes.readUInt32BE(0), 0x89504e47, `${s.src} is a real PNG`);
+    const w = bytes.readUInt32BE(16), h = bytes.readUInt32BE(20);
+    const [sw, sh] = s.sizes.split("x").map(Number);
+    assert.ok(w >= 320 && h >= 320 && w <= 3840 && h <= 3840, `${s.src} within 320–3840px`);
+    assert.equal(w, sw, `${s.src} declared width matches the actual file`);
+    assert.equal(h, sh, `${s.src} declared height matches the actual file`);
+    assert.ok(Math.max(w, h) / Math.min(w, h) <= 2.3, `${s.src} aspect ratio within the 2.3× rule`);
+    if (s.form_factor === "narrow") assert.ok(h > w, "narrow captures are portrait (mobile)");
+    else assert.ok(w > h, "wide captures are landscape (desktop)");
+    (byFactor[s.form_factor] ||= []).push(`${w}/${h}`);
+  }
+  for (const [factor, ratios] of Object.entries(byFactor)) {
+    assert.ok(new Set(ratios).size === 1, `all ${factor} captures share one aspect ratio`);
+  }
+});
