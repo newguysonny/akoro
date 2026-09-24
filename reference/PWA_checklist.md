@@ -1,4 +1,6 @@
-‎import { useState, useEffect } from 'react';
+‎1.installation
+
+import { useState, useEffect } from 'react';
 ‎
 ‎// beforeinstallprompt is not in the standard TS lib — extend Window here
 ‎interface BeforeInstallPromptEvent extends Event {
@@ -393,3 +395,94 @@
 ‎ * • Generate maskable icons at: https://maskable.app
 ‎ */
 ‎
+2.Notifications:
+‎
+‎const registration = await navigator.serviceWorker.getRegistration();
+‎
+‎const base64UrlToUint8Array = base64UrlData => {
+‎  const padding = '='.repeat((4 - base64UrlData.length % 4) % 4);
+‎  const base64 = (base64UrlData + padding)
+‎  .replace(/\-/g, '+')
+‎  .replace(/_/g, '/');
+‎
+‎  const rawData = atob(base64);
+‎  const buffer = new Uint8Array(rawData.length);
+‎
+‎  for(let i = 0; i < rawData.length; ++i) {
+‎    buffer[i] = rawData.charCodeAt(i);
+‎  }
+‎
+‎  return buffer;
+‎};
+‎
+‎const subscribeToPushMessages = (registration, publicKey) => registration.pushManager.subscribe({
+‎  userVisibleOnly: true,
+‎  applicationServerKey: base64UrlToUint8Array(publicKey)
+‎});
+‎
+‎const unsubscribeFromPushMessages = subscription => subscription.unsubscribe();
+‎
+‎const getPushSubscription = () => registration.pushManager.getSubscription();
+‎
+‎const apiUrl = '...';
+‎const sendPushMessage = async ({title, message, delay, interaction}) => {
+‎  const pushSubscription = await getPushSubscription();
+‎  const delayTime = !Number.isInteger(parseInt(delay, 10)) ? 0 :
+‎    delay > 5 ? 5 : delay;
+‎
+‎  fetch(apiUrl, {
+‎    method: 'POST',
+‎    headers: {
+‎      'Content-Type': 'application/json'
+‎    },
+‎    body: JSON.stringify({
+‎      pushSubscription,
+‎      title,
+‎      message,
+‎      delay: delayTime * 1000,
+‎      interaction
+‎    })
+‎  });
+‎};
+‎
+‎// in service worker
+‎self.addEventListener('push', async e => {
+‎  const data = e.data.json();
+‎  const {title, message, interaction} = data;
+‎
+‎  const options = {
+‎    body: message,
+‎    icon: '/src/img/icons/icon-512x512.png',
+‎    vibrate: [100, 50, 100],
+‎    data: {
+‎      dateOfArrival: Date.now()
+‎    },
+‎    actions: [
+‎      {
+‎        action: 'confirm',
+‎        title: 'OK'
+‎      },
+‎      {
+‎        action: 'close',
+‎        title: 'Close notification'
+‎      },
+‎    ],
+‎    requireInteraction: interaction
+‎  };
+‎
+‎  e.waitUntil(
+‎    self.registration.showNotification(title, options)
+‎    .then(hasActiveClients)
+‎    .then((activeClients) => {
+‎      if(!activeClients) {
+‎        self.numBadges += 1;
+‎        navigator.setAppBadge(self.numBadges);
+‎      }
+‎    })
+‎    .catch(err => sendMessage(err))
+‎  )
+‎});
+‎    
+‎https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification
+‎https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API
+‎https://caniuse.com/#feat=notifications
