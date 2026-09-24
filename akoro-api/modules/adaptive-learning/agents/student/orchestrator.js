@@ -24,7 +24,10 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  // SUPABASE_SERVICE_ROLE_KEY is an alias for the app's standard
+  // SUPABASE_SERVICE_KEY (same service-role secret) — fall back so a
+  // deployment setting only the standard name still boots.
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
 );
 
 export const STUDENT_PHASES = {
