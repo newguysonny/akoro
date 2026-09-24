@@ -477,7 +477,6 @@ function SessionChatView({
         {chatMode === "guide" ? (
           <div style={{ marginBottom:8 }}>
             <FortizoChatComposer
-              dark
               value={input}
               onChange={onInputChange}
               onSend={guide?.onSend ? () => guide.onSend(input) : undefined}
@@ -493,7 +492,6 @@ function SessionChatView({
         ) : (
         <div style={{ marginBottom:8 }}>
           <FortizoChatComposer
-            dark
             value={input}
             onChange={onInputChange}
             onSend={onSend}

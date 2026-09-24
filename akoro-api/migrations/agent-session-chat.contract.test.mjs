@@ -13,13 +13,15 @@ import test from "node:test";
  * desktop/tablet the Fortizo split beside it.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [teach, chatView, viewer, recordTeach, dash, lib] = await Promise.all([
+const [teach, chatView, viewer, recordTeach, dash, lib, agentTab, composer] = await Promise.all([
   read("../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
   read("../../akoro-learner/src/components/teaching/SessionChatView.jsx"),
   read("../../akoro-learner/src/components/courses/AgentSessionViewer.jsx"),
   read("../../akoro-learner/src/components/library/RecordTeachSession.jsx"),
   read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
   read("../../akoro-learner/src/pages/LibraryPage.jsx"),
+  read("../../akoro-learner/src/components/tabs/AgentChatTab.jsx"),
+  read("../../akoro-learner/src/components/common/FortizoChatComposer.jsx"),
 ]);
 
 test("TeachAgentModal carries real material beside the teaching pump", () => {
@@ -73,4 +75,21 @@ test("the superseded viewers are gone", async () => {
   assert.ok(!libFiles.includes("RecordSessionViewer.jsx"), "RecordSessionViewer retired");
   const courseFiles = await readdir(new URL("../../akoro-learner/src/components/courses", import.meta.url));
   assert.ok(!courseFiles.includes("SessionChatPane.jsx"), "SessionChatPane retired");
+});
+
+test("the session composer matches the agent chat tab — no hardcoded dark", () => {
+  // The teaching sheet is theme-aware (--ak-* vars); the composer used to be
+  // pinned to its dark treatment, which washed out on the light theme. The
+  // agent chat tab renders the SAME FortizoChatComposer with its default
+  // (light) treatment — the session must match, in every mode.
+  const sessionComposerCalls = chatView.split("<FortizoChatComposer").length - 1;
+  assert.ok(sessionComposerCalls >= 2, "both teach and guide modes render the composer");
+  assert.ok(!/\{?\s*<FortizoChatComposer[^>]*\bdark\b/.test(chatView), "neither call site passes the dark override");
+  assert.ok(!agentTab.includes("<FortizoChatComposer") || !/\{?\s*<FortizoChatComposer[^>]*\bdark\b/.test(agentTab),
+    "the agent chat tab (the reference) stays on the default treatment");
+  // The shared composer's default is the light, theme-aware one.
+  assert.ok(composer.includes("const surface = dark ? 'rgba(255,255,255,.075)' : '#F8F9FC';"),
+    "light surface matches the agent tab");
+  assert.ok(composer.includes("const inputColor = dark ? '#E5EAFB' : 'var(--ak-text)';"),
+    "input text is the theme's own text color on the light path");
 });
