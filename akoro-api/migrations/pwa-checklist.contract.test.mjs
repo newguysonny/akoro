@@ -18,9 +18,11 @@ import test from "node:test";
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const dir = "../../akoro-learner/";
-const [hook, banner, manifestRaw, html, pushSw, pushApi, wakeLock, teachModal, decayModal, viteConfig, updatePrompt] = await Promise.all([
+const [hook, banner, sheet, siteChrome, manifestRaw, html, pushSw, pushApi, wakeLock, teachModal, decayModal, viteConfig, updatePrompt] = await Promise.all([
   read(dir + "src/hooks/usePwaInstall.js"),
   read(dir + "src/components/common/InstallBanner.jsx"),
+  read(dir + "src/components/common/InstallInstructionsSheet.jsx"),
+  read(dir + "src/components/SiteChrome.jsx"),
   read(dir + "public/manifest.json"),
   read(dir + "index.html"),
   read(dir + "public/push-sw.js"),
@@ -49,19 +51,25 @@ test("install: the hook catches beforeinstallprompt and knows the platform", () 
 });
 
 test("install: prompt-less browsers get their exact manual steps, not a dead button", () => {
-  assert.ok(banner.includes("const INSTALL_INSTRUCTIONS = {"), "per-platform instruction table");
+  assert.ok(sheet.includes("const INSTALL_INSTRUCTIONS = {"), "per-platform instruction table");
   for (const p of ["ios:", "'android-chrome':", "'android-firefox':", "'android-samsung':", "desktop:", "unknown:"]) {
-    assert.ok(banner.includes(p), `instructions exist for ${p}`);
+    assert.ok(sheet.includes(p), `instructions exist for ${p}`);
   }
-  assert.ok(banner.includes("Google Play Protect warning"), "Samsung Internet warns about Play Protect");
-  assert.ok(banner.includes("Works in Safari only"), "iOS note says which browsers can install");
+  assert.ok(sheet.includes("Google Play Protect warning"), "Samsung Internet warns about Play Protect");
+  assert.ok(sheet.includes("Works in Safari only"), "iOS note says which browsers can install");
+  assert.ok(sheet.includes("INSTALL_INSTRUCTIONS[platform] || INSTALL_INSTRUCTIONS.unknown"), "an unknown platform still gets generic steps");
+  assert.ok(sheet.includes('role="dialog"') && sheet.includes('aria-modal="true"'), "the sheet is a dialog");
+  assert.ok(sheet.includes("if (e.target === e.currentTarget) onClose();"), "backdrop tap closes the sheet");
+  assert.ok(sheet.includes("Install on {PLATFORM_LABELS[platform]"), "steps are titled with the learner's own platform");
+  assert.ok(sheet.includes("{i + 1}"), "steps are numbered");
+  // Both install surfaces share the ONE sheet — the steps tables never fork.
+  assert.ok(banner.includes("InstallInstructionsSheet"), "the in-app banner uses the shared sheet");
   assert.ok(banner.includes('if (canPrompt) { const r = await promptInstall(); if (r === \'accepted\') dismiss(); return; }'),
     "one tap installs where the native prompt exists");
   assert.ok(banner.includes("setSheetOpen(true);   // no native prompt on this browser"), "otherwise the steps sheet opens");
-  assert.ok(banner.includes('role="dialog"') && banner.includes('aria-modal="true"'), "the sheet is a dialog");
-  assert.ok(banner.includes("if (e.target === e.currentTarget) setSheetOpen(false);"), "backdrop tap closes the sheet");
-  assert.ok(banner.includes("Install on {PLATFORM_LABELS[platform]"), "steps are titled with the learner's own platform");
-  assert.ok(banner.includes("{i + 1}"), "steps are numbered");
+  assert.ok(siteChrome.includes("InstallInstructionsSheet"), "the landing-page header button uses the same sheet");
+  assert.ok(siteChrome.includes("setSheetOpen(true);"), "its no-native-prompt fallback opens the sheet");
+  assert.ok(!siteChrome.includes("Add Akoro to your Home Screen"), "the old tiny popover is gone");
 });
 
 test("install: the manifest is installable and Android-clippable", async () => {
