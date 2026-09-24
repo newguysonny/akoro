@@ -1,11 +1,18 @@
 /**
- * UpdatePrompt — shows a "new version available" banner when the service worker
- * has a newer build waiting, then auto-reloads after a short countdown (users
- * can reload immediately, or postpone — lazyWithRetry still catches any stale
- * chunk they hit in the meantime).
+ * UpdatePrompt — the service-worker update lifecycle's UI half.
  *
- * Registers the SW itself so it receives onNeedRefresh (vite-plugin-pwa is in
- * `prompt` mode). In dev, `registerSW` is a no-op, so this renders nothing.
+ * A new deploy installs a new SW that WAITS behind the old one (no skipWaiting
+ * baked into the SW — see vite.config.js). When the waiting worker is detected
+ * (on load, every 60s, and on tab focus) this banner appears and owns the
+ * swap: "Reload now" (or the countdown reaching 0) calls updateSW(true) →
+ * postMessage SKIP_WAITING → the new SW activates → controllerchange → the
+ * page reloads into the fresh build. Until then the old SW keeps serving the
+ * old page its own cached chunks, so nothing 404s mid-session. "Later" keeps
+ * the current version until the next check. The countdown pauses while a
+ * protected flow (live session, assessment) holds the activity lock.
+ *
+ * Registers the SW itself via vite-plugin-pwa's registerSW (prompt mode). In
+ * dev, `registerSW` is a no-op, so this renders nothing.
  */
 import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
@@ -23,14 +30,15 @@ export default function UpdatePrompt() {
     updateSW.current = registerSW({
       immediate: true,
       onNeedRefresh() { setSecs(COUNTDOWN); setShow(true); },
-      // Proactively poll for a new deploy so the banner fires BEFORE the user
-      // navigates into a stale (deleted) route chunk and white-screens. Checks
-      // shortly after load, every few minutes, and whenever the tab refocuses.
+      // Proactively poll for a new deploy so the banner fires as soon as one
+      // ships: shortly after load, every 60 seconds, and whenever the tab
+      // refocuses. (registration.update() is a cheap conditional fetch of
+      // sw.js — safe to do often.)
       onRegisteredSW(_url, registration) {
         if (!registration) return;
         const check = () => { registration.update().catch(() => {}); };
         setTimeout(check, 5000);
-        const id = setInterval(check, 5 * 60 * 1000);
+        const id = setInterval(check, 60 * 1000);
         const onVis = () => { if (document.visibilityState === 'visible') check(); };
         document.addEventListener('visibilitychange', onVis);
         window.addEventListener('focus', check);

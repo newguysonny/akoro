@@ -67,15 +67,19 @@ export default defineConfig({
         // last good copy. The Vercel SPA rewrite handles deep links.
         cleanupOutdatedCaches: true,
         clientsClaim: true,
-        // Activate a newly-deployed SW immediately instead of leaving it stuck
-        // in "waiting" behind the old one. Without this, a tab opened before a
-        // deploy keeps being served the OLD cached index.html (which points at
-        // deleted chunks) forever → the blank white screen that only cleared on
-        // the raw *.vercel.app origin. With skipWaiting + clientsClaim the fresh
-        // shell takes over on the next navigation, so reloads recover on their
-        // own. (No forced reload — the running page keeps its JS; pair with the
-        // chunkRetry escape hatch for anything loaded mid-swap.)
-        skipWaiting: true,
+        // NOTE: deliberately NO `skipWaiting` baked into the SW — a new build
+        // INSTALLS AND WAITS behind the old one, and UpdatePrompt owns the
+        // swap (Reload now / countdown → updateSW(true) → postMessage
+        // SKIP_WAITING → controllerchange → reload). Baking skipWaiting in
+        // activated the new SW mid-session: cleanupOutdatedCaches deleted the
+        // old precache under the still-running OLD page, whose next lazy chunk
+        // 404'd → the "hangs a bit, then refreshes" users saw after every
+        // deploy (chunkRetry caught it, but late, and the banner never showed
+        // because the waiting phase it detects lasted ~0ms). With the waiting
+        // flow the old SW keeps serving the old page its own cached chunks —
+        // nothing 404s — until the banner's accept swaps versions atomically.
+        // The nets stay for edge cases: network-first HTML (no cache-first
+        // stale shell), no navigateFallback, chunkRetry + preloadError.
         runtimeCaching: [
           {
             // HTML documents (SPA navigations) → NetworkFirst so a returning

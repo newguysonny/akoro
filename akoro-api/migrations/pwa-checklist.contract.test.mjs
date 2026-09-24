@@ -132,10 +132,26 @@ test("offline: the Workbox SW precaches the shell and serves reads offline", () 
   assert.ok(viteConfig.includes("runtimeCaching:"), "reads are runtime-cached");
   assert.ok(viteConfig.includes("handler: 'NetworkFirst'") && viteConfig.includes("handler: 'StaleWhileRevalidate'"),
     "documents prefer the network, catalogs serve instantly");
-  assert.ok(viteConfig.includes("skipWaiting: true") && viteConfig.includes("clientsClaim: true")
-    && viteConfig.includes("cleanupOutdatedCaches: true"), "new versions take over instead of sticking");
+  assert.ok(viteConfig.includes("clientsClaim: true") && viteConfig.includes("cleanupOutdatedCaches: true"),
+    "the SW claims clients on first install and cleans the old precache on activation");
   assert.ok(updatePrompt.includes("registerSW") && updatePrompt.includes("onNeedRefresh"),
     "the app registers the SW and prompts on new versions");
+});
+
+test("updates: the banner owns the version swap — the new SW waits, the old page never breaks", () => {
+  // Baking skipWaiting into the SW activated new builds mid-session: the old
+  // precache was deleted under the still-running old page, whose next lazy
+  // chunk 404'd — the "hangs a bit, then refreshes" after every deploy. The
+  // correct lifecycle: the new SW installs and WAITS (old SW keeps serving
+  // the old page its own cached chunks), the banner surfaces it, and the
+  // accept path swaps versions atomically.
+  assert.ok(!viteConfig.includes("skipWaiting: true"), "no skipWaiting baked into the SW — a new build installs and waits");
+  assert.ok(updatePrompt.includes("onNeedRefresh"), "a waiting worker surfaces the banner");
+  assert.ok((updatePrompt.match(/updateSW\.current\?\.\(true\)/g) || []).length >= 2,
+    "both the countdown's end and Reload now accept via updateSW(true) — SKIP_WAITING → controllerchange → reload");
+  assert.ok(updatePrompt.includes("60 * 1000"), "new deploys are detected within a minute, not only on revisit");
+  assert.ok(updatePrompt.includes("if (!show || busy) return;"), "the countdown pauses while a live session/assessment holds the activity lock");
+  assert.ok(updatePrompt.includes("postpone"), "Later keeps the current version working until the next check");
 });
 
 test("screenshots: the richer install dialog gets rule-abiding captures", async () => {
