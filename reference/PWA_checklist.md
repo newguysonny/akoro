@@ -486,3 +486,65 @@ import { useState, useEffect } from 'react';
 ‎https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification
 ‎https://developer.mozilla.org/en-US/docs/Web/API/Notifications_API
 ‎https://caniuse.com/#feat=notifications
+
+‎3. Screenwake lock for sessions e.g adaptive, video course, teaching, continuation, revision.
+‎
+‎const wakeLockSwitch = document.querySelector('#wake-lock');
+‎const restoreSwitch = document.querySelector('#restore-wake-lock');
+‎
+‎let wakeLock = null;
+‎
+‎const requestWakeLock = async (onVisibilityChange = false) => {
+‎  try {
+‎    wakeLock = await navigator.wakeLock.request('screen');
+‎
+‎    wakeLock.addEventListener('release', () => {
+‎      console.log('Wake Lock was released');
+‎      wakeLockSwitch.checked = false;
+‎      wakeLock = null;
+‎    });
+‎    console.log('Wake Lock is active');
+‎    
+‎    // if the wake lock is restored on visibility change, check the checkbox
+‎    if(onVisibilityChange) {
+‎      wakeLockSwitch.checked = true;
+‎    }
+‎  }
+‎  catch(err) {
+‎    console.error(err);
+‎  }
+‎};
+‎
+‎const releaseWakeLock = () => {
+‎  console.log('releasing wakeLock');
+‎
+‎  wakeLock.release();
+‎  wakeLock = null;
+‎};
+‎
+‎wakeLockSwitch.addEventListener('change', ({detail}) => {
+‎  const {checked} = detail;
+‎
+‎  checked ? requestWakeLock() : releaseWakeLock();
+‎});   
+‎
+‎const handleVisibilityChange = async () => {
+‎  // add a delay to show the wake lock is restored on visibility change
+‎  // so the user can see the checkbox is checked
+‎  if (supported && restoreSwitch.checked && document.visibilityState === 'visible') {
+‎    setTimeout(async () => {
+‎      await requestWakeLock(true);
+‎    }, 1000);
+‎  }
+‎};
+‎
+‎document.addEventListener('visibilitychange', handleVisibilityChange);   
+‎    
+‎https://web.dev/wakelock/
+‎
+‎4. Offline support : basic-service-worker
+‎https://github.com/pwa-today/basic-service-worker.git
+‎
+‎To implement offline support for your web app, you can use this Basic Service Worker that is also used in What PWA Can Do Today.
+‎
+‎It also takes care of installing a new version of your web app automatically and as soon as possible.
