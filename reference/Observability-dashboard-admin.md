@@ -60,7 +60,47 @@ const MOCK_DATA = {
   cacheHit: gen(24, 97.1, 1.4),
   aiMs:     gen(24, 1140, 310),
   aiCalls:  gen(24, 11, 6).map(d => ({ ...d, v: Math.max(0, Math.round(d.v)) })),
+
+  // Bottleneck tab — layer latency breakdown (ms per layer per sample)
+  layerBreakdown: Array.from({ length: 24 }, (_, i) => ({
+    i,
+    db:    Math.round(82 + Math.sin(i * 0.5) * 38 + (Math.random() - 0.5) * 22),
+    app:   Math.round(20 + (Math.random() - 0.5) * 10),
+    cache: Math.round(3  + (Math.random() - 0.5) * 2),
+  })),
+
+  // DB connection pool — active + waiting connections per sample
+  poolUtil: Array.from({ length: 24 }, (_, i) => {
+    const used    = Math.max(1, Math.min(10, Math.round(6 + Math.sin(i * 0.6) * 2.5 + (Math.random() - 0.5) * 1.5)));
+    const waiting = Math.max(0, used > 8 ? Math.round((used - 8) * 2 + Math.random()) : 0);
+    return { i, used, waiting, waitMs: waiting > 0 ? Math.round(waiting * 48 + Math.random() * 25) : 0 };
+  }),
+
+  // Cache hit vs miss latency
+  cacheLatency: Array.from({ length: 24 }, (_, i) => ({
+    i,
+    hit:  Math.round(3  + (Math.random() - 0.5) * 2),
+    miss: Math.round(260 + Math.sin(i * 0.5) * 55 + (Math.random() - 0.5) * 40),
+  })),
 };
+
+// Pre-computed bottleneck averages
+const BK = (() => {
+  const bd   = MOCK_DATA.layerBreakdown;
+  const N    = bd.length;
+  const avgDb    = Math.round(bd.reduce((a, d) => a + d.db,    0) / N);
+  const avgApp   = Math.round(bd.reduce((a, d) => a + d.app,   0) / N);
+  const avgCache = Math.round(bd.reduce((a, d) => a + d.cache, 0) / N);
+  const total    = avgDb + avgApp + avgCache;
+  const hitAvg   = Math.round(MOCK_DATA.cacheLatency.reduce((a, d) => a + d.hit,  0) / N);
+  const missAvg  = Math.round(MOCK_DATA.cacheLatency.reduce((a, d) => a + d.miss, 0) / N);
+  const maxPool  = Math.max(...MOCK_DATA.poolUtil.map(d => d.used));
+  const avgWait  = Math.round(MOCK_DATA.poolUtil.reduce((a, d) => a + d.waitMs, 0) / N);
+  return { avgDb, avgApp, avgCache, total, hitAvg, missAvg, maxPool, avgWait,
+    pctDb: Math.round(avgDb / total * 100), pctApp: Math.round(avgApp / total * 100),
+    pctCache: Math.round(avgCache / total * 100), hitRate: 97.2,
+  };
+})();
 
 const AGENT_COLORS = {
   'NaNa Esumai': C.brass,
@@ -309,6 +349,95 @@ function DiskBar({ label, pct }) {
 }
 
 // ── Agent activity row ────────────────────────────────────────────────────────
+// ── Bottleneck layer card ─────────────────────────────────────────────────────
+const BADGE = {
+  green:  { bg: 'rgba(45,184,135,0.1)',  color: '#2DB887' },
+  yellow: { bg: 'rgba(229,168,23,0.1)',  color: '#E5A817' },
+  red:    { bg: 'rgba(224,80,80,0.1)',   color: '#E05050' },
+  brass:  { bg: 'rgba(196,154,60,0.1)',  color: '#D4A94A' },
+};
+
+function LayerCard({ label, avgMs, pct, color, badge, badgeColor = 'green' }) {
+  const bs = BADGE[badgeColor] ?? BADGE.green;
+  const isBottleneck = badgeColor === 'red';
+  return (
+    <div style={{
+      background: C.s1, borderRadius: 12, padding: '14px 14px',
+      border: `1px solid ${isBottleneck ? 'rgba(224,80,80,0.35)' : C.b}`,
+      display: 'flex', flexDirection: 'column', gap: 5,
+    }}>
+      <span style={{ fontSize: 10.5, color: C.sub, fontWeight: 500, letterSpacing: '.04em' }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+        <span style={{ fontSize: 22, fontWeight: 600, color, letterSpacing: '-.03em', lineHeight: 1 }}>{avgMs}</span>
+        <span style={{ fontSize: 12, color: C.sub }}>ms avg</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, height: 3, background: C.s3, borderRadius: 2 }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2 }} />
+        </div>
+        <span style={{ fontSize: 10, color: C.sub, whiteSpace: 'nowrap' }}>{pct}% of req</span>
+      </div>
+      <span style={{ fontSize: 10.5, fontWeight: 500, padding: '2px 8px', borderRadius: 100, alignSelf: 'flex-start', background: bs.bg, color: bs.color }}>
+        {badge}
+      </span>
+    </div>
+  );
+}
+
+// ── Connection pool slot visualiser ──────────────────────────────────────────
+function PoolSlots({ used, waiting, total = 10 }) {
+  const slots = Array.from({ length: total }, (_, i) => {
+    if (i < used)             return { color: used >= 9 ? C.red : used >= 7 ? C.yellow : C.green };
+    if (i < used + waiting)   return { color: C.yellow };
+    return { color: C.s3 };
+  });
+  const free = total - used - waiting;
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 3, marginBottom: 10 }}>
+        {slots.map((s, i) => (
+          <div key={i} style={{ flex: 1, height: 14, borderRadius: 3, background: s.color,
+            boxShadow: s.color !== C.s3 ? `0 0 6px ${s.color}55` : 'none' }} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 14, fontSize: 11 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.green }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: C.green, display: 'inline-block' }} />
+          {used} active
+        </span>
+        {waiting > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.yellow }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: C.yellow, display: 'inline-block' }} />
+            {waiting} waiting
+          </span>
+        )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.dim }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: C.s3, border: `1px solid ${C.b}`, display: 'inline-block' }} />
+          {free} free
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Bottleneck rank row ───────────────────────────────────────────────────────
+function BkRow({ rank, label, ms, pct, maxPct, color, trend }) {
+  const trendColor = trend === '↑' ? C.red : trend === '↓' ? C.green : C.sub;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.b}` }}>
+      <span style={{ fontSize: 11, color: C.dim, fontWeight: 600, width: 18, flexShrink: 0, textAlign: 'center' }}>{rank}</span>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 5px ${color}55` }} />
+      <span style={{ fontSize: 12, fontWeight: 500, color: C.text, flex: 1 }}>{label}</span>
+      <div style={{ width: 80, height: 3, background: C.s3, borderRadius: 2, flexShrink: 0 }}>
+        <div style={{ height: '100%', width: `${Math.min(100, pct / maxPct * 100)}%`, background: color, borderRadius: 2 }} />
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 600, color, whiteSpace: 'nowrap', width: 50, textAlign: 'right' }}>{ms}ms</span>
+      <span style={{ fontSize: 11, color: C.sub, width: 32, textAlign: 'right' }}>{pct}%</span>
+      <span style={{ fontSize: 13, color: trendColor, width: 16, textAlign: 'right' }}>{trend}</span>
+    </div>
+  );
+}
+
 function AgentRow({ agent, action, ms, ago, ok }) {
   const color = AGENT_COLORS[agent] ?? C.sub;
   return (
@@ -327,7 +456,7 @@ function AgentRow({ agent, action, ms, ago, ok }) {
 }
 
 // ── Tab nav ───────────────────────────────────────────────────────────────────
-const TABS = ['Overview', 'Infrastructure', 'Database', 'AI / LLM'];
+const TABS = ['Overview', 'Infrastructure', 'Database', 'AI / LLM', 'Bottlenecks'];
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ObservabilityDashboard() {
@@ -528,6 +657,163 @@ export default function ObservabilityDashboard() {
         </>}
 
       </div>
+
+        {/* BOTTLENECKS */}
+        {tab === 'Bottlenecks' && (() => {
+          const currentPool = MOCK_DATA.poolUtil[MOCK_DATA.poolUtil.length - 1];
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: 0 }}>Latency bottleneck analysis</h2>
+                <span style={{ fontSize: 11, padding: '2px 9px', borderRadius: 100, background: 'rgba(224,80,80,0.1)', color: C.red, fontWeight: 500, border: '1px solid rgba(224,80,80,0.2)' }}>
+                  1 bottleneck detected
+                </span>
+              </div>
+
+              {/* Layer latency cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                <LayerCard label="Database layer"     avgMs={BK.avgDb}    pct={BK.pctDb}    color={C.red}    badge={`Bottleneck · P95 ${BK.avgDb}ms`}  badgeColor="red" />
+                <LayerCard label="Application layer"  avgMs={BK.avgApp}   pct={BK.pctApp}   color={C.green}  badge="Normal range"                       badgeColor="green" />
+                <LayerCard label="Cache hit latency"  avgMs={BK.hitAvg}   pct={BK.pctCache} color={C.blue}   badge={`Fast · ${BK.hitRate}% hit rate`}   badgeColor="green" />
+                <LayerCard label="Cache miss latency" avgMs={BK.missAvg}  pct={Math.round(BK.missAvg * 0.028 / BK.total * 100)} color={C.yellow} badge="Forces full DB query" badgeColor="yellow" />
+              </div>
+
+              {/* Stacked latency breakdown */}
+              <Card>
+                <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: C.text, display: 'block' }}>Request time by layer</span>
+                    <span style={{ fontSize: 10.5, color: C.sub }}>P95 latency contribution · last 24 samples</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    {[{ label: 'DB', color: C.brass }, { label: 'App', color: C.green }, { label: 'Cache', color: C.blue }].map(s => (
+                      <span key={s.label} style={{ fontSize: 10.5, color: C.sub, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, display: 'inline-block' }} />
+                        {s.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: '6px 8px 10px' }}>
+                  <ResponsiveContainer width="100%" height={130}>
+                    <AreaChart data={MOCK_DATA.layerBreakdown} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+                      <defs>
+                        {[['gdb2', C.brass], ['gapp2', C.green], ['gcache2', C.blue]].map(([id, color]) => (
+                          <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor={color} stopOpacity={0.70} />
+                            <stop offset="100%" stopColor={color} stopOpacity={0.40} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" strokeDasharray="3 4" />
+                      <XAxis dataKey="i" hide />
+                      <YAxis tick={{ fontSize: 10, fill: C.dim }} tickLine={false} axisLine={false} />
+                      <Tooltip content={(props) => <ChartTooltip {...props} unit="ms" />} />
+                      <Area type="monotone" dataKey="db"    stackId="s" stroke={C.brass} fill="url(#gdb2)"    name="DB"    />
+                      <Area type="monotone" dataKey="app"   stackId="s" stroke={C.green} fill="url(#gapp2)"   name="App"   />
+                      <Area type="monotone" dataKey="cache" stackId="s" stroke={C.blue}  fill="url(#gcache2)" name="Cache" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+
+              {/* DB connection pool */}
+              <Card style={{ padding: '14px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: C.text, display: 'block' }}>DB connection pool</span>
+                    <span style={{ fontSize: 10.5, color: C.sub }}>{currentPool.used}/10 active · peak {BK.maxPool}/10 today</span>
+                  </div>
+                  {currentPool.waiting > 0
+                    ? <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 100, background: C.yellowF, color: C.yellow, fontWeight: 500 }}>
+                        {currentPool.waiting} connection{currentPool.waiting > 1 ? 's' : ''} waiting
+                      </span>
+                    : <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 100, background: C.greenF, color: C.green, fontWeight: 500 }}>No queue</span>
+                  }
+                </div>
+
+                <PoolSlots used={currentPool.used} waiting={currentPool.waiting} />
+
+                <div style={{ marginTop: 14 }}>
+                  <span style={{ fontSize: 10.5, color: C.sub, display: 'block', marginBottom: 4 }}>Pool utilization over time</span>
+                  <ResponsiveContainer width="100%" height={90}>
+                    <AreaChart data={MOCK_DATA.poolUtil} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+                      <defs>
+                        <linearGradient id="gpool2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={C.blue} stopOpacity={0.25} /><stop offset="100%" stopColor={C.blue} stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="gwait2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={C.yellow} stopOpacity={0.35} /><stop offset="100%" stopColor={C.yellow} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" strokeDasharray="3 4" />
+                      <XAxis dataKey="i" hide />
+                      <YAxis domain={[0, 10]} ticks={[0, 5, 10]} tick={{ fontSize: 10, fill: C.dim }} tickLine={false} axisLine={false} />
+                      <Tooltip content={(props) => <ChartTooltip {...props} unit=" conn" />} />
+                      <Area type="monotone" dataKey="used"    stroke={C.blue}   strokeWidth={1.5} fill="url(#gpool2)" name="Active"  />
+                      <Area type="monotone" dataKey="waiting" stroke={C.yellow} strokeWidth={1.5} fill="url(#gwait2)" name="Waiting" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 12 }}>
+                  {[
+                    { label: 'Current active', value: `${currentPool.used}/10`, color: currentPool.used >= 8 ? C.yellow : C.green },
+                    { label: 'Peak today',      value: `${BK.maxPool}/10`,      color: BK.maxPool >= 8 ? C.yellow : C.green },
+                    { label: 'Avg wait time',   value: BK.avgWait > 0 ? `${BK.avgWait}ms` : '0ms', color: BK.avgWait > 20 ? C.yellow : C.green },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: C.s2, borderRadius: 8, padding: '10px 12px' }}>
+                      <span style={{ fontSize: 10, color: C.sub, display: 'block', marginBottom: 4 }}>{s.label}</span>
+                      <span style={{ fontSize: 16, fontWeight: 600, color: s.color }}>{s.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Cache miss cost */}
+              <Card>
+                <div style={{ padding: '12px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: C.text, display: 'block' }}>Cache miss cost</span>
+                    <span style={{ fontSize: 10.5, color: C.sub }}>Hit vs miss latency · hit rate {BK.hitRate}%</span>
+                  </div>
+                  <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 100, background: C.yellowF, color: C.yellow, fontWeight: 500 }}>
+                    Miss = ×{Math.round(BK.missAvg / BK.hitAvg)}x slower
+                  </span>
+                </div>
+                <div style={{ padding: '6px 8px 6px' }}>
+                  <ResponsiveContainer width="100%" height={110}>
+                    <LineChart data={MOCK_DATA.cacheLatency} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+                      <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" strokeDasharray="3 4" />
+                      <XAxis dataKey="i" hide />
+                      <YAxis tick={{ fontSize: 10, fill: C.dim }} tickLine={false} axisLine={false} />
+                      <Tooltip content={(props) => <ChartTooltip {...props} unit="ms" />} />
+                      <Line type="monotone" dataKey="miss" stroke={C.red}   strokeWidth={1.8} dot={false} name="Cache miss" />
+                      <Line type="monotone" dataKey="hit"  stroke={C.green} strokeWidth={1.8} dot={false} name="Cache hit"  />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <div style={{ display: 'flex', gap: 12, paddingLeft: 4, paddingTop: 6, paddingBottom: 6 }}>
+                    {[{ label: 'Cache hit', color: C.green, val: `${BK.hitAvg}ms avg` }, { label: 'Cache miss', color: C.red, val: `${BK.missAvg}ms avg` }].map(s => (
+                      <span key={s.label} style={{ fontSize: 11, color: C.sub, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 12, height: 2, background: s.color, display: 'inline-block', borderRadius: 1 }} />
+                        {s.label} · <strong style={{ color: s.color }}>{s.val}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+
+              {/* Ranked bottlenecks */}
+              <Card style={{ padding: '14px 16px' }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: C.text, display: 'block', marginBottom: 12 }}>Bottleneck severity ranking</span>
+                <BkRow rank="1" label="Database queries"     ms={BK.avgDb}   pct={BK.pctDb}   maxPct={BK.pctDb} color={C.red}    trend="↑" />
+                <BkRow rank="2" label="Cache misses (2.8%)" ms={BK.missAvg} pct={Math.round(BK.missAvg * 0.028 / BK.total * 100)} maxPct={BK.pctDb} color={C.yellow} trend="→" />
+                <BkRow rank="3" label="Application layer"   ms={BK.avgApp}  pct={BK.pctApp}  maxPct={BK.pctDb} color={C.green}  trend="↓" />
+                <BkRow rank="4" label="Cache hits"          ms={BK.hitAvg}  pct={BK.pctCache} maxPct={BK.pctDb} color={C.blue}   trend="→" />
+              </Card>
+            </>
+          );
+        })()}
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
       <div style={{ margin: '20px 18px 0', paddingTop: 14, borderTop: `1px solid ${C.b}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
