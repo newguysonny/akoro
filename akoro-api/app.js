@@ -19,6 +19,7 @@ import { createAdapter }          from "@socket.io/redis-adapter";
 import Redis                      from "ioredis";
 import cors                       from "cors";
 import helmet                     from "helmet";
+import compression                from "compression";
 import cookieParser               from "cookie-parser";
 import path                       from "path";
 import { fileURLToPath }          from "url";
@@ -247,6 +248,21 @@ app.use(helmet({
 }));
 app.use(cors(corsDelegate));
 app.use(cookieParser());
+// ─── Response compression ──────────────────────────────────────────────────────
+// Render's Hobby workspace caps outbound bandwidth at 5 GB/month (April 2026
+// plan change; it used to be 100 GB). Every uncompressed JSON response is
+// billed byte-for-byte, and gzip typically shrinks API JSON 5-10×, so this one
+// middleware is the single biggest egress reduction available. SSE streams are
+// excluded: buffering them would stall token-by-token chat/training streaming,
+// and they are already sent in small chunks. WebSocket traffic (Socket.io)
+// does not pass through Express middleware and is unaffected.
+app.use(compression({
+  filter: (req, res) => {
+    const type = String(res.getHeader("Content-Type") || "");
+    if (type.includes("text/event-stream")) return false;   // never buffer SSE
+    return compression.filter(req, res);
+  },
+}));
 // Paystack webhook signature validation needs the RAW request body. The raw
 // parser must run BEFORE the global JSON parser (body-parser skips bodies
 // already consumed by an earlier parser) — otherwise req.body arrives here as
@@ -262,7 +278,18 @@ app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 app.use(passport.initialize());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Uploads are served without auth (question images etc.), which makes them the
+// one URL family a crawler or scraper can pull in bulk. Past-question scans are
+// exactly what AI crawlers and exam-pirate scrapers look for, and on the 5 GB
+// Hobby bandwidth cap a few bulk pulls are real money. robots.txt stops the
+// well-behaved ones; X-Robots-Tag keeps them out of indexes even if the file
+// is reached via a direct link.
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send("User-agent: *\nDisallow: /\n");
+});
+app.use("/uploads",
+  (_req, res, next) => { res.setHeader("X-Robots-Tag", "noindex, nofollow"); next(); },
+  express.static(path.join(__dirname, "uploads")));
 app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId); next(); });
 
 // ─── Health & readiness ───────────────────────────────────────────────────────

@@ -84,6 +84,15 @@ function storeKey(store) {
  *  tick rather than one enormous bill and a rate-limit wall. */
 const BATCH = 25;
 
+/** If a store's UPDATE keeps failing, its rows never leave the sweep queue
+ *  (supabase-js returns the error instead of throwing), and they would be
+ *  re-embedded — re-sent over the wire and re-billed — every 10 minutes
+ *  forever. On Render's metered outbound bandwidth that is a silent GB-scale
+ *  leak with zero users. A pass whose update failed parks the store for this
+ *  long before trying again, and says so in the logs. */
+const FAILED_STORE_BACKOFF_MS = 6 * 60 * 60 * 1000;
+const storeBackoffUntil = new Map();
+
 export async function embedText(text, feature = "embedding_sweep", userId = null) {
   const res = await openai.embeddings.create({
     model: "text-embedding-3-small",
@@ -137,6 +146,7 @@ export async function sweepOnce({ batch = BATCH } = {}) {
   for (const s of STORES) {
     let filled = 0, failed = 0;
     try {
+      if (Date.now() < (storeBackoffUntil.get(s.table) ?? 0)) continue;
       let selection = db.schema(s.schema).from(s.table).select(s.select);
       selection = applyStoreFilter(selection, s);
       const { data: rows } = await selection.is("embedding", null).is("embedded_at", null).limit(batch);
@@ -151,7 +161,13 @@ export async function sweepOnce({ batch = BATCH } = {}) {
           let update = db.schema(s.schema).from(s.table)
             .update({ embedded_at: new Date().toISOString() }).eq(key, r[key]);
           update = applyStoreFilter(update, s);
-          await update;
+          const { error: stampError } = await update;
+          if (stampError) {
+            failed++;
+            console.warn(`[embeddings] ${s.table}: stamp update failed (${stampError.message}) — store parked ${FAILED_STORE_BACKOFF_MS / 3600000}h`);
+            storeBackoffUntil.set(s.table, Date.now() + FAILED_STORE_BACKOFF_MS);
+            break;
+          }
           continue;
         }
         try {
@@ -160,7 +176,15 @@ export async function sweepOnce({ batch = BATCH } = {}) {
           let update = db.schema(s.schema).from(s.table)
             .update({ embedding, embedded_at: new Date().toISOString() }).eq(key, r[key]);
           update = applyStoreFilter(update, s);
-          await update;
+          const { error: updateError } = await update;
+          if (updateError) {
+            // The embedding was paid for but the row is still queued; without
+            // this check it would be re-embedded on every pass, invisibly.
+            failed++;
+            console.warn(`[embeddings] ${s.table}: update failed after embedding (${updateError.message}) — store parked ${FAILED_STORE_BACKOFF_MS / 3600000}h`);
+            storeBackoffUntil.set(s.table, Date.now() + FAILED_STORE_BACKOFF_MS);
+            break;
+          }
           filled++;
         } catch (e) {
           failed++;

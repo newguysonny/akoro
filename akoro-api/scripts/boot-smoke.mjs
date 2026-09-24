@@ -40,7 +40,7 @@ for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "REDIRECT_URI_GOOGL
   process.env[k] ||= `dummy-${k}`;
 }
 
-await import("../app.js");
+const { default: app } = await import("../app.js");
 
 const base = `http://127.0.0.1:${process.env.PORT}`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -54,6 +54,20 @@ try {
     method: "POST", headers: { "content-type": "application/json" }, body: "{}",
   });
   console.log("AGENT CHAT (unauthed):", chat.status, JSON.stringify(await chat.json().catch(() => null)));
+
+  // Egress guards (Render Hobby caps outbound bandwidth at 5 GB/month):
+  // compression middleware mounted, robots.txt refuses crawlers, uploads
+  // responses carry X-Robots-Tag. The 404 here is expected — the check is the
+  // header, which the wrapper sets before static() falls through.
+  const hasCompression = app._router?.stack?.some((l) => l.handle?.name === "compression");
+  console.log("COMPRESSION MOUNTED:", hasCompression);
+  const robots = await fetch(`${base}/robots.txt`).then((r) => r.text());
+  console.log("ROBOTS.TXT:", JSON.stringify(robots.trim()));
+  const uploadProbe = await fetch(`${base}/uploads/boot-smoke-missing.png`);
+  console.log("UPLOADS X-ROBOTS-TAG:", uploadProbe.headers.get("x-robots-tag"), `(status ${uploadProbe.status})`);
+  if (!hasCompression || !robots.includes("Disallow: /") || uploadProbe.headers.get("x-robots-tag")?.includes("noindex") === false) {
+    throw new Error("egress guard missing (compression / robots.txt / uploads noindex)");
+  }
   console.log("BOOT_SMOKE_OK — app boots, routes respond, no crash");
   process.exit(0);
 } catch (e) {
