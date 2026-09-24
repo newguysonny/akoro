@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { startMicCapture } from '../../utils/micCapture.js';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, STUDENT_ID } from '../../constants.js';
 import { acquireActivityLock } from '../../utils/activityLock.js';
+import { useWakeLock } from '../../hooks/useWakeLock.js';
 import { API, apiGet } from '../../services/api.js';
 const AGENT_CONFIG = { name: '', emoji: '🤖', guideName: 'NaNa Esumai', guideEmoji: '🧠', guideRenderStyle: {} };
 import { XIcon, SparkleIcon, ZapIcon, BrainIcon, Icon } from '../common/Icons.jsx';
@@ -14,6 +15,10 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarted, content = null }) {
   // Hold the activity lock so an auto-reload can't interrupt a teaching session.
   useEffect(() => acquireActivityLock(), []);
+  // Keep the screen awake while a session runs (teaching, continuation,
+  // revision, agent sessions over records and course lessons). No-op where
+  // the Wake Lock API is unsupported.
+  useWakeLock();
   const { t } = useLang();
   const topic     = config?.topic    || session?.topic    || "your topic";
   const subject   = config?.subject  || session?.subject  || "science";
