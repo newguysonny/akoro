@@ -117,4 +117,51 @@
     opacity: 0; transform: translateY(8px); transition: opacity 0.25s, transform 0.25s;
   }
   .ak-save-toast-show { opacity: 1; transform: translateY(0); }
+
+  /* ── cards (pilot schools) ────────────────────────────────────────────── */
+  .ak-cards { @apply grid gap-3.5; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .ak-card { @apply bg-akoro-surface border border-akoro-line rounded-akoro p-[18px]; }
+  .ak-card h3 { @apply m-0 mb-[3px] text-[1.02rem] font-extrabold; }
+  .ak-card-clickable { @apply cursor-pointer transition-colors; }
+  .ak-card-clickable:hover { @apply border-akoro-purple; }
+  .ak-card-status { @apply text-[0.78rem] font-bold mb-3; }
+  .ak-card-status-active { @apply text-akoro-green; }
+  .ak-card-status-ended { @apply text-akoro-dim; }
+  .ak-card-row { @apply flex justify-between text-[0.85rem] py-[5px] text-akoro-dim; }
+  .ak-card-row span:last-child { @apply text-akoro-ink font-semibold; }
+
+  /* ── alert banner ─────────────────────────────────────────────────────── */
+  .ak-alert-banner { @apply flex flex-col gap-2 mb-[18px]; }
+  .ak-alert-item {
+    @apply flex items-center gap-2.5 py-[11px] px-4 rounded-akorosm text-[0.85rem]
+           font-semibold bg-[#FFF1EE] border border-[#FFD6CB] text-[#A6402B];
+  }
+  .ak-alert-item-info { @apply bg-akoro-purplesoft border-[#DCD0FF] text-akoro-purple; }
+  .ak-alert-item button { @apply ml-auto bg-transparent border-0 font-bold text-[0.8rem] cursor-pointer underline; font-family: inherit; color: inherit; }
+
+  /* ── filters + pagination ─────────────────────────────────────────────── */
+  .ak-filters { @apply flex gap-2.5 mb-4 flex-wrap; }
+  .ak-filters input[type="text"] { @apply flex-1 min-w-[160px] py-[9px] px-3 rounded-akorosm border border-akoro-line bg-akoro-surface text-akoro-ink text-[0.88rem]; font-family: inherit; }
+  .ak-filters select { @apply py-[9px] px-3 rounded-akorosm border border-akoro-line bg-akoro-surface text-akoro-ink text-[0.88rem]; font-family: inherit; }
+  .ak-pagination { @apply flex justify-center gap-1.5 mt-4; }
+  .ak-pagination button {
+    @apply w-8 h-8 rounded-akorosm border border-akoro-line bg-akoro-surface text-akoro-ink
+           font-bold text-[0.85rem] cursor-pointer;
+    font-family: inherit;
+  }
+  .ak-pagination button.ak-page-active { @apply bg-akoro-purple border-akoro-purple text-white; }
+  .ak-pagination button:disabled { @apply opacity-40 cursor-default; }
+
+  /* ── detail view pieces ───────────────────────────────────────────────── */
+  .ak-back-link { @apply bg-transparent border-0 text-akoro-dim font-bold text-[0.85rem] cursor-pointer p-0 mb-3.5; font-family: inherit; }
+  .ak-back-link:hover { @apply text-akoro-purple; }
+  .ak-detail-head { @apply flex justify-between items-start mb-6; }
+  .ak-stat-row { @apply flex gap-3.5 mb-[26px] flex-wrap; }
+  .ak-stat { @apply bg-akoro-surface border border-akoro-line rounded-akoro py-4 px-5 min-w-[150px]; }
+  .ak-stat .ak-stat-label { @apply text-[0.75rem] text-akoro-dim font-bold uppercase tracking-[0.03em] mb-1.5; }
+  .ak-stat .ak-stat-value { @apply text-[1.3rem] font-extrabold; }
+  .ak-name-edit { @apply flex gap-2 items-center; }
+  .ak-name-edit input { @apply text-[1.4rem] font-extrabold py-1 px-2 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink; font-family: inherit; }
+  .ak-date-input { @apply py-[7px] px-2.5 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink font-bold text-[0.9rem]; font-family: inherit; }
+  .ak-date-input:focus { outline: 2px solid #6C3BFF; outline-offset: 1px; }
 }

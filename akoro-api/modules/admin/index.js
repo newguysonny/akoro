@@ -10,6 +10,7 @@ import aiSpendRouter from "./aiSpend.js";
 import evalsRouter from "./evals.js";
 import agentToolRequestsRouter from "./agent-tool-requests.js";
 import tiersRouter from "./tiers.js";
+import pilotSchoolsRouter from "./pilotSchools.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -23,5 +24,6 @@ router.use("/", aiSpendRouter);
 router.use("/", evalsRouter);
 router.use("/", agentToolRequestsRouter);
 router.use("/", tiersRouter);
+router.use("/", pilotSchoolsRouter);
 
 export default router;
