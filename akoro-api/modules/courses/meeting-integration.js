@@ -42,7 +42,7 @@
 // ─── § IMPORTS ────────────────────────────────────────────────────────────────
 
 import { Router }                    from "express";
-import axios                         from "axios";
+import { meetingsPost, meetingsDelete } from "../../lib/meetingsBreaker.js";
 import { v4 as uuidv4 }              from "uuid";
 import Redis                         from "ioredis";
 import cron                          from "node-cron";
@@ -268,7 +268,7 @@ export const ensureValidToken = async (userId, provider) => {
     console.log(`[tokens] 🔄 Refreshing ${provider} tokens for user ${userId}`);
     const { tokenUrl, clientId, clientSecret, redirectUri } = providerConfig(provider);
 
-    const response = await axios.post(tokenUrl, null, {
+    const response = await meetingsPost(tokenUrl, null, {
       timeout: 10000,   // must complete within LOCK_TTL_MS so the lock can't expire mid-refresh
       params: {
         grant_type:    "refresh_token",
@@ -342,7 +342,7 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
 
   switch (platform) {
     case "zoom": {
-      const { data } = await axios.post(
+      const { data } = await meetingsPost(
         "https://api.zoom.us/v2/users/me/meetings",
         {
           topic,
@@ -370,7 +370,7 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
     }
 
     case "google": {
-      const { data } = await axios.post(
+      const { data } = await meetingsPost(
         "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
         {
           summary: topic,
@@ -397,7 +397,7 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
     }
 
     case "teams": {
-      const { data } = await axios.post(
+      const { data } = await meetingsPost(
         "https://graph.microsoft.com/v1.0/me/calendar/events",
         {
           subject:                  topic,
@@ -422,7 +422,7 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
     case "youtube": {
       // Create a scheduled live broadcast
       const scheduledStartTime = new Date(startTime).toISOString();
-      const { data: broadcast } = await axios.post(
+      const { data: broadcast } = await meetingsPost(
         "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails",
         {
           snippet: {
@@ -445,7 +445,7 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
       );
 
       // Create a live stream (RTMP ingestion point)
-      const { data: stream } = await axios.post(
+      const { data: stream } = await meetingsPost(
         "https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status",
         {
           snippet: { title: `${topic} — stream` },
@@ -459,7 +459,7 @@ export const createMeeting = async (userId, { topic, startTime, durationMin = 60
       );
 
       // Bind the stream to the broadcast
-      await axios.post(
+      await meetingsPost(
         `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${broadcast.id}&part=id,contentDetails&streamId=${stream.id}`,
         {},
         { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -497,20 +497,20 @@ export const endMeeting = async (userId, platform, meetingId) => {
 
   switch (platform) {
     case "zoom":
-      await axios.delete(`https://api.zoom.us/v2/meetings/${meetingId}`, {
+      await meetingsDelete(`https://api.zoom.us/v2/meetings/${meetingId}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       break;
 
     case "google":
-      await axios.delete(
+      await meetingsDelete(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events/${meetingId}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       break;
 
     case "teams":
-      await axios.delete(
+      await meetingsDelete(
         `https://graph.microsoft.com/v1.0/me/calendar/events/${meetingId}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
@@ -518,7 +518,7 @@ export const endMeeting = async (userId, platform, meetingId) => {
 
     case "youtube":
       // Transition broadcast to "complete" — stops the live stream
-      await axios.post(
+      await meetingsPost(
         `https://www.googleapis.com/youtube/v3/liveBroadcasts/transition?broadcastStatus=complete&id=${meetingId}&part=status`,
         {},
         { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -604,12 +604,12 @@ const meetingHandlers = {
     try {
       let tokenResponse;
       if (provider === "zoom") {
-        tokenResponse = await axios.post(cfg.tokenUrl, null, {
+        tokenResponse = await meetingsPost(cfg.tokenUrl, null, {
           params: { grant_type: "authorization_code", code, redirect_uri: cfg.redirectUri },
           auth:   { username: cfg.clientId, password: cfg.clientSecret },
         });
       } else {
-        tokenResponse = await axios.post(cfg.tokenUrl, new URLSearchParams({
+        tokenResponse = await meetingsPost(cfg.tokenUrl, new URLSearchParams({
           grant_type:    "authorization_code",
           code,
           redirect_uri:  cfg.redirectUri,

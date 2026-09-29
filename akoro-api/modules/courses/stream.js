@@ -58,6 +58,7 @@ import { getSignedUrl }                   from "@aws-sdk/s3-request-presigner";
 import path                               from "path";
 import { fileURLToPath }                  from "url";
 import { authenticateToken, requireRole } from "../auth/routes.js";
+import { r2Send } from "../../lib/r2Breaker.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -154,7 +155,7 @@ const getContentType = (filename) => {
  */
 const uploadSourceToR2 = async (buffer, courseId, videoId, ext) => {
   const key = `courses/${courseId}/videos/${videoId}/source${ext}`;
-  await r2.send(new PutObjectCommand({
+  await r2Send(r2, new PutObjectCommand({
     Bucket:      R2_BUCKET,
     Key:         key,
     Body:        buffer,
@@ -180,13 +181,13 @@ const generateSignedSourceUrl = async (sourceKey) => {
  * Covers both staging source and all encoded HLS files in one call.
  */
 const deleteR2Prefix = async (prefix) => {
-  const { Contents } = await r2.send(
+  const { Contents } = await r2Send(r2, 
     new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: prefix })
   );
   if (!Contents?.length) return;
   await Promise.all(
     Contents.map((obj) =>
-      r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: obj.Key }))
+      r2Send(r2, new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: obj.Key }))
     )
   );
 };

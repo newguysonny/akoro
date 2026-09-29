@@ -35,6 +35,7 @@ import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
 import { breakerStats } from "./lib/circuitBreaker.js";
 import { createLoadShedder }       from "./middleware/loadShedder.js";
+import { createTenantQuotaMiddleware } from "./middleware/tenantQuota.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 import { applyMigrations, migrationsAlreadyApplied, migrationUrl, currentGitSha } from "./lib/migrations.js";
@@ -283,6 +284,10 @@ app.use(requestLogger);
 // with an honest 503 + Retry-After instead of collapsing. Auth and health are
 // exempt — sessions must stay refreshable while the server is on its knees.
 app.use(createLoadShedder());
+// Per-school quota (plan §3.2): school-site traffic is attributed by Origin
+// and counted against the school's tier quota — one classroom is thirty
+// "users", so per-user limits can't see a noisy school. Fails open.
+app.use(createTenantQuotaMiddleware());
 app.use(passport.initialize());
 // Uploads are served without auth (question images etc.), which makes them the
 // one URL family a crawler or scraper can pull in bulk. Past-question scans are

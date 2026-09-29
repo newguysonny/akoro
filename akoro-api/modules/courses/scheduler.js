@@ -31,7 +31,7 @@
 
 import { Router }    from "express";
 import cron          from "node-cron";
-import axios         from "axios";
+import { meetingsPost, meetingsDelete } from "../../lib/meetingsBreaker.js";
 import db            from "../../db.js";
 import { createMeeting } from "./meeting-integration.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -53,7 +53,7 @@ const getZoomAccessToken = async () => {
     `${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`
   ).toString("base64");
 
-  const { data } = await axios.post(
+  const { data } = await meetingsPost(
     "https://zoom.us/oauth/token",
     new URLSearchParams({
       grant_type: "account_credentials",
@@ -71,7 +71,7 @@ const getZoomAccessToken = async () => {
 const createZoomMeeting = async ({ topic, scheduledAt, durationMin, teacherEmail, password }) => {
   const token = await getZoomAccessToken();
 
-  const { data } = await axios.post(
+  const { data } = await meetingsPost(
     `https://api.zoom.us/v2/users/${teacherEmail}/meetings`,
     {
       topic,
@@ -105,7 +105,7 @@ const createZoomMeeting = async ({ topic, scheduledAt, durationMin, teacherEmail
  */
 const deleteZoomMeeting = async (meetingId) => {
   const token = await getZoomAccessToken();
-  await axios.delete(`https://api.zoom.us/v2/meetings/${meetingId}`, {
+  await meetingsDelete(`https://api.zoom.us/v2/meetings/${meetingId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 };
@@ -117,7 +117,7 @@ const deleteZoomMeeting = async (meetingId) => {
  * The refresh token lives in the teachers table / teacher profile.
  */
 const refreshGoogleToken = async (refreshToken) => {
-  const { data } = await axios.post("https://oauth2.googleapis.com/token", {
+  const { data } = await meetingsPost("https://oauth2.googleapis.com/token", {
     client_id:     process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
     refresh_token: refreshToken,
@@ -137,7 +137,7 @@ const createGoogleMeetLink = async ({ topic, scheduledAt, durationMin, teacherRe
   const startTime = new Date(scheduledAt);
   const endTime   = new Date(startTime.getTime() + durationMin * 60 * 1000);
 
-  const { data } = await axios.post(
+  const { data } = await meetingsPost(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
     {
       summary:     topic,
@@ -175,7 +175,7 @@ const createGoogleMeetLink = async ({ topic, scheduledAt, durationMin, teacherRe
  */
 const deleteGoogleMeetLink = async ({ meetingId, teacherRefreshToken }) => {
   const accessToken = await refreshGoogleToken(teacherRefreshToken);
-  await axios.delete(
+  await meetingsDelete(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${meetingId}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );

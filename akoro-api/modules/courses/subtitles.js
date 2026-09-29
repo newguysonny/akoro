@@ -22,6 +22,7 @@ import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import config                             from "../../config/index.js";
+import { r2Send } from "../../lib/r2Breaker.js";
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -49,7 +50,7 @@ const r2 = new S3Client({
 });
 
 const uploadVttToR2 = async (vttContent, key) => {
-  await r2.send(new PutObjectCommand({
+  await r2Send(r2, new PutObjectCommand({
     Bucket:      config.r2.bucketName,
     Key:         key,
     Body:        Buffer.from(vttContent, "utf-8"),
@@ -61,7 +62,7 @@ const uploadVttToR2 = async (vttContent, key) => {
 };
 
 const deleteFromR2 = async (key) => {
-  await r2.send(new DeleteObjectCommand({ Bucket: config.r2.bucketName, Key: key }));
+  await r2Send(r2, new DeleteObjectCommand({ Bucket: config.r2.bucketName, Key: key }));
 };
 
 // ─── SRT → VTT converter ─────────────────────────────────────────────────────

@@ -11,8 +11,8 @@
  * service through fetch. Both funnel through here so ONE breaker state covers
  * all of it (also visible in /health.breakers as "paystack").
  */
-import axios from "axios";
-import { makeBreaker, ProviderUnavailableError } from "./circuitBreaker.js";
+import { makeHttpBreaker } from "./httpBreaker.js";
+import { ProviderUnavailableError } from "./circuitBreaker.js";
 
 export class PaystackUnavailableError extends ProviderUnavailableError {
   constructor(message = "Payment provider temporarily unavailable — please retry shortly.", retryAfterSec = null) {
@@ -21,28 +21,22 @@ export class PaystackUnavailableError extends ProviderUnavailableError {
   }
 }
 
-const breaker = makeBreaker(
-  "paystack",
-  // Accepts an axios config OR a zero-arg request thunk (the marketplace
-  // service builds its own fetch options).
-  (arg) => (typeof arg === "function" ? arg() : axios(arg)),
-  { errorClass: PaystackUnavailableError },
-);
-
-/** Run an arbitrary request thunk under the same breaker state. */
-export function paystackThrough(fn) {
-  return breaker.fire(fn);
-}
+const http = makeHttpBreaker("paystack", PaystackUnavailableError);
 
 /** POST — returns the full axios response so `const { data } = …` call sites
  *  keep working unchanged. */
 export function paystackPost(url, body, config = {}) {
-  return breaker.fire({ ...config, method: "post", url, data: body });
+  return http.post(url, body, config);
 }
 
 /** GET — same contract. */
 export function paystackGet(url, config = {}) {
-  return breaker.fire({ ...config, method: "get", url });
+  return http.get(url, config);
 }
 
-export const paystackBreaker = breaker;
+/** Run an arbitrary request thunk under the same breaker state. */
+export function paystackThrough(fn) {
+  return http.through(fn);
+}
+
+export const paystackBreaker = http.breaker;

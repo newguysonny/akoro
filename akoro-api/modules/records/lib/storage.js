@@ -26,6 +26,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
 import { getSignedUrl }                       from "@aws-sdk/s3-request-presigner";
 import config                                 from "../../../config/index.js";
 import db                                     from "../../../db.js";
+import { r2Send } from "../../../lib/r2Breaker.js";
 
 const s3 = new S3Client({
   region:    "auto",
@@ -132,6 +133,6 @@ export async function removeRecordFile(fileKey) {
     } catch (err) { console.error("[records/storage] fallback delete failed:", err.message); }
     return;
   }
-  try { await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: fileKey })); }
+  try { await r2Send(s3, new DeleteObjectCommand({ Bucket: BUCKET, Key: fileKey })); }
   catch (err) { console.error("[records/storage] delete failed:", err.message); }
 }
