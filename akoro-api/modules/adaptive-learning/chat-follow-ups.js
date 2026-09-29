@@ -77,6 +77,7 @@ export async function scheduleChatFollowUp({ userId, input, defaultTimezone }) {
   if (insertError) throw new Error("Could not save the scheduled chat follow-up");
 
   try {
+    await assertQueueCapacity(chatFollowUpQueue(), { name: "followups" });
     await chatFollowUpQueue().add("deliver-chat-follow-up", { followUpId: id }, {
       jobId: `chat-follow-up-${id}`,
       delay: validated.delayMs,

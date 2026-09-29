@@ -33,7 +33,7 @@ import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
-import { breakerStats, AIProviderUnavailableError } from "./lib/circuitBreaker.js";
+import { breakerStats } from "./lib/circuitBreaker.js";
 import { createLoadShedder }       from "./middleware/loadShedder.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
@@ -657,17 +657,6 @@ app.use((_req, res) => res.status(404).json({ success: false, message: "Route no
 app.use((err, _req, res, _next) => {
   if (err instanceof MulterError)
     return res.status(400).json({ success: false, message: `Upload error: ${err.message}`, code: err.code });
-  // Deliberate fail-fast (plan §3.4): the breaker is open on the AI provider.
-  // 503 + Retry-After, never 500 — nothing is broken on our side, and the
-  // client's correct move is to retry after the window, not to report a bug.
-  if (err instanceof AIProviderUnavailableError || err?.code === "provider_unavailable") {
-    res.setHeader("Retry-After", String(err?.retryAfterSec ?? 30));
-    return res.status(503).json({
-      success: false,
-      message: err?.message || "AI provider temporarily unavailable — please retry shortly.",
-      code: "provider_unavailable",
-    });
-  }
   if (err?.type === "entity.parse.failed")
     return res.status(400).json({ success: false, message: "Request body is not valid JSON", code: "invalid_json" });
   if (err?.type === "entity.too.large")
@@ -676,6 +665,20 @@ app.use((err, _req, res, _next) => {
     return res.status(415).json({ success: false, message: "Request body charset is not supported", code: "unsupported_charset" });
   if (err?.code === "23505")
     return res.status(409).json({ success: false, message: "That record already exists", code: "conflict" });
+  // Deliberate, typed fail-fast (plan §3.3/§3.4): breaker open or queue full.
+  // These carry their own status + Retry-After AND a stable `code` — the code
+  // requirement is what separates OUR typed errors from library errors that
+  // merely follow the http-errors expose convention (body-parser etc., all
+  // classified above). 503, never 500: nothing is broken; the client's correct
+  // move is to retry after the window.
+  if (err?.expose === true && err?.code && Number.isInteger(err?.statusCode) && err.statusCode >= 400) {
+    if (err.retryAfterSec) res.setHeader("Retry-After", String(err.retryAfterSec));
+    return res.status(err.statusCode).json({
+      success: false,
+      message: err.message,
+      code: err.code,
+    });
+  }
   console.error(`[${config.instanceId.slice(0, 8)}] [ERROR]`, err?.stack || err?.message || err);
   res.status(500).json({
     success: false, message: "Internal server error", code: "internal_error", instance: config.instanceId,

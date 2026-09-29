@@ -10,6 +10,20 @@
  * self-contained so it can be extracted into a standalone service.)
  */
 export function serverError(res, e, req) {
+  // A typed, deliberate fail-fast (breaker open, queue full) carries its own
+  // status and Retry-After — honor it instead of flattening to 500. Only
+  // errors WE threw qualify: expose + statusCode + a stable code. Library
+  // errors that merely follow the http-errors expose convention (body-parser)
+  // never carry our codes and fall through to the generic handling below.
+  if (e?.expose === true && e?.code && Number.isInteger(e?.statusCode) && e.statusCode >= 400) {
+    if (e.retryAfterSec) res.setHeader("Retry-After", String(e.retryAfterSec));
+    return res.status(e.statusCode).json({
+      success: false,
+      error:   e.message,
+      message: e.message,
+      ...(e.code ? { code: e.code } : {}),
+    });
+  }
   // Postgres unique-constraint violations are the caller's conflict to
   // resolve, not a server fault — but the constraint name in the message is
   // schema reconnaissance, so the body stays generic. PostgREST surfaces the

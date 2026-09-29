@@ -10,7 +10,8 @@
 //      breaker and 503 every other caller.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeAiBreaker, AIProviderUnavailableError } from "./circuitBreaker.js";
+import { makeAiBreaker, makeBreaker, AIProviderUnavailableError, ProviderUnavailableError } from "./circuitBreaker.js";
+import { PaystackUnavailableError } from "./paystackBreaker.js";
 
 const fastOpts = {
   timeout: 500,
@@ -78,4 +79,26 @@ test("429 from the provider DOES count toward opening the breaker", async () => 
 
   for (let i = 0; i < 6; i++) { try { await fire(); } catch {} }
   assert.ok(breaker.opened, "429 is provider pressure and must trip the breaker");
+});
+
+test("a custom errorClass flavors the fail-fast error (paystack money path)", async () => {
+  const { fire } = makeBreaker("test-paystack", async () => {
+    throw Object.assign(new Error("paystack 500"), { response: { status: 500 } });
+  }, { ...fastOpts, errorClass: PaystackUnavailableError });
+
+  let err = null;
+  for (let i = 0; i < 6; i++) { try { await fire(); } catch (e) { err = e; } }
+  assert.ok(err instanceof PaystackUnavailableError, "open breaker must throw the paystack-flavored error");
+  assert.ok(err instanceof ProviderUnavailableError, "which is still a provider-unavailable error for the global handler");
+  assert.equal(err.statusCode, 503);
+  assert.match(err.message, /payment provider/i);
+});
+
+test("axios-shaped 4xx (err.response.status) is filtered like SDK 4xx", async () => {
+  const { fire, breaker } = makeBreaker("test-axios-4xx", async () => {
+    throw Object.assign(new Error("bad request"), { response: { status: 400 } });
+  }, fastOpts);
+
+  for (let i = 0; i < 8; i++) { await assert.rejects(() => fire()); }
+  assert.ok(!breaker.opened, "axios 4xx is our bug, not an outage — breaker must stay closed");
 });

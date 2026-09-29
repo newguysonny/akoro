@@ -9,6 +9,7 @@ import Redis        from "ioredis";
 import { TaskDB, TaskScheduleDB } from "./lib/db.js";
 import { redisConnectionOptions }       from "../../lib/redisOptions.js";
 import { traceRedis } from "../../lib/redisTrace.js";
+import { assertQueueCapacity } from "../../lib/queueGuard.js";
 
 const redis = traceRedis(new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", redisConnectionOptions({ label: "tasks-scheduler" })), "tasks-scheduler");
 redis.on("error", (err) => console.error("[tasks/scheduler Redis]", err.message));

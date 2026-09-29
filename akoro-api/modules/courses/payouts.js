@@ -20,6 +20,7 @@
 
 import { Router }                         from "express";
 import axios                              from "axios";
+import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import { body, validationResult }         from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -205,7 +206,7 @@ const bankHandlers = {
   verify: asyncHandler(async (req, res) => {
     const { account_number, bank_code } = req.body;
 
-    const { data: psData } = await axios.get(
+    const { data: psData } = await paystackGet(
       `https://api.paystack.co/bank/resolve?account_number=${account_number}&bank_code=${bank_code}`,
       { headers: { Authorization: `Bearer ${PAYSTACK_KEY()}` } }
     );
@@ -249,7 +250,7 @@ const bankHandlers = {
    * List supported Nigerian banks from Paystack (for bank selector dropdown).
    */
   listBanks: asyncHandler(async (req, res) => {
-    const { data: psData } = await axios.get(
+    const { data: psData } = await paystackGet(
       "https://api.paystack.co/bank?country=nigeria&per_page=100&use_cursor=false",
       { headers: { Authorization: `Bearer ${PAYSTACK_KEY()}` } }
     );
@@ -344,7 +345,7 @@ const payoutHandlers = {
     // Create Paystack Transfer Recipient
     let recipientCode;
     try {
-      const { data: recipient } = await axios.post(
+      const { data: recipient } = await paystackPost(
         "https://api.paystack.co/transferrecipient",
         {
           type:           "nuban",
@@ -365,7 +366,7 @@ const payoutHandlers = {
     // Initiate Paystack Transfer
     let transferReference;
     try {
-      const { data: transfer } = await axios.post(
+      const { data: transfer } = await paystackPost(
         "https://api.paystack.co/transfer",
         {
           source:    "balance",

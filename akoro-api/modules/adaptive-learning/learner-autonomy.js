@@ -81,6 +81,7 @@ function validDueAt(value) {
 async function queueReview(review) {
   const due = validDueAt(review.due_at);
   if (!due) throw new Error("Task has no valid due time");
+  await assertQueueCapacity(autonomyQueue(), { name: "autonomy" });
   return autonomyQueue().add("review-due-task", {
     reviewId: review.id,
     revision: review.revision,

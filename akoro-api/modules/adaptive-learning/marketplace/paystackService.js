@@ -5,6 +5,7 @@
 // =============================================================
 
 import crypto from "crypto";
+import { paystackThrough } from "../../../lib/paystackBreaker.js";
 
 const PAYSTACK_BASE    = "https://api.paystack.co";
 const SECRET_KEY       = process.env.PAYSTACK_SECRET_KEY;
@@ -26,7 +27,7 @@ async function paystackRequest(method, path, body = null) {
   };
   if (body) options.body = JSON.stringify(body);
 
-  const res  = await fetch(`${PAYSTACK_BASE}${path}`, options);
+  const res  = await paystackThrough(() => fetch(`${PAYSTACK_BASE}${path}`, options));
   const data = await res.json();
 
   if (!res.ok) {

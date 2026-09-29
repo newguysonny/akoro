@@ -90,6 +90,14 @@ const BASE = {
   // plain text ("Too many requests..."), which no frontend error path can
   // parse — and a 429 the client can't identify can't back off intelligently.
   message: { success: false, message: 'Too many requests. Please slow down and try again shortly.', code: 'rate_limited' },
+  // Log every limit hit (hardening plan: layer + route + key type). Without
+  // this, a 429 storm is invisible in the logs — the client sees rejections,
+  // the server sees nothing.
+  handler: (req, res, options) => {
+    const key = req.user?.id ? `user:${req.user.id}` : req.rateLimitId ? `session:${req.rateLimitId}` : `ip:${req.ip}`;
+    console.warn(`[ratelimit] 429 ${req.method} ${req.originalUrl} key=${key} limit=${req.rateLimit?.limit}`);
+    res.status(options.statusCode || 429).json(options.message);
+  },
 };
 
 /** Auth endpoints: login / register — 5 req / 15 min */

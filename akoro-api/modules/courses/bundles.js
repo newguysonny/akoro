@@ -15,6 +15,7 @@
 
 import { Router }                         from "express";
 import axios                              from "axios";
+import { paystackPost, paystackGet }            from "../../lib/paystackBreaker.js";
 import { body, query, validationResult }  from "express-validator";
 import db                                 from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
@@ -351,7 +352,7 @@ const bundleHandlers = {
       },
     }).select().single();
 
-    const { data: psData } = await axios.post(
+    const { data: psData } = await paystackPost(
       "https://api.paystack.co/transaction/initialize",
       {
         email:     user.email,

@@ -25,14 +25,22 @@ const num = (key, fallback) => {
 /** Typed error for "we are failing fast on purpose". Maps to 503 + Retry-After
  *  in app.js's global handler — never a 500, because nothing is broken: the
  *  provider is, and the client should retry, not report a bug. */
-export class AIProviderUnavailableError extends Error {
-  constructor(message = "AI provider temporarily unavailable — please retry shortly.", retryAfterSec = null) {
+export class ProviderUnavailableError extends Error {
+  constructor(message = "External provider temporarily unavailable — please retry shortly.", retryAfterSec = null) {
     super(message);
-    this.name = "AIProviderUnavailableError";
+    this.name = "ProviderUnavailableError";
     this.statusCode = 503;
     this.code = "provider_unavailable";
     this.expose = true;
     this.retryAfterSec = retryAfterSec;
+  }
+}
+
+/** The AI flavour keeps its own message and identity (logs, /health). */
+export class AIProviderUnavailableError extends ProviderUnavailableError {
+  constructor(message = "AI provider temporarily unavailable — please retry shortly.", retryAfterSec = null) {
+    super(message, retryAfterSec);
+    this.name = "AIProviderUnavailableError";
   }
 }
 
@@ -51,10 +59,12 @@ export function breakerStats() {
 
 /**
  * Wrap an external call. `fn` receives the fire() arguments verbatim.
- * `overrides` exists so tests can use millisecond windows — production should
- * never pass it.
+ * `overrides.errorClass` selects the typed error thrown when open (defaults to
+ * the generic ProviderUnavailableError). Other overrides exist so tests can
+ * use millisecond windows — production should never pass them.
  */
-export function makeAiBreaker(name, fn, overrides = {}) {
+export function makeBreaker(name, fn, overrides = {}) {
+  const { errorClass = ProviderUnavailableError, ...breakerOverrides } = overrides;
   const breaker = new CircuitBreaker(fn, {
     // Backstop only — most calls carry their own __timeoutMs at the SDK level,
     // and streamed chat only waits here for response HEADERS, not the stream.
@@ -66,11 +76,12 @@ export function makeAiBreaker(name, fn, overrides = {}) {
     // A 4xx that is NOT 429 is OUR request bug (bad prompt, bad key shape) —
     // the provider is fine, so it must not open the breaker and 503 every
     // other caller. 429 and 5xx/timeouts are provider trouble and count.
+    // (OpenAI SDK errors carry .status; axios errors carry .response.status.)
     errorFilter: (err) => {
-      const status = err?.status;
+      const status = err?.status ?? err?.response?.status;
       return Boolean(status && status >= 400 && status < 500 && status !== 429);
     },
-    ...overrides,
+    ...breakerOverrides,
   });
 
   // State changes are the events an operator needs in the logs — the observ-
@@ -91,10 +102,15 @@ export function makeAiBreaker(name, fn, overrides = {}) {
         if (breaker.opened) {
           // The rejection IS the design: one honest 503 instead of a queue of
           // requests each burning a full SDK timeout against a dead provider.
-          throw new AIProviderUnavailableError(undefined, retryAfterSec);
+          throw new errorClass(undefined, retryAfterSec);
         }
         throw e;
       }
     },
   };
+}
+
+/** AI flavour — what lib/aiModel.js uses for chat + embeddings. */
+export function makeAiBreaker(name, fn, overrides = {}) {
+  return makeBreaker(name, fn, { errorClass: AIProviderUnavailableError, ...overrides });
 }
