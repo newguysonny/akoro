@@ -25,6 +25,9 @@ import CouponsPage          from './pages/CouponsPage.jsx';
 import TiersPage            from './pages/TiersPage.jsx';
 import PilotSchoolsPage     from './pages/PilotSchoolsPage.jsx';
 import AuditLogPage         from './pages/AuditLogPage.jsx';
+import SubscriptionsPage   from './pages/SubscriptionsPage.jsx';
+import CustomersPage       from './pages/CustomersPage.jsx';
+import InvoicesPage        from './pages/InvoicesPage.jsx';
 import ReportsPage          from './pages/ReportsPage.jsx';
 import NotificationsPage    from './pages/NotificationsPage.jsx';
 import MessagesPage         from './pages/MessagesPage.jsx';
@@ -122,6 +125,9 @@ export default function App() {
           <Route path="/tiers"             element={<AdminRoute><TiersPage /></AdminRoute>} />
           <Route path="/pilot-schools"      element={<AdminRoute><PilotSchoolsPage /></AdminRoute>} />
           <Route path="/audit-log"          element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+          <Route path="/subscriptions"       element={<AdminRoute><SubscriptionsPage /></AdminRoute>} />
+          <Route path="/billing-customers"   element={<AdminRoute><CustomersPage /></AdminRoute>} />
+          <Route path="/invoices"            element={<AdminRoute><InvoicesPage /></AdminRoute>} />
           <Route path="/reports"           element={<AdminRoute><ReportsPage /></AdminRoute>} />
           <Route path="/notifications"     element={<AdminRoute><NotificationsPage /></AdminRoute>} />
           <Route path="/messages"          element={<AdminRoute><MessagesPage /></AdminRoute>} />

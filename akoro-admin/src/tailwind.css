@@ -164,4 +164,20 @@
   .ak-name-edit input { @apply text-[1.4rem] font-extrabold py-1 px-2 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink; font-family: inherit; }
   .ak-date-input { @apply py-[7px] px-2.5 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink font-bold text-[0.9rem]; font-family: inherit; }
   .ak-date-input:focus { outline: 2px solid #6C3BFF; outline-offset: 1px; }
+
+  /* ── billing (subscriptions / customers / invoices) ────────────────────── */
+  .ak-badge-s-active   { @apply bg-akoro-greensoft text-akoro-green; }
+  .ak-badge-s-trial    { @apply bg-akoro-purplesoft text-akoro-purple; }
+  .ak-badge-s-past_due { @apply bg-akoro-coralsoft text-akoro-coral; }
+  .ak-badge-s-paused   { @apply bg-akoro-amber text-[#A8770B]; }
+  .ak-badge-s-canceled { @apply bg-akoro-bg text-akoro-dim border border-dashed border-akoro-line; }
+  .ak-badge-i-draft { @apply bg-akoro-bg text-akoro-dim border border-dashed border-akoro-line; }
+  .ak-badge-i-open  { @apply bg-akoro-purplesoft text-akoro-purple; }
+  .ak-badge-i-paid  { @apply bg-akoro-greensoft text-akoro-green; }
+  .ak-badge-i-void  { @apply bg-akoro-bg text-akoro-dim line-through; }
+
+  .ak-link-btn { @apply bg-transparent border-0 p-0 font-bold text-[inherit] text-akoro-purple cursor-pointer underline; font-family: inherit; }
+  .ak-overdue  { @apply text-akoro-coral font-bold; }
+  .ak-notes-box { @apply w-full py-2.5 px-3 rounded-akorosm border border-akoro-line bg-akoro-bg text-akoro-ink text-[0.9rem]; font-family: inherit; resize: vertical; }
+  .ak-table td.ak-num, .ak-table th.ak-num { @apply text-right; }
 }
