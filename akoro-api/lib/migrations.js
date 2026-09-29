@@ -76,6 +76,38 @@ export async function migrationsAlreadyApplied(url, sha) {
 }
 
 /**
+ * Schemas the app reaches through the Data API (supabase-js, service_role).
+ * Kept as one allowlist so the grant pass below can never be pointed at an
+ * unexpected schema, and so adding a schema to the platform means adding it
+ * here once.
+ */
+export const DATA_API_SCHEMAS = ["public", "edu", "mgmt", "vouchers", "content"];
+
+/**
+ * The grant statements that assert service_role Data API access for a set of
+ * schemas: schema USAGE, every table, every sequence (INSERTs need sequence
+ * access), and default privileges so tables created by LATER migrations
+ * inherit the grant even when their file forgets it. Pure — the security
+ * contract ("service_role only, never anon/authenticated") is test-covered.
+ */
+export function dataApiGrantStatements(schemas) {
+  const out = [];
+  for (const s of schemas) {
+    // Schemas come from the allowlist ∩ pg_namespace, but be defensive
+    // anyway: only plain identifiers are ever emitted, anything else is
+    // skipped — never interpolated, quoted or not.
+    if (!/^[a-z_][a-z0-9_]*$/i.test(String(s))) continue;
+    const q = `"${s}"`;
+    out.push(`GRANT USAGE ON SCHEMA ${q} TO service_role`);
+    out.push(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${q} TO service_role`);
+    out.push(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ${q} TO service_role`);
+    out.push(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${q} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO service_role`);
+    out.push(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${q} GRANT USAGE, SELECT ON SEQUENCES TO service_role`);
+  }
+  return out;
+}
+
+/**
  * Apply the manifest groups. Never throws for per-file SQL failures unless
  * continueOnError is false (default) — matching the original script: the run
  * halts at the first failing file and reports. Returns { applied, failed }.
@@ -101,6 +133,37 @@ export async function applyMigrations({ url, groups = ["schema"], continueOnErro
         console.error(`[MIGRATIONS:${label}] FAILED ${file}: ${err.message}`);
         if (!continueOnError) throw new Error(`Migration halted at ${file}. Fix it and re-run (migrations are idempotent).`);
       }
+    }
+    // ── Data API grants (Supabase change, 2026-10-30) ────────────────────────
+    // Supabase stops auto-granting Data API access to NEW tables in public.
+    // Existing tables keep their grants, and this app reaches the database
+    // ONLY as service_role (no frontend talks to Supabase directly) — so the
+    // exposure is a future migration forgetting a grant. Make the invariant
+    // structural instead: every run re-asserts service_role access on every
+    // schema the app uses, and default privileges mean a table created by a
+    // later migration inherits the grant even if its file forgets it.
+    // Deliberately ONLY service_role: granting anon/authenticated would expose
+    // the Data API to any client holding the project's public anon key.
+    // Best-effort by design (like the log write below): idempotent, re-run on
+    // every deploy, loud on failure — a blocked deploy over a grant helps
+    // nobody, and the next run self-heals.
+    try {
+      const { rows: roleRows } = await client.query("SELECT 1 FROM pg_roles WHERE rolname = 'service_role'");
+      if (roleRows.length) {
+        const { rows: nsRows } = await client.query(
+          "SELECT nspname FROM pg_namespace WHERE nspname = ANY($1::text[])",
+          [DATA_API_SCHEMAS],
+        );
+        const schemas = nsRows.map((r) => r.nspname);
+        for (const stmt of dataApiGrantStatements(schemas)) await client.query(stmt);
+        if (schemas.length) {
+          console.log(`[MIGRATIONS:${label}] Data API grants asserted (service_role) on: ${schemas.join(", ")}`);
+        }
+      } else {
+        console.log(`[MIGRATIONS:${label}] service_role absent (local Postgres?) — Data API grants skipped`);
+      }
+    } catch (grantErr) {
+      console.error(`[MIGRATIONS:${label}] DATA API GRANT FAILED — if new tables report "permission denied" through the API, run the grants manually: ${grantErr.message}`);
     }
     // Durable record (best-effort — a logging failure never fails the run).
     try {
