@@ -50,7 +50,8 @@ export default function SubscriptionsPage() {
   const [loadError, setLoadError]     = useState('');
   const [subs, setSubs]               = useState([]);
   const [search, setSearch]           = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(
+    ['active', 'trial', 'past_due', 'canceled', 'paused'].includes(params.get('status')) ? params.get('status') : 'all');
   const [page, setPage]               = useState(1);
 
   const [selected, setSelected]       = useState(null); // detail w/ timeline

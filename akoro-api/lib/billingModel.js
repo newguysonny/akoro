@@ -138,3 +138,93 @@ export function invoiceOverdueDays(inv, today = todayStr()) {
   const d = Math.round((new Date(`${today}T00:00:00Z`) - new Date(`${inv.due_at}T00:00:00Z`)) / 86400000);
   return d > 0 ? d : 0;
 }
+
+/* ═══ Overview (plan §4.6 #5 — analytics with real numbers) ══════════════════ */
+
+/**
+ * The Overview panel's numbers, computed from live rows (Phase 5: the
+ * gateway + invoices are real, so revenue metrics are grounded now).
+ *
+ * Input shapes (all plain rows — the endpoint normalizes, this stays pure):
+ *   subs: [{ id, learner_id, customer_id, status, price, cycle, next_date,
+ *            tier_name, learner_name, trial_ended: bool, ever_paid: bool }]
+ *   paidInvoices: [{ customer_id, amount }]        // amount = Σ line items
+ *   activePilots: number
+ *
+ * Trial conversion is learner-based and history-driven: concluded trials are
+ * learners whose trial subscription has a "Trial ended" event; converted are
+ * those who ever held a paid plan. Returns nulls (rendered "—") until there
+ * is at least one concluded trial — an invented 0% would be a lie.
+ */
+export function computeOverview({ subs = [], paidInvoices = [], activePilots = 0, today = todayStr() }) {
+  const daysUntil = (d) => (d ? Math.round((new Date(`${d}T00:00:00Z`) - new Date(`${today}T00:00:00Z`)) / 86400000) : null);
+
+  const paying  = subs.filter((s) => s.status === "active" && s.price > 0);
+  const trials  = subs.filter((s) => s.status === "trial");
+  const pastDue = subs.filter((s) => s.status === "past_due");
+  const trialsEnding = trials.filter((s) => { const d = daysUntil(s.next_date); return d !== null && d >= 0 && d <= 7; });
+
+  const concludedLearners = new Set(subs.filter((s) => s.trial_ended).map((s) => s.learner_id).filter(Boolean));
+  const paidLearners      = new Set(subs.filter((s) => s.ever_paid).map((s) => s.learner_id).filter(Boolean));
+  let convertedLearners = new Set([...concludedLearners].filter((id) => paidLearners.has(id)));
+  const conversion = concludedLearners.size
+    ? { pct: Math.round((convertedLearners.size / concludedLearners.size) * 100), converted: convertedLearners.size, concluded: concludedLearners.size }
+    : { pct: null, converted: convertedLearners.size, concluded: concludedLearners.size };
+
+  // Subscribers by plan: the prototype's Trial / Freemium / Premium rows,
+  // generalized to whatever tiers actually exist (active subs per tier).
+  const byTier = new Map();
+  for (const s of subs) {
+    if (s.status !== "active") continue;
+    const label = s.tier_name ?? "Plan";
+    byTier.set(label, (byTier.get(label) ?? 0) + 1);
+  }
+  const TIER_ORDER = ["Freemium", "Premium"];
+  const tierLabels = [...byTier.keys()].sort((a, b) => {
+    const ai = TIER_ORDER.indexOf(a), bi = TIER_ORDER.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.localeCompare(b);
+  });
+  const mix = [
+    { label: "Trial", n: trials.length },
+    ...tierLabels.map((label) => ({ label, n: byTier.get(label) })),
+  ];
+
+  // Needs attention: past_due first, then trials ending within 7 days.
+  const attention = [
+    ...pastDue.map((s) => ({ subscription_id: s.id, learner_name: s.learner_name, kind: "past_due", price: s.price, cycle: s.cycle })),
+    ...trialsEnding.map((s) => ({ subscription_id: s.id, learner_name: s.learner_name, kind: "trial_ending", next_date: s.next_date })),
+  ];
+
+  const renewals = subs
+    .filter((s) => s.status === "active" && s.price > 0 && (() => { const d = daysUntil(s.next_date); return d !== null && d >= 0 && d <= 30; })())
+    .map((s) => ({ subscription_id: s.id, learner_name: s.learner_name, renews: s.next_date, price: s.price, cycle: s.cycle }))
+    .sort((a, b) => String(a.renews).localeCompare(String(b.renews)));
+
+  // Revenue, grounded in what actually happened: MRR from active paid subs
+  // (annual normalized to monthly), revenue-to-date from paid invoices.
+  const mrr = Math.round(paying.reduce((sum, s) => sum + (s.cycle === "annual" ? s.price / 12 : s.price), 0));
+  const revenueToDate = paidInvoices.reduce((sum, i) => sum + (i.amount ?? 0), 0);
+  const payingCustomers = new Set(paidInvoices.map((i) => i.customer_id).filter(Boolean)).size;
+
+  return {
+    kpis: {
+      paying: paying.length,
+      trials: trials.length,
+      trialsEnding: trialsEnding.length,
+      conversion,
+      pastDue: pastDue.length,
+      atRisk: pastDue.reduce((sum, s) => sum + s.price, 0),
+      activePilots,
+    },
+    mix,
+    attention,
+    renewals,
+    revenue: {
+      mrr,
+      arr: mrr * 12,
+      revenueToDate,
+      payingCustomers,
+      avgPerCustomer: payingCustomers ? Math.round(revenueToDate / payingCustomers) : 0,
+    },
+  };
+}

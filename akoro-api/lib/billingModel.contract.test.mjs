@@ -130,3 +130,92 @@ test("invoiceTimeline: derived most-recent-first; invoiceOverdueDays only for op
   assert.equal(invoiceOverdueDays({ status: "paid", due_at: "2026-09-25" }, T), 0);
   assert.equal(invoiceOverdueDays({ status: "open", due_at: null }, T), 0);
 });
+
+/* ═══ computeOverview (Phase 5 analytics) ════════════════════════════════════ */
+
+import { computeOverview } from "./billingModel.js";
+
+const today = "2026-09-29";
+
+test("computeOverview: KPIs count paying/trials/past-due and 7-day trial endings", () => {
+  const subs = [
+    { id: "a", learner_id: "L1", customer_id: "C1", status: "active", price: 1500, cycle: "monthly", next_date: "2026-10-20", tier_name: "Premium", learner_name: "Ada", trial_ended: false, ever_paid: true },
+    { id: "b", learner_id: "L2", customer_id: "C2", status: "active", price: 0, cycle: "monthly", next_date: null, tier_name: "Freemium", learner_name: "Bo", trial_ended: false, ever_paid: false },
+    { id: "c", learner_id: "L3", customer_id: "C3", status: "trial", price: 1500, cycle: "monthly", next_date: "2026-10-02", tier_name: "Premium", learner_name: "Cy", trial_ended: false, ever_paid: false },
+    { id: "d", learner_id: "L4", customer_id: "C4", status: "past_due", price: 1500, cycle: "monthly", next_date: "2026-09-28", tier_name: "Premium", learner_name: "Dee", trial_ended: true, ever_paid: true },
+    { id: "e", learner_id: "L5", customer_id: "C5", status: "trial", price: 1500, cycle: "monthly", next_date: "2026-11-01", tier_name: "Premium", learner_name: "Em", trial_ended: false, ever_paid: false },
+  ];
+  const o = computeOverview({ subs, paidInvoices: [], activePilots: 3, today });
+  assert.equal(o.kpis.paying, 1);
+  assert.equal(o.kpis.trials, 2);
+  assert.equal(o.kpis.trialsEnding, 1);           // Cy ends within 7 days, Em doesn't
+  assert.equal(o.kpis.pastDue, 1);
+  assert.equal(o.kpis.atRisk, 1500);
+  assert.equal(o.kpis.activePilots, 3);
+});
+
+test("computeOverview: conversion is learner-based and null until a trial concluded", () => {
+  const empty = computeOverview({ subs: [], paidInvoices: [], activePilots: 0, today });
+  assert.equal(empty.kpis.conversion.pct, null);
+
+  const subs = [
+    // L1: trial ended, then paid → converted. L2: trial ended, never paid. L3: still trialing (not concluded).
+    { id: "a", learner_id: "L1", status: "active", price: 1500, cycle: "monthly", tier_name: "Premium", trial_ended: true, ever_paid: true },
+    { id: "b", learner_id: "L2", status: "active", price: 0, cycle: "monthly", tier_name: "Freemium", trial_ended: true, ever_paid: false },
+    { id: "c", learner_id: "L3", status: "trial", price: 1500, cycle: "monthly", tier_name: "Premium", trial_ended: false, ever_paid: false },
+  ];
+  const o = computeOverview({ subs, paidInvoices: [], activePilots: 0, today });
+  assert.deepEqual(o.kpis.conversion, { pct: 50, converted: 1, concluded: 2 });
+});
+
+test("computeOverview: plan mix is Trial + active subs per tier, Freemium/Premium first", () => {
+  const subs = [
+    { id: "a", learner_id: "L1", status: "active", price: 1500, cycle: "monthly", tier_name: "Premium", trial_ended: false, ever_paid: true },
+    { id: "b", learner_id: "L2", status: "active", price: 0, cycle: "monthly", tier_name: "Freemium", trial_ended: false, ever_paid: false },
+    { id: "c", learner_id: "L3", status: "active", price: 0, cycle: "monthly", tier_name: "Freemium", trial_ended: false, ever_paid: false },
+    { id: "d", learner_id: "L4", status: "active", price: 0, cycle: "monthly", tier_name: "Custom Tier", trial_ended: false, ever_paid: false },
+    { id: "e", learner_id: "L5", status: "trial", price: 1500, cycle: "monthly", tier_name: "Premium", trial_ended: false, ever_paid: false },
+    { id: "f", learner_id: "L6", status: "canceled", price: 1500, cycle: "monthly", tier_name: "Premium", trial_ended: false, ever_paid: true }, // not in mix
+  ];
+  const o = computeOverview({ subs, paidInvoices: [], activePilots: 0, today });
+  assert.deepEqual(o.mix, [
+    { label: "Trial", n: 1 },
+    { label: "Freemium", n: 2 },
+    { label: "Premium", n: 1 },
+    { label: "Custom Tier", n: 1 },
+  ]);
+});
+
+test("computeOverview: attention lists past_due then ending trials; renewals window is 30 days", () => {
+  const subs = [
+    { id: "pd", learner_id: "L1", status: "past_due", price: 1500, cycle: "monthly", next_date: "2026-09-20", tier_name: "Premium", learner_name: "Ada", trial_ended: false, ever_paid: true },
+    { id: "te", learner_id: "L2", status: "trial", price: 1500, cycle: "monthly", next_date: "2026-10-01", tier_name: "Premium", learner_name: "Bo", trial_ended: false, ever_paid: false },
+    { id: "r1", learner_id: "L3", status: "active", price: 1500, cycle: "monthly", next_date: "2026-10-15", tier_name: "Premium", learner_name: "Cy", trial_ended: false, ever_paid: true },
+    { id: "r2", learner_id: "L4", status: "active", price: 18000, cycle: "annual", next_date: "2026-10-31", tier_name: "Premium", learner_name: "Dee", trial_ended: false, ever_paid: true },
+    { id: "x",  learner_id: "L5", status: "active", price: 1500, cycle: "monthly", next_date: "2026-12-25", tier_name: "Premium", learner_name: "Em", trial_ended: false, ever_paid: true }, // outside 30d
+  ];
+  const o = computeOverview({ subs, paidInvoices: [], activePilots: 0, today });
+  assert.deepEqual(o.attention.map((a) => a.kind), ["past_due", "trial_ending"]);
+  assert.equal(o.attention[0].subscription_id, "pd");
+  assert.deepEqual(o.renewals.map((r) => r.subscription_id), ["r1"]); // r2 (day 32) and x (day 87) are outside the window
+});
+
+test("computeOverview: MRR normalizes annual to monthly; revenue comes only from paid invoices", () => {
+  const subs = [
+    { id: "a", learner_id: "L1", customer_id: "C1", status: "active", price: 1500, cycle: "monthly", next_date: "2026-10-20", tier_name: "Premium", trial_ended: false, ever_paid: true },
+    { id: "b", learner_id: "L2", customer_id: "C2", status: "active", price: 18000, cycle: "annual", next_date: "2027-03-01", tier_name: "Premium", trial_ended: false, ever_paid: true },
+    { id: "c", learner_id: "L3", customer_id: "C3", status: "active", price: 1500, cycle: "monthly", next_date: "2026-10-01", tier_name: "Premium", trial_ended: false, ever_paid: true }, // trial? no — active
+  ];
+  const paidInvoices = [
+    { customer_id: "C1", amount: 1500 },
+    { customer_id: "C1", amount: 1500 },
+    { customer_id: "C2", amount: 18000 },
+    { customer_id: "C4", amount: 500 },
+  ];
+  const o = computeOverview({ subs, paidInvoices, activePilots: 0, today });
+  assert.equal(o.revenue.mrr, 4500); // 1500 + 18000/12 + 1500
+  assert.equal(o.revenue.arr, 4500 * 12);
+  assert.equal(o.revenue.revenueToDate, 21500);
+  assert.equal(o.revenue.payingCustomers, 3);
+  assert.equal(o.revenue.avgPerCustomer, Math.round(21500 / 3));
+});
