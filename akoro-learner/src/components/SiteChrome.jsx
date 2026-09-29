@@ -261,6 +261,7 @@ export function SFSHeader() {
 
           {/* Apply button – uses the same gradient as primary buttons */}
           <button
+            onClick={() => navigate('/apply')}
             style={{
               background: `linear-gradient(135deg, ${B}, ${B2})`,
               color: '#fff',

@@ -41,6 +41,8 @@ const PrivacyPolicyPage  = lazyWithRetry(() => import('./pages/PrivacyPolicyPage
 const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage.jsx'));
 const AboutPage          = lazyWithRetry(() => import('./pages/AboutPage.jsx'));
 const PricingPage        = lazyWithRetry(() => import('./pages/PricingPage.jsx'));
+const PilotApplicationPage = lazyWithRetry(() => import('./pages/PilotApplicationPage.jsx'));
+const UpgradePage          = lazyWithRetry(() => import('./pages/UpgradePage.jsx'));
 const ComparisonPage     = lazyWithRetry(() => import('./pages/ComparisonPage.jsx'));
 const ContactPage        = lazyWithRetry(() => import('./pages/ContactPage.jsx'));
 const CareersPage        = lazyWithRetry(() => import('./pages/CareersPage.jsx'));
@@ -148,6 +150,8 @@ function AppRoutes() {
         
         
       <Route path="/pricing"  element={<PricingPage />}/>
+      <Route path="/apply"   element={<PilotApplicationPage />}/>
+      <Route path="/upgrade" element={<UpgradePage />}/>
       <Route path="/compare"  element={<ComparisonPage />}/>
       <Route path="/about"    element={<AboutPage />}/>
       <Route path="/contact"  element={<ContactPage />}/>
