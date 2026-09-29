@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPost, apiPatch } from '../services/api.js';
+import MessageModal from './billing/MessageModal.jsx';
+
+const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', inapp: 'In-app notice' };
+const AUDIENCE_LABELS = { admins: 'School administrators', instructors: 'Instructors', students: 'Students', all: 'Everyone at the school' };
 
 /**
  * PilotSchoolsPage — Pilot Schools + Applications queue (plan §4.6 Phase 1)
@@ -32,6 +36,11 @@ const addDays = (dateStr, n) => {
   return d.toISOString().slice(0, 10);
 };
 const daysUntil = (dateStr) => Math.round((new Date(`${dateStr}T00:00:00Z`) - new Date(`${todayStr()}T00:00:00Z`)) / 86400000);
+const fmtWhenSent = (iso) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 
 export default function PilotSchoolsPage() {
   const [loading, setLoading] = useState(true);
@@ -50,6 +59,8 @@ export default function PilotSchoolsPage() {
   const [settingsDraft, setSettingsDraft]     = useState(null);
   const [renaming, setRenaming]     = useState(false);
   const [nameDraft, setNameDraft]   = useState('');
+  const [messages, setMessages]   = useState([]);
+  const [msgContext, setMsgContext] = useState(null);
 
   const [addOpen, setAddOpen]       = useState(false);
   const [addForm, setAddForm]       = useState(null);
@@ -106,7 +117,10 @@ export default function PilotSchoolsPage() {
   });
 
   /* ── detail actions ─────────────────────────────────────────────────────── */
-  const openDetail = (s) => { setSelected(s); setSettingsEditing(false); setRenaming(false); };
+  const openDetail = (s) => {
+    setSelected(s); setSettingsEditing(false); setRenaming(false);
+    apiGet(`/api/admin/messages?school_id=${s.school_id}`).then((r) => setMessages(r.data ?? [])).catch(() => setMessages([]));
+  };
 
   const startSettingsEdit = () => {
     setSettingsDraft({
@@ -288,6 +302,7 @@ export default function PilotSchoolsPage() {
                 <p className="ak-sub !mt-1.5 !mb-0">{detailStatusText(selected)}</p>
               </div>
               <div className="ak-detail-actions">
+                <button className="ak-btn ak-btn-small" onClick={() => setMsgContext({ kind: 'school', school: { id: selected.school_id, name: selected.name, contact: selected.contact, end_date: selected.end_date } })}>Message school</button>
                 <button className="ak-btn ak-btn-ghost ak-btn-small" onClick={() => { setRenaming(true); setNameDraft(selected.name); }}>Rename</button>
                 <button className="ak-btn ak-btn-ghost ak-btn-small" onClick={endPilotNow}>End pilot now</button>
                 <button className="ak-btn ak-btn-danger ak-btn-small" onClick={archiveSchool}>Archive</button>
@@ -359,6 +374,21 @@ export default function PilotSchoolsPage() {
               </div>
               <button className="ak-btn ak-btn-small" onClick={saveContact}>Save contact</button>
             </div>
+
+            <div className="ak-section-title">Messages</div>
+            <table className="ak-table">
+              <thead><tr><th>When</th><th>Channel</th><th>Audience</th><th>Message</th></tr></thead>
+              <tbody>
+                {messages.length ? messages.map((m) => (
+                  <tr key={m.id}>
+                    <td className="whitespace-nowrap">{fmtWhenSent(m.sent_at)}</td>
+                    <td>{CHANNEL_LABELS[m.channel] ?? m.channel}{m.delivery_status === 'failed' && <span className="text-akoro-coral"> · failed</span>}{m.delivery_status === 'no_recipient' && <span className="text-akoro-dim"> · no recipient</span>}</td>
+                    <td>{AUDIENCE_LABELS[m.audience] ?? '—'}</td>
+                    <td>{m.subject || m.body.slice(0, 60)}</td>
+                  </tr>
+                )) : <tr><td colSpan={4} className="text-akoro-dim">No messages sent yet.</td></tr>}
+              </tbody>
+            </table>
           </>
         ) : (
           /* ══════════ SCHOOLS LIST + APPLICATIONS ══════════ */
@@ -557,6 +587,14 @@ export default function PilotSchoolsPage() {
               <button className="ak-btn" onClick={approveApplication}>Approve &amp; create pilot</button>
             </div>
           </Modal>
+        )}
+
+        {msgContext && (
+          <MessageModal
+            context={msgContext}
+            onClose={() => setMsgContext(null)}
+            onSent={(ok, msg) => { if (msg) showToast(msg); if (ok && selected) apiGet(`/api/admin/messages?school_id=${selected.school_id}`).then((r) => setMessages(r.data ?? [])).catch(() => {}); }}
+          />
         )}
 
         <div className={`ak-save-toast ${toast ? 'ak-save-toast-show' : ''}`} role="status">{toast}</div>

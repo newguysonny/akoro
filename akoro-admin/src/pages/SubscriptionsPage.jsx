@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPatch, apiPost, apiDelete } from '../services/api.js';
 import { SubStatusBadge, refId, subPrice, fmtDate, fmtWhen, Pagination, Filters } from './billing/bits.jsx';
+import MessageModal from './billing/MessageModal.jsx';
 
 /**
  * SubscriptionsPage — one record per trialing or subscribed learner, billed to
@@ -57,6 +58,7 @@ export default function SubscriptionsPage() {
   const [notesDraft, setNotesDraft]   = useState('');
   const [usableCoupons, setUsableCoupons] = useState([]);
   const [couponCode, setCouponCode]  = useState('');
+  const [msgContext, setMsgContext]  = useState(null);
 
   const [toast, setToast]             = useState(null);
   const toastTimer                    = useRef(null);
@@ -298,7 +300,7 @@ export default function SubscriptionsPage() {
                 </Filters>
 
                 <table className="ak-table">
-                  <thead><tr><th>ID</th><th>Billing contact</th><th>Learner</th><th>Plan</th><th>Status</th><th>Next date</th></tr></thead>
+                  <thead><tr><th>ID</th><th>Billing contact</th><th>Learner</th><th>Plan</th><th>Status</th><th>Next date</th><th></th></tr></thead>
                   <tbody>
                     {items.length ? items.map((s) => (
                       <tr key={s.id} className="ak-clickable" onClick={() => openDetail(s.id)}>
@@ -308,14 +310,23 @@ export default function SubscriptionsPage() {
                         <td>{s.tier?.name} <small className="text-akoro-dim">{subPrice(s)}</small></td>
                         <td><SubStatusBadge status={s.status} /></td>
                         <td>{fmtDate(s.next_date)}</td>
+                        <td><button className="ak-btn ak-btn-ghost ak-btn-small" onClick={(e) => { e.stopPropagation(); setMsgContext({ kind: 'sub', customer: s.customer, subscriptionId: s.id, learnerName: s.learner?.name }); }}>Message</button></td>
                       </tr>
-                    )) : <tr><td colSpan={6} className="text-akoro-dim">No subscriptions match.</td></tr>}
+                    )) : <tr><td colSpan={7} className="text-akoro-dim">No subscriptions match.</td></tr>}
                   </tbody>
                 </table>
                 <Pagination page={safePage} totalPages={totalPages} onPage={setPage} />
               </>
             )}
           </>
+        )}
+
+        {msgContext && (
+          <MessageModal
+            context={msgContext}
+            onClose={() => setMsgContext(null)}
+            onSent={(ok, msg) => { if (msg) showToast(msg); if (ok) load(); }}
+          />
         )}
 
         <div className={`ak-save-toast ${toast ? 'ak-save-toast-show' : ''}`} role="status">{toast}</div>

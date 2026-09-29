@@ -27,6 +27,8 @@ import cron from "node-cron";
 import db from "../../db.js";
 import { authenticateToken, requireRole } from "../auth/routes.js";
 import { validatePilotSchoolInput, buildPilotPatch, todayStr } from "../../lib/pilotModel.js";
+import { fillTemplate } from "../../lib/messageModel.js";
+import { queueMessage, getBillingSettings } from "../billing/delivery.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -253,6 +255,45 @@ router.post("/pilot-applications/:id/reject", ...adminOnly, asyncHandler(async (
 cron.schedule("30 3 * * *", async () => {
   try {
     const today = todayStr();
+
+    // Pilot-ending reminders first (plan §4.6 #4): active cohorts whose end
+    // date is within the next 7 days get the prototype's "Pilot ending" email
+    // to the school's admin contact — once per school, only when the setting
+    // is on. Runs before the expiry sweep so the last-chance notice still goes
+    // out on the morning of the final day.
+    try {
+      const settings = await getBillingSettings();
+      if (settings.notify_pilot_ending) {
+        const soon = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+        const { data: ending } = await db.from("pilot_cohorts")
+          .select("id, school_id, end_date, pilot_schools!pilot_cohorts_school_id_fkey(id, name, contact_email)")
+          .eq("status", "active").gte("end_date", today).lte("end_date", soon);
+        let reminded = 0;
+        for (const c of ending ?? []) {
+          const school = c.pilot_schools ?? null;
+          if (!school?.id || !school.contact_email) continue;
+          const { count } = await db.from("messages")
+            .select("id", { count: "exact", head: true })
+            .eq("school_id", school.id).eq("template", "pilot-end");
+          if ((count ?? 0) > 0) continue;
+          const t = fillTemplate("pilot-end", { school: school.name, end: c.end_date });
+          await queueMessage({
+            schoolId: school.id,
+            audience: "admins",
+            channel: "email",
+            template: "pilot-end",
+            subject: t.subject,
+            body: t.body,
+            sentBy: "system (pilot-expiry-check)",
+          });
+          reminded++;
+        }
+        if (reminded) console.log(`[pilot-expiry-check] queued ${reminded} pilot-ending reminder(s)`);
+      }
+    } catch (e) {
+      console.error("[pilot-expiry-check] reminder sweep failed:", e.message);
+    }
+
     const { data: expired } = await db.from("pilot_cohorts")
       .select("id, school_id, end_date, pilot_schools!pilot_cohorts_school_id_fkey(name)")
       .eq("status", "active").lt("end_date", today);

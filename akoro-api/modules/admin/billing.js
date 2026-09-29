@@ -37,6 +37,8 @@ import { authenticateToken, requireRole } from "../auth/routes.js";
 import {
   applySubscriptionAction, applyInvoiceAction, invoiceTimeline, todayStr, isDateStr,
 } from "../../lib/billingModel.js";
+import config from "../../config/index.js";
+import { getBillingSettings } from "../billing/delivery.js";
 
 const router    = Router();
 const adminOnly = [authenticateToken, requireRole(["admin"])];
@@ -317,5 +319,72 @@ function invoiceActionEndpoint(action) {
 for (const action of ["finalize", "mark-paid", "void"]) {
   router.post(`/invoices/:id/${action}`, ...adminOnly, invoiceActionEndpoint(action));
 }
+
+/* ═══ BILLING SETTINGS (plan §4.6 #4 — gateway/notification/branding) ═══════ */
+
+const SETTINGS_DEFAULTS = {
+  email_from_name: "Akoro",
+  email_from_address: process.env.RESEND_FROM_EMAIL || "noreply@akoro.app",
+  support_email: null,
+  notify_payment_failed: true,
+  notify_trial_ending: true,
+  notify_pilot_ending: true,
+};
+
+const gatewayStatus = () => {
+  const sk = config.paystack?.secretKey ?? null;
+  return {
+    paystack_mode:             sk ? (sk.startsWith("sk_live_") ? "live" : "test") : "not_configured",
+    paystack_public_key:       Boolean(config.paystack?.publicKey),
+    paystack_secret_key:       Boolean(sk),
+    webhook_url:               `${config.apiBaseUrl?.replace(/\/$/, "") ?? ""}/api/webhooks/paystack`,
+    email_provider_configured: Boolean(process.env.RESEND_API_KEY),
+    sms_provider_configured:   Boolean(config.twilio?.accountSid && config.twilio?.authToken && config.twilio?.phoneNumber),
+  };
+};
+
+router.get("/billing-settings", ...adminOnly, asyncHandler(async (req, res) => {
+  const settings = await getBillingSettings();
+  return ok(res, { settings, gateway: gatewayStatus() });
+}));
+
+router.patch("/billing-settings", ...adminOnly, asyncHandler(async (req, res) => {
+  const current = await getBillingSettings();
+  const patch = {};
+  const errors = {};
+
+  if (req.body.email_from_name !== undefined) {
+    const v = String(req.body.email_from_name).trim();
+    if (!v || v.length > 80) errors.email_from_name = "Sender name must be 1–80 characters.";
+    else patch.email_from_name = v;
+  }
+  if (req.body.email_from_address !== undefined) {
+    const v = String(req.body.email_from_address).trim().toLowerCase();
+    if (!EMAIL_RE.test(v)) errors.email_from_address = "Enter a valid from address.";
+    else patch.email_from_address = v;
+  }
+  if (req.body.support_email !== undefined) {
+    const v = String(req.body.support_email ?? "").trim().toLowerCase();
+    if (v && !EMAIL_RE.test(v)) errors.support_email = "Enter a valid support address.";
+    else patch.support_email = v || null;
+  }
+  for (const flag of ["notify_payment_failed", "notify_trial_ending", "notify_pilot_ending"]) {
+    if (req.body[flag] !== undefined) {
+      if (typeof req.body[flag] !== "boolean") errors[flag] = "Must be true or false.";
+      else patch[flag] = req.body[flag];
+    }
+  }
+  if (Object.keys(errors).length)
+    return res.status(400).json({ success: false, code: "invalid_billing_settings", message: Object.values(errors).join("; "), fields: errors });
+  if (!Object.keys(patch).length) return ok(res, { settings: current, gateway: gatewayStatus(), unchanged: true });
+
+  patch.updated_at = new Date().toISOString();
+  const { data, error } = await db.from("billing_settings").update(patch).eq("id", true).select().single();
+  if (error) return res.status(500).json({ success: false, message: error.message });
+
+  await audit(req, "billing_settings.updated", "billing_settings", true,
+    { ...SETTINGS_DEFAULTS, ...current }, { ...SETTINGS_DEFAULTS, ...data });
+  return ok(res, { settings: data, gateway: gatewayStatus() });
+}));
 
 export default router;

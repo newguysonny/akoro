@@ -13,6 +13,7 @@ import tiersRouter from "./tiers.js";
 import pilotSchoolsRouter from "./pilotSchools.js";
 import billingRouter from "./billing.js";
 import couponsRouter from "./coupons.js";
+import messagesRouter from "./messages.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -29,5 +30,6 @@ router.use("/", tiersRouter);
 router.use("/", pilotSchoolsRouter);
 router.use("/", billingRouter);
 router.use("/", couponsRouter);
+router.use("/", messagesRouter);
 
 export default router;

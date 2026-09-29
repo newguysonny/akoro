@@ -154,7 +154,13 @@
     "2026-autonomy-planner.sql",
     "2026-edu-blogs.sql",
     "2026-edu-blogs-public.sql",
-    "2026-records.sql"
+    "2026-records.sql",
+    "2026-tiers-pilot-applications.sql",
+    "2026-pilot-schools-cohorts.sql",
+    "2026-tenant-quota.sql",
+    "2026-billing-core.sql",
+    "2026-coupons-gateway.sql",
+    "2026-billing-messaging.sql"
   ],
   "demo": [
     "2026-seed-school.sql",

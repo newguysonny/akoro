@@ -22,7 +22,9 @@ import cron from "node-cron";
 import db from "../../db.js";
 import { addCycleDays, todayStr } from "../../lib/billingModel.js";
 import { discountedPrice } from "../../lib/couponModel.js";
+import { fillTemplate } from "../../lib/messageModel.js";
 import { chargeSubscription } from "./gateway.js";
+import { queueMessage, getBillingSettings } from "./delivery.js";
 
 const today = () => todayStr();
 
@@ -38,6 +40,58 @@ async function systemAudit(action, entityType, entityId, before, after) {
 async function addEvent(subscriptionId, text) {
   const { error } = await db.from("subscription_events").insert({ subscription_id: subscriptionId, text });
   if (error) console.error("[billing:jobs] event insert failed:", error.message);
+}
+
+/**
+ * Queue a templated notification email to a subscription's customer.
+ * Deduped: one message per (subscription, template) — a reminder is sent once,
+ * not on every daily sweep. Never throws (logging only) — a failed notification
+ * must never break the billing sweep around it.
+ */
+async function queueSubNotice(sub, template, sentBy) {
+  try {
+    const { count } = await db.from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("subscription_id", sub.id).eq("template", template);
+    if ((count ?? 0) > 0) return false;
+
+    const t = fillTemplate(template, { parent: sub.customer?.name, learner: sub.learner_name });
+    await queueMessage({
+      customerId: sub.customer_id,
+      subscriptionId: sub.id,
+      channel: "email",
+      template,
+      subject: t.subject,
+      body: t.body,
+      sentBy,
+    });
+    return true;
+  } catch (e) {
+    console.error(`[billing:jobs] notice queue failed (${template}):`, e.message);
+    return false;
+  }
+}
+
+/**
+ * Payment-failure reminder — NOT deduped: every failed charge attempt (first
+ * failure in invoice-generation, then each payment-retry) is its own dunning
+ * touch, and the messages row is the record of each one.
+ */
+async function queuePaymentReminder(s) {
+  try {
+    const t = fillTemplate("payment", { parent: s.customers?.name ?? s.customer?.name, learner: s.learner_name ?? s.users?.full_name });
+    await queueMessage({
+      customerId: s.customer_id,
+      subscriptionId: s.id,
+      channel: "email",
+      template: "payment",
+      subject: t.subject,
+      body: t.body,
+      sentBy: "system (billing jobs)",
+    });
+  } catch (e) {
+    console.error("[billing:jobs] payment reminder queue failed:", e.message);
+  }
 }
 
 async function freemiumTierId() {
@@ -69,6 +123,22 @@ cron.schedule("15 3 * * *", async () => {
         { status: "trial", tier_id: s.tier_id }, { status: "active", tier: "Freemium" });
     }
     console.log(`[trial-expiry-check] moved ${expired.length} expired trial(s) to Freemium`);
+
+    // Trial-ending reminders (plan §4.6 #4 notification settings): trials whose
+    // end date is within the next 3 days get the prototype's "Trial ending"
+    // email — once per subscription, only when notify_trial_ending is on.
+    const settings = await getBillingSettings();
+    if (settings.notify_trial_ending) {
+      const soon = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+      const { data: ending } = await db.from("subscriptions")
+        .select(`id, customer_id, next_date, customers(name), users!subscriptions_learner_user_id_fkey(full_name)`)
+        .eq("status", "trial").gte("next_date", t).lte("next_date", soon).limit(500);
+      let reminded = 0;
+      for (const s of ending ?? []) {
+        if (await queueSubNotice({ ...s, customer: s.customers, learner_name: s.users?.full_name }, "trial", "system (billing jobs)")) reminded++;
+      }
+      if (reminded) console.log(`[trial-expiry-check] queued ${reminded} trial-ending reminder(s)`);
+    }
   } catch (e) {
     console.error("[trial-expiry-check] failed:", e.message);
   }
@@ -80,7 +150,7 @@ cron.schedule("45 3 * * *", async () => {
     const t = today();
     const { data: due } = await db.from("subscriptions")
       .select("id, customer_id, cycle, price, next_date, gateway_authorization, discount_coupon_id, " +
-              "tiers(name), users!subscriptions_learner_user_id_fkey(full_name), " +
+              "tiers(name), users!subscriptions_learner_user_id_fkey(full_name), customers(name), " +
               "coupons!subscriptions_discount_coupon_id_fkey(id, code, type, value, duration)")
       .eq("status", "active").gt("price", 0).lte("next_date", t).limit(500);
     if (!due?.length) return;
@@ -127,6 +197,9 @@ cron.schedule("45 3 * * *", async () => {
           await addEvent(s.id, "Renewal payment failed (attempt 1)");
           await systemAudit("invoice.generated_charge_failed", "invoice", invoice.id, null,
             { subscription: s.id, amount, charged: false });
+          if ((await getBillingSettings()).notify_payment_failed) {
+            await queuePaymentReminder(s);
+          }
         }
       } else {
         awaiting++;
@@ -153,9 +226,12 @@ cron.schedule("0 4 * * *", async () => {
     const maxRetries = settings?.payment_retry_attempts ?? 3;
     const graceDays  = settings?.grace_period_days ?? 5;
 
+    const notifyFailed = (await getBillingSettings()).notify_payment_failed;
+
     const { data: pastDue } = await db.from("subscriptions")
       .select("id, customer_id, cycle, price, retry_count, past_due_since, gateway_authorization, " +
-              "discount_coupon_id, coupons!subscriptions_discount_coupon_id_fkey(id, code, type, value, duration)")
+              "discount_coupon_id, customers(name), users!subscriptions_learner_user_id_fkey(full_name), " +
+              "coupons!subscriptions_discount_coupon_id_fkey(id, code, type, value, duration)")
       .eq("status", "past_due").not("gateway_authorization", "is", null).limit(500);
     if (!pastDue?.length) return;
 
@@ -209,6 +285,7 @@ cron.schedule("0 4 * * *", async () => {
         await addEvent(s.id, `Payment retry failed (attempt ${attempt} of ${maxRetries})`);
         await systemAudit("subscription.payment_retry_failed", "subscription", s.id,
           { attempt, of: maxRetries }, { attempt: attempt + 1 <= maxRetries ? attempt + 1 : "exhausted" });
+        if (notifyFailed) await queuePaymentReminder(s);
       }
     }
     console.log(`[payment-retry] ${recovered} recovered, ${retried} retried, ${downgraded} downgraded`);

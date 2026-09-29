@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
 import { apiGet, apiPatch } from '../services/api.js';
-import { SubStatusBadge, refId, subPrice, fmtDate, Pagination, Filters } from './billing/bits.jsx';
+import { SubStatusBadge, refId, subPrice, fmtDate, fmtWhen, Pagination, Filters } from './billing/bits.jsx';
+import MessageModal from './billing/MessageModal.jsx';
+
+const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', inapp: 'In-app notice' };
 
 /**
  * CustomersPage — the billing identity behind each subscription: the parent or
@@ -42,6 +45,8 @@ export default function CustomersPage() {
   const [emailDraft, setEmailDraft] = useState('');
   const [phoneDraft, setPhoneDraft] = useState('');
   const [notesDraft, setNotesDraft] = useState('');
+  const [messages, setMessages]   = useState([]);
+  const [msgContext, setMsgContext] = useState(null);
 
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
@@ -81,6 +86,16 @@ export default function CustomersPage() {
     setEmailDraft(c.email ?? '');
     setPhoneDraft(c.phone ?? '');
     setNotesDraft(c.notes ?? '');
+    loadMessages(c.id);
+  };
+
+  const loadMessages = async (customerId) => {
+    try {
+      const res = await apiGet(`/api/admin/messages?customer_id=${customerId}`);
+      setMessages(res.data ?? []);
+    } catch {
+      setMessages([]); // the section simply shows "No messages sent yet."
+    }
   };
 
   /* ── list filtering ─────────────────────────────────────────────────────── */
@@ -180,6 +195,21 @@ export default function CustomersPage() {
                 : <span className="ak-tag ak-tag-none">None on file</span>}
             </div>
 
+            <div className="ak-section-title">Messages</div>
+            <table className="ak-table">
+              <thead><tr><th>When</th><th>Channel</th><th>Message</th><th>Regarding</th></tr></thead>
+              <tbody>
+                {messages.length ? messages.map((m) => (
+                  <tr key={m.id}>
+                    <td className="whitespace-nowrap">{fmtWhen(m.sent_at)}</td>
+                    <td>{CHANNEL_LABELS[m.channel] ?? m.channel}{m.delivery_status === 'failed' && <span className="text-akoro-coral"> · failed</span>}{m.delivery_status === 'no_recipient' && <span className="text-akoro-dim"> · no recipient</span>}</td>
+                    <td>{m.subject || m.body.slice(0, 60)}</td>
+                    <td>{m.subscription_id ? refId('SUB', m.subscription_id) : 'Account'}</td>
+                  </tr>
+                )) : <tr><td colSpan={4} className="text-akoro-dim">No messages sent yet.</td></tr>}
+              </tbody>
+            </table>
+
             <div className="ak-section-title">Internal notes</div>
             <textarea
               className="ak-notes-box" rows="3"
@@ -202,7 +232,7 @@ export default function CustomersPage() {
                 <Filters search={{ value: search, placeholder: 'Search customer, email, or learner…' }} onSearch={(v) => { setSearch(v); setPage(1); }} />
 
                 <table className="ak-table">
-                  <thead><tr><th>ID</th><th>Customer</th><th>Email</th><th>Learners</th><th>Billing status</th><th>Open balance</th></tr></thead>
+                  <thead><tr><th>ID</th><th>Customer</th><th>Email</th><th>Learners</th><th>Billing status</th><th>Open balance</th><th></th></tr></thead>
                   <tbody>
                     {items.length ? items.map((c) => {
                       const st = standing(c.subscriptions), bal = balance(c.subscriptions);
@@ -214,15 +244,24 @@ export default function CustomersPage() {
                           <td>{c.subscriptions.map((s) => s.learner?.name ?? '—').join(', ')}</td>
                           <td><SubStatusBadge status={st.key} /></td>
                           <td>{bal ? `₦${bal.toLocaleString()}` : '—'}</td>
+                          <td><button className="ak-btn ak-btn-ghost ak-btn-small" onClick={(e) => { e.stopPropagation(); setMsgContext({ kind: 'customer', customer: c, learnerNames: c.subscriptions.map((s) => s.learner?.name).filter(Boolean) }); }}>Message</button></td>
                         </tr>
                       );
-                    }) : <tr><td colSpan={6} className="text-akoro-dim">No customers match.</td></tr>}
+                    }) : <tr><td colSpan={7} className="text-akoro-dim">No customers match.</td></tr>}
                   </tbody>
                 </table>
                 <Pagination page={safePage} totalPages={totalPages} onPage={setPage} />
               </>
             )}
           </>
+        )}
+
+        {msgContext && (
+          <MessageModal
+            context={msgContext}
+            onClose={() => setMsgContext(null)}
+            onSent={(ok, msg) => { if (msg) showToast(msg); if (ok && selected) loadMessages(selected.id); }}
+          />
         )}
 
         <div className={`ak-save-toast ${toast ? 'ak-save-toast-show' : ''}`} role="status">{toast}</div>
