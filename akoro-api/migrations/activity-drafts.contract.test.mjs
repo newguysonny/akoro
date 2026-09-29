@@ -428,7 +428,8 @@ test("the plan generator's model calls are individually bounded — no 10-minute
     "generateSubtopics and generateObjectives both bounded");
   // ...and the metered client actually forwards them as SDK request options.
   assert.match(aiModel, /clean\.__timeoutMs != null \|\| clean\.__maxRetries != null/);
-  assert.match(aiModel, /create\(clean, reqOpts\)/);
+  assert.match(aiModel, /chatBreaker\.fire\(clean, reqOpts\)/);
+  assert.match(aiModel, /rawClient\.chat\.completions\.create\(params, reqOpts\)/);
 });
 
 test("classroom name resolution never chains .catch on a Supabase builder", () => {

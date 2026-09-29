@@ -9,12 +9,26 @@
  */
 import OpenAI from "openai";
 import { coinsAvailable, chargeForAI, InsufficientCoins } from "./coins.js";
+import { makeAiBreaker } from "./circuitBreaker.js";
 import { aiContext } from "./aiContext.js";
 import { AI_DEFAULT_MAX_TOKENS, usdCost, cachedTokensOf } from "./aiPricing.js";
 import { recordAiCall, errorKindOf } from "./aiTelemetry.js";
 
 export const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export { InsufficientCoins };
+
+// One breaker per endpoint family. Every model call in the app — chat,
+// streaming chat, embeddings, voice, tasks, training — funnels through these
+// two call sites, so provider trouble fails fast everywhere at once instead of
+// hanging each request on its own SDK timeout.
+const chatBreaker = makeAiBreaker(
+  "openai-chat",
+  (params, reqOpts) => rawClient.chat.completions.create(params, reqOpts),
+);
+const embeddingsBreaker = makeAiBreaker(
+  "openai-embeddings",
+  (params) => rawClient.embeddings.create(params),
+);
 
 // baseURL is overridable so the golden-path tests can point the whole platform
 // at a local stand-in and exercise every tool path end to end without a live
@@ -88,7 +102,7 @@ async function meteredCreate(params = {}) {
   if (clean.stream) {
     let source;
     try {
-      source = await rawClient.chat.completions.create({
+      source = await chatBreaker.fire({
         ...clean,
         ...(bills ? { stream_options: { include_usage: true, ...(clean.stream_options || {}) } } : {}),
       }, reqOpts);
@@ -105,7 +119,7 @@ async function meteredCreate(params = {}) {
 
   let res;
   try {
-    res = await rawClient.chat.completions.create(clean, reqOpts);
+    res = await chatBreaker.fire(clean, reqOpts);
   } catch (e) { report(null, { ok: false, errorKind: errorKindOf(e) }); throw e; }
 
   report(res?.usage ?? null);
@@ -151,7 +165,7 @@ async function meteredEmbeddings(params = {}) {
   const feature = params.__feature ?? store.feature ?? "embedding";
   const billTo  = params.__billTo  ?? store.billTo  ?? null;
   const clean = { ...params }; delete clean.__userId; delete clean.__feature; delete clean.__ref; delete clean.__billTo;
-  const res = await rawClient.embeddings.create(clean);
+  const res = await embeddingsBreaker.fire(clean);
   if ((userId || billTo) && res?.usage) {
     chargeForAI({ userId, feature, billTo, model: clean.model || "text-embedding-3-small", usage: { prompt_tokens: res.usage.prompt_tokens ?? res.usage.total_tokens ?? 0, completion_tokens: 0 } })
       .catch((e) => { if (!(e instanceof InsufficientCoins)) console.warn("[coins] embed charge failed:", e.message); });

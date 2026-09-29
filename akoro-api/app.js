@@ -33,6 +33,8 @@ import config                     from "./config/index.js";
 import { runConfigChecks }         from "./lib/preflightChecks.js";
 import { runWithRouteUsage } from "./lib/usageMeter.js";
 import { schoolBillTo }            from "./lib/coins.js";
+import { breakerStats, AIProviderUnavailableError } from "./lib/circuitBreaker.js";
+import { createLoadShedder }       from "./middleware/loadShedder.js";
 import { SITE_BASE_DOMAINS, isTenantHost, refreshTenantHosts } from "./modules/school/tenant.js";
 import db, { checkDb }           from "./db.js";
 import { applyMigrations, migrationsAlreadyApplied, migrationUrl, currentGitSha } from "./lib/migrations.js";
@@ -277,6 +279,10 @@ app.use("/api/self-study/:id/files",          express.json({ limit: "9mb" }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
+// Load shedding (plan §3.5): under extreme load, shed low-priority traffic
+// with an honest 503 + Retry-After instead of collapsing. Auth and health are
+// exempt — sessions must stay refreshable while the server is on its knees.
+app.use(createLoadShedder());
 app.use(passport.initialize());
 // Uploads are served without auth (question images etc.), which makes them the
 // one URL family a crawler or scraper can pull in bulk. Past-question scans are
@@ -317,6 +323,9 @@ app.get("/health", async (req, res) => {
     status: healthy ? "ok" : "degraded", instance: config.instanceId,
     uptime: Math.round(process.uptime()), env: config.nodeEnv,
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
+    // Breaker states are local (no round-trip): a provider outage is visible
+    // in /health the moment it trips, not only when requests fail.
+    breakers: breakerStats(),
     cached: !deep && fresh,
   });
 });
@@ -648,6 +657,17 @@ app.use((_req, res) => res.status(404).json({ success: false, message: "Route no
 app.use((err, _req, res, _next) => {
   if (err instanceof MulterError)
     return res.status(400).json({ success: false, message: `Upload error: ${err.message}`, code: err.code });
+  // Deliberate fail-fast (plan §3.4): the breaker is open on the AI provider.
+  // 503 + Retry-After, never 500 — nothing is broken on our side, and the
+  // client's correct move is to retry after the window, not to report a bug.
+  if (err instanceof AIProviderUnavailableError || err?.code === "provider_unavailable") {
+    res.setHeader("Retry-After", String(err?.retryAfterSec ?? 30));
+    return res.status(503).json({
+      success: false,
+      message: err?.message || "AI provider temporarily unavailable — please retry shortly.",
+      code: "provider_unavailable",
+    });
+  }
   if (err?.type === "entity.parse.failed")
     return res.status(400).json({ success: false, message: "Request body is not valid JSON", code: "invalid_json" });
   if (err?.type === "entity.too.large")
