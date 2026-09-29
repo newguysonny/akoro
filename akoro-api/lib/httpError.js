@@ -10,9 +10,30 @@
  * self-contained so it can be extracted into a standalone service.)
  */
 export function serverError(res, e, req) {
+  // Postgres unique-constraint violations are the caller's conflict to
+  // resolve, not a server fault — but the constraint name in the message is
+  // schema reconnaissance, so the body stays generic. PostgREST surfaces the
+  // code as e.code; a route wanting a specific message still owns its own
+  // explicit 409.
+  if (e?.code === "23505") {
+    return res.status(409).json({
+      success: false,
+      error:   "That record already exists",
+      message: "That record already exists",
+      code:    "conflict",
+    });
+  }
   console.error(
     `[api] 500 ${req?.method || "?"} ${req?.originalUrl || req?.path || "?"} —`,
     e?.stack || e?.message || e
   );
-  return res.status(500).json({ error: "Something went wrong. Please try again." });
+  // `message` + `code` join the long-standing `error` key so every failure
+  // answers with one envelope: { success:false, message, code? }. The old key
+  // stays so existing clients keep parsing.
+  return res.status(500).json({
+    success: false,
+    error:   "Something went wrong. Please try again.",
+    message: "Something went wrong. Please try again.",
+    code:    "internal_error",
+  });
 }

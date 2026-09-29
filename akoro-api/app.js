@@ -633,18 +633,51 @@ app.use("/api/records",    standardLimit, recordsModule); // learner library she
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
-app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
+app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found", code: "not_found" }));
 
 // ─── Global error handler ─────────────────────────────────────────────────────
+// The contract: a failure the CALLER caused or can fix is a 4xx carrying a
+// stable machine-readable `code`; a failure inside the server is a 500 that
+// reveals nothing but the instance id. Body-parser faults (bad JSON, oversized
+// body, weird charset) and multer upload errors are client payload problems —
+// reporting them as 500 sends frontends down the "server is broken, retry or
+// give up" path for bodies the CLIENT must fix. Postgres unique violations are
+// the client's conflict to resolve, but their messages name constraints
+// (schema reconnaissance), so the response stays generic.
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   if (err instanceof MulterError)
     return res.status(400).json({ success: false, message: `Upload error: ${err.message}`, code: err.code });
-  console.error(`[${config.instanceId.slice(0, 8)}] [ERROR]`, err.message);
+  if (err?.type === "entity.parse.failed")
+    return res.status(400).json({ success: false, message: "Request body is not valid JSON", code: "invalid_json" });
+  if (err?.type === "entity.too.large")
+    return res.status(413).json({ success: false, message: "Request body is too large", code: "payload_too_large" });
+  if (err?.type === "charset.unsupported")
+    return res.status(415).json({ success: false, message: "Request body charset is not supported", code: "unsupported_charset" });
+  if (err?.code === "23505")
+    return res.status(409).json({ success: false, message: "That record already exists", code: "conflict" });
+  console.error(`[${config.instanceId.slice(0, 8)}] [ERROR]`, err?.stack || err?.message || err);
   res.status(500).json({
-    success: false, message: "Internal server error", instance: config.instanceId,
-    ...(config.isDev && { stack: err.stack }),
+    success: false, message: "Internal server error", code: "internal_error", instance: config.instanceId,
+    ...(config.isDev && { stack: err?.stack }),
   });
+});
+
+// ─── Process safety nets ──────────────────────────────────────────────────────
+// Express 4 does NOT forward a rejected promise to the error handler, so a
+// single un-awaited failure in any route would otherwise crash the process
+// (Node's default since v15) and take down every chat surface at once — the
+// exact all-chats-down shape of the Sept 2026 outage. Log it loudly and keep
+// serving; the request that lost its promise times out and retries, everyone
+// else keeps working.
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason?.stack || reason);
+});
+// A synchronous throw OUTSIDE Express is different: process state is unknown.
+// Log, then exit — Render's restart policy brings the process back cleanly.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err?.stack || err);
+  process.exit(1);
 });
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────

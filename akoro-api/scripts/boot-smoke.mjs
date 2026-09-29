@@ -65,8 +65,43 @@ try {
   console.log("ROBOTS.TXT:", JSON.stringify(robots.trim()));
   const uploadProbe = await fetch(`${base}/uploads/boot-smoke-missing.png`);
   console.log("UPLOADS X-ROBOTS-TAG:", uploadProbe.headers.get("x-robots-tag"), `(status ${uploadProbe.status})`);
+
+  // Error contract: a fault the CALLER caused must answer 4xx with a stable
+  // `code`, never a 500 — bad JSON and dead tokens are client situations, and
+  // a frontend that can't tell them from a server fault can't retry, refresh,
+  // or show the right message.
+  const badJson = await fetch(`${base}/api/adaptive/chat/agent`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: "{invalid",
+  });
+  const badJsonBody = await badJson.json().catch(() => null);
+  console.log("INVALID JSON:", badJson.status, JSON.stringify(badJsonBody));
+  const notFound = await fetch(`${base}/api/definitely/not/a/route`).then((r) => r.json().catch(() => null));
+  console.log("404 BODY:", JSON.stringify(notFound));
+  const { default: jwt } = await import("jsonwebtoken");
+  const deadToken = jwt.sign(
+    { sub: "boot-smoke", iss: "https://api.akoro.app", aud: "https://akoro.app" },
+    process.env.JWT_SECRET || "dummy",
+    { algorithm: "HS256", expiresIn: -10 },
+  );
+  const dead = await fetch(`${base}/api/adaptive/chat/agent`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${deadToken}` },
+    body: "{}",
+  });
+  const deadBody = await dead.json().catch(() => null);
+  console.log("EXPIRED TOKEN:", dead.status, JSON.stringify(deadBody));
+
   if (!hasCompression || !robots.includes("Disallow: /") || uploadProbe.headers.get("x-robots-tag")?.includes("noindex") === false) {
     throw new Error("egress guard missing (compression / robots.txt / uploads noindex)");
+  }
+  if (badJson.status !== 400 || badJsonBody?.code !== "invalid_json") {
+    throw new Error(`invalid JSON must be 400 invalid_json, got ${badJson.status} ${JSON.stringify(badJsonBody)}`);
+  }
+  if (notFound?.code !== "not_found") {
+    throw new Error(`404 body must carry code not_found, got ${JSON.stringify(notFound)}`);
+  }
+  if (dead.status !== 401 || !["token_expired", "token_invalid"].includes(deadBody?.code)) {
+    throw new Error(`expired token must be 401 token_expired/token_invalid, got ${dead.status} ${JSON.stringify(deadBody)}`);
   }
   console.log("BOOT_SMOKE_OK — app boots, routes respond, no crash");
   process.exit(0);

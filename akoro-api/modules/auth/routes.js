@@ -99,7 +99,7 @@ const asyncHandler = (fn) => (req, res, next) =>
 const res200 = (res, data, meta = {}) => res.status(200).json({ success: true,  data, ...meta });
 const res201 = (res, data)            => res.status(201).json({ success: true,  data });
 const res400 = (res, message)         => res.status(400).json({ success: false, message });
-const res401 = (res, message)         => res.status(401).json({ success: false, message });
+const res401 = (res, message, code)   => res.status(401).json({ success: false, message, ...(code ? { code } : {}) });
 const res403 = (res, message)         => res.status(403).json({ success: false, message });
 const res404 = (res, message)         => res.status(404).json({ success: false, message });
 
@@ -480,7 +480,15 @@ export const authenticateToken = asyncHandler(async (req, res, next) => {
   try {
     decoded = verifyToken(token);
   } catch (err) {
-    return res403(res, err.name === "TokenExpiredError" ? "Access token expired" : "Invalid token");
+    // 401, never 403: an expired or bad token is FAILED AUTHENTICATION
+    // (RFC 6750 §3.1), and every client's silent-refresh flow keys on 401.
+    // Answering 403 here dressed "session expired, refresh and retry" up as
+    // "you are not allowed", so learners got a hard failure where the app
+    // should have spent the refresh cookie and replayed the request invisibly.
+    // `code` lets clients branch without parsing message text.
+    return res401(res,
+      err.name === "TokenExpiredError" ? "Access token expired" : "Invalid token",
+      err.name === "TokenExpiredError" ? "token_expired" : "token_invalid");
   }
 
   // 4. Check deny-list

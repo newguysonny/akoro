@@ -86,6 +86,10 @@ const BASE = {
   standardHeaders: true,   // X-RateLimit-* headers
   legacyHeaders:   false,
   skipSuccessfulRequests: false,
+  // One JSON envelope for every 429. express-rate-limit's default body is
+  // plain text ("Too many requests..."), which no frontend error path can
+  // parse — and a 429 the client can't identify can't back off intelligently.
+  message: { success: false, message: 'Too many requests. Please slow down and try again shortly.', code: 'rate_limited' },
 };
 
 /** Auth endpoints: login / register — 5 req / 15 min */
