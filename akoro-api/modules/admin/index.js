@@ -12,6 +12,7 @@ import agentToolRequestsRouter from "./agent-tool-requests.js";
 import tiersRouter from "./tiers.js";
 import pilotSchoolsRouter from "./pilotSchools.js";
 import billingRouter from "./billing.js";
+import couponsRouter from "./coupons.js";
 
 const router = Router();
 router.use("/", coreRouter);
@@ -27,5 +28,6 @@ router.use("/", agentToolRequestsRouter);
 router.use("/", tiersRouter);
 router.use("/", pilotSchoolsRouter);
 router.use("/", billingRouter);
+router.use("/", couponsRouter);
 
 export default router;

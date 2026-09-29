@@ -39,7 +39,7 @@ const FEATURES = [
   { key: null,      text: 'Full gradebook & progress tracking' },
 ];
 
-export default function PaywallScreen({ trigger = 'default', onClose, onUpgrade, onContinueFreemium }) {
+export default function PaywallScreen({ trigger = 'default', busy = false, note = '', onClose, onUpgrade, onContinueFreemium }) {
   const [plan, setPlan] = useState('annual'); // Annual pre-selected, as in the prototype
   const c = COPY[trigger] ?? COPY.default;
 
@@ -105,12 +105,16 @@ export default function PaywallScreen({ trigger = 'default', onClose, onUpgrade,
       </div>
 
       {/* CTAs */}
+      {note && (
+        <p className="text-[0.82rem] font-bold text-akoro-coral text-center leading-[1.4] mt-0 mb-3">{note}</p>
+      )}
       <button
         type="button"
+        disabled={busy}
         onClick={() => onUpgrade?.(plan)}
-        className="w-full py-4 rounded-full border-none bg-akoro-purple hover:bg-akoro-purpledark text-white font-extrabold text-[1.02rem] cursor-pointer mb-[14px]"
+        className={`w-full py-4 rounded-full border-none text-white font-extrabold text-[1.02rem] mb-[14px] ${busy ? 'bg-akoro-purpledark cursor-wait opacity-80' : 'bg-akoro-purple hover:bg-akoro-purpledark cursor-pointer'}`}
       >
-        {ctaLabel}
+        {busy ? 'Starting checkout…' : ctaLabel}
       </button>
       <button
         type="button"

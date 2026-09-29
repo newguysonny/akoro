@@ -72,6 +72,8 @@ import paystackWebhookRouter     from "./modules/webhooks/paystack.js";
 import adminModule              from "./modules/admin/index.js";
 import contactModule            from "./modules/contact/routes.js";
 import pilotApplicationsModule from "./modules/pilot-applications/routes.js";
+import billingGatewayModule    from "./modules/billing/gateway.js";
+import "./modules/billing/jobs.js"; // billing cron jobs (trial-expiry / invoice-generation / payment-retry)
 import agentToolRequestsModule  from "./modules/agent-tool-requests/routes.js";
 import learnerGoalsModule       from "./modules/learner-goals/routes.js";
 import agentProposalsModule      from "./modules/agent-proposals/routes.js";
@@ -647,6 +649,7 @@ app.use("/api/blogs",      standardLimit, blogsModule); // learner-authored blog
 app.use("/api/records",    standardLimit, recordsModule); // learner library shelf: uploads (R2), links, pastes
 app.use("/api/contact",    standardLimit, contactModule);  // public contact/partner intake + admin inbox
 app.use("/api/public/pilot-applications", standardLimit, pilotApplicationsModule); // public /apply form (Tiers & Credits plan §4.2 — the one unauth write)
+app.use("/api/subscriptions",  standardLimit, billingGatewayModule); // learner subscription checkout (Phase 3; webhook-fulfilled)
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found", code: "not_found" }));

@@ -48,10 +48,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /* ── shared selects ────────────────────────────────────────────────────────── */
 const SUB_SELECT =
   "id, customer_id, learner_user_id, tier_id, status, cycle, price, next_date, " +
-  "payment_method_ref, notes, created_at, updated_at, " +
+  "payment_method_ref, notes, retry_count, past_due_since, created_at, updated_at, " +
   "customers(id, name, email, phone, notes), " +
   "tiers(id, name, access, platform), " +
-  "users!subscriptions_learner_user_id_fkey(id, full_name, email)";
+  "users!subscriptions_learner_user_id_fkey(id, full_name, email), " +
+  "coupons!subscriptions_discount_coupon_id_fkey(id, code, type, value, duration, months)";
+// gateway_authorization is deliberately NOT selected — it's a payment
+// credential and never leaves the server.
 
 const INV_SELECT =
   "id, customer_id, subscription_id, status, issued_at, due_at, paid_at, voided_at, created_at, " +
@@ -86,6 +89,12 @@ const subView = (row) => ({
   next_date: row.next_date,
   payment_method_ref: row.payment_method_ref,
   notes: row.notes ?? "",
+  discount: row.coupons ? {
+    id: row.coupons.id, code: row.coupons.code, type: row.coupons.type,
+    value: row.coupons.value, duration: row.coupons.duration, months: row.coupons.months,
+  } : null,
+  retry_count: row.retry_count ?? 0,
+  past_due_since: row.past_due_since ?? null,
   created_at: row.created_at,
 });
 

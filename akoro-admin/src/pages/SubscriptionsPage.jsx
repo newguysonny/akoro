@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../components/Layout.jsx';
-import { apiGet, apiPatch, apiPost } from '../services/api.js';
+import { apiGet, apiPatch, apiPost, apiDelete } from '../services/api.js';
 import { SubStatusBadge, refId, subPrice, fmtDate, fmtWhen, Pagination, Filters } from './billing/bits.jsx';
 
 /**
@@ -55,6 +55,8 @@ export default function SubscriptionsPage() {
   const [selected, setSelected]       = useState(null); // detail w/ timeline
   const [cancelArmed, setCancelArmed] = useState(false);
   const [notesDraft, setNotesDraft]   = useState('');
+  const [usableCoupons, setUsableCoupons] = useState([]);
+  const [couponCode, setCouponCode]  = useState('');
 
   const [toast, setToast]             = useState(null);
   const toastTimer                    = useRef(null);
@@ -80,12 +82,34 @@ export default function SubscriptionsPage() {
     }
   }, []);
 
+  const couponTextOf = (d) => {
+    if (!d) return '';
+    const amt = d.type === 'percent' ? `${d.value}% off` : `₦${Number(d.value).toLocaleString()} off`;
+    const dur = d.duration === 'once' ? 'first payment' : d.duration === 'forever' ? 'forever' : `for ${d.months} months`;
+    return `${amt}, ${dur}`;
+  };
+
   const openDetail = useCallback(async (id) => {
     try {
       const res = await apiGet(`/api/admin/subscriptions/${id}`);
       setSelected(res.data);
       setCancelArmed(false);
       setNotesDraft(res.data.notes ?? '');
+
+      // Coupon picker (prototype renderSubCoupon): paid, non-canceled subs only.
+      const s = res.data;
+      if ((s.price ?? 0) > 0 && s.status !== 'canceled' && !s.discount) {
+        const couponsRes = await apiGet('/api/admin/billing/coupons').catch(() => null);
+        const today = new Date().toISOString().slice(0, 10);
+        const usable = (couponsRes?.data ?? []).filter((c) =>
+          !c.paused && !(c.expires_at && c.expires_at < today) &&
+          !(c.max_redemptions && c.redeemed >= c.max_redemptions));
+        setUsableCoupons(usable);
+        setCouponCode(usable[0]?.code ?? '');
+      } else {
+        setUsableCoupons([]);
+        setCouponCode('');
+      }
     } catch (e) {
       showToast(e.message || 'Could not load the subscription.');
     }
@@ -119,6 +143,29 @@ export default function SubscriptionsPage() {
       showToast(`${refId('SUB', selected.id)} updated`);
     } catch (e) {
       showToast(e.message || 'Could not update the subscription.');
+    }
+  };
+
+  const applyCoupon = async () => {
+    if (!couponCode) return;
+    try {
+      await apiPost(`/api/admin/subscriptions/${selected.id}/apply-coupon`, { code: couponCode });
+      await load();
+      await openDetail(selected.id);
+      showToast(`${couponCode} applied`);
+    } catch (e) {
+      showToast(e.message || 'Could not apply the coupon.');
+    }
+  };
+
+  const removeCoupon = async () => {
+    try {
+      await apiDelete(`/api/admin/subscriptions/${selected.id}/coupon`);
+      await load();
+      await openDetail(selected.id);
+      showToast(`${selected.discount?.code ?? 'Coupon'} removed`);
+    } catch (e) {
+      showToast(e.message || 'Could not remove the coupon.');
     }
   };
 
@@ -184,7 +231,31 @@ export default function SubscriptionsPage() {
               <div className="ak-stat"><div className="ak-stat-label">Price</div><div className="ak-stat-value">{subPrice(selected)}</div></div>
               <div className="ak-stat"><div className="ak-stat-label">{dateLabel}</div><div className="ak-stat-value">{fmtDate(selected.next_date)}</div></div>
               <div className="ak-stat"><div className="ak-stat-label">Payment method</div><div className="ak-stat-value !text-[1rem]">{selected.payment_method_ref || 'None on file'}</div></div>
+              <div className="ak-stat">
+                <div className="ak-stat-label">Discount</div>
+                <div className="ak-stat-value !text-[1rem]">{selected.discount ? selected.discount.code : 'None'}</div>
+                {selected.discount && <div className="text-[0.75rem] text-akoro-dim mt-1 font-semibold">{couponTextOf(selected.discount)}</div>}
+              </div>
             </div>
+
+            {/* coupon apply/remove (prototype renderSubCoupon) */}
+            {selected.discount ? (
+              <div className="-mt-4 mb-6">
+                <button className="ak-btn ak-btn-ghost ak-btn-small" onClick={removeCoupon}>Remove coupon {selected.discount.code}</button>
+              </div>
+            ) : (selected.price ?? 0) > 0 && selected.status !== 'canceled' && usableCoupons.length > 0 && (
+              <div className="ak-price-row -mt-4 mb-6">
+                <select className="ak-select !w-auto" value={couponCode} onChange={(e) => setCouponCode(e.target.value)}>
+                  {usableCoupons.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} · {c.type === 'percent' ? `${c.value}% off` : `₦${Number(c.value).toLocaleString()} off`}
+                      {c.duration === 'repeating' ? `, ${c.months} months` : c.duration === 'forever' ? ', forever' : ', first payment'}
+                    </option>
+                  ))}
+                </select>
+                <button className="ak-btn ak-btn-ghost ak-btn-small" onClick={applyCoupon}>Apply coupon</button>
+              </div>
+            )}
 
             <div className="ak-section-title">Timeline</div>
             <table className="ak-table">
