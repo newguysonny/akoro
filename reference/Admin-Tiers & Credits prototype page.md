@@ -501,6 +501,13 @@
   <div id="schools" class="panel">
     <h1>Pilot Schools</h1>
     <p class="sub">Each pilot partner has its own start date, end date, and credit caps. Click a school to see its details.</p>
+
+    <div class="subtabs">
+      <button class="subtab active" id="subtab-pilot-list" onclick="switchSchoolView('list')">Schools</button>
+      <button class="subtab" id="subtab-pilot-apps" onclick="switchSchoolView('apps')">Applications <span id="app-count-badge"></span></button>
+    </div>
+
+    <div id="schools-list-view">
     <div class="alert-banner" id="school-alerts"></div>
     <div class="filters">
       <input type="text" id="school-search" placeholder="Search schools…" oninput="renderSchools()">
@@ -517,6 +524,15 @@
     </div>
     <div class="cards" id="school-cards"></div>
     <div class="pagination" id="school-pagination"></div>
+    </div>
+
+    <div id="applications-view" style="display:none">
+      <table>
+        <thead><tr><th>School</th><th>Contact</th><th>Requested</th><th>Est. students</th><th>Message</th><th></th></tr></thead>
+        <tbody id="app-body"></tbody>
+      </table>
+      <p class="sub" id="app-empty" style="display:none">No pending applications.</p>
+    </div>
   </div>
 
   <div id="school-detail" class="panel">
@@ -538,7 +554,7 @@
 
     <div class="section-title">Pilot settings</div>
     <table>
-      <thead><tr><th>Start date</th><th>End date</th><th>Student cap / mo</th><th>Instructor cap / mo</th></tr></thead>
+      <thead><tr><th>Start date</th><th>End date</th><th>Student cap / mo</th><th>Instructor cap / mo</th><th>Actions</th></tr></thead>
       <tbody id="detail-settings"></tbody>
     </table>
 
@@ -715,6 +731,27 @@
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeCouponModal()">Cancel</button>
       <button class="btn" onclick="submitCoupon()">Create coupon</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="app-overlay" onclick="if(event.target.id==='app-overlay') closeAppModal()">
+  <div class="modal">
+    <h2>Review application</h2>
+    <p class="sub" id="app-review-meta" style="margin:0 0 16px"></p>
+    <div class="field-row">
+      <div class="field"><label for="app-start">Pilot start date</label><input type="date" id="app-start"></div>
+      <div class="field"><label for="app-end">Pilot end date</label><input type="date" id="app-end"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="app-student-cap">Student cap / mo</label><input type="number" min="0" id="app-student-cap"></div>
+      <div class="field"><label for="app-instructor-cap">Instructor cap / mo</label><input type="number" min="0" id="app-instructor-cap"></div>
+    </div>
+    <div class="field"><label for="app-reject-reason">Rejection reason (only needed if rejecting)</label><input type="text" id="app-reject-reason" placeholder="e.g. outside target region"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeAppModal()">Cancel</button>
+      <button class="btn danger" id="app-reject-btn" onclick="rejectApplication()">Reject</button>
+      <button class="btn" onclick="approveApplication()">Approve &amp; create pilot</button>
     </div>
   </div>
 </div>
@@ -1146,6 +1183,7 @@
     if (document.getElementById('tier-overlay').classList.contains('show')) closeTierModal();
     if (document.getElementById('msg-overlay').classList.contains('show')) closeMessage();
     if (document.getElementById('coupon-overlay').classList.contains('show')) closeCouponModal();
+    if (document.getElementById('app-overlay').classList.contains('show')) closeAppModal();
   });
   function submitSchool(){
     const name = document.getElementById('m-name').value.trim();
@@ -1182,14 +1220,7 @@
       <div class="stat"><div class="label">Credits used this period</div><div class="value">${totalUsed}</div></div>
     `;
 
-    document.getElementById('detail-settings').innerHTML = `
-      <tr>
-        <td><input class="credit-input" style="width:130px" type="date" value="${s.start}" onchange="updateSchoolField(${i},'start',this.value)"></td>
-        <td><input class="credit-input" style="width:130px" type="date" value="${s.end}" onchange="updateSchoolField(${i},'end',this.value)"></td>
-        <td><input class="credit-input" type="number" min="0" value="${s.studentCap}" onchange="updateSchoolField(${i},'studentCap',Math.max(0,Number(this.value)||0))"> / mo</td>
-        <td><input class="credit-input" type="number" min="0" value="${s.instructorCap}" onchange="updateSchoolField(${i},'instructorCap',Math.max(0,Number(this.value)||0))"> / mo</td>
-      </tr>
-    `;
+    renderSchoolSettingsRow(s, i);
 
     document.getElementById('detail-usage').innerHTML = rows.length ? rows.map(u => `
       <tr class="usage-row">
@@ -1209,10 +1240,47 @@
     document.getElementById('school-detail').classList.add('active');
   }
 
-  function updateSchoolField(i, field, value){
-    schools[i][field] = value;
-    if (field === 'end' && schools[i].status === 'active' && daysUntil(value) < 0) schools[i].status = 'ended';
-    toast(`${schools[i].name} updated`);
+  let editingSchoolSettings = false;
+
+  function renderSchoolSettingsRow(s, i){
+    const editing = editingSchoolSettings;
+    document.getElementById('detail-settings').innerHTML = `
+      <tr>
+        <td>${editing ? `<input class="credit-input" id="ss-start" style="width:130px" type="date" value="${s.start}">` : s.start}</td>
+        <td>${editing ? `<input class="credit-input" id="ss-end" style="width:130px" type="date" value="${s.end}">` : s.end}</td>
+        <td>${editing ? `<input class="credit-input" id="ss-student-cap" type="number" min="0" value="${s.studentCap}">` : s.studentCap} / mo</td>
+        <td>${editing ? `<input class="credit-input" id="ss-instructor-cap" type="number" min="0" value="${s.instructorCap}">` : s.instructorCap} / mo</td>
+        <td>${
+          editing
+            ? `<div class="detail-actions"><button class="btn small" onclick="saveSchoolSettings(${i})">Save</button><button class="btn ghost small" onclick="cancelSchoolSettingsEdit(${i})">Cancel</button></div>`
+            : `<button class="btn ghost small" onclick="editSchoolSettings()">Edit</button>`
+        }</td>
+      </tr>
+    `;
+  }
+  function editSchoolSettings(){
+    editingSchoolSettings = true;
+    showSchoolDetail(activeSchoolIndex);
+    document.getElementById('ss-start')?.focus();
+  }
+  function cancelSchoolSettingsEdit(i){
+    editingSchoolSettings = false;
+    showSchoolDetail(i);
+  }
+  function saveSchoolSettings(i){
+    const s = schools[i];
+    const start = document.getElementById('ss-start').value;
+    const end = document.getElementById('ss-end').value;
+    if (!start || !end || end < start) { toast('End date must be after start date'); return; }
+    const before = `${s.start} → ${s.end}, ${s.studentCap}/${s.instructorCap}`;
+    s.start = start;
+    s.end = end;
+    s.studentCap = Math.max(0, Number(document.getElementById('ss-student-cap').value) || 0);
+    s.instructorCap = Math.max(0, Number(document.getElementById('ss-instructor-cap').value) || 0);
+    if (s.status === 'active' && daysUntil(s.end) < 0) s.status = 'ended';
+    editingSchoolSettings = false;
+    logAudit(`${s.name} pilot settings updated`, before, `${s.start} → ${s.end}, ${s.studentCap}/${s.instructorCap}`);
+    toast(`${s.name} updated`);
     showSchoolDetail(i);
   }
 
@@ -1247,6 +1315,7 @@
   }
 
   function backToSchools(){
+    editingSchoolSettings = false;
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     document.getElementById('schools').classList.add('active');
     document.querySelector('.nav-item[data-panel="schools"]').classList.add('active');
@@ -1996,6 +2065,93 @@
     showSub(activeSubIndex);
   }
 
+  let applications = [
+    { id: 'APP-01', schoolName: 'Bright Minds Academy', contactName: 'Mr. Tayo Ogundele', contactEmail: 'principal@brightminds.example.com', contactPhone: '+234 803 222 0001', submitted: '2026-09-24', estStudents: 180, message: 'We would love to pilot Akoro with our SS1-SS3 students ahead of WAEC prep season.', status: 'pending' },
+    { id: 'APP-02', schoolName: 'Unity Secondary School', contactName: 'Mrs. Ngozi Umeh', contactEmail: 'info@unitysec.example.com', contactPhone: '+234 803 222 0002', submitted: '2026-09-26', estStudents: 95, message: 'Interested after hearing about the Chrisland pilot from a colleague.', status: 'pending' },
+  ];
+  let activeAppIndex = null, appRejectArmed = false;
+
+  function switchSchoolView(view){
+    document.getElementById('subtab-pilot-list').classList.toggle('active', view === 'list');
+    document.getElementById('subtab-pilot-apps').classList.toggle('active', view === 'apps');
+    document.getElementById('schools-list-view').style.display = view === 'list' ? '' : 'none';
+    document.getElementById('applications-view').style.display = view === 'apps' ? '' : 'none';
+    if (view === 'apps') renderApplications();
+  }
+
+  function pendingApps(){ return applications.filter(a => a.status === 'pending'); }
+
+  function renderApplications(){
+    const badge = document.getElementById('app-count-badge');
+    const n = pendingApps().length;
+    badge.textContent = n ? `(${n})` : '';
+    const body = document.getElementById('app-body');
+    const empty = document.getElementById('app-empty');
+    const list = pendingApps();
+    empty.style.display = list.length ? 'none' : '';
+    body.innerHTML = list.map(a => {
+      const i = applications.indexOf(a);
+      return `
+      <tr>
+        <td><b>${escapeHTML(a.schoolName)}</b></td>
+        <td>${escapeHTML(a.contactName)}<br><small style="color:var(--text-dim)">${escapeHTML(a.contactEmail)} · ${escapeHTML(a.contactPhone)}</small></td>
+        <td>${a.submitted}</td>
+        <td>${a.estStudents}</td>
+        <td style="max-width:260px">${escapeHTML(a.message)}</td>
+        <td><button class="btn small" onclick="openAppModal(${i})">Review</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openAppModal(i){
+    activeAppIndex = i; appRejectArmed = false;
+    const a = applications[i];
+    document.getElementById('app-review-meta').innerHTML = `<b>${escapeHTML(a.schoolName)}</b> · applied ${a.submitted} · ~${a.estStudents} students<br>${escapeHTML(a.message)}`;
+    const pilotDefault = schoolTiers.find(t => t.name === 'Pilot') || { durationDays: 30, studentCap: 200, instructorCap: 400 };
+    document.getElementById('app-start').value = TODAY;
+    document.getElementById('app-end').value = addDays(TODAY, pilotDefault.durationDays || 30);
+    document.getElementById('app-student-cap').value = pilotDefault.studentCap;
+    document.getElementById('app-instructor-cap').value = pilotDefault.instructorCap;
+    document.getElementById('app-reject-reason').value = '';
+    document.getElementById('app-reject-btn').textContent = 'Reject';
+    document.getElementById('app-overlay').classList.add('show');
+  }
+  function closeAppModal(){ document.getElementById('app-overlay').classList.remove('show'); }
+
+  function approveApplication(){
+    const a = applications[activeAppIndex];
+    const start = document.getElementById('app-start').value;
+    const end = document.getElementById('app-end').value;
+    if (!start || !end || end < start) { toast('Check the start and end dates'); return; }
+    const studentCap = Math.max(0, Number(document.getElementById('app-student-cap').value) || 0);
+    const instructorCap = Math.max(0, Number(document.getElementById('app-instructor-cap').value) || 0);
+    schools.push({
+      name: a.schoolName,
+      contact: { name: a.contactName, email: a.contactEmail, phone: a.contactPhone },
+      start, end, studentCap, instructorCap, status: 'active', archived: false,
+    });
+    a.status = 'approved';
+    logAudit(`Application ${a.id} approved`, a.schoolName, `Pilot created, ${start} → ${end}`);
+    closeAppModal();
+    renderApplications();
+    renderSchools();
+    toast(`${a.schoolName} approved and added as a pilot school`);
+  }
+  function rejectApplication(){
+    if (!appRejectArmed) {
+      appRejectArmed = true;
+      document.getElementById('app-reject-btn').textContent = 'Click again to confirm';
+      return;
+    }
+    const a = applications[activeAppIndex];
+    const reason = document.getElementById('app-reject-reason').value.trim();
+    a.status = 'rejected';
+    logAudit(`Application ${a.id} rejected`, a.schoolName, reason || 'No reason given');
+    closeAppModal();
+    renderApplications();
+    toast(`${a.schoolName} rejected`);
+  }
+
   renderTiers();
   renderSchools();
   renderUsage();
@@ -2005,6 +2161,7 @@
   renderCustomers();
   renderInvoices();
   renderCoupons();
+  renderApplications();
 </script>
 </body>
 </html>
