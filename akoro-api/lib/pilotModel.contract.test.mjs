@@ -16,10 +16,22 @@ const SCHOOL = {
   contact_phone: "+234 803 111 0001",
 };
 
+// CURRENT is built relative to today so it is a genuinely "current" pilot on
+// every calendar day. A fixed window (the original Sep 2026 dates) goes stale:
+// once its end_date passes, the auto-end rule fires on untouched patches, and
+// when it equals todayStr() the change-detection path skips end_date — both
+// broke the suite on 2026-09-30.
+const T = todayStr();
+const shiftDays = (n) => {
+  const d = new Date(`${T}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 const CURRENT = {
   id: "c1", school_id: "s1", name: "Chrisland College",
   contact: { name: "Mrs. Folake Adeyemi", email: "admin@chrisland.example.com", phone: "+234 803 111 0001" },
-  start_date: "2026-09-01", end_date: "2026-09-30",
+  start_date: shiftDays(-14), end_date: shiftDays(45),
   student_cap: 200, instructor_cap: 400,
   status: "active", archived: false,
 };
@@ -58,12 +70,13 @@ test("buildPilotPatch: identical values produce empty patches", () => {
 });
 
 test("buildPilotPatch: dates validate as a pair — changing only end before start is rejected", () => {
-  const okEnd = buildPilotPatch(CURRENT, SCHOOL, { end_date: "2026-11-15" });
+  const newEnd = shiftDays(60);   // always after the fixture's own end
+  const okEnd = buildPilotPatch(CURRENT, SCHOOL, { end_date: newEnd });
   assert.deepEqual(okEnd.errors, {});
-  assert.equal(okEnd.cohortPatch.end_date, "2026-11-15");
+  assert.equal(okEnd.cohortPatch.end_date, newEnd);
   assert.equal(okEnd.cohortPatch.start_date, undefined);
 
-  const bad = buildPilotPatch(CURRENT, SCHOOL, { end_date: "2026-08-01" });
+  const bad = buildPilotPatch(CURRENT, SCHOOL, { end_date: shiftDays(-15) });  // day before the fixture's start
   assert.ok(bad.errors.end_date, "end before the untouched start must fail");
 });
 
