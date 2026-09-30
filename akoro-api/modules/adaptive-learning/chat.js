@@ -18,6 +18,7 @@ import pkg from "pg";
 import { OPENAI_MODEL, openai } from "../../lib/aiModel.js";
 const { Pool } = pkg;
 import db from "../../db.js";
+import config from "../../config/index.js";
 import { consultPeerAgents, PEER_QUESTION_MIN, PEER_QUESTION_MAX } from "./peerConsult.js";
 import { searchBlogPosts, readBlogPost, BLOG_SEARCH_MAX_RESULTS } from "./blogResearch.js";
 import { listGoals, createGoal, updateGoal } from "../learner-goals/service.js";
@@ -84,7 +85,18 @@ import {
 } from "../agent-tools/conversation-context-routes.js";
 
 const router     = express.Router();
-const pool       = new Pool({ connectionString: process.env.DATABASE_URL });
+// The one direct-Postgres pool in the API. Deliberately small: Supavisor (the
+// external proxy in front of Supabase Postgres) absorbs traffic spikes, so a
+// big pool here only adds idle connections and context-switch overhead on the
+// database. max/idle/connect-timeout come from config (DB_POOL_MAX etc.,
+// default max 5) — see config/index.js and lib/dbPool.contract.test.mjs,
+// which enforces that every runtime pool stays small and bounded.
+const pool       = new Pool({
+  connectionString:         process.env.DATABASE_URL,
+  max:                     config.db.poolMax,
+  idleTimeoutMillis:       config.db.poolIdleMs,
+  connectionTimeoutMillis: config.db.poolConnectMs,
+});
 const query      = (text, params) => pool.query(text, params);
 // The measured learner-profile slice is a separate additive deployment. Keep
 // the legacy JavaScript teaching/session engine unchanged while its migration
