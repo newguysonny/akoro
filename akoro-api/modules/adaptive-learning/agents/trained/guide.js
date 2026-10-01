@@ -5,6 +5,7 @@
 // =============================================================
 
 import { buildGuidePrompt } from "../../training/agentPromptBuilder.js";
+import { buildTrainedMustKnowPrompt, buildTrainedEvaluateSessionPrompt } from "../../../agent-context/personas/trained.js";
 
 import { openai } from "../../../../lib/aiModel.js";
 
@@ -37,8 +38,7 @@ export class TrainedGuide {
       messages: [
         {
           role: "system",
-          content: `You are a curriculum expert. Return 3-5 must-know concepts.
-JSON only: { "mustKnow": ["concept1", "concept2", ...] }`,
+          content: await buildTrainedMustKnowPrompt(),
         },
         { role: "user", content: `Topic: ${topic}` },
       ],
@@ -113,15 +113,7 @@ JSON only: { "mustKnow": ["concept1", "concept2", ...] }`,
       messages: [
         {
           role: "system",
-          content: `You are ${this.name}. Evaluate this teaching session.
-Tone: ${gc.tone || "encouraging"}. No jargon.
-Return JSON:
-{
-  "overallScore": 0-100,
-  "strengths": ["...", "...", "..."],
-  "nextTimeTip": "...",
-  "nextLesson": "..."
-}`,
+          content: await buildTrainedEvaluateSessionPrompt({ name: this.name, tone: gc.tone || "encouraging" }),
         },
         {
           role: "user",

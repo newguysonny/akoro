@@ -133,6 +133,20 @@ export const SETS = Object.freeze({
       "agents/student/personality/ADVANCED.md",
     ]),
   }),
+
+  // ── P2b trained shell: platform doctrine composes FIRST around a teacher's
+  //    own DB-configured style (D3 — the layer wraps it, never replaces it).
+  //    The three auxiliary judges (must-know fallback, boundary, session
+  //    evaluation) are cold JSON contracts and deliberately carry no shell.
+  persona_trained: Object.freeze({
+    mode: "verbatim",
+    consumer: "Trained teacher agents (agents/trained/*, training/agentPromptBuilder.js) — P2b TRAINED_SHELL",
+    files: Object.freeze([
+      "agents/trained/SHELL.md", "agents/trained/GUIDE_TIP.md", "agents/trained/CONTROL_DRIFT.md",
+      "agents/trained/STUDENT_REPLY.md", "agents/trained/MUST_KNOW.md", "agents/trained/BOUNDARY.md",
+      "agents/trained/EVALUATE_SESSION.md",
+    ]),
+  }),
 });
 
 /** Workspace files no registered set loads yet — must be empty by P7 (D13). */

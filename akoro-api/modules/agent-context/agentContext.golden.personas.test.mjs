@@ -21,6 +21,7 @@ const nana = await import("./personas/nana-esumai.js");
 const sargeant = await import("./personas/sargeant.js");
 const clone = await import("./personas/student-clone.js");
 const student = await import("./personas/student.js");
+const trained = await import("./personas/trained.js");
 const { fillTemplate } = await import("./template.js");
 
 const BUILDERS = {
@@ -54,10 +55,16 @@ const BUILDERS = {
   "student-personality-early": (v) => student.studentPersonality("EARLY", v),
   "student-personality-solid": (v) => student.studentPersonality("SOLID", v),
   "student-personality-advanced": (v) => student.studentPersonality("ADVANCED", v),
+  "trained-guide-tip": (v) => trained.buildTrainedGuideTipPrompt(v),
+  "trained-control-drift": (v) => trained.buildTrainedControlDriftPrompt(v),
+  "trained-student-reply": (v) => trained.buildTrainedStudentReplyPrompt(v),
+  "trained-must-know": () => trained.buildTrainedMustKnowPrompt(),
+  "trained-boundary": (v) => trained.buildTrainedBoundaryPrompt(v),
+  "trained-evaluate-session": (v) => trained.buildTrainedEvaluateSessionPrompt(v),
 };
 
 test("every persona prompt is byte-identical to the pre-migration literals", async () => {
-  assert.equal(fixture.cases.length, 30);
+  assert.equal(fixture.cases.length, 36);
   for (const { label, values, builderArgs, expected } of fixture.cases) {
     const build = BUILDERS[label];
     assert.ok(build, `no builder mapped for ${label}`);
