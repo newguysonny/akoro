@@ -39,6 +39,21 @@ test("durable Agent Chat context stays server-owned and uses an idempotent turn"
   assert.match(route, /turnId,/);
 });
 
+test("a failed history load is surfaced with a retry — never silent", () => {
+  // Regression of the 2026-10-01 aftermath: loadSessions and openSession
+  // both swallowed errors, so a FAILED load was pixel-identical to an EMPTY
+  // history — learners concluded their chats were gone. The tab must set a
+  // visible error state for both failure kinds and offer the matching retry.
+  assert.match(learnerChatTab, /setHistoryError\(\{ kind: "sessions" \}\)/,
+    "sessions-list failure must set the history error state");
+  assert.match(learnerChatTab, /setHistoryError\(\{ kind: "messages", sessionId: id \}\)/,
+    "per-conversation message-load failure must set the history error state");
+  assert.match(learnerChatTab, /function retryHistoryLoad|const retryHistoryLoad/,
+    "a retry action must exist");
+  assert.match(learnerChatTab, /agent\.history_load_error/);
+  assert.match(learnerChatTab, /agent\.history_retry/);
+});
+
 test("every completed turn persists — the save is never gated on client socket state", () => {
   const route = source.slice(source.indexOf('router.post("/agent"'));
   // Regression (2026-10-01, observed live): the old save gate

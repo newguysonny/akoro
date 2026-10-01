@@ -463,6 +463,8 @@ export const ES = {
   'agent.error_timeout':    'Está tardando más de lo normal — seguiré trabajando. Revisa la pestaña Tareas en un momento.',
   'agent.error_task':       'No pude iniciar esa tarea — inténtalo de nuevo.',
   'agent.error_connection': 'Error de conexión — inténtalo de nuevo.',
+  'agent.history_load_error': 'No pudimos cargar tu historial de chats. Tus conversaciones están a salvo: no se perdió nada.',
+  'agent.history_retry':     'Reintentar',
 
   /* ── Discovery ── */
   'discovery.general':      'General',

@@ -475,6 +475,8 @@ export const IG = {
   'agent.error_timeout':    'Ọ na-ewe ogologo oge — a ga m aga n\'ihu. Lelee taabụ Ọrụ n\'oge obere.',
   'agent.error_task':       'Enweghị m ike ibido ọrụ ahụ — biko nwalee ọzọ.',
   'agent.error_connection': 'Njikọ njikọ — biko nwalee ọzọ.',
+  'agent.history_load_error': 'Anyị enweghị ike ibido akụkọ mkparịta ụka gị. Mkparịta ụka gị dị ná nchekwa — ọ dịghị ihe furu.',
+  'agent.history_retry':     'Nwalaga ọzọ',
 
   /* ── Discovery ── */
   'discovery.general':      'Izugbe',

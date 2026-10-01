@@ -526,6 +526,8 @@ export const EN = {
   'agent.error_timeout':    "That's taking longer than usual — I'll keep working. Check the Tasks tab in a moment for the result.",
   'agent.error_task':       "I couldn't start that task — please try again.",
   'agent.error_connection': 'Connection error — please try again.',
+  'agent.history_load_error': "We couldn't load your chat history. Your conversations are safe — nothing was lost.",
+  'agent.history_retry':     'Try again',
 
   /* ── Discovery ── */
   'discovery.general':      'General',

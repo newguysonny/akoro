@@ -456,6 +456,8 @@ export const AR = {
   'agent.error_timeout':    'يستغرق الأمر وقتاً أطول من المعتاد — سأواصل العمل. تحقق من تبويب المهام بعد لحظة.',
   'agent.error_task':       'تعذّر بدء هذه المهمة — يرجى المحاولة مرة أخرى.',
   'agent.error_connection': 'خطأ في الاتصال — يرجى المحاولة مرة أخرى.',
+  'agent.history_load_error': 'تعذّر تحميل سجل محادثاتك. محادثاتك في أمان — لم يُفقد أي شيء.',
+  'agent.history_retry':     'حاول مجددًا',
 
   /* ── Discovery ── */
   'discovery.general':      'عام',

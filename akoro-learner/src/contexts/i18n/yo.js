@@ -476,6 +476,8 @@ export const YO = {
   'agent.error_timeout':    'Ó ń gba akókò jù — èmi yóò tẹ̀síwájú. Ṣàyẹ̀wò abà Àwọn Iṣẹ́ ní ìsẹjú díẹ̀.',
   'agent.error_task':       'Mi ò lè bẹ̀rẹ̀ iṣẹ́ náà — jọwọ gbìyànjú lẹ́ẹ̀kan sí i.',
   'agent.error_connection': 'Àṣìṣe ìsopọ̀ — jọwọ gbìyànjú lẹ́ẹ̀kan sí i.',
+  'agent.history_load_error': 'A kò lè gbé ìtàn ìjíròrò rẹ wọlé. Ìjíròrò rẹ wà láàbọ̀ — a kò sọ nǹkan nù.',
+  'agent.history_retry':     'Tún gbìyànjú',
 
   /* ── Discovery ── */
   'discovery.general':      'Gbogboogbo',

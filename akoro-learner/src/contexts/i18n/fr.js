@@ -457,6 +457,8 @@ export const FR = {
   'agent.error_timeout':    "Cela prend plus de temps que d'habitude — je continue à travailler. Consulte l'onglet Tâches dans un moment.",
   'agent.error_task':       "Je n'ai pas pu démarrer cette tâche — réessaie.",
   'agent.error_connection': 'Erreur de connexion — réessaie.',
+  'agent.history_load_error': "Impossible de charger ton historial de conversations. Tes conversations sont en sécurité — rien n'a été perdu.",
+  'agent.history_retry':     'Réessayer',
 
   /* ── Discovery ── */
   'discovery.general':      'Général',

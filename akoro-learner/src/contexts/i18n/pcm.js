@@ -475,6 +475,8 @@ export const PCM = {
   'agent.error_timeout':    'E dey take long pass normal — I go still dey work. Check the Tasks tab soon.',
   'agent.error_task':       'I no fit start that task — abeg try again.',
   'agent.error_connection': 'Connection wahala — abeg try again.',
+  'agent.history_load_error': 'We no fit load your chat history. Your chat dey safe — nothing lost.',
+  'agent.history_retry':     'Try am again',
 
   /* ── Discovery ── */
   'discovery.general':      'General',

@@ -457,6 +457,8 @@ export const HA = {
   'agent.error_timeout':    'Yana ɗaukar lokaci fiye da al\'ada — zan ci gaba da aiki. Duba shafin Ayyuka nan ba da daɗewa ba.',
   'agent.error_task':       'Ban iya fara wannan aikin ba — don Allah sake gwadawa.',
   'agent.error_connection': 'Kuskuren haɗin gwiwa — don Allah sake gwadawa.',
+  'agent.history_load_error': 'Ba za mu iya ɗora tarihin tattaunawarka ba. Tattaunawarka na cikin aminci — ba a ɓace da komai.',
+  'agent.history_retry':     'Sake gwadawa',
 
   /* ── Discovery ── */
   'discovery.general':      'Gabaɗaya',

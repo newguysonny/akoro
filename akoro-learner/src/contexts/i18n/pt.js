@@ -463,6 +463,8 @@ export const PT = {
   'agent.error_timeout':    'Está a demorar mais do que o habitual — continuarei a trabalhar. Verifica o separador Tarefas em breve.',
   'agent.error_task':       'Não consegui iniciar essa tarefa — tenta novamente.',
   'agent.error_connection': 'Erro de ligação — tenta novamente.',
+  'agent.history_load_error': 'Não conseguimos carregar o teu histórico de chats. As tuas conversas estão guardadas — nada se perdeu.',
+  'agent.history_retry':     'Tentar de novo',
 
   /* ── Discovery ── */
   'discovery.general':      'Geral',

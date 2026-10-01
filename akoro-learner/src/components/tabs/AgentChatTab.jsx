@@ -163,6 +163,11 @@ function AgentChatTab({
   const [sessionId,     setSessionId]     = useState(null);
   const [drawerOpen,    setDrawerOpen]    = useState(false);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  // A failed history load must never look like an EMPTY history — that exact
+  // confusion hid the persistence bug for weeks ("my chats are gone" vs "the
+  // list didn't load"). { kind:"sessions" } = the past-chats list failed;
+  // { kind:"messages", sessionId } = one conversation's messages failed.
+  const [historyError,  setHistoryError]  = useState(null);
   const sessionIdRef = useRef(null);
   const creatingRef  = useRef(null);   // in-flight create → avoids double sessions
   const setSession = (id) => { sessionIdRef.current = id; setSessionId(id); };
@@ -174,8 +179,15 @@ function AgentChatTab({
     try {
       const d = await apiGet(`${CHAT_BASE}/sessions`);
       setSessions(d?.sessions ?? []);
+      setHistoryError(null);
       return d?.sessions ?? [];
-    } catch { return []; }
+    } catch {
+      // apiGet only throws when BOTH the network and the offline cache came
+      // up empty — show the banner so "couldn't load" is never mistaken for
+      // "you have no past chats".
+      setHistoryError({ kind: "sessions" });
+      return [];
+    }
     finally { setSessionsLoading(false); }
   };
 
@@ -208,13 +220,29 @@ function AgentChatTab({
       }));
       setSession(id);
       setMessages(msgs.length ? msgs : [greeting(agentName, agentEmoji)]);
-    } catch { /* keep current view on failure */ }
+      setHistoryError(null);
+    } catch {
+      // Keep the current view, but SAY so — a silent failure here looks
+      // exactly like "this conversation is empty" and learners conclude
+      // their chat is gone. The transcript is safe server-side.
+      setHistoryError({ kind: "messages", sessionId: id });
+    }
+  };
+
+  // Retry the exact load that failed: the sessions list, or the one
+  // conversation that could not be opened.
+  const retryHistoryLoad = () => {
+    const failed = historyError;
+    setHistoryError(null);
+    if (failed?.kind === "messages" && failed.sessionId) openSession(failed.sessionId);
+    else loadSessions().then((list) => { if (list.length && !sessionIdRef.current) openSession(list[0].id); });
   };
 
   const newChat = () => {
     setDrawerOpen(false);
     setSession(null);
     setMessages([greeting(agentName, agentEmoji)]);
+    setHistoryError(null);
   };
 
   const removeSession = async (id, e) => {
@@ -561,6 +589,15 @@ function AgentChatTab({
             <div style={{ width:1,height:18,background:"var(--ak-border)",flexShrink:0 }}/>
             {QUICK_PROMPTS.map(p=><button key={p.text} onClick={()=>sendMessage(p.text)} style={{ flexShrink:0,padding:"5px 12px",borderRadius:20,border:`1px solid ${BRAND}30`,background:`${BRAND}08`,color:BRAND,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap" }}>{t(p.key)}</button>)}
           </div>
+          {historyError&&(
+            /* "Couldn't load" ≠ "you have no history": a warm, non-alarming
+               banner (nothing was lost — retry) instead of a silent empty
+               chat. Retry repeats the exact load that failed. */
+            <div style={{ display:"flex",alignItems:"center",gap:8,margin:"10px 16px 0",padding:"9px 12px",borderRadius:12,background:`${GOLD}14`,border:`1px solid ${GOLD}45`,flexShrink:0 }}>
+              <span style={{ flex:1,fontSize:11.5,fontWeight:700,color:GOLD,lineHeight:1.45 }}>{t('agent.history_load_error')}</span>
+              <button onClick={retryHistoryLoad} style={{ flexShrink:0,border:"none",background:`${GOLD}1A`,color:GOLD,cursor:"pointer",fontSize:11,fontWeight:900,whiteSpace:"nowrap",padding:"5px 10px",borderRadius:8,fontFamily:"'Nunito',sans-serif" }}>{t('agent.history_retry')}</button>
+            </div>
+          )}
           <div ref={feedRef} style={{ flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12 }}>
             {messages.map(msg=>{
               const isMe=msg.from==="me";
@@ -837,7 +874,16 @@ function AgentChatTab({
             {sessionsLoading&&sessions.length===0?(
               <p style={{ textAlign:"center",fontSize:12,color:"var(--ak-text-muted)",padding:"20px 0" }}>{t('common.loading')}</p>
             ):sessions.length===0?(
-              <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
+              historyError?.kind==="sessions"?(
+                /* The list failed to load — NOT the same as having no chats. */
+                <div style={{ textAlign:"center",padding:"28px 16px",color:GOLD }}>
+                  <Icon name="ti-cloud-off" size={34} color={GOLD} style={{opacity:.5}}/>
+                  <p style={{ fontSize:12.5,fontWeight:700,marginTop:8,lineHeight:1.5 }}>{t('agent.history_load_error')}</p>
+                  <button onClick={retryHistoryLoad} style={{ marginTop:10,border:"none",background:`${GOLD}1A`,color:GOLD,cursor:"pointer",fontSize:11,fontWeight:900,padding:"6px 14px",borderRadius:8,fontFamily:"'Nunito',sans-serif" }}>{t('agent.history_retry')}</button>
+                </div>
+              ):(
+                <div style={{ textAlign:"center",padding:"28px 16px",color:"var(--ak-text-muted)" }}><Icon name="ti-message-circle" size={34} color="var(--ak-text-muted)" style={{opacity:.3}}/><p style={{ fontSize:12.5,fontWeight:700,marginTop:8 }}>{t('agent.no_chats')}</p></div>
+              )
             ):sessions.map(s=>{
               const active=s.id===sessionId;
               return (
