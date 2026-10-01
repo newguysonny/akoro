@@ -1,8 +1,9 @@
 # Akoro Context Layer Adoption — Mini-Plan (All Agentic Surfaces)
 
-> **Build status:** P0 ✅ + P1 ✅ (chat + voice, byte-identical golden gate; 382/382 suite,
-> boot preflight live — app refuses to start on a missing required doctrine file).
-> P2–P7 pending. Source material for the new files: see
+> **Build status:** P0 ✅ + P1 ✅ (chat + voice) + **P2a ✅** (NaNa Esumai, Sargeant/SergeantProctor,
+> shared Student-clone — 21 persona templates, golden gate; suite 386/386, boot preflight live at
+> 12 sets). **P2b pending:** agents/student/agent.js main persona, trained shell, decay/merge, and the
+> deliberate SOUL.md/MEMORY.md wording pass. P3–P7 pending. Source material for the new files: see
 > `Akoro Context Layer — Architecture Folder Review.md`.
 
 This is the follow-up phase recorded in the Study-Prep Master Plan §4.6 ("Adoption by existing features —

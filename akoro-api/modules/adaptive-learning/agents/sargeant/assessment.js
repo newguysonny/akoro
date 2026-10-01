@@ -12,6 +12,13 @@
  */
 
 import { openai } from "../base-orchestrator.js";
+// P2 (Context Layer Adoption): prompts load VERBATIM from the akoro-agent/
+// workspace — byte-identical to the pre-migration literals, pinned by
+// agentContext.golden.personas.test.mjs.
+import {
+  buildAssessmentQuestionsPrompt, buildAssessmentEvaluatePrompt,
+  buildAssessmentVerdictPrompt, buildAssessmentDriftPrompt,
+} from "../../../agent-context/personas/sargeant.js";
 
 export class Sargeant {
 
@@ -35,16 +42,7 @@ export class Sargeant {
       model: "gpt-4.1-mini", temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are Sargeant. Generate exactly 2 assessment questions to test ${agentName}'s understanding of "${subtopic}".\n\n` +
-          `Rules:\n` +
-          `- Questions must directly test the learning objectives\n` +
-          `- Q1: factual/definition level\n` +
-          `- Q2: application/reasoning level (harder)\n` +
-          `- Questions are FOR ${agentName} (AI agent), not the human\n` +
-          `- No multiple choice — open-ended only\n\n` +
-          `Return JSON:\n` +
-          `{ "opening": "one short strict intro sentence", "q1": "...", "q2": "...", "objectivesTested": ["..."] }` },
+        { role: "system", content: await buildAssessmentQuestionsPrompt({ subtopic, agentName }) },
         { role: "user", content: `Subtopic: ${subtopic}\nTopic: ${topic}\nObjectives: ${JSON.stringify(objectives)}` },
       ],
     });
@@ -57,10 +55,7 @@ export class Sargeant {
       model: "gpt-4.1-mini", temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are Sargeant. Evaluate a Student AI Agent's answer.\n` +
-          `Be strict but fair.\n` +
-          `Return JSON: { "score": 0-100, "correct": bool, "feedback": "one sentence — what was right or missing", "keyConceptDemonstrated": bool }` },
+        { role: "system", content: await buildAssessmentEvaluatePrompt() },
         { role: "user", content: JSON.stringify({ question, answer, subtopic, objective }) },
       ],
     });
@@ -92,11 +87,7 @@ export class Sargeant {
     const verdictRes = await openai.chat.completions.create({
       model: "gpt-4.1-mini", temperature: 0.3,
       messages: [
-        { role: "system", content:
-          `You are Sargeant. Give a brief, strict verdict on ${agentName}'s assessment of "${subtopic}".\n` +
-          `Score: ${avgScore}%  Passed: ${passed}\n` +
-          `If passed: one sentence of acknowledgment, then "Advance to next subtopic."\n` +
-          `If failed: identify the specific gap, then "Human must re-teach [specific concept] before advancing."` },
+        { role: "system", content: await buildAssessmentVerdictPrompt({ agentName, subtopic, avgScore, passed }) },
         { role: "user", content: JSON.stringify({ evaluations, avgScore, passed }) },
       ],
     });
@@ -119,10 +110,7 @@ export class Sargeant {
       model: "gpt-4.1-mini", temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content:
-          `You are Sargeant. Check if the human has drifted off-topic.\n` +
-          `Intended topic: "${intendedTopic}"\n` +
-          `Return JSON: { "isDrifting": bool, "driftLevel": "none|edge|hard", "statusMessage": "...", "edgeNote": null }` },
+        { role: "system", content: await buildAssessmentDriftPrompt({ intendedTopic }) },
         { role: "user", content: JSON.stringify({ recentHistory }) },
       ],
     });

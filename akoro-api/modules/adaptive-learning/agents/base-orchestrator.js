@@ -7,6 +7,10 @@
  */
 
 import db     from "../../../db.js";
+// P2 (Context Layer Adoption): prompts load VERBATIM from the akoro-agent/
+// workspace — byte-identical to the pre-migration literals, pinned by
+// agentContext.golden.personas.test.mjs.
+import { buildStudentCloneReplyPrompt, buildStudentCloneAnalyzePrompt } from "../../agent-context/personas/student-clone.js";
 
 // Re-export the coin-metered client so every orchestrator/agent that imports
 // `openai` from here is billed automatically (see lib/aiModel.js).
@@ -46,14 +50,7 @@ export class BaseOrchestrator {
   }
 
   async _generateStudentReply({ humanMessage, topic, understanding, confusion, history, phaseLabel }, onChunk = null) {
-    const systemPrompt =
-      `You are a Student AI Agent learning about "${topic}".\n` +
-      `Phase: ${phaseLabel}\n` +
-      `Understanding: ${understanding}%  Confusion: ${confusion}%\n\n` +
-      `Respond naturally to the human teacher's explanation.\n` +
-      `If understanding is low: ask one focused question about something unclear.\n` +
-      `If understanding is rising: show partial understanding and probe deeper.\n` +
-      `Keep reply to 2-3 sentences max. Never lecture back.`;
+    const systemPrompt = await buildStudentCloneReplyPrompt({ topic, phaseLabel, understanding, confusion });
 
     const messages = [
       { role: "system",    content: systemPrompt },
@@ -76,7 +73,7 @@ export class BaseOrchestrator {
       model: "gpt-4.1-mini", temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: `Analyze a student AI agent's reply for understanding.\nReturn JSON: { "understanding": 0-100, "confusion": 0-100, "misconceptionDetected": bool, "misconceptionCleared": bool, "keyInsight": "string or null" }` },
+        { role: "system", content: await buildStudentCloneAnalyzePrompt() },
         { role: "user",   content: JSON.stringify({ topic, studentReply, recentHistory: history.slice(-4) }) },
       ],
     });

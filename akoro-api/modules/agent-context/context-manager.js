@@ -114,6 +114,17 @@ export async function loadDoctrine(relative) {
 }
 
 /**
+ * One doctrine file's EXACT bytes (no trim) — for {{token}} templates whose
+ * leading/trailing whitespace is part of the byte-identity contract (P2
+ * persona templates: a trailing \n before the closing backtick is a real
+ * byte of the pre-migration prompt).
+ */
+export async function loadRaw(relative) {
+  const entry = await loadFile(relative, { required: true });
+  return entry.content;
+}
+
+/**
  * contextVersion (D8): a short content hash over every file referenced by the
  * manifest. Boot logs it; doctrine changes become observable. Deterministic:
  * same files + manifest version → same hash.

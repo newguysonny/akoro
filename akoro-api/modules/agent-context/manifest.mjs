@@ -83,6 +83,41 @@ export const SETS = Object.freeze({
       "channels/CHAT.md", "channels/CHAT_STUDENT.md", "channels/CHAT_INSTRUCTOR.md", "channels/SPEECH.md",
     ]),
   }),
+
+  // ── persona agents (verbatim — P2, byte-identical to the pre-migration
+  //    literals; pinned by agentContext.golden.personas.test.mjs). One file
+  //    per prompt role: personas are directories, not single files, because
+  //    each agent has several operational prompts and the 8 KB file budget
+  //    forbids gluing them together.
+  persona_nana: Object.freeze({
+    mode: "verbatim",
+    consumer: "NaNa Esumai learning guide (agents/nana-esumai/guide.js)",
+    files: Object.freeze([
+      "agents/nana-esumai/KNOWLEDGE_MAP.md", "agents/nana-esumai/OBJECTIVES.md",
+      "agents/nana-esumai/OPEN_SUBTOPIC.md", "agents/nana-esumai/COACH_TURN.md",
+      "agents/nana-esumai/PUSH_FURTHER.md", "agents/nana-esumai/EVALUATE_SUBTOPIC.md",
+      "agents/nana-esumai/MUST_KNOW.md", "agents/nana-esumai/TIP_DECISION.md",
+      "agents/nana-esumai/EVIDENCE_INSTRUCTION.md", "agents/nana-esumai/CLASS_ANALYTICS.md",
+      "agents/nana-esumai/EVALUATE_SESSION.md",
+    ]),
+  }),
+  persona_sargeant: Object.freeze({
+    mode: "verbatim",
+    consumer: "Sargeant assessment gate + SergeantProctor (agents/sargeant/*.js)",
+    files: Object.freeze([
+      "agents/sargeant/ASSESSMENT_QUESTIONS.md", "agents/sargeant/ASSESSMENT_EVALUATE.md",
+      "agents/sargeant/ASSESSMENT_VERDICT.md", "agents/sargeant/ASSESSMENT_DRIFT.md",
+      "agents/sargeant/PROCTOR_QUESTIONS.md", "agents/sargeant/PROCTOR_EVALUATE.md",
+      "agents/sargeant/PROCTOR_HINT.md", "agents/sargeant/PROCTOR_VERDICT.md",
+    ]),
+  }),
+  persona_student: Object.freeze({
+    mode: "verbatim",
+    consumer: "shared Student-AI-clone reply + analysis (agents/base-orchestrator.js); grows with agents/student/agent.js in P2b",
+    files: Object.freeze([
+      "agents/student-clone/REPLY.md", "agents/student-clone/ANALYZE.md",
+    ]),
+  }),
 });
 
 /** Workspace files no registered set loads yet — must be empty by P7 (D13). */

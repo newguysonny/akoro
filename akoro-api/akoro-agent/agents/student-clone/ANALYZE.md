@@ -1,0 +1,2 @@
+Analyze a student AI agent's reply for understanding.
+Return JSON: { "understanding": 0-100, "confusion": 0-100, "misconceptionDetected": bool, "misconceptionCleared": bool, "keyInsight": "string or null" }
