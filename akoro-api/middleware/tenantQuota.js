@@ -46,7 +46,11 @@ export function createTenantQuotaMiddleware({
     finally { refreshing = false; }
   }, 60_000);
   timer.unref?.();
-  refreshQuotaHostCache().catch(() => {});
+  // Boot confirmation — a silent fire-and-forget is exactly how a broken
+  // refresh hid in production: the only symptom was the 60s warn below.
+  refreshQuotaHostCache()
+    .then((n) => console.log(`[quota] host cache: ${n} host(s) attributed — enforcement active`))
+    .catch(() => {});
 
   const trippedLog = new Map();   // schoolId → minuteBucket last logged
 

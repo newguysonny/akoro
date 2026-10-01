@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 
 const {
   quotaForSchool, minuteBucket, resetSec, countRequest,
-  schoolForHost, _setQuotaHostCacheForTests,
+  schoolForHost, _setQuotaHostCacheForTests, buildHostMap,
 } = await import("./tenantQuota.js");
 const { createTenantQuotaMiddleware } = await import("../middleware/tenantQuota.js");
 
@@ -188,4 +188,45 @@ test("middleware: cache not yet loaded → allow (fail-open at boot)", async () 
   mw({ headers: { origin: "https://greentree.akoro.name.ng" }, path: "/api/x" }, mkRes(), () => { nexted = true; });
   await tick();
   assert.ok(nexted);
+});
+
+test("buildHostMap: REAL supabase shape { data, error } — the production regression", () => {
+  // Production failed with "(schools || []).map is not a function" because the
+  // response OBJECT was treated as the row array, so the quota host cache never
+  // loaded and enforcement silently failed open. These responses are shaped
+  // exactly like supabase-js resolves (data/error/count/status fields).
+  const schoolsRes = {
+    data: [
+      { id: "s1", slug: "Greentree", plan_tier: "pilot",   api_quota_per_min: null },
+      { id: "s2", slug: "hillview",  plan_tier: "premium", api_quota_per_min: 999 },
+    ],
+    error: null, count: 2, status: 200, statusText: "OK",
+  };
+  const domainsRes = {
+    data: [
+      { domain: "www.Greentree.edu.ng", school_id: "s1" },
+      { domain: "orphan.example.com",   school_id: "sX" },
+    ],
+    error: null, count: 2, status: 200, statusText: "OK",
+  };
+  const m = buildHostMap(schoolsRes, domainsRes);
+  assert.equal(m.size, 3, "two slugs + one joined custom domain");
+  assert.equal(m.get("greentree").plan_tier, "pilot", "slug keys are lowercased");
+  assert.equal(m.get("greentree.edu.ng").id, "s1", "custom domain joins by school id, www. stripped");
+  assert.equal(m.get("hillview").api_quota_per_min, 999, "per-school override survives the map");
+  assert.ok(!m.has("orphan.example.com"), "a domain with no matching school must not leak in");
+  assert.ok(!m.has("www.greentree.edu.ng"), "the www. form is not a separate entry");
+
+  // A plain ARRAY must fail loudly — that is the bug's original camouflage.
+  assert.throws(() => buildHostMap([{ id: "s1", slug: "x" }], { data: [] }),
+    /supabase \{ data, error \} object, not rows/);
+});
+
+test("buildHostMap: query error throws (stale map beats empty map); null data is empty", () => {
+  assert.throws(() => buildHostMap({ data: null, error: new Error("relation missing") }, { data: [] }),
+    /relation missing/);
+  assert.throws(() => buildHostMap({ data: [] }, { data: null, error: new Error("jwt expired") }),
+    /jwt expired/);
+  assert.equal(buildHostMap({ data: null, error: null }, { data: null, error: null }).size, 0,
+    "no rows and no error → empty map, not a crash");
 });

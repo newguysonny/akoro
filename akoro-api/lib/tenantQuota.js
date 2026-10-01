@@ -53,21 +53,45 @@ export function resetSec(d = new Date()) {
 let hostMap = new Map();
 let cacheEverLoaded = false;
 
-export async function refreshQuotaHostCache() {
-  const [schools, domains] = await Promise.all([
-    db.from("school_profiles").select("id, slug, plan_tier, api_quota_per_min").not("slug", "is", null),
-    db.schema("edu").from("school_domains").select("domain, school_id").eq("verified", true),
-  ]);
-  const byId = new Map((schools || []).map((s) => [s.id, s]));
+/** Pure: two supabase responses → the host→school map. Test-covered.
+ *
+ * supabase-js resolves to { data, error } — NOT an array of rows. The first
+ * version of this refresh treated the response object as the row list, so
+ * `(schools || []).map` threw ".map is not a function" on every refresh,
+ * cacheEverLoaded never flipped true, and quota enforcement silently failed
+ * open in production until a Render log line exposed it. The regression tests
+ * pin the REAL response shape — arrays are deliberately rejected. */
+export function buildHostMap(schoolsRes, domainsRes) {
+  // Loud shape guard: if this ever receives a plain array again, say so —
+  // the original bug was exactly this confusion, and it failed silently.
+  for (const [name, r] of [["school_profiles", schoolsRes], ["school_domains", domainsRes]]) {
+    if (r != null && !("data" in r))
+      throw new Error(`buildHostMap: ${name} response must be a supabase { data, error } object, not rows`);
+  }
+  if (schoolsRes?.error) throw schoolsRes.error;
+  if (domainsRes?.error) throw domainsRes.error;
+  const schools = Array.isArray(schoolsRes?.data) ? schoolsRes.data : [];
+  const domains = Array.isArray(domainsRes?.data) ? domainsRes.data : [];
+  const byId = new Map(schools.map((s) => [s.id, s]));
   const next = new Map();
-  for (const s of schools || []) next.set(String(s.slug).toLowerCase(), s);
-  for (const d of domains || []) {
+  for (const s of schools) next.set(String(s.slug).toLowerCase(), s);
+  for (const d of domains) {
     const s = byId.get(d.school_id);
     if (s) next.set(String(d.domain).toLowerCase().replace(/^www\./, ""), s);
   }
-  hostMap = next;
+  return next;
+}
+
+export async function refreshQuotaHostCache() {
+  const [schoolsRes, domainsRes] = await Promise.all([
+    db.from("school_profiles").select("id, slug, plan_tier, api_quota_per_min").not("slug", "is", null),
+    db.schema("edu").from("school_domains").select("domain, school_id").eq("verified", true),
+  ]);
+  // buildHostMap throws on a query error, so the caller's catch logs the real
+  // cause and the previous map stays in place — stale attribution beats none.
+  hostMap = buildHostMap(schoolsRes, domainsRes);
   cacheEverLoaded = true;
-  return next.size;
+  return hostMap.size;
 }
 
 /** The school for a host, or null. Slug subdomains and verified custom
