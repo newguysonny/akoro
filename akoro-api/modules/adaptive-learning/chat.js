@@ -2624,6 +2624,7 @@ router.post("/agent", async (req, res) => {
 
     // Do not persist a response whose client stream has been abandoned. A retry
     // with the same turn id can safely resume the idempotent durable write.
+    let turnSaved = false;   // one outcome line per turn — see the log below
     if (conversationId && !req.destroyed && !res.destroyed) {
       if (durable) {
         if (wantsStream) status("saving", "Saving this study context…");
@@ -2639,15 +2640,18 @@ router.post("/agent", async (req, res) => {
             scratchpad: nextScratchpad(conversation?.scratchpad, userMessage, prepared.toolExecutions),
             memories: safeMemoryUpdates(userMessage),
           });
+          turnSaved = true;
         } catch (persistError) {
           // The reply already happened — never lose the transcript to a
           // durable-write hiccup. Fall back to the plain two-row append.
           console.error("[/chat/agent] durable persist failed — appending basic transcript:", persistError.message);
           await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+            .then(() => { turnSaved = true; })
             .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
         }
       } else {
         await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
+          .then(() => { turnSaved = true; })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
     } else if (!warnedUnsavedTurn) {
@@ -2656,6 +2660,13 @@ router.post("/agent", async (req, res) => {
         ? "client disconnected before the save"
         : "client sent no conversationId"}) — that reply cannot be restored on reload`);
     }
+    // One line per completed turn, success or failure: with this, "my history
+    // is empty" is diagnosable from the logs alone — saved=false names the
+    // failing write above, saved=true with an empty reload points at the read
+    // side (GET /sessions, GET /sessions/:id/messages) or the client.
+    console.log(`[agent-chat] turn user=${String(req.user.id).slice(0, 8)} conv=${conversationId ?? "-"} `
+      + `turn=${turnId ?? "-"} durable=${durable} tools=${prepared.toolExecutions.length} `
+      + `saved=${turnSaved} ${Date.now() - t0}ms`);
 
     const metadata = {
       model: usedModel,
