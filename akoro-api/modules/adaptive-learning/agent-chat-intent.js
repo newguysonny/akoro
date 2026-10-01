@@ -113,6 +113,9 @@ export function requiredStudyPrepTool(message, history = []) {
   if (!pending) return null;
   // Apostrophes ("let's do it") must not break the short-answer shapes.
   const plain = text.replace(/['\u2019]/g, "");
+  // A short tutoring imperative or question ("explain photosynthesis",
+  // "what is osmosis") is a different need, not a confirmation of the offer.
+  if (/^\s*(?:explain|define|describe|teach|tell|quiz|solve|calculate|compute|what|why|how|when|where|who)\b/i.test(plain)) return null;
   if (SHORT_CONFIRM_RE.test(plain)) return "start_study_prep_session";
   return !plain.includes("?") && SHORT_ANSWER_RE.test(plain) ? "start_study_prep_session" : null;
 }

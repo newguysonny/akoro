@@ -131,6 +131,9 @@ test("a short confirmation after an upcoming-test mention starts the session", (
   assert.equal(requiredStudyPrepTool("yes please let's do it", history), "start_study_prep_session");
   assert.equal(requiredStudyPrepTool("let's do it", history), "start_study_prep_session");
   assert.equal(requiredStudyPrepTool("ok biology", history), "start_study_prep_session");
+  // Short tutoring imperatives/questions are a different need, not a yes.
+  assert.equal(requiredStudyPrepTool("Explain photosynthesis", history), null);
+  assert.equal(requiredStudyPrepTool("what is osmosis", history), null);
 });
 
 test("status and resume questions read the session instead of starting one", () => {
