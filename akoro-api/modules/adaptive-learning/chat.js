@@ -48,6 +48,7 @@ import {
   getTopicsBySubject,
 } from "./agents/student/knowledge.js";
 import { decayEngine } from "./agents/student/decayEngine.js";
+import { subjectMastery } from "./agents/student/knowledge.js";
 import { activeSessions } from "./websocket.js";
 import {
   cancelChatFollowUp,
@@ -234,7 +235,7 @@ export const CHAT_TOOLS = [
   },
   {
     name: "list_school_subjects",
-    description: "List the subjects in the signed-in learner's school — the full school list, plus their own class's subjects and subject teacher when the school has recorded them. Use for ANY question about which subjects exist in the school or the class ('what subjects do we have?'). Answer ONLY from this result: if the list is empty, say the school has not registered subjects yet — never invent a subject list.",
+    description: "List the subjects in the signed-in learner's SCHOOL CATALOGUE — the full school list, plus their own class's subjects and subject teacher when the school has recorded them. Use for ANY question about which subjects the school or class offers ('what subjects do we have?'). This is the catalogue, NOT what the learner has learnt — for their own learning history use get_my_learning_sessions. Answer ONLY from this result: if the list is empty, say the school has not registered subjects yet — never invent a subject list.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
@@ -252,6 +253,11 @@ export const CHAT_TOOLS = [
       },
       required: ["name"],
     },
+  },
+  {
+    name: "get_my_learning_sessions",
+    description: "Read the signed-in learner's own agent learning history: their learning agent (name, level, sessions), every subject and topic they have actually LEARNT by teaching their agent, with confidence per topic, recent learning sessions and what each achieved. Use for ANY question about what the learner has learnt, studied or covered with their agent ('what subjects have I learnt?', 'show my learning sessions', 'my learning history'). This is NOT the school's subject catalogue — never mix the two.",
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "create_task",
@@ -1129,6 +1135,71 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         }
         return { matches: matches.filter((m) => m.fullName), searchedFor: name };
       } catch (error) { return { error: error.message || "Could not look up that teacher right now" }; }
+    }
+    case "get_my_learning_sessions": {
+      try {
+        // The learner's own learning agent (one per learner, edu.student_agents).
+        const { data: agentRow } = await db.schema("edu").from("student_agents")
+          .select("id, name, level, total_sessions, total_turns, knowledge_score, subjects_learned")
+          .eq("student_id", studentId).limit(1).maybeSingle();
+        if (!agentRow?.id) return {
+          agent: null, subjects: [], recentSessions: [], recentLearning: [],
+          note: "This learner has no learning agent yet — it grows when they teach it in a learning session. Say exactly that; never invent subjects or topics.",
+        };
+        // What the learner has actually taught their agent, grouped by subject.
+        const { data: knowledge, error: kErr } = await db.schema("edu").from("agent_knowledge")
+          .select("subject, topic, confidence").eq("agent_id", agentRow.id).limit(400);
+        if (kErr) return { error: "Could not load your learning history: " + kErr.message };
+        const rowsBySubject = new Map();
+        for (const row of knowledge ?? []) {
+          const subject = row.subject || "General";
+          if (!rowsBySubject.has(subject)) rowsBySubject.set(subject, []);
+          rowsBySubject.get(subject).push(row);
+        }
+        const subjects = [];
+        for (const [subject, rows] of [...rowsBySubject.entries()].slice(0, 10)) {
+          const avg = rows.length ? rows.reduce((s, r) => s + (Number(r.confidence) || 0), 0) / rows.length : 0;
+          const mastery = await subjectMastery(agentRow.id, subject).catch(() => null);
+          const topics = [...new Map(rows.map((r) => [(r.topic || "").toLowerCase().trim(), r])).values()]
+            .slice(0, 6)
+            .map((r) => ({ topic: r.topic, confidence: Math.round((Number(r.confidence) || 0) * 100) + "%" }));
+          subjects.push({
+            subject, level: mastery?.level ?? null,
+            knowledgeItems: rows.length, avgConfidence: Math.round(avg * 100) + "%",
+            topics,
+          });
+        }
+        // The learning sessions themselves (the protégé teaching sessions).
+        const { data: sessions, error: sErr } = await db.schema("edu").from("adaptive_sessions")
+          .select("subject, topic, status, current_phase, started_at, completed_at")
+          .eq("student_id", studentId).order("started_at", { ascending: false }).limit(8);
+        if (sErr) return { error: "Could not load your learning sessions: " + sErr.message };
+        // What the most recent sessions actually achieved.
+        const { data: deltas } = await db.schema("edu").from("session_knowledge_delta")
+          .select("subject, topic, concepts_learned, xp_earned, started_at")
+          .eq("agent_id", agentRow.id).order("started_at", { ascending: false }).limit(5);
+        return {
+          agent: {
+            name: agentRow.name || "My Learning Agent",
+            level: agentRow.level ?? 1,
+            totalSessions: agentRow.total_sessions ?? 0,
+            totalTurns: agentRow.total_turns ?? 0,
+            knowledgeScore: Number(agentRow.knowledge_score) || 0,
+            subjectsLearned: agentRow.subjects_learned ?? [],
+          },
+          subjects,
+          recentSessions: (sessions ?? []).map((s) => ({
+            subject: s.subject, topic: s.topic, status: s.status,
+            phase: s.current_phase, startedAt: s.started_at, completedAt: s.completed_at,
+          })),
+          recentLearning: (deltas ?? []).map((d) => ({
+            subject: d.subject, topic: d.topic,
+            conceptsLearned: Array.isArray(d.concepts_learned) ? d.concepts_learned.length : 0,
+            xpEarned: Number(d.xp_earned) || 0, at: d.started_at,
+          })),
+          note: "This is what the learner has actually learnt by teaching their agent — the school's subject CATALOGUE is a different question (list_school_subjects).",
+        };
+      } catch (error) { return { error: error.message || "Could not load your learning sessions right now" }; }
     }
     case "create_task": {
       if (!input?.title || !String(input.title).trim()) {

@@ -23,6 +23,11 @@ export function requiresAgentCapabilitiesTool(message) {
    the route FORCE the matching read tool on iteration 0, exactly like the
    capabilities force. Conversation that merely MENTIONS a topic ("my teacher
    said…", "I hate my subjects") never forces — only identity questions do. */
+// Checked BEFORE the school-catalogue question: "what subjects have I LEARNT"
+// is about the learner's own teaching/learning history with their agent, not
+// the school's subject catalogue — conflating the two produced the 2026-10-01
+// "subjects you have learned" reply that listed the school catalogue instead.
+const MY_LEARNING_HISTORY_QUESTION = /\b(?:what|which)\s+subjects?\s+(?:have\s+i|i['\u2019]ve)\s+(?:learnt|learned|studied|covered|taught)\b|\bwhat\s+have\s+i\s+(?:learnt|learned|studied)\b|\btopics?\s+have\s+i\s+(?:learnt|learned|covered|studied)\b|\bmy\s+learning\s+(?:sessions?|history)\b/i;
 const SCHOOL_SUBJECTS_QUESTION = /\b(?:what|which)\s+subjects?\b|\bsubjects?\s+(?:do|does|are|have|has)\b|\bsubjects?\s+in\s+(?:my|our|the)\s+(?:class|school)\b|\blist\s+(?:the\s+|all\s+)?subjects\b/i;
 const MY_TEACHERS_QUESTION = /\bwho\s+(?:is|are)\s+my\s+teacher|\bwho\s+teaches\b|\bwhich\s+teacher\b|\bwhat(?:'s|\s+is)\s+my\s+teacher\b|\blist\s+my\s+teachers\b/i;
 const MY_SCHOOL_QUESTION = /\bmy\s+school\b(?!\s+fees?)|\bwhich\s+school\b|\bwhat\s+school\b|\bschool\s+(?:name|info|profile|details)\b|\babout\s+(?:my|the|our)\s+school\b/i;
@@ -31,6 +36,7 @@ const MY_PROGRESS_QUESTION = /\bhow\s+am\s+i\s+doing\b|\bmy\s+progress\b|\bhow\s
 export function requiredLearnerDataTool(message) {
   const text = String(message || "").replace(/\s+/g, " ").trim();
   if (!text) return null;
+  if (MY_LEARNING_HISTORY_QUESTION.test(text)) return "get_my_learning_sessions";
   if (SCHOOL_SUBJECTS_QUESTION.test(text)) return "list_school_subjects";
   if (MY_TEACHERS_QUESTION.test(text)) return "list_my_teachers";
   if (MY_SCHOOL_QUESTION.test(text)) return "get_my_school";

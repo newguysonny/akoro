@@ -19,6 +19,7 @@ const TOOL_LABELS = {
   "list_school_subjects": "Checking your subjects…",
   "list_my_teachers":    "Checking your teachers…",
   "find_teacher":        "Looking up a teacher…",
+  "get_my_learning_sessions": "Reading your learning sessions…",
   "create_task":         "Planning a task…",
   "create-battle":       "Creating a battle…",
   "generate-quiz":       "Generating quiz questions…",

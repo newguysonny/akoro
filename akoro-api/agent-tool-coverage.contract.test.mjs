@@ -118,7 +118,7 @@ test("the school directory tools are gateway-validated read-only tools", () => {
   // joined the learner catalogue, so the python-agent gateway must validate
   // their arguments too — a catalogue entry without a validator 404s at
   // execution time. None of them is a write tool.
-  for (const tool of ["get_my_school", "list_school_subjects", "list_my_teachers"]) {
+  for (const tool of ["get_my_school", "list_school_subjects", "list_my_teachers", "get_my_learning_sessions"]) {
     assert.match(gateway, new RegExp(`case "${tool}":`), `${tool} missing from validateStudentArguments`);
   }
   assert.match(gateway, /case "find_teacher":[\s\S]{0,200}only\(new Set\(\["name"\]\)\)/,

@@ -146,3 +146,35 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
   // An honest empty is an empty list — never a fabricated one.
   assert.match(directory, /subjects: \(schoolSubjects \?\? \[\]\)\.map/);
 });
+
+test("learning-session history is its own tool — never answered with the school catalogue", () => {
+  // Live 2026-10-01: "What subjects have I learnt so far with my protégé…"
+  // was answered with the school's subject catalogue framed as "subjects you
+  // have learned". The learner's teaching history and the school catalogue
+  // are different questions with different tools, and both descriptions own
+  // the distinction so the model can never conflate them.
+  assert.match(source, /name: "get_my_learning_sessions"/, "missing from the learner catalogue");
+  assert.match(source, /case "get_my_learning_sessions":/, "missing from executeChatTool");
+  const catalogueDef = source.slice(
+    source.indexOf('name: "list_school_subjects"'),
+    source.indexOf('name: "list_my_teachers"'),
+  );
+  assert.match(catalogueDef, /NOT what the learner has learnt/);
+  const historyDef = source.slice(
+    source.indexOf('name: "get_my_learning_sessions"'),
+    source.indexOf("input_schema", source.indexOf('name: "get_my_learning_sessions"')),
+  );
+  assert.match(historyDef, /NOT the school's subject catalogue/);
+  // The history case reads only the learner's own learning records — bounded
+  // and free of any contact details.
+  const historyCase = source.slice(
+    source.indexOf('case "get_my_learning_sessions"'),
+    source.indexOf('case "create_task"'),
+  );
+  for (const table of ["student_agents", "agent_knowledge", "adaptive_sessions", "session_knowledge_delta"]) {
+    assert.match(historyCase, new RegExp(table), `the history case must read ${table}`);
+  }
+  for (const sel of historyCase.match(/\.select\("([^"]*)"\)/g) ?? []) {
+    assert.doesNotMatch(sel, /email|phone|username|password|guardian/i, `history case selects private columns: ${sel}`);
+  }
+});

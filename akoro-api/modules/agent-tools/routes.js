@@ -222,6 +222,7 @@ function validateStudentArguments(name, arguments_) {
     case "get_my_school":
     case "list_school_subjects":
     case "list_my_teachers":
+    case "get_my_learning_sessions":
     case "list_tasks":
     case "find_battles":
     case "get_ranking":

@@ -78,6 +78,15 @@ test("the live hallucination transcript now forces the matching directory tool",
   assert.equal(requiredLearnerDataTool("Which school am I in?"), "get_my_school");
   assert.equal(requiredLearnerDataTool("How am I doing?"), "check_progress");
   assert.equal(requiredLearnerDataTool("What's my progress like?"), "check_progress");
+  // Live 2026-10-01: this exact question was answered with the SCHOOL's
+  // subject catalogue framed as "subjects you have learned" — the learner's
+  // teaching history is a different tool and MUST win over the catalogue.
+  assert.equal(requiredLearnerDataTool("What subjects have I learnt so far with my protégé, my agent on here and the topics"), "get_my_learning_sessions");
+  assert.equal(requiredLearnerDataTool("What have I learnt so far?"), "get_my_learning_sessions");
+  assert.equal(requiredLearnerDataTool("Show my learning sessions"), "get_my_learning_sessions");
+  assert.equal(requiredLearnerDataTool("my learning history"), "get_my_learning_sessions");
+  // The catalogue question still routes to the catalogue.
+  assert.equal(requiredLearnerDataTool("What subjects do we have in the class?"), "list_school_subjects");
 });
 
 test("conversational mentions never force a directory lookup", () => {
@@ -88,6 +97,7 @@ test("conversational mentions never force a directory lookup", () => {
     "Can you prep me for my exam?",
     "Hey",
     "my school fees are due",                    // fees are not school identity
+    "Teach my protégé about photosynthesis",     // a session-start ask, not history
   ]) {
     assert.equal(requiredLearnerDataTool(message), null, message);
   }
