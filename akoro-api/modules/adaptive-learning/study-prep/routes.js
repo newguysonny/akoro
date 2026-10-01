@@ -10,6 +10,7 @@ import express from "express";
 
 import { HarnessRejection } from "./harness.js";
 import { studyPrepEnabled, getHarness, runStudyPrepPlanningStep, startStudyPrepSession } from "./wiring.js";
+import { supabaseStore } from "./store.js";
 import { publicEvent } from "./events.js";
 import { pauseCopy } from "./narration.js";
 
@@ -47,6 +48,15 @@ router.post("/sessions", async (req, res) => {
     if (goal.length < 3 || subject.length < 2) return fail(res, 422, "tool_schema_invalid", "A goal (3+ chars) and subject are required");
     const view = await startStudyPrepSession({ learnerId: req.user.id, goal, subject, classLevel, examBoard });
     return res.status(201).json(shapeView(view));
+  } catch (error) { return rejection(res, error); }
+});
+
+// GET /study-prep/sessions — restore the learner's active session (or null).
+router.get("/sessions", async (req, res) => {
+  if (!guard(res)) return;
+  try {
+    const active = await getActiveSessionView(req.user.id);
+    return res.json(active ? shapeView(active) : { success: true, session: null });
   } catch (error) { return rejection(res, error); }
 });
 
@@ -238,6 +248,16 @@ router.post("/sessions/:id/cancel", async (req, res) => {
     return res.json({ success: true, session: result.session });
   } catch (error) { return rejection(res, error); }
 });
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+/** The learner's active session view, or null when none exists. */
+async function getActiveSessionView(learnerId) {
+  const active = await supabaseStore.findActiveSessionsList(learnerId);
+  const id = active?.data?.[0]?.id;
+  if (!id) return null;
+  return getHarness().getSessionView({ sessionId: id, learnerId });
+}
 
 // ── shaping ────────────────────────────────────────────────────────────────
 

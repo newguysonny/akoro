@@ -1,6 +1,7 @@
 /** Durable, learner-owned workflow projection for adaptive multi-turn paths. */
 import db from "../../db.js";
 import { canTransitionWorkflow, workflowEvent } from "./workflow-state.js";
+import { publicGroupedWorkflows } from "./study-prep/workflow-grouping.js";
 
 const enabled = () => String(process.env.AKORO_ADAPTIVE_WORKFLOWS_ENABLED || "").toLowerCase() === "true";
 const safe = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
@@ -61,8 +62,12 @@ export function publicWorkflow(row) {
 
 export async function listLearnerWorkflows(learnerId, limit = 12) {
   if (!enabled()) return [];
+  // Fetch a wider window than the limit, then GROUP by study-prep session so
+  // one session (even with six topics) is a single list entry with nested
+  // topics — other workflow types stay visible beside it (Master Plan §4.8.3).
+  const capped = Math.max(1, Math.min(Number(limit) || 12, 30));
   const { data, error } = await db.schema("edu").from("adaptive_workflow_runs").select("*")
-    .eq("learner_id", learnerId).order("updated_at", { ascending: false }).limit(Math.max(1, Math.min(Number(limit) || 12, 30)));
+    .eq("learner_id", learnerId).order("updated_at", { ascending: false }).limit(capped * 3);
   if (error) throw error;
-  return (data || []).map(publicWorkflow);
+  return publicGroupedWorkflows(data || [], publicWorkflow).slice(0, capped);
 }

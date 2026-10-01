@@ -252,7 +252,8 @@ export function createHarness({ store, topicWorkflow, syllabus, now = () => new 
       });
       return {
         session: publicSession(session), topic: publicTopic(updatedTopic || topic),
-        run: topicWorkflow.publicRun(result.run), attempt: result.attempt,
+        run: topicWorkflow.publicRun(result.run),
+        attempt: topicWorkflow.publicAttempt ? topicWorkflow.publicAttempt(result.attempt) : result.attempt,
       };
     } catch (error) {
       // Generation failed after the charge — refund, keep the session intact.
