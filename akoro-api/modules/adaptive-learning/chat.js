@@ -1876,6 +1876,7 @@ router.post("/sessions", async (req, res) => {
 // GET /sessions/:id/messages — messages for one owned session.
 router.get("/sessions/:id/messages", async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store");
     const { data: session } = await db
       .from("chat_sessions").select("id")
       .eq("id", req.params.id).eq("user_id", req.user.id).maybeSingle();
@@ -2156,6 +2157,23 @@ async function thinkOnce({ messages, model }) {
 // conversation-* migrations ship in the manifest). Set the flag to "false"
 // only to force the plain-transcript fallback on a lagging environment.
 const durableAgentChatContextEnabled = String(process.env.AKORO_AGENT_CHAT_DURABLE_CONTEXT_ENABLED ?? "true").trim().toLowerCase() === "true";
+
+// Grounding is best-effort by design (an embeddings/RAG hiccup must never
+// take the chat down), but a SILENTLY broken pipeline reads to users as
+// "the agent hallucinates". One line a minute keeps the failure visible in
+// the logs without flooding them — the same discipline as the redis tracer.
+let lastGroundingWarn = 0;
+function warnGrounding(kind, error) {
+  if (Date.now() - lastGroundingWarn > 60_000) {
+    lastGroundingWarn = Date.now();
+    console.warn(`[agent-chat] ${kind} grounding unavailable — teaching WITHOUT it:`, error?.message || error);
+  }
+}
+
+// A turn that is never saved is invisible everywhere else: the reply already
+// went out, so no error path logs it. One warn per process is enough to see
+// it in production logs without spamming per message.
+let warnedUnsavedTurn = false;
 const AGENT_CHAT_SESSION_PREFIX = "agentchat_";
 const CHAT_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CHAT_TURN_ID = /^[A-Za-z0-9_-]{8,180}$/;
@@ -2322,6 +2340,10 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
       const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });
+      // Every tool call is logged: with nothing here, "the agent ignores my
+      // data" is undiagnosable from server logs — zero lines means the model
+      // never called a tool; a failed line points at the tool's backend.
+      console.log(`[agent-chat] tool ${tool} → ${observation.success ? "ok" : "FAILED"} (request ${observation.request_id})`);
       executions.push({
         tool,
         success: observation.success,
@@ -2628,6 +2650,11 @@ router.post("/agent", async (req, res) => {
         await appendBasicChatTurn({ conversationId, userId: req.user.id, userMessage, assistantMessage: reply })
           .catch((e) => console.error("[/chat/agent] basic transcript append failed:", e.message));
       }
+    } else if (!warnedUnsavedTurn) {
+      warnedUnsavedTurn = true;
+      console.warn(`[/chat/agent] a completed turn was NOT saved (${conversationId
+        ? "client disconnected before the save"
+        : "client sent no conversationId"}) — that reply cannot be restored on reload`);
     }
 
     const metadata = {
