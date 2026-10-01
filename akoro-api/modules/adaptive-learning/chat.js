@@ -59,7 +59,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
-import { requiresAgentCapabilitiesTool, requiresActivityPreparation } from "./agent-chat-intent.js";
+import { requiresAgentCapabilitiesTool, requiresActivityPreparation, requiredLearnerDataTool } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
@@ -226,6 +226,32 @@ export const CHAT_TOOLS = [
     name: "check_progress",
     description: "Check the student's progress across all enrolled courses. Returns completion % and overall XP.",
     input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_my_school",
+    description: "Read the signed-in learner's school identity: the school's public profile (name, description, website, address) and the learner's class. Use for ANY question about their school — its name, what it is, where it is — or their class/level. If no school is linked, say exactly that; never guess a school. Public information only: never expose staff contact details or internal school records.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "list_school_subjects",
+    description: "List the subjects in the signed-in learner's school — the full school list, plus their own class's subjects and subject teacher when the school has recorded them. Use for ANY question about which subjects exist in the school or the class ('what subjects do we have?'). Answer ONLY from this result: if the list is empty, say the school has not registered subjects yet — never invent a subject list.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "list_my_teachers",
+    description: "List the signed-in learner's teachers: their classroom teachers and, where the school records it, per-subject teachers — name, subject, and the class they teach. Use for ANY question about who teaches the learner ('who is my teacher?', 'who teaches us Maths?'). Names, subjects and classes only — never contact details. If the result is empty, say no teachers are linked yet; never invent names.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "find_teacher",
+    description: "Find one teacher by name within the signed-in learner's school and classrooms, returning their public identity: full name, subject, and the classes they teach. Use when the learner asks about a specific teacher ('who is Mrs Adeyemi?', 'does Mr Okafor teach here?'). The name is required — if the learner did not give one, ask for it instead of calling. Public identity only: never expose contact details or private staff records. If nothing matches, say so; never guess a person.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The teacher's name as the learner said it, e.g. 'Mrs Adeyemi' or 'Okafor'." },
+      },
+      required: ["name"],
+    },
   },
   {
     name: "create_task",
@@ -691,6 +717,53 @@ export function openAiInstructorTools() {
   }));
 }
 
+/* ── Learner school context (P2b directory tools) ─────────────────────────
+   The learner's school identity comes from two places: their school-management
+   enrolment (mgmt.students — the school's own roster) or their classrooms
+   (classrooms.school_id — standalone teachers have none). Read-only and
+   public-directory bounded: this answers "which school / which subjects /
+   who teaches me", never staff contact details or internal school records. */
+async function resolveLearnerSchoolContext(studentId) {
+  const ctx = { schoolId: null, school: null, classId: null, className: null, sectionName: null, classrooms: [] };
+  const { data: roster } = await db.schema("mgmt").from("students")
+    .select("school_id, class_id, section_id").eq("user_id", studentId)
+    .not("school_id", "is", null).limit(1).maybeSingle();
+  if (roster?.school_id) {
+    ctx.schoolId = roster.school_id;
+    ctx.classId = roster.class_id || null;
+    if (ctx.classId) {
+      const { data: classRow } = await db.schema("mgmt").from("classes")
+        .select("name").eq("id", ctx.classId).limit(1).maybeSingle();
+      ctx.className = classRow?.name || null;
+    }
+    if (roster.section_id) {
+      const { data: sectionRow } = await db.schema("mgmt").from("sections")
+        .select("name").eq("id", roster.section_id).limit(1).maybeSingle();
+      ctx.sectionName = sectionRow?.name || null;
+    }
+  }
+  const { data: memberships } = await db.from("classroom_students")
+    .select("classrooms(id, name, school_id, teacher_id)")
+    .eq("user_id", studentId).eq("status", "active").limit(25);
+  ctx.classrooms = (memberships ?? []).map((m) => m.classrooms).filter(Boolean);
+  if (!ctx.schoolId) ctx.schoolId = ctx.classrooms.map((c) => c.school_id).find(Boolean) || null;
+  if (ctx.schoolId) {
+    // Public directory fields only — the school's published identity.
+    const { data: school } = await db.from("school_profiles")
+      .select("name, description, website, logo_url, address, is_active")
+      .eq("id", ctx.schoolId).limit(1).maybeSingle();
+    if (school) ctx.school = {
+      name: school.name,
+      description: school.description || null,
+      website: school.website || null,
+      logoUrl: school.logo_url || null,
+      address: school.address || null,
+      active: Boolean(school.is_active),
+    };
+  }
+  return ctx;
+}
+
 export async function executeChatTool(name, input, studentId, { conversationId = null, role = "student", channel = "ai_chat" } = {}) {
   switch (name) {
     // ── Instructor: activity creation, human-in-the-loop ──────────────────
@@ -912,6 +985,150 @@ export async function executeChatTool(name, input, studentId, { conversationId =
         total_xp: xpRow?.[0]?.total_xp ?? 0,
         rank:     xpRow?.[0]?.rank ?? "—",
       };
+    }
+    case "get_my_school": {
+      try {
+        const ctx = await resolveLearnerSchoolContext(studentId);
+        // No school anywhere: the honest answer is "none is linked" — the
+        // agent says exactly that instead of inventing a school.
+        return {
+          school: ctx.school,
+          className: ctx.className,
+          sectionName: ctx.sectionName,
+          classrooms: ctx.classrooms.map((c) => c.name),
+        };
+      } catch (error) { return { error: error.message || "Could not load your school right now" }; }
+    }
+    case "list_school_subjects": {
+      try {
+        const ctx = await resolveLearnerSchoolContext(studentId);
+        if (!ctx.schoolId) {
+          // No school link: the only honest subject signal is what the
+          // learner's own classroom teachers declare.
+          const subjects = [];
+          const teacherIds = [...new Set(ctx.classrooms.map((c) => c.teacher_id).filter(Boolean))];
+          if (teacherIds.length) {
+            const { data: profiles } = await db.schema("edu").from("teacher_profiles")
+              .select("teacher_id, teacher_name, subject").in("teacher_id", teacherIds);
+            const byTeacher = new Map((profiles ?? []).map((p) => [p.teacher_id, p]));
+            for (const room of ctx.classrooms) {
+              const profile = room.teacher_id ? byTeacher.get(room.teacher_id) : null;
+              if (profile?.subject) subjects.push({ name: profile.subject, teacher: profile.teacher_name || null, class: room.name });
+            }
+          }
+          return { subjects, source: "classroom teachers",
+            note: "No school is linked to this learner, so this list comes from their classroom teachers only — say that when you use it." };
+        }
+        const { data: schoolSubjects, error: subjErr } = await db.schema("mgmt").from("subjects")
+          .select("id, name, code, subject_type").eq("school_id", ctx.schoolId).order("name").limit(60);
+        if (subjErr) return { error: "Could not load the school's subjects: " + subjErr.message };
+        let classSubjects = null;
+        if (ctx.classId) {
+          const { data: assigned, error: assignedErr } = await db.schema("mgmt").from("class_subjects")
+            .select("subject_id, teacher_id, is_elective").eq("class_id", ctx.classId).limit(60);
+          if (!assignedErr && (assigned ?? []).length) {
+            const subjById = new Map((schoolSubjects ?? []).map((s) => [s.id, s]));
+            const teacherIds = [...new Set(assigned.map((r) => r.teacher_id).filter(Boolean))];
+            // An empty .in() is not a valid PostgREST filter — guard it.
+            const teacherRows = teacherIds.length
+              ? (await db.from("users").select("id, full_name").in("id", teacherIds)).data
+              : [];
+            const nameById = new Map((teacherRows ?? []).map((u) => [u.id, u.full_name]));
+            classSubjects = assigned
+              .map((r) => ({
+                subject: subjById.get(r.subject_id)?.name || null,
+                elective: Boolean(r.is_elective),
+                teacher: r.teacher_id ? (nameById.get(r.teacher_id) || null) : null,
+              }))
+              .filter((s) => s.subject);
+          }
+        }
+        return {
+          school: ctx.school?.name || null,
+          class: ctx.className ? (ctx.sectionName ? `${ctx.className} ${ctx.sectionName}` : ctx.className) : null,
+          subjects: (schoolSubjects ?? []).map((s) => ({ name: s.name, code: s.code || null, type: s.subject_type || "core" })),
+          classSubjects,
+          note: classSubjects ? "subjects = the whole school; classSubjects = the learner's own class." : null,
+        };
+      } catch (error) { return { error: error.message || "Could not load the school's subjects right now" }; }
+    }
+    case "list_my_teachers": {
+      try {
+        const ctx = await resolveLearnerSchoolContext(studentId);
+        const teachers = [];
+        const seen = new Set();
+        const push = (fullName, subject, teaches) => {
+          if (!fullName) return;
+          const key = `${fullName}|${subject || ""}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          teachers.push({ fullName, subject: subject || null, teaches: teaches || null });
+        };
+        const classroomTeacherIds = [...new Set(ctx.classrooms.map((c) => c.teacher_id).filter(Boolean))];
+        if (classroomTeacherIds.length) {
+          const { data: rows } = await db.from("users").select("id, full_name").in("id", classroomTeacherIds);
+          const { data: profiles } = await db.schema("edu").from("teacher_profiles")
+            .select("teacher_id, teacher_name, subject").in("teacher_id", classroomTeacherIds);
+          const profileBy = new Map((profiles ?? []).map((p) => [p.teacher_id, p]));
+          const nameBy = new Map((rows ?? []).map((u) => [u.id, u.full_name]));
+          for (const room of ctx.classrooms) {
+            const profile = room.teacher_id ? profileBy.get(room.teacher_id) : null;
+            push(nameBy.get(room.teacher_id) || profile?.teacher_name || null, profile?.subject || null, room.name);
+          }
+        }
+        if (ctx.classId && ctx.schoolId) {
+          const { data: assigned } = await db.schema("mgmt").from("class_subjects")
+            .select("subject_id, teacher_id").eq("class_id", ctx.classId).limit(60);
+          const rows = (assigned ?? []).filter((r) => r.teacher_id);
+          if (rows.length) {
+            const { data: subjRows } = await db.schema("mgmt").from("subjects")
+              .select("id, name").eq("school_id", ctx.schoolId).limit(100);
+            const subjBy = new Map((subjRows ?? []).map((s) => [s.id, s.name]));
+            const { data: users } = await db.from("users")
+              .select("id, full_name").in("id", [...new Set(rows.map((r) => r.teacher_id))]);
+            const nameBy = new Map((users ?? []).map((u) => [u.id, u.full_name]));
+            const classLabel = ctx.className ? (ctx.sectionName ? `${ctx.className} ${ctx.sectionName}` : ctx.className) : null;
+            for (const r of rows) push(nameBy.get(r.teacher_id), subjBy.get(r.subject_id) || null, classLabel);
+          }
+        }
+        return { teachers };
+      } catch (error) { return { error: error.message || "Could not load your teachers right now" }; }
+    }
+    case "find_teacher": {
+      try {
+        const name = String(input?.name || "").trim().replace(/[%_\\]/g, " ");
+        if (name.length < 2) {
+          return clarify("name", "Which teacher would you like me to find? Tell me their name — for example 'Mrs Adeyemi'.", { action: "find_teacher" });
+        }
+        const ctx = await resolveLearnerSchoolContext(studentId);
+        // Scope: the learner's school staff plus their own classroom teachers.
+        const ids = new Set(ctx.classrooms.map((c) => c.teacher_id).filter(Boolean));
+        if (ctx.schoolId) {
+          const { data: staff } = await db.from("school_teachers")
+            .select("teacher_id").eq("school_id", ctx.schoolId).limit(200);
+          for (const r of staff ?? []) if (r.teacher_id) ids.add(r.teacher_id);
+        }
+        if (!ids.size) return { matches: [], searchedFor: name,
+          note: "No teachers are linked to this learner's school or classrooms yet." };
+        const { data: users, error: usersErr } = await db.from("users")
+          .select("id, full_name").eq("role", "instructor")
+          .in("id", [...ids]).ilike("full_name", `%${name}%`).limit(5);
+        if (usersErr) return { error: "Could not search for that teacher: " + usersErr.message };
+        const matches = [];
+        for (const u of users ?? []) {
+          const { data: profile } = await db.schema("edu").from("teacher_profiles")
+            .select("teacher_name, subject").eq("teacher_id", u.id).limit(1).maybeSingle();
+          const { data: rooms } = await db.from("classrooms")
+            .select("name").eq("teacher_id", u.id).limit(10);
+          matches.push({
+            fullName: u.full_name || profile?.teacher_name || null,
+            subject: profile?.subject || null,
+            classes: (rooms ?? []).map((r) => r.name),
+            school: ctx.school?.name || null,
+          });
+        }
+        return { matches: matches.filter((m) => m.fullName), searchedFor: name };
+      } catch (error) { return { error: error.message || "Could not look up that teacher right now" }; }
     }
     case "create_task": {
       if (!input?.title || !String(input.title).trim()) {
@@ -2567,7 +2784,12 @@ router.post("/agent", async (req, res) => {
       // details the conversation already has. The force covers iteration 0
       // only; the tool's own clarify() handles anything genuinely missing.
       requiredTool: role === "student"
-        ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities" : null)
+        ? (requiresAgentCapabilitiesTool(userMessage) ? "get_agent_capabilities"
+          // Identity questions about the learner's OWN school/class/subjects/
+          // teachers/progress are fact questions about data the model cannot
+          // see — the live 2026-10-01 transcript had tools=0 and an invented
+          // subject list. Force the matching read tool on iteration 0.
+          : requiredLearnerDataTool(userMessage))
         : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
           ? "prepare_activity" : null),
       role,

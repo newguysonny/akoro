@@ -14,6 +14,30 @@ export function requiresAgentCapabilitiesTool(message) {
   return CAPABILITY_QUESTION.test(String(message || "").replace(/\s+/g, " ").trim());
 }
 
+/* ── Learner-data identity questions ────────────────────────────────────────
+   The live hallucination transcript (2026-10-01): asked "What subjects do we
+   have in the class?", the model answered from general knowledge — tools=0 —
+   and invented a subject list. A question about the learner's OWN school,
+   class, subjects, teachers, or progress is a fact question about data the
+   model cannot see: the reply must come from a tool result. These guards let
+   the route FORCE the matching read tool on iteration 0, exactly like the
+   capabilities force. Conversation that merely MENTIONS a topic ("my teacher
+   said…", "I hate my subjects") never forces — only identity questions do. */
+const SCHOOL_SUBJECTS_QUESTION = /\b(?:what|which)\s+subjects?\b|\bsubjects?\s+(?:do|does|are|have|has)\b|\bsubjects?\s+in\s+(?:my|our|the)\s+(?:class|school)\b|\blist\s+(?:the\s+|all\s+)?subjects\b/i;
+const MY_TEACHERS_QUESTION = /\bwho\s+(?:is|are)\s+my\s+teacher|\bwho\s+teaches\b|\bwhich\s+teacher\b|\bwhat(?:'s|\s+is)\s+my\s+teacher\b|\blist\s+my\s+teachers\b/i;
+const MY_SCHOOL_QUESTION = /\bmy\s+school\b(?!\s+fees?)|\bwhich\s+school\b|\bwhat\s+school\b|\bschool\s+(?:name|info|profile|details)\b|\babout\s+(?:my|the|our)\s+school\b/i;
+const MY_PROGRESS_QUESTION = /\bhow\s+am\s+i\s+doing\b|\bmy\s+progress\b|\bhow\s+(?:is|was)\s+my\s+progress\b/i;
+
+export function requiredLearnerDataTool(message) {
+  const text = String(message || "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (SCHOOL_SUBJECTS_QUESTION.test(text)) return "list_school_subjects";
+  if (MY_TEACHERS_QUESTION.test(text)) return "list_my_teachers";
+  if (MY_SCHOOL_QUESTION.test(text)) return "get_my_school";
+  if (MY_PROGRESS_QUESTION.test(text)) return "check_progress";
+  return null;
+}
+
 /* ── Instructor activity preparation ────────────────────────────────────────
    An instructor's activity request must produce a prepare_activity call, but
    a small model left on tool_choice:auto detours into writing sample

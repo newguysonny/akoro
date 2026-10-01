@@ -60,3 +60,35 @@ test("confirmations never start a request and reads/tutoring never force the too
   assert.equal(requiresActivityPreparation("test me on yesterday's topic"), false);
   assert.equal(requiresActivityPreparation("Explain photosynthesis"), false);
 });
+
+import { requiredLearnerDataTool } from "./agent-chat-intent.js";
+
+test("the live hallucination transcript now forces the matching directory tool", () => {
+  // 2026-10-01, answered from general knowledge with tools=0 and an invented
+  // subject list — these MUST reach the school's own records.
+  assert.equal(requiredLearnerDataTool("What subjects do we have in the class?"), "list_school_subjects");
+  assert.equal(requiredLearnerDataTool("Which subjects are we offering this term?"), "list_school_subjects");
+  assert.equal(requiredLearnerDataTool("List the subjects in my school"), "list_school_subjects");
+  assert.equal(requiredLearnerDataTool("What subjects does the school have?"), "list_school_subjects");
+  assert.equal(requiredLearnerDataTool("Who is my teacher?"), "list_my_teachers");
+  assert.equal(requiredLearnerDataTool("Who teaches us Mathematics?"), "list_my_teachers");
+  assert.equal(requiredLearnerDataTool("Who are my teachers this term?"), "list_my_teachers");
+  assert.equal(requiredLearnerDataTool("What's my school name?"), "get_my_school");
+  assert.equal(requiredLearnerDataTool("Tell me about my school"), "get_my_school");
+  assert.equal(requiredLearnerDataTool("Which school am I in?"), "get_my_school");
+  assert.equal(requiredLearnerDataTool("How am I doing?"), "check_progress");
+  assert.equal(requiredLearnerDataTool("What's my progress like?"), "check_progress");
+});
+
+test("conversational mentions never force a directory lookup", () => {
+  for (const message of [
+    "Explain photosynthesis",
+    "My teacher said I should revise algebra",   // mention, not an identity question
+    "I hate my subjects",                        // opinion, not a list question
+    "Can you prep me for my exam?",
+    "Hey",
+    "my school fees are due",                    // fees are not school identity
+  ]) {
+    assert.equal(requiredLearnerDataTool(message), null, message);
+  }
+});

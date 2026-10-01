@@ -219,6 +219,9 @@ function validateStudentArguments(name, arguments_) {
     case "get_agent_capabilities":
     case "get_learner_context":
     case "check_progress":
+    case "get_my_school":
+    case "list_school_subjects":
+    case "list_my_teachers":
     case "list_tasks":
     case "find_battles":
     case "get_ranking":
@@ -241,6 +244,10 @@ function validateStudentArguments(name, arguments_) {
       shortText(arguments_.query, "query", true, 300);
       shortText(arguments_.subject, "subject", false, 180);
       if (arguments_.query.trim().length < 3) throw new GatewayError(422, "query must be at least three characters");
+      return;
+    case "find_teacher":
+      only(new Set(["name"]));
+      shortText(arguments_.name, "name", true, 120);
       return;
     case "submit_tool_request":
       only(new Set(["title", "description", "category"]));

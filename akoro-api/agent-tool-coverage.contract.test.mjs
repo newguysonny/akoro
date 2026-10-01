@@ -112,3 +112,17 @@ test("capability awareness · the card and the prompt must match the runtime gat
   // the /agent route passes the REAL durable flag into the doctrine assembler
   assert.match(chatJs, /durableMemory: durable,/);
 });
+
+test("the school directory tools are gateway-validated read-only tools", () => {
+  // P2b: get_my_school / list_school_subjects / list_my_teachers / find_teacher
+  // joined the learner catalogue, so the python-agent gateway must validate
+  // their arguments too — a catalogue entry without a validator 404s at
+  // execution time. None of them is a write tool.
+  for (const tool of ["get_my_school", "list_school_subjects", "list_my_teachers"]) {
+    assert.match(gateway, new RegExp(`case "${tool}":`), `${tool} missing from validateStudentArguments`);
+  }
+  assert.match(gateway, /case "find_teacher":[\s\S]{0,200}only\(new Set\(\["name"\]\)\)/,
+    "find_teacher must accept exactly one name argument");
+  assert.doesNotMatch(gateway, /STUDENT_WRITE_TOOLS[^;]*find_teacher/,
+    "find_teacher is a read-only lookup and must never join the write set");
+});

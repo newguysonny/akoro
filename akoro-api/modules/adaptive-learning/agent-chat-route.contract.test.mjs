@@ -11,6 +11,8 @@ const instructorChatPage = await readFile(
 const learnerChatTab = await readFile(
   new URL("../../../akoro-learner/src/components/tabs/AgentChatTab.jsx", import.meta.url), "utf8",
 );
+const toolObservationsDoctrine = await readFile(
+  new URL("../../akoro-agent/policies/TOOL_OBSERVATIONS.md", import.meta.url), "utf8");
 
 test("the sole Agent Chat response authority is the unified /agent route", () => {
   assert.match(source, /router\.post\("\/agent", async \(req, res\) =>/);
@@ -100,4 +102,47 @@ test("the instructor chat is durable and uses the shared Fortizo composer", () =
   // honest error bubble — a dropped stream must not dead-end the instructor.
   assert.match(instructorChatPage, /const attemptTurn = async \(turnId\) =>/);
   assert.match(instructorChatPage, /data = await attemptTurn\(newTurnId\(\)\);\s*\n\s*\} catch \(e\) \{/);
+});
+
+test("school/class/teacher directory tools are privacy-bounded and forced for identity questions", () => {
+  // The 2026-10-01 live hallucination: "What subjects do we have in the
+  // class?" was answered from general knowledge (tools=0) with an invented
+  // subject list. The directory tools answer identity questions from the
+  // school's own records, and the route FORCES the matching read tool on
+  // iteration 0 — exactly like the capabilities force.
+  for (const tool of ["get_my_school", "list_school_subjects", "list_my_teachers", "find_teacher"]) {
+    assert.match(source, new RegExp(`name: "${tool}"`), `${tool} missing from the learner catalogue`);
+    assert.match(source, new RegExp(`case "${tool}":`), `${tool} missing from executeChatTool`);
+  }
+  assert.match(source, /requiredLearnerDataTool\(userMessage\)/,
+    "the identity-question force is not wired into the /agent route");
+  // The doctrine owns the rule: no tool result, no school/class/teacher facts.
+  assert.match(toolObservationsDoctrine, /FACT questions about data you cannot see in this conversation/);
+  assert.match(toolObservationsDoctrine, /never guess, and never fill the gap with generic school facts/);
+  // Public identity only: every column the directory block selects must stay
+  // in the public-directory allowlist — contact details and internal school
+  // records are never selected.
+  const directory = source.slice(
+    source.indexOf('case "get_my_school"'),
+    source.indexOf('case "create_task"'),
+  );
+  assert.ok(directory.includes('case "find_teacher"'), "directory slice did not capture all four tools");
+  const selects = directory.match(/\.select\("([^"]*)"\)/g) ?? [];
+  assert.ok(selects.length >= 6, "directory tool selects not found");
+  for (const sel of selects) {
+    assert.doesNotMatch(sel, /email|phone|username|password|guardian/i, `directory selects private columns: ${sel}`);
+  }
+  // The school profile query is exactly the published-identity allowlist —
+  // it lives in the shared resolver, not in a case body.
+  const resolver = source.slice(
+    source.indexOf("async function resolveLearnerSchoolContext"),
+    source.indexOf("export async function executeChatTool"),
+  );
+  assert.ok(resolver.length > 200, "the learner school-context resolver was not found");
+  assert.match(resolver, /name, description, website, logo_url, address, is_active/);
+  for (const sel of resolver.match(/\.select\("([^"]*)"\)/g) ?? []) {
+    assert.doesNotMatch(sel, /email|phone|username|password|guardian/i, `resolver selects private columns: ${sel}`);
+  }
+  // An honest empty is an empty list — never a fabricated one.
+  assert.match(directory, /subjects: \(schoolSubjects \?\? \[\]\)\.map/);
 });
