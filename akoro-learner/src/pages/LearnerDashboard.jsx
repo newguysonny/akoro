@@ -35,6 +35,7 @@ import { ProgressBar, LiveBadge } from '../components/common/ProgressBar.jsx';
 import { ZapIcon, MicIcon, Icon } from '../components/common/Icons.jsx';
 import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
+import { NavIcon } from '../components/common/NavIcons.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { getAlarmChoice, startAlarm, stopAlarm } from '../services/alarmSound.js';
@@ -774,7 +775,10 @@ export default function LearnerDashboard() {
     apiGet("/api/battle/my-battles").then(d=>setBattles(d?.data ?? [])).catch(()=>{});
   }, []);
 
-  const NAV_ITEMS=[{key:"sessions",icon:"📚",label:t('nav.learn')},{key:"discovery",icon:"🧭",label:t('nav.discover')},{key:"rankings",icon:"🏆",label:t('nav.rankings')},{key:"battles",icon:"⚔️",label:t('nav.battles')},{key:"agent",icon:"🤖",label:t('nav.agent')}];
+  // Bottom-nav destinations. No icon field any more: the key IS the
+  // NavIcon name (NavIcons.jsx) — the same icon set the AppShell
+  // sidebar uses, so a destination reads identically on every surface.
+  const NAV_ITEMS=[{key:"sessions",label:t('nav.learn')},{key:"discovery",label:t('nav.discover')},{key:"rankings",label:t('nav.rankings')},{key:"battles",label:t('nav.battles')},{key:"agent",label:t('nav.agent')}];
   // 'lobby' counts too: a battle waiting on its invitations is outstanding work,
   // and it can now sit there for the whole invite window rather than 5 seconds.
   // Only battles I am actually in. An unanswered invitation is counted by the
@@ -1151,13 +1155,13 @@ export default function LearnerDashboard() {
         {/* BOTTOM NAV — mobile only; hidden by CSS above 768px where the
             AppShell sidebar takes over. */}
         <div className="ak-bottom-nav" style={{ position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"var(--ak-surface)",backdropFilter:"blur(12px)",borderTop:"1px solid var(--ak-border)",padding:"8px 0 env(safe-area-inset-bottom,14px)",display:"flex",justifyContent:"space-around",minHeight:62 }}>
-          {NAV_ITEMS.map(({key,icon,label})=>{
+          {NAV_ITEMS.map(({key,label})=>{
             // "Learn" (key "sessions") stays active on the Challenges sub-tab too.
             const navActive = tab===key || (key==="sessions" && tab==="challenges");
             return (
               <div key={key} onClick={()=>goTab(key)} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:navActive?BRAND:"var(--ak-text-muted)",minWidth:56,padding:"2px 0" }}>
                 <div style={{ position:"relative" }}>
-                  <span style={{ fontSize:22 }}>{icon}</span>
+                  <NavIcon name={key} size={24} active={navActive}/>
                   {key==="sessions"&&totalUnread>0&&<div style={{ position:"absolute",top:-3,right:-6,width:14,height:14,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center" }}><span style={{ fontSize:8,fontWeight:900,color:"#fff" }}>{totalUnread}</span></div>}
                   {key==="battles"&&activeBattleCount>0&&<div style={{ position:"absolute",top:-3,right:-6,width:14,height:14,borderRadius:"50%",background:RED,display:"flex",alignItems:"center",justifyContent:"center" }}><span style={{ fontSize:8,fontWeight:900,color:"#fff" }}>{activeBattleCount}</span></div>}
                   {key==="agent"&&<div style={{ position:"absolute",top:-2,right:-4,width:8,height:8,borderRadius:"50%",background:GREEN,border:"1.5px solid #fff" }}/>}

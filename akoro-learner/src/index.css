@@ -144,7 +144,7 @@ select:focus-visible {
 }
 
 /* Collapsed rail (user-driven via the header hamburger, default state):
-   labels, captions and text collapse, badges re-anchor to the emoji's
+   labels, captions and text collapse, badges re-anchor to the icon's
    corner, brand centres, items become square tiles. */
 .ak-sidebar.ak-collapsed { width: 76px; }
 .ak-collapsed .ak-sb-label,

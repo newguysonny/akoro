@@ -12,8 +12,9 @@
  * the dashboard keeps its bottom nav and the secondary pages keep their
  * back-button headers, exactly as before.
  *
- * Nav icons are the SAME emoji the mobile bottom nav uses (📚🧭🏆⚔️🤖), so a
- * destination reads identically on every surface.
+ * Nav icons are the SAME brand SVG set the mobile bottom nav uses
+ * (common/NavIcons.jsx): Learn, Discover, Rankings, Battles, Agent and
+ * the "More" set, so a destination reads identically on every surface.
  *
  * Tier-aware: Activities and Gradebook are school-UI only, Communities is
  * higher-ed only — each tier sees exactly its own set in the sidebar. The tier comes from the shared
@@ -45,6 +46,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
+import { NavIcon } from './common/NavIcons.jsx';
 import NowStudyingTabletBar from './dashboard/NowStudyingTabletBar.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { BRAND, RED, GREEN } from '../constants.js';
@@ -86,16 +88,16 @@ export function SidebarToggle() {
 }
 
 /* The five dashboard tabs — the same destinations, in the same order, with
-   the same emoji as the mobile bottom nav (mirrors goTab() on the
+   the same NavIcon set as the mobile bottom nav (mirrors goTab() on the
    dashboard): "Learn" is /app with no ?tab, the rest are /app?tab=<key>.
    "challenges" is Learn's second pill, so it keeps Learn lit here just like
    it does in the bottom nav. */
 const TAB_NAV = [
-  { tab: 'sessions',  emoji: '📚', key: 'nav.learn'    },
-  { tab: 'discovery', emoji: '🧭', key: 'nav.discover' },
-  { tab: 'rankings',  emoji: '🏆', key: 'nav.rankings' },
-  { tab: 'battles',   emoji: '⚔️', key: 'nav.battles'  },
-  { tab: 'agent',     emoji: '🤖', key: 'nav.agent'    },
+  { tab: 'sessions',  key: 'nav.learn'    },
+  { tab: 'discovery', key: 'nav.discover' },
+  { tab: 'rankings',  key: 'nav.rankings' },
+  { tab: 'battles',   key: 'nav.battles'  },
+  { tab: 'agent',     key: 'nav.agent'    },
 ];
 
 /* Standalone pages — on mobile these live behind header buttons and
@@ -105,12 +107,12 @@ const TAB_NAV = [
    mirror: Communities (study groups) is higher-ed only, matching the
    settings quick links that swap it for Activities + Gradebook. */
 const PAGE_NAV = [
-  { to: '/library',     emoji: '🗂️', key: 'nav.library'     },
-  { to: '/activities',  emoji: '📝', key: 'nav.activities',  schoolOnly: true },
-  { to: '/gradebook',   emoji: '📊', key: 'nav.gradebook',   schoolOnly: true },
-  { to: '/communities', emoji: '👥', key: 'nav.communities', higherEdOnly: true },
-  { to: '/wallet',      emoji: '🪙', key: 'nav.wallet'      },
-  { to: '/settings',    emoji: '⚙️', key: 'nav.settings'    },
+  { to: '/library',     icon: 'library',     key: 'nav.library'     },
+  { to: '/activities',  icon: 'activities',  key: 'nav.activities',  schoolOnly: true },
+  { to: '/gradebook',   icon: 'gradebook',   key: 'nav.gradebook',   schoolOnly: true },
+  { to: '/communities', icon: 'communities', key: 'nav.communities', higherEdOnly: true },
+  { to: '/wallet',      icon: 'wallet',      key: 'nav.wallet'      },
+  { to: '/settings',    icon: 'settings',    key: 'nav.settings'    },
 ];
 
 /* Current-route matching: tab links match /app + ?tab= (default sessions);
@@ -127,8 +129,8 @@ function useActiveRoutes() {
 /* One sidebar row. `badge`/`badgeColor` mirror the bottom-nav badges (Learn =
    unread sessions on brand, Battles = live battles on red); `dot` is the
    agent-online dot. In collapsed-rail mode the badge re-anchors to the
-   emoji's corner via the .ak-sb-badge CSS in index.css. */
-function NavButton({ active, emoji, label, badge = 0, badgeColor = BRAND, dot = false, onClick }) {
+   icon's corner via the .ak-sb-badge CSS in index.css. */
+function NavButton({ active, icon, label, badge = 0, badgeColor = BRAND, dot = false, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -147,8 +149,8 @@ function NavButton({ active, emoji, label, badge = 0, badgeColor = BRAND, dot = 
       onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--ak-surface-hover)'; }}
       onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
-      <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, fontSize: 19, lineHeight: 1 }}>
-        {emoji}
+      <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+        <NavIcon name={icon} size={21} active={active}/>
         {dot && (
           <span style={{
             position: 'absolute', top: -2, right: -3, width: 8, height: 8,
@@ -203,11 +205,11 @@ export function Sidebar({ badges = {}, collapsed = false }) {
 
       {/* Nav */}
       <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }} aria-label="App navigation">
-        {TAB_NAV.map(({ tab, emoji, key }) => (
+        {TAB_NAV.map(({ tab, key }) => (
           <NavButton
             key={tab}
             active={isTab(tab)}
-            emoji={emoji}
+            icon={tab}
             label={t(key)}
             badge={tab === 'sessions' ? (badges.learn || 0) : tab === 'battles' ? (badges.battles || 0) : 0}
             badgeColor={tab === 'battles' ? RED : BRAND}
@@ -222,11 +224,11 @@ export function Sidebar({ badges = {}, collapsed = false }) {
           color: 'var(--ak-text-muted)',
         }}>{t('nav.more')}</div>
 
-        {pageNav.map(({ to, emoji, key }) => (
+        {pageNav.map(({ to, icon, key }) => (
           <NavButton
             key={to}
             active={isPage(to)}
-            emoji={emoji}
+            icon={icon}
             label={t(key)}
             onClick={() => navigate(to)}
           />

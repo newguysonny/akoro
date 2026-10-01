@@ -18,6 +18,7 @@
  */
 import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { Icon } from '../components/common/Icons.jsx';
+import { NavIcon } from '../components/common/NavIcons.jsx';
 import { BRAND, RED, GREEN, GOLD } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 
@@ -85,7 +86,7 @@ export default function ShellPreviewPage() {
         {/* Fake scrollable content */}
         <div className="ak-dash-scroll" style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 72px' }}>
           <div style={{ padding: '10px 4px 14px', fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text-muted)' }}>
-            /dev/shell — dev-only preview. The sidebar starts expanded; tap the hamburger to collapse it to the icon rail (remembered across loads). Emoji match the mobile bottom nav; Activities + Gradebook are school-UI only; Communities is higher-ed only — each tier sees exactly its own set. Above 768px the now-studying player bar is pinned full-width at the bottom (3 columns: name & details · progress + prev/next · tool icons); below that the bottom nav + the dashboard's own bar take over. (This preview is the Learn tab, so its header shows on mobile too — off-Learn tabs drop the header there.)
+            /dev/shell — dev-only preview. The sidebar starts expanded; tap the hamburger to collapse it to the icon rail (remembered across loads). Icons match the mobile bottom nav; Activities + Gradebook are school-UI only; Communities is higher-ed only — each tier sees exactly its own set. Above 768px the now-studying player bar is pinned full-width at the bottom (3 columns: name & details · progress + prev/next · tool icons); below that the bottom nav + the dashboard's own bar take over. (This preview is the Learn tab, so its header shows on mobile too — off-Learn tabs drop the header there.)
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
             {['Maths — Fractions', 'English — Comprehension', 'Science — Photosynthesis', 'History — Independence', 'Battles — 2 live', 'Rankings — #4 this week'].map((label, i) => (
@@ -114,7 +115,7 @@ export default function ShellPreviewPage() {
         <div className="ak-bottom-nav" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200, background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)', padding: '8px 0 env(safe-area-inset-bottom,14px)', display: 'flex', justifyContent: 'space-around', minHeight: 62 }}>
           {tabs.map(({ key, label }, i) => (
             <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer', color: i === 0 ? BRAND : 'var(--ak-text-muted)', minWidth: 56, padding: '2px 0' }}>
-              <Icon name={['ti-book', 'ti-compass', 'ti-trophy', 'ti-swords', 'ti-robot'][i]} size={22} color={i === 0 ? BRAND : 'var(--ak-text-muted)'}/>
+              <NavIcon name={key} size={24} active={i === 0}/>
               <span style={{ fontSize: 10.5, fontWeight: i === 0 ? 800 : 600 }}>{label}</span>
             </div>
           ))}
