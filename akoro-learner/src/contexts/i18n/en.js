@@ -12,7 +12,6 @@ export const EN = {
   /* Sidebar-only entries (AppShell) — secondary destinations the mobile app
      reaches through header buttons / back-button flows. */
   'nav.library':     'Library',
-  'nav.study':      'Study Prep',
   'nav.activities':  'Activities',
   'nav.gradebook':   'Gradebook',
   'nav.communities': 'Communities',

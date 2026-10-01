@@ -14,6 +14,8 @@ import { agentChatEndpoint, createAgentChatTurnId } from '../../lib/agentChatEnd
 import StreamCaret from '../common/StreamCaret.jsx';
 import Spinner from '../common/Spinner.jsx';
 import { useInFlight } from '../../hooks/useInFlight.js';
+import StudyPrepChatCard from './studyPrep/StudyPrepChatCard.jsx';
+import { fetchActiveStudyPrepSession } from '../../services/studyPrepApi.js';
 
 const QUICK_PROMPTS = [
   { text:"Create a task for me", key:"agent.qp_create" },
@@ -289,6 +291,27 @@ function AgentChatTab({
   const PRI_LABEL = {high:t('agent.pri_high_label'),medium:t('agent.pri_medium_label'),low:t('agent.pri_low_label')};
   const PRI_BG    = {high:`${RED}15`,medium:`${GOLD}15`,low:`${GREEN}15`};
 
+  // The study-prep session is the durable layer — it outlives chats. On mount,
+  // restore an active session as an agent message carrying the session card,
+  // exactly like a fresh start_study_prep_session tool echo would.
+  useEffect(() => {
+    let cancelled = false;
+    fetchActiveStudyPrepSession()
+      .then((response) => {
+        if (cancelled || !response?.session?.id) return;
+        setMessages((prev) => prev.some((m) => m.studyPrepSessionId === response.session.id) ? prev : [...prev, {
+          id: `study-prep-${response.session.id}`,
+          from: "agent",
+          text: "Your study-prep session is active — pick up where you left off:",
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          phase: "done",
+          studyPrepSessionId: response.session.id,
+        }]);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // The parent fetches the agent profile asynchronously; if it resolves after
   // this tab mounts, sync the incoming name/emoji so the header isn't blank.
   useEffect(() => {
@@ -373,7 +396,10 @@ function AgentChatTab({
         onStatus: (s)=>{ if(!started) setStatusLabel(t(statusKey[s?.step]||"") || s?.label || ""); },
         onDone: ({ reply, syllabus, pastQuestions, thinking, toolExecutions })=>{
           ensureBubble(); setStatusLabel("");
-          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done"}:m));
+          // Study-prep sessions ride the reply as a session echo (the
+          // activity-draft pattern) — render the interactive session card.
+          const studyPrepSession = (toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
+          setMessages(prev=>prev.map(m=>m.id===replyId?{...m,...(reply!=null?{text:reply}:{}),thinking:thinking||m.thinking,syllabus:syllabus||[],pastQuestions:pastQuestions||[],phase:"done",...(studyPrepSession?{studyPrepSessionId:studyPrepSession.id}:{})}:m));
           if ((toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         },
@@ -392,6 +418,10 @@ function AgentChatTab({
           finalReply = data.reply || data.response || t('agent.fallback');
           setMessages(prev=>[...prev,{id:replyId,from:"agent",text:finalReply,time:t2,
             thinking:data.thinking||"",syllabus:data.syllabus||[],pastQuestions:data.pastQuestions||[]}]);
+          const studyPrepSessionFallback = (data?.toolExecutions || []).find((entry) => entry?.session?.id && entry?.success)?.session || null;
+          if (studyPrepSessionFallback) {
+            setMessages(prev=>prev.map(m=>m.id===replyId?{...m,studyPrepSessionId:studyPrepSessionFallback.id}:m));
+          }
           if ((data?.toolExecutions || []).some((entry) => entry?.tool === "create_task" && entry?.success)) refetchTasks();
           if ((data?.toolExecutions || []).some((entry) => entry?.tool === "suggest_help" && entry?.success)) refetchSuggestions();
         } catch {
@@ -550,6 +580,7 @@ function AgentChatTab({
                           : <span key={i} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5,fontWeight:700,padding:"4px 9px",borderRadius:20,background:"rgba(255,255,255,.18)",color:"#fff" }}><Icon name="ti-file-text" size={10}/> {a.name}</span>)}
                       </div>
                     )}
+                    {!isMe&&msg.studyPrepSessionId&&<StudyPrepChatCard sessionId={msg.studyPrepSessionId}/>}
                     {!isMe&&msg.syllabus?.length>0&&(
                       <div style={{ display:"flex",flexWrap:"wrap",gap:5,marginTop:5 }}>
                         {msg.syllabus.map((s,i)=>(

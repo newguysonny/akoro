@@ -18,6 +18,8 @@ import { getLearnerAutonomy } from "./learner-autonomy.js";
 import { publicMemory } from "../agent-tools/conversation-context-validation.js";
 
 const isEnabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
+// Default-ON kill-switch keys (peer-consult pattern): absent env means enabled.
+const isEnabledByDefault = (key) => String(process.env[key] ?? "true").toLowerCase() !== "false";
 const text = (value, maximum) => typeof value === "string"
   ? value.replace(/[\r\n\x00]+/g, " ").replace(/\s+/g, " ").trim().slice(0, maximum)
   : "";
@@ -243,14 +245,14 @@ export async function getLearningInsightsSummary(learnerId) {
 
 /** Existing learner-owned generated-practice and workflow status, no answer keys. */
 export async function getExamPrepStatus(learnerId) {
-  if (!isEnabled("AKORO_EXAM_PREP_CONFIDENCE_ENABLED")) {
+  if (!isEnabledByDefault("AKORO_EXAM_PREP_CONFIDENCE_ENABLED")) {
     return { enabled: false, runs: [], workflows: [], message: "Generated exam-style practice is not enabled for this learner." };
   }
   const [runsResult, workflowsResult] = await Promise.all([
     db.schema("edu").from("learner_exam_prep_runs")
       .select("id, topic, subject, exam_board, question_provenance, question_count, pass_threshold, max_attempts, current_attempt, last_score, status, completed_at, updated_at")
       .eq("learner_id", learnerId).order("updated_at", { ascending: false }).limit(10),
-    isEnabled("AKORO_ADAPTIVE_WORKFLOWS_ENABLED")
+    isEnabledByDefault("AKORO_ADAPTIVE_WORKFLOWS_ENABLED")
       ? db.schema("edu").from("adaptive_workflow_runs")
         .select("id, workflow_type, topic, subject, exam_board, current_attempt, last_score, state, updated_at, completed_at")
         .eq("learner_id", learnerId).order("updated_at", { ascending: false }).limit(10)

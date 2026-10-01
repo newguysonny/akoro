@@ -104,8 +104,10 @@ const query      = (text, params) => pool.query(text, params);
 const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED || "").toLowerCase() === "true";
 const learnerSoulStateEnabled = String(process.env.AKORO_LEARNER_SOUL_STATE_ENABLED || "").toLowerCase() === "true";
 const conceptTrackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
-const examPrepConfidenceEnabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toLowerCase() === "true";
-const studyPrepEnabled = String(process.env.AKORO_STUDY_PREP_ENABLED || "").toLowerCase() === "true";
+// Default-ON kill switches (the peer-consult/blog-research pattern): the
+// slices ship enabled; AKORO_…_ENABLED=false removes them everywhere at once.
+const examPrepConfidenceEnabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED ?? "true").toLowerCase() !== "false";
+const studyPrepEnabled = String(process.env.AKORO_STUDY_PREP_ENABLED ?? "true").toLowerCase() !== "false";
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
    Priority: block_history column (exact) → session_phase_progress (derived).
@@ -873,7 +875,11 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       } catch (error) { return { revised: false, error: error.message || "Could not revise the draft" }; }
     }
     case "get_agent_capabilities": {
-      const enabled = (key) => String(process.env[key] || "").toLowerCase() === "true";
+      // Default-on keys consult the kill-switch semantics, not strict equality,
+      // so the card must never deny an ability the runtime has.
+      const enabled = (key) => ["AKORO_EXAM_PREP_CONFIDENCE_ENABLED", "AKORO_ADAPTIVE_WORKFLOWS_ENABLED", "AKORO_STUDY_PREP_ENABLED"].includes(key)
+        ? String(process.env[key] ?? "true").toLowerCase() !== "false"
+        : String(process.env[key] || "").toLowerCase() === "true";
       return {
         sections: [
           { title: "Study support", items: ["Explain concepts and work through problems", "Help draft and improve study notes, essays, and revision plans", "Generate practice questions and discuss answers", "Show safe study profile, learning overview, knowledge-map, saved-study-knowledge, guide-preference, and Online/Offline status when asked",
@@ -2389,6 +2395,14 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
             || tool === "revise_activity_draft" && toolResult?.revised)
           && toolResult?.draftId
           ? { draft: { id: toolResult.draftId, title: toolResult.title, type: toolResult.type, audience: toolResult.audience } }
+          : {}),
+        // Study-prep sessions ride the same way: a session echo lets the chat
+        // tab render the interactive session card (plan card, human gates)
+        // without parsing the model's prose. Plan-only — the card's buttons
+        // hit the harness REST endpoints, never the model.
+        ...((tool === "start_study_prep_session" && toolResult?.sessionId
+            || tool === "get_study_prep_session" && toolResult?.sessions?.[0]?.sessionId)
+          ? { session: { id: toolResult.sessionId || toolResult.sessions[0].sessionId } }
           : {}),
       });
       transcript.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(observation) });

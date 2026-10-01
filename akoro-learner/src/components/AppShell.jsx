@@ -106,7 +106,6 @@ const TAB_NAV = [
    settings quick links that swap it for Activities + Gradebook. */
 const PAGE_NAV = [
   { to: '/library',     emoji: '🗂️', key: 'nav.library'     },
-  { to: '/study-prep',  emoji: '🎯', key: 'nav.study'      },
   { to: '/activities',  emoji: '📝', key: 'nav.activities',  schoolOnly: true },
   { to: '/gradebook',   emoji: '📊', key: 'nav.gradebook',   schoolOnly: true },
   { to: '/communities', emoji: '👥', key: 'nav.communities', higherEdOnly: true },

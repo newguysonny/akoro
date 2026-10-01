@@ -75,8 +75,22 @@ test("every route responds with one envelope and a stable code on failure", () =
   assert.match(routes, /500, "study_prep_fault"/);
 });
 
-test("the flag ships off by default", () => {
-  assert.match(env, /AKORO_STUDY_PREP_ENABLED=false/);
+test("the study-prep flags ship DEFAULT-ON (kill switches), like peer consult", () => {
+  assert.match(env, /AKORO_STUDY_PREP_ENABLED=true/);
+  assert.match(env, /AKORO_EXAM_PREP_CONFIDENCE_ENABLED=true/);
+  assert.match(env, /AKORO_ADAPTIVE_WORKFLOWS_ENABLED=true/);
+  // the opt-in slices stay off
+  assert.match(env, /AKORO_CONCEPT_TRACKER_ENABLED=false/);
+  assert.match(env, /AKORO_LEARNER_INSIGHTS_ENABLED=false/);
+  // every runtime read uses kill-switch semantics (absent env = enabled)
+  assert.match(chat, /AKORO_STUDY_PREP_ENABLED \?\? "true"/);
+  assert.match(chat, /AKORO_EXAM_PREP_CONFIDENCE_ENABLED \?\? "true"/);
+});
+
+test("study-prep sessions ride the reply as a session echo (the activity-draft pattern)", () => {
+  assert.match(chat, /start_study_prep_session" && toolResult\?\.sessionId/);
+  assert.match(chat, /get_study_prep_session" && toolResult\?\.sessions\?\.\[0\]\?\.sessionId/);
+  assert.match(chat, /\? \{ session: \{ id: toolResult\.sessionId \|\| toolResult\.sessions\[0\]\.sessionId \} \}/);
 });
 
 test("the plan-card endpoints exist: confirm, adjust, teach-back gate, pause/resume/cancel", () => {

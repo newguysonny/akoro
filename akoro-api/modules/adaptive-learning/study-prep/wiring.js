@@ -19,7 +19,8 @@ import { buildAgentContext } from "./context-manager.js";
 import { runAgentStep } from "./agent-loop.js";
 import { pauseCopy } from "./narration.js";
 
-export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLED || "").toLowerCase() === "true";
+// Default-on kill switch: study-prep ships enabled; =false removes every surface.
+export const studyPrepEnabled = () => String(process.env.AKORO_STUDY_PREP_ENABLED ?? "true").toLowerCase() !== "false";
 
 /** The topic workflow: the extracted exam-prep service, harness-driven. */
 const topicWorkflow = {

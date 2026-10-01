@@ -3,7 +3,8 @@ import db from "../../db.js";
 import { canTransitionWorkflow, workflowEvent } from "./workflow-state.js";
 import { publicGroupedWorkflows } from "./study-prep/workflow-grouping.js";
 
-const enabled = () => String(process.env.AKORO_ADAPTIVE_WORKFLOWS_ENABLED || "").toLowerCase() === "true";
+// Default-on kill switch: workflow projections ship enabled; =false removes them.
+const enabled = () => String(process.env.AKORO_ADAPTIVE_WORKFLOWS_ENABLED ?? "true").toLowerCase() !== "false";
 const safe = (value, maximum) => String(value || "").replace(/[\r\n\x00]+/g, " ").trim().slice(0, maximum);
 
 export async function startExamPrepWorkflow({ learnerId, examPrepRunId, topic, subject, examBoard, policyVersion, attempt }) {

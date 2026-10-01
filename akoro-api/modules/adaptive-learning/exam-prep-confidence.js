@@ -20,7 +20,8 @@ import {
 import { listLearnerWorkflows } from "./adaptive-workflows.js";
 
 const router = express.Router();
-const enabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toLowerCase() === "true";
+// Default-on kill switch: the confidence loop ships enabled; =false removes it.
+const enabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED ?? "true").toLowerCase() !== "false";
 const fail = (res, status, error, code = null) => res.status(status).json({ success: false, code: code || undefined, error });
 
 router.post("/confidence-runs", async (req, res) => {
