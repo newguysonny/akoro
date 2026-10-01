@@ -153,6 +153,10 @@ policies/
   SAFETY.md, EDUCATION_RULES.md, TOOL_RULES.md   (EXIST)
   TOOL_OBSERVATIONS.md (NEW) structured-observation guide (from chat.js)
   HITL_DRAFTS.md       (NEW) instructor human-in-the-loop rules (from chat.js)
+  TEACHING_VALIDATION.md (NEW) Guardian Angel doctrine — a false claim never enters durable knowledge;
+                      response strategy scales with the protégé's own mastery; verified/contradicted/
+                      uncertain recorded separately from the demonstrated answer; HONEST variant
+                      (genuine clarifying questions, never concealed corrective behaviour)
 
 school/
   AI_CONCIERGE.md    (NEW, P6) school-scoped doctrine — walled off from learner files (D9)
@@ -172,6 +176,17 @@ the whole brain; each operation gets a focused slice of it.
 Changing *which files an operation loads* is a manifest edit — wiring is behaviour, so it carries contract
 tests (and the orphan check: every file must be loaded by at least one set, so the library cannot
 accrete dead doctrine).
+
+### 3.2a Source material — the architecture folder
+
+The prepared docs in `modules/adaptive-learning/architecture/` (soul stack, cognitive engine, heartbeat,
+tracking dimensions, validation suite) are the **primary source material** for the new files — reviewed
+doc-by-doc in `reference/Akoro Context Layer — Architecture Folder Review.md`, which contains the full
+adoption map (e.g. `Cognitive-Engine-and-soul.md` → `agents/STUDENT_AGENT.md`; the heartbeat doc →
+`autonomy/HEARTBEAT.md`; the upgrade plan's System Prompt Assembly spec pre-writes the manifest/`chat_student`
+design) plus the rejected list (stealth correction, Neo4j, broad autonomy) and the constraint that the
+engineering half of those docs is already built — so doctrine files describe real implemented behaviour.
+Distil doctrine from them; never copy the sketches (their own audit's rule).
 
 ### 3.3 Manifest, preflight and budgets
 
@@ -298,6 +313,11 @@ the single-source rule test goes repo-wide; `MEMORY.md` curation documented in A
 7. School AI surfaces cannot load learner-teaching doctrine files, and vice versa.
 
 ## 8. Still open
+
+- **Guardian Angel framing (founder call, pending)**: the soul-stack spec's "stealth correction"
+  (protégé never admits it validates) vs the honest middle path (genuine clarifying questions).
+  Recommended and provisionally adopted: the honest variant — see the architecture-folder review §5.
+  Confirm before `policies/TEACHING_VALIDATION.md` is authored in P2.
 
 - **Set granularity for the task tools** — one `practice_generation` set vs per-tool sets; decide after
   P3 golden captures (start coarse, split only if a set exceeds budget).
