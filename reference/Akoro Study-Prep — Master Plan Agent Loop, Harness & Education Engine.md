@@ -343,6 +343,11 @@ platform doctrine, not study-prep-private, and `contextManager.load({...})` is a
 reasoning modules read the same files) with its own contract tests. That migration is *out of scope* here
 and must never happen implicitly.
 
+> **That follow-up phase now exists as its own mini-plan** (drafted 2026-10-01, after the study-prep loop
+> shipped): see `Akoro Context Layer Adoption — Mini-Plan All Agentic Surfaces.md` — extended from
+> "chat + persona agents" to all 41 LLM call sites + the python agent, with byte-identical golden gates
+> per phase.
+
 ### 4.7 `deliberate()` — rescope, not retirement (S2, S5; overrides S4)
 
 `deliberate(decision_node, facts)` remains in the codebase but changes job: it is the **harness's narration
