@@ -2080,8 +2080,12 @@ async function processAttachments(attachments = []) {
 // and HITL guides — lives in modules/agent-context/chat-doctrine.js and loads
 // VERBATIM from the akoro-agent/ workspace, byte-identical to the
 // pre-migration literals (pinned by agentContext.golden.chat.test.mjs).
-// Re-exported here for existing consumers (modules/voice/routes.js).
-export { tutorSystemPrompt, assembleChatDoctrine } from "../agent-context/chat-doctrine.js";
+// Imported (not just re-exported): `export { x } from` does NOT create a
+// local binding, and this module's /agent route calls assembleChatDoctrine
+// directly — a re-export-only line made every chat turn throw
+// ReferenceError: assembleChatDoctrine is not defined.
+import { tutorSystemPrompt, assembleChatDoctrine } from "../agent-context/chat-doctrine.js";
+export { tutorSystemPrompt, assembleChatDoctrine };
 
 /* chat.completions streaming → `delta` events. Returns the full text. */
 async function streamChat({ send, messages, model, max_tokens = 700, temperature = 0.6, tools = null, toolChoice = undefined }) {

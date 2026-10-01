@@ -3,7 +3,7 @@
  *
  * DECOUPLE STEP: to remove this module from Akoro entirely, delete this
  * folder and the one `app.use("/api/vouchers", vouchersModule)` line (plus
- * the fulfillVoucherWalletTopup wiring in modules/webhooks/paystack.js).
+ * the voucher-fulfilment wiring in modules/webhooks/paystack.js).
  * Nothing elsewhere in the codebase imports from modules/vouchers/.
  */
 import { Router } from "express";

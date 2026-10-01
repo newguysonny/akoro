@@ -56,8 +56,11 @@ test("single-source rule (D4): the chat/voice prompt literals exist only as work
   assert.doesNotMatch(chat, /## Durable memory \(read before/, "durable-memory guide still hardcoded");
   assert.doesNotMatch(chat, /const (THINK_ADDENDUM|RESEARCH_ADDENDUM|TOOL_OBSERVATION_GUIDE|INSTRUCTOR_HITL_GUIDE|DURABLE_MEMORY_GUIDE)/, "addendum/guide consts still exist");
   assert.doesNotMatch(voice, /You are speaking out loud in a live voice conversation/, "speech rules still hardcoded in voice");
-  // and the surfaces really load the files through the seam
-  assert.match(chat, /export \{ tutorSystemPrompt, assembleChatDoctrine \}/, "chat re-exports the doctrine seam");
+  // and the surfaces really load the files through the seam — IMPORTED
+  // locally, not just re-exported: `export { x } from` does not bind x, and
+  // the /agent route calls assembleChatDoctrine directly (the P1 outage)
+  assert.match(chat, /import \{ tutorSystemPrompt, assembleChatDoctrine \} from "\.\.\/agent-context\/chat-doctrine\.js";/, "chat imports the doctrine seam locally");
+  assert.match(chat, /export \{ tutorSystemPrompt, assembleChatDoctrine \};/, "chat re-exports the doctrine seam for voice");
   assert.match(chat, /assembleChatDoctrine\(\{/, "the /agent route assembles doctrine through the seam");
   assert.match(voice, /await tutorSystemPrompt\(/, "voice awaits the async persona builder");
   assert.match(voice, /loadDoctrine\("channels\/SPEECH\.md"\)/, "voice loads the speech channel rules");

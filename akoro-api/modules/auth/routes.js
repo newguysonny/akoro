@@ -443,7 +443,7 @@ const RefreshStore = {
   },
 };
 
-// peekAccessToken lives in lib/tokenPeek.js: the rate limiters need it, and
+// The token-peek helpers live in lib/tokenPeek.js: the rate limiters need them, and
 // importing this module there would close the cycle security → auth → security.
 // Re-exported so callers have one obvious place to find it.
 export { peekAccessToken, readAccessToken } from "../../lib/tokenPeek.js";

@@ -12,9 +12,12 @@ import db     from "../../../db.js";
 // agentContext.golden.personas.test.mjs.
 import { buildStudentCloneReplyPrompt, buildStudentCloneAnalyzePrompt } from "../../agent-context/personas/student-clone.js";
 
-// Re-export the coin-metered client so every orchestrator/agent that imports
-// `openai` from here is billed automatically (see lib/aiModel.js).
-export { openai } from "../../../lib/aiModel.js";
+// Import AND re-export the coin-metered client: every orchestrator/agent
+// that imports `openai` from here is billed automatically (see
+// lib/aiModel.js). Imported locally too because the shared helpers below
+// call it — `export { x } from` alone does not create a local binding.
+import { openai } from "../../../lib/aiModel.js";
+export { openai };
 
 export class BaseOrchestrator {
   constructor() {
