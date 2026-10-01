@@ -102,3 +102,64 @@ test("conversational mentions never force a directory lookup", () => {
     assert.equal(requiredLearnerDataTool(message), null, message);
   }
 });
+
+import { requiredStudyPrepTool } from "./agent-chat-intent.js";
+
+test("the live test-planning transcript now forces the study-prep session", () => {
+  // 2026-10-01: the learner asked to plan a test twice; the model had
+  // start_study_prep_session available and never called it — tools=0, a
+  // generic four-question planning questionnaire both times. These MUST
+  // reach the study-prep workflow.
+  assert.equal(requiredStudyPrepTool("let's plan for a test"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("let's plan for a test for these sessions"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("Using our sessions, let's plan for a test coming up next week friday"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("Help me prepare for my exam"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("I want to revise for my maths test"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("Can you prep me for my exam?"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("How should I prepare for my WAEC exam?"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("exam prep please"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("I need to get ready for my chemistry test"), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("study for my test next week"), "start_study_prep_session");
+});
+
+test("a short confirmation after an upcoming-test mention starts the session", () => {
+  const history = [
+    { role: "user", content: "I have a Biology test tomorrow" },
+    { role: "assistant", content: "I can set up a study plan for it — want me to?" },
+  ];
+  assert.equal(requiredStudyPrepTool("yes", history), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("yes please let's do it", history), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("let's do it", history), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("ok biology", history), "start_study_prep_session");
+});
+
+test("status and resume questions read the session instead of starting one", () => {
+  for (const message of [
+    "how is my study prep going",
+    "Study prep status",
+    "continue my study prep",
+    "where were we on my exam prep",
+  ]) {
+    assert.equal(requiredStudyPrepTool(message), "get_study_prep_session", message);
+  }
+});
+
+test("tutoring, bare mentions and factual questions never start a session", () => {
+  for (const message of [
+    "Quiz me on Algebra",                        // tutoring in chat
+    "test me on yesterday's topic",              // tutoring in chat
+    "Explain photosynthesis",
+    "I have a Biology test tomorrow",            // bare mention — the agent offers; the confirm force catches the yes
+    "What is study prep?",                       // a question about the feature, not a request
+    "When is my exam?",                          // factual query
+    "What did I score on my test?",
+    "Have I prepared enough for my test?",
+  ]) {
+    assert.equal(requiredStudyPrepTool(message), null, message);
+  }
+  // No pending test mention in the conversation → a bare confirm never starts one.
+  assert.equal(requiredStudyPrepTool("yes", [
+    { role: "user", content: "Explain photosynthesis" },
+    { role: "assistant", content: "Photosynthesis is…" },
+  ]), null);
+});

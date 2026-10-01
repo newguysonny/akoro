@@ -74,3 +74,45 @@ export function requiresActivityPreparation(message, history = []) {
   if (SHORT_CONFIRM_RE.test(text)) return true;
   return !text.includes("?") && SHORT_ANSWER_RE.test(text);
 }
+
+/* ── Study-prep session requests ─────────────────────────────────────────────
+   The live 2026-10-01 transcript: the learner asked "let's plan for a test"
+   twice; start_study_prep_session was in the tool list both times and the
+   model never called it — tools=0, a generic four-question planning
+   questionnaire instead, no session, no plan card. Exam preparation is the
+   study-prep workflow (Master Plan §4.8–4.9); left on tool_choice:auto a
+   small model interviews the learner instead of starting it. These guards
+   force the matching study-prep tool on iteration 0, exactly like the
+   learner-data force. The route must apply them only while the study_prep
+   feature gate keeps the tools in the list. */
+const STUDY_PREP_READ_RE = /\b(?:study[\s-]?prep|exam[\s-]?prep|prep\s+session)\b[^.?!]{0,48}\b(?:status|progress|going|update|left off|where were we)\b|\b(?:how|where)\b[^.?!]{0,40}\b(?:study[\s-]?prep|exam[\s-]?prep)\b|\b(?:continue|resume|back to|carry on with)\b[^.?!]{0,40}\b(?:study[\s-]?prep|exam[\s-]?prep|my\s+prep)\b/i;
+const STUDY_PREP_REQUEST_RE = /\b(?:plan|prepare|prep|revise|revision|study|practise|practice|get\s+ready)\b[^.?!]{0,64}\b(?:test|exam|paper)s?\b|\b(?:exam|test)[\s-]?prep\b|\b(?:test|exam)\b[^.?!]{0,40}\b(?:coming\s+up|next\s+week|next\s+month|tomorrow|this\s+week)\b[^.?!]{0,40}\b(?:plan|prepare|prep|study|help|revise|start)\b/i;
+// "How do/should I prepare for my exam?" is a prep request in question form,
+// not a factual query — the session's plan is the real answer to it.
+const STUDY_PREP_HOW_RE = /^how\s+(?:do|should|can|would)\s+(?:i|we)\b[^.?!]{0,64}\b(?:test|exam|paper)s?\b/i;
+// Pure factual queries about tests never start a session ("When is my exam?").
+const STUDY_PREP_QUERY_RE = /^\s*(?:when|who|where|show|list|see|view|check|did|has|have|is|are|was|were)\b/i;
+// A bare mention ("I have a Biology test tomorrow") never forces on its own —
+// the agent offers the session and the confirmation force below catches the yes.
+const UPCOMING_TEST_MENTION_RE = /\b(?:test|exam|paper)s?\b[^.?!]{0,48}\b(?:coming\s+up|next\s+week|next\s+month|tomorrow|this\s+week)\b|\b(?:test|exam)\b[^.?!]{0,32}\b(?:tomorrow|friday|monday|tuesday|wednesday|thursday|saturday|sunday)\b/i;
+
+export function requiredStudyPrepTool(message, history = []) {
+  const text = String(message || "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  // "Quiz me on Algebra" / "test me on this" is tutoring in chat.
+  if (/^\s*(?:quiz|test)\s+me\b/i.test(text)) return null;
+  if (STUDY_PREP_READ_RE.test(text)) return "get_study_prep_session";
+  if (!STUDY_PREP_QUERY_RE.test(text) && (STUDY_PREP_REQUEST_RE.test(text) || STUDY_PREP_HOW_RE.test(text))) {
+    return "start_study_prep_session";
+  }
+  // A short confirmation/answer only ever CONTINUES an upcoming-test mention
+  // already in the conversation — it can never start one on its own.
+  const pending = (Array.isArray(history) ? history : []).slice(-10)
+    .some((m) => m?.role === "user" && UPCOMING_TEST_MENTION_RE.test(String(m.content || ""))
+      && !/^\s*(?:quiz|test)\s+me\b/i.test(String(m.content || "").trim()));
+  if (!pending) return null;
+  // Apostrophes ("let's do it") must not break the short-answer shapes.
+  const plain = text.replace(/['\u2019]/g, "");
+  if (SHORT_CONFIRM_RE.test(plain)) return "start_study_prep_session";
+  return !plain.includes("?") && SHORT_ANSWER_RE.test(plain) ? "start_study_prep_session" : null;
+}

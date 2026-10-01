@@ -24,6 +24,7 @@ export async function getStudyPrepSessionSummary(learnerId) {
     return {
       sessionId: view.session.id, status: view.session.status, goal: view.session.goal,
       subject: view.session.subject, pausedReason: view.session.pausedReason,
+      plan: view.session.plan,
       topics: view.topics.map((topic) => ({ label: topic.label, status: topic.status })),
       estimate: view.session.estimate,
       recentNarrative: (view.events || []).filter((event) => event.narrative).slice(-2).map((event) => text(event.narrative, 240)),

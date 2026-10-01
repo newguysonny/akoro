@@ -39,6 +39,12 @@ export async function assembleChatDoctrine({
   // family. Instructor doctrine keeps its own voice.
   if (role === "student") {
     system = (await loadDoctrine("identity/SOUL.md")) + "\n\n" + system;
+    // Exam-prep adoption (Master Plan §4.8–4.9 + Akoro-Exam-Prep-Confidence-
+    // Loop.md): test preparation is a study-prep session, never a chat
+    // questionnaire. The live 2026-10-01 transcript had the model interview
+    // the learner for topics/format/duration while start_study_prep_session
+    // sat unused in the tool list.
+    system += "\n\n" + (await loadDoctrine("channels/STUDY_PREP.md"));
   }
   system += currentTimeContext;
   if (think) system += "\n\n" + (await loadDoctrine("channels/MODE_THINK.md"));

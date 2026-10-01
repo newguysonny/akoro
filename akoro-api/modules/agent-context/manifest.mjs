@@ -64,7 +64,7 @@ export const SETS = Object.freeze({
     mode: "verbatim",
     consumer: "agent chat /agent route — student role",
     files: Object.freeze([
-      "identity/SOUL.md", "channels/CHAT.md", "channels/CHAT_STUDENT.md", "channels/MODE_THINK.md", "channels/MODE_RESEARCH.md",
+      "identity/SOUL.md", "channels/CHAT.md", "channels/CHAT_STUDENT.md", "channels/STUDY_PREP.md", "channels/MODE_THINK.md", "channels/MODE_RESEARCH.md",
       "policies/AGENT_CHAT.md", "policies/TOOL_OBSERVATIONS.md", "memory/MEMORY.md", "memory/DURABLE_MEMORY.md",
     ]),
   }),

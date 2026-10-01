@@ -60,7 +60,7 @@ import {
   scheduleAutonomyReviewForTask,
   setLearnerAutonomy,
 } from "./learner-autonomy.js";
-import { requiresAgentCapabilitiesTool, requiresActivityPreparation, requiredLearnerDataTool } from "./agent-chat-intent.js";
+import { requiresAgentCapabilitiesTool, requiresActivityPreparation, requiredLearnerDataTool, requiredStudyPrepTool } from "./agent-chat-intent.js";
 import { agentToolActivity } from "../../lib/agentActivity.js";
 import { hasExplicitToolRequestConsent } from "./agent-tool-request-intent.js";
 import { getLearnerProfileContext } from "./learner-profile-context.js";
@@ -1515,6 +1515,20 @@ export async function executeChatTool(name, input, studentId, { conversationId =
     case "start_study_prep_session": {
       const { startStudyPrepSession } = await import("./study-prep/wiring.js");
       if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
+      // The iteration-0 force makes "let's plan for a test" deterministic, so
+      // repeated asks must never stack sessions: an unconfirmed plan is
+      // returned as-is and the plan card stays the single source of truth.
+      const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
+      const summary = await getStudyPrepSessionSummary(studentId);
+      const unconfirmed = (summary.sessions || [])
+        .find((session) => session.status === "planning" || session.status === "awaiting_confirmation");
+      if (unconfirmed) {
+        return {
+          enabled: true, sessionId: unconfirmed.sessionId, status: unconfirmed.status,
+          plan: unconfirmed.plan, estimate: unconfirmed.estimate,
+          note: "An unconfirmed study-prep session already exists — present its plan card; nothing is charged until the learner approves it.",
+        };
+      }
       const view = await startStudyPrepSession({
         learnerId: studentId,
         goal: String(input?.goal || "").slice(0, 300),
@@ -2860,7 +2874,13 @@ router.post("/agent", async (req, res) => {
           // teachers/progress are fact questions about data the model cannot
           // see — the live 2026-10-01 transcript had tools=0 and an invented
           // subject list. Force the matching read tool on iteration 0.
-          : requiredLearnerDataTool(userMessage))
+          : (requiredLearnerDataTool(userMessage)
+            // Test/exam preparation is the study-prep session workflow; left
+            // on auto the model interviews the learner for topics/format/
+            // duration instead of starting it (live 2026-10-01 transcript:
+            // "let's plan for a test" twice, tools=0 both times). Only while
+            // the feature gate keeps the study-prep tools in the list.
+            ?? (studyPrepEnabled ? requiredStudyPrepTool(userMessage, dialogue) : null)))
         : ((instructorTools.length && requiresActivityPreparation(userMessage, dialogue))
           ? "prepare_activity" : null),
       role,

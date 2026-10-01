@@ -13,6 +13,8 @@ const learnerChatTab = await readFile(
 );
 const toolObservationsDoctrine = await readFile(
   new URL("../../akoro-agent/policies/TOOL_OBSERVATIONS.md", import.meta.url), "utf8");
+const studyPrepDoctrine = await readFile(
+  new URL("../../akoro-agent/channels/STUDY_PREP.md", import.meta.url), "utf8");
 
 test("the sole Agent Chat response authority is the unified /agent route", () => {
   assert.match(source, /router\.post\("\/agent", async \(req, res\) =>/);
@@ -145,6 +147,25 @@ test("school/class/teacher directory tools are privacy-bounded and forced for id
   }
   // An honest empty is an empty list — never a fabricated one.
   assert.match(directory, /subjects: \(schoolSubjects \?\? \[\]\)\.map/);
+});
+
+test("test/exam preparation forces the study-prep session tool — the questionnaire detour is closed", () => {
+  const route = source.slice(source.indexOf('router.post("/agent"'));
+  // The 2026-10-01 live transcript: "let's plan for a test" twice, tools=0
+  // both times, a generic four-question planning questionnaire instead of
+  // the study-prep workflow that was already in the tool list.
+  assert.match(route, /requiredStudyPrepTool\(userMessage, dialogue\)/,
+    "the study-prep force is not wired into the /agent route");
+  assert.match(route, /studyPrepEnabled \? requiredStudyPrepTool/,
+    "the force must respect the AKORO_STUDY_PREP_ENABLED feature gate");
+  // Repeated asks must never stack unconfirmed sessions on top of each other.
+  assert.match(source, /session\.status === "planning" \|\| session\.status === "awaiting_confirmation"/,
+    "start_study_prep_session must reuse an unconfirmed session instead of creating another");
+  // The doctrine owns the rule: test preparation is a session, never a chat
+  // questionnaire, and the plan card is where the learner approves the cost.
+  assert.match(studyPrepDoctrine, /never a questionnaire in chat/);
+  assert.match(studyPrepDoctrine, /Nothing is charged until they approve the card/);
+  assert.match(studyPrepDoctrine, /generated exam-style practice/);
 });
 
 test("learning-session history is its own tool — never answered with the school catalogue", () => {
