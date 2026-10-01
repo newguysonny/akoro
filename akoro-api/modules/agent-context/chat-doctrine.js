@@ -33,11 +33,19 @@ export async function assembleChatDoctrine({
   agentName = "Akoro", role = "student", think = false, research = false, durableMemory = false, currentTimeContext = "",
 } = {}) {
   let system = await tutorSystemPrompt({ agentName, role });
+  // P2b deliberate adoption: the platform SOUL opens the student prompt —
+  // identity before channel, "persona layers compose ON TOP of the shared
+  // soul" — and the curated agent wisdom (memory/MEMORY.md) joins the memory
+  // family. Instructor doctrine keeps its own voice.
+  if (role === "student") {
+    system = (await loadDoctrine("identity/SOUL.md")) + "\n\n" + system;
+  }
   system += currentTimeContext;
   if (think) system += "\n\n" + (await loadDoctrine("channels/MODE_THINK.md"));
   if (research) system += "\n\n" + (await loadDoctrine("channels/MODE_RESEARCH.md"));
   system += "\n\n" + (await loadDoctrine("policies/AGENT_CHAT.md"));
   system += "\n\n" + (await loadDoctrine(role === "student" ? "policies/TOOL_OBSERVATIONS.md" : "policies/HITL_DRAFTS.md"));
+  if (role === "student") system += "\n\n" + (await loadDoctrine("memory/MEMORY.md"));
   if (durableMemory && role === "student") system += "\n\n" + (await loadDoctrine("memory/DURABLE_MEMORY.md"));
   return system;
 }

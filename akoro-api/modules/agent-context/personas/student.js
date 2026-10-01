@@ -13,13 +13,16 @@
  * lives in files.
  */
 
+import { loadDoctrine } from "../context-manager.js";
 import { renderPersona } from "../template.js";
 
 const DIR = "agents/student";
 
 /** The protégé's in-session reply persona (state-conditioned). */
 export async function buildStudentAgentReplyPrompt(values) {
-  return renderPersona(`${DIR}/REPLY.md`, values);
+    // P2b deliberate adoption: the platform soul opens the voice —
+    // persona layers compose ON TOP of the shared soul, never fork it.
+    return (await loadDoctrine("identity/SOUL.md")) + "\n\n" + (await renderPersona(`${DIR}/REPLY.md`, values));
 }
 
 /** The teaching-evidence judge (JSON). */

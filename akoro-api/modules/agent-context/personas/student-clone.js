@@ -6,13 +6,16 @@
  * by agentContext.golden.personas.test.mjs.
  */
 
+import { loadDoctrine } from "../context-manager.js";
 import { renderPersona } from "../template.js";
 
 const DIR = "agents/student-clone";
 
 /** The student clone's in-session reply persona (state-conditioned). */
 export async function buildStudentCloneReplyPrompt({ topic, phaseLabel, understanding, confusion }) {
-  return renderPersona(`${DIR}/REPLY.md`, { topic, phaseLabel, understanding, confusion });
+    // P2b deliberate adoption: the platform soul opens the voice —
+    // persona layers compose ON TOP of the shared soul, never fork it.
+    return (await loadDoctrine("identity/SOUL.md")) + "\n\n" + (await renderPersona(`${DIR}/REPLY.md`, { topic, phaseLabel, understanding, confusion }));
 }
 
 /** The JSON understanding-analysis judge. */

@@ -129,7 +129,7 @@ test("no dead doctrine: every workspace file is registered or pending (orphan ch
   }
   // the pending list is pinned EXACTLY: adopting or adding an orphan is a
   // conscious manifest change, never an accident
-  assert.deepEqual(Object.keys(PENDING_ADOPTION).sort(), ["identity/SOUL.md", "memory/MEMORY.md"]);
+  assert.deepEqual(Object.keys(PENDING_ADOPTION).sort(), []);
   for (const [file, phase] of Object.entries(PENDING_ADOPTION)) {
     assert.match(phase, /^P\d/, `${file} must name the phase that will adopt it`);
     assert.ok(files.includes(file), `${file} is pending but missing from the workspace`);

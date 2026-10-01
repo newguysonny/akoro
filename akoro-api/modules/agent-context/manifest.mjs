@@ -64,8 +64,8 @@ export const SETS = Object.freeze({
     mode: "verbatim",
     consumer: "agent chat /agent route — student role",
     files: Object.freeze([
-      "channels/CHAT.md", "channels/CHAT_STUDENT.md", "channels/MODE_THINK.md", "channels/MODE_RESEARCH.md",
-      "policies/AGENT_CHAT.md", "policies/TOOL_OBSERVATIONS.md", "memory/DURABLE_MEMORY.md",
+      "identity/SOUL.md", "channels/CHAT.md", "channels/CHAT_STUDENT.md", "channels/MODE_THINK.md", "channels/MODE_RESEARCH.md",
+      "policies/AGENT_CHAT.md", "policies/TOOL_OBSERVATIONS.md", "memory/MEMORY.md", "memory/DURABLE_MEMORY.md",
     ]),
   }),
   chat_instructor: Object.freeze({
@@ -115,7 +115,7 @@ export const SETS = Object.freeze({
     mode: "verbatim",
     consumer: "shared Student-AI-clone reply + analysis (agents/base-orchestrator.js)",
     files: Object.freeze([
-      "agents/student-clone/REPLY.md", "agents/student-clone/ANALYZE.md",
+      "identity/SOUL.md", "agents/student-clone/REPLY.md", "agents/student-clone/ANALYZE.md",
     ]),
   }),
 
@@ -126,7 +126,7 @@ export const SETS = Object.freeze({
     mode: "verbatim",
     consumer: "Student Agent protégé (agents/student/agent.js) — P2b flagship persona",
     files: Object.freeze([
-      "agents/student/REPLY.md", "agents/student/EVIDENCE.md",
+      "identity/SOUL.md", "agents/student/REPLY.md", "agents/student/EVIDENCE.md",
       "agents/student/ANALYZE.md", "agents/student/EXTRACT.md",
       "agents/student/DECAY_MUST_KNOW.md", "agents/student/MERGE_NOTES.md",
       "agents/student/personality/NEW_SUBJECT.md", "agents/student/personality/FRESH.md",
@@ -143,7 +143,7 @@ export const SETS = Object.freeze({
     mode: "verbatim",
     consumer: "Trained teacher agents (agents/trained/*, training/agentPromptBuilder.js) — P2b TRAINED_SHELL",
     files: Object.freeze([
-      "agents/trained/SHELL.md", "agents/trained/GUIDE_TIP.md", "agents/trained/CONTROL_DRIFT.md",
+      "identity/SOUL.md", "agents/trained/SHELL.md", "agents/trained/GUIDE_TIP.md", "agents/trained/CONTROL_DRIFT.md",
       "agents/trained/STUDENT_REPLY.md", "agents/trained/MUST_KNOW.md", "agents/trained/BOUNDARY.md",
       "agents/trained/EVALUATE_SESSION.md",
     ]),
@@ -151,7 +151,11 @@ export const SETS = Object.freeze({
 });
 
 /** Workspace files no registered set loads yet — must be empty by P7 (D13). */
-export const PENDING_ADOPTION = Object.freeze({
-  "identity/SOUL.md": "P2 — persona agents compose the platform soul",
-  "memory/MEMORY.md": "P2 — student-agent persona set (curated agent wisdom)",
-});
+export const PENDING_ADOPTION = Object.freeze({});
+// Empty since P2b: identity/SOUL.md now opens the chat_student doctrine and
+// the student-voice persona replies (clone, protégé, trained), and
+// memory/MEMORY.md (curated agent wisdom) composes into chat_student — its
+// content (tools, syllabus rows, retests) is the learner chat agent's world.
+// NaNa and Sargeant keep their own contractual personas: Sargeant is strict
+// by contract, NaNa carries a complete persona of her own, and JSON judges
+// stay cold.

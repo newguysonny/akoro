@@ -36,7 +36,9 @@ export async function buildTrainedControlDriftPrompt(values) {
 
 /** The trained student agent's reply persona. */
 export async function buildTrainedStudentReplyPrompt(values) {
-  return renderPersona(`${DIR}/STUDENT_REPLY.md`, values);
+    // P2b deliberate adoption: the platform soul opens the voice —
+    // persona layers compose ON TOP of the shared soul, never fork it.
+    return (await loadDoctrine("identity/SOUL.md")) + "\n\n" + (await renderPersona(`${DIR}/STUDENT_REPLY.md`, values));
 }
 
 /** Curriculum must-know fallback (JSON judge). */
