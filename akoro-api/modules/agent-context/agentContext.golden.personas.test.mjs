@@ -20,6 +20,7 @@ const fixture = JSON.parse(
 const nana = await import("./personas/nana-esumai.js");
 const sargeant = await import("./personas/sargeant.js");
 const clone = await import("./personas/student-clone.js");
+const student = await import("./personas/student.js");
 const { fillTemplate } = await import("./template.js");
 
 const BUILDERS = {
@@ -44,10 +45,19 @@ const BUILDERS = {
   "proctor-verdict": (v) => sargeant.buildProctorVerdictPrompt(v),
   "student-clone-reply": (v) => clone.buildStudentCloneReplyPrompt(v),
   "student-clone-analyze": () => clone.buildStudentCloneAnalyzePrompt(),
+  "student-agent-reply": (v) => student.buildStudentAgentReplyPrompt(v),
+  "student-agent-evidence": (v) => student.buildStudentAgentEvidencePrompt(v),
+  "student-agent-analyze": (v) => student.buildStudentAgentAnalyzePrompt(v),
+  "student-agent-extract": (v) => student.buildStudentAgentExtractPrompt(v),
+  "student-personality-new-subject": (v) => student.studentPersonality("NEW_SUBJECT", v),
+  "student-personality-fresh": (v) => student.studentPersonality("FRESH", v ?? {}),
+  "student-personality-early": (v) => student.studentPersonality("EARLY", v),
+  "student-personality-solid": (v) => student.studentPersonality("SOLID", v),
+  "student-personality-advanced": (v) => student.studentPersonality("ADVANCED", v),
 };
 
 test("every persona prompt is byte-identical to the pre-migration literals", async () => {
-  assert.equal(fixture.cases.length, 21);
+  assert.equal(fixture.cases.length, 30);
   for (const { label, values, builderArgs, expected } of fixture.cases) {
     const build = BUILDERS[label];
     assert.ok(build, `no builder mapped for ${label}`);
@@ -82,6 +92,7 @@ test("single-source rule (D4): the persona prompt literals exist only as workspa
     assessment: await read("../adaptive-learning/agents/sargeant/assessment.js"),
     proctor: await read("../adaptive-learning/agents/sargeant/proctor.js"),
     base: await read("../adaptive-learning/agents/base-orchestrator.js"),
+    student: await read("../adaptive-learning/agents/student/agent.js"),
   };
   for (const [name, source] of Object.entries(files)) {
     assert.doesNotMatch(source, /You are NaNa Esumai/, `${name}: NaNa persona still hardcoded`);
@@ -90,10 +101,19 @@ test("single-source rule (D4): the persona prompt literals exist only as workspa
     assert.doesNotMatch(source, /You are a Student AI Agent/, `${name}: student-clone persona still hardcoded`);
     assert.doesNotMatch(source, /You are a curriculum expert/, `${name}: curriculum-expert prompt still hardcoded`);
     assert.doesNotMatch(source, /Analyze a student AI agent's reply/, `${name}: analysis judge still hardcoded`);
+    // P2b flagship: the Student Agent protégé persona + judges + personality
+    // bands exist only as workspace templates.
+    assert.doesNotMatch(source, /You are a Student Agent learning about/, `${name}: student-agent reply persona still hardcoded`);
+    assert.doesNotMatch(source, /Evaluate the HUMAN learner's teaching message/, `${name}: evidence judge still hardcoded`);
+    assert.doesNotMatch(source, /Analyze this student agent reply for understanding/, `${name}: understanding judge still hardcoded`);
+    assert.doesNotMatch(source, /Extract what was LEARNED in this teaching exchange/, `${name}: extraction judge still hardcoded`);
+    assert.doesNotMatch(source, /You have never been taught /, `${name}: personality bands still hardcoded`);
+    assert.doesNotMatch(source, /You are an advanced learner /, `${name}: personality bands still hardcoded`);
   }
   // and the surfaces really build their prompts through the persona modules
   assert.match(files.guide, /agent-context\/personas\/nana-esumai\.js/, "guide imports the nana builders");
   assert.match(files.assessment, /agent-context\/personas\/sargeant\.js/, "assessment imports the sargeant builders");
   assert.match(files.proctor, /agent-context\/personas\/sargeant\.js/, "proctor imports the sargeant builders");
   assert.match(files.base, /agent-context\/personas\/student-clone\.js/, "base-orchestrator imports the clone builders");
+  assert.match(files.student, /agent-context\/personas\/student\.js/, "the Student Agent imports its persona builders");
 });

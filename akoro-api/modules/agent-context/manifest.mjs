@@ -113,9 +113,24 @@ export const SETS = Object.freeze({
   }),
   persona_student: Object.freeze({
     mode: "verbatim",
-    consumer: "shared Student-AI-clone reply + analysis (agents/base-orchestrator.js); grows with agents/student/agent.js in P2b",
+    consumer: "shared Student-AI-clone reply + analysis (agents/base-orchestrator.js)",
     files: Object.freeze([
       "agents/student-clone/REPLY.md", "agents/student-clone/ANALYZE.md",
+    ]),
+  }),
+
+  // ── P2b flagship: the learner's own Student Agent (protégé). The templates
+  //    own the persona voice; subject-scoped level, RAG context, teaching
+  //    evidence and pace stay code-assembled dynamic truth.
+  persona_student_agent: Object.freeze({
+    mode: "verbatim",
+    consumer: "Student Agent protégé (agents/student/agent.js) — P2b flagship persona",
+    files: Object.freeze([
+      "agents/student/REPLY.md", "agents/student/EVIDENCE.md",
+      "agents/student/ANALYZE.md", "agents/student/EXTRACT.md",
+      "agents/student/personality/NEW_SUBJECT.md", "agents/student/personality/FRESH.md",
+      "agents/student/personality/EARLY.md", "agents/student/personality/SOLID.md",
+      "agents/student/personality/ADVANCED.md",
     ]),
   }),
 });
