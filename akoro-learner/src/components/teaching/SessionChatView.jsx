@@ -269,6 +269,24 @@ function SessionChatView({
                   : (t('teaching.reconnecting') || 'Reconnecting…')}
               </span>
             )}
+            {/* The round session controls ride the toggle row — level with
+                LEARN BY TEACHING / LEARNING WITH GUIDE, not floating beside
+                the topic. Minimize parks the session on the Now-Studying bar
+                (non-destructive, so no confirm like close). */}
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginLeft:"auto",flexShrink:0 }}>
+              {onMinimize && (
+                <div onClick={onMinimize} role="button" aria-label={t('now.minimize')} title={t('now.minimize')}
+                  style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
+                    display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </div>
+              )}
+              <div onClick={handleCloseRequest}
+                style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
+                  display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+                <XIcon size={15} color="var(--ak-text-muted)"/>
+              </div>
+            </div>
           </div>
           <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
           <p style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
@@ -283,6 +301,7 @@ function SessionChatView({
             </div>
           )}
         </div>
+        {((onSwitchAgent && chatMode !== "guide") || (showSummarize && chatMode !== "guide")) && (
         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
           {onSwitchAgent && chatMode !== "guide" && (
             <div onClick={switching ? undefined : onSwitchAgent}
@@ -301,21 +320,8 @@ function SessionChatView({
               <span style={{ fontSize:11,fontWeight:800,color:sc }}>{t('teaching.summarize')}</span>
             </div>
           )}
-          {/* Minimize — keep the session running, park it on the Now-Studying
-              bar. Non-destructive, so no confirm like close. */}
-          {onMinimize && (
-            <div onClick={onMinimize} role="button" aria-label={t('now.minimize')} title={t('now.minimize')}
-              style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
-                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </div>
-          )}
-          <div onClick={handleCloseRequest}
-            style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
-              display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-            <XIcon size={15} color="var(--ak-text-muted)"/>
-          </div>
         </div>
+        )}
       </div>
 
       {/* Live cognitive state — agent's understanding & confusion this turn.
