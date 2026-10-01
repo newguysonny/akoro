@@ -122,6 +122,7 @@ Status legend: ✅ exists today · 🔧 changed by this plan · 🆕 new.
 | Session replay from the events table — **never re-runs the LLM** | S4, S5 | Frontend | 🆕 |
 | Honest elapsed-time pacing (show real 80 ms, don't pad) | S4, S5 | Frontend | 🆕 |
 | Context layer: `.md` workspace (identity / learning / reasoning / policies / strategies / memory) + Context Manager with per-operation selection | S3 | Context layer | 🆕 |
+| **Agentic inspection** — the agent decides what to inspect and chains observations into discoveries (weak sub-concept → confusion history → targeted teaching); never a hardcoded sequence | S3 | Agent loop + read tools | 🆕 |
 | Files = stable instructions; DB = dynamic truth; tools = controlled access (`.md` never authoritative state) | S3 | Doctrine | 🆕 |
 | `learner.get_relevant_memory()` retrieval instead of dumping history | S3 | Read tools | 🆕 |
 | Exam-prep service extraction (`startRun/submitAttempt/startRetest/generateAttempt` out of the router) | S4, S5 | `exam-prep-service.js` | 🔧 |
@@ -290,8 +291,8 @@ estimate.
 
 ### 4.6 Context layer (S3)
 
-A workspace of configuration `.md` files under `akoro-agent/` (repo-tracked, loaded by the harness — **never
-authoritative state**):
+A workspace of configuration `.md` files under `akoro-agent/` — the **configurable agent brain / context
+layer** (repo-tracked, loaded by the harness before the reasoning loop — **never authoritative state**):
 
 ```
 akoro-agent/
@@ -316,6 +317,15 @@ akoro-agent/
 - Doctrine: **files = stable instructions; database = dynamic truth; tools = controlled access.** Learner
   memory lives in Postgres and is retrieved (`learner.get_relevant_memory()`), not dumped. New behaviours
   (e.g. a future `LEARNER_PREFERENCES.md`) are added by dropping in a file — the loop is not rewritten.
+- **Agentic inspection (S3):** the context layer doesn't just tell the agent *what to do*, it tells it *what
+  to consider before deciding* (REASONING.md / INSPECTION.md) — and the agent then inspects on its own
+  initiative through the read tools, chaining observations into discoveries. S3's canonical example: the
+  agent doesn't merely receive "Teach Water Cycle" — it inspects `learner.get_state`, **observes** weak
+  evaporation knowledge (0.35), inspects `learner.get_history`, **observes** the learner repeatedly confuses
+  evaporation with transpiration, and only then decides to teach that distinction before attempting another
+  full Water Cycle exercise. Each inspection is chosen because of what the previous observation revealed —
+  the opposite of v2's fixed research → draft → verification sequence. The loop (§4.3) is what makes this
+  possible; the context layer is what makes it *purposeful*.
 - Files are validated by a contract test: no learner-identifying data, no policy numbers that belong in the
   policy tables, size budget per file.
 
@@ -460,6 +470,9 @@ generator**, never the agent's cognition and never a decision-maker.
 12. (S4) Workflow list shows one entry per session with topics nested.
 13. (S4) Mastery write-back produces evidence rows + updated `learner_concept_state` per the deterministic
     policy.
+14. (S3) Agentic inspection: a stub agent that observes a weak sub-concept from `learner.get_state` goes on
+    to call `learner.get_history` before planning — tool choice driven by the previous observation, not a
+    fixed sequence; the context selection for the planning step includes the reasoning/inspection files.
 
 ### 4.15 Build order (S5 §11 revised, with S4 folded in)
 
