@@ -166,6 +166,10 @@ test("test/exam preparation forces the study-prep session tool — the questionn
   assert.match(studyPrepDoctrine, /never a questionnaire in chat/);
   assert.match(studyPrepDoctrine, /Nothing is charged until they approve the card/);
   assert.match(studyPrepDoctrine, /generated exam-style practice/);
+  // The 2026-10-01 outage transcript: when the tool failed, the model fell
+  // back to interviewing the learner (topics? format? duration? count?) —
+  // the exact behaviour the doctrine exists to prevent.
+  assert.match(studyPrepDoctrine, /never fall back to interviewing/);
 });
 
 test("learning-session history is its own tool — never answered with the school catalogue", () => {

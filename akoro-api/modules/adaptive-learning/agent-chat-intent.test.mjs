@@ -166,3 +166,29 @@ test("tutoring, bare mentions and factual questions never start a session", () =
     { role: "assistant", content: "Photosynthesis is…" },
   ]), null);
 });
+
+test("can-you ability questions force the live capabilities tool — the blog denial is closed", () => {
+  // Live 2026-10-01: "Can you research from the platform blog?" was answered
+  // from general knowledge — the model DENIED having the Akoro blog research
+  // tools that were in its tool list. Ability probes must come from the live
+  // catalogue, not the model's self-image.
+  for (const message of [
+    "Can you research from the platform blog?",
+    "Can you communicate with other agents?",
+    "Can you search the web?",
+    "Can you access the internet?",
+    "can you browse the akoro blog for me",
+    "Do you have access to past questions?",
+  ]) {
+    assert.equal(requiresAgentCapabilitiesTool(message), true, message);
+  }
+  // Requests for actual work are not ability probes.
+  for (const message of [
+    "Can you help me with algebra?",
+    "Can you explain photosynthesis?",
+    "Can you find my homework?",
+    "Can you read my attachment?",
+  ]) {
+    assert.equal(requiresAgentCapabilitiesTool(message), false, message);
+  }
+});

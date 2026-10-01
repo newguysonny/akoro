@@ -2638,7 +2638,14 @@ async function runAgentToolLoop({ systemContent, messages, studentId, conversati
       agentToolActivity(studentId, tool);
       let toolResult;
       try { toolResult = await executeChatTool(tool, input, studentId, { conversationId, role }); }
-      catch (error) { toolResult = { success: false, error: "The requested Akoro action could not be completed." }; }
+      catch (error) {
+        // The observation stays generic (internal detail never reaches the
+        // learner), but the log carries the real cause — the 2026-10-01
+        // study-prep outage was invisible here while every call failed with
+        // "relation study_prep_sessions does not exist".
+        console.warn(`[agent-chat] tool ${tool} error:`, error?.message || error);
+        toolResult = { success: false, error: "The requested Akoro action could not be completed." };
+      }
       // Structured observation: the tool's real backend outcome becomes the
       // model's next input, so the reply confirms facts, not intent.
       const observation = toolObservation({ action: tool, result: toolResult, requestId: newToolRequestId() });

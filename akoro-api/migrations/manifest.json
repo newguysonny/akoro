@@ -148,6 +148,7 @@
     "2026-curriculum-guardian-review-v1.sql",
     "2026-agent-tool-requests-v1.sql",
     "2026-adaptive-teaching-evidence.sql",
+    "2026-study-prep-sessions-v1.sql",
     "2026-community-activity-types.sql",
     "2026-learner-goals.sql",
     "2026-agent-proposals.sql",

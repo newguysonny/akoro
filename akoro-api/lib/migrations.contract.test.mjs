@@ -49,3 +49,36 @@ test("only plain identifiers are ever emitted — anything else is skipped, not 
   assert.ok(stmts.every((s) => s.includes('"ok_schema"')));
   assert.ok(stmts.every((s) => !/DROP TABLE|GRANT ALL TO anon/i.test(s)), "hostile text must never appear in emitted SQL");
 });
+
+test("every migration file on disk is registered in the manifest — an unregistered schema ships no tables", async () => {
+  // The 2026-10-01 study-prep outage: 2026-study-prep-sessions-v1.sql was
+  // written to manifest standard (fully idempotent) but never added to the
+  // schema group, so the boot self-migration never created
+  // edu.study_prep_sessions in production. Every study-prep chat tool call
+  // failed with "relation does not exist" and surfaced to learners as a
+  // generic "issue starting the session". A file on disk that no group runs
+  // must be a deliberate, listed exclusion — never an accident.
+  const { readdir, readFile: read } = await import("node:fs/promises");
+  const manifest = JSON.parse(await read(new URL("../migrations/manifest.json", import.meta.url), "utf8"));
+  const registered = new Set([...(manifest.schema || []), ...(manifest.demo || [])]);
+  const DELIBERATE_EXCLUSIONS = new Set([
+    "2026-run-all.sql",                  // manual copy-paste bundle, duplicates the files below (see manifest "//")
+    "2026-teardown-jss11-all-sections.sql", // destructive teardown helper, never part of a deploy
+  ]);
+  const onDisk = (await readdir(new URL("../migrations", import.meta.url)))
+    .filter((f) => f.endsWith(".sql"));
+  assert.ok(onDisk.length > 100, "migration files not found — wrong directory?");
+  for (const file of onDisk) {
+    if (DELIBERATE_EXCLUSIONS.has(file)) continue;
+    assert.ok(registered.has(file), `${file} exists in migrations/ but no manifest group runs it`);
+  }
+  // The incident itself, pinned so it can never silently recur.
+  assert.ok((manifest.schema || []).includes("2026-study-prep-sessions-v1.sql"),
+    "study-prep sessions schema must run on every deploy");
+  // And it must run after the tables it ALTERs.
+  const order = manifest.schema;
+  assert.ok(order.indexOf("2026-exam-prep-confidence-loop-v1.sql") < order.indexOf("2026-study-prep-sessions-v1.sql"),
+    "study-prep ALTERs learner_exam_prep_runs — exam-prep schema must run first");
+  assert.ok(order.indexOf("2026-adaptive-workflows-v1.sql") < order.indexOf("2026-study-prep-sessions-v1.sql"),
+    "study-prep ALTERs adaptive_workflow_runs — adaptive-workflows schema must run first");
+});
