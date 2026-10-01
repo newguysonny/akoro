@@ -22,6 +22,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
 );
 import { openai } from "../../../../lib/aiModel.js";
+import { buildDecayMustKnowPrompt } from "../../../agent-context/personas/student.js";
 
 // =============================================================
 // DECAY CONFIGURATION
@@ -637,8 +638,7 @@ export class DecayEngine {
         messages: [
           {
             role: "system",
-            content: `Return 3-5 must-know concepts for this subject/topic.
-JSON only: { "mustKnow": ["concept1", "concept2", ...] }`,
+            content: await buildDecayMustKnowPrompt(),
           },
           { role: "user", content: `Subject: ${subject}, Topic: ${topic}` },
         ],

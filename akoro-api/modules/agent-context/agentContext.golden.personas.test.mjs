@@ -61,10 +61,12 @@ const BUILDERS = {
   "trained-must-know": () => trained.buildTrainedMustKnowPrompt(),
   "trained-boundary": (v) => trained.buildTrainedBoundaryPrompt(v),
   "trained-evaluate-session": (v) => trained.buildTrainedEvaluateSessionPrompt(v),
+  "student-decay-must-know": () => student.buildDecayMustKnowPrompt(),
+  "student-merge-notes": () => student.buildMergeNotesPrompt(),
 };
 
 test("every persona prompt is byte-identical to the pre-migration literals", async () => {
-  assert.equal(fixture.cases.length, 36);
+  assert.equal(fixture.cases.length, 38);
   for (const { label, values, builderArgs, expected } of fixture.cases) {
     const build = BUILDERS[label];
     assert.ok(build, `no builder mapped for ${label}`);
@@ -100,6 +102,8 @@ test("single-source rule (D4): the persona prompt literals exist only as workspa
     proctor: await read("../adaptive-learning/agents/sargeant/proctor.js"),
     base: await read("../adaptive-learning/agents/base-orchestrator.js"),
     student: await read("../adaptive-learning/agents/student/agent.js"),
+    decay: await read("../adaptive-learning/agents/student/decayEngine.js"),
+    merge: await read("../adaptive-learning/agents/student/mergeKnowledge.js"),
   };
   for (const [name, source] of Object.entries(files)) {
     assert.doesNotMatch(source, /You are NaNa Esumai/, `${name}: NaNa persona still hardcoded`);
@@ -116,6 +120,9 @@ test("single-source rule (D4): the persona prompt literals exist only as workspa
     assert.doesNotMatch(source, /Extract what was LEARNED in this teaching exchange/, `${name}: extraction judge still hardcoded`);
     assert.doesNotMatch(source, /You have never been taught /, `${name}: personality bands still hardcoded`);
     assert.doesNotMatch(source, /You are an advanced learner /, `${name}: personality bands still hardcoded`);
+    // P2b decay/merge judges exist only as workspace templates.
+    assert.doesNotMatch(source, /Return 3-5 must-know concepts/, `${name}: decay must-know literal remains`);
+    assert.doesNotMatch(source, /You consolidate a student's own study notes/, `${name}: merge rule literal remains`);
   }
   // and the surfaces really build their prompts through the persona modules
   assert.match(files.guide, /agent-context\/personas\/nana-esumai\.js/, "guide imports the nana builders");
@@ -123,4 +130,6 @@ test("single-source rule (D4): the persona prompt literals exist only as workspa
   assert.match(files.proctor, /agent-context\/personas\/sargeant\.js/, "proctor imports the sargeant builders");
   assert.match(files.base, /agent-context\/personas\/student-clone\.js/, "base-orchestrator imports the clone builders");
   assert.match(files.student, /agent-context\/personas\/student\.js/, "the Student Agent imports its persona builders");
+  assert.match(files.decay, /personas\/student\.js/, "the decay engine loads its judge from the seam");
+  assert.match(files.merge, /personas\/student\.js/, "the merge rule loads from the seam");
 });

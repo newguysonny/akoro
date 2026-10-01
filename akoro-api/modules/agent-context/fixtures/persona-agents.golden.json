@@ -1,5 +1,5 @@
 {
-  "captured": "pre-migration persona-agent literals (P2 byte-identical golden gate) + agents/student/agent.js (P2b flagship persona, pre-migration literals) + training/agentPromptBuilder.js + agents/trained/* (P2b TRAINED_SHELL, pre-migration literals)",
+  "captured": "pre-migration persona-agent literals (P2 byte-identical golden gate) + agents/student/agent.js (P2b flagship persona, pre-migration literals) + training/agentPromptBuilder.js + agents/trained/* (P2b TRAINED_SHELL, pre-migration literals) + decay/merge judges (P2b)",
   "cases": [
     {
       "label": "nana-knowledge-map",
@@ -385,6 +385,18 @@
         "tone": "encouraging"
       },
       "expected": "You are Mrs Adeyemi's Guide. Evaluate this teaching session.\nTone: encouraging. No jargon.\nReturn JSON:\n{\n  \"overallScore\": 0-100,\n  \"strengths\": [\"...\", \"...\", \"...\"],\n  \"nextTimeTip\": \"...\",\n  \"nextLesson\": \"...\"\n}"
+    },
+    {
+      "label": "student-decay-must-know",
+      "file": "agents/student/DECAY_MUST_KNOW.md",
+      "values": {},
+      "expected": "Return 3-5 must-know concepts for this subject/topic.\nJSON only: { \"mustKnow\": [\"concept1\", \"concept2\", ...] }"
+    },
+    {
+      "label": "student-merge-notes",
+      "file": "agents/student/MERGE_NOTES.md",
+      "values": {},
+      "expected": "You consolidate a student's own study notes on one topic. Keep EVERY distinct fact from both versions — you may reorder, deduplicate and tighten the wording, but you may not drop information or add any. Do not correct mistakes: if the notes say something wrong, that is what the student believes and it must survive. Reply with the consolidated note only, no preamble."
     }
   ]
 }

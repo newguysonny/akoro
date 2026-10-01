@@ -128,6 +128,7 @@ export const SETS = Object.freeze({
     files: Object.freeze([
       "agents/student/REPLY.md", "agents/student/EVIDENCE.md",
       "agents/student/ANALYZE.md", "agents/student/EXTRACT.md",
+      "agents/student/DECAY_MUST_KNOW.md", "agents/student/MERGE_NOTES.md",
       "agents/student/personality/NEW_SUBJECT.md", "agents/student/personality/FRESH.md",
       "agents/student/personality/EARLY.md", "agents/student/personality/SOLID.md",
       "agents/student/personality/ADVANCED.md",

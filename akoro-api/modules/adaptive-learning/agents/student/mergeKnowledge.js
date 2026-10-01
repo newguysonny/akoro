@@ -18,6 +18,7 @@
 // does, and consolidate with one model call when it gets long.
 
 import { openai } from "../../../../lib/aiModel.js";
+import { buildMergeNotesPrompt } from "../../../agent-context/personas/student.js";
 
 /** Past this many characters a note is consolidated rather than appended to. */
 const CAP = 1200;
@@ -74,11 +75,7 @@ export async function mergeKnowledge(existing, incoming, { model = "gpt-4o-mini"
       messages: [
         {
           role: "system",
-          content:
-            "You consolidate a student's own study notes on one topic. Keep EVERY distinct fact from both " +
-            "versions — you may reorder, deduplicate and tighten the wording, but you may not drop " +
-            "information or add any. Do not correct mistakes: if the notes say something wrong, that is what " +
-            "the student believes and it must survive. Reply with the consolidated note only, no preamble.",
+          content: await buildMergeNotesPrompt(),
         },
         { role: "user", content: `EXISTING NOTE:\n${old}\n\nNEWLY LEARNED:\n${add}` },
       ],

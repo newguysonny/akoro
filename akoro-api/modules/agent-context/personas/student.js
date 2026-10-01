@@ -37,6 +37,16 @@ export async function buildStudentAgentExtractPrompt(values) {
   return renderPersona(`${DIR}/EXTRACT.md`, values);
 }
 
+/** The decay engine's must-know derivation (JSON judge). */
+export async function buildDecayMustKnowPrompt() {
+  return renderPersona(`${DIR}/DECAY_MUST_KNOW.md`, {});
+}
+
+/** The knowledge-merge consolidation rule: lose NOTHING. */
+export async function buildMergeNotesPrompt() {
+  return renderPersona(`${DIR}/MERGE_NOTES.md`, {});
+}
+
 /**
  * One personality voice band — NEW_SUBJECT | FRESH | EARLY | SOLID | ADVANCED.
  * The agent picks the band from level/sessions/mastery (behaviour, code);
