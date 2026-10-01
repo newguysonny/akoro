@@ -25,6 +25,11 @@ const blogService = read("modules/blogs/service.js");
 const proposalsRoutes = read("modules/agent-proposals/routes.js");
 const gateway = read("modules/agent-tools/routes.js");
 const pyClient = read("..", "akoro-python-agent", "src", "agent", "tools", "akoro_api.py");
+// Context-layer adoption (3e5253c) moved the durable-memory guide out of an
+// inline chat.js constant into doctrine: the text lives in DURABLE_MEMORY.md
+// and chat-doctrine.js injects it only when memory actually loaded.
+const chatDoctrine = read("modules/agent-context/chat-doctrine.js");
+const durableMemoryDoc = read("akoro-agent", "memory", "DURABLE_MEMORY.md");
 
 const TOOL_NAMES = ["list_my_goals", "create_goal", "update_goal_progress", "list_my_proposals",
   "list_my_blogs", "save_blog_draft", "publish_blog"];
@@ -100,7 +105,10 @@ test("capability awareness · the card and the prompt must match the runtime gat
   // the memory card line consults the REAL default-on gate — never a strict
   // env-equality check that turns "unset" into "the agent can't remember"
   assert.match(chatJs, /\(durableAgentChatContextEnabled \? \["Remember across chats/);
-  assert.match(chatJs, /Never claim you cannot remember while this memory section is present/);
+  // the guide text now lives in doctrine (DURABLE_MEMORY.md), not chat.js
+  assert.match(durableMemoryDoc, /Never claim you cannot remember while this memory section is present/);
   // the guide is injected only where memory actually loaded (durable && student)
-  assert.match(chatJs, /\(durable && role === "student" \? DURABLE_MEMORY_GUIDE : ""\)/);
+  assert.match(chatDoctrine, /if \(durableMemory && role === "student"\) system \+= "\\n\\n" \+ \(await loadDoctrine\("memory\/DURABLE_MEMORY\.md"\)\)/);
+  // the /agent route passes the REAL durable flag into the doctrine assembler
+  assert.match(chatJs, /durableMemory: durable,/);
 });

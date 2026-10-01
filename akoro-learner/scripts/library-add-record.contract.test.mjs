@@ -27,7 +27,10 @@ test("the Library header carries the + and the sheet, community-style", () => {
   // Every learner: no tier gate on the page that hosts the +.
   assert.doesNotMatch(library, /isHigherEdUI/);
   // Opening still tells the truth about uploads/pastes; links open.
-  assert.match(library, /records\.viewer_soon/);
+  // The real record viewer shipped (server-backed): uploads and pastes open
+  // in it, and it explains itself for pre-viewer uploads with no stored
+  // bytes — the old records.viewer_soon placeholder copy is gone.
+  assert.match(library, /setViewer\(r\)/);
   assert.match(library, /window\.open\(r\.url, '_blank', 'noopener'\)/);
 });
 
@@ -38,11 +41,15 @@ test("the Learn tab no longer owns the FAB or the sheet — but record seams sur
   // The Now-Studying bar's + now routes to the Library sheet.
   assert.match(dashboard, /onAdd=\{\(\)=>navigate\('\/library\?add=1'\)\}/);
   // Discovery and the Now bar still open records through the tracked path.
+  // Records are server-backed now (recordsApi seam), so the dashboard loads
+  // them with listRecords() instead of the old localStorage loader.
   assert.match(dashboard, /openRecordTracked/);
-  assert.match(dashboard, /loadRecordsLocal/);
+  assert.match(dashboard, /listRecords\(\)/);
 });
 
 test("marking a record done flips the row immediately, not after a reopen", () => {
-  // The modal updates its own list with the same 100↔10 rule the parents write.
-  assert.match(modal, /setRecords\(records\.map\(x => x\.id === r\.id \? \{ \.\.\.x, progress: p/);
+  // The modal updates its own list optimistically (functional form), then
+  // persists through the server-backed progress seam.
+  assert.match(modal, /setRecords\(\(rs\) => rs\.map\(x => x\.id === r\.id \? \{ \.\.\.x, progress: p/);
+  assert.match(modal, /await setRecordProgress\(r\.id, p\)/);
 });
