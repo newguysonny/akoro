@@ -30,6 +30,7 @@ import drawRouter                from "./draw.js";
 import { syllabusRouter }        from "./syllabus.js";
 import teachingSessionRouter     from "./teachingSession.js";
 import examPrepConfidenceRouter  from "./exam-prep-confidence.js";
+import studyPrepRouter         from "./study-prep/routes.js";
 // Side-effect import: schedules the off-peak lesson-ladder pre-warm so the
 // first learner on a scheme-of-work topic never waits for generation.
 import "./ladderPrewarm.js";
@@ -73,6 +74,9 @@ router.use("/teaching",      authenticateToken, teachingSessionRouter);
 // Additive learner-owned diagnostic/retest workflow. It does not change the
 // legacy phase-oriented teaching route or the teacher task exam-prep tool.
 router.use("/exam-prep",     authenticateToken, examPrepConfidenceRouter);
+// Study-prep session loop (agent + harness + education engine) — additive,
+// gated by AKORO_STUDY_PREP_ENABLED. The exam-prep surface above is unchanged.
+router.use("/study-prep",    authenticateToken, studyPrepRouter);
 
 router.use("/chat",          authenticateToken, chatRouter);
 router.use("/draw",          authenticateToken, drawRouter);

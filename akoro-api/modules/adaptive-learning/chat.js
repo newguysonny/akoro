@@ -105,6 +105,7 @@ const learnerInsightsEnabled = String(process.env.AKORO_LEARNER_INSIGHTS_ENABLED
 const learnerSoulStateEnabled = String(process.env.AKORO_LEARNER_SOUL_STATE_ENABLED || "").toLowerCase() === "true";
 const conceptTrackerEnabled = String(process.env.AKORO_CONCEPT_TRACKER_ENABLED || "").toLowerCase() === "true";
 const examPrepConfidenceEnabled = String(process.env.AKORO_EXAM_PREP_CONFIDENCE_ENABLED || "").toLowerCase() === "true";
+const studyPrepEnabled = String(process.env.AKORO_STUDY_PREP_ENABLED || "").toLowerCase() === "true";
 /* ─── reconstructHistoryBlocks ──────────────────────────────────────────────
    Rebuilds the typed block array from a completed teaching session.
    Priority: block_history column (exact) → session_phase_progress (derived).
@@ -499,6 +500,27 @@ export const CHAT_TOOLS = [
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "start_study_prep_session",
+    description: "Start a study-prep session for the learner: resolves the approved syllabus, inspects their recorded knowledge, and proposes an ordered plan with a coin estimate. Plan-only — no practice is generated and nothing is charged until the learner approves the plan card. Use when they ask to prepare for a test or exam covering multiple topics.",
+    featureGate: "study_prep",
+    input_schema: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The learner's study goal in their own words (3 to 300 characters)." },
+        subject: { type: "string", description: "The subject, e.g. 'Basic Science'." },
+        classLevel: { type: "string", description: "Class level, e.g. 'JSS1' or 'SS2'." },
+        examBoard: { type: "string", description: "Exam board, e.g. 'WAEC', 'NECO', 'JAMB'." },
+      },
+      required: ["goal", "subject"],
+    },
+  },
+  {
+    name: "get_study_prep_session",
+    description: "Read the learner's current study-prep session: status, topics with their states, the plan-card estimate, and the recent agent activity log. Use for progress/resume questions. Never returns answer keys.",
+    featureGate: "study_prep",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "submit_tool_request",
     description: "Create a compact product request for Akoro admins to consider a missing study tool or integration. Use ONLY after the learner explicitly asks you to submit the request after you have explained that it is feature feedback, not an immediate action. Never submit automatically merely because a request is unsupported, and never copy raw chat, attachments, passwords, contact details, or sensitive account data. Describe the needed capability concisely instead.",
     input_schema: {
@@ -528,6 +550,7 @@ export function getLearnerChatTools({ allowToolRequest = true } = {}) {
     concept_tracker: conceptTrackerEnabled,
     learning_insights: learnerInsightsEnabled,
     exam_prep_confidence: examPrepConfidenceEnabled,
+    study_prep: studyPrepEnabled,
     durable_agent_chat_context: durableAgentChatContextEnabled,
   };
   return CHAT_TOOLS.filter((tool) => (!tool.featureGate || enabled[tool.featureGate] === true)
@@ -1195,6 +1218,26 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       return getAgentPreferenceSummary(studentId);
     case "get_autonomy_status":
       return getAutonomyStatus(studentId);
+    case "start_study_prep_session": {
+      const { startStudyPrepSession } = await import("./study-prep/wiring.js");
+      if (!studyPrepEnabled) return { enabled: false, message: "Study-prep sessions are not enabled for this learner." };
+      const view = await startStudyPrepSession({
+        learnerId: studentId,
+        goal: String(input?.goal || "").slice(0, 300),
+        subject: String(input?.subject || "").slice(0, 180),
+        classLevel: String(input?.classLevel || "JSS1").slice(0, 40),
+        examBoard: String(input?.examBoard || "WAEC").slice(0, 80),
+      });
+      return {
+        enabled: true, sessionId: view.session.id, status: view.session.status,
+        plan: view.session.plan, estimate: view.session.estimate,
+        note: "Plan proposed — nothing is charged until the learner approves it on the plan card.",
+      };
+    }
+    case "get_study_prep_session": {
+      const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
+      return getStudyPrepSessionSummary(studentId);
+    }
     case "submit_tool_request": {
       const request = await createLearnerToolRequest({ learnerId: studentId, body: input });
       return {
