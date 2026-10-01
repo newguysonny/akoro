@@ -329,6 +329,20 @@ akoro-agent/
 - Files are validated by a contract test: no learner-identifying data, no policy numbers that belong in the
   policy tables, size budget per file.
 
+**Adoption by existing features — explicit later phase, not automatic.** Nothing existing migrates onto the
+context layer during this build (§5). Today's agents assemble context entirely in code — chat's
+`tutorSystemPrompt()` in `chat.js` (persona + formatting contract + Think/Research addenda hardcoded as JS
+template strings), the persona agents under `agents/` (JS modules; trained-teacher style from DB
+orchestration config + pgvector chunks via `training/agentPromptBuilder.js`), and the python agent's
+`reasoning/` modules — no `.md` workspace exists yet anywhere. That is correct for this plan's scope: the
+context manager + `akoro-agent/` workspace serve the study-prep loop first, behind the flag, with zero
+regression risk to live chat, activities, adaptive workflows or autonomy. But the workspace files are
+platform doctrine, not study-prep-private, and `contextManager.load({...})` is a generic API — so a
+**separate, explicitly-scoped follow-up phase** can migrate existing consumers (e.g. regenerate
+`tutorSystemPrompt()`'s blocks from `AGENT.md + LEARNING.md + TOOL_RULES.md`; let the python agent's
+reasoning modules read the same files) with its own contract tests. That migration is *out of scope* here
+and must never happen implicitly.
+
 ### 4.7 `deliberate()` — rescope, not retirement (S2, S5; overrides S4)
 
 `deliberate(decision_node, facts)` remains in the codebase but changes job: it is the **harness's narration
