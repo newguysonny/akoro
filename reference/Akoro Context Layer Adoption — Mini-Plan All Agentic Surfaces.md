@@ -100,27 +100,78 @@ Legend: Prompt source today — `literal` (JS/Python string) · `db-config` · `
   imports keep working; the shim is deleted in P7).
 - The workspace stays at `akoro-api/akoro-agent/` (ships with the API deploy; already the case).
 
-### 3.2 Workspace extension (new files, doctrine only)
+### 3.2 Workspace extension — the configurable agent brain
+
+The 15 existing files are the study-prep seed. Full adoption grows the brain to **~37 files across 10
+layers**. Existing files are **promoted** (study-prep-scoped → platform doctrine); new files are marked
+**(NEW)**. The principle stays: *files are the personality, the database is the memory* — mastery,
+confidence and the autonomy queue remain DB truth, never doctrine.
 
 ```
-akoro-agent/
-├── (existing 15 files — shared doctrine, unchanged)
-├── channels/CHAT.md              the chat formatting contract (markdown subset rules)
-├── channels/VOICE.md             voice-specific brevity rules
-├── agents/NANA_ESUMAI.md         persona pair voices
-├── agents/SARGEANT.md            assessor + proctor persona
-├── agents/STUDENT_AGENT.md       student-session agent persona
-├── agents/TRAINED_SHELL.md       platform shell around DB teacher config
-├── teaching/PHASES.md            teaching-session phase doctrine
-├── practice/GENERATION.md        generated-practice rules (never a past paper, MCQ shape)
-├── practice/ASSESSMENT.md        grading/rubric doctrine
-├── practice/DRAWING.md           draw/sketch/mermaid/svg rules
-├── policies/AUTONOMY_RULES.md    THE LOOP's planner boundaries
-├── policies/TOOL_OBSERVATIONS.md the structured-observation guide
-├── policies/HITL_DRAFTS.md       instructor human-in-the-loop rules
-├── consult/PEER_CONSULT.md       peer-consult privacy framing
-└── school/AI_CONCIERGE.md        school-scope doctrine (no learner doctrine leakage)
+identity/      who Akoro is
+  SOUL.md                 core identity (EXISTS — promoted to platform scope)
+  VOICE.md           (NEW) tone, register, reading level, warmth — the soul's expression
+
+reasoning/     how it thinks  (the "cognitive" layer)
+  REASONING.md, PLANNING.md, INSPECTION.md   (EXIST — think/plan/check core)
+  COGNITIVE_LOAD.md  (NEW) chunking, one-concept-per-turn, worked examples, no wall-of-text —
+                      drives teaching AND practice generation
+  METACOGNITION.md   (NEW) teach-back, confidence calibration, "what would you do differently" —
+                      the exam-prep confidence + study-prep teach-back doctrine, promoted to shared
+
+learning/      the education engine  (the "adaptive learning soul")
+  LEARNING.md, TEACHING.md, MASTERY.md, ASSESSMENT.md   (EXIST)
+  ADAPTATION.md      (NEW) scaffold ladder, hint ladder, difficulty steering when a learner struggles
+  MOTIVATION.md      (NEW) growth-mindset language, no praise inflation, streak & frustration handling
+  PACE.md            (NEW) pacing doctrine — defer vs flag, spacing, review scheduling
+                      (pairs with the planned pace-profile feature)
+
+autonomy/      proactive & self-directed  (the "heartbeat" layer)
+  HEARTBEAT.md       (NEW) THE LOOP's doctrine — when the agent may act unprompted, cadence rules,
+                      the no-autonomous-side-effects boundary (from autonomy/cycle.js literals)
+  NUDGES.md          (NEW) what may be nudged, anti-spam rules, quiet hours, one nudge at a time
+  PEER_CONSULT.md    (NEW) peer-consult privacy framing
+
+channels/      per-medium expression contracts
+  CHAT.md            (NEW) the chat formatting contract, markdown subset (from chat.js)
+  SPEECH.md          (NEW) voice-channel brevity rules
+  DRAWING.md         (NEW) draw/sketch/mermaid/svg/excalidraw rules (from draw.js's 4 prompts)
+
+agents/        persona voice layers composed ON TOP of the shared soul — never forks of it
+  NANA_ESUMAI.md, SARGEANT.md, STUDENT_AGENT.md, TRAINED_SHELL.md   (NEW, P2)
+
+practice/      generation doctrine
+  GENERATION.md      (NEW) generated exam-style practice, NEVER a historical past paper, MCQ shape,
+                      distractor rules, difficulty bands — one file every generator loads
+  GRADING.md         (NEW) rubric/grading doctrine (distinct from learning/ASSESSMENT.md's
+                      assess-to-learn doctrine)
+
+teaching/
+  PHASES.md          (NEW, P5) teaching-session phase doctrine
+
+policies/
+  SAFETY.md, EDUCATION_RULES.md, TOOL_RULES.md   (EXIST)
+  TOOL_OBSERVATIONS.md (NEW) structured-observation guide (from chat.js)
+  HITL_DRAFTS.md       (NEW) instructor human-in-the-loop rules (from chat.js)
+
+school/
+  AI_CONCIERGE.md    (NEW, P6) school-scoped doctrine — walled off from learner files (D9)
+
+memory/
+  MEMORY.md          (EXISTS — curated agent wisdom)
+  CURATION.md        (NEW, P7) how MEMORY.md is maintained — owner + pruning rule (closes the
+                      still-open curation item)
 ```
+
+**Budget math — the brain loads in slices, never whole.** 8 KB/file and 24 KB/set mean every operation
+loads a **curated selection of ~3–6 files**: e.g. `chat_student` ≈ SOUL + VOICE + CHAT + COGNITIVE_LOAD +
+SAFETY + TOOL_OBSERVATIONS; `autonomy_planner` ≈ SOUL + HEARTBEAT + NUDGES + PACE + SAFETY. The library is
+the whole brain; each operation gets a focused slice of it.
+
+**What is freely configurable vs tested:** editing a file's *text* changes doctrine with no deploy.
+Changing *which files an operation loads* is a manifest edit — wiring is behaviour, so it carries contract
+tests (and the orphan check: every file must be loaded by at least one set, so the library cannot
+accrete dead doctrine).
 
 ### 3.3 Manifest, preflight and budgets
 
@@ -209,6 +260,7 @@ the single-source rule test goes repo-wide; `MEMORY.md` curation documented in A
 | D10 | Python agent reads the same files | One philosophy across runtimes; no Node/Python prompt dialects |
 | D11 | Rule-based "prompt-ish" modules are verified, not cosmetically migrated | Migration has a cost; only LLM call sites get sets |
 | D12 | Context layer itself has no kill switch | It is infrastructure like `lib/aiModel.js`; a flag would imply a second prompt path exists |
+| D13 | The brain is a layered library (~37 files, 10 layers) loaded in curated slices, never whole | Budgets force focus; personas compose ON the shared soul rather than forking it; every file must be loaded by ≥1 set (orphan check) or deleted |
 
 ---
 
@@ -216,7 +268,8 @@ the single-source rule test goes repo-wide; `MEMORY.md` curation documented in A
 
 - `agentContext.manifest.contract.test.mjs` — every set resolves; required files present; budgets hold;
   no state in files (extends the existing `contextLayer.contract.test.mjs`); school/learner wall (D9);
-  hash stability (`context_version` changes only when file content changes).
+  hash stability (`context_version` changes only when file content changes); **orphan check** — every
+  workspace file is loaded by at least one registered set (D13).
 - `agentContext.golden.chat.test.mjs` (P1) — the assembled `systemContent` of the real `/agent` route is
   byte-identical to the captured golden, pre- and post-migration.
 - `agentContext.golden.personas.test.mjs` (P2) — same for each orchestrator; trained order
