@@ -220,11 +220,17 @@ function SessionChatView({
       display:"flex",flexDirection:"column",fontFamily:"'Nunito',sans-serif",
       animation:"sheet-up .36s cubic-bezier(.32,1.1,.64,1)" }}>
 
-      {/* Header */}
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",
+      {/* Header — a dedicated full-width top bar keeps the mode toggle and
+          the round session controls on one row in EVERY state. The icons
+          used to ride the left column's toggle row, whose width follows the
+          topic/subtitle content: aligned while loading, then drifting (or
+          wrapping) out of the row once the real topic and the Switch /
+          Summarize block landed. */}
+      <div style={{
         padding: embedded ? "12px 16px 12px" : "calc(env(safe-area-inset-top, 0px) + 14px) 20px 12px",borderBottom:"1px solid var(--ak-border)" }}>
-        <div style={{ minWidth:0 }}>
-          <div style={{ display:"flex",alignItems:"center",gap:7,marginBottom:3,flexWrap:"wrap" }}>
+        {/* Top bar: mode toggle + conn state <-> round session controls. */}
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:5 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",minWidth:0 }}>
             {onToggleChatMode && mode !== "decay" ? (
               /* Mode toggle — LEARN BY TEACHING ↔ LEARNING WITH GUIDE */
               <div style={{ display:"inline-flex",alignItems:"center",gap:2,borderRadius:20,
@@ -269,59 +275,63 @@ function SessionChatView({
                   : (t('teaching.reconnecting') || 'Reconnecting…')}
               </span>
             )}
-            {/* The round session controls ride the toggle row — level with
-                LEARN BY TEACHING / LEARNING WITH GUIDE, not floating beside
-                the topic. Minimize parks the session on the Now-Studying bar
-                (non-destructive, so no confirm like close). */}
-            <div style={{ display:"flex",alignItems:"center",gap:8,marginLeft:"auto",flexShrink:0 }}>
-              {onMinimize && (
-                <div onClick={onMinimize} role="button" aria-label={t('now.minimize')} title={t('now.minimize')}
-                  style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
-                    display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-                  <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </div>
-              )}
-              <div onClick={handleCloseRequest}
+          </div>
+          {/* The round session controls: always top-right on the toggle's
+              row, whatever loads below. Minimize parks the session on the
+              Now-Studying bar — non-destructive, so no confirm like close. */}
+          <div style={{ display:"flex",alignItems:"center",gap:8,flexShrink:0 }}>
+            {onMinimize && (
+              <div onClick={onMinimize} role="button" aria-label={t('now.minimize')} title={t('now.minimize')}
                 style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
                   display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
-                <XIcon size={15} color="var(--ak-text-muted)"/>
+                <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="var(--ak-text-muted)" strokeWidth="2.6" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </div>
+            )}
+            <div onClick={handleCloseRequest}
+              style={{ width:36,height:36,borderRadius:"50%",background:"var(--ak-tag-bg)",
+                display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer" }}>
+              <XIcon size={15} color="var(--ak-text-muted)"/>
             </div>
           </div>
-          <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
-          <p style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
-            {chatMode === "guide"
-              ? `${subject} · ${guideLabel || "🧠 NaNa Esumai"}`
-              : `${subject} · ${agentEmoji} ${agentName} · ${guideLabel || "NaNa Esumai 🧠 · Sargeant ⚡"}`}
-          </p>
-          {reference && (
-            <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"var(--ak-success-text)" }}>
-              <Icon name="ti-paperclip" size={10}/>
-              <span style={{ fontSize:9.5,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{reference.name}</span>
-            </div>
+        </div>
+        {/* Content row: the topic block, with the labelled actions beside it. */}
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",gap:8 }}>
+          <div style={{ minWidth:0 }}>
+            <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
+            <p style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
+              {chatMode === "guide"
+                ? `${subject} · ${guideLabel || "🧠 NaNa Esumai"}`
+                : `${subject} · ${agentEmoji} ${agentName} · ${guideLabel || "NaNa Esumai 🧠 · Sargeant ⚡"}`}
+            </p>
+            {reference && (
+              <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"var(--ak-success-text)" }}>
+                <Icon name="ti-paperclip" size={10}/>
+                <span style={{ fontSize:9.5,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{reference.name}</span>
+              </div>
+            )}
+          </div>
+          {((onSwitchAgent && chatMode !== "guide") || (showSummarize && chatMode !== "guide")) && (
+          <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+            {onSwitchAgent && chatMode !== "guide" && (
+              <div onClick={switching ? undefined : onSwitchAgent}
+                style={{ display:"flex",alignItems:"center",gap:5,background:"var(--ak-tag-bg)",
+                  border:"1px solid var(--ak-border2)",borderRadius:12,padding:"7px 11px",
+                  cursor:switching?"default":"pointer",opacity:switching?.6:1 }}>
+                <span style={{ fontSize:12 }}>⇄</span>
+                <span style={{ fontSize:11,fontWeight:800,color:"var(--ak-text-sec)" }}>{switching ? t('teaching.switching') : t('teaching.switch')}</span>
+              </div>
+            )}
+            {showSummarize && chatMode !== "guide" && (
+              <div onClick={onSummarize}
+                style={{ display:"flex",alignItems:"center",gap:5,background:`${sc}22`,
+                  border:`1px solid ${sc}44`,borderRadius:12,padding:"7px 12px",cursor:"pointer" }}>
+                <SparkleIcon size={13} color={sc}/>
+                <span style={{ fontSize:11,fontWeight:800,color:sc }}>{t('teaching.summarize')}</span>
+              </div>
+            )}
+          </div>
           )}
         </div>
-        {((onSwitchAgent && chatMode !== "guide") || (showSummarize && chatMode !== "guide")) && (
-        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-          {onSwitchAgent && chatMode !== "guide" && (
-            <div onClick={switching ? undefined : onSwitchAgent}
-              style={{ display:"flex",alignItems:"center",gap:5,background:"var(--ak-tag-bg)",
-                border:"1px solid var(--ak-border2)",borderRadius:12,padding:"7px 11px",
-                cursor:switching?"default":"pointer",opacity:switching?.6:1 }}>
-              <span style={{ fontSize:12 }}>⇄</span>
-              <span style={{ fontSize:11,fontWeight:800,color:"var(--ak-text-sec)" }}>{switching ? t('teaching.switching') : t('teaching.switch')}</span>
-            </div>
-          )}
-          {showSummarize && chatMode !== "guide" && (
-            <div onClick={onSummarize}
-              style={{ display:"flex",alignItems:"center",gap:5,background:`${sc}22`,
-                border:`1px solid ${sc}44`,borderRadius:12,padding:"7px 12px",cursor:"pointer" }}>
-              <SparkleIcon size={13} color={sc}/>
-              <span style={{ fontSize:11,fontWeight:800,color:sc }}>{t('teaching.summarize')}</span>
-            </div>
-          )}
-        </div>
-        )}
       </div>
 
       {/* Live cognitive state — agent's understanding & confusion this turn.
