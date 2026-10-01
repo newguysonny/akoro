@@ -39,6 +39,22 @@ test("durable Agent Chat context stays server-owned and uses an idempotent turn"
   assert.match(route, /turnId,/);
 });
 
+test("every completed turn persists — the save is never gated on client socket state", () => {
+  const route = source.slice(source.indexOf('router.post("/agent"'));
+  // Regression (2026-10-01, observed live): the old save gate
+  // `conversationId && !req.destroyed && !res.destroyed` meant NO turn ever
+  // persisted behind Cloudflare + Render, where the socket reads destroyed
+  // the instant the last delta flushes — 4/4 turns logged saved=false with
+  // the turn line 2ms after the stream (no DB round-trip ever ran), and
+  // every learner's chat history silently vanished on reload. The durable
+  // write is turn-keyed idempotent, so persisting a fully-generated reply is
+  // always safe even for an abandoned stream.
+  assert.doesNotMatch(route, /!req\.destroyed && !res\.destroyed/,
+    "the save block must not be skipped on destroyed sockets");
+  assert.match(route, /let turnSaved = false;/);
+  assert.match(route, /if \(conversationId\) \{/);
+});
+
 test("learner study projections remain bounded tools and product feedback needs explicit consent", () => {
   for (const tool of [
     "get_learning_overview", "get_knowledge_map", "search_my_study_knowledge",
