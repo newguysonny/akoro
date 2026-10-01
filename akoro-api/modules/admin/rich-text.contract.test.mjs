@@ -12,6 +12,8 @@ const sessionChat = await readFile(
   new URL("../../../akoro-learner/src/components/teaching/SessionChatView.jsx", import.meta.url), "utf8");
 const chatSource = await readFile(
   new URL("../adaptive-learning/chat.js", import.meta.url), "utf8");
+const chatDoctrine = await readFile(
+  new URL("../../akoro-agent/channels/CHAT.md", import.meta.url), "utf8");
 const studentAgent = await readFile(
   new URL("../../../akoro-python-agent/src/agent/adaptive/student.py", import.meta.url), "utf8");
 
@@ -84,7 +86,9 @@ test("all three agent chat surfaces render RichText; user bubbles stay plain", (
 });
 
 test("both agents carry the formatting contract", () => {
-  assert.match(chatSource, /Formatting contract \(the chat renders a small markdown subset/);
-  assert.match(chatSource, /NEVER use markdown tables, HTML, images, links, or code fences/);
+  // P1: the chat persona + formatting contract load from the workspace.
+  assert.match(chatDoctrine, /Formatting contract \(the chat renders a small markdown subset/);
+  assert.match(chatDoctrine, /NEVER use markdown tables, HTML, images, links, or code fences/);
+  assert.match(chatSource, /assembleChatDoctrine|tutorSystemPrompt/);
   assert.match(studentAgent, /never use headings, tables, HTML, or code fences/);
 });

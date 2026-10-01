@@ -13,6 +13,7 @@ import test from "node:test";
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
 const chat = await read("./chat.js");
+const toolObservationsDoctrine = await read("../../akoro-agent/policies/TOOL_OBSERVATIONS.md");
 const taskLoop = await read("../tasks/lib/agentLoop.js");
 const util = await read("../../utils/toolObservation.js");
 
@@ -21,8 +22,9 @@ test("learner Agent Chat observes tools through the structured envelope", () => 
   assert.match(chat, /toolObservation\(\{ action: tool, result: toolResult, requestId: newToolRequestId\(\) \}\)/);
   assert.match(chat, /content: JSON\.stringify\(observation\)/);
   // The model is taught the envelope so confirmations stay grounded.
-  assert.match(chat, /TOOL_OBSERVATION_GUIDE/);
-  assert.match(chat, /"success": boolean, "request_id": string, "action": string/);
+  // P1: the guide loads from the workspace through the doctrine seam.
+  assert.match(chat, /assembleChatDoctrine/);
+  assert.match(toolObservationsDoctrine, /"success": boolean, "request_id": string, "action": string/);
   // Executions carry the correlation id for tracing.
   assert.match(chat, /requestId: observation\.request_id/);
 });

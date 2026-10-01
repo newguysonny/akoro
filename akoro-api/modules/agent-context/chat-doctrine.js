@@ -1,0 +1,43 @@
+/**
+ * modules/agent-context/chat-doctrine.js — the Agent Chat prompt seam
+ * (Context Layer Adoption P1). The STATIC doctrine of the /agent route and
+ * the voice bootstrap — persona, formatting contract, role addenda, Think/
+ * Research modes, agent-chat operating rules, tool-observation and HITL
+ * guides — loads VERBATIM from the akoro-agent/ workspace, byte-identical to
+ * the pre-migration chat.js literals (pinned by
+ * agentContext.golden.chat.test.mjs).
+ *
+ * This module is deliberately side-effect-free (only the context manager):
+ * tests import it directly, and chat.js/voice compose it with their dynamic
+ * truth (current time, grounding, memory, scratchpad, attachments), which
+ * never lives in files.
+ */
+
+import { loadDoctrine } from "./context-manager.js";
+
+export async function tutorSystemPrompt({ agentName = "Akoro", role = "student" } = {}) {
+  const base = (await loadDoctrine("channels/CHAT.md")).replaceAll("{{agentName}}", agentName);
+  if (role === "instructor") return base + "\n" + (await loadDoctrine("channels/CHAT_INSTRUCTOR.md"));
+  return base + "\n" + (await loadDoctrine("channels/CHAT_STUDENT.md"));
+}
+
+/**
+ * assembleChatDoctrine — the STATIC part of the Agent Chat system prompt,
+ * in the pre-migration concatenation order (the golden fixture pins the
+ * bytes; the time context keeps its position right after the persona).
+ * The durable-memory guide loads only when memory actually loaded — the
+ * agent historically DENIED having memory because nothing in the prompt
+ * owned the ability (see memory/DURABLE_MEMORY.md).
+ */
+export async function assembleChatDoctrine({
+  agentName = "Akoro", role = "student", think = false, research = false, durableMemory = false, currentTimeContext = "",
+} = {}) {
+  let system = await tutorSystemPrompt({ agentName, role });
+  system += currentTimeContext;
+  if (think) system += "\n\n" + (await loadDoctrine("channels/MODE_THINK.md"));
+  if (research) system += "\n\n" + (await loadDoctrine("channels/MODE_RESEARCH.md"));
+  system += "\n\n" + (await loadDoctrine("policies/AGENT_CHAT.md"));
+  system += "\n\n" + (await loadDoctrine(role === "student" ? "policies/TOOL_OBSERVATIONS.md" : "policies/HITL_DRAFTS.md"));
+  if (durableMemory && role === "student") system += "\n\n" + (await loadDoctrine("memory/DURABLE_MEMORY.md"));
+  return system;
+}

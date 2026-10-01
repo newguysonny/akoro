@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("./chat.js", import.meta.url), "utf8");
+const agentChatDoctrine = await readFile(
+  new URL("../../akoro-agent/policies/AGENT_CHAT.md", import.meta.url), "utf8");
 const instructorChatPage = await readFile(
   new URL("../../../akoro-instructor/src/pages/ChatPage.jsx", import.meta.url), "utf8",
 );
@@ -44,7 +46,9 @@ test("learner study projections remain bounded tools and product feedback needs 
     "get_chat_memory", "get_agent_preferences", "get_autonomy_status", "submit_tool_request",
   ]) assert.match(source, new RegExp(`name: "${tool}"`));
   assert.match(source, /hasExplicitToolRequestConsent\(userMessage\)/);
-  assert.match(source, /never submit one automatically/);
+  // P1: the agent-chat operating doctrine loads from the workspace.
+  assert.match(agentChatDoctrine, /never submit one automatically/);
+  assert.match(source, /assembleChatDoctrine/);
   assert.match(source, /Never expose a raw transcript, internal scratchpad, hidden reasoning, or raw tool output/);
 });
 

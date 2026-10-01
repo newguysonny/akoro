@@ -14,13 +14,15 @@ import test from "node:test";
  * create path the activities workbench uses (targets, notifications, ding).
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, service, drafts, routes, chat, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage, classroomsMigration, guide, aiModel] = await Promise.all([
+const [migration, manifest, service, drafts, routes, chat, chatDoctrine, hitlDoctrine, page, panel, chatPage, gateway, studentAgent, routinesMigration, routines, outcomes, appJs, instructorChatPage, classroomsMigration, guide, aiModel] = await Promise.all([
   read("./2026-activity-drafts.sql"),
   read("./manifest.json"),
   read("../../akoro-api/modules/self-study/createAssignment.js"),
   read("../../akoro-api/modules/self-study/drafts.js"),
   read("../../akoro-api/modules/self-study/routes.js"),
   read("../../akoro-api/modules/adaptive-learning/chat.js"),
+  read("../../akoro-api/akoro-agent/channels/CHAT.md"),
+  read("../../akoro-api/akoro-agent/policies/HITL_DRAFTS.md"),
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/components/ActivityPreviewPanel.jsx"),
   read("../../akoro-instructor/src/pages/ChatPage.jsx"),
@@ -84,8 +86,9 @@ test("the agent prepares but never assigns — tools, gating, and honesty", () =
   assert.match(chat, /\}\) : instructorTools,/);
   assert.match(chat, /"prepare_activity", "revise_activity_draft"\]\.includes\(tool\)/, "prepare + revise are side-effecting");
   // HITL honesty guide replaces the learner observation guide for instructors.
-  assert.match(chat, /INSTRUCTOR_HITL_GUIDE/);
-  assert.match(chat, /Never say an activity was assigned, sent, or that learners were notified/);
+  // P1: the guide loads from the workspace via assembleChatDoctrine.
+  assert.match(chat, /assembleChatDoctrine/);
+  assert.match(hitlDoctrine, /Never say an activity was assigned, sent, or that learners were notified/);
   // No assign endpoint is reachable from any tool case.
   assert.doesNotMatch(chat, /drafts\/\$\{[^}]+\}\/assign|assignActivityDraft/);
 });
@@ -139,8 +142,8 @@ test("the no-guess rule is universal: every tool asks before it guesses", () => 
   assert.match(chat, /export function clarify\(field, question, extra = \{\}\)/);
   assert.match(chat, /needsClarification: true, missing: field, question/);
   // The base prompt (both roles) carries the missing-details rule.
-  assert.match(chat, /Missing details rule: before calling any Akoro tool, check you hold every input the user actually stated/);
-  assert.match(chat, /ask one clear clarifying question and wait/);
+  assert.match(chatDoctrine, /Missing details rule: before calling any Akoro tool, check you hold every input the user actually stated/);
+  assert.match(chatDoctrine, /ask one clear clarifying question and wait/);
   // Side-effecting tools clarify instead of failing or inventing.
   assert.match(chat, /return clarify\("title", "What should the task be called\?"/);
   assert.match(chat, /return clarify\("message", "What should the future chat message say\?"/);
@@ -276,7 +279,7 @@ test("bigger bets: weekly routines prepare drafts — assignment stays human", (
   assert.match(routines, /startRoutineScheduler/);
   assert.match(appJs, /startRoutineScheduler\(\)/);
   // Honesty: the guide forbids claiming a routine assigned anything.
-  assert.match(chat, /Routines only ever prepare drafts at their weekly slot/);
+  assert.match(hitlDoctrine, /Routines only ever prepare drafts at their weekly slot/);
   // Managed from the workbench strip: pause/resume/cancel chips.
   assert.match(page, /\/api\/self-study\/routines/);
   assert.match(page, /Weekly routines/);
@@ -292,7 +295,7 @@ test("bigger bets: outcomes close the loop — data in, decision human", () => {
   assert.match(chat, /pickOne: true/);
   assert.match(chat, /then call again with its assignmentId/);
   // Weak results suggest a revision draft — the instructor still decides.
-  assert.match(chat, /suggest a revision draft and let the instructor decide/);
+  assert.match(hitlDoctrine, /suggest a revision draft and let the instructor decide/);
 });
 
 test("bigger bets: batch preparation is first-class", () => {
@@ -325,7 +328,7 @@ test("whole-class audiences resolve to a real class — never to zero learners",
   // at every weekly run.
   assert.match(routines, /create one in Classes first/);
   // And the agent guide forbids asking for a class that does not exist.
-  assert.match(chat, /Never ask them to name a class that does not exist/);
+  assert.match(hitlDoctrine, /Never ask them to name a class that does not exist/);
 });
 
 test("classroom ownership: created_by exists, backfilled, and agent queries never answer empty on error", () => {
@@ -402,20 +405,20 @@ test("prepare failures are diagnosable and survivable — no more silent thrash"
   // Server-side log + verbatim relay: the REAL reason reaches Render logs
   // and the instructor — "technical problem" is forbidden in the guide.
   assert.match(chat, /console\.error\("\[prepare_activity\] failed:/);
-  assert.match(chat, /repeat that reason to the instructor and fix that one thing together\. NEVER call it a technical problem/);
+  assert.match(hitlDoctrine, /repeat that reason to the instructor and fix that one thing together\. NEVER call it a technical problem/);
   // One class + "the whole class" → no name-confirmation round trip.
-  assert.match(chat, /list_my_classrooms shows exactly ONE class, use it without asking/);
+  assert.match(hitlDoctrine, /list_my_classrooms shows exactly ONE class, use it without asking/);
   // A bare "Yes" once landed as "what do you mean?" — confirmation must
   // fire the tool, not restart the interview.
-  assert.match(chat, /call prepare_activity immediately — every detail they gave is already in this conversation/);
+  assert.match(hitlDoctrine, /call prepare_activity immediately — every detail they gave is already in this conversation/);
   // The model once wrote sample questions as chat prose and invented a
   // "how many questions?" requirement — so the route FORCES prepare_activity
   // on an activity request (or a confirmation continuing one), and the guide
   // forbids the detours outright.
   assert.match(chat, /requiresActivityPreparation\(userMessage, dialogue\)/);
   assert.match(chat, /\? "prepare_activity" : null/);
-  assert.match(chat, /prepare_activity is the ONLY way an activity comes into existence/);
-  assert.match(chat, /never ask for them; inventing extra requirements/);
+  assert.match(hitlDoctrine, /prepare_activity is the ONLY way an activity comes into existence/);
+  assert.match(hitlDoctrine, /never ask for them; inventing extra requirements/);
   // The tool result says the plan is on its way (it no longer awaits it).
   assert.match(chat, /plan_status === "pending"\) result\.planNote/);
 });

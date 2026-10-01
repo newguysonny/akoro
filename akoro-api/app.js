@@ -734,6 +734,20 @@ process.on("SIGINT",  () => shutdown("SIGINT"));
 // Weekly routine preparation (drafts only — assignment stays human).
 if (!skipJob("routine scheduler")) startRoutineScheduler();
 
+// Context-layer preflight (Context Layer Adoption P0): every registered
+// doctrine set must resolve within budget or the process refuses to serve —
+// agent behaviour can never silently change because a workspace file went
+// missing. The logged version hash makes doctrine drift observable.
+{
+  const { preflight } = await import("./modules/agent-context/context-manager.js");
+  const contextLayer = await preflight();
+  if (!contextLayer.ok) {
+    console.error("[context-layer] PREFLIGHT FAIL:", contextLayer.problems.join(" | "));
+    process.exit(1);
+  }
+  console.log(`[context-layer] ok v${contextLayer.version} — ${contextLayer.sets.length} sets, manifest v${contextLayer.manifestVersion}`);
+}
+
 httpServer.listen(config.server.port, config.server.host, () => {
   serverReady = true;
 

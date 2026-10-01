@@ -42,6 +42,15 @@ for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "REDIRECT_URI_GOOGL
 
 const { default: app } = await import("../app.js");
 
+// The context-layer preflight runs inside app.js boot (P0); assert it here too
+// so the smoke answers for the workspace, not just the routes.
+{
+  const { preflight } = await import("../modules/agent-context/context-manager.js");
+  const pf = await preflight();
+  if (!pf.ok) throw new Error(`context-layer preflight failed: ${pf.problems.join(" | ")}`);
+  console.log(`[boot-smoke] context-layer ok v${pf.version} (${pf.sets.length} sets)`);
+}
+
 const base = `http://127.0.0.1:${process.env.PORT}`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 for (let i = 0; i < 40; i++) {

@@ -1,5 +1,10 @@
 # Akoro Context Layer Adoption — Mini-Plan (All Agentic Surfaces)
 
+> **Build status:** P0 ✅ + P1 ✅ (chat + voice, byte-identical golden gate; 382/382 suite,
+> boot preflight live — app refuses to start on a missing required doctrine file).
+> P2–P7 pending. Source material for the new files: see
+> `Akoro Context Layer — Architecture Folder Review.md`.
+
 This is the follow-up phase recorded in the Study-Prep Master Plan §4.6 ("Adoption by existing features —
 explicit later phase, not automatic"), extended per the product decision from "chat + persona agents" to
 **every agentic surface in the platform**. The study-prep loop shipped the workspace
