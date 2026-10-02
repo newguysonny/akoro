@@ -16,6 +16,7 @@ import {
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet, AlarmSoundSheet } from './sheets.jsx';
 import { getAlarmChoice, storeAlarmChoice, alarmChoiceLabel, getCustomAlarmMeta, saveCustomAlarm, clearCustomAlarm } from '../../services/alarmSound.js';
 import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
+import { PLAN_OPTIONS, setPlanOverride } from '../../utils/planOverride.js';
 
 // A concise, recognisable list keeps the mobile selector usable. The API still
 // validates IANA identifiers, so the agent never treats a display label as a
@@ -261,6 +262,18 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       return;
     }
 
+    /* Current Plan — a DEVICE-LOCAL test switch (utils/planOverride.js),
+       the plan sibling of the study-level selector above. The plan is not
+       a PATCH-able profile field and billing will own it later, so this
+       flips what plan-driven UI shows on this device — no server write to
+       pretend at. Remove the case + row when the plan goes server-side. */
+    if (field === 'plan') {
+      setPlanOverride(val);
+      setProfile(p => ({ ...p, plan: val || 'Free' }));
+      showToast(val === 'Free' ? 'Default plan restored' : `Switched to ${val} — testing view`);
+      return;
+    }
+
     const fieldMap = {
       fullName:'fullName', username:'username', phone:'phone',
       city:'city', country:'country', school:'schoolName',
@@ -411,7 +424,9 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
       <Section title={t('settings.plan_usage')}>
         <Row icon="ti-coin" label="Credit Balance" value={`${(coinBalance||0).toLocaleString()} coins`}
           sub="Top up & view AI usage" onClick={()=>navigate('/wallet')}/>
-        <Row icon="ti-star" label={t('settings.current_plan')} value={profile.plan||'Free'}/>
+        <Row icon="ti-star" label={t('settings.current_plan')} value={profile.plan||'Free'}
+          sub="Tap to switch — device-local test control until billing goes live"
+          onClick={()=>openSheet('plan',t('settings.current_plan'),'select',PLAN_OPTIONS)}/>
         <div style={rowBase}>
           <span style={{ fontSize:17,width:28,flexShrink:0,display:'flex',alignItems:'center' }}>
             <Icon name="ti-chart-bar" size={17} color="var(--ak-text-sub)"/>

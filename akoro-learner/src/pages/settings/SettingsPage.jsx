@@ -24,6 +24,7 @@ import { LogoutModal } from './sheets.jsx';
 import { UserTab } from './userTab.jsx';
 import { AgentTab } from './agentTab.jsx';
 import { AppShell } from '../../components/AppShell.jsx';
+import { effectivePlan } from '../../utils/planOverride.js';
 
 /* ─── Loading skeleton ────────────────────────────────────────── */
 /* ─── Loading skeleton ────────────────────────────────────────── */
@@ -136,7 +137,7 @@ export default function SettingsPage() {
           accentColor:   accent,
           twoFactor:     data.twoFactorEnabled || false,
           googleLinked:  !!data.email,
-          plan:          'Free',
+          plan:          effectivePlan(data.plan),
           sessionsUsed:  0,
           sessionsLimit: 30,
           teachingHours: '0h',
@@ -186,7 +187,7 @@ export default function SettingsPage() {
             id:user.id,email:user.email,username:user.username,
             fullName:user.fullName,avatarUrl:user.avatarUrl,avatarEmoji:'👨🏾‍🎓',
             subjects:[],language,displayMode,accentColor:accent,
-            twoFactor:false,googleLinked:false,plan:'Free',sessionsUsed:0,
+            twoFactor:false,googleLinked:false,plan:effectivePlan(),sessionsUsed:0,
             sessionsLimit:30,teachingHours:'0h',xpBalance:0,
             memberId:user.id,memberSince:'—',
             notif:{ email:true,sms:false,push:true,whatsapp:false,whatsappNumber:'',
