@@ -20,6 +20,7 @@ import { getStudentState } from "../../student-state.js";
 import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teaching-evidence.js";
 import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
+import { blocksToConversationHistory } from "./continuation-history.js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -66,7 +67,8 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
                 subject = null,                  // free-teaching subject (decay carries its own)
                 decayPayload = null,
                 referenceMaterial = null,
-                teachingEvidence = null }) {      // compact server-derived evidence for a continuation
+                teachingEvidence = null,       // compact server-derived evidence for a continuation
+                priorBlocks = null }) {        // previous session's block_history — the conversation itself
     super();
     this.studentId          = studentId;
     this.teacherAgentId     = teacherAgentId;
@@ -96,6 +98,14 @@ export class StudentSessionOrchestrator extends BaseOrchestrator {
       misconceptionsCleared: [],
       xpEarned:              0,
     };
+
+    // Continuation + decay context: restore the previous conversation itself.
+    // Position (resumeFrom) and compact evidence were already restored, but
+    // without this the agent restarted blank on every "Continue Teaching" —
+    // the faded transcript in the UI was pixels, not memory. Bounded by the
+    // mapper (last turns, capped length), and the workflow slices it further
+    // when building prompts.
+    this.session.history = blocksToConversationHistory(priorBlocks);
 
     this.session.phase = "PHASE_1";
   }

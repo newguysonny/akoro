@@ -31,6 +31,7 @@ export async function getOrchestrator({
   decayPayload      = null,
   referenceMaterial = null,
   teachingEvidence  = null,
+  priorBlocks       = null,   // previous session's block_history — restored as conversation memory
 } = {}) {
 
   if (agentPairId && BUILTIN_REGISTRY[agentPairId])
@@ -54,7 +55,7 @@ return null;
   if (mode === "student" || studentId) {
     const guideOrchestrator = await _resolveGuideForStudent(teacherAgentId, studentId || userId);
     return new StudentSessionOrchestrator({
-      studentId, teacherAgentId, guideOrchestrator, sessionType, subject, decayPayload, referenceMaterial, teachingEvidence,
+      studentId, teacherAgentId, guideOrchestrator, sessionType, subject, decayPayload, referenceMaterial, teachingEvidence, priorBlocks,
     });
   }
 

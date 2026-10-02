@@ -69,6 +69,21 @@ function scheduleSessionReap(sessionId) {
 // persist the session row + typed block transcript so the Sessions list
 // (GET /sessions) and "Continue Teaching" (continuation mode) work for WS
 // sessions. The DB row id is stashed on the orchestrator as `dbSessionId`.
+
+// How much of a prior transcript a new session row carries forward. Without
+// the carry, a continuation's row held only its OWN turns — continue once and
+// you saw the previous lesson faded; continue AGAIN and the first lesson was
+// gone. The tail is kept (newest blocks always included) so chains stay
+// bounded no matter how many times a learner continues.
+const CARRY_BLOCK_CAP = 80;
+function carryForward(priorBlocks, openingBlocks) {
+  if (!Array.isArray(priorBlocks) || !priorBlocks.length) return openingBlocks;
+  const carry = priorBlocks
+    .filter(b => b && typeof b === "object" && b.type !== "system-divider")
+    .map(b => ({ ...b, faded: true }));
+  return [...carry.slice(-CARRY_BLOCK_CAP), ...openingBlocks];
+}
+
 async function createSessionRecord(orchestrator, { studentId, topic, subject, openingBlocks }) {
   if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;   // already saved
   const row = {
@@ -652,6 +667,10 @@ export function setupWebSocket(io) {
         let resumeFrom    = null;
         let resumeTeachingEvidence = null;
         let ownedNotificationId = null;
+        // The previous conversation, restored as agent memory (continuation)
+        // or as review context (decay). UI chrome is filtered out by the
+        // mapper/orchestrator; only the spoken turns become context.
+        let priorBlocks   = [];
 
         // ── Continuation: load block history from DB ─────────
         if (mode === "continuation" && prevSessionId) {
@@ -698,6 +717,12 @@ export function setupWebSocket(io) {
                 { type: "system-divider", label: `Previous session · ${daysSince} days ago` },
                 ...prevSession.block_history.map(b => ({ ...b, faded: true })),
               ];
+              // The transcript shown faded above is also the agent's memory:
+              // without this the continuation looked connected but the agent
+              // itself had forgotten every word of the previous lesson.
+              priorBlocks = Array.isArray(prevSession.block_history)
+                ? prevSession.block_history
+                : [];
             }
           } catch (e) {
             console.warn("[start_adaptive_session] history load failed:", e.message);
@@ -715,6 +740,38 @@ export function setupWebSocket(io) {
             ownedNotificationId = notificationId;
           }
           decayPayload = { ...decayPayload, notificationId: ownedNotificationId };
+
+          // A review resumes the relationship, not just the topic health: the
+          // tail of the most recent lesson on this topic becomes the agent's
+          // conversational memory, and the modal shows it faded. Failure here
+          // degrades to a context-less review, never a failed session start.
+          try {
+            const { data: priorRow } = await db.schema("edu")
+              .from("adaptive_sessions")
+              .select("block_history, updated_at, completed_at")
+              .eq("student_id", studentId)
+              .ilike("topic", topic)
+              .in("status", ["active", "complete"])
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (Array.isArray(priorRow?.block_history) && priorRow.block_history.length) {
+              const tail = priorRow.block_history
+                .filter(b => b && typeof b === "object" && b.type !== "system-divider")
+                .slice(-10);
+              priorBlocks = tail;
+              const completedAt = priorRow.completed_at || priorRow.updated_at;
+              const daysSince   = Math.max(0, Math.round(
+                (Date.now() - new Date(completedAt).getTime()) / 86_400_000
+              ));
+              historyBlocks = [
+                { type: "system-divider", label: `Last lesson · ${daysSince} days ago` },
+                ...tail.map(b => ({ ...b, faded: true })),
+              ];
+            }
+          } catch (e) {
+            console.warn("[start_adaptive_session] decay prior-lesson load failed:", e.message);
+          }
         }
 
         // ── Create orchestrator with mode-aware context ───────
@@ -724,7 +781,10 @@ export function setupWebSocket(io) {
           userId:               caller,
           sessionType,
           subject,
-          continuationSessionId: mode === "continuation" ? prevSessionId : null,
+          // The restored conversation. (A continuationSessionId used to be
+          // passed here and silently dropped — getOrchestrator never named
+          // it, so every continuation restarted the agent with empty memory.)
+          priorBlocks,
           decayPayload,
           // Capped source material from the higher-ed start-session modal.
           // It is session-memory only; no file or raw text is persisted.
@@ -813,9 +873,12 @@ export function setupWebSocket(io) {
         // session even if this initial insert fails or hasn't finished yet.
         orchestrator.sessionMeta = { studentId, topic, subject };
 
-        // Persist in background — never blocks the session
+        // Persist in background — never blocks the session. The new row
+        // carries the prior transcript (faded) so the NEXT continuation sees
+        // the whole chain, not just this hop.
         createSessionRecord(orchestrator, {
-          studentId, topic, subject, openingBlocks: init.openingBlocks,
+          studentId, topic, subject,
+          openingBlocks: carryForward(priorBlocks, init.openingBlocks),
         }).then(rowId => {
           socket.emit("session_saved", {
             sessionId: id,
