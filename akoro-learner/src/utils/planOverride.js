@@ -53,3 +53,27 @@ export function setPlanOverride(plan) {
 export function effectivePlan(serverPlan) {
   return getPlanOverride() || serverPlan || 'Free';
 }
+
+/* Gated features by plan — a mirror of the seeded learner tiers
+ * (2026-tiers-pilot-applications.sql): Freemium gates Gradebook, Battles,
+ * Rankings and Voice/audio; Trial and Premium gate nothing. The 'Free'
+ * default (no override) gates nothing — that is today's behaviour.
+ *
+ * Enforcement today is at the navigation seams (goTab, the sidebar, the
+ * settings quick links) for Battles, Rankings and Gradebook — each lands
+ * on the paywall with a matching trigger. 'Voice/audio' is mapped but
+ * not yet wired: the mic lives mid-session in the teach modal, so its
+ * gate belongs to the voice-quota work with the existing 'voice'
+ * paywall trigger. When billing goes live, this map moves server-side
+ * with the rest. */
+export const GATED_FEATURES = Object.freeze({
+  Trial:   Object.freeze([]),
+  Freemium: Object.freeze(['Gradebook', 'Battles', 'Rankings', 'Voice/audio']),
+  Premium: Object.freeze([]),
+});
+
+/** True when the effective plan gates this feature (feature names as in the tiers seed). */
+export function featureGated(feature) {
+  const plan = effectivePlan();
+  return (GATED_FEATURES[plan] || []).includes(feature);
+}

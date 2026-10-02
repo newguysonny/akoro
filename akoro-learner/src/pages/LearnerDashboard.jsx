@@ -38,6 +38,7 @@ import { AppShell, SidebarToggle } from '../components/AppShell.jsx';
 import { NavIcon } from '../components/common/NavIcons.jsx';
 import { useNowStudying } from '../utils/nowStudying.js';
 import { useHigherEd } from '../hooks/useStudyTier.js';
+import { featureGated } from '../utils/planOverride.js';
 import { getAlarmChoice, startAlarm, stopAlarm } from '../services/alarmSound.js';
 import React from 'react';
 
@@ -115,7 +116,17 @@ export default function LearnerDashboard() {
     setDiscoverQuery(discoverQFromUrl());
   }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   // A user tab switch pushes a history entry; the effect above then sets state.
-  const goTab = (key) => navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
+  // Plan gate (utils/planOverride.js — the Settings test switch): a tap on
+  // a plan-gated destination lands on the paywall instead of the tab, with
+  // the trigger naming the locked feature. The bottom nav, the tab pills
+  // and every "go to battles" CTA route through goTab, so one seam gates
+  // them all. Deep links still resolve — route guards arrive with billing.
+  const GATED_TABS = { battles: "Battles", rankings: "Rankings" };
+  const goTab = (key) => {
+    const feature = GATED_TABS[key];
+    if (feature && featureGated(feature)) return navigate(`/upgrade?trigger=${key}`);
+    navigate(key === "sessions" ? "/app" : `/app?tab=${key}`);
+  };
   const [sessionTab,        setSessionTab]        = useState("all");
   const [liveSubTab,        setLiveSubTab]        = useState("starting-soon");
   const [agentSubTab,       setAgentSubTab]       = useState("sessions");

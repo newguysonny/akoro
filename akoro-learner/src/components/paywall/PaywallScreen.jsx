@@ -29,14 +29,16 @@ const COPY = {
   battles: { icon: '⚔️', headline: 'Unlock Battles & Challenges', sub: 'Go Premium to compete with classmates and climb the leaderboard', feature: 'battles' },
   voice:   { icon: '🎙️', headline: 'Unlock Voice Tutoring', sub: "Talk through problems with Amara's Agent, hands-free", feature: 'voice' },
   credits: { icon: '⚡', headline: "You've used all your free credits", sub: 'Upgrade for 1,000 AI credits every month — no more waiting', feature: 'credits' },
+  rankings: { icon: '🏆', headline: 'Unlock Rankings', sub: 'Go Premium to climb the leaderboard and see how you stack up against classmates', feature: 'rankings' },
+  gradebook: { icon: '📗', headline: 'Unlock Your Gradebook', sub: 'Go Premium for the full gradebook — every score, topic and progress trail', feature: 'gradebook' },
 };
 
 const FEATURES = [
   { key: 'credits', text: 'Full AI credit allowance — 1,000 credits/month' },
   { key: 'battles', text: 'Battles & Challenges with classmates' },
-  { key: null,      text: 'Full leaderboards & rankings' },
+  { key: 'rankings', text: 'Full leaderboards & rankings' },
   { key: 'voice',   text: 'Voice & push-to-talk tutoring' },
-  { key: null,      text: 'Full gradebook & progress tracking' },
+  { key: 'gradebook', text: 'Full gradebook & progress tracking' },
 ];
 
 export default function PaywallScreen({ trigger = 'default', busy = false, note = '', onClose, onUpgrade, onContinueFreemium }) {

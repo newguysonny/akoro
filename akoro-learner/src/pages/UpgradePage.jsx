@@ -21,7 +21,7 @@ import { API } from '../services/api.js';
  * gateway's authorization URL.
  */
 
-const TRIGGERS = new Set(['default', 'battles', 'voice', 'credits']);
+const TRIGGERS = new Set(['default', 'battles', 'voice', 'credits', 'rankings', 'gradebook']);
 
 export default function UpgradePage() {
   const navigate = useNavigate();

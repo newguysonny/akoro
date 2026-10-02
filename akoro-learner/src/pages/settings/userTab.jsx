@@ -16,7 +16,7 @@ import {
 import { AvatarPickerSheet, SubjectsSheet, GenericSheet, TwoFactorSheet, AlarmSoundSheet } from './sheets.jsx';
 import { getAlarmChoice, storeAlarmChoice, alarmChoiceLabel, getCustomAlarmMeta, saveCustomAlarm, clearCustomAlarm } from '../../services/alarmSound.js';
 import { isHigherEdUI, setCachedTier } from '../../utils/studyLevel.js';
-import { PLAN_OPTIONS, setPlanOverride } from '../../utils/planOverride.js';
+import { PLAN_OPTIONS, setPlanOverride, featureGated } from '../../utils/planOverride.js';
 
 // A concise, recognisable list keeps the mobile selector usable. The API still
 // validates IANA identifiers, so the agent never treats a display label as a
@@ -268,9 +268,18 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
        flips what plan-driven UI shows on this device — no server write to
        pretend at. Remove the case + row when the plan goes server-side. */
     if (field === 'plan') {
+      const previous = profile.plan || 'Free';
       setPlanOverride(val);
       setProfile(p => ({ ...p, plan: val || 'Free' }));
       showToast(val === 'Free' ? 'Default plan restored' : `Switched to ${val} — testing view`);
+      // A plan switch re-derives what's gated (Battles, Rankings,
+      // Gradebook). Same staged reload as study level: the splash shows,
+      // and every surface re-reads the plan fresh at boot — no half-gated
+      // state where one nav locked and another didn't.
+      if ((val || 'Free') !== previous) {
+        try { localStorage.setItem('akoro_boot_splash', String(Date.now())); } catch { /* private mode */ }
+        setTimeout(() => window.location.reload(), 650);   // let the toast breathe
+      }
       return;
     }
 
@@ -333,7 +342,7 @@ function UserTab({ profile, setProfile, onSaveProfile, onSaveNotif, onSaveAgent,
           // renders as one blank card (which is exactly what happened).
           : [
               { icon:'ti-activity', title:'settings.activities', sub:'settings.activities_sub',  go:()=>navigate('/activities') },
-              { icon:'ti-books-2',  title:'settings.gradebook',  sub:'settings.gradebook_sub',   go:()=>navigate('/gradebook') },
+              { icon:'ti-books-2',  title:'settings.gradebook',  sub:'settings.gradebook_sub',   go:()=>featureGated('Gradebook') ? navigate('/upgrade?trigger=gradebook') : navigate('/gradebook') },
             ],
         { icon:'ti-books',    title:'settings.library',       sub:'settings.library_sub',       go:()=>navigate('/library') },
       ].flat().map(card => (

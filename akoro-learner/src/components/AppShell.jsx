@@ -47,6 +47,7 @@ import { useLang } from '../contexts/LanguageContext.jsx';
 import AkoroLogo from './common/AkoroLogo.jsx';
 import { Icon } from './common/Icons.jsx';
 import { NavIcon } from './common/NavIcons.jsx';
+import { featureGated } from '../utils/planOverride.js';
 import NowStudyingTabletBar from './dashboard/NowStudyingTabletBar.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { BRAND, RED, GREEN } from '../constants.js';
@@ -181,8 +182,21 @@ export function Sidebar({ badges = {}, collapsed = false }) {
   const higherEd  = useHigherEd();
 
   // Same navigation the dashboard's bottom nav performs (goTab), so the
-  // sidebar and the bottom nav can never disagree about where they go.
-  const goTab  = (key) => navigate(key === 'sessions' ? '/app' : `/app?tab=${key}`);
+  // sidebar and the bottom nav can never disagree about where they go —
+  // including the plan gate: a gated tap lands on the paywall with the
+  // matching trigger (utils/planOverride.js, the Settings test switch).
+  const GATED_TABS = { battles: 'Battles', rankings: 'Rankings' };
+  const goTab  = (key) => {
+    const feature = GATED_TABS[key];
+    if (feature && featureGated(feature)) return navigate(`/upgrade?trigger=${key}`);
+    navigate(key === 'sessions' ? '/app' : `/app?tab=${key}`);
+  };
+  // Gradebook is plan-gated for Freemium (tiers seed) — the row lands on
+  // the paywall's gradebook trigger instead of the page.
+  const goPage = (to) => {
+    if (to === '/gradebook' && featureGated('Gradebook')) return navigate('/upgrade?trigger=gradebook');
+    navigate(to);
+  };
 
   // Activities + Gradebook are school-UI only; Communities is the
   // mirror — higher-ed only (unknown tier defaults to school UI).
@@ -230,7 +244,7 @@ export function Sidebar({ badges = {}, collapsed = false }) {
             active={isPage(to)}
             icon={icon}
             label={t(key)}
-            onClick={() => navigate(to)}
+            onClick={() => goPage(to)}
           />
         ))}
       </nav>
