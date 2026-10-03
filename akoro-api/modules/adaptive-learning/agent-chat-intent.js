@@ -84,17 +84,48 @@ export function requiresActivityPreparation(message, history = []) {
    small model interviews the learner instead of starting it. These guards
    force the matching study-prep tool on iteration 0, exactly like the
    learner-data force. The route must apply them only while the study_prep
-   feature gate keeps the tools in the list. */
-const STUDY_PREP_READ_RE = /\b(?:study[\s-]?prep|exam[\s-]?prep|prep\s+session)\b[^.?!]{0,48}\b(?:status|progress|going|update|left off|where were we)\b|\b(?:how|where)\b[^.?!]{0,40}\b(?:study[\s-]?prep|exam[\s-]?prep)\b|\b(?:continue|resume|back to|carry on with)\b[^.?!]{0,40}\b(?:study[\s-]?prep|exam[\s-]?prep|my\s+prep)\b/i;
-const STUDY_PREP_REQUEST_RE = /\b(?:plan|prepare|prep|revise|revision|study|practise|practice|get\s+ready)\b[^.?!]{0,64}\b(?:test|exam|paper)s?\b|\b(?:exam|test)[\s-]?prep\b|\b(?:test|exam)\b[^.?!]{0,40}\b(?:coming\s+up|next\s+week|next\s+month|tomorrow|this\s+week)\b[^.?!]{0,40}\b(?:plan|prepare|prep|study|help|revise|start)\b/i;
+   feature gate keeps the tools in the list.
+
+   2026-10-03 — the live WASSCE transcript: "I have WASSCE Physics in three
+   weeks, help me prepare" forced nothing, because the patterns only knew
+   the generic test/exam/paper nouns and tomorrow/this/next week. Learners
+   name the exam (WASSCE, WAEC, NECO, JAMB/UTME, GCE, NABTEB, IGCSE, BECE,
+   common entrance) and the time ("in three weeks", "in 2 weeks", "in a
+   month"). The nouns and timings are shared fragments now, and an
+   exam-noun-first request frame ("…WASSCE…, help me prepare") forces too.
+   SAT/ACT stay out: as bare English words they over-match. */
+
+// The exam nouns learners actually use. "sat"/"act" deliberately excluded.
+const EXAM_NOUN = String.raw`(?:test|exam|paper|wassce|waec|neco|jamb|utme|gce|nabteb|igcse|jsce|bece|common\s+entrance|toefl|ielts)`;
+// Real timing phrasings, not just tomorrow/this/next week.
+const EXAM_TIMING = String.raw`(?:tomorrow|this\s+week|next\s+week|next\s+month|coming\s+up|in\s+(?:[0-9]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|a\s+few|couple\s+of)\s*(?:days?|weeks?|months?|fortnights?))`;
+const PREP_VERB = String.raw`(?:plan|prepare|prep|revise|revision|study|practise|practice|get\s+ready)`;
+
+const STUDY_PREP_READ_RE = new RegExp(String.raw
+  `\b(?:study[\s-]?prep|exam[\s-]?prep|prep\s+session|(?:wassce|waec|neco|jamb|utme|gce|nabteb|igcse)[\s-]?prep)\b[^.?!]{0,48}\b(?:status|progress|going|update|left off|where were we)\b`
+  + String.raw`|\b(?:how|where)\b[^.?!]{0,40}\b(?:study[\s-]?prep|exam[\s-]?prep)\b`
+  + String.raw`|\b(?:continue|resume|back to|carry on with)\b[^.?!]{0,40}\b(?:study[\s-]?prep|exam[\s-]?prep|my\s+prep|(?:wassce|waec|neco|jamb|utme|gce|nabteb|igcse)[\s-]?prep)\b`, "i");
+// Request shapes: prep verb before the exam noun; the explicit compounds;
+// noun → timing → verb ("my exam is coming up, help me plan"); and the
+// noun-first explicit request frame ("I have WASSCE Physics in three weeks,
+// help me prepare"). Bare mentions never match — the offer + confirmation
+// force below catches the yes.
+const STUDY_PREP_REQUEST_RE = new RegExp(String.raw
+  `\b${PREP_VERB}\b[^.?!]{0,64}\b${EXAM_NOUN}s?\b`
+  + String.raw`|\b(?:exam|test)[\s-]?prep\b`
+  + String.raw`|\b${EXAM_NOUN}\b[^.?!]{0,40}\b${EXAM_TIMING}\b[^.?!]{0,40}\b(?:plan|prepare|prep|study|help|revise|start)\b`
+  + String.raw`|\b${EXAM_NOUN}s?\b[^.?!]{0,80}\b(?:help\s+me\s+${PREP_VERB}|(?:want|need)\s+to\s+${PREP_VERB}|let's\s+${PREP_VERB}|can\s+you\s+(?:help\s+me\s+)?(?:prep|prepare|revise))\b`, "i");
 // "How do/should I prepare for my exam?" is a prep request in question form,
 // not a factual query — the session's plan is the real answer to it.
-const STUDY_PREP_HOW_RE = /^how\s+(?:do|should|can|would)\s+(?:i|we)\b[^.?!]{0,64}\b(?:test|exam|paper)s?\b/i;
+const STUDY_PREP_HOW_RE = new RegExp(String.raw`^how\s+(?:do|should|can|would)\s+(?:i|we)\b[^.?!]{0,64}\b${EXAM_NOUN}s?\b`, "i");
 // Pure factual queries about tests never start a session ("When is my exam?").
 const STUDY_PREP_QUERY_RE = /^\s*(?:when|who|where|show|list|see|view|check|did|has|have|is|are|was|were)\b/i;
-// A bare mention ("I have a Biology test tomorrow") never forces on its own —
-// the agent offers the session and the confirmation force below catches the yes.
-const UPCOMING_TEST_MENTION_RE = /\b(?:test|exam|paper)s?\b[^.?!]{0,48}\b(?:coming\s+up|next\s+week|next\s+month|tomorrow|this\s+week)\b|\b(?:test|exam)\b[^.?!]{0,32}\b(?:tomorrow|friday|monday|tuesday|wednesday|thursday|saturday|sunday)\b/i;
+// A bare mention ("I have a Biology test tomorrow", "my JAMB is in 2 weeks")
+// never forces on its own — the agent offers the session and the
+// confirmation force below catches the yes.
+const UPCOMING_TEST_MENTION_RE = new RegExp(String.raw
+  `\b${EXAM_NOUN}s?\b[^.?!]{0,48}\b${EXAM_TIMING}\b`
+  + String.raw`|\b${EXAM_NOUN}\b[^.?!]{0,32}\b(?:tomorrow|friday|monday|tuesday|wednesday|thursday|saturday|sunday)\b`, "i");
 
 export function requiredStudyPrepTool(message, history = []) {
   const text = String(message || "").replace(/\s+/g, " ").trim();

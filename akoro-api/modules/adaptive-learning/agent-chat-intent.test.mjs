@@ -153,10 +153,13 @@ test("tutoring, bare mentions and factual questions never start a session", () =
     "test me on yesterday's topic",              // tutoring in chat
     "Explain photosynthesis",
     "I have a Biology test tomorrow",            // bare mention — the agent offers; the confirm force catches the yes
+    "I have my JAMB in 2 weeks",                 // named-exam bare mention — still an offer, not a force
     "What is study prep?",                       // a question about the feature, not a request
     "When is my exam?",                          // factual query
+    "When is my WASSCE?",                        // factual query with a named exam
     "What did I score on my test?",
     "Have I prepared enough for my test?",
+    "Explain photosynthesis for my exam tomorrow", // tutoring imperative — the topic is the need, not the plan
   ]) {
     assert.equal(requiredStudyPrepTool(message), null, message);
   }
@@ -165,6 +168,44 @@ test("tutoring, bare mentions and factual questions never start a session", () =
     { role: "user", content: "Explain photosynthesis" },
     { role: "assistant", content: "Photosynthesis is…" },
   ]), null);
+});
+
+test("the live WASSCE transcript now forces the study-prep session", () => {
+  // 2026-10-03: the exact live phrasing that produced a tips-only reply.
+  assert.equal(requiredStudyPrepTool("I have WASSCE Physics in three weeks, help me prepare"), "start_study_prep_session");
+});
+
+test("named exams and real-world timing force the study-prep session", () => {
+  for (const message of [
+    "My JAMB is in 2 weeks, I need to revise",
+    "I want to study for my UTME",
+    "help me get ready for my NECO exam",
+    "How do I prepare for WASSCE?",
+    "I have my GCE in a month, let's plan",
+    "my exam is coming up, help me plan",
+    "can you prep me for my NABTEB?",
+    "Help me revise for my IGCSE maths paper",
+  ]) {
+    assert.equal(requiredStudyPrepTool(message), "start_study_prep_session", message);
+  }
+});
+
+test("a named-exam mention plus a short confirmation starts the session", () => {
+  const history = [
+    { role: "user", content: "I have my JAMB in 2 weeks" },
+    { role: "assistant", content: "Would you like to start a study-prep session?" },
+  ];
+  assert.equal(requiredStudyPrepTool("yes", history), "start_study_prep_session");
+  assert.equal(requiredStudyPrepTool("let's do it", history), "start_study_prep_session");
+});
+
+test("named-exam status questions read the session instead of starting one", () => {
+  for (const message of [
+    "how is my waec prep going",
+    "continue my jamb prep",
+  ]) {
+    assert.equal(requiredStudyPrepTool(message), "get_study_prep_session", message);
+  }
 });
 
 test("can-you ability questions force the live capabilities tool — the blog denial is closed", () => {
