@@ -50,7 +50,7 @@ export default function ConnectionBanner() {
       <span>
         {offline
           ? "You're offline — anything on this page may be out of date."
-          : "Can't reach Akoro right now — parts of this page may be missing or out of date."}
+          : "Can't reach Kpemu right now — parts of this page may be missing or out of date."}
       </span>
       <button onClick={() => window.location.reload()} style={{
         marginLeft: 4, padding: '4px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,.35)',

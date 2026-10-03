@@ -17,7 +17,7 @@ export default function SignupPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB', fontFamily: FONT, padding: 18 }}>
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 380, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 26 }}>
-        <div style={{ fontSize: 22, fontWeight: 900, color: INK, marginBottom: 4 }}>🪙 Akoro Agent</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: INK, marginBottom: 4 }}>🪙 Kpemu Agent Demo</div>
         <div style={{ fontSize: 13, color: MUTED, marginBottom: 20 }}>Create your agent account</div>
         <label style={lbl}>Full name</label>
         <input value={form.fullName} onChange={set('fullName')} required style={inp} />

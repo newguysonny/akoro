@@ -96,7 +96,7 @@ export function Sidebar() {
     <div style={{ width: 232, flexShrink: 0, background: '#0F1115', display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <div style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 9, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
         <span style={{ fontSize: 20 }}>🏢</span>
-        <span style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>Akoro Business</span>
+        <span style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>Kpemu Business</span>
       </div>
 
       <BusinessSwitcher />

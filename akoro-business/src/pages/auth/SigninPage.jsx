@@ -21,7 +21,7 @@ export default function SigninPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB', fontFamily: FONT, padding: 18 }}>
       <form onSubmit={submit} style={{ width: '100%', maxWidth: 380, background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 26 }}>
-        <div style={{ fontSize: 22, fontWeight: 900, color: INK, marginBottom: 4 }}>🏢 Akoro Business</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: INK, marginBottom: 4 }}>🏢 Kpemu Business</div>
         <div style={{ fontSize: 13, color: MUTED, marginBottom: 20 }}>Sign in to manage your voucher program</div>
         <label style={lbl}>Email</label>
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required style={inp} />
