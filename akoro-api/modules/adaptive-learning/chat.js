@@ -1520,13 +1520,33 @@ export async function executeChatTool(name, input, studentId, { conversationId =
       // returned as-is and the plan card stays the single source of truth.
       const { getStudyPrepSessionSummary } = await import("./study-prep/chat-tool-handlers.js");
       const summary = await getStudyPrepSessionSummary(studentId);
+      // A plan must actually exist for the "return as-is" rule to apply. A
+      // "planning" session with no plan is a zombie from a failed planning
+      // step (the row was created, then the LLM/syllabus step faulted):
+      // echoing it mounts a plan-less card the learner can never confirm —
+      // the 2026-10-03 "study session could not be loaded" dead end.
+      const hasPlan = (session) => Array.isArray(session?.plan) && session.plan.length > 0;
       const unconfirmed = (summary.sessions || [])
-        .find((session) => session.status === "planning" || session.status === "awaiting_confirmation");
+        .find((session) => session.status === "awaiting_confirmation" || (session.status === "planning" && hasPlan(session)));
       if (unconfirmed) {
         return {
           enabled: true, sessionId: unconfirmed.sessionId, status: unconfirmed.status,
           plan: unconfirmed.plan, estimate: unconfirmed.estimate,
           note: "An unconfirmed study-prep session already exists — present its plan card; nothing is charged until the learner approves it.",
+        };
+      }
+      // Zombie self-heal: re-run the planning step for the stalled session
+      // instead of creating a second one. If planning faults again the tool
+      // call fails honestly and no dead session card is echoed to the chat.
+      const stalled = (summary.sessions || [])
+        .find((session) => session.status === "planning" && !hasPlan(session));
+      if (stalled) {
+        const { runStudyPrepPlanningStep } = await import("./study-prep/wiring.js");
+        const view = await runStudyPrepPlanningStep({ sessionId: stalled.sessionId, learnerId: studentId });
+        return {
+          enabled: true, sessionId: view.session.id, status: view.session.status,
+          plan: view.session.plan, estimate: view.session.estimate,
+          note: "Plan proposed — nothing is charged until the learner approves it on the plan card.",
         };
       }
       const view = await startStudyPrepSession({

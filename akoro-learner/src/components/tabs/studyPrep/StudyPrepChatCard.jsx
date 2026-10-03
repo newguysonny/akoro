@@ -42,13 +42,26 @@ export default function StudyPrepChatCard({ sessionId }) {
   const [adjusting, setAdjusting] = useState(false);
   const [dropPick, setDropPick] = useState({});
 
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    fetchStudyPrepSession(sessionId)
-      .then((response) => { if (!cancelled && response?.session) setView(response); })
-      .catch(() => { if (!cancelled) setError('This study session could not be loaded.'); });
-    return () => { cancelled = true; };
-  }, [sessionId]);
+    let retryTimer = null;
+    // One silent retry: this load fires right after a heavy streaming chat
+    // turn, where a transient 429/auth blip is the usual culprit — the session
+    // itself is almost always fine. Only after both attempts show the error.
+    const load = (attempt) => {
+      fetchStudyPrepSession(sessionId)
+        .then((response) => { if (!cancelled && response?.session) { setView(response); setError(''); } })
+        .catch((err) => {
+          if (cancelled) return;
+          if (attempt === 0) { retryTimer = setTimeout(() => load(1), 1500); return; }
+          console.warn('[study-prep] session load failed:', err?.code || '', err?.message || err);
+          setError(err?.message || err?.error || 'This study session could not be loaded.');
+        });
+    };
+    load(0);
+    return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
+  }, [sessionId, reloadKey]);
 
   const run = async (action, onResult) => {
     setBusy(true); setError('');
@@ -69,8 +82,13 @@ export default function StudyPrepChatCard({ sessionId }) {
   if (!view) {
     return (
       <div style={{ ...card, padding: 12, marginTop: 6 }}>
-        <div style={caption}>Loading your study session…</div>
-        {error && <div style={{ ...caption, color: RED }}>{error}</div>}
+        <div style={caption}>{error ? 'This study session could not be loaded.' : 'Loading your study session…'}</div>
+        {error && (
+          <div style={{ ...caption, color: RED }}>
+            {error}
+            {' '}<button type="button" onClick={() => { setError(''); setReloadKey((key) => key + 1); }} style={{ border: 0, background: 'transparent', color: 'inherit', fontWeight: 900, cursor: 'pointer', textDecoration: 'underline', fontSize: 10.5, padding: 0 }}>try again</button>
+          </div>
+        )}
       </div>
     );
   }

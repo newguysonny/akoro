@@ -159,8 +159,12 @@ test("test/exam preparation forces the study-prep session tool — the questionn
   assert.match(route, /studyPrepEnabled \? requiredStudyPrepTool/,
     "the force must respect the AKORO_STUDY_PREP_ENABLED feature gate");
   // Repeated asks must never stack unconfirmed sessions on top of each other.
-  assert.match(source, /session\.status === "planning" \|\| session\.status === "awaiting_confirmation"/,
-    "start_study_prep_session must reuse an unconfirmed session instead of creating another");
+  // (2026-10-03: reuse applies only when a plan actually exists — a plan-less
+  // "planning" zombie from a failed planning step is re-planned, not echoed.)
+  assert.match(source, /session\.status === "awaiting_confirmation" \|\| \(session\.status === "planning" && hasPlan\(session\)\)/,
+    "start_study_prep_session must reuse an unconfirmed PLANNED session instead of creating another");
+  assert.match(source, /runStudyPrepPlanningStep\(\{ sessionId: stalled\.sessionId, learnerId: studentId \}\)/,
+    "a stalled plan-less planning session must be re-planned, never echoed as a dead card");
   // The doctrine owns the rule: test preparation is a session, never a chat
   // questionnaire, and the plan card is where the learner approves the cost.
   assert.match(studyPrepDoctrine, /never a questionnaire in chat/);

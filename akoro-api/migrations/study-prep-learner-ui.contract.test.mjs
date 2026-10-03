@@ -61,7 +61,11 @@ test("agent intent renders as 'agent says:' — italic, muted, never bolded", ()
 test("honest pacing: real recorded durations render, never fabricated", () => {
   assert.match(card, /event\.durationMs != null/);
   assert.match(card, /\(\{event\.durationMs\} ms\)/);
-  assert.doesNotMatch(card, /setTimeout|sleep\(/);
+  // The events render itself must never fabricate pacing with timers. (The
+  // session-load effect may keep a network retry backoff — that is transport,
+  // not a displayed duration. 2026-10-03.)
+  const eventsRender = card.slice(Math.max(0, card.indexOf("durationMs") - 500), card.indexOf("durationMs") + 500);
+  assert.doesNotMatch(eventsRender, /setTimeout|sleep\(/);
 });
 
 test("paused states carry the honest copy from the decision register", () => {
