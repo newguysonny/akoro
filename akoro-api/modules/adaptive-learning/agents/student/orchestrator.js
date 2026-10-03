@@ -21,6 +21,7 @@ import { createTeachingEvidenceState, publicTeachingEvidence } from "../../teach
 import { createPublicLearningState } from "../../public-learning-state.js";
 import { executeTeachingTurnWorkflow } from "../../teaching-workflow/runner.js";
 import { blocksToConversationHistory } from "./continuation-history.js";
+import { STUDENT_PHASES, ACTION_FOR_DIALOGUE_MOVE } from "../../teaching-session/state-machine.js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -31,23 +32,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY
 );
 
-export const STUDENT_PHASES = {
-  PHASE_1: "Phase 1 — What does Student Agent already know?",
-  PHASE_2: "Phase 2 — Must-know parts",
-  PHASE_3: "Phase 3 — Student Agent teaches it back",
-  PHASE_4: "Phase 4 — Push a little further!",
-  MASTERY: "Mastery",
-};
-
-const ACTION_FOR_DIALOGUE_MOVE = Object.freeze({
-  clarify_core: "DIG_DEEPER",
-  repair_misconception: "CLEAR_MISTAKE",
-  apply_in_context: "USE_ANALOGY",
-  connect_and_explain: "ONE_MORE_PUSH",
-  stretch_transfer: "CHALLENGE",
-  consolidate_and_advance: "GAP_CLOSED",
-  synthesise: "TRIGGER_RECALL",
-});
+// The phase labels and dialogue-move action map now live in the pure
+// teaching-session state machine. Re-exported here so existing importers
+// (including tests) keep working.
+export { STUDENT_PHASES };
 
 export class StudentSessionOrchestrator extends BaseOrchestrator {
 

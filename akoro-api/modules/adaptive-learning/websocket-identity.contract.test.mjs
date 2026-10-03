@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const websocket = await readFile(new URL("./websocket.js", import.meta.url), "utf8");
+const teachingSessionContext = await readFile(new URL("./teaching-session/context.js", import.meta.url), "utf8");
 const decayEngine = await readFile(new URL("./agents/student/decayEngine.js", import.meta.url), "utf8");
 const orchestrator = await readFile(new URL("./agents/student/orchestrator.js", import.meta.url), "utf8");
 const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
@@ -26,10 +27,13 @@ test("adaptive socket events use token identity rather than browser-supplied lea
 });
 
 test("continuation history is scoped to the authenticated learner", () => {
+  // The ownership query lives in the teaching-session context loader since
+  // the 2026-10-03 service extraction; the scoping contract is unchanged.
   assert.match(
-    websocket,
+    teachingSessionContext,
     /\.eq\("id", prevSessionId\)\s*\.eq\("student_id", studentId\)\s*\.maybeSingle\(\)/,
   );
+  assert.match(websocket, /loadContinuationContext\(\{ studentId, prevSessionId \}\)/);
 });
 
 test("decay-alert mutations are scoped to their authenticated owner", () => {

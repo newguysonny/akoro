@@ -12,6 +12,7 @@ import {
   createTeachingEvidenceState,
 } from "../teaching-evidence.js";
 import { TEACHING_TURN_TOOL_CATALOG } from "./catalog.js";
+import { applyTeachingProgress } from "../teaching-session/state-machine.js";
 
 export { TEACHING_TURN_TOOL_CATALOG };
 
@@ -190,40 +191,35 @@ export function createTeachingTurnTools() {
         context.subtopicAdvanced = false;
 
         // This is deliberately deterministic. Neither the browser nor NaNa's
-        // generated recommendation can bypass a missing teaching-evidence gate.
-        const hasNextSubtopic = context.mustKnowIndex < Math.max(0, context.mustKnowParts.length - 1);
-        const mayAdvance = evidenceUpdate.dialogue.canAdvance;
+        // generated recommendation can bypass a missing teaching-evidence
+        // gate. The transition table lives in teaching-session/state-machine.js
+        // (pure, unit-tested); this tool only applies its decision.
         const requestedPhase = Object.hasOwn(context.phaseLabels, guideResult.nextPhase)
           ? guideResult.nextPhase
           : null;
 
-        if (mayAdvance && hasNextSubtopic) {
-          orchestrator.session.mustKnowIndex = context.mustKnowIndex + 1;
-          context.subtopicAdvanced = true;
-          guideResult = {
-            ...guideResult,
-            nextAction: "NEXT_SUBTOPIC",
-            nextMustKnowIndex: orchestrator.session.mustKnowIndex,
-          };
-        } else {
-          guideResult = {
-            ...guideResult,
-            nextAction: context.actionForDialogueMove[evidenceUpdate.dialogue.move] || "DIG_DEEPER",
-            nextMustKnowIndex: context.mustKnowIndex,
-          };
-        }
+        const progress = applyTeachingProgress({
+          phase: orchestrator.session.phase,
+          mustKnowIndex: context.mustKnowIndex,
+          mustKnowCount: context.mustKnowParts.length,
+          canAdvance: evidenceUpdate.dialogue.canAdvance,
+          allConceptsVerified: evidenceUpdate.dialogue.allConceptsVerified,
+          requestedPhase,
+          dialogueMove: evidenceUpdate.dialogue.move,
+          actionForDialogueMove: context.actionForDialogueMove,
+        });
 
-        const mayEnterMastery = mayAdvance && !hasNextSubtopic && evidenceUpdate.dialogue.allConceptsVerified;
-        if (mayEnterMastery && orchestrator.session.phase !== "MASTERY") {
-          orchestrator.session.phase = "MASTERY";
-          context.phaseChanged = true;
-          context.phaseLabel = context.phaseLabels.MASTERY;
-          guideResult = { ...guideResult, nextAction: "MASTERY", nextPhase: "MASTERY" };
-        } else if (mayAdvance && requestedPhase && requestedPhase !== "MASTERY" && requestedPhase !== context.phase) {
-          orchestrator.session.phase = requestedPhase;
-          context.phaseChanged = true;
-          context.phaseLabel = context.phaseLabels[requestedPhase];
-        }
+        orchestrator.session.mustKnowIndex = progress.mustKnowIndex;
+        orchestrator.session.phase = progress.phase;
+        context.subtopicAdvanced = progress.subtopicAdvanced;
+        context.phaseChanged = progress.phaseChanged;
+        context.phaseLabel = progress.phaseChanged ? context.phaseLabels[progress.phase] : null;
+        guideResult = {
+          ...guideResult,
+          nextAction: progress.nextAction,
+          nextMustKnowIndex: progress.nextMustKnowIndex,
+          ...(progress.enteredMastery ? { nextPhase: "MASTERY" } : {}),
+        };
 
         await updateStudentState(context.agentId, context.topic, context.analysis, {
           phase: orchestrator.session.phase,

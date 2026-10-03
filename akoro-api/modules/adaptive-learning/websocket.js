@@ -25,19 +25,12 @@ import { resolveLadder, provenanceLabel } from "./lessonLadder.js";
 import { NaNaEsumai } from "./agents/nana-esumai/guide.js";
 import { normalizeSessionReference } from "./sessionReference.js";
 import { serialiseTeachingEvidence } from "./teaching-evidence.js";
-import db from "../../db.js";
+import {
+  createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
+} from "./teaching-session/lifecycle.js";
+import { loadContinuationContext, loadDecayPriorLesson, carryForward } from "./teaching-session/context.js";
 
 export const activeSessions = new Map();
-
-// Rolling deploys can briefly run this code against a database that has not
-// received the compact-evidence migration yet. Retry without the optional
-// column so normal teaching/session persistence remains available; never fall
-// back to storing transcript text as evidence.
-function isMissingColumn(error, column) {
-  const message = String(error?.message || "").toLowerCase();
-  return error?.code === "42703" || error?.code === "PGRST204" ||
-    (message.includes(column.toLowerCase()) && /column|schema cache|could not find/i.test(message));
-}
 
 // ── Session reap grace window ────────────────────────────────────────────────
 // When a socket drops we keep its orchestrator alive briefly so a reconnecting
@@ -62,175 +55,6 @@ function scheduleSessionReap(sessionId) {
   }, SESSION_REAP_GRACE_MS);
   if (t.unref) t.unref();   // don't keep the process alive for a reap timer
   sessionReapTimers.set(sessionId, t);
-}
-
-// ── adaptive_sessions persistence ────────────────────────────────────────────
-// The WS flow already saves agent knowledge/stats/deltas. These helpers also
-// persist the session row + typed block transcript so the Sessions list
-// (GET /sessions) and "Continue Teaching" (continuation mode) work for WS
-// sessions. The DB row id is stashed on the orchestrator as `dbSessionId`.
-
-// How much of a prior transcript a new session row carries forward. Without
-// the carry, a continuation's row held only its OWN turns — continue once and
-// you saw the previous lesson faded; continue AGAIN and the first lesson was
-// gone. The tail is kept (newest blocks always included) so chains stay
-// bounded no matter how many times a learner continues.
-const CARRY_BLOCK_CAP = 80;
-function carryForward(priorBlocks, openingBlocks) {
-  if (!Array.isArray(priorBlocks) || !priorBlocks.length) return openingBlocks;
-  const carry = priorBlocks
-    .filter(b => b && typeof b === "object" && b.type !== "system-divider")
-    .map(b => ({ ...b, faded: true }));
-  return [...carry.slice(-CARRY_BLOCK_CAP), ...openingBlocks];
-}
-
-async function createSessionRecord(orchestrator, { studentId, topic, subject, openingBlocks }) {
-  if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;   // already saved
-  const row = {
-    student_id:             studentId,
-    student_agent_id:       orchestrator.studentAgentRecord?.id || null,
-    // topic + subject are NOT NULL — never let a missing value silently drop
-    // the whole session row (which is what kept sessions off the list).
-    topic:                  topic || "Untitled session",
-    subject:                subject || "General",
-    // These columns are JSONB — send real arrays/objects. Sending
-    // JSON.stringify(...) stored a JSON *string* scalar ("[]") instead of an
-    // array, which then read back wrong downstream.
-    subtopics:              Array.isArray(orchestrator.session?.mustKnowParts) ? orchestrator.session.mustKnowParts : [],
-    objectives:             {},
-    current_subtopic_idx:   0,
-    current_phase:          "1",
-    status:                 "active",
-    started_at:             new Date().toISOString(),
-    updated_at:             new Date().toISOString(),
-    session_history:        [],
-    objectives_covered:     {},
-    confidence_by_subtopic: {},
-    // Compact scores/categories only. The conversation itself remains in the
-    // existing transcript column, never duplicated as assessment evidence.
-    teaching_evidence:      serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
-    block_history:          Array.isArray(openingBlocks) ? openingBlocks : [],
-  };
-
-  try {
-    let insertRow = row;
-    let { data, error } = await db.schema("edu").from("adaptive_sessions")
-      .insert(insertRow).select("id").single();
-
-    // The new field is intentionally optional during a rolling migration.
-    if (error && isMissingColumn(error, "teaching_evidence")) {
-      console.warn("[adaptive_sessions create] teaching_evidence migration pending; saving without it");
-      const { teaching_evidence: _evidence, ...legacyRow } = row;
-      insertRow = legacyRow;
-      ({ data, error } = await db.schema("edu").from("adaptive_sessions")
-        .insert(insertRow).select("id").single());
-    }
-
-    // The session row is what makes a session visible in the Sessions tab, so
-    // never let one optional column take the whole row down with it.
-    // student_agent_id is a decoration; student_id/topic/subject are the row.
-    // (Its FK pointed at public.user_agents while we write edu.student_agents
-    // ids — that silently killed EVERY insert.)
-    if (error && insertRow.student_agent_id) {
-      console.warn("[adaptive_sessions create] retrying without student_agent_id:", error.message);
-      ({ data, error } = await db.schema("edu").from("adaptive_sessions")
-        .insert({ ...insertRow, student_agent_id: null }).select("id").single());
-    }
-    if (error) throw error;
-    orchestrator.dbSessionId = data.id;
-    // Remember the identity so a later fallback save (cancel/disconnect before
-    // the row existed) can still persist the session.
-    orchestrator.sessionMeta = { studentId, topic, subject };
-    return data.id;
-  } catch (e) {
-    // Loud: a failure here is why a session would never appear in the list.
-    console.error("[adaptive_sessions create] FAILED — session will not be listed:",
-      e.code || "", e.message, e.details || "");
-    orchestrator.saveError = { message: e.message, code: e.code || null };
-    return null;
-  }
-}
-
-// Ensure a DB row exists for this orchestrator — used by the cancel/disconnect
-// path so a session started but never "completed" is still saved.
-async function ensureSessionRecord(orchestrator) {
-  if (orchestrator?.dbSessionId) return orchestrator.dbSessionId;
-  const meta = orchestrator?.sessionMeta;
-  if (!meta?.studentId) return null;
-  return createSessionRecord(orchestrator, { ...meta, openingBlocks: [] });
-}
-
-async function appendSessionBlocks(orchestrator, newBlocks) {
-  const id = orchestrator?.dbSessionId || await ensureSessionRecord(orchestrator);
-  if (!id || !newBlocks?.length) return;
-  try {
-    const { data } = await db.schema("edu").from("adaptive_sessions")
-      .select("block_history").eq("id", id).single();
-    const existing = Array.isArray(data?.block_history) ? data.block_history : [];
-
-    // WHERE THEY GOT TO, not just what was said.
-    //
-    // current_phase and current_subtopic_idx were written once at creation as
-    // "1" and 0 and never touched again, so the stored row always claimed the
-    // learner was on the first phase of the first subtopic no matter how far
-    // they had come. Continuing a session read that back and restarted them at
-    // the beginning — the transcript was there, the progress was not.
-    //
-    // subtopics is refreshed too: the ladder is resolved after the row is
-    // created, so the row was written with whatever was known at insert time,
-    // which for a resolved-later ladder is an empty array.
-    const sess = orchestrator?.session ?? {};
-    const update = {
-      block_history:        [...existing, ...newBlocks],
-      current_phase:        String(sess.phase ?? "1").replace(/^PHASE_/, ""),
-      current_subtopic_idx: Number.isInteger(sess.mustKnowIndex) ? sess.mustKnowIndex : 0,
-      ...(Array.isArray(sess.mustKnowParts) && sess.mustKnowParts.length
-        ? { subtopics: sess.mustKnowParts }
-        : {}),
-      teaching_evidence: serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
-      updated_at:           new Date().toISOString(),
-    };
-    let { error } = await db.schema("edu").from("adaptive_sessions").update(update).eq("id", id);
-    if (error && isMissingColumn(error, "teaching_evidence")) {
-      const { teaching_evidence: _evidence, ...legacyUpdate } = update;
-      ({ error } = await db.schema("edu").from("adaptive_sessions").update(legacyUpdate).eq("id", id));
-    }
-    if (error) throw error;
-  } catch (e) {
-    console.warn("[adaptive_sessions append]", e.message);
-  }
-}
-
-async function completeSessionRecord(orchestrator) {
-  const id = orchestrator?.dbSessionId;
-  if (!id) return;
-  try {
-    // Read prior status + student so ranking XP is awarded exactly once.
-    const { data: prior } = await db.schema("edu").from("adaptive_sessions")
-      .select("status, student_id, subject").eq("id", id).maybeSingle();
-
-    const completion = {
-      status:       "complete",
-      completed_at: new Date().toISOString(),
-      teaching_evidence: serialiseTeachingEvidence(orchestrator?.teachingEvidence) || {},
-      updated_at:   new Date().toISOString(),
-    };
-    let { error } = await db.schema("edu").from("adaptive_sessions").update(completion).eq("id", id);
-    if (error && isMissingColumn(error, "teaching_evidence")) {
-      const { teaching_evidence: _evidence, ...legacyCompletion } = completion;
-      ({ error } = await db.schema("edu").from("adaptive_sessions").update(legacyCompletion).eq("id", id));
-    }
-    if (error) throw error;
-
-    if (prior && prior.status !== "complete" && prior.student_id) {
-      try {
-        const { awardXP, XP } = await import("../ranking/routes.js");
-        awardXP({ userId: prior.student_id, reason: "teaching_session", amount: XP.SESSION_ATTEND, subject: prior.subject || null }).catch(() => {});
-      } catch { /* ranking module unavailable — non-fatal */ }
-    }
-  } catch (e) {
-    console.warn("[adaptive_sessions complete]", e.message);
-  }
 }
 
 // Wire io globally so webhook can emit agent_purchased
@@ -675,58 +499,14 @@ export function setupWebSocket(io) {
         // ── Continuation: load block history from DB ─────────
         if (mode === "continuation" && prevSessionId) {
           sessionType = "continuation";
-          try {
-            // The continuation id comes from the browser, so ownership belongs
-            // in this query rather than in client-side navigation state.
-            let { data: prevSession, error: continuationError } = await db.schema("edu")
-              .from("adaptive_sessions")
-              .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase, teaching_evidence")
-              .eq("id", prevSessionId)
-              .eq("student_id", studentId)
-              .maybeSingle();
-            // Compatibility with API/schema caches while the migration rolls
-            // out. This does not weaken ownership filtering.
-            if (continuationError && isMissingColumn(continuationError, "teaching_evidence")) {
-              ({ data: prevSession, error: continuationError } = await db.schema("edu")
-                .from("adaptive_sessions")
-                .select("block_history, updated_at, completed_at, current_subtopic_idx, current_phase")
-                .eq("id", prevSessionId)
-                .eq("student_id", studentId)
-                .maybeSingle());
-            }
-            if (continuationError) throw continuationError;
-
-            // The position, not just the transcript. Loading only the words
-            // meant a continuation showed the previous lesson greyed out and
-            // then began teaching subtopic 1 again.
-            if (prevSession) {
-              const savedPhase = String(prevSession.current_phase || "1").toUpperCase().replace(/^PHASE_/, "");
-              resumeFrom = {
-                subtopicIdx: Number(prevSession.current_subtopic_idx) || 0,
-                phase: savedPhase === "MASTERY" ? "MASTERY" : `PHASE_${savedPhase}`,
-              };
-              resumeTeachingEvidence = prevSession.teaching_evidence || null;
-            }
-
-            if (prevSession?.block_history?.length) {
-              const completedAt = prevSession.completed_at || prevSession.updated_at;
-              const daysSince   = Math.max(0, Math.round(
-                (Date.now() - new Date(completedAt).getTime()) / 86_400_000
-              ));
-              historyBlocks = [
-                { type: "system-divider", label: `Previous session · ${daysSince} days ago` },
-                ...prevSession.block_history.map(b => ({ ...b, faded: true })),
-              ];
-              // The transcript shown faded above is also the agent's memory:
-              // without this the continuation looked connected but the agent
-              // itself had forgotten every word of the previous lesson.
-              priorBlocks = Array.isArray(prevSession.block_history)
-                ? prevSession.block_history
-                : [];
-            }
-          } catch (e) {
-            console.warn("[start_adaptive_session] history load failed:", e.message);
-          }
+          // Ownership is enforced inside the loader (the continuation id
+          // comes from the browser); a missing history degrades to a fresh
+          // start, never a failed session.
+          const continuation = await loadContinuationContext({ studentId, prevSessionId });
+          historyBlocks          = continuation.historyBlocks;
+          priorBlocks            = continuation.priorBlocks;
+          resumeFrom             = continuation.resumeFrom;
+          resumeTeachingEvidence = continuation.resumeTeachingEvidence;
         }
 
         // ── Decay: load decay context ─────────────────────────
@@ -743,35 +523,10 @@ export function setupWebSocket(io) {
 
           // A review resumes the relationship, not just the topic health: the
           // tail of the most recent lesson on this topic becomes the agent's
-          // conversational memory, and the modal shows it faded. Failure here
-          // degrades to a context-less review, never a failed session start.
-          try {
-            const { data: priorRow } = await db.schema("edu")
-              .from("adaptive_sessions")
-              .select("block_history, updated_at, completed_at")
-              .eq("student_id", studentId)
-              .ilike("topic", topic)
-              .in("status", ["active", "complete"])
-              .order("updated_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (Array.isArray(priorRow?.block_history) && priorRow.block_history.length) {
-              const tail = priorRow.block_history
-                .filter(b => b && typeof b === "object" && b.type !== "system-divider")
-                .slice(-10);
-              priorBlocks = tail;
-              const completedAt = priorRow.completed_at || priorRow.updated_at;
-              const daysSince   = Math.max(0, Math.round(
-                (Date.now() - new Date(completedAt).getTime()) / 86_400_000
-              ));
-              historyBlocks = [
-                { type: "system-divider", label: `Last lesson · ${daysSince} days ago` },
-                ...tail.map(b => ({ ...b, faded: true })),
-              ];
-            }
-          } catch (e) {
-            console.warn("[start_adaptive_session] decay prior-lesson load failed:", e.message);
-          }
+          // conversational memory, and the modal shows it faded.
+          const priorLesson = await loadDecayPriorLesson({ studentId, topic });
+          priorBlocks   = priorLesson.priorBlocks;
+          historyBlocks = priorLesson.historyBlocks;
         }
 
         // ── Create orchestrator with mode-aware context ───────
