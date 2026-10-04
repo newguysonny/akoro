@@ -311,9 +311,14 @@ export default function LearnerDashboard() {
     setSelectedSession(null);
     setToast(t('now.minimized_toast'));
   };
-  const minimizeTeachSession = () => {
+  const minimizeTeachSession = (parked) => {
     const ts = teachSession;
     if (ts) {
+      // The live session id from the modal (fallback: whatever the state
+      // already carried). It rides in the snapshot so the bar reopens the
+      // SAME session — resumes it while the grace window holds, continues
+      // from its saved history afterwards. No conversation lost to minimize.
+      const liveId = parked?.sessionId || ts.sessionId || null;
       nowActs.setCurrent({
         type: 'session',
         id: ts.id || (ts.selfStudyId ? `self-${ts.selfStudyId}` : `teach-${ts.topic || 'session'}`),
@@ -323,13 +328,13 @@ export default function LearnerDashboard() {
         progress: ts.progress || 0,
         // The session itself rides along — the bar reopens it DIRECTLY,
         // no details sheet in between.
-        snapshot: { __restore: 'teach', teach: ts },
+        snapshot: { __restore: 'teach', teach: { ...ts, sessionId: liveId } },
       });
     }
     setTeachSession(null);
     setToast(t('now.minimized_toast'));
   };
-  const minimizeDecaySession = () => {
+  const minimizeDecaySession = (parked) => {
     const d = decaySession;
     if (d) {
       nowActs.setCurrent({
@@ -340,7 +345,10 @@ export default function LearnerDashboard() {
         emoji: 'ti-refresh',
         progress: 0,
         // The decay alert rides along so the bar reopens revision DIRECTLY.
-        snapshot: { __restore: 'decay', decay: d },
+        // The live session id rides with it: restore resumes the parked
+        // session (or continues its saved history) — the re-teach
+        // conversation survives minimize.
+        snapshot: { __restore: 'decay', decay: { ...d, ...(parked?.sessionId ? { resumeSessionId: parked.sessionId } : {}) } },
       });
     }
     setDecaySession(null);
@@ -394,9 +402,14 @@ export default function LearnerDashboard() {
       const snap = now.item.snapshot;
       if (snap?.__restore === 'teach' && snap.teach) {
         const ts = snap.teach;
-        setTeachSession(ts.id || ts.sessionId ? { ...ts, mode: 'continuation' } : ts);
+        // Resume the SAME live session first (minimize grace window); the
+        // modal falls back to a continuation of the saved history on
+        // resume_failed — either way the parked conversation comes back.
+        setTeachSession(ts.id || ts.sessionId
+          ? { ...ts, mode: 'continuation', resumeSessionId: ts.sessionId || ts.id }
+          : ts);
       } else if (snap?.__restore === 'decay' && snap.decay) {
-        setDecaySession(snap.decay);
+        setDecaySession(snap.decay);   // carries resumeSessionId when a live session was parked
       } else if (live) {
         if (live.type === 'live') { joinLive(live); return; }
         const decay = decayBySession[live.id] || (live.decayAlertId && decayAlerts.find(a=>a.id===live.decayAlertId)) || null;
@@ -1216,8 +1229,12 @@ export default function LearnerDashboard() {
             session={teachSession?.topic ? null : teachSession}
             config={teachSession?.topic ? teachSession : null}
             // A self-study attempt has to know which session it became, or the
-            // teacher's progress view points at nothing.
+            // teacher's progress view points at nothing. The live session id
+            // is also remembered on the state itself — a minimize parks it in
+            // the Now-Studying snapshot, and restoring reopens THIS session
+            // instead of a fresh empty one.
             onSessionStarted={sid=>{
+              if (sid) setTeachSession(prev => prev ? { ...prev, sessionId: sid } : prev);
               if (teachSession?.selfStudyId && sid) {
                 // Best-effort, but not silent: if this never lands the teacher's
                 // progress view points at no session, so leave a trail.

@@ -30,6 +30,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const ttsVoice  = "nova";   // student AI agent voice — consistent across all teachers
   const mode      = config?.mode || session?.mode || "fresh";
   const prevSessId = config?.sessionId || config?.id || session?.id || null;
+  // A minimized session reopens with its live id: resume the surviving
+  // orchestrator first (disconnect grace window); resume_failed falls back to
+  // the normal start, which — with mode + sessionId — continues from the
+  // saved history. Either way the conversation comes back.
+  const resumeSid = config?.resumeSessionId || session?.resumeSessionId || null;
 
   const [sessionId,  setSessionId]  = useState(null);
   // The session is driven entirely over the WebSocket (start_adaptive_session →
@@ -51,7 +56,10 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const [connState,  setConnState]  = useState("connecting");
   const timerRef      = useRef(null);
   const wsRef         = useRef(null);
-  const sessionIdRef  = useRef(null);   // live session id — drives seamless resume on reconnect
+  const sessionIdRef  = useRef(resumeSid);   // live session id — drives seamless resume on reconnect AND on minimize→restore
+  // True the moment the learner minimizes: the unmount cleanup must NOT end
+  // the server session then — a park keeps it resumable.
+  const parkedRef     = useRef(false);
   const pendingSendRef = useRef(null);  // message typed during a drop — flushed on reconnect
   const mediaRef      = useRef(null);    // MediaRecorder — audio (blob) mode
   const voiceMediaRef = useRef(null);    // PCM capture handle — voice (streaming) mode
@@ -264,10 +272,14 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
         }
       });
 
-      // Resumed onto the same orchestrator — local blocks are already intact,
-      // so just re-enable sending and flush any message typed during the drop.
-      ws.on("session_resumed", () => {
+      // Resumed onto the same orchestrator — re-enable sending and flush any
+      // message typed during the drop. A REMOUNT (minimize → restore) arrives
+      // with empty local blocks; the saved transcript the server sent with
+      // the resume rebuilds them, so the parked conversation is exactly where
+      // it was left. A mere reconnect keeps its intact blocks.
+      ws.on("session_resumed", (d) => {
         setWsReady(true); setInitLoading(false);
+        if (d?.historyBlocks?.length) setBlocks(prev => prev.length ? prev : d.historyBlocks);
         const p = pendingSendRef.current;
         if (p) { pendingSendRef.current = null; ws.emit("teacher_message", { message: p.text, modality: p.modality }); }
       });
@@ -538,11 +550,29 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
 
     return () => {
       stopTts();
-      wsRef.current?.emit("end_session");
+      // Only a real close (X / Save & Close) ends the session. A MINIMIZE
+      // parked it instead: the transcript is already saved per turn,
+      // park_session ensured the DB row, and the disconnect grace window
+      // keeps the orchestrator resumable — ending here would kill the very
+      // session the Now-Studying bar is about to offer back.
+      if (!parkedRef.current) wsRef.current?.emit("end_session");
       wsRef.current?.disconnect();
       clearInterval(timerRef.current);
     };
   }, []);
+
+  // ── Minimize = park, not end ────────────────────────────────────────────
+  // The history is durable either way (every turn is appended server-side),
+  // but a park also KEEPS THE CONTEXT: the live orchestrator survives the
+  // disconnect grace window, so restoring resumes the same session — same
+  // phase, same subtopic, same memory — instead of starting an empty one.
+  // The live context rides up to the parent so the bar can restore THIS
+  // session, not a config lookalike.
+  const handleMinimize = () => {
+    parkedRef.current = true;
+    if (sessionIdRef.current) wsRef.current?.emit("park_session");
+    onMinimize?.({ sessionId: sessionIdRef.current, mode, topic, subject });
+  };
 
   const toggleRecording = async () => {
     if (recording) {
@@ -799,7 +829,7 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
       userTurns={userTurns}
       showSummarize={userTurns >= 2 && !summary}
       onSummarize={generateSummary}
-      onMinimize={onMinimize}
+      onMinimize={handleMinimize}
       recording={recording}
       onToggleRecording={toggleRecording}
       seconds={seconds}

@@ -11,7 +11,7 @@ const chat = await readFile(new URL("./chat.js", import.meta.url), "utf8");
 test("adaptive socket events use token identity rather than browser-supplied learner ids", () => {
   for (const event of [
     "start_adaptive_session", "teacher_message", "request_summary", "resume_session",
-    "end_session", "switch_agent_pair", "get_state", "acknowledge_alert",
+    "park_session", "end_session", "switch_agent_pair", "get_state", "acknowledge_alert",
   ]) {
     assert.match(websocket, new RegExp(`"${event}"`));
   }
@@ -44,4 +44,28 @@ test("decay-alert mutations are scoped to their authenticated owner", () => {
   assert.match(websocket, /markNotificationRead\(notificationId, studentId\)/);
   assert.match(websocket, /markNotificationRead\(notificationId, socket\.data\.user\.id\)/);
   assert.match(chat, /markNotificationRead\(req\.params\.notifId, req\.user\.id\)/);
+});
+
+test("minimize parks the session instead of ending it — the conversation survives", () => {
+  // park_session saves like an end (row ensured; every turn is already
+  // appended durably) but keeps the session RESUMABLE — it must never
+  // complete the row or drop the orchestrator.
+  const park = websocket.slice(
+    websocket.indexOf('socket.on("park_session"'),
+    websocket.indexOf('socket.on("end_session"'),
+  );
+  assert.ok(park.length > 0, "park_session handler must precede end_session");
+  assert.match(park, /ensureSessionRecord\(orchestrator\)/);
+  assert.doesNotMatch(park, /completeSessionRecord/);
+  assert.doesNotMatch(park, /activeSessions\.delete/);
+
+  // resume ships the saved transcript so a REMOUNTED client (minimize →
+  // restore, local blocks gone) rebuilds its transcript from the same
+  // per-turn history a continuation loads.
+  assert.match(websocket, /readSessionBlocks\(orchestrator\)/);
+  const resume = websocket.slice(
+    websocket.indexOf('socket.on("resume_session"'),
+    websocket.indexOf('socket.on("park_session"'),
+  );
+  assert.match(resume, /historyBlocks/);
 });

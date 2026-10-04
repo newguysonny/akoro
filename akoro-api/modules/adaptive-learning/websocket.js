@@ -27,6 +27,7 @@ import { normalizeSessionReference } from "./sessionReference.js";
 import { serialiseTeachingEvidence } from "./teaching-evidence.js";
 import {
   createSessionRecord, ensureSessionRecord, appendSessionBlocks, completeSessionRecord,
+  readSessionBlocks,
 } from "./teaching-session/lifecycle.js";
 import { loadContinuationContext, loadDecayPriorLesson, carryForward } from "./teaching-session/context.js";
 
@@ -276,7 +277,7 @@ export function setupWebSocket(io) {
   const IDENTITY_EVENTS = new Set([
     "list_agent_pairs", "get_my_agents",
     "start_session", "start_student_session", "start_decay_session", "start_adaptive_session",
-    "teacher_message", "request_summary", "resume_session", "end_session",
+    "teacher_message", "request_summary", "resume_session", "park_session", "end_session",
     "switch_agent_pair", "get_knowledge_health", "get_subject_topics",
     "acknowledge_alert", "get_state", "get_agent_growth",
     "subscribe-student", "join-student-room",
@@ -716,7 +717,7 @@ export function setupWebSocket(io) {
     // survived a transient drop. If the orchestrator is gone (server restart,
     // landed on another instance, or grace window expired) the client is told
     // to start fresh instead.
-    socket.on("resume_session", ({ sessionId, studentId, userId } = {}) => {
+    socket.on("resume_session", async ({ sessionId, studentId, userId } = {}) => {
       const orchestrator = sessionId ? activeSessions.get(sessionId) : null;
       if (!orchestrator) return socket.emit("resume_failed", { sessionId: sessionId || null });
 
@@ -726,6 +727,13 @@ export function setupWebSocket(io) {
       if (owner && me && owner !== me) return socket.emit("resume_failed", { sessionId });
 
       cancelSessionReap(sessionId);
+
+      // A remounted client (minimize → restore) arrives with empty local
+      // blocks; the same per-turn-appended history a continuation loads
+      // rebuilds its transcript. A client that merely reconnected keeps its
+      // intact local blocks and ignores this. Not faded — this is the live
+      // session's own conversation, not a previous one.
+      const historyBlocks = await readSessionBlocks(orchestrator);
 
       const caller = userId || studentId || orchestrator.studentId;
       socket.join(`session:${sessionId}`);
@@ -749,7 +757,27 @@ export function setupWebSocket(io) {
         currentSubtopic: orchestrator.session?.mustKnowParts?.[orchestrator.session?.mustKnowIndex] || null,
         topic:        orchestrator.session?.topic   || null,
         subject:      orchestrator.subject          || null,
+        historyBlocks,
       });
+    });
+
+    // ── park_session ──────────────────────────────────────────
+    // Minimize: save the session the way an end does, but keep it resumable.
+    // The transcript is already appended per turn; this ensures the DB row
+    // exists (status stays "active", so it lists as resumable) before the
+    // socket drops. The disconnect handler then holds the orchestrator
+    // through its grace window so a quick restore resumes the live session.
+    socket.on("park_session", async () => {
+      const { sessionId } = socket.data;
+      const orchestrator = activeSessions.get(sessionId);
+      if (!orchestrator) return socket.emit("session_parked", { sessionId: sessionId || null, saved: false, reason: "no active session" });
+      try {
+        const rowId = await ensureSessionRecord(orchestrator);
+        socket.emit("session_parked", { sessionId, saved: !!rowId, rowId: rowId || null });
+      } catch (err) {
+        console.error("[park_session]", err);
+        socket.emit("session_parked", { sessionId, saved: false, error: err.message });
+      }
     });
 
     // ── end_session ───────────────────────────────────────────

@@ -97,6 +97,27 @@ export async function ensureSessionRecord(orchestrator) {
   return createSessionRecord(orchestrator, { ...meta, openingBlocks: [] });
 }
 
+// The saved transcript of a live session, read back from its DB row. Used by
+// resume_session so a client that REMOUNTED (minimize → restore) can rebuild
+// its transcript from the same per-turn-appended history a continuation
+// loads — a client that merely reconnected keeps its intact local blocks and
+// ignores this. Returns [] when nothing is saved yet; never throws.
+export async function readSessionBlocks(orchestrator) {
+  const id = orchestrator?.dbSessionId;
+  if (!id) return [];
+  try {
+    const { data, error } = await db.schema("edu").from("adaptive_sessions")
+      .select("block_history").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return Array.isArray(data?.block_history)
+      ? data.block_history.filter(b => b && typeof b === "object")
+      : [];
+  } catch (e) {
+    console.warn("[adaptive_sessions read]", e.message);
+    return [];
+  }
+}
+
 export async function appendSessionBlocks(orchestrator, newBlocks) {
   const id = orchestrator?.dbSessionId || await ensureSessionRecord(orchestrator);
   if (!id || !newBlocks?.length) return;
