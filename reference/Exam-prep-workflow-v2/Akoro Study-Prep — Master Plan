@@ -355,6 +355,55 @@ The manifest is the source of truth. Do not maintain a parallel registry.
 
 **`PENDING_ADOPTION`:** currently empty — all workspace files are in a set.
 
+### 7.3a Operation → set → pill mapping (canonical)
+
+Two vocabularies exist in this codebase: the **manifest set names** (what
+actually loads context) and the **UI pill types** (what the client renders).
+They do not map 1:1 and that mismatch will cause drift if left implicit.
+
+**The manifest set name is canonical.** The UI pill is derived from it.
+The loop's operation-detection logic must speak in set names; the SSE emitter
+translates to pills before sending to the client.
+
+| Manifest set | When the agent uses it | UI pill | Thought_type |
+|---|---|---|---|
+| `research` | Gathering syllabus, learner state, history, prerequisites | `research` | `research` |
+| `planning` | Building or revising the study plan | `draft` | `draft` |
+| `safety` | Safety-critical validation steps | `verification` | `verification` |
+| `teaching` | Executing an intervention or starting a topic | `action` | `action` |
+| `strategies` | Choosing a strategy after a gap | `action` | `action` |
+| `reflection` | Reviewing a score or deciding what's next | `reflection` | `reflection` |
+| *(session.complete)* | Closing summary — no set switch needed | `synthesis` | `synthesis` |
+
+**Key consequences:**
+- `teaching` and `strategies` both map to the `action` pill. That is correct —
+  from the learner's perspective both are "the system doing something." The
+  distinction only matters internally (which files are loaded).
+- `safety` maps to `verification` because the learner sees a rules check, not
+  a context load.
+- `synthesis` has no manifest set of its own today. When `session.complete` is
+  called, the loop stays in `reflection` context. If a `summary` set is needed
+  later, add it to the manifest and update this table.
+- The SSE `tool_row` event carries `type` (the pill name, derived here) — the
+  loop never sends a raw set name to the client.
+
+**Derivation function (add to `sse.js`):**
+
+```javascript
+const SET_TO_PILL = {
+  research:   'research',
+  planning:   'draft',
+  safety:     'verification',
+  teaching:   'action',
+  strategies: 'action',
+  reflection: 'reflection',
+};
+
+function pillFromSet(setName) {
+  return SET_TO_PILL[setName] ?? 'research';
+}
+```
+
 ### 7.4 Context assembly
 
 ```
@@ -385,6 +434,36 @@ This is the **highest-priority remaining backend gap**.
 2. Add it to a set in `manifest.mjs`.
 3. The agent loop does not change. The harness does not change.
 4. The boot preflight catches missing required files on next deploy.
+
+### 7.7 Adding an operation
+
+An **operation** is a fully wired unit. Adding only one of its parts produces
+a dormant or broken partial — the most common way this architecture drifts.
+
+An operation has five parts. All five must be in place before it is live:
+
+| Part | What it is | Where it lives |
+|---|---|---|
+| **Set** | The manifest.mjs entry listing which MD files to load | `manifest.mjs` |
+| **Trigger** | The observation type or decision node that activates this set | `wiring.js` operation-detection logic |
+| **Permitted tools** | The tool list the harness exposes in this state | `harness.js` / state-machine tool gating |
+| **Decision nodes** | The `DECISION_NODES` values this operation can produce | `state-machine.js` |
+| **Pill mapping** | The UI pill derived from this set name | `sse.js:pillFromSet` + §7.3a table |
+
+**Adding only the set (§7.6) produces a dormant operation.** The set exists
+in the manifest and passes boot preflight, but the loop never selects it
+because no trigger points at it. This is the current state of `teaching`,
+`reflection`, `strategies`, and `safety` — all defined, all dormant (§7.5).
+
+**Adding a new role or persona is not an operation.** A role that has its
+own state, gates, truth, and lifecycle is a **second agent**. If you catch
+yourself designing a role that needs its own session state machine, its own
+harness checks, or its own set of decision nodes that don't appear in
+`DECISION_NODES` — stop. That is a second agent. It must reuse the six-layer
+model from §3, not be bolted onto an existing operation.
+
+The "just add a set" instinct is the single most likely way this architecture
+drifts into an unclosed operation enum. Use the five-part checklist above.
 
 ---
 
@@ -583,7 +662,11 @@ Single propose/action/synthesis calls → `tool_single` with label + timing.
              [agent / system]
 ```
 
-Pill types: `research` · `draft` · `verification` · `action` · `reflection` · `synthesis`
+**Pill types** are derived from manifest set names via `pillFromSet()` (§7.3a).
+The loop speaks in set names; the SSE emitter translates before sending.
+
+`research` · `draft` · `verification` · `action` · `reflection` · `synthesis`
+
 Actor labels: `agent` (model decided) · `system` (platform executed)
 
 ### 14.5 Activity message
