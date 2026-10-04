@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, Menu } from 'lucide-react';
+import { LayoutDashboard, KeyRound, Percent, Wallet, ClipboardList, Settings, LogOut, Building2, Ticket, FileText, ChevronsUpDown, Check, Plus, Settings2, PackageSearch, Webhook, Menu, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useStartup } from '../contexts/StartupContext.jsx';
 import { INK, MUTED, MUTED2, BORDER, WHITE, ACCENT, FONT } from '../constants.js';
@@ -24,12 +24,14 @@ const NAV = [
 ];
 
 // ── Responsive shell ──────────────────────────────────────────────────────
-// Below the breakpoint the app is phone-shaped: a full-width header carries
+// PHONES (below 768px) get the app-shaped shell: a full-width header carries
 // the hamburger (the ONLY way the sidebar opens), the brand, the username
 // and Sign out — so pages get the whole viewport width. The sidebar itself
-// becomes a drawer: closed by default, closed again by the backdrop, a nav
-// tap, Escape, or the hamburger. Desktop keeps the permanent sidebar.
-const MOBILE = '(max-width: 900px)';
+// becomes a drawer with its own close (X) button, also closed by the
+// backdrop, a nav tap, or Escape. TABLETS AND DESKTOP (768px+) share the
+// permanent sidebar + content shell unchanged — a tablet is wide enough
+// for both columns.
+const MOBILE = '(max-width: 767px)';
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(() => {
@@ -158,12 +160,23 @@ export function Sidebar({ mobile = false, open = false, onClose }) {
   }, [mobile, open, onClose]);
 
   // Shared chrome: brand, business switcher, nav. On mobile every
-  // navigating action inside also closes the drawer.
+  // navigating action inside also closes the drawer, and the brand row
+  // carries the drawer's own X close button.
   const inner = (
     <>
       <div style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 9, borderBottom: '1px solid rgba(255,255,255,.06)' }}>
         <img src="/kpemu-mark.svg" alt="Kpemu" width={24} height={24} />
         <span style={{ fontSize: 15, fontWeight: 900, color: '#fff' }}>Kpemu Business</span>
+        {mobile && (
+          <button onClick={onClose} aria-label="Close menu" title="Close menu" style={{
+            marginLeft: 'auto', width: 34, height: 34, borderRadius: 9,
+            border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.05)',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', flexShrink: 0,
+          }}>
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       <BusinessSwitcher onNavigate={mobile ? onClose : null} />
