@@ -92,6 +92,9 @@ const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : 
 const isMcq = (q) => typeof q === 'object' && q !== null && Array.isArray(q.options);
 /* Option letters — A, B, C… so a pick reads "B. Mesophyll". */
 const letterOf = (i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Number(i)] ?? '';
+/* A question's type as a chip label — MCQs without a stored type still
+   say what they are. */
+const typeLabel = (t) => String(t ?? '').replace(/[_-]+/g, ' ').trim();
 
 function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) {
   const total = questions.length;
@@ -105,29 +108,54 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
   const answeredCount = questions.reduce((n, _, i) => n + (answered(i) ? 1 : 0), 0);
 
   if (reviewing) {
+    /* The full question paper — every question with its options and the
+       learner's pick, so submitting is an informed act, not a leap. */
+    const allDone = answeredCount === total;
     return (
-      <div style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
-        <div style={{ width: 44, height: 44, borderRadius: '50%', background: `${mid}14`, color: mid, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-          <Icon name="ti-circle-check" size={22}/>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: allDone ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.12)', color: allDone ? '#047857' : '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name={allDone ? 'ti-circle-check' : 'ti-help'} size={20}/>
+          </div>
+          <div>
+            <h3 style={{ fontSize: 15.5, fontWeight: 900, margin: 0, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>Questions · {total}</h3>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: 0, fontFamily: "'Nunito',sans-serif" }}>
+              {allDone ? 'All answered — ready to submit.' : `You answered ${answeredCount} of ${total} — tap a question to finish it.`}
+            </p>
+          </div>
         </div>
-        <h3 style={{ fontSize: 15.5, fontWeight: 900, margin: '0 0 4px', color: 'var(--ak-text)', textAlign: 'center', fontFamily: "'Nunito',sans-serif" }}>Answers complete</h3>
-        <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ak-text-muted)', margin: '0 0 16px', textAlign: 'center', fontFamily: "'Nunito',sans-serif" }}>
-          You answered {answeredCount} / {total} questions.
-        </p>
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ margin: '14px 0 16px' }}>
           {questions.map((q, i) => {
-            const text = qText(q);
-            const short = text.length > 56 ? `${text.slice(0, 56)}…` : text;
+            const mcq = isMcq(q);
+            const ans = work.answers[i];
+            const done = answered(i);
+            const typed = typeof ans === 'string' ? ans.trim() : '';
             return (
               <button key={i} onClick={() => { setReviewing(false); setIdx(i); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 6px', border: 'none', borderBottom: '1px solid var(--ak-border)', background: 'none', cursor: 'pointer', textAlign: 'left', borderRadius: 8 }}>
-                <span style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: answered(i) ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.12)', color: answered(i) ? '#047857' : '#B45309' }}>
-                  <Icon name={answered(i) ? 'ti-check' : 'ti-help'} size={11}/>
-                </span>
-                <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>{i + 1}. {short}</span>
-                <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif", maxWidth: '45%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {answered(i) ? (isMcq(questions[i]) && work.answers[i] != null ? `${letterOf(work.answers[i])}. ${questions[i].options?.[work.answers[i]] ?? ''}` : 'Answered') : 'Not answered'}
-                </span>
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: 14, marginBottom: 10, borderRadius: 14, border: `1.5px solid ${done ? 'var(--ak-border)' : 'rgba(245,158,11,.45)'}`, background: 'var(--ak-surface)', cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Question {i + 1}</span>
+                  {mcq && <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999, textTransform: 'capitalize' }}>{typeLabel(q.type) || 'Multiple choice'}</span>}
+                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: done ? '#047857' : '#B45309', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '45%' }}>
+                    {done ? (mcq && ans != null ? `${letterOf(ans)}. ${q.options?.[ans] ?? ''}` : 'Answered') : 'Not answered'}
+                  </span>
+                </div>
+                <p style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: 0, fontFamily: "'Nunito',sans-serif" }}>{qText(q)}</p>
+                {mcq ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                    {q.options.map((opt, oi) => {
+                      const picked = ans === oi;
+                      return (
+                        <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 11px', borderRadius: 10, border: `1.5px solid ${picked ? mid : 'var(--ak-border)'}`, background: picked ? `${mid}0C` : 'var(--ak-surface)', fontSize: 12, fontWeight: picked ? 800 : 700, color: picked ? 'var(--ak-text)' : 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>
+                          <span style={{ width: 18, height: 18, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 900, border: `1.5px solid ${picked ? mid : 'var(--ak-border)'}`, background: picked ? mid : 'transparent', color: picked ? '#fff' : 'var(--ak-text-muted)' }}>{letterOf(oi)}</span>
+                          {opt}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (done && (
+                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ak-text)', margin: '10px 0 0', padding: '8px 11px', borderLeft: `3px solid ${mid}`, background: 'var(--ak-surface)', borderRadius: 8, whiteSpace: 'pre-wrap', maxHeight: 60, overflow: 'hidden', fontFamily: "'Nunito',sans-serif" }}>{typed.length > 120 ? `${typed.slice(0, 120)}…` : typed}</p>
+                ))}
               </button>
             );
           })}
@@ -153,7 +181,10 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
         </div>
       </div>
       <div style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 16, boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
-        <p style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 7px', fontFamily: "'Nunito',sans-serif" }}>Question {idx + 1}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 7px' }}>
+          <p style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: 0, fontFamily: "'Nunito',sans-serif" }}>Question {idx + 1}</p>
+          {qMcq && <span style={{ fontSize: 9.5, fontWeight: 900, color: mid, background: `${mid}14`, padding: '2px 8px', borderRadius: 999, textTransform: 'capitalize' }}>{typeLabel(q.type) || 'Multiple choice'}</span>}
+        </div>
         <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif" }}>
           {qText(q)}
         </p>
@@ -182,6 +213,10 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
             style={{ width: '100%', minHeight: 96, borderRadius: 12, border: '1.5px solid var(--ak-border)', padding: '11px 13px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}/>
         )}
       </div>
+      <button onClick={() => (answeredCount === total ? onSubmit() : setReviewing(true))} disabled={submitting}
+        style={{ width: '100%', marginTop: 14, padding: 12, borderRadius: 20, border: 'none', cursor: submitting ? 'default' : 'pointer', background: `linear-gradient(135deg, ${mid}, ${dark})`, color: '#fff', fontSize: 13, fontWeight: 900, fontFamily: "'Nunito',sans-serif", display: 'flex', justifyContent: 'center' }}>
+        {submitting ? <Spinner size={13}/> : 'Submit'}
+      </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
         <button onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0}
           style={{ padding: '9px 18px', borderRadius: 20, border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', color: 'var(--ak-text-muted)', fontSize: 12.5, fontWeight: 800, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontFamily: "'Nunito',sans-serif" }}>
@@ -562,7 +597,7 @@ export default function ActivityDetailPage() {
           {!isDone && !row.graded && (
             <>
               <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>
-                {useStepper ? 'Questions' : 'Your answer'}
+                {useStepper ? `Questions · ${questions.length}` : 'Your answer'}
               </p>
               {useStepper ? (
                 <Stepper questions={questions} work={work} setWork={setWork} mid={t.mid} dark={t.dark} onSubmit={submit} submitting={submitting}/>
