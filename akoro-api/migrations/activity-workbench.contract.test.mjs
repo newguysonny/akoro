@@ -9,7 +9,7 @@ import test from "node:test";
  * All four kinds ride the self-study machinery, separated by `type`.
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [page, selfStudy, planEditor, routes, service, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes, activityFeed] = await Promise.all([
+const [page, selfStudy, planEditor, routes, service, migration, manifest, activityApi, battleForm, battlesPage, dashboard, learnerActivity, activitySocket, selfStudyList, guide, analyticsPage, appRoutes, activityFeed, activityDetail] = await Promise.all([
   read("../../akoro-instructor/src/pages/ActivitiesPage.jsx"),
   read("../../akoro-instructor/src/pages/SelfStudyPage.jsx"),
   read("../../akoro-instructor/src/components/PlanEditor.jsx"),
@@ -28,6 +28,7 @@ const [page, selfStudy, planEditor, routes, service, migration, manifest, activi
   read("../../akoro-instructor/src/pages/SelfStudyAnalyticsPage.jsx"),
   read("../../akoro-instructor/src/App.jsx"),
   read("../../akoro-learner/src/pages/ActivityPage.jsx"),
+  read("../../akoro-learner/src/pages/ActivityDetailPage.jsx"),
 ]);
 
 test("the page mirrors the workbench: rail + WHEN TO USE IT + form + past activities", () => {
@@ -232,10 +233,37 @@ test("the Activities header shows a real streak and the feed splits by stage", (
   assert.ok(activityFeed.includes("🔥"), "fire icon");
   // Stage pills: pending (default) → awaiting grading → graded, before the
   // cards, combining with the kind filter.
-  assert.ok(activityFeed.includes("Pending submissions"), "pending pill");
-  assert.ok(activityFeed.includes("Awaiting grading"), "awaiting pill");
-  assert.ok(activityFeed.includes("Graded activity"), "graded pill");
+  // Short pills — "Pending submissions" etc. overflowed a phone's width;
+  // the full wording survives in each stage's empty-state sentence.
+  assert.ok(activityFeed.includes("label: 'Pending'"), "pending pill");
+  assert.ok(activityFeed.includes("label: 'Awaiting'"), "awaiting pill");
+  assert.ok(activityFeed.includes("label: 'Graded'"), "graded pill");
   assert.ok(activityFeed.includes("useState('pending')"), "pending is the default");
   assert.ok(activityFeed.includes(".filter(a => stageOf(a) === stage)"), "cards respect the stage");
   assert.ok(activityFeed.indexOf("STAGES.map") > -1 && activityFeed.indexOf("STAGES.map") < activityFeed.indexOf("{displayed.map"), "pills render before the cards");
+});
+
+test("assignments carry their marking shape — points, AI switches, rubric, question types", () => {
+  // Workbench form: only the necessary fields (reference: assignment
+  // generation and creator.md) — the AI fills in the question-level detail.
+  assert.ok(page.includes("const QUESTION_TYPES"), "question type choices offered");
+  for (const qt of ["'MCQ'", "'Short answer'", "'Essay'", "'Coding'", "'Diagram'"]) {
+    assert.ok(page.includes(qt), `question type ${qt} offered`);
+  }
+  assert.ok(page.includes("MarkingToggle"), "AI switches render as toggles");
+  assert.ok(page.includes("onClick={draftQuestions}"), "questions draft with AI");
+  assert.ok(page.includes("onClick={draftRubric}"), "rubric drafts with AI, task-breakdown style");
+  // The marking shape rides in details with the assignment.
+  assert.ok(page.includes("ai_auto_allocate_points"), "AI point allocation rides in details");
+  assert.ok(page.includes("ai_auto_grade"), "AI auto-grade rides in details");
+  assert.ok(page.includes("total_points:"), "total points ride in details");
+  // Backend: two teacher-only drafting endpoints.
+  assert.ok(routes.includes('router.post("/assignment-draft/questions"'), "questions draft endpoint");
+  assert.ok(routes.includes('router.post("/assignment-draft/rubric"'), "rubric draft endpoint");
+  // Guide: the drafting generators exist (bounded like the plan calls —
+  // the drafts test counts every __timeoutMs occurrence).
+  assert.ok(guide.includes("async generateAssignmentQuestions("), "question generator");
+  assert.ok(guide.includes("async generateAssignmentRubric("), "rubric generator");
+  // Learner: mixed sets decide MCQ per question, never per set.
+  assert.ok(activityDetail.includes("const isMcq = (q) =>"), "per-question MCQ in the stepper");
 });

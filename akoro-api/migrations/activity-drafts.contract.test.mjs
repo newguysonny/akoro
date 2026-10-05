@@ -426,9 +426,10 @@ test("prepare failures are diagnosable and survivable — no more silent thrash"
 test("the plan generator's model calls are individually bounded — no 10-minute stalls", () => {
   // The SDK's defaults (timeout 10 min, 2 retries) let one stalled provider
   // call hold a chat turn far past any client's patience. The two plan
-  // calls opt into tighter bounds via the metered client's dunder options.
-  assert.equal((guide.match(/__timeoutMs: 45_000, __maxRetries: 1/g) || []).length, 2,
-    "generateSubtopics and generateObjectives both bounded");
+  // calls and the two assignment-drafting calls opt into tighter bounds via
+  // the metered client's dunder options.
+  assert.equal((guide.match(/__timeoutMs: 45_000, __maxRetries: 1/g) || []).length, 4,
+    "generateSubtopics, generateObjectives and both assignment drafters are bounded");
   // ...and the metered client actually forwards them as SDK request options.
   assert.match(aiModel, /clean\.__timeoutMs != null \|\| clean\.__maxRetries != null/);
   assert.match(aiModel, /chatBreaker\.fire\(clean, reqOpts\)/);

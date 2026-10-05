@@ -130,6 +130,93 @@ export class NaNaEsumai {
     return JSON.parse(res.choices[0].message.content).objectives || [];
   }
 
+  /* ── Assignment workbench: draft graded questions ────────── */
+  /**
+   * Draft assignment questions with the marking built in. The instructor
+   * sets the shape — total points and which question types are allowed
+   * (reference: assignment generation and creator.md) — and the model
+   * allocates points across questions weighted by difficulty and thinking
+   * level, so every question arrives already worth its marks. MCQs carry
+   * their options and the correct index; every other type is open answer.
+   */
+  async generateAssignmentQuestions({ topic, subject, totalPoints, questionTypes, difficulty, subtopics }) {
+    const types  = (Array.isArray(questionTypes) && questionTypes.length)
+      ? questionTypes.join(", ") : "MCQ, Short answer";
+    const areas  = (Array.isArray(subtopics) && subtopics.length)
+      ? `\nQuestion areas from the approved task breakdown (cover them in order):\n${subtopics.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}\n` : "";
+    const total  = Number(totalPoints) || null;
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.3,
+      __timeoutMs: 45_000, __maxRetries: 1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content:
+          "You write graded assignment questions for a school class. " +
+          "Use ONLY the question types listed. Produce " +
+          (total
+            ? "as many questions as the total points sensibly support (about one question per 3-5 points, minimum 3, maximum 12)"
+            : "4 to 6 questions and choose a sensible total (10, 20, 50 or 100)") +
+          ". Allocate max_points across the questions so they sum EXACTLY" +
+          (total ? ` to ${total}` : " to that total") +
+          ". Weight the points by difficulty and thinking level — harder questions and higher cognitive levels earn more marks. " +
+          "difficulty is one of Easy, Medium, Hard. cognitive_level is one of Recall, Understand, Apply, Analyze, Evaluate, Create. " +
+          'MCQ questions must carry exactly 4 options plus "correct", the 0-based index of the right one; every other type has no options. ' +
+          'Return JSON: { "questions": [ { "text": string, "type": string, "max_points": number, "difficulty": string, "cognitive_level": string, "options"?: string[], "correct"?: number } ] }' },
+        { role: "user", content:
+          `Topic: ${topic}\nSubject: ${subject}\nQuestion types to use: ${types}` +
+          (difficulty ? `\nOverall difficulty target: ${difficulty}` : "") +
+          (total ? `\nTotal points: ${total}` : "") + areas },
+      ],
+    });
+    let questions = [];
+    try { questions = JSON.parse(res.choices[0].message.content).questions || []; } catch { questions = []; }
+    return questions
+      .filter(q => q && typeof q.text === "string" && q.text.trim())
+      .map(q => ({
+        text:            q.text.trim(),
+        type:            String(q.type || "").trim(),
+        max_points:      Number(q.max_points) || null,
+        difficulty:      String(q.difficulty || "").trim(),
+        cognitive_level: String(q.cognitive_level || "").trim(),
+        options: Array.isArray(q.options) ? q.options.map(o => String(o)).filter(Boolean) : null,
+        correct: Number.isInteger(q.correct) ? q.correct : null,
+      }));
+  }
+
+  /* ── Assignment workbench: draft the marking rubric ──────── */
+  /**
+   * Draft a rubric — criteria with points — for the same brief. When the
+   * total is known the criteria points sum to it; without one the model
+   * returns percentage weights, which the workbench shows as-is until the
+   * instructor sets a total.
+   */
+  async generateAssignmentRubric({ topic, subject, totalPoints, questionTypes }) {
+    const types = (Array.isArray(questionTypes) && questionTypes.length) ? questionTypes.join(", ") : null;
+    const total = Number(totalPoints) || null;
+    const res = await openai.chat.completions.create({
+      model: "gpt-4.1-mini", temperature: 0.25,
+      __timeoutMs: 45_000, __maxRetries: 1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content:
+          "You write marking rubrics for school assignments. 3 to 6 criteria, each a short noun phrase a teacher can grade against. " +
+          (total
+            ? `The criteria points must sum EXACTLY to ${total}.`
+            : "Return percentage weights that sum to 100.") +
+          ' Return JSON: { "rubric": [ { "criterion": string, "points": number } ] }' },
+        { role: "user", content:
+          `Topic: ${topic}\nSubject: ${subject}` +
+          (total ? `\nTotal points: ${total}` : "") +
+          (types ? `\nQuestion types in the assignment: ${types}` : "") },
+      ],
+    });
+    let rubric = [];
+    try { rubric = JSON.parse(res.choices[0].message.content).rubric || []; } catch { rubric = []; }
+    return rubric
+      .filter(r => r && typeof r.criterion === "string" && r.criterion.trim())
+      .map(r => ({ criterion: r.criterion.trim(), points: Number(r.points) || 0 }));
+  }
+
   /* ── Opening message when subtopic begins ────────────────── */
   async openSubtopic({ subtopic, topic, subject, agentName, agentEmoji, phase, objectives, subtopicIdx, totalSubtopics }) {
     const objList = objectives.map((o, i) => `  ${i + 1}. ${o}`).join("\n");

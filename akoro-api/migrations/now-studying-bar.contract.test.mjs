@@ -60,8 +60,12 @@ test("continuing from the bar skips the details sheet", () => {
 });
 
 test("minimized sessions ride along as snapshots", () => {
-  assert.ok(dash.includes("snapshot: { __restore: 'teach', teach: ts }"), "teach minimize parks its payload");
-  assert.ok(dash.includes("snapshot: { __restore: 'decay', decay: d }"), "decay minimize parks its payload");
+  // The live session id rides in the snapshot so restoring reopens THE
+  // session — resume inside the grace window, continuation from the saved
+  // history after it — instead of a config lookalike with no conversation.
+  assert.ok(dash.includes("snapshot: { __restore: 'teach', teach: { ...ts, sessionId: liveId } }"), "teach minimize parks its payload + live id");
+  assert.ok(dash.includes("resumeSessionId: ts.sessionId || ts.id"), "teach restore resumes the parked session first");
+  assert.ok(dash.includes("snapshot: { __restore: 'decay', decay: { ...d, ...(parked?.sessionId ? { resumeSessionId: parked.sessionId } : {}) } }"), "decay minimize parks its payload + live id");
 });
 
 test("the honesty toast exists in every locale", async () => {

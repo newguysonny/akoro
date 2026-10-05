@@ -107,6 +107,13 @@ const Q_INP = {
   padding: '7px 10px', borderRadius: 8, border: `1px solid ${BORDER}`,
   fontFamily: FONT, fontSize: 12, fontWeight: 600, color: INK, outline: 'none', background: WHITE,
 };
+/* Chip for the AI-drafted question-level detail (type · difficulty ·
+   cognitive level) — display-only; the instructor overrides the words or
+   the points, everything else regenerates. */
+const META_CHIP = {
+  fontSize: 10, fontWeight: 800, color: BLUE, background: '#EFF6FF',
+  borderRadius: 100, padding: '2px 8px', fontFamily: FONT, whiteSpace: 'nowrap',
+};
 const BLANK = {
   title: '', subject: 'Basic Science', topic: '', instructions: '',
   difficulty: 'intermediate', dueAt: '', classId: '',
@@ -114,26 +121,68 @@ const BLANK = {
   scheduledAt: '', durationMins: '60',
   subtopics: [], objectives: {},
   questions: [],   // optional: [{q, options?, correct?}] — learners answer on submit
+  // Assignment marking shape (reference: assignment generation and
+  // creator.md). Only these are asked of the instructor; the question-level
+  // fields (text, type, max_points, difficulty, cognitive level) are
+  // drafted by the AI onto each question.
+  totalPoints: '',           // '' | numeric string — the assignment is marked out of this
+  aiAutoAllocate: true,      // AI splits the total across questions
+  aiAutoGrade: false,        // AI drafts marks per answer for approval
+  questionTypes: ['MCQ', 'Short answer'],
+  rubric: [],                // [{ criterion, points }]
 };
-const BLANK_QUESTION = { q: '', kind: 'mcq', options: ['', ''], correct: 0 };
+const BLANK_QUESTION = { q: '', kind: 'mcq', options: ['', ''], correct: 0, type: '', max_points: null, difficulty: '', cognitive_level: '' };
+
+/* The question types the AI may use when drafting — the instructor ticks
+   as many as they want; the draft uses exactly those. */
+const QUESTION_TYPES = ['MCQ', 'Short answer', 'Essay', 'Coding', 'Diagram'];
 
 /* Clean the builder's rows into what rides in details.questions — only
-   complete questions travel, so a half-filled row is simply ignored. */
+   complete questions travel, so a half-filled row is simply ignored.
+   Question-level marking fields (type, max_points, difficulty, cognitive
+   level) ride along when present: the learner contract reads q/options,
+   everything else is workbench + grading detail. */
 function cleanQuestions(raw) {
   return (raw ?? [])
     .map((row) => {
       const q = (row.q || '').trim();
       if (!q) return null;
+      const extra = {
+        ...(row.type ? { type: row.type } : {}),
+        ...(row.max_points !== '' && row.max_points != null ? { max_points: Number(row.max_points) || 0 } : {}),
+        ...(row.difficulty ? { difficulty: row.difficulty } : {}),
+        ...(row.cognitive_level ? { cognitive_level: row.cognitive_level } : {}),
+      };
       if (row.kind === 'mcq') {
         const options = (row.options ?? []).map(o => (o || '').trim()).filter(Boolean);
         if (options.length < 2) return null;
         const correct = Math.min(Math.max(Number(row.correct) || 0, 0), options.length - 1);
-        return { q, options, correct };
+        return { q, options, correct, ...extra };
       }
-      return { q };
+      return { q, ...extra };
     })
     .filter(Boolean)
     .slice(0, 20);
+}
+
+/* A small on/off switch for the AI marking toggles — reads as a switch, not
+   a button, so "AI auto-grade: on" is one glance. */
+function MarkingToggle({ on, onChange, label, hint }) {
+  return (
+    <button type="button" onClick={() => onChange(!on)} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%',
+      padding: '9px 11px', borderRadius: 10, border: `1.5px solid ${BORDER}`, background: WHITE,
+      cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+    }}>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: INK }}>{label}</span>
+        {hint && <span style={{ display: 'block', fontSize: 10.5, color: MUTED2, marginTop: 1 }}>{hint}</span>}
+      </span>
+      <span style={{ width: 38, height: 22, borderRadius: 100, background: on ? GREEN : '#E5E7EB', position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
+        <span style={{ position: 'absolute', top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.2)', transition: 'left .15s' }} />
+      </span>
+    </button>
+  );
 }
 
 export function ActivityForm({ type, onAssigned, initial = null, savePayload = null }) {
@@ -143,6 +192,8 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [drafting, setDrafting] = useState(false);
+  const [qDrafting, setQDrafting] = useState(false);          // AI drafting the questions
+  const [rubricDrafting, setRubricDrafting] = useState(false); // AI drafting the rubric
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(null);      // "Assigned to N learners" banner
@@ -155,7 +206,15 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
   useEffect(() => {
     setClassesLoading(true);
     apiGet('/api/instructor/classrooms')
-      .then(d => setClasses(d?.data ?? []))
+      .then(d => {
+        const list = d?.data ?? [];
+        setClasses(list);
+        // One class: pre-select it. A controlled select with no empty-value
+        // option DISPLAYS the only class while the state stays '' — the
+        // option already looks chosen, so picking it never fires onChange
+        // and submit is stuck on "Pick a class." with nothing to select.
+        if (list.length === 1) setForm(f => (f.classId ? f : { ...f, classId: list[0].id }));
+      })
       .catch(() => setClasses([]))
       .finally(() => setClassesLoading(false));
   }, []);
@@ -177,11 +236,78 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
     } finally { setDrafting(false); }
   };
 
+  /* Assignment: draft the questions with the marking built in — point
+     allocation, per-question difficulty and cognitive level, MCQ options.
+     Uses the marking shape above (total points, question types) and the
+     approved task breakdown as question areas. */
+  const draftQuestions = async () => {
+    if (!form.topic.trim()) return setError('Enter a topic first — the questions are built from it.');
+    setError(''); setQDrafting(true);
+    try {
+      const d = await apiPost('/api/self-study/assignment-draft/questions', {
+        topic: form.topic.trim(), subject: form.subject,
+        total_points: Number(form.totalPoints) || null,
+        question_types: form.questionTypes,
+        difficulty: form.difficulty,
+        subtopics: form.subtopics.map(s => s.trim()).filter(Boolean),
+      });
+      const qs = (d?.data?.questions ?? []).map(q => {
+        const opts = Array.isArray(q.options) && q.options.length >= 2 ? q.options : null;
+        return {
+          q: q.text || '',
+          kind: opts ? 'mcq' : 'open',
+          options: opts || ['', ''],
+          correct: opts ? Math.min(Math.max(Number(q.correct) || 0, 0), opts.length - 1) : 0,
+          type: q.type || '', max_points: q.max_points ?? null,
+          difficulty: q.difficulty || '', cognitive_level: q.cognitive_level || '',
+        };
+      });
+      if (!qs.length) throw new Error('The AI returned no questions — try again, or add them yourself.');
+      setForm(f => {
+        // No total set yet? Adopt the AI's allocation as the total.
+        const sum = qs.reduce((n, q) => n + (Number(q.max_points) || 0), 0);
+        return {
+          ...f, questions: qs,
+          title: f.title || `${f.topic.trim()} — ${meta.name.toLowerCase()}`,
+          totalPoints: f.totalPoints || (sum ? String(sum) : f.totalPoints),
+        };
+      });
+    } catch (e) {
+      setError(e?.message || 'Could not draft the questions.');
+    } finally { setQDrafting(false); }
+  };
+
+  /* Assignment: draft the rubric — criteria with points (or percentage
+     weights until a total is set). */
+  const draftRubric = async () => {
+    if (!form.topic.trim()) return setError('Enter a topic first — the rubric is built from it.');
+    setError(''); setRubricDrafting(true);
+    try {
+      const d = await apiPost('/api/self-study/assignment-draft/rubric', {
+        topic: form.topic.trim(), subject: form.subject,
+        total_points: Number(form.totalPoints) || null,
+        question_types: form.questionTypes,
+      });
+      const rub = (d?.data?.rubric ?? [])
+        .map(r => ({ criterion: r.criterion || '', points: Number(r.points) || 0 }))
+        .filter(r => r.criterion.trim());
+      if (!rub.length) throw new Error('The AI returned no rubric — try again, or write the criteria yourself.');
+      setForm(f => ({ ...f, rubric: rub }));
+    } catch (e) {
+      setError(e?.message || 'Could not draft the rubric.');
+    } finally { setRubricDrafting(false); }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError('');
     if (!form.title.trim()) return setError('Give it a title.');
     if (!form.topic.trim()) return setError(`Enter the ${isLive ? 'session focus' : 'topic'}.`);
+    // An assignment is marked work — the total is what its questions and
+    // rubric are allocated out of (reference: assignment generation and
+    // creator.md).
+    if (type === 'assignment' && !Number(form.totalPoints))
+      return setError('Set the total points — the questions and rubric are marked out of it.');
     if (!form.classId) return setError('Pick a class.');
     const aud = form.audience;
     if (aud.mode === 'class' && !aud.classroomId) return setError('Pick which class this is for.');
@@ -202,9 +328,24 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
         title: form.title.trim(), subject: form.subject, topic: form.topic.trim(),
         instructions: form.instructions || null,
         due_at: dueIso,
-        details: isLive
-          ? { scheduled_at: new Date(form.scheduledAt).toISOString(), duration_mins: Number(form.durationMins) || 60 }
-          : (cleanQuestions(form.questions).length ? { questions: cleanQuestions(form.questions) } : {}),
+        details: {
+          ...(isLive
+            ? { scheduled_at: new Date(form.scheduledAt).toISOString(), duration_mins: Number(form.durationMins) || 60 }
+            : {}),
+          ...(!isLive && cleanQuestions(form.questions).length ? { questions: cleanQuestions(form.questions) } : {}),
+          // The assignment's marking shape — only the necessary fields from
+          // the workbench; question-level detail already rides on each
+          // drafted question above.
+          ...(type === 'assignment' ? {
+            total_points: Number(form.totalPoints) || null,
+            ai_auto_allocate_points: !!form.aiAutoAllocate,
+            ai_auto_grade: !!form.aiAutoGrade,
+            question_types: form.questionTypes,
+            rubric: form.rubric
+              .filter(r => (r.criterion || '').trim())
+              .map(r => ({ criterion: r.criterion.trim(), points: Number(r.points) || 0 })),
+          } : {}),
+        },
       };
       if (!isLive) { body.subtopics = clean; body.objectives = objectives; body.difficulty = form.difficulty; }
 
@@ -290,6 +431,103 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
         </div>
       )}
 
+      {/* Marking — the assignment's necessary fields (reference: assignment
+          generation and creator.md). Everything question-level is drafted
+          by the AI onto each question; the instructor always overrides. */}
+      {type === 'assignment' && (
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 12, background: WHITE }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 10 }}>Marking</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10 }}>
+            <div>
+              <Inp label="Total points *" type="number" min={1} value={form.totalPoints}
+                onChange={e => setField('totalPoints', e.target.value)} placeholder="e.g. 20" />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                {[10, 20, 50, 100].map(v => (
+                  <button key={v} type="button" onClick={() => setField('totalPoints', String(v))}
+                    style={{
+                      padding: '4px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: FONT,
+                      fontSize: 11, fontWeight: 800,
+                      border: `1.5px solid ${Number(form.totalPoints) === v ? BLUE : BORDER}`,
+                      background: Number(form.totalPoints) === v ? '#EFF6FF' : WHITE,
+                      color: Number(form.totalPoints) === v ? BLUE : MUTED,
+                    }}>{v}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'flex-end' }}>
+              <MarkingToggle label="AI allocates points" hint="Splits the total across questions by difficulty."
+                on={form.aiAutoAllocate} onChange={v => setField('aiAutoAllocate', v)} />
+              <MarkingToggle label="AI auto-grade" hint="Drafts a mark per answer for you to approve."
+                on={form.aiAutoGrade} onChange={v => setField('aiAutoGrade', v)} />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT, marginBottom: 6 }}>Question types</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {QUESTION_TYPES.map(qt => {
+                const on = form.questionTypes.includes(qt);
+                return (
+                  <button key={qt} type="button"
+                    onClick={() => setForm(f => ({ ...f, questionTypes: on ? f.questionTypes.filter(x => x !== qt) : [...f.questionTypes, qt] }))}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 100,
+                      cursor: 'pointer', fontFamily: FONT, fontSize: 11.5, fontWeight: 800,
+                      border: `1.5px solid ${on ? BLUE : BORDER}`,
+                      background: on ? '#EFF6FF' : WHITE,
+                      color: on ? BLUE : MUTED,
+                    }}>
+                    {on && <Check size={11} />} {qt}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 5 }}>
+              The AI uses exactly these when drafting the questions — tick as many as you want.
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: INK, fontFamily: FONT }}>
+                Rubric
+                {form.rubric.length > 0 && (
+                  <span style={{ color: MUTED2, fontWeight: 600 }}>
+                    {' '}— {form.rubric.reduce((n, r) => n + (Number(r.points) || 0), 0)}
+                    {Number(form.totalPoints) ? ` of ${form.totalPoints}` : ''} points
+                  </span>
+                )}
+              </div>
+              <Btn size="sm" variant="secondary" type="button" onClick={draftRubric} disabled={rubricDrafting}>
+                {rubricDrafting
+                  ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                  : <><Sparkles size={13} /> {form.rubric.length ? 'Redraft with AI' : 'Draft with AI'}</>}
+              </Btn>
+            </div>
+            {form.rubric.length === 0 ? (
+              <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT }}>
+                Criteria the marks are shared across — draft them with AI or add your own.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {form.rubric.map((r, ri) => (
+                  <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <input value={r.criterion} onChange={e => setForm(f => ({ ...f, rubric: f.rubric.map((x, i) => i === ri ? { ...x, criterion: e.target.value } : x) }))}
+                      placeholder={`Criterion ${ri + 1}, e.g. Correctness`} style={{ flex: 1, ...Q_INP }} />
+                    <input type="number" min={0} value={r.points} onChange={e => setForm(f => ({ ...f, rubric: f.rubric.map((x, i) => i === ri ? { ...x, points: e.target.value } : x) }))}
+                      title="Points for this criterion" style={{ ...Q_INP, width: 74 }} />
+                    <button type="button" onClick={() => setForm(f => ({ ...f, rubric: f.rubric.filter((_, i) => i !== ri) }))}
+                      style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 15, padding: '2px 5px' }} title="Remove criterion">×</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setForm(f => ({ ...f, rubric: [...f.rubric, { criterion: '', points: '' }] }))}
+                  style={{ border: 'none', background: 'none', color: PURPLE, cursor: 'pointer', fontSize: 11, fontWeight: 800, fontFamily: FONT, textAlign: 'left', padding: '2px 0' }}>+ criterion</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {isLive && (
         <Inp label="Holds on *" type="datetime-local" value={form.scheduledAt} onChange={e => setField('scheduledAt', e.target.value)} />
       )}
@@ -304,13 +542,24 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
               <div style={{ fontSize: 10.5, color: MUTED2, fontFamily: FONT, marginTop: 2 }}>
                 {form.questions.length
                   ? `${cleanQuestions(form.questions).length} question${cleanQuestions(form.questions).length === 1 ? '' : 's'} will ride with this activity — learners answer them on submit.`
-                  : 'Add questions and learners answer them in the app instead of a free-text answer.'}
+                  : type === 'assignment'
+                    ? 'Draft them with AI — it uses the total points and question types above — or add your own.'
+                    : 'Add questions and learners answer them in the app instead of a free-text answer.'}
               </div>
             </div>
-            <Btn size="sm" variant="secondary" type="button"
-              onClick={() => setForm(f => ({ ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''] }] }))}>
-              <Plus size={13} /> Add question
-            </Btn>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {type === 'assignment' && (
+                <Btn size="sm" variant="secondary" type="button" onClick={draftQuestions} disabled={qDrafting}>
+                  {qDrafting
+                    ? <><Loader2 size={13} style={{ animation: 'spin .8s linear infinite' }} /> Drafting…</>
+                    : <><Sparkles size={13} /> {form.questions.length ? 'Redraft questions' : 'Draft questions'}</>}
+                </Btn>
+              )}
+              <Btn size="sm" variant="secondary" type="button"
+                onClick={() => setForm(f => ({ ...f, questions: [...f.questions, { ...BLANK_QUESTION, options: ['', ''] }] }))}>
+                <Plus size={13} /> Add question
+              </Btn>
+            </div>
           </div>
           {form.questions.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
@@ -328,6 +577,19 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
                     <button type="button" onClick={() => setForm(f => ({ ...f, questions: f.questions.filter((_, i) => i !== qi) }))}
                       style={{ border: 'none', background: 'none', color: MUTED2, cursor: 'pointer', fontSize: 15, padding: '2px 5px' }} title="Remove question">×</button>
                   </div>
+                  {type === 'assignment' && !!(row.type || row.difficulty || row.cognitive_level || row.max_points != null) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingLeft: 26, marginBottom: row.kind === 'mcq' ? 7 : 0 }}>
+                      {row.type && <span style={META_CHIP}>{row.type}</span>}
+                      {row.difficulty && <span style={META_CHIP}>{row.difficulty}</span>}
+                      {row.cognitive_level && <span style={META_CHIP}>{row.cognitive_level}</span>}
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, color: MUTED2, marginLeft: 'auto', fontFamily: FONT }}>
+                        Points
+                        <input type="number" min={0} value={row.max_points == null ? '' : row.max_points}
+                          onChange={e => setForm(f => ({ ...f, questions: f.questions.map((r, i) => i === qi ? { ...r, max_points: e.target.value === '' ? null : Number(e.target.value) } : r) }))}
+                          title="Points for this question" style={{ ...Q_INP, width: 58, padding: '4px 7px' }} />
+                      </label>
+                    </div>
+                  )}
                   {row.kind === 'mcq' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingLeft: 26 }}>
                       {(row.options ?? []).map((opt, oi) => (
@@ -362,6 +624,7 @@ export function ActivityForm({ type, onAssigned, initial = null, savePayload = n
         <Sel label="Class *" value={form.classId} onChange={e => setField('classId', e.target.value)}>
           {classesLoading && <option value="">Loading classes…</option>}
           {!classesLoading && !classes.length && <option value="">No classes set up yet</option>}
+          {!classesLoading && classes.length > 0 && <option value="">Choose a class…</option>}
           {classes.map(c => (
             <option key={c.id} value={c.id}>
               {c.name}{c.student_count ? ` — ${c.student_count} learner${c.student_count === 1 ? '' : 's'}` : ''}

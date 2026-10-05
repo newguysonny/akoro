@@ -13,6 +13,9 @@
  *
  * Teacher / school:
  *   POST   /plan               → AI drafts subtopics + objectives to review
+ *   POST   /assignment-draft/questions → AI drafts the assignment's questions
+ *                                       (points allocated, per-question level)
+ *   POST   /assignment-draft/rubric    → AI drafts the marking rubric
  *   POST   /                   → create + assign (usernames | ids | whole class)
  *   GET    /                   → my assignments, with progress
  *   GET    /:id                → one assignment + per-learner status
@@ -92,6 +95,40 @@ router.post("/plan", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) =
   subtopics.forEach((st, i) => { objectives[st] = lists[i]; });
 
   ok(res, { topic, subject, subtopics, objectives });
+}));
+
+/* ═══ Assignment drafting — points, rubric and questions ═════════════════════
+   The workbench's Assignment form exposes only the necessary fields
+   (reference: assignment generation and creator.md): total points, the AI
+   switches, the question types to use, and the rubric. Everything
+   question-level — text, type, max_points, difficulty, cognitive level —
+   is drafted HERE and handed back for review. Nothing is assigned by
+   these routes; the instructor edits before anything is sent. */
+
+router.post("/assignment-draft/questions", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { topic, subject, total_points, question_types, difficulty, subtopics } = req.body;
+  if (!topic?.trim() || !subject?.trim()) return bad(res, "topic and subject are required");
+  const questions = await nana.generateAssignmentQuestions({
+    topic:        topic.trim(),
+    subject,
+    totalPoints:  Number(total_points) || null,
+    questionTypes: Array.isArray(question_types) ? question_types : null,
+    difficulty:   typeof difficulty === "string" ? difficulty : null,
+    subtopics:    Array.isArray(subtopics) ? subtopics : null,
+  });
+  ok(res, { questions });
+}));
+
+router.post("/assignment-draft/rubric", requireRole(TEACHER_ROLES), asyncHandler(async (req, res) => {
+  const { topic, subject, total_points, question_types } = req.body;
+  if (!topic?.trim() || !subject?.trim()) return bad(res, "topic and subject are required");
+  const rubric = await nana.generateAssignmentRubric({
+    topic:        topic.trim(),
+    subject,
+    totalPoints:  Number(total_points) || null,
+    questionTypes: Array.isArray(question_types) ? question_types : null,
+  });
+  ok(res, { rubric });
 }));
 
 /* ═══ Draft routines — recurring, human-approved preparation ══════════════════
