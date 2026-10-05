@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import Toast from '../common/Toast.jsx';
+import { Icon } from '../common/Icons.jsx';
 import { PROGRAM, AUTHOR, topicsFor, accentFor, readsFor } from './pharmdData.js';
 
 /* The reference's done-green — a content colour, theme-independent. */
@@ -28,12 +29,12 @@ const GREEN = '#2BB673';
 /* Sheet menus (reference sheetActionsFor). */
 const SHEET_ACTIONS = {
   topic: [
-    ['🔗', 'Share'], ['➕', 'Add to Library'], ['⬇', 'Download'],
-    ['✓', 'Mark as complete'], ['📘', 'Go to course'],
+    ['ti-share', 'Share'], ['ti-bookmark-plus', 'Add to Library'], ['ti-download', 'Download'],
+    ['ti-check', 'Mark as complete'], ['ti-book-2', 'Go to course'],
   ],
   course: [
-    ['🔗', 'Share'], ['➕', 'Add to Library'], ['⬇', 'Download all topics'],
-    ['👤', 'Go to creator'], ['🎓', 'Go to program'],
+    ['ti-share', 'Share'], ['ti-bookmark-plus', 'Add to Library'], ['ti-download', 'Download all topics'],
+    ['ti-user', 'Go to creator'], ['ti-school', 'Go to program'],
   ],
 };
 
@@ -127,7 +128,7 @@ export default function PharmDProgram({ onClose }) {
         .pd-t-meta{font-size:.76rem;color:var(--ak-text-sub,#6B7280);font-weight:600;margin-top:2px}
         .pd-check{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--ak-border2,#E5E7EB);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:${GREEN}}
         .pd-check.done{background:${GREEN};border-color:${GREEN};color:#fff}
-        .pd-more{background:none;border:none;color:var(--ak-text-sub,#6B7280);font-size:1.2rem;font-weight:900;padding:6px 4px;cursor:pointer;line-height:1;flex-shrink:0;font-family:inherit}
+        .pd-more{background:none;border:none;color:var(--ak-text-sub,#6B7280);padding:6px 4px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
         .pd-upload{position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.5);border:1.5px solid rgba(255,255,255,0.5);color:#fff;font-size:.85rem;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;font-family:inherit}
         .pd-card .pd-upload{width:24px;height:24px;font-size:.7rem;top:6px;right:6px}
         .pd-folder-art .pd-upload{bottom:10px;right:10px}
@@ -153,7 +154,7 @@ export default function PharmDProgram({ onClose }) {
         .pd-sheet-actions{padding:8px 0}
         .pd-sheet-action{display:flex;align-items:center;gap:16px;padding:13px 20px;cursor:pointer;background:none;border:none;width:100%;text-align:left;font-family:inherit}
         .pd-sheet-action:hover{background:var(--ak-surface-hover,#F9FAFB)}
-        .pd-s-icon{width:22px;text-align:center;font-size:1.05rem}
+        .pd-s-icon{width:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .pd-s-label{font-size:.92rem;font-weight:700;color:var(--ak-text,#111827)}
       `}</style>
 
@@ -179,7 +180,7 @@ export default function PharmDProgram({ onClose }) {
                         <span className="pd-art" style={{ background: accentFor(c) }}>
                           <span className="pd-upload" role="button" aria-label={`Set cover photo for ${c}`}
                             onClick={(e) => { e.stopPropagation(); soon('Custom covers'); }}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); soon('Custom covers'); } }}>📷</span>
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); soon('Custom covers'); } }}><Icon name="ti-camera" size={12}/></span>
                           <span className="pd-code">{c}</span>
                         </span>
                         <div className="pd-name">{c}</div>
@@ -204,7 +205,7 @@ export default function PharmDProgram({ onClose }) {
               <div className="pd-folder-art" style={{ background: accentFor(code) }}>
                 <span className="pd-upload" role="button" aria-label="Set cover photo"
                   onClick={() => soon('Custom covers')}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') soon('Custom covers'); }}>📷</span>
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') soon('Custom covers'); }}><Icon name="ti-camera" size={14}/></span>
                 <span className="pd-code-big">{code}</span>
               </div>
               <h2 className="pd-folder-title">{code}</h2>
@@ -215,8 +216,8 @@ export default function PharmDProgram({ onClose }) {
               <p className="pd-folder-meta">{topics.length} topics · {PROGRAM.name}</p>
               <div className="pd-action-row">
                 <button className="pd-start" onClick={() => openTopic(0)}>Start learning</button>
-                <button className="pd-icon-btn" aria-label="Download all topics" onClick={() => soon('Offline downloads')}>⬇</button>
-                <button className="pd-icon-btn" aria-label="More" onClick={() => setSheet({ kind: 'course' })}>⋯</button>
+                <button className="pd-icon-btn" aria-label="Download all topics" onClick={() => soon('Offline downloads')}><Icon name="ti-download" size={18}/></button>
+                <button className="pd-icon-btn" aria-label="More" onClick={() => setSheet({ kind: 'course' })}><Icon name="ti-dots-vertical" size={20}/></button>
               </div>
             </div>
             <div className="pd-topic-list">
@@ -231,7 +232,7 @@ export default function PharmDProgram({ onClose }) {
                   </div>
                   <div className={`pd-check${isDone(i) ? ' done' : ''}`}>{isDone(i) ? '✓' : ''}</div>
                   <button className="pd-more" aria-label={`More for ${t.name}`}
-                    onClick={(e) => { e.stopPropagation(); setSheet({ kind: 'topic', idx: i }); }}>⋮</button>
+                    onClick={(e) => { e.stopPropagation(); setSheet({ kind: 'topic', idx: i }); }}><Icon name="ti-dots-vertical" size={16}/></button>
                 </div>
               ))}
             </div>
@@ -245,7 +246,7 @@ export default function PharmDProgram({ onClose }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <button className="pd-back" aria-label="Back to course" onClick={() => setView('folder')}>←</button>
                 <button className="pd-more" style={{ fontSize: '1.4rem' }} aria-label="More"
-                  onClick={() => setSheet({ kind: 'topic', idx: topicIdx })}>⋮</button>
+                  onClick={() => setSheet({ kind: 'topic', idx: topicIdx })}><Icon name="ti-dots-vertical" size={20}/></button>
               </div>
               <div className="pd-breadcrumb">{code} · Topic {topicIdx + 1} of {topics.length}</div>
               <h2 className="pd-topic-title">{topics[topicIdx].name}</h2>
@@ -280,7 +281,7 @@ export default function PharmDProgram({ onClose }) {
             <div className="pd-sheet-actions">
               {SHEET_ACTIONS[sheet.kind].map(([icon, label]) => (
                 <button key={label} className="pd-sheet-action" onClick={() => runSheetAction(sheet.kind, label, sheet.idx)}>
-                  <span className="pd-s-icon">{icon}</span>
+                  <span className="pd-s-icon"><Icon name={icon} size={18}/></span>
                   <span className="pd-s-label">{label}</span>
                 </button>
               ))}
