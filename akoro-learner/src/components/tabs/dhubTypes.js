@@ -27,7 +27,7 @@ export const TYPES = (t) => ([
     kw: 'courses video lessons catalogue study curriculum marketplace',
   },
   {
-    key: 'pharmd', icon: 'ti-pill', accent: GREEN, soon: true,
+    key: 'pharmd', icon: 'ti-pill', accent: GREEN, soon: false,
     grad: 'linear-gradient(140deg,#14B8A6,#0C7E72)',
     label: t('dhub.card_pharmd'), desc: t('dhub.card_pharmd_desc'),
     kw: 'pharm d pharmacy doctor program clinical pharmacology',

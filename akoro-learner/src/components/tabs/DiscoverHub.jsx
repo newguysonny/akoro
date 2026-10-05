@@ -4,8 +4,9 @@
  * Higher-ed learners' Discover landing: a search box plus a grid of
  * discovery-type cards. The hub is a router, not a feed — only the
  * Courses card opens the course catalogue (DiscoveryTab); every other
- * type — Notes/Materials, Pharm D, Teaching guide AND Live classes —
- * answers "coming soon" until its own destination ships. (The hub's
+ * type — Notes/Materials, Teaching guide AND Live classes — answers
+ * "coming soon" until its own destination ships; Pharm D opens its own
+ * programme page (PharmDProgram — browse → course folder → topics). (The hub's
  * Live classes is its own product, deliberately NOT the Learn tab's
  * live sessions view, which is a different thing.)
  *
@@ -25,12 +26,14 @@ import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
 import DiscoverSearchPage from './DiscoverSearchPage.jsx';
+import PharmDProgram from '../pharmd/PharmDProgram.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
 export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, userId, initialQuery = '' }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pharmdOpen, setPharmdOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
   const all = TYPES(t);
@@ -39,6 +42,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
   const activate = (ty, qOverride) => {
     const q = qOverride ?? query.trim();
     if (ty.key === 'courses') onOpenCourses?.(q);
+    else if (ty.key === 'pharmd') setPharmdOpen(true);
     else setToast({ msg: `${ty.label} — ${t('dhub.coming_soon')}`, color: GOLD });
   };
 
@@ -156,6 +160,8 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
           onOpenBattles={onOpenBattles}
         />
       )}
+
+      {pharmdOpen && <PharmDProgram onClose={() => setPharmdOpen(false)} />}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>
