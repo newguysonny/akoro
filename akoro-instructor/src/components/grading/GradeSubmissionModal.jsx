@@ -32,6 +32,10 @@ const RUBRIC_MAX = RUBRIC_DEF.reduce((s, r) => s + r.max, 0);
 
 const initialsOf = (name) => (name || '?').split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase();
 
+/* Questions ride as plain strings or objects (.q = the question text; MCQ
+   adds .options/.correct) — read each one per question, never per set. */
+const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
+
 const fmtWhen = (iso) => {
   if (!iso) return null;
   try { return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
@@ -51,7 +55,6 @@ const fmtSize = (bytes) => {
 function SubmittedPaper({ current, brief }) {
   const sub = current.submission ?? {};
   const questions = Array.isArray(brief?.details?.questions) ? brief.details.questions : [];
-  const mcq = questions.length && typeof questions[0] === 'object' && Array.isArray(questions[0].options);
   const answerKeys = Object.keys(sub.answers ?? {});
   const files = sub.files?.length ? sub.files : (current.files ?? []);
   const hasWork = (sub.text || '').trim() || answerKeys.length || files.length;
@@ -78,15 +81,16 @@ function SubmittedPaper({ current, brief }) {
           {answerKeys.filter(k => sub.answers[k] !== '' && sub.answers[k] != null).sort((a, b) => Number(a) - Number(b)).map((k) => {
             const q = questions[Number(k)];
             const raw = sub.answers[k];
-            const chosen = (mcq && q?.options) ? q.options[raw] ?? raw : null;
-            const correct = mcq && q && q.correct === raw;
+            const qMcq = !!q && Array.isArray(q.options);
+            const chosen = qMcq ? (q.options[raw] ?? raw) : null;
+            const correct = qMcq && q.correct === raw;
             return (
-              <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && q?.options ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
-                {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {mcq ? q.q : q}</div>}
+              <div key={k} style={{ background: WHITE, border: `1px solid ${correct === false && qMcq ? 'rgba(239,68,68,.35)' : BORDER}`, borderRadius: 10, padding: '10px 13px' }}>
+                {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>
-                  {mcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? '✓' : ''}</span>}
+                  {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? '✓' : ''}</span>}
                   {chosen ?? String(raw)}
-                  {mcq && q && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
+                  {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
               </div>
             );

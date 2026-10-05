@@ -82,10 +82,16 @@ function Chip({ children, dot }) {
 }
 
 /* ── Question stepper — one question at a time, autosaved (reference) ───── */
+/* ── Question shapes ────────────────────────────────────────────────────────
+   A question rides as a plain string (older assignments) or an object:
+   .q is the question text and the object may carry marking metadata
+   (type, max_points, difficulty, cognitive_level); MCQ adds .options and
+   .correct. Mixed sets are normal (AI-drafted assignments mix MCQ with
+   short answer, essay, coding…) — decide per question, never per set. */
+const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
+const isMcq = (q) => typeof q === 'object' && q !== null && Array.isArray(q.options);
+
 function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) {
-  // Mixed sets are normal (AI-drafted assignments mix MCQ with short
-  // answer, essay, coding, diagram…) — decide per question, never per set.
-  const isMcq = (q) => typeof q === 'object' && Array.isArray(q.options);
   const total = questions.length;
   const [idx, setIdx] = useState(() => {
     const firstUn = questions.findIndex((_, i) => !(isMcq(questions[i]) ? work.answers[i] != null : (work.answers[i] || '').trim()));
@@ -108,7 +114,7 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
         </p>
         <div style={{ marginBottom: 16 }}>
           {questions.map((q, i) => {
-            const text = isMcq(q) ? q.q : q;
+            const text = qText(q);
             const short = text.length > 56 ? `${text.slice(0, 56)}…` : text;
             return (
               <button key={i} onClick={() => { setReviewing(false); setIdx(i); }}
@@ -145,7 +151,7 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
       <div style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 16, boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
         <p style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 7px', fontFamily: "'Nunito',sans-serif" }}>Question {idx + 1}</p>
         <p style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 14px', fontFamily: "'Nunito',sans-serif" }}>
-          {qMcq ? q.q : q}
+          {qText(q)}
         </p>
         {qMcq ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -189,15 +195,13 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
 /* Read-only question list — how a graded activity shows its questions:
    the published correct option is marked, nothing is editable. */
 function StaticQuestions({ questions }) {
-  // Mixed sets are normal (AI-drafted assignments) — per question, not per set.
-  const isMcq = (q) => typeof q === 'object' && Array.isArray(q.options);
   return (
     <>
       <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 12px', fontFamily: "'Nunito',sans-serif" }}>Questions</p>
       {questions.map((q, i) => (
         <div key={i} style={{ background: 'var(--ak-surface)', borderRadius: 16, padding: 16, boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginBottom: 10 }}>
           <p style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--ak-text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 6px', fontFamily: "'Nunito',sans-serif" }}>Question {i + 1}</p>
-          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}>{isMcq(q) ? q.q : q}</p>
+          <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--ak-text)', lineHeight: 1.4, margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}>{qText(q)}</p>
           {isMcq(q) && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {q.options.map((opt, oi) => {
@@ -253,7 +257,7 @@ function SubmittedWork({ submission, questions }) {
             const chosen = Array.isArray(q.options) ? q.options[ans] : null;
             return (
               <div key={i} style={{ background: 'var(--ak-surface)', borderRadius: 14, padding: '11px 13px', boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', marginBottom: 3, fontFamily: "'Nunito',sans-serif" }}>Q{i + 1}. {q.q}</div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', marginBottom: 3, fontFamily: "'Nunito',sans-serif" }}>Q{i + 1}. {qText(q)}</div>
                 <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>
                   {chosen != null ? chosen : String(ans)}
                 </div>
