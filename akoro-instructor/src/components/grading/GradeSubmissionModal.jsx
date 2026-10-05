@@ -35,6 +35,8 @@ const initialsOf = (name) => (name || '?').split(/\s+/).slice(0, 2).map(w => w[0
 /* Questions ride as plain strings or objects (.q = the question text; MCQ
    adds .options/.correct) — read each one per question, never per set. */
 const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
+/* Option letters — a pick reads "B. Mesophyll", matching the learner. */
+const letterOf = (i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Number(i)] ?? '';
 
 const fmtWhen = (iso) => {
   if (!iso) return null;
@@ -89,7 +91,7 @@ function SubmittedPaper({ current, brief }) {
                 {q && <div style={{ fontSize: 11, fontWeight: 800, color: MUTED2, marginBottom: 4 }}>Q{Number(k) + 1}. {qText(q)}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 800, color: INK, fontFamily: FONT }}>
                   {qMcq && <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? GREEN : BORDER}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: GREEN }}>{correct ? '✓' : ''}</span>}
-                  {chosen ?? String(raw)}
+                  {chosen != null ? `${letterOf(raw)}. ${chosen}` : String(raw)}
                   {qMcq && correct && <span style={{ fontSize: 10, fontWeight: 800, color: GREEN, background: '#E6F6EE', borderRadius: 999, padding: '2px 8px' }}>correct</span>}
                 </div>
               </div>

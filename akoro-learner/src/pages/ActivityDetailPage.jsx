@@ -90,6 +90,8 @@ function Chip({ children, dot }) {
    short answer, essay, coding…) — decide per question, never per set. */
 const qText = (q) => (typeof q === 'object' && q !== null ? String(q.q ?? '') : String(q ?? ''));
 const isMcq = (q) => typeof q === 'object' && q !== null && Array.isArray(q.options);
+/* Option letters — A, B, C… so a pick reads "B. Mesophyll". */
+const letterOf = (i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Number(i)] ?? '';
 
 function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) {
   const total = questions.length;
@@ -123,7 +125,9 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
                   <Icon name={answered(i) ? 'ti-check' : 'ti-help'} size={11}/>
                 </span>
                 <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>{i + 1}. {short}</span>
-                <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif" }}>{answered(i) ? 'Answered' : 'Not answered'}</span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', fontFamily: "'Nunito',sans-serif", maxWidth: '45%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {answered(i) ? (isMcq(questions[i]) && work.answers[i] != null ? `${letterOf(work.answers[i])}. ${questions[i].options?.[work.answers[i]] ?? ''}` : 'Answered') : 'Not answered'}
+                </span>
               </button>
             );
           })}
@@ -165,8 +169,8 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
                   fontSize: 12.5, fontWeight: work.answers[idx] === oi ? 800 : 700, cursor: 'pointer', textAlign: 'left',
                   fontFamily: "'Nunito',sans-serif",
                 }}>
-                <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${work.answers[idx] === oi ? mid : 'var(--ak-border)'}`, flexShrink: 0, position: 'relative' }}>
-                  {work.answers[idx] === oi && <span style={{ position: 'absolute', inset: 3, borderRadius: '50%', background: mid }}/>}
+                <span style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 900, fontFamily: "'Nunito',sans-serif", border: `1.5px solid ${work.answers[idx] === oi ? mid : 'var(--ak-border)'}`, background: work.answers[idx] === oi ? mid : 'transparent', color: work.answers[idx] === oi ? '#fff' : 'var(--ak-text-muted)' }}>
+                  {letterOf(oi)}
                 </span>
                 {opt}
               </button>
@@ -214,8 +218,8 @@ function StaticQuestions({ questions }) {
                     fontSize: 12.5, fontWeight: 700, color: correct ? '#047857' : 'var(--ak-text-muted)',
                     fontFamily: "'Nunito',sans-serif",
                   }}>
-                    <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${correct ? '#10B981' : 'var(--ak-border)'}`, flexShrink: 0, position: 'relative' }}>
-                      {correct && <span style={{ position: 'absolute', inset: 3, borderRadius: '50%', background: '#10B981' }}/>}
+                    <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, fontFamily: "'Nunito',sans-serif", border: `1.5px solid ${correct ? '#10B981' : 'var(--ak-border)'}`, background: correct ? '#10B981' : 'transparent', color: correct ? '#fff' : 'inherit' }}>
+                      {letterOf(oi)}
                     </span>
                     {opt}
                     {correct && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: '#047857' }}>correct</span>}
@@ -259,7 +263,7 @@ function SubmittedWork({ submission, questions }) {
               <div key={i} style={{ background: 'var(--ak-surface)', borderRadius: 14, padding: '11px 13px', boxShadow: '0 2px 10px rgba(17,24,39,.06)' }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--ak-text-muted)', marginBottom: 3, fontFamily: "'Nunito',sans-serif" }}>Q{i + 1}. {qText(q)}</div>
                 <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', fontFamily: "'Nunito',sans-serif" }}>
-                  {chosen != null ? chosen : String(ans)}
+                  {chosen != null ? `${letterOf(ans)}. ${chosen}` : String(ans)}
                 </div>
               </div>
             );
