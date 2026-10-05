@@ -30,9 +30,9 @@ const KINDS = [
    grading (no grading data exists yet); `graded` is the seam that flips the
    moment grading lands on an activity. */
 const STAGES = [
-  { key: 'pending',  label: 'Pending submissions', empty: 'Nothing pending — submit what is due' },
-  { key: 'awaiting', label: 'Awaiting grading',    empty: 'Nothing awaiting grading right now' },
-  { key: 'graded',   label: 'Graded activity',     empty: 'No graded activity yet' },
+  { key: 'pending',  label: 'Pending',  empty: 'Nothing pending — submit what is due' },
+  { key: 'awaiting', label: 'Awaiting', empty: 'Nothing awaiting grading right now' },
+  { key: 'graded',   label: 'Graded',   empty: 'No graded activity yet' },
 ];
 
 function stageOf(a) {
