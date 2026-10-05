@@ -96,7 +96,7 @@ const letterOf = (i) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Number(i)] ?? '';
    say what they are. */
 const typeLabel = (t) => String(t ?? '').replace(/[_-]+/g, ' ').trim();
 
-function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) {
+function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting, attachment }) {
   const total = questions.length;
   const [idx, setIdx] = useState(() => {
     const firstUn = questions.findIndex((_, i) => !(isMcq(questions[i]) ? work.answers[i] != null : (work.answers[i] || '').trim()));
@@ -160,6 +160,7 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
             );
           })}
         </div>
+        {attachment}
         <button onClick={onSubmit} disabled={submitting}
           style={{ width: '100%', padding: 12, borderRadius: 20, border: 'none', cursor: submitting ? 'default' : 'pointer', background: `linear-gradient(135deg, ${mid}, ${dark})`, color: '#fff', fontSize: 13, fontWeight: 900, fontFamily: "'Nunito',sans-serif", display: 'flex', justifyContent: 'center' }}>
           {submitting ? <Spinner size={13}/> : 'Submit answers'}
@@ -227,6 +228,7 @@ function Stepper({ questions, work, setWork, mid, dark, onSubmit, submitting }) 
           {isLast ? 'Review answers' : 'Next →'}
         </button>
       </div>
+      {attachment}
     </div>
   );
 }
@@ -410,6 +412,54 @@ export default function ActivityDetailPage() {
       if (fileRef.current) fileRef.current.value = '';
     }
   };
+
+  /* The attachment area — one optional file (PDF, JPG, PNG, DOCX, ≤5MB),
+     uploaded immediately and handed in with the submission's fileIds.
+     Both flows use it: free-text work and the question stepper. */
+  const attachArea = (
+    <>
+                  {work?.fileId ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginTop: 8, border: '1px solid rgba(16,185,129,.3)' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(16,185,129,.12)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name="ti-file" size={15}/>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{work.fileName || 'Attachment'}</div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#047857', marginTop: 1 }}>{fmtSize(work.fileSize || 0)} · uploaded</div>
+                      </div>
+                      <button onClick={() => dropFile(work.fileId)} aria-label="Remove file"
+                        style={{ border: 'none', background: 'none', color: 'var(--ak-text-muted)', cursor: 'pointer', width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name="ti-x" size={13}/>
+                      </button>
+                    </div>
+                  ) : uploading ? (
+                    <div style={{ marginTop: 8, border: '1.5px dashed var(--ak-border)', borderRadius: 14, padding: '22px 14px', textAlign: 'center', background: 'var(--ak-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
+                      <Spinner size={15} color={BRAND}/>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Uploading…</div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFile(e.dataTransfer.files?.[0]); }}
+                      style={{
+                        marginTop: 8, border: `1.5px dashed ${dragOver ? BRAND : 'var(--ak-border)'}`, borderRadius: 14,
+                        padding: '22px 14px', textAlign: 'center', cursor: 'pointer',
+                        background: dragOver ? `${BRAND}0A` : 'var(--ak-surface)',
+                      }}>
+                      <input ref={fileRef} type="file" style={{ display: 'none' }}
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        onChange={(e) => pickFile(e.target.files?.[0])}/>
+                      <div style={{ width: 34, height: 34, borderRadius: 10, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
+                        <Icon name="ti-cloud-upload" size={16}/>
+                      </div>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Click to upload or drag and drop</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX up to 5MB</div>
+                    </div>
+                  )}
+    </>
+  );
 
   /* ── loading / not found ── */
   if (loading) {
@@ -600,7 +650,13 @@ export default function ActivityDetailPage() {
                 {useStepper ? `Questions · ${questions.length}` : 'Your answer'}
               </p>
               {useStepper ? (
-                <Stepper questions={questions} work={work} setWork={setWork} mid={t.mid} dark={t.dark} onSubmit={submit} submitting={submitting}/>
+                <Stepper questions={questions} work={work} setWork={setWork} mid={t.mid} dark={t.dark} onSubmit={submit} submitting={submitting}
+                  attachment={(
+                    <div style={{ marginTop: 16 }}>
+                      <p style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', margin: '0 0 10px', fontFamily: "'Nunito',sans-serif" }}>Attachment <span style={{ color: 'var(--ak-text-muted)', fontWeight: 700 }}>— optional, for workings, diagrams or extra pages</span></p>
+                      {attachArea}
+                    </div>
+                  )}/>
               ) : (
                 <>
                   <textarea
@@ -608,47 +664,7 @@ export default function ActivityDetailPage() {
                     placeholder="Type your answer or working…"
                     maxLength={4000}
                     style={{ width: '100%', minHeight: 110, borderRadius: 12, border: '1.5px solid var(--ak-border)', padding: '11px 13px', fontFamily: "'Nunito',sans-serif", fontSize: 12.5, fontWeight: 600, color: 'var(--ak-text)', resize: 'vertical', outline: 'none', boxSizing: 'border-box', background: 'var(--ak-surface)' }}/>
-                  {/* file dropzone — validated locally; uploads land with the API update */}
-                  {work?.fileId ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--ak-surface)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 2px 10px rgba(17,24,39,.06)', marginTop: 8, border: '1px solid rgba(16,185,129,.3)' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(16,185,129,.12)', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name="ti-file" size={15}/>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{work.fileName || 'Attachment'}</div>
-                        <div style={{ fontSize: 10.5, fontWeight: 700, color: '#047857', marginTop: 1 }}>{fmtSize(work.fileSize || 0)} · uploaded</div>
-                      </div>
-                      <button onClick={() => dropFile(work.fileId)} aria-label="Remove file"
-                        style={{ border: 'none', background: 'none', color: 'var(--ak-text-muted)', cursor: 'pointer', width: 26, height: 26, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name="ti-x" size={13}/>
-                      </button>
-                    </div>
-                  ) : uploading ? (
-                    <div style={{ marginTop: 8, border: '1.5px dashed var(--ak-border)', borderRadius: 14, padding: '22px 14px', textAlign: 'center', background: 'var(--ak-surface)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
-                      <Spinner size={15} color={BRAND}/>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Uploading…</div>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => fileRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                      onDragLeave={() => setDragOver(false)}
-                      onDrop={(e) => { e.preventDefault(); setDragOver(false); pickFile(e.dataTransfer.files?.[0]); }}
-                      style={{
-                        marginTop: 8, border: `1.5px dashed ${dragOver ? BRAND : 'var(--ak-border)'}`, borderRadius: 14,
-                        padding: '22px 14px', textAlign: 'center', cursor: 'pointer',
-                        background: dragOver ? `${BRAND}0A` : 'var(--ak-surface)',
-                      }}>
-                      <input ref={fileRef} type="file" style={{ display: 'none' }}
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                        onChange={(e) => pickFile(e.target.files?.[0])}/>
-                      <div style={{ width: 34, height: 34, borderRadius: 10, background: `${BRAND}14`, color: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px' }}>
-                        <Icon name="ti-cloud-upload" size={16}/>
-                      </div>
-                      <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--ak-text)' }}>Click to upload or drag and drop</div>
-                      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--ak-text-muted)', marginTop: 3 }}>PDF, JPG, PNG, DOCX up to 5MB</div>
-                    </div>
-                  )}
+                  {attachArea}
                 </>
               )}
               {submitErr && <div style={{ fontSize: 12, fontWeight: 700, color: RED, marginTop: 10 }}>{submitErr}</div>}
