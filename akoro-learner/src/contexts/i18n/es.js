@@ -623,7 +623,7 @@ export const ES = {
   'battles.your_score':    'Tu puntuación: {score}',
 
   /* ── Agent dynamic messages ── */
-  'agent.greeting':       "¡Hola {user}!  Soy {name} {emoji}, tu agente de aprendizaje personal.\n\nPuedo ayudarte a crear sesiones de estudio, autoevaluarte, seguir tu progreso o hablar sobre cualquier tema. ¿Qué te gustaría hacer hoy?",
+  'agent.greeting':       "¡Hola {user}!  Soy {name}, tu agente de aprendizaje personal.\n\nPuedo ayudarte a crear sesiones de estudio, autoevaluarte, seguir tu progreso o hablar sobre cualquier tema. ¿Qué te gustaría hacer hoy?",
   'agent.all_done_tasks': '¡Todo listo! Revisa la pestaña Tareas para ver los detalles.',
   'agent.fallback':       '¡Aquí estoy! ¿Podrías reformular eso?',
   'agent.mode_think':            'Pensar',
@@ -714,7 +714,7 @@ export const ES = {
   'records.too_big':         'Solo imágenes, PDF, texto, audio o vídeo de hasta 500 MB.',
   'records.bad_link':        'Ese enlace parece incompleto: incluye https://',
   'records.nothing_to_paste':'Pega algún texto primero.',
-  'agent.updated':        '¡He sido actualizado! Ahora soy {name} {emoji}. ¡Mismo conocimiento, nueva identidad!',
+  'agent.updated':        '¡He sido actualizado! Ahora soy {name}. ¡Mismo conocimiento, nueva identidad!',
   'agent.task_assigned':  " ¡Tarea asignada!\n\n \"{title}\"\nPrioridad: {priority}\n\n¡Lo seguiré para ti!",
 
   /* ── Landing page ── */

@@ -702,7 +702,7 @@ export const EN = {
   'battles.your_score':    'Your score: {score}',
 
   /* ── Agent dynamic messages ── */
-  'agent.greeting':       "Hi {user}!  I'm {name} {emoji}, your personal learning agent.\n\nI can help you create study sessions, quiz yourself, track your progress, or talk through any topic. What would you like to do today?",
+  'agent.greeting':       "Hi {user}!  I'm {name}, your personal learning agent.\n\nI can help you create study sessions, quiz yourself, track your progress, or talk through any topic. What would you like to do today?",
   'agent.all_done_tasks': 'All done! Check the Tasks tab for the details.',
   'agent.fallback':       "I'm here! Could you rephrase that?",
   'agent.mode_think':            'Think',
@@ -810,7 +810,7 @@ export const EN = {
   'records.too_big':         'Only images, PDFs, text, audio or video up to 500 MB.',
   'records.bad_link':        'That link looks incomplete — include https://',
   'records.nothing_to_paste':'Paste some text first.',
-  'agent.updated':        "I've been updated! I'm now {name} {emoji}. Same knowledge, fresh identity!",
+  'agent.updated':        "I've been updated! I'm now {name}. Same knowledge, fresh identity!",
   'agent.task_assigned':  " Task assigned!\n\n \"{title}\"\nPriority: {priority}\n\nI'll track this for you!",
 
 

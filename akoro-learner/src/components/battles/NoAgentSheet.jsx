@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import { BRAND, RED } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
+import { DrawnAvatar } from '../common/AgentAvatar.jsx';
 
 // settingsApi's putAgent resolves the body even on a 4xx/5xx, so it cannot tell
 // us whether the agent was actually created — and here that difference decides
@@ -28,6 +29,8 @@ async function createAgent(body) {
   return r.json();
 }
 
+/* Avatar choices — stored as emoji keys, drawn via AgentAvatar (never
+   rendered as emoji glyphs). */
 const EMOJIS = ['🤖', '🦉', '🧠', '📚', '🔬', '🎓', '⚡', '🌟', '🧭', '🐝'];
 
 /** True when a failure means "no agent yet" rather than a real error. */
@@ -94,14 +97,14 @@ export default function NoAgentSheet({ open, onClose, onCreated, defaultName = '
             Avatar
           </label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {EMOJIS.map(em => (
-              <button key={em} onClick={() => setEmoji(em)} style={{
-                width: 46, height: 46, borderRadius: 12, fontSize: 22, cursor: 'pointer',
-                border: `2px solid ${emoji === em ? BRAND : 'var(--ak-border2)'}`,
-                background: emoji === em ? `${BRAND}12` : 'var(--ak-surface-hover)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>{em}</button>
-            ))}
+              {EMOJIS.map(em => (
+                <button key={em} onClick={() => setEmoji(em)} aria-label={`Avatar ${em}`} style={{
+                  width: 46, height: 46, borderRadius: 12, cursor: 'pointer',
+                  border: `2px solid ${emoji === em ? BRAND : 'var(--ak-border2)'}`,
+                  background: emoji === em ? `${BRAND}12` : 'var(--ak-surface-hover)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}><DrawnAvatar emoji={em} size={30}/></button>
+              ))}
           </div>
         </div>
 

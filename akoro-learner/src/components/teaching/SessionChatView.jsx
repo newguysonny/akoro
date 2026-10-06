@@ -6,6 +6,7 @@ import { MicIcon, XIcon, BrainIcon, SparkleIcon, ZapIcon, ChevDownIcon, Icon } f
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import StreamCaret from '../common/StreamCaret.jsx';
 import BlockRenderer from '../sessions/BlockRenderer.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 
 /* ── Mic level meter ──────────────────────────────────────────────
@@ -300,8 +301,8 @@ function SessionChatView({
             <p style={{ fontSize:15,fontWeight:900,color:"var(--ak-text)",margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{topic}</p>
             <p style={{ fontSize:11,fontWeight:600,color:"var(--ak-text-muted)",margin:0 }}>
               {chatMode === "guide"
-                ? `${subject} · ${guideLabel || "🧠 NaNa Esumai"}`
-                : `${subject} · ${agentEmoji} ${agentName} · ${guideLabel || "NaNa Esumai 🧠 · Sargeant ⚡"}`}
+                ? `${subject} · ${guideLabel || "NaNa Esumai"}`
+                : `${subject} · ${agentName}${guideLabel ? ` · ${guideLabel}` : " · NaNa Esumai · Sargeant"}`}
             </p>
             {reference && (
               <div title={`Session reference: ${reference.name}`} style={{ display:"inline-flex",alignItems:"center",gap:4,maxWidth:"100%",marginTop:6,padding:"3px 7px",borderRadius:20,background:"rgba(52,211,153,.10)",border:"1px solid rgba(52,211,153,.25)",color:"var(--ak-success-text)" }}>
@@ -384,7 +385,7 @@ function SessionChatView({
           <div style={{ display:"flex",alignItems:"flex-end",gap:8,marginBottom:4 }}>
             <div style={{ width:28,height:28,borderRadius:"50%",background:AGENT_STYLES.student.bg,
               border:`1.5px solid ${AGENT_STYLES.student.ring}`,flexShrink:0,
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:14 }}>{agentEmoji || AGENT_STYLES.student.emoji}</div>
+              display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji || AGENT_STYLES.student.emoji} size={19}/></div>
             <div style={{ maxWidth:"84%",padding:"9px 13px",borderRadius:"4px 18px 18px 18px",
               background:AGENT_STYLES.student.bg,border:`1px solid ${AGENT_STYLES.student.ring}`,
               color:AGENT_STYLES.student.color,fontSize:13.5,lineHeight:1.6,

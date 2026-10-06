@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { BRAND, RED, GREEN, GOLD, SUBJECTS, SUBJECT_COLORS, AGENT_STYLES } from '../../constants.js';
 import { ZapIcon, ChevDownIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 
 /* Where a step sits in the arc of the topic. Four kinds, because that is the
    shape of learning something: name it, see how it works, use it, tie it
@@ -227,13 +228,13 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
     <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:nana.bg,
         border:`1.5px solid ${nana.ring}`, flexShrink:0, display:"flex",
-        alignItems:"center", justifyContent:"center", fontSize:14 }}>{nana.emoji}</div>
+        alignItems:"center", justifyContent:"center" }}><AgentAvatar emoji={nana.emoji} size={19}/></div>
       <div style={{ maxWidth:"80%" }}>
         {block.learningState && (
           <div style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 9px",
             borderRadius:20, background:nana.bg, border:`0.5px solid ${nana.ring}`,
             fontSize:9.5, fontWeight:700, color:nana.color, marginBottom:4, flexWrap:"wrap" }}>
-            {nana.emoji} Learning state: {block.learningState}
+            <AgentAvatar emoji={nana.emoji} size={11}/> Learning state: {block.learningState}
           </div>
         )}
         <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
@@ -256,13 +257,13 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
     <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:4, opacity }}>
       <div style={{ width:28, height:28, borderRadius:"50%", background:student.bg,
         border:`1.5px solid ${student.ring}`, flexShrink:0, display:"flex",
-        alignItems:"center", justifyContent:"center", fontSize:14 }}>{student.emoji}</div>
+        alignItems:"center", justifyContent:"center" }}><AgentAvatar emoji={student.emoji} size={19}/></div>
       <div style={{ maxWidth:"80%" }}>
         {block.currentIdea && (
           <div style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"2px 9px",
             borderRadius:20, background:student.bg, border:`0.5px solid ${student.ring}50`,
             fontSize:9.5, fontWeight:700, color:student.color, marginBottom:4, flexWrap:"wrap" }}>
-            {student.emoji} Current idea: {block.currentIdea}
+            <AgentAvatar emoji={student.emoji} size={11}/> Current idea: {block.currentIdea}
           </div>
         )}
         <div style={{ padding:"9px 13px", borderRadius:"4px 18px 18px 18px",
@@ -345,7 +346,7 @@ function BlockRenderer({ block, agentName, agentEmoji }) {
         <div style={{ background:"linear-gradient(135deg,rgba(120,53,15,.80),rgba(146,64,14,.80))",
           padding:"7px 13px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-            <span style={{ fontSize:14 }}>{block.agentEmoji || "🤖"}</span>
+            <AgentAvatar emoji={block.agentEmoji} size={16}/>
             <span style={{ fontSize:12, fontWeight:800, color:"#FDE68A" }}>
               {block.agentName || "Agent"} — needs revision
             </span>

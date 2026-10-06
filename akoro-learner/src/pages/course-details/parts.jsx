@@ -12,6 +12,7 @@ import {
 import { API, apiPost } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../../components/common/Icons.jsx';
+import { AgentAvatar } from '../../components/common/AgentAvatar.jsx';
 import BattleModal from '../../components/battles/BattleModal.jsx';
 
 /* ── palette ──────────────────────────────────────────────── */
@@ -51,12 +52,11 @@ function Btn({ children, variant = 'primary', size = 'md', onClick, style }) {
 }
 
 /* Avatar — a colored disc. Static UI passes a lucide icon (preferred) or
-   initials — real glyphs, never emoji. A ti-* string renders through
-   Tabler; any other string passes through untouched for DB-supplied
-   identity (the agent emoji a learner picked at agent creation). */
+   initials; a ti-* string renders through Tabler; a stored agent_emoji
+   draws its AgentAvatar glyph (unknown keys draw the bot). */
 const Avatar = ({ icon: Ico, initials, emoji, bg = BORDER, size = 40, ring, color }) => (
   <div style={{ width: size, height: size, background: bg, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.round(size * 0.32), fontWeight: 900, letterSpacing: 0.4, color: color || MUTED2, boxShadow: ring ? `0 0 0 2px #fff,0 0 0 4px ${BRAND}` : 'none' }}>
-    {Ico ? <Ico size={Math.round(size * 0.46)} color={color || MUTED2}/> : initials ? initials : emoji?.startsWith('ti-') ? <Icon name={emoji} size={Math.round(size * 0.5)} color={color || MUTED2}/> : emoji}
+    {Ico ? <Ico size={Math.round(size * 0.46)} color={color || MUTED2}/> : initials ? initials : emoji ? <AgentAvatar emoji={emoji} size={Math.round(size * 0.62)}/> : null}
   </div>
 );
 

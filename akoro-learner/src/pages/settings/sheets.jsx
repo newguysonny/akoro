@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { useLang } from '../../contexts/LanguageContext.jsx';
+import { DrawnAvatar } from '../../components/common/AgentAvatar.jsx';
 import { setup2FA, enable2FA, disable2FA } from '../../services/settingsApi.js';
 import { ALARM_DEFAULTS, previewAlarm, stopPreview } from '../../services/alarmSound.js';
 import {
@@ -109,10 +110,10 @@ function AvatarPickerSheet({ type, current, onClose, onSavePhoto, onSaveEmoji, c
               {emojiList.map(em=>(
                 <div key={em} onClick={()=>setSelEmoji(em)}
                   style={{ width:46,height:46,borderRadius:12,display:'flex',
-                    alignItems:'center',justifyContent:'center',fontSize:22,cursor:'pointer',
+                    alignItems:'center',justifyContent:'center',cursor:'pointer',
                     background:selEmoji===em?`${color}15`:'var(--ak-tag-bg)',
                     border:`1.5px solid ${selEmoji===em?color:'var(--ak-border2)'}` }}>
-                  {em}
+                  <DrawnAvatar emoji={em} size={30}/>
                 </div>
               ))}
             </div>

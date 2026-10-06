@@ -21,6 +21,7 @@ import {
   BRAND, RED, ORANGE, Icon,
 } from './shared.jsx';
 import { LogoutModal } from './sheets.jsx';
+import { DrawnAvatar } from '../../components/common/AgentAvatar.jsx';
 import { UserTab } from './userTab.jsx';
 import { AgentTab } from './agentTab.jsx';
 import { AppShell } from '../../components/AppShell.jsx';
@@ -238,11 +239,9 @@ export default function SettingsPage() {
           border:`2px solid ${color}`,flexShrink:0,
           display:'flex',alignItems:'center',justifyContent:'center',
           background:`${color}18`,fontSize:16 }}>
-          {profile?.avatarUrl
-            ? <img src={profile.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
-            : profile?.avatarEmoji || user?.avatarUrl
-              ? <img src={user?.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
-              : '👤'
+          {(profile?.avatarUrl || user?.avatarUrl)
+            ? <img src={profile?.avatarUrl || user?.avatarUrl} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>
+            : <DrawnAvatar emoji={profile?.avatarEmoji} size={24}/>
           }
         </div>
         <div style={{ flex:1,minWidth:0 }}>

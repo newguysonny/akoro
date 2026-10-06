@@ -3,6 +3,7 @@ import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../../constants.js';
 import { apiGet, apiPost, apiDelete, streamPost } from '../../services/api.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { ZapIcon, BrainIcon, SparkleIcon, XIcon, Icon } from '../common/Icons.jsx';
+import { AgentAvatar } from '../common/AgentAvatar.jsx';
 import FortizoChatComposer from '../common/FortizoChatComposer.jsx';
 import RichText from '../common/RichText.jsx';
 import CopyMessageButton from '../common/CopyMessageButton.jsx';
@@ -75,7 +76,7 @@ function AgentChatTab({
   // Greeting message — uses real agent name from parent
   const greeting = (name, emoji) => ({
     id:1, from:"agent",
-    text: t('agent.greeting').replace('{user}','').replace('Hi !','Hi!').replace('{name}',name).replace('{emoji}',emoji),
+    text: t('agent.greeting').replace('{user}','').replace('Hi !','Hi!').replace('{name}',name),
     time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
   });
 
@@ -604,7 +605,7 @@ function AgentChatTab({
               const thinkingStream=!isMe&&msg.phase==="thinking";
               return (
                 <div key={msg.id} style={{ display:"flex",justifyContent:isMe?"flex-end":"flex-start",alignItems:"flex-end",gap:8 }}>
-                  {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div>}
+                  {!isMe&&<div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji} size={20}/></div>}
                   <div style={{ maxWidth:"78%" }}>
                     {!isMe&&(msg.thinking||thinkingStream)&&<ThoughtBlock thinking={msg.thinking} streaming={thinkingStream}/>}
                     {(!msg.phase||msg.text)&&(
@@ -644,7 +645,7 @@ function AgentChatTab({
                 </div>
               );
             })}
-            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16 }}>{agentEmoji}</div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
+            {loading&&<div style={{ display:"flex",alignItems:"flex-end",gap:8 }}><div style={{ width:30,height:30,borderRadius:"50%",background:`${BRAND}15`,border:`1.5px solid ${BRAND}40`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center" }}><AgentAvatar emoji={agentEmoji} size={20}/></div><div style={{ padding:"12px 16px",borderRadius:"4px 18px 18px 18px",background:"var(--ak-surface-hover)",border:`1px solid ${BRAND}25`,display:"flex",gap:8,alignItems:"center" }}>{[0,.25,.5].map((d,i)=><div key={i} style={{ width:6,height:6,borderRadius:"50%",background:BRAND,animation:`bounce-dot .7s ease-in-out ${d}s infinite alternate` }}/>)}</div></div>}
             {loading&&statusLabel&&<div style={{ display:"flex",alignItems:"center",gap:6,margin:"-6px 0 0 38px" }}><span style={{ width:7,height:7,borderRadius:"50%",background:BRAND,display:"inline-block",animation:"pulse-dot 1.4s ease-in-out infinite" }}/><span style={{ fontSize:11,fontWeight:700,color:"var(--ak-text-muted)" }}>{statusLabel}</span></div>}
           </div>
           <div style={{ padding:"10px 16px 12px",borderTop:"1px solid var(--ak-border)",background:"var(--ak-surface)",flexShrink:0 }}>
@@ -844,8 +845,8 @@ function AgentChatTab({
         <div style={{ position:"fixed",top:0,bottom:0,left:0,zIndex:2100,width:"min(86vw,320px)",background:"var(--ak-surface)",boxShadow:"6px 0 40px rgba(0,0,0,.18)",animation:"drawer-in .28s cubic-bezier(.32,1,.64,1)",fontFamily:"'Nunito',sans-serif",display:"flex",flexDirection:"column" }}>
           <style>{`@keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}`}</style>
           <div style={{ display:"flex",alignItems:"center",gap:12,padding:"16px 16px 13px",borderBottom:"1px solid var(--ak-border)",flexShrink:0 }}>
-            <div style={{ width:46,height:46,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:23,position:"relative",flexShrink:0 }}>
-              {agentEmoji}<div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
+            <div style={{ width:46,height:46,borderRadius:"50%",background:`${BRAND}15`,border:`2px solid ${BRAND}`,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",flexShrink:0 }}>
+              <AgentAvatar emoji={agentEmoji} size={30}/><div style={{ position:"absolute",bottom:0,right:0,width:12,height:12,borderRadius:"50%",background:agentOnline?GREEN:"var(--ak-text-muted)",border:"2px solid #fff",animation:agentOnline?"pulse-dot 2s ease-in-out infinite":"none" }}/>
             </div>
             <div style={{ flex:1,minWidth:0 }}>
               <p style={{ fontSize:14.5,fontWeight:900,color:"var(--ak-text)",margin:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{shownName}</p>
