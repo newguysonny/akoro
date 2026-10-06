@@ -333,6 +333,9 @@ export default function PharmDProgram({ onClose }) {
                   </button>
                 </div>
               )}
+              {!courseLoading && courseData && !topics.length && (
+                <div className="pd-empty"><div className="pd-empty-card">Topics for {courseData.course?.title || code} are being prepared — check back soon.</div></div>
+              )}
               {topics.map((t, i) => (
                 <div key={t.id || i} className="pd-topic-row" role="button" tabIndex={0}
                   onClick={() => openTopic(i)}
