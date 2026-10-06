@@ -20,6 +20,11 @@
  *                                       on mark-done — self-reported)
  *   DELETE /api/records/:id          → row + best-effort R2 object
  *   GET    /api/records/:id/file     → 302 to a presigned download
+ *   GET    /api/records/folders      → my folders, newest first
+ *   POST   /api/records/folders      → create one (name, description,
+ *                                       visibility, coverKey) — covers
+ *                                       presign via /upload-url with
+ *                                       purpose 'folder-cover'
  *
  * A kind='upload' row with no file_key is a legacy device record whose
  * bytes were never captured — the list says so (fileMissing) so the
@@ -54,6 +59,14 @@ const res503 = (res, msg)  => res.status(503).json({ success: false, message: ms
 const MAX_FILE_BYTES   = 500 * 1024 * 1024;  // 500 MB — matches the sheet's guard
 const MAX_TEXT_CHARS   = 20_000;             // matches the sheet's counter
 const MAX_RECORDS      = 200;                // a shelf, not an archive
+
+/* Folders — the shelf's organization layer (created from the
+   "Add to library" sheet). A cover rides the SAME presigned storage
+   pipeline as record files, just image-only and small. */
+const MAX_FOLDERS        = 50;
+const MAX_FOLDER_NAME    = 100;
+const MAX_FOLDER_DESC    = 500;
+const MAX_COVER_BYTES    = 5 * 1024 * 1024;
 
 /* ── What the viewer can actually open ──────────────────────────────────────
    Mirrors the app's picker: PDF, text, images, audio, video. Word docs are
@@ -99,18 +112,28 @@ const toApi = async (r) => ({
 });
 
 // ─── POST /api/records/upload-url ───────────────────────────────────────────
+//   body.purpose: 'record' (default) | 'folder-cover' — a cover is
+//   image-only and capped at 5 MB, but otherwise rides the exact same
+//   presigned-PUT pipeline (R2, or the Supabase fallback where 5 MB is
+//   already the bucket's hard cap, so the cover always fits).
 router.post("/upload-url", authenticateToken, asyncHandler(async (req, res) => {
   const { name, mime, size } = req.body || {};
+  const purpose = req.body?.purpose === "folder-cover" ? "folder-cover" : "record";
   if (!name || !String(name).trim()) return res400(res, "A file name is required.");
   const bytes = Number(size);
   if (!Number.isFinite(bytes) || bytes <= 0) return res400(res, "A file size is required.");
-  if (bytes > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
-  if (!detectType(mime, name)) return res400(res, "Only PDFs, text files, images, audio or video can be uploaded.");
-  // No R2 on this deployment? Files up to 5 MB ride the Supabase Storage
-  // fallback (same signed-PUT protocol — the API still never proxies the
-  // bytes); larger ones honestly need R2.
-  if (!recordsStorageEnabled() && bytes > MAX_FALLBACK_FILE_BYTES) {
-    return res503(res, "This deployment has no R2 file storage yet — files up to 5 MB upload to the built-in Supabase storage; larger ones need the R2_* variables.");
+  if (purpose === "folder-cover") {
+    if (!/^image\//.test(String(mime || ""))) return res400(res, "Folder covers must be images.");
+    if (bytes > MAX_COVER_BYTES) return res400(res, "Folder covers are capped at 5 MB.");
+  } else {
+    if (bytes > MAX_FILE_BYTES) return res400(res, "Files are capped at 500 MB.");
+    if (!detectType(mime, name)) return res400(res, "Only PDFs, text files, images, audio or video can be uploaded.");
+    // No R2 on this deployment? Files up to 5 MB ride the Supabase Storage
+    // fallback (same signed-PUT protocol — the API still never proxies the
+    // bytes); larger ones honestly need R2.
+    if (!recordsStorageEnabled() && bytes > MAX_FALLBACK_FILE_BYTES) {
+      return res503(res, "This deployment has no R2 file storage yet — files up to 5 MB upload to the built-in Supabase storage; larger ones need the R2_* variables.");
+    }
   }
 
   const { uploadUrl, fileKey } = await createPresignedUpload(String(name).trim(), mime, req.user.id);
@@ -185,6 +208,67 @@ router.get("/", authenticateToken, asyncHandler(async (req, res) => {
     .order("created_at", { ascending: false }).limit(MAX_RECORDS);
   if (error) throw error;
   res200(res, await Promise.all((data || []).map(toApi)));
+}));
+
+/* ── Folders — the shelf's organization layer ─────────────────────────────
+   The create flow ships first ("Add to library" → Create a folder);
+   putting items INTO folders lands next. visibility is stored as the
+   learner chose it — 'public' folders get their browsing surface when
+   the shared library ships, nothing pretends they're browsable today. */
+const folderToApi = async (f) => ({
+  id: f.id,
+  name: f.name,
+  description: f.description || "",
+  visibility: f.visibility,
+  coverUrl: f.cover_key
+    ? await createPresignedDownload(f.cover_key).catch(() => null)  // a storage hiccup degrades the cover, never the list
+    : null,
+  createdAt: f.created_at,
+});
+
+// ─── GET /api/records/folders — my folders, newest first ───────────────────
+router.get("/folders", authenticateToken, asyncHandler(async (req, res) => {
+  const { data, error } = await edu().from("library_folders")
+    .select("*").eq("user_id", req.user.id)
+    .order("created_at", { ascending: false }).limit(MAX_FOLDERS);
+  if (error) throw error;
+  res200(res, await Promise.all((data || []).map(folderToApi)));
+}));
+
+// ─── POST /api/records/folders — create one ────────────────────────────────
+router.post("/folders", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const body = req.body || {};
+
+  const name = String(body.name || "").trim();
+  if (!name) return res400(res, "A folder name is required.");
+  if (name.length > MAX_FOLDER_NAME) return res400(res, "Folder names are capped at 100 characters.");
+  const description = String(body.description || "").trim();
+  if (description.length > MAX_FOLDER_DESC) return res400(res, "Descriptions are capped at 500 characters.");
+  const visibility = body.visibility === "public" ? "public" : "private";
+
+  // A cover, when given, must be the learner's own freshly-uploaded image.
+  let coverKey = String(body.coverKey || "").trim();
+  if (coverKey) {
+    if (!ownsRecordFileKey(coverKey, userId)) return res403(res, "That cover image does not belong to you.");
+    coverKey = coverKey.slice(0, 500);
+  } else {
+    coverKey = null;
+  }
+
+  const { count } = await edu().from("library_folders").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  if ((count || 0) >= MAX_FOLDERS) return res400(res, `You already have ${MAX_FOLDERS} folders — that's the cap.`);
+
+  const { data, error } = await edu().from("library_folders")
+    .insert({ user_id: userId, name, description: description || null, cover_key: coverKey, visibility })
+    .select().single();
+  if (error) {
+    if (/duplicate key|unique/i.test(String(error.message || ""))) {
+      return res400(res, "You already have a folder with that name.");
+    }
+    throw error;
+  }
+  res201(res, await folderToApi(data));
 }));
 
 // ─── PATCH /api/records/:id — progress / last-opened ────────────────────────

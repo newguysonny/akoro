@@ -18,7 +18,7 @@ import test from "node:test";
  *              with transport (±10s, seek, 0.75×–2×) in the SHARED toolbar
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample] = await Promise.all([
+const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample, foldersMigration, createSheet] = await Promise.all([
   read("2026-records.sql"),
   read("manifest.json"),
   read("../modules/records/routes.js"),
@@ -35,6 +35,8 @@ const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryP
   read("../../akoro-learner/src/pages/LearnerDashboard.jsx"),
   read("../config/index.js"),
   read("../.env.example"),
+  read("2026-library-folders.sql"),
+  read("../../akoro-learner/src/components/library/CreateFolderSheet.jsx"),
 ]);
 
 test("the shelf is a table that follows the learner, not a device", () => {
@@ -176,4 +178,45 @@ test("the rest of the app reads the server shelf too", () => {
   assert.ok(!searchPage.includes("akoro_records_"), "no localStorage reads remain in search");
   assert.ok(dashboard.includes("RecordTeachSession"), "records opened from the dashboard open as teaching sessions");
   assert.ok(dashboard.includes("setRecordProgressApi"), "dashboard progress goes to the server");
+});
+
+test("folders: create flow with name, cover, description, visibility", () => {
+  // The table — organization layer over the shelf, owned per learner.
+  assert.ok(foldersMigration.includes("CREATE TABLE IF NOT EXISTS edu.library_folders"), "the folders table");
+  assert.ok(foldersMigration.includes("REFERENCES public.users(id) ON DELETE CASCADE"), "dies with its owner");
+  assert.ok(foldersMigration.includes("CHECK (visibility IN ('private', 'public'))"), "visibility is exactly private|public");
+  assert.ok(foldersMigration.includes("UNIQUE (user_id, name)"), "no duplicate names per learner");
+  assert.ok(foldersMigration.includes("idx_library_folders_user"), "listed by owner, newest first");
+  assert.ok(foldersMigration.includes("organization lands next"), "honest about what's NOT in scope yet");
+  // Registered with the other schema files.
+  assert.ok(JSON.parse(manifest).schema.includes("2026-library-folders.sql"), "in the manifest schema group");
+
+  // The routes — same module, same auth, same storage pipeline.
+  assert.ok(routes.includes('router.post("/folders"'), "POST /folders creates");
+  assert.ok(routes.includes('router.get("/folders"'), "GET /folders lists mine");
+  assert.ok(routes.includes("library_folders"), "reads the folders table");
+  for (const guard of ["authenticateToken"]) {
+    assert.ok((routes.match(/folders[\s\S]{0,200}authenticateToken|authenticateToken[\s\S]{0,80}folders/g) || []).length >= 1, `${guard} on folder routes`);
+  }
+  assert.ok(routes.includes("purpose === \"folder-cover\""), "covers presign through the same endpoint with a purpose");
+  assert.ok(routes.includes("Folder covers must be images."), "covers are image-only");
+  assert.ok(routes.includes("MAX_COVER_BYTES"), "covers are size-capped");
+  assert.ok(routes.includes("ownsRecordFileKey(coverKey, userId)"), "a cover must be the learner's own object");
+  assert.ok(routes.includes("already have a folder with that name"), "duplicate names get a friendly 400");
+  assert.ok(routes.includes("MAX_FOLDERS"), "the folder count is capped");
+
+  // The service seam.
+  assert.ok(recordsApi.includes("listFolders"), "listFolders()");
+  assert.ok(recordsApi.includes("createFolder"), "createFolder()");
+  assert.ok(recordsApi.includes("purpose: 'folder-cover'"), "cover presign passes the purpose");
+
+  // The sheet — the four fields, the add-modal entry, the folder strip.
+  assert.ok(createSheet.includes("Folder name"), "folder name field");
+  assert.ok(createSheet.includes("Cover image"), "cover image field");
+  assert.ok(createSheet.includes("Description"), "description field");
+  assert.ok(createSheet.includes("private") && createSheet.includes("public"), "visibility choice");
+  assert.ok(createSheet.includes("presignFolderCoverUpload") || createSheet.includes("putFileTo"), "cover rides the presigned PUT pipeline");
+  assert.ok(libraryPage.includes("CreateFolderSheet"), "the Library page mounts the sheet");
+  assert.ok(libraryPage.includes("Create a folder"), "the Add-to-library modal offers it");
+  assert.ok(libraryPage.includes("listFolders"), "the page loads folders with the shelf");
 });

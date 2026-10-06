@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMyLibrary } from '../services/libraryApi.js';
-import { listRecords, setRecordProgress, touchRecordOpened } from '../services/recordsApi.js';
+import { listRecords, listFolders, setRecordProgress, touchRecordOpened } from '../services/recordsApi.js';
 import { Icon, XIcon } from '../components/common/Icons.jsx';
 import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
+import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
 import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
@@ -273,6 +274,7 @@ export default function LibraryPage() {
   const [searchParams] = useSearchParams();
   const [items, setItems]       = useState([]);
   const [records, setRecords]   = useState([]);
+  const [folders, setFolders]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [filter, setFilter]     = useState('all');
   const [viewer, setViewer]     = useState(null);   // the record open as a session
@@ -282,6 +284,7 @@ export default function LibraryPage() {
   // that holds it. The Now-Studying bar's + deep-links here with ?add=1.
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [folderSheetOpen, setFolderSheetOpen] = useState(false);
   // The blog option belongs to the higher-ed tier (studyLevel.js gate) —
   // resolved via the shared cached hook, so the page never flashes the
   // school layout at a higher-ed learner while the tier revalidates.
@@ -298,14 +301,17 @@ export default function LibraryPage() {
 
   const load = useCallback(async () => {
     try {
-      // The shelf is two feeds: the school/higher-ed library and the
-      // learner's own records. One failing shouldn't blank the other.
-      const [lib, recs] = await Promise.all([
+      // The shelf is three feeds now: the school/higher-ed library, the
+      // learner's own records, and their folders. One failing shouldn't
+      // blank the others.
+      const [lib, recs, flds] = await Promise.all([
         fetchMyLibrary().catch(() => []),
         listRecords().catch(() => []),
+        listFolders().catch(() => []),
       ]);
       setItems(lib);
       setRecords(recs);
+      setFolders(flds);
     } finally { setLoading(false); }
   }, []);
 
@@ -395,6 +401,33 @@ export default function LibraryPage() {
 
       {/* CONTENT */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 80px' }}>
+        {/* Folders — the shelf's organization layer. Created from the
+            Add-to-library sheet; opening one (adding items) comes next. */}
+        {!loading && folders.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 8px', letterSpacing: .3 }}>FOLDERS</p>
+            <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+              {folders.map(f => (
+                <button key={f.id} onClick={() => setToast('Adding items to folders comes next')}
+                  title={f.description || f.name}
+                  style={{ flex: '0 0 128px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', textAlign: 'left', padding: 0, fontFamily: "'Nunito',sans-serif" }}>
+                  {f.coverUrl
+                    ? <img src={f.coverUrl} alt="" style={{ display: 'block', width: '100%', height: 72, objectFit: 'cover' }} />
+                    : <div style={{ width: '100%', height: 72, background: `linear-gradient(135deg, ${BRAND}, #4C1DCC)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Icon name="ti-folder" size={26} color="rgba(255,255,255,.9)"/>
+                      </div>}
+                  <div style={{ padding: '8px 10px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--ak-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 10.5, fontWeight: 700, color: 'var(--ak-text-muted)' }}>
+                      <Icon name={f.visibility === 'public' ? 'ti-world' : 'ti-lock'} size={11}/>
+                      {f.visibility === 'public' ? 'Public' : 'Private'}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[1,2,3,4].map(i => <div key={i} style={{ height: 70, borderRadius: 14, background: 'var(--ak-border)', opacity: .4 }} />)}
@@ -439,6 +472,13 @@ export default function LibraryPage() {
               <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', margin: 0 }}>Files, links or pasted text</p>
             </div>
           </button>
+          <button onClick={() => { setAddOpen(false); setFolderSheetOpen(true); }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 13px', borderRadius: 14, border: '1px solid var(--ak-border)', background: 'var(--ak-surface-hover)', cursor: 'pointer', textAlign: 'left', marginBottom: 8, fontFamily: "'Nunito',sans-serif" }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: '#F59E0B14', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon name="ti-folder" size={19} color="#F59E0B" /></div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--ak-text)', margin: 0 }}>Create a folder</p>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ak-text-muted)', margin: 0 }}>Name, cover, description, visibility</p>
+            </div>
+          </button>
           {higherEd && (
             <button onClick={() => { setAddOpen(false); navigate('/write/blog/new'); }} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 13px', borderRadius: 14, border: '1px solid var(--ak-border)', background: 'var(--ak-surface-hover)', cursor: 'pointer', textAlign: 'left', fontFamily: "'Nunito',sans-serif" }}>
               <div style={{ width: 40, height: 40, borderRadius: 12, background: '#0EA5E914', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon name="ti-news" size={19} color="#0EA5E9" /></div>
@@ -458,6 +498,13 @@ export default function LibraryPage() {
         user={{ id: STUDENT_ID }}
         onOpenRecord={openRecord}
         onRecordsChanged={setRecords}
+      />
+
+      {/* Create-folder sheet — name, cover, description, visibility */}
+      <CreateFolderSheet
+        open={folderSheetOpen}
+        onClose={() => setFolderSheetOpen(false)}
+        onCreated={(f) => { setFolders((fs) => [f, ...fs]); setToast(`Folder “${f.name}” created`); }}
       />
 
       {/* The record as a TEACHING session — the learner teaches their agent

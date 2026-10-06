@@ -63,6 +63,29 @@ export async function setRecordProgress(id, progress) {
   return d?.data ?? null;
 }
 
+/* ── Folders — the shelf's organization layer ──────────────────────────────
+   Created from the "Add to library" sheet. A cover rides the same
+   presigned-PUT pipeline as record files (purpose 'folder-cover' makes
+   the route enforce image-only + 5 MB). */
+
+/** My folders, newest first. Each carries a presigned coverUrl (or null). */
+export async function listFolders() {
+  const d = await apiGet('/api/records/folders');
+  return d?.data ?? [];
+}
+
+/** Step 1 of a cover upload — same endpoint, folder-cover purpose. */
+export async function presignFolderCoverUpload({ name, mime, size }) {
+  const d = await apiPost('/api/records/upload-url', { name, mime, size, purpose: 'folder-cover' });
+  return d?.data ?? null;
+}
+
+/** Create the folder (coverKey comes from the presigned PUT, step 2). */
+export async function createFolder({ name, description, visibility, coverKey }) {
+  const d = await apiPost('/api/records/folders', { name, description, visibility, coverKey });
+  return d?.data ?? null;
+}
+
 /** Mark a record opened (server-side last_opened_at, no progress change). */
 export async function touchRecordOpened(id) {
   await apiPatch(`/api/records/${id}`, { lastOpened: true });
