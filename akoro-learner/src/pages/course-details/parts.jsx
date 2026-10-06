@@ -6,7 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, ChevronDown, Play, Users, Clock, Star, Globe, Lock,
   CheckCircle2, Radio, ShoppingCart, CalendarPlus, MonitorPlay, BookOpen,
-  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Crown, PartyPopper,
+  Brain, Award, Swords, TrendingUp, Calendar, ArrowRight, Share2, Flag, Check, Plus, Video, Crown, PartyPopper, MoreVertical,
 } from 'lucide-react';
 import { API, apiPost } from '../../services/api.js';
 import { BRAND } from '../../constants.js';
@@ -214,7 +214,7 @@ function VideoPlayer({ lesson, courseEmoji = 'ti-book' }) {
 }
 
 /* ── curriculum (shared) ──────────────────────────────────── */
-function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
+function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle, onLessonMore }) {
   const [open, setOpen] = useState(0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -251,9 +251,16 @@ function Curriculum({ modules, isEnrolled, hours, onPick, currentTitle }) {
                       style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px', borderBottom: li < m.lessons.length - 1 ? `1px solid ${BORDER}` : 'none', cursor: clickable ? 'pointer' : unlocked ? 'default' : 'not-allowed', opacity: unlocked ? 1 : 0.5, background: active ? `${BRAND}10` : 'transparent' }}>
                       <div style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0, background: isEnrolled && l.done ? BRAND : unlocked ? '#EDE8E1' : '#F0ECE6', color: isEnrolled && l.done ? '#fff' : MUTED2 }}>{isEnrolled && l.done ? <Check size={10} /> : !unlocked ? <Lock size={9} /> : li + 1}</div>
                       {l.type === 'video' ? <Play size={12} color={unlocked ? BRAND : '#C9C5BE'} /> : <BookOpen size={12} color={unlocked ? BRAND : '#C9C5BE'} />}
-                      <span style={{ flex: 1, fontSize: 13.5, color: unlocked ? INK : '#C9C5BE' }}>{l.title}</span>
+                      <span style={{ flex: 1, fontSize: 13.5, color: unlocked ? INK : '#C9C5BE', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</span>
                       <span style={{ fontSize: 11, color: MUTED2 }}>{l.duration}</span>
                       {isEnrolled && l.done && <span style={{ fontSize: 10, fontWeight: 800, color: '#2AA76E', background: '#E8F8EE', padding: '1px 8px', borderRadius: 100 }}>Done</span>}
+                      {isEnrolled && onLessonMore && (
+                        <button aria-label={`More for ${l.title}`}
+                          onClick={(e) => { e.stopPropagation(); onLessonMore({ ...l, module: m.title }); }}
+                          style={{ background: 'none', border: 'none', padding: 4, margin: '-4px -2px -4px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', color: MUTED2, flexShrink: 0 }}>
+                          <MoreVertical size={14}/>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -578,7 +585,7 @@ function mapCourse(api) {
 }
 
 /* ── guest / overview view ────────────────────────────────── */
-function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart, onAgentSession }) {
+function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, enrolling, onJoinLive, onAddToCart, addingCart, inCart, onAgentSession, onLessonMore }) {
   const isVideo = type === 'video';
   const isFree = course.priceLabel === 'Free';
   const tabs = isVideo ? ['about', 'curriculum', 'teachers', 'reviews'] : ['about', 'schedule', 'curriculum', 'teachers', 'reviews'];
@@ -706,7 +713,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
       )}
 
       {/* Curriculum */}
-      {tab === 'curriculum' && <Curriculum modules={modules} isEnrolled={isEnrolled} hours={course.hours} onPick={isEnrolled ? onPlay : null} />}
+      {tab === 'curriculum' && <Curriculum modules={modules} isEnrolled={isEnrolled} hours={course.hours} onPick={isEnrolled ? onPlay : null} onLessonMore={isEnrolled ? onLessonMore : null} />}
 
       {/* Teachers */}
       {tab === 'teachers' && (
@@ -734,7 +741,7 @@ function CourseOverview({ type, isEnrolled, course, modules, onPlay, onEnrol, en
 }
 
 /* ── enrolled video player view ───────────────────────────── */
-function EnrolledVideoView({ course, modules, onAgentSession }) {
+function EnrolledVideoView({ course, modules, onAgentSession, onLessonMore }) {
   const first = (() => {
     for (const m of modules) { const l = (m.lessons || []).find((x) => x.type === 'video'); if (l) return { ...l, module: m.title }; }
     return { title: 'Lesson', type: 'video', module: modules[0]?.title };
@@ -790,7 +797,7 @@ function EnrolledVideoView({ course, modules, onAgentSession }) {
         ))}
       </div>
 
-      {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} />}
+      {tab === 'content' && <Curriculum modules={modules} isEnrolled hours={course.hours} onPick={setLesson} currentTitle={lesson?.title} onLessonMore={onLessonMore} />}
       {tab === 'about' && <div style={{ ...card, padding: 22 }}><p style={{ fontSize: 13.5, color: MUTED, lineHeight: 1.7, margin: 0 }}>{course.description || 'A complete course covering the full syllabus with lessons and quizzes.'}</p></div>}
       {tab === 'reviews' && <Reviews reviews={course.reviews} courseId={course.id} canReview />}
       {tab === 'battles' && <BattlesSection battles={course.battles} leaderboard={course.leaderboard} lobbies={course.openLobbies} />}

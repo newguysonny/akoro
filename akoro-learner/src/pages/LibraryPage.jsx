@@ -8,6 +8,7 @@ import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
 import LibraryFolderPage from '../components/library/LibraryFolderPage.jsx';
+import AddToFolderPage from '../components/library/AddToFolderPage.jsx';
 import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
@@ -84,7 +85,20 @@ const CARD_BASE = {
   alignItems: 'center', width: '100%', textAlign: 'left', fontFamily: "'Nunito',sans-serif",
 };
 
-function CourseCard({ item, onOpen }) {
+/* The ⋯ on every shelf row — opens Add to Folder for that content. */
+function MoreBtn({ item, onMore }) {
+  if (!onMore) return null;
+  return (
+    <button aria-label={`More for ${item.name || item.title || 'this item'}`}
+      onClick={(e) => { e.stopPropagation(); onMore(item); }}
+      style={{ background: 'none', border: 'none', padding: 6, margin: '-6px -4px -6px 0', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--ak-text-muted)' }}>
+      <Icon name="ti-dots-vertical" size={16}/>
+    </button>
+  );
+}
+
+function CourseCard({ item, onOpen, onMore }) {
   const live = item.courseType === 'live';
   const st = getStatus(item.status);
   const open = () => { if (item.slug) onOpen(item.slug); };
@@ -125,11 +139,13 @@ function CourseCard({ item, onOpen }) {
           <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', flexShrink: 0 }}>{item.progress || 0}%</span>
         </div>
       </div>
-    </button>
+    
+<MoreBtn item={item} onMore={onMore}/>
+      </button>
   );
 }
 
-function GuideCard({ item }) {
+function GuideCard({ item, onMore }) {
   const { color } = getMeta('guide');
   return (
     <div style={CARD_BASE}>
@@ -155,12 +171,13 @@ function GuideCard({ item }) {
           </span>
         </div>
       </div>
-    </div>
+    <MoreBtn item={item} onMore={onMore}/>
+      </div>
   );
 }
 
 /* Generic row for kinds whose data hasn't landed yet (folders, collections). */
-function ItemCard({ item }) {
+function ItemCard({ item, onMore }) {
   const { icon, color } = getMeta(item.kind);
   return (
     <div style={CARD_BASE}>
@@ -180,11 +197,12 @@ function ItemCard({ item }) {
           </div>
         )}
       </div>
-    </div>
+    <MoreBtn item={item} onMore={onMore}/>
+      </div>
   );
 }
 
-function BlogCard({ item, onOpen }) {
+function BlogCard({ item, onOpen, onMore }) {
   const published = item.blogStatus === 'published';
   const color = published ? GREEN : GOLD;
   return (
@@ -210,14 +228,16 @@ function BlogCard({ item, onOpen }) {
           </span>
         </div>
       </div>
-    </button>
+    
+<MoreBtn item={item} onMore={onMore}/>
+      </button>
   );
 }
 
 /* A record on the shelf — its icon says what it is (PDF/audio/video/doc…),
    its progress says where the learner left off, and tapping it opens the
    record as a full study session. */
-function RecordCard({ item, onOpen }) {
+function RecordCard({ item, onOpen, onMore }) {
   const meta = recordMeta(item);
   const done = (item.progress || 0) >= 100;
   const bits = [
@@ -251,19 +271,20 @@ function RecordCard({ item, onOpen }) {
           <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--ak-text-muted)', flexShrink: 0 }}>{item.progress || 0}%</span>
         </div>
       </div>
-    </button>
+    <MoreBtn item={item} onMore={onMore}/>
+      </button>
   );
 }
 
 /* Record rows keep their real kind ('upload'/'link'/'paste') — the viewer
    and the icons branch on it — and carry isRecordItem so the list routes
    them to the record card. */
-function LibraryItem({ item, onOpen }) {
-  if (item.isRecordItem)     return <RecordCard item={item} onOpen={onOpen} />;
-  if (item.kind === 'course') return <CourseCard item={item} onOpen={onOpen} />;
-  if (item.kind === 'guide')  return <GuideCard item={item} />;
-  if (item.kind === 'blog')   return <BlogCard item={item} onOpen={onOpen} />;
-  return <ItemCard item={item} />;
+function LibraryItem({ item, onOpen, onMore }) {
+  if (item.isRecordItem)     return <RecordCard item={item} onOpen={onOpen} onMore={onMore} />;
+  if (item.kind === 'course') return <CourseCard item={item} onOpen={onOpen} onMore={onMore} />;
+  if (item.kind === 'guide')  return <GuideCard item={item} onMore={onMore} />;
+  if (item.kind === 'blog')   return <BlogCard item={item} onOpen={onOpen} onMore={onMore} />;
+  return <ItemCard item={item} onMore={onMore} />;
 }
 
 export default function LibraryPage() {
@@ -287,6 +308,7 @@ export default function LibraryPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [folderSheetOpen, setFolderSheetOpen] = useState(false);
   const [folderPage, setFolderPage] = useState(null);   // the folder opened full-screen
+  const [addToFolder, setAddToFolder] = useState(null); // the content being filed away
   // The blog option belongs to the higher-ed tier (studyLevel.js gate) —
   // resolved via the shared cached hook, so the page never flashes the
   // school layout at a higher-ed learner while the tier revalidates.
@@ -318,6 +340,43 @@ export default function LibraryPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  /* ⋯ on a shelf row → file that content away. Snapshots are stored at
+     add time (title/sub/kind/link), so a folder never re-asks the shelf. */
+  const openAddToFolder = (item) => {
+    if (!item) return;
+    if (item.isRecordItem) {
+      const ft = recordFileType(item);
+      const kind = item.kind === 'link' ? 'link'
+        : item.kind === 'paste' ? 'paste'
+        : ['pdf','audio','video','image','text'].includes(ft) ? ft : 'text';
+      setAddToFolder({ itemType: 'record', itemRef: String(item.id), title: item.name, sub: 'Your record', kind, link: null });
+    } else if (item.kind === 'blog') {
+      setAddToFolder({ itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Blog', kind: 'blog', link: `/write/blog/${item.id}` });
+    } else if (item.kind === 'course') {
+      setAddToFolder({ itemType: 'library', itemRef: String(item.id), title: item.title, sub: 'Course', kind: 'course', link: item.slug ? `/course/${item.slug}` : null });
+    } else {
+      const k = item.kind || 'text';
+      setAddToFolder({
+        itemType: 'library', itemRef: String(item.id), title: item.title,
+        sub: k[0].toUpperCase() + k.slice(1), kind: ['pdf','audio','video','image','text','link','paste','blog','course','topic'].includes(k) ? k : 'text', link: null,
+      });
+    }
+  };
+
+  /* Items stored inside a folder open back onto the surface they came
+     from: records re-enter their teach session, links navigate. */
+  const openFolderItem = (it) => {
+    if (!it) return;
+    if (it.itemType === 'record') {
+      const r = records.find((x) => String(x.id) === String(it.itemRef));
+      if (r) { setFolderPage(null); openRecord(r); }
+      else setToast('That record is no longer on your shelf');
+      return;
+    }
+    if (it.link) { setFolderPage(null); navigate(it.link); return; }
+    setToast(it.itemType === 'pharmd_topic' ? 'Open Pharm.D topics from the Discover tab' : 'Open this from its own page');
+  };
 
   /* Opening a record starts a TEACHING session over it — same flow as
      "Start teaching", with the file itself as the material. Links stay links. */
@@ -445,7 +504,7 @@ export default function LibraryPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <LibraryItem key={a.id} item={a} onOpen={(it) => it?.isRecordItem
+            {displayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddToFolder} onOpen={(it) => it?.isRecordItem
               ? openRecord(it)
               : it?.kind === 'blog' ? navigate(`/write/blog/${it.id}`) : navigate(`/course/${it?.slug || it?.id}`)} />)}
           </div>
@@ -515,8 +574,18 @@ export default function LibraryPage() {
         <LibraryFolderPage
           folder={folderPage}
           onClose={() => setFolderPage(null)}
+          onOpenItem={openFolderItem}
           onRenamed={(f) => { setFolders((fs) => fs.map((x) => (x.id === f.id ? f : x))); setFolderPage(f); }}
           onDeleted={(id) => { setFolders((fs) => fs.filter((x) => x.id !== id)); setFolderPage(null); setToast('Folder deleted'); }}
+        />
+      )}
+
+      {/* ⋯ on any shelf row — pick the folders this content joins. */}
+      {addToFolder && (
+        <AddToFolderPage
+          item={addToFolder}
+          onClose={() => setAddToFolder(null)}
+          onAdded={() => { listFolders().then(setFolders).catch(() => {}); }}
         />
       )}
 

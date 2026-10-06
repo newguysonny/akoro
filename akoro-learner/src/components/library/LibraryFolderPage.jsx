@@ -9,27 +9,55 @@
  * soon); an empty folder shows the same dashed empty card the
  * Pharm.D browse view uses for empty years.
  *
- * Items-in-folders is the next step on the roadmap — until it
- * lands the page is honestly empty: the primary button is disabled
- * (exactly like Pharm.D's Start learning with zero topics) and the
- * list says what will appear here.
+ * Items-in-folders has landed: every piece of content filed via ⋯ →
+ * Add to folder (records, Pharm.D topics, course lessons, library
+ * posts) is listed here from its add-time snapshot, and tapping a
+ * row hands it back to the parent to open on its home surface.
  */
 import { useEffect, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
-import { renameFolder, deleteFolder } from '../../services/recordsApi.js';
+import { renameFolder, deleteFolder, listFolderItems } from '../../services/recordsApi.js';
 
 /* The reference's folder gradient — same family as Pharm.D's accent art. */
 const ART_BG = `linear-gradient(160deg, ${BRAND} 0%, #2E1A6E 75%)`;
 
-export default function LibraryFolderPage({ folder, onClose, onRenamed, onDeleted }) {
+/* Icon + tint per stored kind — the snapshot's kind drives the glyph. */
+const KIND_META = {
+  pdf:    ['ti-file-text',     '#EF4444'],
+  audio:  ['ti-headphones',    '#10B981'],
+  video:  ['ti-video',         '#3B82F6'],
+  image:  ['ti-photo',         '#F59E0B'],
+  text:   ['ti-file-text',     '#6B7280'],
+  link:   ['ti-link',          BRAND],
+  paste:  ['ti-clipboard-text', '#8B5CF6'],
+  blog:   ['ti-news',          '#EC4899'],
+  course: ['ti-book-2',        BRAND],
+  topic:  ['ti-book-2',        '#8B5CF6'],
+};
+const kindMeta = (k) => KIND_META[k] || ['ti-box', '#6B7280'];
+
+export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted }) {
   const [sheet, setSheet] = useState(null);        // null | 'more' | 'rename' | 'delete'
   const [name, setName]       = useState(folder?.name || '');
   const [busy, setBusy]       = useState(false);
   const [toast, setToast]     = useState(null);
+  const [items, setItems]     = useState([]);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
 
   const soon = (label) => setToast({ msg: `${label} — coming soon`, color: BRAND });
+
+  /* Items come from their own endpoint — newest first, snapshots only. */
+  useEffect(() => {
+    if (!folder?.id) return;
+    let alive = true;
+    setItemsLoaded(false);
+    listFolderItems(folder.id)
+      .then((rows) => { if (alive) { setItems(rows); setItemsLoaded(true); } })
+      .catch(() => { if (alive) { setItems([]); setItemsLoaded(true); } });
+    return () => { alive = false; };
+  }, [folder?.id]);
 
   /* Escape closes the sheet (the Pharm.D pattern). */
   useEffect(() => {
@@ -42,7 +70,9 @@ export default function LibraryFolderPage({ folder, onClose, onRenamed, onDelete
   if (!folder) return null;
 
   const visibilityLabel = folder.visibility === 'public' ? 'Public' : 'Private';
-  const itemCount = 0;   // items-in-folders lands next; the empty state is honest about it
+  /* The API count holds the seat until the real list lands, so the
+     header never flashes 0 on open. */
+  const itemCount = itemsLoaded ? items.length : (folder.itemCount || items.length);
 
   /* Rename — optimistic close, rolled back on failure. */
   const submitRename = async () => {
@@ -97,8 +127,15 @@ export default function LibraryFolderPage({ folder, onClose, onRenamed, onDelete
         .lf-icon-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:inherit}
         .lf-upload{position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.5);border:1.5px solid rgba(255,255,255,0.5);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;font-family:inherit}
         .lf-folder-art .lf-upload{bottom:10px;right:10px}
-        /* The list — empty until items-in-folders ships */
-        .lf-topic-list{padding:18px 10px 30px}
+        /* The list — everything filed into this folder */
+        .lf-topic-list{padding:18px 10px 30px;display:flex;flex-direction:column;gap:9px}
+        .lf-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:14px;background:var(--ak-surface,#fff);border:1px solid var(--ak-border,#F3F4F6);width:100%;text-align:left;cursor:pointer;font-family:inherit}
+        .lf-item:active{background:var(--ak-surface-hover,#F9FAFB)}
+        .lf-item-icon{width:44px;height:44px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+        .lf-item-body{flex:1;min-width:0}
+        .lf-item-title{font-size:.92rem;font-weight:800;color:var(--ak-text,#111827);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .lf-item-sub{font-size:.74rem;font-weight:600;color:var(--ak-text-sub,#6B7280);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .lf-item-go{color:var(--ak-text-sub,#9CA3AF);flex-shrink:0;display:flex;align-items:center}
         .lf-empty{padding:18px 22px;flex:0 0 auto;width:100%}
         .lf-empty-card{border:1.5px dashed var(--ak-border2,#E5E7EB);border-radius:14px;padding:18px;text-align:center;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
         /* Sheets — the Pharm.D action-sheet family */
@@ -137,14 +174,31 @@ export default function LibraryFolderPage({ folder, onClose, onRenamed, onDelete
           <p className="lf-folder-meta">{itemCount} item{itemCount === 1 ? '' : 's'} · {visibilityLabel}</p>
           {folder.description && <p className="lf-folder-desc">{folder.description}</p>}
           <div className="lf-action-row">
-            <button className="lf-start" disabled={itemCount === 0}>Add items</button>
+            <button className="lf-start" onClick={() => setToast({ msg: 'Tap ⋯ on any content — a record, a topic, a video — to add it here', color: BRAND })}>Add items</button>
             <button className="lf-icon-btn" aria-label="More" onClick={() => setSheet('more')}><Icon name="ti-dots-vertical" size={20}/></button>
           </div>
         </div>
         <div className="lf-topic-list">
-          {itemCount === 0 && (
+          {itemsLoaded && items.length === 0 && (
             <div className="lf-empty"><div className="lf-empty-card">This folder is empty — items you add will appear here.</div></div>
           )}
+          {items.map((it) => {
+            const [icon, tint] = kindMeta(it.kind);
+            return (
+              <button key={it.id} className="lf-item"
+                onClick={() => (onOpenItem ? onOpenItem(it) : setToast({ msg: 'Open this from its own page', color: BRAND }))}
+                aria-label={it.title}>
+                <span className="lf-item-icon" style={{ background: `${tint}14` }}>
+                  <Icon name={icon} size={20} color={tint}/>
+                </span>
+                <span className="lf-item-body">
+                  <span className="lf-item-title" style={{ display: 'block' }}>{it.title}</span>
+                  {it.sub && <span className="lf-item-sub" style={{ display: 'block' }}>{it.sub}</span>}
+                </span>
+                <span className="lf-item-go"><Icon name="ti-chevron-right" size={16}/></span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

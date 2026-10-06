@@ -18,7 +18,7 @@ import test from "node:test";
  *              with transport (±10s, seek, 0.75×–2×) in the SHARED toolbar
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample, foldersMigration, createSheet, folderPage] = await Promise.all([
+const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample, foldersMigration, createSheet, folderPage, itemsMigration, atfPage, pharmd, parts, courseDetails] = await Promise.all([
   read("2026-records.sql"),
   read("manifest.json"),
   read("../modules/records/routes.js"),
@@ -38,6 +38,11 @@ const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryP
   read("2026-library-folders.sql"),
   read("../../akoro-learner/src/components/library/CreateFolderSheet.jsx"),
   read("../../akoro-learner/src/components/library/LibraryFolderPage.jsx"),
+  read("2026-library-folder-items.sql"),
+  read("../../akoro-learner/src/components/library/AddToFolderPage.jsx"),
+  read("../../akoro-learner/src/components/pharmd/PharmDProgram.jsx"),
+  read("../../akoro-learner/src/pages/course-details/parts.jsx"),
+  read("../../akoro-learner/src/pages/course-details/CourseDetailsPage.jsx"),
 ]);
 
 test("the shelf is a table that follows the learner, not a device", () => {
@@ -239,4 +244,58 @@ test("folders: create flow with name, cover, description, visibility", () => {
   assert.ok(libraryPage.includes("LibraryFolderPage"), "tapping a folder opens the page");
   assert.ok(libraryPage.includes("setFolderPage(f)"), "the folder card click-through");
   assert.ok(!libraryPage.includes("Adding items to folders comes next"), "the placeholder toast is gone");
+});
+
+test("folder items: any content files into folders, snapshots at add time", () => {
+  // The table — one row per (folder, item), snapshots so the folder never re-queries.
+  assert.ok(itemsMigration.includes("CREATE TABLE IF NOT EXISTS edu.library_folder_items"), "the items table");
+  assert.ok(itemsMigration.includes("item_type IN ('record', 'pharmd_topic', 'lesson', 'library')"), "the four item types");
+  assert.ok(itemsMigration.includes("REFERENCES edu.library_folders(id) ON DELETE CASCADE"), "items die with their folder");
+  assert.ok(itemsMigration.includes("UNIQUE (folder_id, item_type, item_ref)"), "an item lands in a folder once");
+  assert.ok(itemsMigration.includes("idx_library_folder_items_folder"), "listed by folder, newest first");
+  assert.ok(JSON.parse(manifest).schema.includes("2026-library-folder-items.sql"), "in the manifest schema group");
+
+  // The routes — bulk add, owner-checked, capped, idempotent; items listed per folder.
+  assert.ok(routes.includes('router.post("/folders/items"'), "POST /folders/items bulk-adds");
+  assert.ok(routes.includes('router.get("/folders/:id/items"'), "GET /folders/:id/items lists");
+  assert.ok(routes.includes("Not your folder."), "items routes are owner-only");
+  assert.ok(routes.includes("MAX_FOLDER_ITEMS"), "a folder cannot grow unbounded");
+  assert.ok(routes.includes('"folder_id,item_type,item_ref"'), "upsert is idempotent per item");
+  assert.ok(routes.includes("ITEM_TYPES"), "the item-type enum is enforced");
+  assert.ok(routes.includes("folderItemCounts"), "the folder list carries live counts");
+  assert.ok(recordsApi.includes("addFolderItem"), "addFolderItem()");
+  assert.ok(recordsApi.includes("listFolderItems"), "listFolderItems()");
+
+  // The page — the reference Add to folder UI, ported 1:1.
+  for (const cls of ["atf-page", "atf-search", "atf-done", "atf-radio"]) {
+    assert.ok(atfPage.includes(cls), cls);
+  }
+  assert.ok(atfPage.includes("New folder"), "New folder pill");
+  assert.ok(atfPage.includes("Most relevant"), "the sort row");
+  assert.ok(atfPage.includes("Added to"), "the done toast counts folders");
+  assert.ok(atfPage.includes("addFolderItem"), "Done is the bulk add");
+  assert.ok(atfPage.includes("CreateFolderSheet"), "New folder reuses the create sheet");
+  assert.ok((atfPage.match(/linear-gradient\(145deg,/g) || []).length >= 4, "the four accent gradients");
+
+  // Every surface carries ⋯ → Add to folder.
+  assert.ok(pharmd.includes("ti-folder-plus"), "Pharm.D topic sheet: folder icon");
+  assert.ok(pharmd.includes("'Add to folder'"), "Pharm.D topic sheet: Add to folder action");
+  assert.ok(pharmd.includes("itemType: 'pharmd_topic'"), "topics snapshot as pharmd_topic");
+  assert.ok(!/topic:\s*\[[^\]]*Add to Library/.test(pharmd), "the old stub label is gone from the topic sheet");
+  assert.ok(libraryPage.includes("MoreBtn"), "every shelf card has the ⋯");
+  assert.ok((libraryPage.match(/onMore=\{onMore\}/g) || []).length >= 5, "all five card kinds thread onMore");
+  assert.ok(libraryPage.includes("openAddToFolder"), "the shelf builds item snapshots");
+  assert.ok(libraryPage.includes("itemType: 'record'"), "records are fileable");
+  assert.ok(parts.includes("onLessonMore"), "curriculum lessons carry ⋯");
+  assert.ok(parts.includes("MoreVertical"), "the lesson ⋯ glyph");
+  assert.ok(parts.includes("e.stopPropagation()"), "⋯ never plays the lesson");
+  assert.ok(courseDetails.includes("itemType: 'lesson'"), "lessons snapshot with their course link");
+  assert.ok(courseDetails.includes("AddToFolderPage"), "the course page mounts the picker");
+
+  // The folder page lists what landed — and rows open back on their surface.
+  assert.ok(folderPage.includes("listFolderItems"), "the folder page loads its items");
+  assert.ok(folderPage.includes("lf-item"), "item rows render");
+  assert.ok(folderPage.includes("onOpenItem"), "tapping a row hands it to the parent");
+  assert.ok(folderPage.includes("KIND_META"), "icons follow the stored kind");
+  assert.ok(libraryPage.includes("openFolderItem"), "the shelf resolves records and links back open");
 });

@@ -98,6 +98,19 @@ export async function deleteFolder(id) {
   return true;
 }
 
+/** A folder's contents — snapshots stored at add time, newest first. */
+export async function listFolderItems(folderId) {
+  const d = await apiGet(`/api/records/folders/${folderId}/items`);
+  return d?.data ?? [];
+}
+
+/** Add one thing to N folders (the Add-to-folder page multi-selects).
+ * item = { itemType, itemRef, title, sub, kind, link }. Idempotent. */
+export async function addFolderItem({ folderIds, itemType, itemRef, title, sub, kind, link }) {
+  const d = await apiPost('/api/records/folders/items', { folderIds, itemType, itemRef, title, sub, kind, link });
+  return d?.data ?? null;
+}
+
 /** Mark a record opened (server-side last_opened_at, no progress change). */
 export async function touchRecordOpened(id) {
   await apiPatch(`/api/records/${id}`, { lastOpened: true });

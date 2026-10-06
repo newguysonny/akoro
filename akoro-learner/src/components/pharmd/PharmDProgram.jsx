@@ -29,6 +29,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
+import AddToFolderPage from '../library/AddToFolderPage.jsx';
 import Spinner from '../common/Spinner.jsx';
 import {
   fetchPharmdProgramme, fetchPharmdCourse, fetchPharmdProgress, completePharmdTopic,
@@ -42,7 +43,7 @@ const GREEN = '#2BB673';
 /* Sheet menus (reference sheetActionsFor). */
 const SHEET_ACTIONS = {
   topic: [
-    ['ti-share', 'Share'], ['ti-bookmark-plus', 'Add to Library'], ['ti-download', 'Download'],
+    ['ti-share', 'Share'], ['ti-folder-plus', 'Add to folder'], ['ti-download', 'Download'],
     ['ti-check', 'Mark as complete'], ['ti-book-2', 'Go to course'],
   ],
   course: [
@@ -62,6 +63,7 @@ export default function PharmDProgram({ onClose }) {
   const [code, setCode] = useState(null);         // the open course code
   const [sessionTopic, setSessionTopic] = useState(null);  // index into topics — the open topic session
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
+  const [addToFolder, setAddToFolder] = useState(null);  // the topic being filed into folders
   const [toast, setToast] = useState(null);
 
   /* Real data: the programme tree, the open course, my completion. */
@@ -156,6 +158,11 @@ export default function PharmDProgram({ onClose }) {
 
   const runSheetAction = (kind, label, idx) => {
     setSheet(null);
+    if (kind === 'topic' && label === 'Add to folder') {
+      const t = topics[idx];
+      if (t) setAddToFolder(t);
+      return;
+    }
     if (kind === 'topic' && label === 'Mark as complete') {
       const t = topics[idx];
       if (t) toggleDone(t.id, !done.has(t.id));
@@ -381,6 +388,21 @@ export default function PharmDProgram({ onClose }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ⋯ → Add to folder on a topic — pick the folders it joins. */}
+      {addToFolder && (
+        <AddToFolderPage
+          item={{
+            itemType: 'pharmd_topic',
+            itemRef: String(addToFolder.id),
+            title: addToFolder.title,
+            sub: `${code || 'PHARM.D'} · PHARM.D`,
+            kind: 'topic',
+            link: null,
+          }}
+          onClose={() => setAddToFolder(null)}
+        />
       )}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}

@@ -70,6 +70,13 @@ const MAX_FOLDER_NAME    = 100;
 const MAX_FOLDER_DESC    = 500;
 const MAX_COVER_BYTES    = 5 * 1024 * 1024;
 
+/* Folder items — what "Add to folder" puts inside. One item may land
+   in several folders at once (the page multi-selects), so the add is
+   a bulk write over the user's own folder ids. */
+const MAX_FOLDER_ITEMS   = 200;
+const ITEM_TYPES         = new Set(["record", "pharmd_topic", "lesson", "library"]);
+const ITEM_KINDS         = new Set(["pdf", "audio", "video", "image", "text", "link", "paste", "blog", "course", "topic"]);
+
 /* ── What the viewer can actually open ──────────────────────────────────────
    Mirrors the app's picker: PDF, text, images, audio, video. Word docs are
    uploadable in the future but stay unopenable in v1 — the viewer says
@@ -217,16 +224,44 @@ router.get("/", authenticateToken, asyncHandler(async (req, res) => {
    putting items INTO folders lands next. visibility is stored as the
    learner chose it — 'public' folders get their browsing surface when
    the shared library ships, nothing pretends they're browsable today. */
-const folderToApi = async (f) => ({
+const folderToApi = async (f, itemCount = 0) => ({
   id: f.id,
   name: f.name,
   description: f.description || "",
   visibility: f.visibility,
+  itemCount,
   coverUrl: f.cover_key
     ? await createPresignedDownload(f.cover_key).catch(() => null)  // a storage hiccup degrades the cover, never the list
     : null,
   createdAt: f.created_at,
 });
+
+/* Item counts for a learner's folders in one query (the folder list
+   renders them; a folder holds ≤ 200 items so this stays small). */
+async function folderItemCounts(userId) {
+  const { data } = await edu().from("library_folder_items")
+    .select("folder_id").eq("user_id", userId);
+  const counts = new Map();
+  for (const row of data || []) counts.set(row.folder_id, (counts.get(row.folder_id) || 0) + 1);
+  return counts;
+}
+
+/* Validate + normalize an item payload shared by the add route.
+   Returns { error } or the row fields (without folder_id/user_id). */
+function normalizeItemPayload(body = {}) {
+  const itemType = String(body.itemType || "").trim();
+  if (!ITEM_TYPES.has(itemType)) return { error: `itemType must be one of: ${[...ITEM_TYPES].join(", ")}.` };
+  const itemRef = String(body.itemRef || "").trim();
+  if (!itemRef || itemRef.length > 200) return { error: "itemRef is required (≤ 200 characters)." };
+  const title = String(body.title || "").trim();
+  if (!title || title.length > 255) return { error: "A title is required (≤ 255 characters)." };
+  const sub = String(body.sub || "").trim().slice(0, 255) || null;
+  const kind = String(body.kind || "").trim().slice(0, 50) || null;
+  if (kind && !ITEM_KINDS.has(kind)) return { error: `kind must be one of: ${[...ITEM_KINDS].join(", ")}.` };
+  const link = String(body.link || "").trim();
+  if (link && !/^\/[a-zA-Z0-9\-_/]*$/.test(link)) return { error: "link must be an in-app path starting with /." };
+  return { row: { item_type: itemType, item_ref: itemRef, title, sub, kind, link: link || null } };
+}
 
 // ─── GET /api/records/folders — my folders, newest first ───────────────────
 router.get("/folders", authenticateToken, asyncHandler(async (req, res) => {
@@ -234,7 +269,8 @@ router.get("/folders", authenticateToken, asyncHandler(async (req, res) => {
     .select("*").eq("user_id", req.user.id)
     .order("created_at", { ascending: false }).limit(MAX_FOLDERS);
   if (error) throw error;
-  res200(res, await Promise.all((data || []).map(folderToApi)));
+  const counts = await folderItemCounts(req.user.id).catch(() => new Map());
+  res200(res, await Promise.all((data || []).map((f) => folderToApi(f, counts.get(f.id) || 0))));
 }));
 
 // ─── POST /api/records/folders — create one ────────────────────────────────
@@ -319,6 +355,68 @@ router.delete("/folders/:id", authenticateToken, asyncHandler(async (req, res) =
   if (error) throw error;
   void removeRecordFile(existing.cover_key);  // best-effort — the row is gone either way
   res.status(200).json({ success: true, data: { id: req.params.id } });
+}));
+
+/* ── Folder items ──────────────────────────────────────────────────────────
+   Anything can land in a folder: a record, a Pharm.D topic, a course
+   lesson, a library shelf item. The display snapshot (title, sub,
+   kind, link) is stored at ADD time — the folder page renders without
+   re-querying every surface, and an item keeps its shape even if the
+   source row later changes. */
+
+// ─── GET /api/records/folders/:id/items — the folder's contents ────────────
+router.get("/folders/:id/items", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: existing } = await edu().from("library_folders")
+    .select("id, user_id").eq("id", req.params.id).maybeSingle();
+  if (!existing) return res404(res, "Folder not found.");
+  if (existing.user_id !== req.user.id) return res403(res, "Not your folder.");
+
+  const { data, error } = await edu().from("library_folder_items")
+    .select("id, item_type, item_ref, title, sub, kind, link, created_at")
+    .eq("folder_id", req.params.id)
+    .order("created_at", { ascending: false }).limit(MAX_FOLDER_ITEMS);
+  if (error) throw error;
+  res200(res, (data || []).map((it) => ({
+    id: it.id, itemType: it.item_type, itemRef: it.item_ref,
+    title: it.title, sub: it.sub || "", kind: it.kind || "topic",
+    link: it.link || null, createdAt: it.created_at,
+  })));
+}));
+
+// ─── POST /api/records/folders/items — add one thing to N folders ──────────
+// The Add-to-folder page multi-selects folders for a single item, so the
+// write is bulk over the learner's own folder ids. Idempotent per folder
+// (UNIQUE (folder_id, item_type, item_ref) + upsert-on-conflict).
+router.post("/folders/items", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const body = req.body || {};
+
+  const folderIds = [...new Set(Array.isArray(body.folderIds) ? body.folderIds.map(String) : [])];
+  if (!folderIds.length) return res400(res, "Pick at least one folder.");
+  if (folderIds.length > MAX_FOLDERS) return res400(res, "Too many folders selected.");
+
+  const { error: itemErr, row } = normalizeItemPayload(body);
+  if (itemErr) return res400(res, itemErr);
+
+  // Every target folder must be the learner's own.
+  const { data: owned } = await edu().from("library_folders")
+    .select("id, name").eq("user_id", userId).in("id", folderIds);
+  const ownedIds = new Set((owned || []).map((f) => f.id));
+  if (ownedIds.size !== folderIds.length) return res403(res, "One of those folders isn't yours.");
+
+  for (const folderId of folderIds) {
+    // Respect the per-folder cap on every target.
+    const { count } = await edu().from("library_folder_items")
+      .select("id", { count: "exact", head: true }).eq("folder_id", folderId);
+    if ((count || 0) >= MAX_FOLDER_ITEMS) {
+      return res400(res, `A folder is full (${MAX_FOLDER_ITEMS} items) — remove one first.`);
+    }
+    const { error } = await edu().from("library_folder_items")
+      .upsert({ folder_id: folderId, user_id: userId, ...row }, { onConflict: "folder_id,item_type,item_ref" });
+    if (error) throw error;
+  }
+  const names = (owned || []).map((f) => f.name);
+  res201(res, { added: folderIds.length, folders: names });
 }));
 
 // ─── PATCH /api/records/:id — progress / last-opened ────────────────────────
