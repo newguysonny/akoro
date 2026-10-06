@@ -2,26 +2,35 @@
  * PharmDProgram.jsx
  * ─────────────────────────────────────────────────────────────
  * The PHARM.D discovery experience, ported 1:1 from
- * reference/pharm D discovery and course page.md. Three views —
- * the programme browse (hero + year rows of course cards), the
- * course folder (art, author, action row, topic list) and the
- * topic content reader (breadcrumb, body, prev/next) — plus the
- * course/topic action sheet.
+ * reference/pharm D discovery and course page.md — now on REAL
+ * data: the programme tree, course folders and topics come from
+ * /api/pharmd (services/pharmdApi.js; the catalogue that
+ * scripts/upload-pharmd-courses.mjs loads into Supabase), topic
+ * PDFs open from the storage bucket, and "Mark as complete"
+ * persists per learner.
  *
- * Layout and visuals are the reference's, unchanged; only the chrome
- * colours moved onto the app's --ak-* theme tokens so the pages
- * follow the app's light/dark theme, and the reference's 430px phone
- * column centres itself on tablet/desktop (mobile is full-bleed).
+ * Three views — programme browse (hero + year rows of course
+ * cards), course folder (art, author, action row, topic list with
+ * done-checks) and the topic reader (breadcrumb + the PDF itself,
+ * sticky prev/next) — plus the course/topic action sheet.
+ *
+ * Layout and visuals are the reference's, unchanged; only the
+ * chrome colours ride the app's --ak-* theme tokens (light/dark
+ * follows the app), and the reference's 430px phone column centres
+ * itself on tablet/desktop (mobile is full-bleed).
  *
  * Mounted full-screen by DiscoverHub when the Pharm D card opens;
  * the browse view's back button closes back to the Discover hub.
- * Content is the reference's placeholder syllabus (pharmdData.js).
  */
 import { useEffect, useRef, useState } from 'react';
 import { BRAND } from '../../constants.js';
-import Toast from '../common/Toast.jsx';
 import { Icon } from '../common/Icons.jsx';
-import { PROGRAM, AUTHOR, topicsFor, accentFor, readsFor } from './pharmdData.js';
+import Toast from '../common/Toast.jsx';
+import Spinner from '../common/Spinner.jsx';
+import {
+  fetchPharmdProgramme, fetchPharmdCourse, fetchPharmdProgress, completePharmdTopic,
+} from '../../services/pharmdApi.js';
+import { PROGRAM, AUTHOR, accentFor } from './pharmdData.js';
 
 /* The reference's done-green — a content colour, theme-independent. */
 const GREEN = '#2BB673';
@@ -38,19 +47,52 @@ const SHEET_ACTIONS = {
   ],
 };
 
+/* One line under a topic: honest about what the data has. */
+const topicMeta = (t) => [
+  t.read_minutes ? `${t.read_minutes} min read` : 'PDF',
+  t.size ? `${(t.size / 1024 / 1024).toFixed(1)} MB` : null,
+].filter(Boolean).join(' · ');
+
 export default function PharmDProgram({ onClose }) {
   const [view, setView] = useState('browse');     // browse | folder | topic
   const [code, setCode] = useState(null);         // the open course code
   const [topicIdx, setTopicIdx] = useState(0);
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
   const [toast, setToast] = useState(null);
-  /* Topic completion: the reference default is topic 1 done per course;
-     flips override that from the sheet's "Mark as complete". */
-  const [flips, setFlips] = useState({});         // { [`${code}:${i}`]: done }
+
+  /* Real data: the programme tree, the open course, my completion. */
+  const [meta, setMeta] = useState(PROGRAM);      // hero copy; the API confirms it
+  const [years, setYears] = useState(null);       // null = still loading
+  const [loadErr, setLoadErr] = useState(false);
+  const [courseData, setCourseData] = useState(null); // { course, topics }
+  const [courseLoading, setCourseLoading] = useState(false);
+  const [done, setDone] = useState(() => new Set());  // completed topic ids
   const scrollRef = useRef(null);
 
-  const topics = code ? topicsFor(code) : [];
-  const isDone = (i) => flips[`${code}:${i}`] ?? i === 0;
+  const topics = courseData?.topics ?? [];
+  const isDone = (i) => !!topics[i] && done.has(topics[i].id);
+
+  /* Programme + my progress, once per open. Progress is optional —
+     the catalogue renders for anyone; only saving needs a session. */
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const d = await fetchPharmdProgramme();
+        if (!alive) return;
+        setYears(d?.years ?? []);
+        if (d?.programme?.name) setMeta({ name: d.programme.name, sub: d.programme.subtitle || '' });
+        setLoadErr(false);
+      } catch {
+        if (alive) setLoadErr(true);
+      }
+      try {
+        const ids = await fetchPharmdProgress();
+        if (alive) setDone(new Set(ids));
+      } catch { /* not signed in / offline — checks simply start empty */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   /* Every view change starts at the top (reference window.scrollTo). */
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [view, code, topicIdx]);
@@ -65,8 +107,28 @@ export default function PharmDProgram({ onClose }) {
 
   const soon = (label) => setToast({ msg: `${label} — coming soon`, color: BRAND });
 
-  const openCourse = (c) => { setCode(c); setView('folder'); };
+  const openCourse = async (c) => {
+    setCode(c);
+    setView('folder');
+    setCourseData(null);
+    setCourseLoading(true);
+    try {
+      setCourseData(await fetchPharmdCourse(c));
+    } catch {
+      setToast({ msg: 'Could not load that course — check your connection.', color: BRAND });
+    } finally {
+      setCourseLoading(false);
+    }
+  };
+
   const openTopic = (i) => { setTopicIdx(i); setView('topic'); };
+
+  /* Start where the learner left off — first unfinished topic. */
+  const startLearning = () => {
+    const first = topics.findIndex((t) => !done.has(t.id));
+    openTopic(first === -1 ? 0 : first);
+  };
+
   const gotoAdjacent = (dir) => {
     const next = topicIdx + dir;
     if (next < 0) return;
@@ -74,10 +136,35 @@ export default function PharmDProgram({ onClose }) {
     openTopic(next);
   };
 
+  /* Mark as complete — optimistic flip, rolled back on failure. */
+  const toggleDone = async (topicId, next) => {
+    setDone((s) => {
+      const n = new Set(s);
+      if (next) n.add(topicId); else n.delete(topicId);
+      return n;
+    });
+    try {
+      await completePharmdTopic(topicId, next);
+    } catch {
+      setDone((s) => {
+        const n = new Set(s);
+        if (next) n.delete(topicId); else n.add(topicId);
+        return n;
+      });
+      setToast({ msg: 'Could not save that — try again.', color: BRAND });
+    }
+  };
+
   const runSheetAction = (kind, label, idx) => {
     setSheet(null);
     if (kind === 'topic' && label === 'Mark as complete') {
-      setFlips((f) => ({ ...f, [`${code}:${idx}`]: !isDone(idx) }));
+      const t = topics[idx];
+      if (t) toggleDone(t.id, !done.has(t.id));
+      return;
+    }
+    if (kind === 'topic' && label === 'Download') {
+      const t = topics[idx];
+      if (t?.file_url) window.open(t.file_url, '_blank', 'noopener');
       return;
     }
     if (label === 'Go to course') { setView('folder'); return; }
@@ -86,7 +173,7 @@ export default function PharmDProgram({ onClose }) {
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`${PROGRAM.name} — ${PROGRAM.sub}`} className="pd-page">
+    <div role="dialog" aria-modal="true" aria-label={`${meta.name} — ${meta.sub}`} className="pd-page">
       <style>{`
         .pd-page{position:fixed;inset:0;z-index:1500;background:var(--ak-bg,#FAFAFC);display:flex;justify-content:center;font-family:'Nunito',system-ui,sans-serif;color:var(--ak-text,#111827)}
         .pd-phone{width:100%;max-width:430px;height:100%;overflow-y:auto;position:relative;background:var(--ak-bg,#FAFAFC);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -119,7 +206,7 @@ export default function PharmDProgram({ onClose }) {
         .pd-folder-meta{color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem;margin:0 0 20px}
         .pd-action-row{display:flex;align-items:center;gap:14px;margin-bottom:8px}
         .pd-start{flex:1;padding:13px;border-radius:100px;border:none;background:${BRAND};color:#fff;font-family:inherit;font-weight:800;font-size:.95rem;cursor:pointer}
-        .pd-icon-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:inherit}
+        .pd-icon-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-family:inherit;text-decoration:none}
         .pd-topic-list{padding:18px 10px 30px}
         .pd-topic-row{display:flex;align-items:center;gap:14px;padding:13px 12px;border-radius:12px;cursor:pointer}
         .pd-topic-row:hover{background:var(--ak-surface,#fff)}
@@ -129,17 +216,18 @@ export default function PharmDProgram({ onClose }) {
         .pd-check{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--ak-border2,#E5E7EB);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:${GREEN}}
         .pd-check.done{background:${GREEN};border-color:${GREEN};color:#fff}
         .pd-more{background:none;border:none;color:var(--ak-text-sub,#6B7280);padding:6px 4px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit}
-        .pd-upload{position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.5);border:1.5px solid rgba(255,255,255,0.5);color:#fff;font-size:.85rem;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;font-family:inherit}
-        .pd-card .pd-upload{width:24px;height:24px;font-size:.7rem;top:6px;right:6px}
+        .pd-upload{position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.5);border:1.5px solid rgba(255,255,255,0.5);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;font-family:inherit}
+        .pd-card .pd-upload{width:24px;height:24px;top:6px;right:6px}
         .pd-folder-art .pd-upload{bottom:10px;right:10px}
-        /* Topic content */
+        /* Topic reader */
+        .pd-topic-shell{display:flex;flex-direction:column;height:100%}
         .pd-topic-header{padding:20px 22px 0}
         .pd-breadcrumb{font-size:.78rem;color:var(--ak-text-sub,#6B7280);font-weight:700;margin:16px 0 8px}
-        .pd-topic-title{font-size:1.4rem;font-weight:900;margin:0 0 18px;color:var(--ak-text,#111827)}
-        .pd-content{padding:0 22px 100px;font-size:.95rem;line-height:1.7;color:var(--ak-text-sub,#6B7280)}
-        .pd-content p{margin:0 0 16px}
-        .pd-content h3{color:var(--ak-text,#111827);font-size:1rem;font-weight:800;margin:22px 0 8px}
-        .pd-topic-footer{position:sticky;bottom:0;background:var(--ak-bg,#FAFAFC);border-top:1px solid var(--ak-border,#F3F4F6);padding:14px 22px;display:flex;gap:10px}
+        .pd-topic-title{font-size:1.4rem;font-weight:900;margin:0 0 14px;color:var(--ak-text,#111827)}
+        .pd-pdf-wrap{flex:1;min-height:0;padding:0 12px 12px;display:flex;flex-direction:column}
+        .pd-pdf{width:100%;flex:1;min-height:380px;border:1px solid var(--ak-border2,#E5E7EB);border-radius:12px;background:var(--ak-surface,#fff)}
+        .pd-pdf-empty{border:1.5px dashed var(--ak-border2,#E5E7EB);border-radius:14px;padding:26px 18px;text-align:center;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
+        .pd-topic-footer{background:var(--ak-bg,#FAFAFC);border-top:1px solid var(--ak-border,#F3F4F6);padding:14px 22px;display:flex;gap:10px;flex-shrink:0}
         .pd-nav{flex:1;padding:13px;border-radius:100px;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-family:inherit;font-weight:800;font-size:.88rem;cursor:pointer}
         .pd-nav.primary{background:${BRAND};border:none;color:#fff}
         .pd-nav:disabled{opacity:.4;cursor:default}
@@ -156,6 +244,8 @@ export default function PharmDProgram({ onClose }) {
         .pd-sheet-action:hover{background:var(--ak-surface-hover,#F9FAFB)}
         .pd-s-icon{width:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
         .pd-s-label{font-size:.92rem;font-weight:700;color:var(--ak-text,#111827)}
+        /* Loading / error states */
+        .pd-state{padding:36px 22px;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
       `}</style>
 
       <div className="pd-phone" ref={scrollRef}>
@@ -165,27 +255,39 @@ export default function PharmDProgram({ onClose }) {
           <div>
             <div className="pd-hero">
               <button className="pd-back" aria-label="Back to Discover" onClick={onClose}>←</button>
-              <h1>{PROGRAM.name}</h1>
-              <div className="pd-sub">{PROGRAM.sub}</div>
+              <h1>{meta.name}</h1>
+              <div className="pd-sub">{meta.sub}</div>
             </div>
-            {PROGRAM.years.map((year) => (
+            {years === null && !loadErr && (
+              <div className="pd-state"><Spinner size={18} color={BRAND}/> Loading the programme…</div>
+            )}
+            {loadErr && (
+              <div className="pd-state">
+                <div>Could not load the programme — check your connection.</div>
+                <button onClick={() => { setYears(null); setLoadErr(false); }}
+                  style={{ padding: '9px 18px', borderRadius: 20, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Try again
+                </button>
+              </div>
+            )}
+            {(years ?? []).map((year) => (
               <div className="pd-section" key={year.label}>
                 <h2>{year.label}</h2>
-                {year.courses.length ? (
+                {year.courses?.length ? (
                   <div className="pd-row">
                     {year.courses.map((c) => (
-                      <div key={c} className="pd-card" role="button" tabIndex={0}
-                        onClick={() => openCourse(c)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCourse(c); } }}>
-                        <span className="pd-art" style={{ background: accentFor(c) }}>
-                          <span className="pd-upload" role="button" aria-label={`Set cover photo for ${c}`}
+                      <div key={c.id || c.code} className="pd-card" role="button" tabIndex={0}
+                        onClick={() => openCourse(c.code)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCourse(c.code); } }}>
+                        <span className="pd-art" style={{ background: accentFor(c.code) }}>
+                          <span className="pd-upload" role="button" aria-label={`Set cover photo for ${c.code}`}
                             onClick={(e) => { e.stopPropagation(); soon('Custom covers'); }}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); soon('Custom covers'); } }}><Icon name="ti-camera" size={12}/></span>
-                          <span className="pd-code">{c}</span>
+                          <span className="pd-code">{c.code}</span>
                         </span>
-                        <div className="pd-name">{c}</div>
+                        <div className="pd-name">{c.title || c.code}</div>
                         <div className="pd-meta">Course. by {AUTHOR}</div>
-                        <div className="pd-reads">{readsFor(c)} reads</div>
+                        <div className="pd-reads">{c.topics} topic{c.topics === 1 ? '' : 's'}</div>
                       </div>
                     ))}
                   </div>
@@ -208,30 +310,40 @@ export default function PharmDProgram({ onClose }) {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') soon('Custom covers'); }}><Icon name="ti-camera" size={14}/></span>
                 <span className="pd-code-big">{code}</span>
               </div>
-              <h2 className="pd-folder-title">{code}</h2>
+              <h2 className="pd-folder-title">{courseData?.course?.title || code}</h2>
               <div className="pd-author-row">
                 <span className="pd-author-avatar" style={{ background: accentFor(code) }}>{AUTHOR.charAt(0)}</span>
                 <span className="pd-author-name">{AUTHOR}</span>
               </div>
-              <p className="pd-folder-meta">{topics.length} topics · {PROGRAM.name}</p>
+              <p className="pd-folder-meta">{topics.length} topics · {meta.name}</p>
               <div className="pd-action-row">
-                <button className="pd-start" onClick={() => openTopic(0)}>Start learning</button>
+                <button className="pd-start" onClick={startLearning} disabled={!topics.length}>Start learning</button>
                 <button className="pd-icon-btn" aria-label="Download all topics" onClick={() => soon('Offline downloads')}><Icon name="ti-download" size={18}/></button>
                 <button className="pd-icon-btn" aria-label="More" onClick={() => setSheet({ kind: 'course' })}><Icon name="ti-dots-vertical" size={20}/></button>
               </div>
             </div>
             <div className="pd-topic-list">
+              {courseLoading && <div className="pd-state"><Spinner size={16} color={BRAND}/> Loading topics…</div>}
+              {!courseLoading && !courseData && (
+                <div className="pd-state">
+                  <div>Could not load the topics.</div>
+                  <button onClick={() => openCourse(code)}
+                    style={{ padding: '9px 18px', borderRadius: 20, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Try again
+                  </button>
+                </div>
+              )}
               {topics.map((t, i) => (
-                <div key={i} className="pd-topic-row" role="button" tabIndex={0}
+                <div key={t.id || i} className="pd-topic-row" role="button" tabIndex={0}
                   onClick={() => openTopic(i)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTopic(i); } }}>
                   <div className="pd-topic-num">{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="pd-t-name">{t.name}</div>
-                    <div className="pd-t-meta">{t.meta}</div>
+                    <div className="pd-t-name">{t.title}</div>
+                    <div className="pd-t-meta">{topicMeta(t)}</div>
                   </div>
                   <div className={`pd-check${isDone(i) ? ' done' : ''}`}>{isDone(i) ? '✓' : ''}</div>
-                  <button className="pd-more" aria-label={`More for ${t.name}`}
+                  <button className="pd-more" aria-label={`More for ${t.title}`}
                     onClick={(e) => { e.stopPropagation(); setSheet({ kind: 'topic', idx: i }); }}><Icon name="ti-dots-vertical" size={16}/></button>
                 </div>
               ))}
@@ -239,19 +351,33 @@ export default function PharmDProgram({ onClose }) {
           </div>
         )}
 
-        {/* ── View 3: Topic content ── */}
-        {view === 'topic' && code && topics[topicIdx] && (
-          <div>
+        {/* ── View 3: Topic reader — the real PDF ── */}
+        {view === 'topic' && topics[topicIdx] && (
+          <div className="pd-topic-shell">
             <div className="pd-topic-header">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <button className="pd-back" aria-label="Back to course" onClick={() => setView('folder')}>←</button>
-                <button className="pd-more" style={{ fontSize: '1.4rem' }} aria-label="More"
-                  onClick={() => setSheet({ kind: 'topic', idx: topicIdx })}><Icon name="ti-dots-vertical" size={20}/></button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {topics[topicIdx].file_url && (
+                    <a className="pd-icon-btn" style={{ width: 36, height: 36 }} href={topics[topicIdx].file_url}
+                      target="_blank" rel="noreferrer" aria-label="Open PDF in a new tab">
+                      <Icon name="ti-external-link" size={16}/>
+                    </a>
+                  )}
+                  <button className="pd-more" aria-label="More"
+                    onClick={() => setSheet({ kind: 'topic', idx: topicIdx })}><Icon name="ti-dots-vertical" size={20}/></button>
+                </div>
               </div>
-              <div className="pd-breadcrumb">{code} · Topic {topicIdx + 1} of {topics.length}</div>
-              <h2 className="pd-topic-title">{topics[topicIdx].name}</h2>
+              <div className="pd-breadcrumb">{code} · Topic {topicIdx + 1} of {topics.length}{isDone(topicIdx) ? ' · done' : ''}</div>
+              <h2 className="pd-topic-title">{topics[topicIdx].title}</h2>
             </div>
-            <div className="pd-content" dangerouslySetInnerHTML={{ __html: topics[topicIdx].body }} />
+            <div className="pd-pdf-wrap">
+              {topics[topicIdx].file_url ? (
+                <iframe className="pd-pdf" title={topics[topicIdx].title} src={topics[topicIdx].file_url}/>
+              ) : (
+                <div className="pd-pdf-empty">No PDF is attached to this topic yet.</div>
+              )}
+            </div>
             <div className="pd-topic-footer">
               <button className="pd-nav" disabled={topicIdx === 0} onClick={() => gotoAdjacent(-1)}>← Previous</button>
               <button className="pd-nav primary" onClick={() => gotoAdjacent(1)}>
@@ -272,9 +398,13 @@ export default function PharmDProgram({ onClose }) {
                 {sheet.kind === 'topic' ? sheet.idx + 1 : code.slice(0, 2)}
               </div>
               <div>
-                <div className="pd-sheet-title">{sheet.kind === 'topic' ? topics[sheet.idx].name : code}</div>
+                <div className="pd-sheet-title">
+                  {sheet.kind === 'topic' ? (topics[sheet.idx]?.title ?? '') : (courseData?.course?.title || code)}
+                </div>
                 <div className="pd-sheet-sub">
-                  {sheet.kind === 'topic' ? `${code} · ${topics[sheet.idx].meta}` : `Course · by ${AUTHOR}`}
+                  {sheet.kind === 'topic'
+                    ? `${code}${topics[sheet.idx] ? ` · ${topicMeta(topics[sheet.idx])}` : ''}`
+                    : `Course · by ${AUTHOR}`}
                 </div>
               </div>
             </div>

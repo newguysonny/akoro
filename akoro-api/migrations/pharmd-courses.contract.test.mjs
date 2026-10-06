@@ -12,12 +12,14 @@ import { parseTopicFile, topicPath, PHARMD_BUCKET, DEFAULT_DIR } from "../script
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, uploader, routes, app] = await Promise.all([
+const [migration, manifest, uploader, routes, app, page, pharmdApi] = await Promise.all([
   read("2026-pharmd-courses.sql"),
   read("manifest.json"),
   read("../scripts/upload-pharmd-courses.mjs"),
   read("../modules/pharmd/routes.js"),
   read("../app.js"),
+  read("../../akoro-learner/src/components/pharmd/PharmDProgram.jsx"),
+  read("../../akoro-learner/src/services/pharmdApi.js"),
 ]);
 
 test("migration: the catalogue tables, keyed for idempotent upserts", () => {
@@ -97,4 +99,25 @@ test("API: the catalogue is public, completion is per-learner", () => {
   // Mounted on the app with the standard limit.
   assert.ok(app.includes('import pharmdModule'), "app imports the module");
   assert.ok(app.includes('app.use("/api/pharmd",      standardLimit, pharmdModule)'), "mounted at /api/pharmd");
+});
+
+test("frontend: the Pharm D pages read the real catalogue", () => {
+  // The service seam hits all four endpoints.
+  assert.ok(pharmdApi.includes("'/api/pharmd/programme'"), "programme endpoint");
+  assert.ok(pharmdApi.includes("/api/pharmd/courses/"), "course endpoint");
+  assert.ok(pharmdApi.includes("'/api/pharmd/progress'"), "progress endpoint");
+  assert.ok(pharmdApi.includes("/api/pharmd/topics/"), "complete endpoint");
+  // The pages fetch real data instead of placeholders.
+  assert.ok(page.includes("fetchPharmdProgramme"), "browse loads the programme tree");
+  assert.ok(page.includes("fetchPharmdCourse"), "folder loads the course's topics");
+  assert.ok(page.includes("fetchPharmdProgress"), "done-checks load per learner");
+  assert.ok(page.includes("completePharmdTopic"), "mark-as-complete persists");
+  assert.ok(page.includes("toggleDone"), "optimistic toggle with rollback");
+  assert.ok(page.includes("file_url"), "topics carry the bucket PDF url");
+  assert.ok(page.includes("<iframe"), "the PDF renders in the topic reader");
+  assert.ok(page.includes('target="_blank"'), "an open-in-new-tab escape hatch");
+  assert.ok(!page.includes("topicsFor"), "no placeholder topic sets");
+  assert.ok(!page.includes("readsFor"), "no mock read counts");
+  // The browse card's third line is honest: topic count, not invented reads.
+  assert.ok(page.includes("{c.topics} topic"), "cards show real topic counts");
 });
