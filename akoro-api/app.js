@@ -304,7 +304,15 @@ app.get("/robots.txt", (_req, res) => {
 });
 app.use("/uploads",
   (_req, res, next) => { res.setHeader("X-Robots-Tag", "noindex, nofollow"); next(); },
-  express.static(path.join(__dirname, "uploads")));
+  express.static(path.join(__dirname, "uploads"), {
+    // Files are stored under unique generated names (a re-upload gets a NEW
+    // filename), so a URL's content never changes — cache it hard. Without
+    // this, a 500 MB lecture video is metered egress on EVERY view; with it,
+    // Cloudflare and the browser keep a copy and Render serves a view only
+    // when the edge misses.
+    maxAge: "30d",
+    immutable: true,
+  }));
 app.use((_req, res, next) => { res.setHeader("X-Instance-Id", config.instanceId); next(); });
 
 // ─── Health & readiness ───────────────────────────────────────────────────────
