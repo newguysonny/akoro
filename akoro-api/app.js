@@ -255,6 +255,51 @@ app.use(helmet({
 }));
 app.use(cors(corsDelegate));
 app.use(cookieParser());
+
+// ── Egress meter ─────────────────────────────────────────────────────────────
+// Render meters outbound bandwidth (5 GB/month on Hobby) and the operator's
+// workspace was SUSPENDED for exhausting it in four days with no users —
+// "how is this even possible" had no answer because nothing measured it.
+// This counts the actual bytes each route puts on the wire (after
+// compression — the wrapper sits ahead of it), keeps an hourly ring so the
+// burn PATTERN is visible (a steady 3 a.m. climb means bots or a worker,
+// spikes only during testing means the operator's own traffic), and exposes
+// a public total in /health plus a per-route breakdown behind the internal
+// secret. WebSockets bypass Express and are not counted.
+const egress = { since: new Date().toISOString(), totalBytes: 0, requests: 0, byRoute: new Map(), hours: [] };
+const egressHour = () => Math.floor(Date.now() / 3_600_000);
+function egressTick(hour, bytes) {
+  const ring = egress.hours;
+  const last = ring[ring.length - 1];
+  if (!last || last.hour !== hour) {
+    ring.push({ hour, bytes });
+    while (ring.length > 24) ring.shift();
+  } else {
+    last.bytes += bytes;
+  }
+}
+app.use((req, res, next) => {
+  const route = () => (req.route?.path ? `${req.baseUrl || ""}${req.route.path}` : req.path.split("?")[0]).slice(0, 120);
+  let bytes = 0;
+  const origWrite = res.write, origEnd = res.end;
+  res.write = function (chunk, ...rest) { if (chunk?.length) bytes += chunk.length; return origWrite.call(this, chunk, ...rest); };
+  res.end   = function (chunk, ...rest) { if (chunk?.length) bytes += chunk.length; return origEnd.call(this, chunk, ...rest); };
+  res.on("finish", () => {
+    const key = `${req.method} ${route()}`;
+    const row = egress.byRoute.get(key) || { requests: 0, bytes: 0 };
+    row.requests++; row.bytes += bytes;
+    egress.byRoute.set(key, row);
+    egress.totalBytes += bytes; egress.requests++;
+    egressTick(egressHour(), bytes);
+  });
+  next();
+});
+setInterval(() => {
+  const mb = (egress.totalBytes / 1e6).toFixed(1);
+  const top = [...egress.byRoute.entries()].sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 3)
+    .map(([k, v]) => `${k} ${(v.bytes / 1e6).toFixed(1)}MB`).join(" | ");
+  console.log(`[egress] ${mb} MB out since boot; top: ${top || "-"}`);
+}, 60 * 60 * 1000).unref?.();
 // ─── Response compression ──────────────────────────────────────────────────────
 // Render's Hobby workspace caps outbound bandwidth at 5 GB/month (April 2026
 // plan change; it used to be 100 GB). Every uncompressed JSON response is
@@ -349,6 +394,11 @@ app.get("/health", async (req, res) => {
       startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
     },
     modules: { communities: { queryDeadlineMs: COMMUNITIES_QUERY_TIMEOUT_MS } },
+    egress: {
+      sinceBootBytes: egress.totalBytes,
+      last24hBytes: egress.hours.reduce((s, h) => s + h.bytes, 0),
+      hourlyBytes: egress.hours.map((h) => ({ hour: h.hour, bytes: h.bytes })),
+    },
     checks: { database: dbOk ? "ok" : "error", redis: redisOk ? "ok" : "error" },
     // Breaker states are local (no round-trip): a provider outage is visible
     // in /health the moment it trips, not only when requests fail.
@@ -366,6 +416,26 @@ app.get("/ready", (_req, res) =>
 // x-internal-secret header (same guard as the worker-callback endpoints). In dev
 // (no INTERNAL_SECRET set) it's open for convenience. Returns 200 when all
 // blockers pass, 503 when any fail — so an uptime monitor / deploy step can gate.
+// GET /internal/egress — the per-route answer to "what is eating the
+// bandwidth". Same guard as preflight: x-internal-secret, or dev when no
+// secret is configured.
+app.get("/internal/egress", (req, res) => {
+  const secret = config.internalSecret;
+  const authorized = secret
+    ? req.headers["x-internal-secret"] === secret
+    : config.isDev;
+  if (!authorized) return res.status(403).json({ success: false, message: "Forbidden" });
+  res.json({
+    since: egress.since,
+    totalBytes: egress.totalBytes,
+    requests: egress.requests,
+    hours: egress.hours,
+    routes: [...egress.byRoute.entries()]
+      .map(([route, v]) => ({ route, ...v, avgBytes: Math.round(v.bytes / Math.max(v.requests, 1)) }))
+      .sort((a, b) => b.bytes - a.bytes)
+      .slice(0, 30),
+  });
+});
 app.get("/internal/preflight", (req, res) => {
   const secret = config.internalSecret;
   const authorized = secret

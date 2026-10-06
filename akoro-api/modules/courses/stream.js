@@ -109,7 +109,11 @@ const res404 = (res, msg)             => res.status(404).json({ success: false, 
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 50 * 1024 * 1024 * 1024 },
+  // 2 GB, not 50: this is a MEMORY buffer on a 512 MB free instance, and
+  // every proxied byte later leaves for R2 through Render's METERED egress
+  // (the API-PUT path is the expensive one; presigned direct-to-R2 uploads
+  // are the fix before this endpoint ever ships to real instructors).
+  limits:  { fileSize: 2 * 1024 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ALLOWED = [
       "video/mp4", "video/quicktime", "video/x-msvideo",
