@@ -68,12 +68,22 @@ export async function deleteCommunity(id) {
 /* ── Community activities ─────────────────────────────────────────────────── */
 
 /* The community's activity feed, newest first (creator name, submission
-   counts, my_submitted flag on each row). */
+   counts, my_submitted flag on each row). Degrades to empty — pages that
+   render the feed as a bonus (the profile page) prefer this. */
 export async function fetchCommunityActivities(communityId) {
   try {
     const d = await apiGet(`/api/communities/${communityId}/activities`, { cache: false });
     return d?.data ?? [];
   } catch { return []; }
+}
+
+/* Same read, but THROWS: the activity page's whole purpose is this feed,
+   so a feed that never arrives must show a real error state instead of a
+   silent "no activities yet" (and before the request deadlines existed,
+   a hung feed request is exactly what kept that page loading forever). */
+export async function fetchCommunityActivitiesStrict(communityId) {
+  const d = await apiGet(`/api/communities/${communityId}/activities`, { cache: false });
+  return d?.data ?? [];
 }
 
 /* Creator posts an activity: { name, subject, class, dueAt, instructions }.

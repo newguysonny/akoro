@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  fetchCommunityStrict, fetchCommunityActivities,
+  fetchCommunityStrict, fetchCommunityActivitiesStrict,
   createCommunityActivity, submitCommunityActivity,
 } from '../services/communityApi.js';
 import CommunityShell, { IconChip, useCommunityToast } from '../components/communities/CommunityShell.jsx';
@@ -229,6 +229,44 @@ function NewActivitySheet({ community, onClose, onCreated }) {
   );
 }
 
+/* The error state tells the truth about WHY nothing arrived. "Your
+   connection" is one cause of four — a learner on a perfectly good
+   connection was told to blame their network while a server-side stall
+   was the real culprit. Kinds:
+     slow    the request was dropped after waiting too long (our client
+             deadline, or the server's own 504 — which names the query
+             step it gave up waiting on)
+     setup   the server answered 503: communities are still being set up
+     server  any other server-side answer — the API writes user-facing
+             copy, so its message is shown
+     network the request never arrived at all (offline / dropped) */
+const ERROR_STATES = {
+  slow: {
+    icon: 'ti-hourglass', title: 'This community is taking too long to load',
+    body: "The request waited too long and was dropped - that's on our side, not your connection.",
+  },
+  setup: {
+    icon: 'ti-settings', title: 'Communities are still being set up',
+    body: 'The server is finishing a setup step. Please try again in a minute.',
+  },
+  server: {
+    icon: 'ti-server', title: 'Something went wrong on our side',
+    body: 'Please try again in a moment.',
+  },
+  network: {
+    icon: 'ti-wifi-off', title: "Couldn't reach this community",
+    body: 'Your connection seems slow or offline - the request never arrived.',
+  },
+};
+
+function classifyError(e) {
+  if (e?.status === 404 || e?.status === 403) return { kind: 'missing' };
+  if (e?.timedOut || e?.status === 504) return { kind: 'slow', step: e?.step };
+  if (e?.status === 503) return { kind: 'setup' };
+  if (e?.status) return { kind: 'server', message: e?.message };
+  return { kind: 'network' };
+}
+
 export default function CommunityActivityPage() {
   const navigate   = useNavigate();
   const { communityId } = useParams();
@@ -239,19 +277,20 @@ export default function CommunityActivityPage() {
   const [typeFilter, setTypeFilter] = useState('all');   // workbench-type filter chip
   const [submittingId, setSubmittingId] = useState(null);
   const [showToast, toastNode] = useCommunityToast();
-  // null = ok/loading - {kind:'network'} = the request never arrived -
-  // {kind:'missing'} = the API answered "no such community / not yours".
+  // null = ok/loading; otherwise classifyError's verdict — 'missing' (the
+  // API answered "no such community / not yours") falls through to the
+  // not-found card below, every other kind gets its honest error card.
   // A degraded connection must never read as "Community not found".
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [c, list] = await Promise.all([fetchCommunityStrict(communityId), fetchCommunityActivities(communityId)]);
+      const [c, list] = await Promise.all([fetchCommunityStrict(communityId), fetchCommunityActivitiesStrict(communityId)]);
       setCommunity(c);
       setActivities(list);
       setError(null);
     } catch (e) {
-      setError(e?.status === 404 || e?.status === 403 ? { kind: 'missing' } : { kind: 'network' });
+      setError(classifyError(e));
     } finally { setLoading(false); }
   }, [communityId]);
 
@@ -285,18 +324,24 @@ export default function CommunityActivityPage() {
     );
   }
 
-  if (error?.kind === 'network') {
+  if (error && error.kind !== 'missing') {
+    const meta = ERROR_STATES[error.kind] || ERROR_STATES.network;
     return (
       <CommunityShell title="Community" backTo="/communities"
         empty={
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <div style={{ fontSize: 40, marginBottom: 10, color: BRAND }}>
-              <Icon name="ti-wifi-off" size={40}/>
+              <Icon name={meta.icon} size={40}/>
             </div>
-            <p style={{ fontSize: 14, color: 'var(--ak-text)', fontWeight: 800 }}>Couldn't reach this community</p>
+            <p style={{ fontSize: 14, color: 'var(--ak-text)', fontWeight: 800 }}>{meta.title}</p>
             <p style={{ fontSize: 12.5, color: 'var(--ak-text-muted)', marginTop: 4 }}>
-              Your connection seems slow or offline - the request never arrived.
+              {error.kind === 'server' ? (error.message || meta.body) : meta.body}
             </p>
+            {error.step && (
+              <p style={{ fontSize: 11, color: 'var(--ak-text-muted)', marginTop: 6, opacity: .85 }}>
+                The server gave up waiting on: {error.step}
+              </p>
+            )}
             <button onClick={retry}
               style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 20px', borderRadius: 100, border: 'none', background: BRAND, color: '#fff', fontSize: 12.5, fontWeight: 900, cursor: 'pointer', fontFamily: "'Nunito',sans-serif" }}>
               <Icon name="ti-refresh" size={14}/> Try again

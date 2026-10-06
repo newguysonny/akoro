@@ -217,7 +217,13 @@ const STATUS_COPY = {
 
 async function apiError(res, method, path) {
   let serverMsg = '';
-  try { const j = await res.json(); serverMsg = j.error || j.message || ''; } catch {}
+  let serverCode, serverStep;
+  try {
+    const j = await res.json();
+    serverMsg = j.error || j.message || '';
+    serverCode = j.code;    // e.g. COMMUNITIES_QUERY_TIMEOUT — lets a page say WHY
+    serverStep = j.step;    // the query step a 504 gave up waiting on
+  } catch {}
   const err = new Error(
     serverMsg ||
     STATUS_COPY[res.status] ||
@@ -225,6 +231,8 @@ async function apiError(res, method, path) {
                        : 'That did not work. Please try again.')
   );
   err.status = res.status;
+  err.code   = serverCode;
+  err.step   = serverStep;
   err.path   = path;
   err.method = method;
   err.detail = `${method} ${path} -> ${res.status}`;   // logs only, never shown
