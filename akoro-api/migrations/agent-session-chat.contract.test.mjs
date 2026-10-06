@@ -31,7 +31,7 @@ test("TeachAgentModal carries real material beside the teaching pump", () => {
   assert.ok(teach.includes("content.media || null"), "or its media");
   assert.ok(teach.includes("content.renderPageContent || null"), "or its custom page renderer");
   assert.ok(teach.includes("content.allowTextMarking ?? true"), "canvases can opt out of annotate/redact");
-  assert.ok(teach.includes("content.state === 'ready' && !isMobileView"), "desktop opens the split when the material lands");
+  assert.ok(teach.includes("content.state === 'ready' && (config?.readerFirst || !isMobileView)"), "desktop opens the split when the material lands — and readerFirst opens it on mobile too (the Pharm.D topic flow)");
   assert.ok(teach.includes("if (!content || content.state === 'ready')"), "the reader never opens on unloaded material");
 });
 

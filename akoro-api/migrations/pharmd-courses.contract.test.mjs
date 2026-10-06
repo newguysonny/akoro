@@ -14,7 +14,7 @@ import { parseTopicFile, topicPath, PHARMD_BUCKET, DEFAULT_DIR } from "../script
  */
 
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, uploader, engine, routes, app, page, pharmdApi] = await Promise.all([
+const [migration, manifest, uploader, engine, routes, app, page, pharmdApi, session, teach] = await Promise.all([
   read("2026-pharmd-courses.sql"),
   read("manifest.json"),
   read("../scripts/upload-pharmd-courses.mjs"),
@@ -23,6 +23,8 @@ const [migration, manifest, uploader, engine, routes, app, page, pharmdApi] = aw
   read("../app.js"),
   read("../../akoro-learner/src/components/pharmd/PharmDProgram.jsx"),
   read("../../akoro-learner/src/services/pharmdApi.js"),
+  read("../../akoro-learner/src/components/pharmd/PharmDTopicSession.jsx"),
+  read("../../akoro-learner/src/components/teaching/TeachAgentModal.jsx"),
 ]);
 
 test("migration: the catalogue tables, keyed for idempotent upserts", () => {
@@ -151,10 +153,28 @@ test("frontend: the Pharm D pages read the real catalogue", () => {
   assert.ok(page.includes("completePharmdTopic"), "mark-as-complete persists");
   assert.ok(page.includes("toggleDone"), "optimistic toggle with rollback");
   assert.ok(page.includes("file_url"), "topics carry the bucket PDF url");
-  assert.ok(page.includes("<iframe"), "the PDF renders in the topic reader");
-  assert.ok(page.includes('target="_blank"'), "an open-in-new-tab escape hatch");
+  assert.ok(page.includes("PharmDTopicSession"), "tapping a topic opens the topic session");
+  assert.ok(!page.includes("<iframe"), "the raw iframe is gone — the session reader renders the PDF");
   assert.ok(!page.includes("topicsFor"), "no placeholder topic sets");
   assert.ok(!page.includes("readsFor"), "no mock read counts");
   // The browse card's third line is honest: topic count, not invented reads.
   assert.ok(page.includes("{c.topics} topic"), "cards show real topic counts");
+});
+
+test("topic session: the reader is the main display, both modals reused", () => {
+  // PharmDTopicSession composes the two shared modals — no new UI built.
+  assert.ok(session.includes("TeachAgentModal"), "the teach session modal is reused");
+  assert.ok(session.includes("loadPdfDocument"), "the real PDF loads through the pdf.js seam");
+  assert.ok(session.includes("PdfPage"), "pages render as pdf.js canvases");
+  assert.ok(session.includes("renderPageContent"), "feeds the reader's page-content seam");
+  assert.ok(session.includes("MAX_REFERENCE_CHARS"), "the PDF's text grounds the agent (server's 12k cap)");
+  assert.ok(session.includes("readerFirst: true"), "the reader opens as the main display");
+  assert.ok(session.includes("akoro_teach_sid_pharmd_"), "session id remembered per topic — 24h continuation");
+  assert.ok(session.includes("Sign in"), "guests get the honest sign-in prompt, like course videos");
+  assert.ok(session.includes("file_url") === false || session.includes("topic?.file_url"), "no-PDF topics fail honestly");
+  // TeachAgentModal honors readerFirst — the one change the flow needed,
+  // and only on mobile: desktop/tablet already auto-open the split.
+  assert.ok(teach.includes("config?.readerFirst || !isMobileView"), "readerFirst opens the reader on mobile too");
+  assert.ok(teach.includes("chatNode={sessionChat(true)}"), "desktop/tablet: reader left, chat right (the split)");
+  assert.ok(teach.includes("onOpenChat"), "mobile: the reader's chat icon brings up the session");
 });

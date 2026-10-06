@@ -9,10 +9,13 @@
  * PDFs open from the storage bucket, and "Mark as complete"
  * persists per learner.
  *
- * Three views — programme browse (hero + year rows of course
- * cards), course folder (art, author, action row, topic list with
- * done-checks) and the topic reader (breadcrumb + the PDF itself,
- * sticky prev/next) — plus the course/topic action sheet.
+ * Two views — programme browse (hero + year rows of course cards)
+ * and the course folder (art, author, action row, topic list with
+ * done-checks) — plus the course/topic action sheet. Tapping a
+ * topic opens PharmDTopicSession: the CONTENT READER modal as the
+ * main display (the real PDF, Generate tools) with the teach agent
+ * session a chat-icon away — reader + chat side by side on
+ * desktop/tablet, the reader full-screen over the chat on mobile.
  *
  * Layout and visuals are the reference's, unchanged; only the
  * chrome colours ride the app's --ak-* theme tokens (light/dark
@@ -30,6 +33,7 @@ import Spinner from '../common/Spinner.jsx';
 import {
   fetchPharmdProgramme, fetchPharmdCourse, fetchPharmdProgress, completePharmdTopic,
 } from '../../services/pharmdApi.js';
+import PharmDTopicSession from './PharmDTopicSession.jsx';
 import { PROGRAM, AUTHOR, accentFor } from './pharmdData.js';
 
 /* The reference's done-green — a content colour, theme-independent. */
@@ -54,9 +58,9 @@ const topicMeta = (t) => [
 ].filter(Boolean).join(' · ');
 
 export default function PharmDProgram({ onClose }) {
-  const [view, setView] = useState('browse');     // browse | folder | topic
+  const [view, setView] = useState('browse');     // browse | folder
   const [code, setCode] = useState(null);         // the open course code
-  const [topicIdx, setTopicIdx] = useState(0);
+  const [sessionTopic, setSessionTopic] = useState(null);  // index into topics — the open topic session
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
   const [toast, setToast] = useState(null);
 
@@ -95,7 +99,7 @@ export default function PharmDProgram({ onClose }) {
   }, []);
 
   /* Every view change starts at the top (reference window.scrollTo). */
-  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [view, code, topicIdx]);
+  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [view, code]);
 
   /* Escape closes the sheet (reference keydown). */
   useEffect(() => {
@@ -121,19 +125,14 @@ export default function PharmDProgram({ onClose }) {
     }
   };
 
-  const openTopic = (i) => { setTopicIdx(i); setView('topic'); };
+  /* A topic opens its agent session (PharmDTopicSession) — the content
+     reader modal is the main display, the teach session a chat-icon away. */
+  const openTopic = (i) => setSessionTopic(i);
 
   /* Start where the learner left off — first unfinished topic. */
   const startLearning = () => {
     const first = topics.findIndex((t) => !done.has(t.id));
     openTopic(first === -1 ? 0 : first);
-  };
-
-  const gotoAdjacent = (dir) => {
-    const next = topicIdx + dir;
-    if (next < 0) return;
-    if (next >= topics.length) { setView('folder'); return; }
-    openTopic(next);
   };
 
   /* Mark as complete — optimistic flip, rolled back on failure. */
@@ -219,18 +218,6 @@ export default function PharmDProgram({ onClose }) {
         .pd-upload{position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,0.5);border:1.5px solid rgba(255,255,255,0.5);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;font-family:inherit}
         .pd-card .pd-upload{width:24px;height:24px;top:6px;right:6px}
         .pd-folder-art .pd-upload{bottom:10px;right:10px}
-        /* Topic reader */
-        .pd-topic-shell{display:flex;flex-direction:column;height:100%}
-        .pd-topic-header{padding:20px 22px 0}
-        .pd-breadcrumb{font-size:.78rem;color:var(--ak-text-sub,#6B7280);font-weight:700;margin:16px 0 8px}
-        .pd-topic-title{font-size:1.4rem;font-weight:900;margin:0 0 14px;color:var(--ak-text,#111827)}
-        .pd-pdf-wrap{flex:1;min-height:0;padding:0 12px 12px;display:flex;flex-direction:column}
-        .pd-pdf{width:100%;flex:1;min-height:380px;border:1px solid var(--ak-border2,#E5E7EB);border-radius:12px;background:var(--ak-surface,#fff)}
-        .pd-pdf-empty{border:1.5px dashed var(--ak-border2,#E5E7EB);border-radius:14px;padding:26px 18px;text-align:center;color:var(--ak-text-sub,#6B7280);font-weight:700;font-size:.85rem}
-        .pd-topic-footer{background:var(--ak-bg,#FAFAFC);border-top:1px solid var(--ak-border,#F3F4F6);padding:14px 22px;display:flex;gap:10px;flex-shrink:0}
-        .pd-nav{flex:1;padding:13px;border-radius:100px;border:1px solid var(--ak-border2,#E5E7EB);background:var(--ak-surface,#fff);color:var(--ak-text,#111827);font-family:inherit;font-weight:800;font-size:.88rem;cursor:pointer}
-        .pd-nav.primary{background:${BRAND};border:none;color:#fff}
-        .pd-nav:disabled{opacity:.4;cursor:default}
         /* Action sheet */
         .pd-sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;z-index:40}
         .pd-sheet{width:100%;max-width:430px;background:var(--ak-surface,#fff);border-radius:20px 20px 0 0;padding:10px 0 max(18px, env(safe-area-inset-bottom));max-height:80vh;overflow-y:auto}
@@ -354,40 +341,13 @@ export default function PharmDProgram({ onClose }) {
           </div>
         )}
 
-        {/* ── View 3: Topic reader — the real PDF ── */}
-        {view === 'topic' && topics[topicIdx] && (
-          <div className="pd-topic-shell">
-            <div className="pd-topic-header">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <button className="pd-back" aria-label="Back to course" onClick={() => setView('folder')}>←</button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {topics[topicIdx].file_url && (
-                    <a className="pd-icon-btn" style={{ width: 36, height: 36 }} href={topics[topicIdx].file_url}
-                      target="_blank" rel="noreferrer" aria-label="Open PDF in a new tab">
-                      <Icon name="ti-external-link" size={16}/>
-                    </a>
-                  )}
-                  <button className="pd-more" aria-label="More"
-                    onClick={() => setSheet({ kind: 'topic', idx: topicIdx })}><Icon name="ti-dots-vertical" size={20}/></button>
-                </div>
-              </div>
-              <div className="pd-breadcrumb">{code} · Topic {topicIdx + 1} of {topics.length}{isDone(topicIdx) ? ' · done' : ''}</div>
-              <h2 className="pd-topic-title">{topics[topicIdx].title}</h2>
-            </div>
-            <div className="pd-pdf-wrap">
-              {topics[topicIdx].file_url ? (
-                <iframe className="pd-pdf" title={topics[topicIdx].title} src={topics[topicIdx].file_url}/>
-              ) : (
-                <div className="pd-pdf-empty">No PDF is attached to this topic yet.</div>
-              )}
-            </div>
-            <div className="pd-topic-footer">
-              <button className="pd-nav" disabled={topicIdx === 0} onClick={() => gotoAdjacent(-1)}>← Previous</button>
-              <button className="pd-nav primary" onClick={() => gotoAdjacent(1)}>
-                {topicIdx === topics.length - 1 ? 'Finish' : 'Next →'}
-              </button>
-            </div>
-          </div>
+        {/* ── Topic session — the reader modal + teach session (chat icon) ── */}
+        {sessionTopic !== null && topics[sessionTopic] && (
+          <PharmDTopicSession
+            topic={topics[sessionTopic]}
+            course={courseData?.course}
+            onClose={() => setSessionTopic(null)}
+          />
         )}
       </div>
 

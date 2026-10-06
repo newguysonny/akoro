@@ -187,9 +187,11 @@ function TeachAgentModal({ session, config, onClose, onMinimize, onSessionStarte
   const openReader      = () => { if (!content || content.state === 'ready') setReaderOpen(true); };
   const closeReader     = () => setReaderOpen(false);
   // With real material, desktop/tablet open the split the moment it lands
-  // (once); mobile keeps the chat-first flow with the content box.
+  // (once). Mobile keeps the chat-first flow with the content box — UNLESS
+  // the caller passes config.readerFirst (the Pharm.D topic flow: the
+  // material is the destination, the chat session opens from the chat icon).
   useEffect(() => {
-    if (content && content.state === 'ready' && !isMobileView && !contentAutoRef.current) {
+    if (content && content.state === 'ready' && (config?.readerFirst || !isMobileView) && !contentAutoRef.current) {
       contentAutoRef.current = true;
       setReaderOpen(true);
     }
