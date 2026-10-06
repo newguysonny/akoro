@@ -102,5 +102,8 @@ test("library · blogs are a first-class kind with draft/published cards", () =>
   assert.match(library, /\{ key: 'blog',\s+label: 'Blogs'\s+\}/);
   // card shows the honest state; tapping opens the editor
   assert.match(library, /\{published \? 'Published' : 'Draft'\}/);
-  assert.match(library, /it\?\.kind === 'blog' \? navigate\(`\/write\/blog\/\$\{it\.id\}`\)/);
+  // card opens route through openLibraryItem, which parks the item on the
+  // Now-Studying bar and navigates (blogs to the editor, courses to /course)
+  assert.match(library, /it\.kind === 'blog' \? `\/write\/blog\/\$\{it\.id\}` : `\/course\/\$\{it\.slug \|\| it\.id\}`/);
+  assert.match(library, /onOpen=\{openLibraryItem\}/);
 });

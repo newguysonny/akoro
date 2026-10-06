@@ -77,3 +77,56 @@ test("the honesty toast exists in every locale", async () => {
     assert.ok(txt.includes("'now.session_ended'"), `${f} carries now.session_ended`);
   }
 });
+
+/* ── folders, Pharm.D and the shelf: everything parks, the bar shows
+   everywhere the learner browses ─────────────────────────────────────── */
+
+const read2 = (name) => readFile(new URL(name, import.meta.url), "utf8");
+const [bar, folderPage, pharmd, hub] = await Promise.all([
+  read2("../../akoro-learner/src/components/dashboard/NowStudyingBar.jsx"),
+  read2("../../akoro-learner/src/components/library/LibraryFolderPage.jsx"),
+  read2("../../akoro-learner/src/components/pharmd/PharmDProgram.jsx"),
+  read2("../../akoro-learner/src/components/tabs/DiscoverHub.jsx"),
+]);
+
+test("the bar itself renders inside full-screen pages (sticky variant)", () => {
+  assert.ok(bar.includes("sticky = false"), "a sticky mode exists");
+  assert.ok(bar.includes("position: 'sticky'"), "pinned inside the page column, not the viewport");
+  assert.ok(bar.includes("zIndex: 30"), "stacked under those pages' sheets (z 40)");
+});
+
+test("the Library page shows the bar on both layouts", () => {
+  assert.ok(lib.includes("nowStudying={{ ...now,"), "AppShell gets the store (the tablet bar)");
+  assert.ok(lib.includes("ak-lib-nowbar"), "a mobile bar renders on the page itself");
+  assert.ok(lib.includes("@media (min-width:769px){.ak-lib-nowbar{display:none}}"), "mobile only — the tablet bar covers desktop");
+  assert.ok(lib.includes("openNowFromLibrary"), "with its own resume handler");
+  assert.ok(lib.includes("type: 'library'"), "shelf opens park with their route");
+  assert.ok(lib.includes("snapshot: { path }"), "the snapshot carries the route");
+});
+
+test("folder items park when they open, and the folder page shows the bar", () => {
+  assert.ok(folderPage.includes("nowItem, onNowOpen, onNowDismiss"), "the folder page takes the bar props");
+  assert.ok(folderPage.includes("<NowStudyingBar sticky"), "and renders the sticky bar");
+  assert.ok(folderPage.includes("nowItem && !sheet &&"), "hidden while a sheet is up");
+  assert.ok(lib.includes("type: 'pharmd'"), "a parked Pharm.D topic from a folder");
+  assert.ok(lib.includes("FILE_TYPE_META[it.kind]?.icon || getMeta(it.kind).icon"), "folder links park with their kind's glyph");
+});
+
+test("Pharm.D topics park, and the programme page shows the bar", () => {
+  assert.ok(pharmd.includes("useNowStudying(STUDENT_ID)"), "the programme subscribes to the store");
+  assert.ok(pharmd.includes("type: 'pharmd'"), "opening a topic parks it");
+  assert.ok(pharmd.includes("emoji: 'ti-stethoscope'"), "with the Pharm.D glyph");
+  assert.ok(pharmd.includes("snapshot: { code, topicId: String(t.id) }"), "carrying where to reopen");
+  assert.ok(pharmd.includes("<NowStudyingBar sticky"), "the bar renders in the phone column");
+  assert.ok(pharmd.includes("sessionTopic === null && !sheet"), "hidden while the topic session or a sheet is up");
+});
+
+test("the dashboard resumes the new types", () => {
+  assert.ok(dash.includes("type === 'library'"), "library: navigate the parked route");
+  assert.ok(dash.includes("navigate(now.item.snapshot.path)"), "straight back to the content");
+  assert.ok(dash.includes("type === 'pharmd'"), "pharmd: hand the focus to Discover");
+  assert.ok(dash.includes("setPharmdFocus({ ...now.item.snapshot, ts: Date.now() })"), "with a fresh timestamp");
+  assert.ok(hub.includes("pharmdFocus?.ts"), "the hub opens the programme on the focus");
+  assert.ok(hub.includes("focus={pharmdFocus}"), "and threads it into PharmDProgram");
+  assert.ok(pharmd.includes("focusedRef"), "the programme opens the parked topic once its list lands");
+});

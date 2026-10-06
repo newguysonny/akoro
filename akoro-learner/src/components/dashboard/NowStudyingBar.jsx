@@ -22,7 +22,7 @@ import { Icon } from '../common/Icons.jsx';
 
 const FONT = "'Nunito', sans-serif";
 
-export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss }) {
+export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss, sticky = false }) {
   const { t } = useLang();
   if (!item) return null;
   const isBattle  = item.type === 'battle';
@@ -31,11 +31,20 @@ export default function NowStudyingBar({ item, onOpen, onAdd, onDismiss }) {
   const dotColor = isBattle ? (battleLive ? RED : BRAND) : stage.color;
   const livePulse = { animation: 'now-live-pulse 1.6s ease-in-out infinite' };
 
+  /* sticky — the same bar rendered INSIDE a full-screen page's scrolling
+     phone column (folders, Pharm.D): pinned to the column's bottom edge
+     instead of the viewport's, and stacked UNDER that page's sheets
+     (z 30 < the sheets' 40) so rename/delete still cover it. */
   return (
-    <div className="ak-now-bar" style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', zIndex: 'var(--z-bar)',
-      background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
-      boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
-      animation: `sheet-up .28s var(--ease-spring)` }}>
+    <div className="ak-now-bar" style={sticky
+      ? { position: 'sticky', bottom: 0, zIndex: 30,
+          background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
+          boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
+          animation: `sheet-up .28s var(--ease-spring)` }
+      : { position: 'fixed', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', zIndex: 'var(--z-bar)',
+          background: 'var(--ak-surface)', borderTop: '1px solid var(--ak-border)',
+          boxShadow: '0 -4px 18px rgba(0,0,0,.10)', fontFamily: FONT,
+          animation: `sheet-up .28s var(--ease-spring)` }}>
       <style>{`@keyframes now-live-pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px 11px 14px' }}>

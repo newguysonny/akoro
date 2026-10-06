@@ -188,6 +188,9 @@ export default function LearnerDashboard() {
   // Tracks the material or session the learner last opened, across all tabs
   // except the AI chat. Higher-ed gated like the records feature it leans on.
   const [now, nowActs] = useNowStudying(userProfile?.id);
+  // Reopen request for a parked Pharm.D topic (the Now-Studying bar's
+  // resume) — passed to the Discover hub, which opens the programme on it.
+  const [pharmdFocus, setPharmdFocus] = useState(null);
   // Is the AI chat SURFACE showing? (Agent tab also hosts tasks/stats/self-study,
   // where the Now-Studying bar should still appear — only chat hides it.)
   const [chatActive, setChatActive] = useState(false);
@@ -427,6 +430,16 @@ export default function LearnerDashboard() {
         catch { r = null; }
       }
       if (r) openRecordTracked(r);
+    } else if (now.item.type === 'library') {
+      // Content parked from the Library shelf or a folder — its route rides
+      // in the snapshot; resume is just the navigation.
+      if (now.item.snapshot?.path) navigate(now.item.snapshot.path);
+      else setToast(t('now.session_ended'));
+    } else if (now.item.type === 'pharmd') {
+      // A parked Pharm.D topic — hand the focus to the Discover hub, which
+      // opens the programme page on the exact topic.
+      setPharmdFocus({ ...now.item.snapshot, ts: Date.now() });
+      goTab('discovery');
     }
   };
 
@@ -1128,6 +1141,7 @@ export default function LearnerDashboard() {
               ? <DiscoveryTab initialQuery={discoverQuery}/>
               : <DiscoverHub
                   userId={userProfile?.id}
+                  pharmdFocus={pharmdFocus}
                   onOpenCourses={(q)=>navigate(`/app?tab=discovery&view=courses${q?`&q=${encodeURIComponent(q)}`:""}`)}
                   onOpenCourse={(c)=>c?.slug&&navigate(`/course/${c.slug}`)}
                   onOpenRecord={openRecordTracked}

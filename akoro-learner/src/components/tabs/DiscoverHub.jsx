@@ -20,7 +20,7 @@
  * Gated by isHigherEdUI() in LearnerDashboard — school learners keep
  * the current DiscoveryTab feed directly.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BRAND, GOLD } from '../../constants.js';
 import { useLang } from '../../contexts/LanguageContext.jsx';
 import { Icon } from '../common/Icons.jsx';
@@ -29,11 +29,18 @@ import DiscoverSearchPage from './DiscoverSearchPage.jsx';
 import PharmDProgram from '../pharmd/PharmDProgram.jsx';
 import { TYPES, matchTypes, FONT } from './dhubTypes.js';
 
-export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, userId, initialQuery = '' }) {
+export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord, onOpenBattles, userId, initialQuery = '', pharmdFocus }) {
   const { t } = useLang();
   const [query, setQuery] = useState(initialQuery);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pharmdOpen, setPharmdOpen] = useState(false);
+
+  /* A reopen request from the Now-Studying bar (a parked Pharm.D topic):
+     open the programme page with the focus — it jumps to the course and
+     reopens the exact topic. */
+  useEffect(() => {
+    if (pharmdFocus?.ts) setPharmdOpen(true);
+  }, [pharmdFocus?.ts]);
   const [toast, setToast] = useState(null);
 
   const all = TYPES(t);
@@ -161,7 +168,7 @@ export default function DiscoverHub({ onOpenCourses, onOpenCourse, onOpenRecord,
         />
       )}
 
-      {pharmdOpen && <PharmDProgram onClose={() => setPharmdOpen(false)} />}
+      {pharmdOpen && <PharmDProgram onClose={() => setPharmdOpen(false)} focus={pharmdFocus} />}
 
       {toast && <Toast msg={toast.msg} color={toast.color} onDone={() => setToast(null)} />}
     </div>

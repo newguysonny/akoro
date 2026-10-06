@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { BRAND } from '../../constants.js';
 import { Icon } from '../common/Icons.jsx';
 import Toast from '../common/Toast.jsx';
+import NowStudyingBar from '../dashboard/NowStudyingBar.jsx';
 import { renameFolder, deleteFolder, listFolderItems } from '../../services/recordsApi.js';
 
 /* The reference's folder gradient — same family as Pharm.D's accent art. */
@@ -38,7 +39,7 @@ const KIND_META = {
 };
 const kindMeta = (k) => KIND_META[k] || ['ti-box', '#6B7280'];
 
-export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted }) {
+export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenamed, onDeleted, nowItem, onNowOpen, onNowDismiss }) {
   const [sheet, setSheet] = useState(null);        // null | 'more' | 'rename' | 'delete'
   const [name, setName]       = useState(folder?.name || '');
   const [busy, setBusy]       = useState(false);
@@ -200,6 +201,13 @@ export default function LibraryFolderPage({ folder, onClose, onOpenItem, onRenam
             );
           })}
         </div>
+
+        {/* The Now-Studying bar, pinned to the column's bottom edge —
+            the folder keeps the learner's parked item in view, under
+            the sheets (sticky z 30 < sheet z 40). */}
+        {nowItem && !sheet && (
+          <NowStudyingBar sticky item={nowItem} onOpen={onNowOpen} onDismiss={onNowDismiss}/>
+        )}
       </div>
 
       {/* ── More sheet — Rename / Delete / Share ── */}

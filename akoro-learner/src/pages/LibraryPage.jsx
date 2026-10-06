@@ -9,6 +9,7 @@ import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
 import LibraryFolderPage from '../components/library/LibraryFolderPage.jsx';
 import AddToFolderPage from '../components/library/AddToFolderPage.jsx';
+import NowStudyingBar from '../components/dashboard/NowStudyingBar.jsx';
 import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
@@ -292,7 +293,7 @@ export default function LibraryPage() {
   const { t } = useLang();
   // Now-Studying parking — the same tracking the dashboard shelf gives
   // records, so a record opened HERE parks on the bar too.
-  const [, nowActs] = useNowStudying(STUDENT_ID);
+  const [now, nowActs] = useNowStudying(STUDENT_ID);
   const [searchParams] = useSearchParams();
   const [items, setItems]       = useState([]);
   const [records, setRecords]   = useState([]);
@@ -364,6 +365,22 @@ export default function LibraryPage() {
     }
   };
 
+  /* Opening shelf content parks it on the Now-Studying bar — blogs,
+     courses and guides ride with their route so the bar reopens them
+     exactly where the learner left. */
+  const openLibraryItem = (it) => {
+    if (!it) return;
+    if (it.isRecordItem) return openRecord(it);
+    const path = it.kind === 'blog' ? `/write/blog/${it.id}` : `/course/${it.slug || it.id}`;
+    nowActs.setCurrent({
+      type: 'library', id: String(it.id), title: it.title,
+      sub: it.subtitle || (it.kind ? it.kind[0].toUpperCase() + it.kind.slice(1) : 'Library'),
+      emoji: getMeta(it.kind).icon, progress: 0,
+      snapshot: { path },
+    });
+    navigate(path);
+  };
+
   /* Items stored inside a folder open back onto the surface they came
      from: records re-enter their teach session, links navigate. */
   const openFolderItem = (it) => {
@@ -374,8 +391,47 @@ export default function LibraryPage() {
       else setToast('That record is no longer on your shelf');
       return;
     }
-    if (it.link) { setFolderPage(null); navigate(it.link); return; }
-    setToast(it.itemType === 'pharmd_topic' ? 'Open Pharm.D topics from the Discover tab' : 'Open this from its own page');
+    if (it.link) {
+      // Parked like a shelf open — the bar follows the learner to the route.
+      nowActs.setCurrent({
+        type: 'library', id: String(it.itemRef), title: it.title,
+        sub: it.sub || 'Library', emoji: FILE_TYPE_META[it.kind]?.icon || getMeta(it.kind).icon, progress: 0,
+        snapshot: { path: it.link },
+      });
+      setFolderPage(null);
+      navigate(it.link);
+      return;
+    }
+    if (it.itemType === 'pharmd_topic') {
+      // The programme page opens from Discover — park it so the bar can
+      // take the learner straight back to the topic.
+      nowActs.setCurrent({
+        type: 'pharmd', id: String(it.itemRef), title: it.title,
+        sub: it.sub || 'PHARM.D', emoji: 'ti-stethoscope',
+        progress: 0, snapshot: { topicId: it.itemRef },
+      });
+      setToast('Open Pharm.D topics from the Discover tab');
+      return;
+    }
+    setToast('Open this from its own page');
+  };
+
+  /* The bar's resume, from the shelf: records reopen in their teach
+     session, parked routes navigate; anything the dashboard owns
+     (sessions, battles, Pharm.D topics) hands off to /app, whose own
+     bar knows how to resume it. */
+  const openNowFromLibrary = async () => {
+    const it = now.item;
+    if (!it) return;
+    if (it.type === 'record') {
+      let r = records.find((x) => x.id === it.id);
+      if (!r) { try { r = (await listRecords()).find((x) => x.id === it.id) || null; } catch { /* offline */ } }
+      if (r) openRecord(r);
+      else setToast('That record is no longer on your shelf');
+      return;
+    }
+    if (it.type === 'library' && it.snapshot?.path) { navigate(it.snapshot.path); return; }
+    navigate('/app');
   };
 
   /* Opening a record starts a TEACHING session over it — same flow as
@@ -430,7 +486,7 @@ export default function LibraryPage() {
   });
 
   return (
-    <AppShell>
+    <AppShell nowStudying={{ ...now, onOpen: openNowFromLibrary, onAdd: () => setSheetOpen(true), onDismiss: nowActs.dismiss }}>
     <div style={{ width: '100%', height: '100%', fontFamily: "'Nunito',sans-serif", background: 'var(--ak-bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* HEADER */}
       <div style={{ background: 'var(--ak-surface)', backdropFilter: 'blur(14px)', borderBottom: '1px solid var(--ak-border)', padding: '14px 18px', zIndex: 100, flexShrink: 0 }}>
@@ -504,9 +560,7 @@ export default function LibraryPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {displayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddToFolder} onOpen={(it) => it?.isRecordItem
-              ? openRecord(it)
-              : it?.kind === 'blog' ? navigate(`/write/blog/${it.id}`) : navigate(`/course/${it?.slug || it?.id}`)} />)}
+            {displayed.map(a => <LibraryItem key={a.id} item={a} onMore={openAddToFolder} onOpen={openLibraryItem} />)}
           </div>
         )}
       </div>
@@ -575,6 +629,9 @@ export default function LibraryPage() {
           folder={folderPage}
           onClose={() => setFolderPage(null)}
           onOpenItem={openFolderItem}
+          nowItem={now.item}
+          onNowOpen={openNowFromLibrary}
+          onNowDismiss={nowActs.dismiss}
           onRenamed={(f) => { setFolders((fs) => fs.map((x) => (x.id === f.id ? f : x))); setFolderPage(f); }}
           onDeleted={(id) => { setFolders((fs) => fs.filter((x) => x.id !== id)); setFolderPage(null); setToast('Folder deleted'); }}
         />
@@ -599,6 +656,16 @@ export default function LibraryPage() {
           onOpened={handleRecordOpened}
           onProgress={handleRecordProgress}
         />
+      )}
+
+      {/* The Now-Studying bar, mobile — the tablet bar comes with AppShell.
+          This page has no bottom nav of its own, so the bar rides the
+          screen's bottom edge (the scoped style re-anchors it). */}
+      {higherEd && now.item && !now.dismissed && !viewer && !folderPage && !addToFolder && (
+        <div className="ak-lib-nowbar">
+          <style>{`@media (min-width:769px){.ak-lib-nowbar{display:none}}.ak-lib-nowbar .ak-now-bar{bottom:env(safe-area-inset-bottom,0px)}`}</style>
+          <NowStudyingBar item={now.item} onOpen={openNowFromLibrary} onAdd={() => setSheetOpen(true)} onDismiss={nowActs.dismiss}/>
+        </div>
       )}
     </div>
     </AppShell>

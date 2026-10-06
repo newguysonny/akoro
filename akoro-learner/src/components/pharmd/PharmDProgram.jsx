@@ -35,6 +35,9 @@ import {
   fetchPharmdProgramme, fetchPharmdCourse, fetchPharmdProgress, completePharmdTopic,
 } from '../../services/pharmdApi.js';
 import PharmDTopicSession from './PharmDTopicSession.jsx';
+import NowStudyingBar from '../dashboard/NowStudyingBar.jsx';
+import { useNowStudying } from '../../utils/nowStudying.js';
+import { STUDENT_ID } from '../../constants.js';
 import { PROGRAM, AUTHOR, accentFor } from './pharmdData.js';
 
 /* The reference's done-green — a content colour, theme-independent. */
@@ -58,10 +61,11 @@ const topicMeta = (t) => [
   t.size ? `${(t.size / 1024 / 1024).toFixed(1)} MB` : null,
 ].filter(Boolean).join(' · ');
 
-export default function PharmDProgram({ onClose }) {
+export default function PharmDProgram({ onClose, focus }) {
   const [view, setView] = useState('browse');     // browse | folder
   const [code, setCode] = useState(null);         // the open course code
   const [sessionTopic, setSessionTopic] = useState(null);  // index into topics — the open topic session
+  const [now, nowActs] = useNowStudying(STUDENT_ID);      // the parked Now-Studying item
   const [sheet, setSheet] = useState(null);       // { kind:'course' } | { kind:'topic', idx }
   const [addToFolder, setAddToFolder] = useState(null);  // the topic being filed into folders
   const [toast, setToast] = useState(null);
@@ -103,6 +107,29 @@ export default function PharmDProgram({ onClose }) {
   /* Every view change starts at the top (reference window.scrollTo). */
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [view, code]);
 
+  /* A reopen request (the Now-Studying bar's resume): go to the parked
+     course and open the parked topic — directly if its list is already
+     on screen, or as soon as the course loads it. */
+  const focusedRef = useRef(null);
+  useEffect(() => {
+    if (!focus?.code || !focus?.topicId) return;
+    focusedRef.current = String(focus.topicId);
+    if (focus.code !== code) {
+      setCode(focus.code);
+      setView('folder');          // the course load lands the topics → below
+    } else if (topics.length) {
+      const i = topics.findIndex((t) => String(t.id) === focusedRef.current);
+      focusedRef.current = null;
+      if (i >= 0) openTopic(i);
+    }
+  }, [focus?.ts]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!focusedRef.current || !topics.length) return;
+    const i = topics.findIndex((t) => String(t.id) === String(focusedRef.current));
+    focusedRef.current = null;
+    if (i >= 0) openTopic(i);
+  }, [topics]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* Escape closes the sheet (reference keydown). */
   useEffect(() => {
     if (!sheet) return;
@@ -129,7 +156,20 @@ export default function PharmDProgram({ onClose }) {
 
   /* A topic opens its agent session (PharmDTopicSession) — the content
      reader modal is the main display, the teach session a chat-icon away. */
-  const openTopic = (i) => setSessionTopic(i);
+  const openTopic = (i) => {
+    setSessionTopic(i);
+    const t = topics[i];
+    if (t) {
+      // Parked like a track — the bar follows the learner off this page,
+      // and its snapshot reopens this exact topic from anywhere.
+      nowActs.setCurrent({
+        type: 'pharmd', id: String(t.id), title: t.title,
+        sub: `${code || 'PHARM.D'} · PHARM.D`, emoji: 'ti-stethoscope',
+        progress: done.has(t.id) ? 100 : 0,
+        snapshot: { code, topicId: String(t.id) },
+      });
+    }
+  };
 
   /* Start where the learner left off — first unfinished topic. */
   const startLearning = () => {
@@ -355,6 +395,25 @@ export default function PharmDProgram({ onClose }) {
             course={courseData?.course}
             onClose={() => setSessionTopic(null)}
           />
+        )}
+
+        {/* The Now-Studying bar, pinned to the column's bottom edge —
+            the parked item stays in view while browsing the programme
+            (under the sheets: sticky z 30 < sheet z 40). Resuming a
+            topic parked HERE reopens it directly; anything parked
+            elsewhere closes back to the hub, where the dashboard's own
+            bar knows how to resume it. */}
+        {now.item && !now.dismissed && sessionTopic === null && !sheet && (
+          <NowStudyingBar sticky item={now.item}
+            onOpen={() => {
+              const it = now.item;
+              if (it?.type === 'pharmd' && it.snapshot?.code === code) {
+                const i = topics.findIndex((t) => String(t.id) === String(it.id));
+                if (i >= 0) { openTopic(i); return; }
+              }
+              onClose?.();
+            }}
+            onDismiss={nowActs.dismiss}/>
         )}
       </div>
 
