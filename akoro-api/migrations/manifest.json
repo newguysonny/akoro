@@ -162,7 +162,8 @@
     "2026-billing-core.sql",
     "2026-coupons-gateway.sql",
     "2026-billing-messaging.sql",
-    "2026-pharmd-courses.sql"
+    "2026-pharmd-courses.sql",
+    "2026-hot-path-indexes.sql"
   ],
   "demo": [
     "2026-seed-school.sql",
