@@ -86,6 +86,18 @@ export async function createFolder({ name, description, visibility, coverKey }) 
   return d?.data ?? null;
 }
 
+/** Rename a folder (any of name/description/visibility). */
+export async function renameFolder(id, { name, description, visibility }) {
+  const d = await apiPatch(`/api/records/folders/${id}`, { name, description, visibility });
+  return d?.data ?? null;
+}
+
+/** Delete a folder (the cover object goes best-effort server-side). */
+export async function deleteFolder(id) {
+  await apiDelete(`/api/records/folders/${id}`);
+  return true;
+}
+
 /** Mark a record opened (server-side last_opened_at, no progress change). */
 export async function touchRecordOpened(id) {
   await apiPatch(`/api/records/${id}`, { lastOpened: true });

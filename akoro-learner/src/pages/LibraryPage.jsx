@@ -7,6 +7,7 @@ import { BRAND, RED, GREEN, GOLD, STUDENT_ID } from '../constants.js';
 import { useLang } from '../contexts/LanguageContext.jsx';
 import AddRecordModal from '../components/dashboard/AddRecordModal.jsx';
 import CreateFolderSheet from '../components/library/CreateFolderSheet.jsx';
+import LibraryFolderPage from '../components/library/LibraryFolderPage.jsx';
 import RecordTeachSession, { recordFileType } from '../components/library/RecordTeachSession.jsx';
 import { useHigherEd } from '../hooks/useStudyTier.js';
 import { AppShell } from '../components/AppShell.jsx';
@@ -285,6 +286,7 @@ export default function LibraryPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [folderSheetOpen, setFolderSheetOpen] = useState(false);
+  const [folderPage, setFolderPage] = useState(null);   // the folder opened full-screen
   // The blog option belongs to the higher-ed tier (studyLevel.js gate) —
   // resolved via the shared cached hook, so the page never flashes the
   // school layout at a higher-ed learner while the tier revalidates.
@@ -408,7 +410,7 @@ export default function LibraryPage() {
             <p style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ak-text-muted)', margin: '0 0 8px', letterSpacing: .3 }}>FOLDERS</p>
             <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
               {folders.map(f => (
-                <button key={f.id} onClick={() => setToast('Adding items to folders comes next')}
+                <button key={f.id} onClick={() => setFolderPage(f)}
                   title={f.description || f.name}
                   style={{ flex: '0 0 128px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--ak-border)', background: 'var(--ak-surface)', cursor: 'pointer', textAlign: 'left', padding: 0, fontFamily: "'Nunito',sans-serif" }}>
                   {f.coverUrl
@@ -506,6 +508,17 @@ export default function LibraryPage() {
         onClose={() => setFolderSheetOpen(false)}
         onCreated={(f) => { setFolders((fs) => [f, ...fs]); setToast(`Folder “${f.name}” created`); }}
       />
+
+      {/* A folder opened full-screen — the Pharm.D folder UI, with
+          rename + delete in its more sheet. */}
+      {folderPage && (
+        <LibraryFolderPage
+          folder={folderPage}
+          onClose={() => setFolderPage(null)}
+          onRenamed={(f) => { setFolders((fs) => fs.map((x) => (x.id === f.id ? f : x))); setFolderPage(f); }}
+          onDeleted={(id) => { setFolders((fs) => fs.filter((x) => x.id !== id)); setFolderPage(null); setToast('Folder deleted'); }}
+        />
+      )}
 
       {/* The record as a TEACHING session — the learner teaches their agent
           over the real file; the content box opens it in the reader. */}

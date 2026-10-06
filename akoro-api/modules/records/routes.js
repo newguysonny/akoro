@@ -25,6 +25,8 @@
  *                                       visibility, coverKey) — covers
  *                                       presign via /upload-url with
  *                                       purpose 'folder-cover'
+ *   PATCH  /api/records/folders/:id  → rename / re-describe / visibility
+ *   DELETE /api/records/folders/:id  → row + best-effort cover object
  *
  * A kind='upload' row with no file_key is a legacy device record whose
  * bytes were never captured — the list says so (fileMissing) so the
@@ -269,6 +271,54 @@ router.post("/folders", authenticateToken, asyncHandler(async (req, res) => {
     throw error;
   }
   res201(res, await folderToApi(data));
+}));
+
+// ─── PATCH /api/records/folders/:id — rename (and re-describe/re-visibility) ─
+router.patch("/folders/:id", authenticateToken, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { data: existing } = await edu().from("library_folders")
+    .select("id, user_id").eq("id", req.params.id).maybeSingle();
+  if (!existing) return res404(res, "Folder not found.");
+  if (existing.user_id !== userId) return res403(res, "Not your folder.");
+
+  const patch = { updated_at: new Date().toISOString() };
+  if (req.body?.name !== undefined) {
+    const name = String(req.body.name || "").trim();
+    if (!name) return res400(res, "A folder name is required.");
+    if (name.length > MAX_FOLDER_NAME) return res400(res, "Folder names are capped at 100 characters.");
+    patch.name = name;
+  }
+  if (req.body?.description !== undefined) {
+    const description = String(req.body.description || "").trim();
+    if (description.length > MAX_FOLDER_DESC) return res400(res, "Descriptions are capped at 500 characters.");
+    patch.description = description || null;
+  }
+  if (req.body?.visibility !== undefined) {
+    patch.visibility = req.body.visibility === "public" ? "public" : "private";
+  }
+
+  const { data, error } = await edu().from("library_folders")
+    .update(patch).eq("id", req.params.id).select().single();
+  if (error) {
+    if (/duplicate key|unique/i.test(String(error.message || ""))) {
+      return res400(res, "You already have a folder with that name.");
+    }
+    throw error;
+  }
+  res200(res, await folderToApi(data));
+}));
+
+// ─── DELETE /api/records/folders/:id — row + best-effort cover object ───────
+router.delete("/folders/:id", authenticateToken, asyncHandler(async (req, res) => {
+  const { data: existing } = await edu().from("library_folders")
+    .select("id, user_id, cover_key").eq("id", req.params.id).maybeSingle();
+  if (!existing) return res404(res, "Folder not found.");
+  if (existing.user_id !== req.user.id) return res403(res, "Not your folder.");
+
+  const { error } = await edu().from("library_folders").delete().eq("id", req.params.id);
+  if (error) throw error;
+  void removeRecordFile(existing.cover_key);  // best-effort — the row is gone either way
+  res.status(200).json({ success: true, data: { id: req.params.id } });
 }));
 
 // ─── PATCH /api/records/:id — progress / last-opened ────────────────────────

@@ -18,7 +18,7 @@ import test from "node:test";
  *              with transport (±10s, seek, 0.75×–2×) in the SHARED toolbar
  */
 const read = (name) => readFile(new URL(name, import.meta.url), "utf8");
-const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample, foldersMigration, createSheet] = await Promise.all([
+const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryPage, viewer, player, pdfPages, reader, searchPage, dashboard, configJs, envExample, foldersMigration, createSheet, folderPage] = await Promise.all([
   read("2026-records.sql"),
   read("manifest.json"),
   read("../modules/records/routes.js"),
@@ -37,6 +37,7 @@ const [migration, manifest, routes, storage, app, recordsApi, addModal, libraryP
   read("../.env.example"),
   read("2026-library-folders.sql"),
   read("../../akoro-learner/src/components/library/CreateFolderSheet.jsx"),
+  read("../../akoro-learner/src/components/library/LibraryFolderPage.jsx"),
 ]);
 
 test("the shelf is a table that follows the learner, not a device", () => {
@@ -219,4 +220,23 @@ test("folders: create flow with name, cover, description, visibility", () => {
   assert.ok(libraryPage.includes("CreateFolderSheet"), "the Library page mounts the sheet");
   assert.ok(libraryPage.includes("Create a folder"), "the Add-to-library modal offers it");
   assert.ok(libraryPage.includes("listFolders"), "the page loads folders with the shelf");
+
+  // The folder page — the Pharm.D folder UI, with rename + delete.
+  assert.ok(routes.includes('router.patch("/folders/:id"'), "PATCH /folders/:id renames");
+  assert.ok(routes.includes('router.delete("/folders/:id"'), "DELETE /folders/:id removes");
+  assert.ok(routes.includes("Not your folder."), "rename/delete are owner-only");
+  assert.ok(routes.includes("removeRecordFile(existing.cover_key)"), "delete takes the cover object best-effort");
+  assert.ok(recordsApi.includes("renameFolder"), "renameFolder()");
+  assert.ok(recordsApi.includes("deleteFolder"), "deleteFolder()");
+  assert.ok(folderPage.includes("lf-folder-hero"), "the Pharm.D folder hero structure (lf- twins of the pd- classes)");
+  for (const cls of ["lf-folder-art", "lf-folder-title", "lf-author-row", "lf-action-row", "lf-sheet-overlay"]) {
+    assert.ok(folderPage.includes(cls), cls);
+  }
+  assert.ok(folderPage.includes("Rename folder"), "rename in the more sheet");
+  assert.ok(folderPage.includes("Delete folder"), "delete in the more sheet");
+  assert.ok(folderPage.includes("This folder is empty"), "the honest empty state");
+  assert.ok(folderPage.includes("This can’t be undone"), "delete asks once — destructive");
+  assert.ok(libraryPage.includes("LibraryFolderPage"), "tapping a folder opens the page");
+  assert.ok(libraryPage.includes("setFolderPage(f)"), "the folder card click-through");
+  assert.ok(!libraryPage.includes("Adding items to folders comes next"), "the placeholder toast is gone");
 });
