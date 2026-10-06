@@ -71,11 +71,41 @@ router.use(authenticateToken);
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
+/* ── Query deadlines ──────────────────────────────────────────────────────
+   A wedged database call (a stuck lock, a starved PostgREST pool) never
+   rejects on its own — the route's promise stays pending forever, the HTTP
+   request never answers, and the learner watches a skeleton that never ends
+   (live report: the community details page "keeps loading, no data
+   arriving" — while every unauthenticated probe of the same route answered
+   instantly). Each communities query races a deadline; past it the route
+   answers 504 at once and the step that hung is named in the server logs,
+   so the next occurrence points at its culprit instead of masquerading as
+   a frontend bug. The losing query is left to settle in the background —
+   its late failure is swallowed on purpose (an unhandled rejection from a
+   race we already abandoned must not crash the process). */
+const QUERY_TIMEOUT_MS = 20000;
+
+function step(label, promise) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      promise.catch(() => {});   // it lost the race — a late failure is not news
+      console.error("[communities] query timed out", { step: label, ms: QUERY_TIMEOUT_MS });
+      const err = new Error(`Timed out after ${QUERY_TIMEOUT_MS}ms: ${label}`);
+      err.deadlineExceeded = true;
+      err.step = label;
+      reject(err);
+    }, QUERY_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /** Member counts for the given community ids, in one query. */
 async function memberCounts(ids) {
   if (!ids.length) return new Map();
-  const { data } = await edu().from("community_members")
-    .select("community_id").in("community_id", ids);
+  const { data, error } = await step("memberCounts", edu().from("community_members")
+    .select("community_id").in("community_id", ids));
+  if (error) throw communityDbError(error, "load member counts");
   const counts = new Map();
   for (const r of data || []) counts.set(r.community_id, (counts.get(r.community_id) || 0) + 1);
   return counts;
@@ -84,8 +114,9 @@ async function memberCounts(ids) {
 /** Display names for the given user ids, in one query. */
 async function userNames(userIds) {
   if (!userIds.length) return new Map();
-  const { data } = await db.from("users")
-    .select("id, full_name").in("id", [...new Set(userIds)]);
+  const { data, error } = await step("userNames", db.from("users")
+    .select("id, full_name").in("id", [...new Set(userIds)]));
+  if (error) throw communityDbError(error, "load names");
   const names = new Map();
   for (const u of data || []) names.set(u.id, u.full_name || "");
   return names;
@@ -105,9 +136,12 @@ async function withExtras(communityRows) {
   }));
 }
 
-/** Fetch one community row or null. */
+/** Fetch one community row or null. The error is surfaced (not folded
+    into a null) so an unready schema reaches the 503 handler below instead
+    of masquerading as "Not found". */
 async function findCommunity(id) {
-  const { data } = await edu().from("communities").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await step("findCommunity", edu().from("communities").select("*").eq("id", id).maybeSingle());
+  if (error) throw communityDbError(error, "load this community");
   return data ?? null;
 }
 
@@ -122,12 +156,16 @@ async function communityOr404(res, id) {
 async function withActivityExtras(rows) {
   if (!rows.length) return rows;
   const [subs, names] = await Promise.all([
-    edu().from("community_activity_submissions")
-      .select("activity_id").in("activity_id", rows.map(r => r.id)),
+    step("activitySubmissions", edu().from("community_activity_submissions")
+      .select("activity_id").in("activity_id", rows.map(r => r.id))),
     userNames(rows.map(r => r.creator_id)),
   ]);
+  // The builder resolves (not rejects) with { data, error }; the error used to
+  // be ignored, and `for (const s of { data, error })` then threw a bare
+  // TypeError (a 500) instead of reaching the schema-pending handler below.
+  if (subs?.error) throw communityDbError(subs.error, "load these activities");
   const counts = new Map();
-  for (const s of subs || []) counts.set(s.activity_id, (counts.get(s.activity_id) || 0) + 1);
+  for (const s of subs?.data || []) counts.set(s.activity_id, (counts.get(s.activity_id) || 0) + 1);
   return rows.map(r => ({
     ...r,
     creator_name:    names.get(r.creator_id) || "",
@@ -245,10 +283,13 @@ router.post("/", asyncHandler(async (req, res) => {
     throw communityDbError(memErr, "add you as the community owner");
   }
 
+  // Extras are cosmetic here and the community is already committed — a
+  // member-count/name lookup failing must not report a creation that
+  // actually succeeded (a retry would then duplicate it).
   ok(res, {
     role: membership.role,
     joined_at: membership.joined_at,
-    ...(await withExtras([created]))[0],
+    ...(await withExtras([created]).catch(() => [created]))[0],
   });
 }));
 
@@ -258,8 +299,8 @@ router.get("/:id", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
 
-  const { data: mem } = await edu().from("community_members")
-    .select("role, joined_at").eq("community_id", c.id).eq("user_id", req.user.id).maybeSingle();
+  const { data: mem } = await step("myMembership", edu().from("community_members")
+    .select("role, joined_at").eq("community_id", c.id).eq("user_id", req.user.id).maybeSingle());
 
   ok(res, { ...c, my_role: mem?.role || null, joined_at: mem?.joined_at || null });
 }));
@@ -271,9 +312,9 @@ router.get("/:id/activities", asyncHandler(async (req, res) => {
   const c = await communityOr404(res, req.params.id);
   if (!c) return;
 
-  const { data, error } = await edu().from("community_activities")
+  const { data, error } = await step("activities", edu().from("community_activities")
     .select("*").eq("community_id", c.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }));
   if (error) throw communityDbError(error, "complete this community request");
 
   const rows = await withActivityExtras(data || []);
@@ -281,9 +322,9 @@ router.get("/:id/activities", asyncHandler(async (req, res) => {
   // Which of these has the caller already submitted?
   const mine = new Set();
   if (rows.length) {
-    const { data: mySubs } = await edu().from("community_activity_submissions")
+    const { data: mySubs } = await step("mySubmissions", edu().from("community_activity_submissions")
       .select("activity_id").eq("user_id", req.user.id)
-      .in("activity_id", rows.map(r => r.id));
+      .in("activity_id", rows.map(r => r.id)));
     for (const s of mySubs || []) mine.add(s.activity_id);
   }
 
@@ -507,6 +548,19 @@ router.use((err, _req, res, next) => {
     success: false,
     error: "Communities are still being set up. Please try again in a minute.",
     code: "COMMUNITIES_SCHEMA_PENDING",
+  });
+});
+
+// A query that outlived its deadline (see `step` above) answers 504 instead of
+// hanging the learner's page on a skeleton forever. The step that hung has
+// already been named in the server logs by then.
+router.use((err, _req, res, next) => {
+  if (!err?.deadlineExceeded) return next(err);
+  return res.status(504).json({
+    success: false,
+    error: "This community is taking too long to load. Please try again.",
+    code: "COMMUNITIES_QUERY_TIMEOUT",
+    step: err.step,
   });
 });
 

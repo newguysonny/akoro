@@ -79,11 +79,16 @@ function forgetExpiry() {
  */
 export function refreshSession() {
   if (!refreshing) {
-    refreshing = fetchWithTimeout(`${API}/api/auth/refresh`, {
+    // One deadline for the whole refresh: connection AND body. A refresh
+    // whose response stalls mid-body must not pin `refreshing` (and every
+    // authed request behind it) open forever.
+    const deadline = armDeadline(REFRESH_TIMEOUT_MS);
+    refreshing = fetch(`${API}/api/auth/refresh`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-Akoro-Portal': PORTAL_ID },
       body: '{}',
-    }, REFRESH_TIMEOUT_MS).then(async (r) => {
+      signal: deadline.signal,
+    }).then(async (r) => {
       const json = r.ok ? await r.json().catch(() => null) : null;
       if (json) rememberExpiry(json);
       // The STATUS, not just ok/not-ok: a 429 or a 502 means we never got an
@@ -91,7 +96,7 @@ export function refreshSession() {
       // the server would still honour.
       return { ok: r.ok, status: r.status, json };
     }).catch(() => ({ ok: false, status: 0, json: null }))
-      .finally(() => { refreshing = null; });
+      .finally(() => { refreshing = null; deadline.settle(); });
   }
   return refreshing;
 }
@@ -127,23 +132,39 @@ const DEFAULT_TIMEOUT_MS = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000
 const REFRESH_TIMEOUT_MS = 15000;   // a hung refresh must not hang every request behind it
 const UPLOAD_TIMEOUT_MS  = 120000;  // bodies can be big; slow is expected, dead is not
 
+/* Recast an abort as the same shape every other network failure has, so the
+   cache fallback, offline queue and page error states all engage — whether it
+   aborted the connection (fetch) or the body read (json()). */
+function recastAbort(err) {
+  if (err?.name !== 'AbortError' && err?.name !== 'TimeoutError') return err;
+  const e = new Error('The request timed out — check your connection and try again.');
+  e.isNetwork = true;
+  e.timedOut  = true;
+  return e;
+}
+
 function fetchWithTimeout(url, opts = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
-  if (!timeoutMs || timeoutMs <= 0) return fetch(url, opts);   // explicit opt-out
+  if (!timeoutMs || timeoutMs <= 0 || opts.signal) return fetch(url, opts);   // opt-out, or the caller owns the deadline
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   return fetch(url, { ...opts, signal: ctrl.signal })
     .finally(() => clearTimeout(timer))
-    .catch((e) => {
-      if (e?.name === 'AbortError') {
-        // Look exactly like every other network failure so the cache
-        // fallback, offline queue and page error states all engage.
-        const err = new Error('The request timed out — check your connection and try again.');
-        err.isNetwork = true;
-        err.timedOut  = true;
-        throw err;
-      }
-      throw e;
-    });
+    .catch((e) => { throw recastAbort(e); });
+}
+
+/* A deadline the CALLER disarms once the response body has been read.
+   fetchWithTimeout bounds time-to-headers; a proxy can still deliver the
+   headers and then stall the body, and an unbounded json() read hangs a page
+   exactly like an unbounded fetch (the community details page did this:
+   "keeps loading, no data arriving"). Arm, thread the signal into
+   authedFetch, settle in the finally. */
+function armDeadline(timeoutMs = DEFAULT_TIMEOUT_MS) {
+  if (!timeoutMs || timeoutMs <= 0 || typeof AbortController === 'undefined') {
+    return { signal: undefined, settle() {} };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return { signal: ctrl.signal, settle() { clearTimeout(timer); } };
 }
 
 /** fetch + one transparent refresh-and-retry on 401. */
@@ -227,19 +248,24 @@ function markOffline(data) {
 }
 
 export async function apiGet(path, { cache = true, timeout } = {}) {
+  const ms = timeout ?? DEFAULT_TIMEOUT_MS;
+  const deadline = armDeadline(ms);       // headers AND body under one clock
   try {
-    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET' }, timeout);
+    const r = await authedFetch(`${API}${path}`, { ...BASE_OPTS, method: 'GET', signal: deadline.signal }, ms);
     if (!r.ok) throw await apiError(r, 'GET', path);
     const json = await r.json();
     if (cache) cacheSet(path, json);            // fire-and-forget snapshot
     return json;
   } catch (err) {
+    const e = recastAbort(err);                 // a body-read abort is a network error too
     // Offline / network failure → serve the last-known-good copy if we have one.
-    if (cache && isNetworkError(err)) {
+    if (cache && isNetworkError(e)) {
       const hit = await cacheGet(path);
       if (hit) return markOffline(hit.data);
     }
-    throw err;
+    throw e;
+  } finally {
+    deadline.settle();
   }
 }
 
@@ -247,16 +273,20 @@ export async function apiGet(path, { cache = true, timeout } = {}) {
 // mutations: if the request fails because we're offline, it's stored and replayed
 // on reconnect, and an optimistic { queued: true } is returned instead of throwing.
 async function apiSend(method, path, body, { queueOffline = false, timeout } = {}) {
+  const ms = timeout ?? DEFAULT_TIMEOUT_MS;
+  const deadline = armDeadline(ms);       // headers AND body under one clock
   try {
     const r = await authedFetch(`${API}${path}`, {
       ...BASE_OPTS,
       method,
+      signal: deadline.signal,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    }, timeout);
+    }, ms);
     if (!r.ok) throw await apiError(r, method, path);
-    return r.json();
+    return await r.json();
   } catch (err) {
-    if (queueOffline && isNetworkError(err)) {
+    const e = recastAbort(err);                 // a body-read abort is a network error too
+    if (queueOffline && isNetworkError(e)) {
       // When a service worker controls the page, its Background Sync queue has
       // already captured this failed request and will replay it (even if the app
       // is closed). Only when there's no SW controller do we fall back to the
@@ -266,7 +296,9 @@ async function apiSend(method, path, body, { queueOffline = false, timeout } = {
       if (!swControlled) await enqueue({ method, path, body });
       return { queued: true, _offline: true };
     }
-    throw err;
+    throw e;
+  } finally {
+    deadline.settle();
   }
 }
 
@@ -278,14 +310,22 @@ export const apiDelete = (path, opts)       => apiSend('DELETE', path, undefined
 // Multipart companion to apiPost. Do not use BASE_OPTS here: the browser must
 // set the FormData boundary itself, so only the portal hint is supplied.
 export async function apiUpload(path, formData, { method = 'POST' } = {}) {
-  const r = await authedFetch(`${API}${path}`, {
-    method,
-    credentials: 'include',
-    headers: { 'X-Akoro-Portal': PORTAL_ID },
-    body: formData,
-  }, UPLOAD_TIMEOUT_MS);
-  if (!r.ok) throw await apiError(r, method, path);
-  return r.json();
+  const deadline = armDeadline(UPLOAD_TIMEOUT_MS);
+  try {
+    const r = await authedFetch(`${API}${path}`, {
+      method,
+      credentials: 'include',
+      headers: { 'X-Akoro-Portal': PORTAL_ID },
+      body: formData,
+      signal: deadline.signal,
+    }, UPLOAD_TIMEOUT_MS);
+    if (!r.ok) throw await apiError(r, method, path);
+    return await r.json();
+  } catch (err) {
+    throw recastAbort(err);
+  } finally {
+    deadline.settle();
+  }
 }
 
 let _flushing = false;
